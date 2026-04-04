@@ -4,6 +4,7 @@
 //! designed as a foundation for agent-enforced knowledge graphs.
 
 pub mod config;
+pub mod context;
 pub mod episode;
 pub mod error;
 pub mod graph;
@@ -18,6 +19,7 @@ pub mod types;
 pub mod vector;
 
 pub use config::{QuipuConfig, ServerConfig, FederationConfig, RemoteEndpoint};
+pub use context::{tool_context, ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact, KnowledgeRelevance};
 pub use episode::{episode_provenance, ingest_batch, ingest_episode, Episode};
 pub use error::{Error, Result};
 pub use graph::{tool_project, ProjectedGraph};
