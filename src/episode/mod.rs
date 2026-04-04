@@ -10,12 +10,11 @@
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
+use crate::namespace;
 use crate::rdf::ingest_rdf;
 #[cfg(feature = "shacl")]
 use crate::shacl;
 use crate::store::Store;
-
-const BASE_NS: &str = "http://aegis.gastown.local/ontology/";
 
 /// An episode — a unit of knowledge to ingest.
 #[derive(Debug, Deserialize)]
@@ -64,8 +63,9 @@ pub fn ingest_episode(
     store: &mut Store,
     episode: &Episode,
     timestamp: &str,
+    base_ns: &str,
 ) -> Result<(i64, usize)> {
-    let turtle = episode_to_turtle(episode);
+    let turtle = episode_to_turtle(episode, base_ns);
 
     // SHACL validation gate: if shapes provided, validate before writing.
     #[cfg(feature = "shacl")]
@@ -111,11 +111,12 @@ pub fn ingest_batch(
     store: &mut Store,
     episodes: &[Episode],
     timestamps: &[&str],
+    base_ns: &str,
 ) -> Result<Vec<(i64, usize)>> {
     let mut results = Vec::with_capacity(episodes.len());
     for (i, episode) in episodes.iter().enumerate() {
         let ts = timestamps.get(i).copied().unwrap_or("1970-01-01T00:00:00Z");
-        results.push(ingest_episode(store, episode, ts)?);
+        results.push(ingest_episode(store, episode, ts, base_ns)?);
     }
     Ok(results)
 }
@@ -124,11 +125,13 @@ pub fn ingest_batch(
 pub fn episode_provenance(
     store: &Store,
     episode_name: &str,
+    base_ns: &str,
 ) -> Result<Vec<(String, Vec<crate::types::Fact>)>> {
     let ep_local = sanitize_iri_local(episode_name);
-    let ep_iri = format!("{BASE_NS}episode_{ep_local}");
+    let ep_iri = format!("{base_ns}episode_{ep_local}");
     let query = format!(
-        "SELECT DISTINCT ?s WHERE {{ ?s <http://www.w3.org/ns/prov#wasGeneratedBy> <{ep_iri}> }}"
+        "SELECT DISTINCT ?s WHERE {{ ?s <{}wasGeneratedBy> <{ep_iri}> }}",
+        namespace::PROV,
     );
     let result = crate::sparql::query(store, &query)?;
 
@@ -145,15 +148,15 @@ pub fn episode_provenance(
 
 // ── Turtle generation ──────────────────────────────────────────
 
-fn episode_to_turtle(episode: &Episode) -> String {
+fn episode_to_turtle(episode: &Episode, base_ns: &str) -> String {
     let mut ttl = String::new();
 
     // Prefixes.
-    ttl.push_str(&format!("@prefix aegis: <{BASE_NS}> .\n"));
-    ttl.push_str("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n");
-    ttl.push_str("@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n");
-    ttl.push_str("@prefix prov: <http://www.w3.org/ns/prov#> .\n");
-    ttl.push_str("@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\n");
+    ttl.push_str(&format!("@prefix aegis: <{base_ns}> .\n"));
+    ttl.push_str(&format!("@prefix rdf: <{}> .\n", namespace::RDF));
+    ttl.push_str(&format!("@prefix rdfs: <{}> .\n", namespace::RDFS));
+    ttl.push_str(&format!("@prefix prov: <{}> .\n", namespace::PROV));
+    ttl.push_str(&format!("@prefix xsd: <{}> .\n\n", namespace::XSD));
 
     let ep_local = sanitize_iri_local(&episode.name);
 

@@ -9,6 +9,7 @@ pub mod episode;
 pub mod error;
 pub mod graph;
 pub mod mcp;
+pub mod namespace;
 pub mod provider;
 pub mod rdf;
 pub mod schema;

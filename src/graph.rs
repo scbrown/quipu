@@ -8,6 +8,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use serde_json::Value as JsonValue;
 
 use crate::error::Result;
+use crate::namespace;
 use crate::store::Store;
 use crate::types::Value;
 
@@ -48,7 +49,7 @@ pub fn project(
     // If type filter is set, find matching entity IDs.
     let type_entity_ids: Option<std::collections::HashSet<i64>> =
         if let Some(type_iri) = type_filter {
-            let rdf_type_id = store.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
+            let rdf_type_id = store.lookup(namespace::RDF_TYPE)?;
             let type_val_id = store.lookup(type_iri)?;
             match (rdf_type_id, type_val_id) {
                 (Some(rdf_type), Some(type_val)) => {

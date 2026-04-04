@@ -10,6 +10,7 @@ use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 use std::io::Read;
 
 use crate::error::{Error, Result};
+use crate::namespace;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -50,31 +51,29 @@ fn term_to_value(store: &Store, term: &OxTerm) -> Result<Value> {
 fn literal_to_value(lit: &Literal) -> Result<Value> {
     let dt = lit.datatype().as_str();
     match dt {
-        "http://www.w3.org/2001/XMLSchema#integer"
-        | "http://www.w3.org/2001/XMLSchema#long"
-        | "http://www.w3.org/2001/XMLSchema#int"
-        | "http://www.w3.org/2001/XMLSchema#short"
-        | "http://www.w3.org/2001/XMLSchema#byte"
-        | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
-        | "http://www.w3.org/2001/XMLSchema#positiveInteger"
-        | "http://www.w3.org/2001/XMLSchema#unsignedLong"
-        | "http://www.w3.org/2001/XMLSchema#unsignedInt" => {
+        namespace::XSD_INTEGER
+        | namespace::XSD_LONG
+        | namespace::XSD_INT
+        | namespace::XSD_SHORT
+        | namespace::XSD_BYTE
+        | namespace::XSD_NON_NEGATIVE_INTEGER
+        | namespace::XSD_POSITIVE_INTEGER
+        | namespace::XSD_UNSIGNED_LONG
+        | namespace::XSD_UNSIGNED_INT => {
             let n: i64 = lit
                 .value()
                 .parse()
                 .map_err(|e| Error::InvalidValue(format!("bad integer literal: {e}")))?;
             Ok(Value::Int(n))
         }
-        "http://www.w3.org/2001/XMLSchema#double"
-        | "http://www.w3.org/2001/XMLSchema#float"
-        | "http://www.w3.org/2001/XMLSchema#decimal" => {
+        namespace::XSD_DOUBLE | namespace::XSD_FLOAT | namespace::XSD_DECIMAL => {
             let f: f64 = lit
                 .value()
                 .parse()
                 .map_err(|e| Error::InvalidValue(format!("bad float literal: {e}")))?;
             Ok(Value::Float(f))
         }
-        "http://www.w3.org/2001/XMLSchema#boolean" => {
+        namespace::XSD_BOOLEAN => {
             let b = matches!(lit.value(), "true" | "1");
             Ok(Value::Bool(b))
         }
@@ -121,15 +120,15 @@ fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
         }
         Value::Int(n) => Ok(OxTerm::Literal(Literal::new_typed_literal(
             n.to_string(),
-            NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
+            NamedNode::new_unchecked(namespace::XSD_INTEGER),
         ))),
         Value::Float(f) => Ok(OxTerm::Literal(Literal::new_typed_literal(
             f.to_string(),
-            NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#double"),
+            NamedNode::new_unchecked(namespace::XSD_DOUBLE),
         ))),
         Value::Bool(b) => Ok(OxTerm::Literal(Literal::new_typed_literal(
             b.to_string(),
-            NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#boolean"),
+            NamedNode::new_unchecked(namespace::XSD_BOOLEAN),
         ))),
         Value::Bytes(_) => Err(Error::InvalidValue(
             "cannot convert raw bytes to RDF term".into(),

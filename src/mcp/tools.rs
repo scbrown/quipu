@@ -297,7 +297,8 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         .and_then(|v| v.as_str())
         .unwrap_or("1970-01-01T00:00:00Z");
 
-    let (tx_id, count) = episode::ingest_episode(store, &ep, timestamp)?;
+    let (tx_id, count) =
+        episode::ingest_episode(store, &ep, timestamp, crate::namespace::DEFAULT_BASE_NS)?;
 
     Ok(serde_json::json!({
         "tx_id": tx_id,

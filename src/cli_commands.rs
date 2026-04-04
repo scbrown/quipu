@@ -53,7 +53,12 @@ pub fn cmd_episode(args: &[String], db_path: &str) {
     };
 
     let now = chrono_now();
-    match quipu::ingest_episode(&mut store, &episode, &now) {
+    match quipu::ingest_episode(
+        &mut store,
+        &episode,
+        &now,
+        quipu::namespace::DEFAULT_BASE_NS,
+    ) {
         Ok((tx_id, count)) => {
             println!(
                 "ingested episode \"{}\" -- {count} facts (tx {tx_id})",

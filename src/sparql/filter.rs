@@ -3,6 +3,7 @@
 use oxrdf::Literal;
 use spargebra::algebra::Expression;
 
+use crate::namespace;
 use crate::store::Store;
 use crate::types::Value;
 
@@ -92,27 +93,21 @@ pub fn compare_values(
 pub fn literal_to_value(lit: &Literal) -> Value {
     let dt = lit.datatype().as_str();
     match dt {
-        "http://www.w3.org/2001/XMLSchema#integer"
-        | "http://www.w3.org/2001/XMLSchema#long"
-        | "http://www.w3.org/2001/XMLSchema#int" => {
+        namespace::XSD_INTEGER | namespace::XSD_LONG | namespace::XSD_INT => {
             if let Ok(n) = lit.value().parse::<i64>() {
                 Value::Int(n)
             } else {
                 Value::Str(lit.value().to_string())
             }
         }
-        "http://www.w3.org/2001/XMLSchema#double"
-        | "http://www.w3.org/2001/XMLSchema#float"
-        | "http://www.w3.org/2001/XMLSchema#decimal" => {
+        namespace::XSD_DOUBLE | namespace::XSD_FLOAT | namespace::XSD_DECIMAL => {
             if let Ok(f) = lit.value().parse::<f64>() {
                 Value::Float(f)
             } else {
                 Value::Str(lit.value().to_string())
             }
         }
-        "http://www.w3.org/2001/XMLSchema#boolean" => {
-            Value::Bool(matches!(lit.value(), "true" | "1"))
-        }
+        namespace::XSD_BOOLEAN => Value::Bool(matches!(lit.value(), "true" | "1")),
         _ => {
             if let Some(lang) = lit.language() {
                 Value::Str(format!("{}@{}", lit.value(), lang))

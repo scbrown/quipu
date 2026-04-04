@@ -1,6 +1,9 @@
 //! Tests for episode ingestion.
 
 use super::*;
+use crate::namespace;
+
+const TEST_BASE_NS: &str = namespace::DEFAULT_BASE_NS;
 
 fn parse_episode(json: &str) -> Episode {
     serde_json::from_str(json).unwrap()
@@ -44,7 +47,7 @@ fn episode_to_turtle_generates_valid_rdf() {
     }"#,
     );
 
-    let ttl = episode_to_turtle(&ep);
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS);
 
     // Should contain prefixes.
     assert!(ttl.contains("@prefix aegis:"));
@@ -80,7 +83,8 @@ fn ingest_episode_writes_to_store() {
     }"#,
     );
 
-    let (tx_id, count) = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap();
+    let (tx_id, count) =
+        ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
 
     assert!(tx_id > 0);
     // Episode (4: type + label + comment + wasAssociatedWith + groupId = 5)
@@ -90,19 +94,15 @@ fn ingest_episode_writes_to_store() {
     assert!(count >= 10, "expected at least 10 triples, got {count}");
 
     // Verify entities are in the store.
-    let koror = store
-        .lookup("http://aegis.gastown.local/ontology/koror")
-        .unwrap();
+    let koror = store.lookup(&format!("{TEST_BASE_NS}koror")).unwrap();
     assert!(koror.is_some(), "koror entity should exist");
 
-    let ct205 = store
-        .lookup("http://aegis.gastown.local/ontology/ct-205")
-        .unwrap();
+    let ct205 = store.lookup(&format!("{TEST_BASE_NS}ct-205")).unwrap();
     assert!(ct205.is_some(), "ct-205 entity should exist");
 
     // Verify the episode provenance entity.
     let ep_ent = store
-        .lookup("http://aegis.gastown.local/ontology/episode_infra-scan")
+        .lookup(&format!("{TEST_BASE_NS}episode_infra-scan"))
         .unwrap();
     assert!(ep_ent.is_some(), "episode entity should exist");
 }
@@ -129,14 +129,12 @@ fn node_properties_become_triples() {
     }"#,
     );
 
-    let (_, count) = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap();
+    let (_, count) = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
 
     // Episode (2: type + label) + node (type + label + wasGeneratedBy + 3 props = 6) = 8
     assert!(count >= 7, "expected at least 7 triples, got {count}");
 
-    let port_id = store
-        .lookup("http://aegis.gastown.local/ontology/port")
-        .unwrap();
+    let port_id = store.lookup(&format!("{TEST_BASE_NS}port")).unwrap();
     assert!(port_id.is_some(), "port predicate should exist");
 }
 
@@ -165,7 +163,8 @@ fn minimal_episode_with_body_only() {
     }"#,
     );
 
-    let (tx_id, count) = ingest_episode(&mut store, &ep, "2026-04-04T14:00:00Z").unwrap();
+    let (tx_id, count) =
+        ingest_episode(&mut store, &ep, "2026-04-04T14:00:00Z", TEST_BASE_NS).unwrap();
     assert!(tx_id > 0);
     // Just the episode entity: type + label + comment = 3
     assert_eq!(count, 3);
@@ -198,7 +197,7 @@ fn shacl_validation_rejects_invalid_episode() {
         shapes: Some(shapes.into()),
     };
 
-    let err = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap_err();
+    let err = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap_err();
     match err {
         Error::ValidationFailed {
             violations,
@@ -244,7 +243,8 @@ fn shacl_validation_passes_valid_episode() {
         shapes: Some(shapes.into()),
     };
 
-    let (tx_id, count) = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap();
+    let (tx_id, count) =
+        ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
     assert!(tx_id > 0);
     assert!(count > 0);
 }
@@ -270,7 +270,7 @@ fn batch_ingestion() {
         "2026-04-04T12:02:00Z",
     ];
 
-    let results = ingest_batch(&mut store, &episodes, &timestamps).unwrap();
+    let results = ingest_batch(&mut store, &episodes, &timestamps, TEST_BASE_NS).unwrap();
     assert_eq!(results.len(), 3);
     assert!(results[0].0 < results[1].0);
     assert!(results[1].0 < results[2].0);
@@ -291,12 +291,14 @@ fn provenance_query() {
     }"#,
     );
 
-    ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap();
+    ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
 
-    let entities = episode_provenance(&store, "prov-test").unwrap();
+    let entities = episode_provenance(&store, "prov-test", TEST_BASE_NS).unwrap();
     let iris: Vec<&str> = entities.iter().map(|(iri, _)| iri.as_str()).collect();
-    assert!(iris.contains(&"http://aegis.gastown.local/ontology/server1"));
-    assert!(iris.contains(&"http://aegis.gastown.local/ontology/server2"));
+    let expected_server1 = format!("{TEST_BASE_NS}server1");
+    let expected_server2 = format!("{TEST_BASE_NS}server2");
+    assert!(iris.contains(&expected_server1.as_str()));
+    assert!(iris.contains(&expected_server2.as_str()));
 }
 
 #[test]
@@ -346,10 +348,10 @@ fn batch_stops_on_validation_failure() {
     ];
     let timestamps = vec!["2026-04-04T12:00:00Z", "2026-04-04T12:01:00Z"];
 
-    let err = ingest_batch(&mut store, &episodes, &timestamps);
+    let err = ingest_batch(&mut store, &episodes, &timestamps, TEST_BASE_NS);
     assert!(err.is_err());
 
     // First episode should have been ingested before failure.
-    let prov = episode_provenance(&store, "ok-ep").unwrap();
+    let prov = episode_provenance(&store, "ok-ep", TEST_BASE_NS).unwrap();
     assert_eq!(prov.len(), 1);
 }

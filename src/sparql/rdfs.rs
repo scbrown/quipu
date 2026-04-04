@@ -3,6 +3,7 @@
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use crate::error::Result;
+use crate::namespace;
 use crate::store::Store;
 use crate::types::Value;
 
@@ -10,8 +11,8 @@ use super::Bindings;
 use super::TemporalContext;
 use super::pattern::bind_var;
 
-pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
-const RDFS_SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+pub const RDF_TYPE: &str = namespace::RDF_TYPE;
+const RDFS_SUBCLASS_OF: &str = namespace::RDFS_SUBCLASS_OF;
 
 /// Check if a triple pattern has rdf:type as predicate and a concrete class as object.
 pub fn is_rdf_type_pattern(tp: &TriplePattern) -> bool {

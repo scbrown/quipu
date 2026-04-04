@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use crate::namespace;
+
 /// Top-level config file structure — we only care about the `[quipu]` section.
 #[derive(Debug, Default, Deserialize)]
 struct ConfigFile {
@@ -27,6 +29,9 @@ pub struct QuipuConfig {
     /// Path to directory containing OWL/SHACL schema files.
     pub schema_path: Option<PathBuf>,
 
+    /// Base namespace URI for ontology entities (default: `DEFAULT_BASE_NS`).
+    pub base_ns: String,
+
     /// REST API server configuration.
     pub server: ServerConfig,
 
@@ -39,6 +44,7 @@ impl Default for QuipuConfig {
         Self {
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             schema_path: None,
+            base_ns: namespace::DEFAULT_BASE_NS.to_string(),
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
         }
