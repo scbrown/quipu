@@ -63,6 +63,7 @@ futures = { version = "0.3", optional = true }
 [features]
 default = ["shacl"]
 shacl = ["dep:rudof_lib"]
+embeddings = []
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
 
 [lints.rust]
