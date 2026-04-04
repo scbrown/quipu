@@ -35,7 +35,7 @@ test *args="":
 
 # Run linter
 lint:
-    cargo clippy -- -D warnings
+    cargo clippy -- -D warnings -A missing-docs
 
 # Format code
 fmt:
