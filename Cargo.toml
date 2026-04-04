@@ -13,6 +13,10 @@ categories = ["database", "data-structures"]
 name = "quipu"
 path = "src/main.rs"
 
+[[bin]]
+name = "quipu-server"
+path = "src/server.rs"
+
 [dependencies]
 rusqlite = { version = "0.35", features = ["bundled"] }
 thiserror = "2"
@@ -23,6 +27,8 @@ spargebra = "0.4"
 rudof_lib = "0.2.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [dev-dependencies]
 tempfile = "3"
