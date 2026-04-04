@@ -1,12 +1,14 @@
 # Quick Start
 
-## Create a Store and Add Data
+## Rust Library
 
 ```rust
-use quipu::{Store, ingest_rdf, sparql_query};
+use quipu::store::Store;
+use quipu::rdf::ingest_rdf;
+use quipu::sparql;
 use oxrdfio::RdfFormat;
 
-fn main() -> quipu::Result<()> {
+fn main() -> quipu::error::Result<()> {
     // Open a persistent store (or use open_in_memory() for testing)
     let mut store = Store::open("my-knowledge.db")?;
 
@@ -37,7 +39,7 @@ fn main() -> quipu::Result<()> {
     println!("Ingested {count} triples in transaction {tx_id}");
 
     // Query with SPARQL
-    let result = sparql_query(
+    let result = sparql::query(
         &store,
         r#"SELECT ?name ?age WHERE {
             ?s a <http://example.org/Person> .
@@ -48,7 +50,7 @@ fn main() -> quipu::Result<()> {
     )?;
 
     println!("People aged 28+:");
-    for row in &result.rows {
+    for row in result.rows() {
         println!("  {:?} age {:?}", row.get("name"), row.get("age"));
     }
 
@@ -56,13 +58,59 @@ fn main() -> quipu::Result<()> {
 }
 ```
 
-## CLI Demo
-
-Run the built-in demo to explore interactively:
+## CLI
 
 ```bash
-cargo run -- demo
+# Build
+cargo build --release
+
+# Load data
+quipu knot data.ttl --db my.db
+
+# Query
+quipu read "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10" --db my.db
+
+# Interactive REPL
+quipu repl --db my.db
 ```
 
-This opens an interactive SPARQL prompt where you can load Turtle files
-and run queries against the fact log.
+## REST API Server
+
+```bash
+# Start
+quipu-server --db my.db --bind 0.0.0.0:3030
+
+# Health check
+curl localhost:3030/health
+
+# Query
+curl -s localhost:3030/query -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 5"}'
+
+# Ingest an episode
+curl -s localhost:3030/episode -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "test-episode",
+    "nodes": [
+      {"name": "alice", "type": "Person", "description": "Test user"}
+    ],
+    "edges": []
+  }'
+```
+
+## MCP (Agent Integration)
+
+When running as a Bobbin subsystem, Quipu tools are available to agents:
+
+```json
+{
+  "tool": "quipu_query",
+  "input": {
+    "query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 5"
+  }
+}
+```
+
+See the [MCP Tools Reference](../reference/mcp-tools.md) for all available tools.
