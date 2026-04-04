@@ -305,3 +305,89 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         "episode": ep.name
     }))
 }
+
+/// MCP tool: `quipu_hybrid_search` — Combined SPARQL + vector similarity search.
+///
+/// Input: `{ "embedding": [f32...], "sparql": "SELECT ?s WHERE {...}", "limit": N, "valid_at": "..." }`
+/// Output: entities ranked by vector similarity, optionally pre-filtered by SPARQL.
+pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let embedding: Vec<f32> = input
+        .get("embedding")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| Error::InvalidValue("missing 'embedding' array parameter".into()))?
+        .iter()
+        .map(|v| v.as_f64().unwrap_or(0.0) as f32)
+        .collect();
+
+    let limit = input
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10) as usize;
+
+    let valid_at = input.get("valid_at").and_then(|v| v.as_str());
+    let sparql_filter = input.get("sparql").and_then(|v| v.as_str());
+
+    // Step 1: If SPARQL filter provided, get candidate entity IRIs.
+    let candidate_iris: Option<Vec<String>> = if let Some(sparql) = sparql_filter {
+        let result = crate::sparql::query(store, sparql)?;
+        let mut iris = Vec::new();
+        for row in result.rows() {
+            // Take the first variable's value as the entity IRI.
+            if let Some(first_var) = result.variables().first() {
+                match row.get(first_var) {
+                    Some(crate::types::Value::Ref(id)) => {
+                        iris.push(store.resolve(*id)?);
+                    }
+                    Some(crate::types::Value::Str(s)) => {
+                        iris.push(s.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Some(iris)
+    } else {
+        None
+    };
+
+    // Step 2: Vector search (over all embeddings or full store).
+    let all_matches = store.vector_search(&embedding, limit * 5, valid_at)?;
+
+    // Step 3: Filter by SPARQL candidates if present, then rank.
+    let filtered: Vec<_> = if let Some(ref candidates) = candidate_iris {
+        all_matches
+            .into_iter()
+            .filter(|m| {
+                store
+                    .resolve(m.entity_id)
+                    .map(|iri| candidates.contains(&iri))
+                    .unwrap_or(false)
+            })
+            .take(limit)
+            .collect()
+    } else {
+        all_matches.into_iter().take(limit).collect()
+    };
+
+    let results: Vec<JsonValue> = filtered
+        .iter()
+        .map(|m| {
+            let iri = store
+                .resolve(m.entity_id)
+                .unwrap_or_else(|_| format!("ref:{}", m.entity_id));
+            serde_json::json!({
+                "entity": iri,
+                "text": m.text,
+                "score": m.score,
+                "valid_from": m.valid_from,
+                "valid_to": m.valid_to
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "results": results,
+        "count": results.len(),
+        "sparql_candidates": candidate_iris.as_ref().map(|c| c.len()),
+    }))
+}

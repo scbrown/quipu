@@ -8,6 +8,7 @@
 //!   POST /validate   — SHACL validation (dry run)
 //!   POST /episode    — Structured episode ingestion
 //!   POST /search     — Vector similarity search
+//!   POST /hybrid_search — Combined SPARQL + vector search
 //!   POST /retract    — Retract entity facts
 //!   POST /shapes     — Manage persistent SHACL shapes
 //!   GET  /health     — Health check
@@ -69,6 +70,7 @@ async fn main() {
         .route("/validate", post(validate))
         .route("/episode", post(episode))
         .route("/search", post(search))
+        .route("/hybrid_search", post(hybrid_search))
         .route("/retract", post(retract))
         .route("/shapes", post(shapes))
         .route("/project", post(project_graph))
@@ -174,6 +176,15 @@ async fn search(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let store = store.lock().unwrap();
     let result = quipu::tool_search(&store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn hybrid_search(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let store = store.lock().unwrap();
+    let result = quipu::tool_hybrid_search(&store, &input)?;
     Ok(axum::Json(result))
 }
 
