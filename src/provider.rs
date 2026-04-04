@@ -63,7 +63,7 @@ impl GraphProvider for LocalProvider<'_> {
             "type": type_filter,
             "limit": limit,
         });
-        crate::mcp::tool_cord(self.store, &input)
+        crate::mcp::tools::tool_cord(self.store, &input)
     }
 
     fn health(&self) -> ProviderStatus {
@@ -82,15 +82,14 @@ impl GraphProvider for LocalProvider<'_> {
 }
 
 /// Federated provider that combines results from multiple providers.
+#[derive(Default)]
 pub struct FederatedProvider<'a> {
     providers: Vec<Box<dyn GraphProvider + 'a>>,
 }
 
 impl<'a> FederatedProvider<'a> {
     pub fn new() -> Self {
-        Self {
-            providers: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn add(&mut self, provider: Box<dyn GraphProvider + 'a>) {
@@ -112,13 +111,14 @@ impl<'a> FederatedProvider<'a> {
             match provider.query(sparql) {
                 Ok(result) => {
                     if variables.is_empty() {
-                        variables = result.variables.clone();
+                        variables = result.variables().to_vec();
                         if !variables.contains(&"_provider".to_string()) {
                             variables.push("_provider".to_string());
                             provider_var_added = true;
                         }
                     }
-                    for mut row in result.rows {
+                    for row in result.rows() {
+                        let mut row = row.clone();
                         if provider_var_added {
                             row.insert(
                                 "_provider".to_string(),
@@ -132,7 +132,7 @@ impl<'a> FederatedProvider<'a> {
             }
         }
 
-        Ok(QueryResult {
+        Ok(QueryResult::Select {
             variables,
             rows: merged_rows,
         })
@@ -152,18 +152,16 @@ impl<'a> FederatedProvider<'a> {
         let mut all_entities = Vec::new();
 
         for provider in &self.providers {
-            if let Ok(result) = provider.entities(type_filter, limit) {
-                if let Some(entities) = result["entities"].as_array() {
-                    for entity in entities {
-                        let mut tagged = entity.clone();
-                        if let Some(obj) = tagged.as_object_mut() {
-                            obj.insert(
-                                "_provider".to_string(),
-                                JsonValue::String(provider.name().to_string()),
-                            );
-                        }
-                        all_entities.push(tagged);
+            if let Ok(result) = provider.entities(type_filter, limit) && let Some(entities) = result["entities"].as_array() {
+                for entity in entities {
+                    let mut tagged = entity.clone();
+                    if let Some(obj) = tagged.as_object_mut() {
+                        obj.insert(
+                            "_provider".to_string(),
+                            JsonValue::String(provider.name().to_string()),
+                        );
                     }
+                    all_entities.push(tagged);
                 }
             }
         }
@@ -204,7 +202,7 @@ mod tests {
         let result = provider
             .query("SELECT ?name WHERE { ?s <http://example.org/name> ?name }")
             .unwrap();
-        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows().len(), 1);
     }
 
     #[test]
@@ -246,8 +244,8 @@ mod tests {
         let result = fed
             .query_all("SELECT ?s ?name WHERE { ?s <http://example.org/name> ?name }")
             .unwrap();
-        assert_eq!(result.rows.len(), 2);
-        assert!(result.variables.contains(&"_provider".to_string()));
+        assert_eq!(result.rows().len(), 2);
+        assert!(result.variables().contains(&"_provider".to_string()));
     }
 
     #[test]
