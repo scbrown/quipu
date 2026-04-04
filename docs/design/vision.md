@@ -84,7 +84,7 @@ Agents are not just API consumers — they are first-class participants:
 
 Every write goes through an agent-driven pipeline:
 
-```
+```text
 Data arrives → Proposer agent extracts triples
              → Critic agent validates against schema (SHACL)
              → If invalid: structured feedback → Proposer retries
@@ -112,6 +112,7 @@ The store rejects invalid writes; the agent's job is to make writes valid.
 Every fact is an immutable entry with two time axes: **transaction time**
 (when asserted) and **valid time** (when true in the world). Nothing is
 ever deleted, only superseded. This enables:
+
 - **Time-travel queries**: "What did we believe about X on March 15?"
 - **Speculative transactions**: Fork in memory, apply hypothetical writes,
   query without persisting
@@ -136,6 +137,7 @@ it's a first-class query primitive.
 ### 5. Agent-Friendly Validation Feedback
 
 Validation doesn't just reject. It returns:
+
 - Which SHACL shape was violated and why
 - The closest matching existing entity (with similarity score)
 - Suggested corrections ("did you mean entity X?")
@@ -213,6 +215,7 @@ similarity) in a single query. Not a bolt-on.
 ### 7. Agent-Friendly Feedback
 
 Validation doesn't just say "rejected." It returns:
+
 - Which SHACL shape was violated
 - The closest matching entity (with similarity score)
 - Suggested corrections
@@ -220,7 +223,7 @@ Validation doesn't just say "rejected." It returns:
 
 ## Architecture (Conceptual)
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │                     Bobbin + Quipu                            │
 │                                                              │
@@ -411,6 +414,7 @@ forces this: Oxigraph's engine expects a mutable triple store with INSERT/
 DELETE semantics. It has no concept of temporal columns, transaction IDs,
 or log-structured storage. Building a custom SPARQL evaluator on top of
 `spargebra` (parser) + SQLite fact log gives us:
+
 - Native `AS OF` time-travel queries
 - Bitemporal filters pushed into SQLite's query optimizer
 - No impedance mismatch between storage and query engine
@@ -430,7 +434,7 @@ Discovery/analysis: materialize relevant subgraph into `petgraph` (in-memory
 Rust graph library), run algorithms (shortest path, community detection,
 connected components), write results back as triples.
 
-```
+```text
 SQLite (durable, inspectable, SPARQL)
   ↕ materialize on demand
 petgraph (in-memory, graph algorithms)
@@ -532,7 +536,7 @@ metadata makes facts versioned.
 
 The existing `aegis-context.jsonld` maps cleanly to OWL + SHACL:
 
-```
+```text
 JSON-LD @type "LXCContainer" → OWL class :LXCContainer rdfs:subClassOf :Infrastructure
 JSON-LD property "runsService" → OWL objectProperty :runsService (domain: :LXCContainer, range: :Service)
 Required fields → SHACL sh:minCount 1
@@ -594,7 +598,7 @@ remarkable architectural DNA with what Quipu needs:
 adds knowledge graph capabilities. `bobbin` becomes the unified context engine
 for both code and domain knowledge. Quipu is a crate that Bobbin depends on.
 
-```
+```text
 bobbin (context engine)
 ├── code search (existing)
 │   ├── LanceDB vectors
@@ -621,6 +625,7 @@ are thin layers on top.
 
 **Recommendation**: Start with **Option A** (Quipu as a Bobbin subsystem).
 Reasons:
+
 - Bobbin already has the Rust skeleton, ONNX pipeline, MCP server, CLI
 - One binary to deploy, one MCP server to configure
 - Context injection hooks can blend code context + knowledge graph context
@@ -675,7 +680,7 @@ knowledge. Integration points:
 Today, Bobbin injects code context into agent prompts via hooks. With Quipu
 integrated, the same hook pipeline injects **code + knowledge**:
 
-```
+```text
 Agent prompt arrives (UserPromptSubmit hook)
   │
   ├─ Bobbin: semantic search over code
@@ -720,12 +725,14 @@ later is a near-rewrite.
 **1. Immutable Bitemporal Fact Log** (stolen from: Datomic, TerminusDB)
 
 Every fact is an immutable entry in an append-only log with two time axes:
+
 - **Transaction time** (`tx_time`): when the fact was asserted
 - **Valid time** (`valid_from`, `valid_to`): when the fact was true in the world
 
 SQLite schema: `(entity, attribute, value, tx_id, valid_from, valid_to, op)`
 
 This enables:
+
 - **Time-travel queries**: "What did we believe about koror on March 15?"
 - **Speculative transactions**: Fork in memory, apply hypothetical writes,
   query without persisting — "What breaks if we decommission this host?"
@@ -749,6 +756,7 @@ Without this, every new triple triggers full re-reasoning — unusable at scale.
 
 Requires a **dependency graph** between derived facts and the base facts +
 rules that produced them:
+
 - Each derived triple stores provenance: which rule + which inputs created it
 - On deletion: walk dependency graph, remove unsupported derivations
 - On addition: run only rules whose body patterns match new facts
@@ -846,7 +854,7 @@ fully combines in one embeddable package.
    Immutable append-only EAVT with bitemporal columns in SQLite. Prototype
    the schema, write path, and time-travel query pattern.
 3. **Prototype in Bobbin** — add a `cairn` module with basic triple store
-   + SHACL validation (rudof). Prove they compose.
+   - SHACL validation (rudof). Prove they compose.
 4. **Design incremental materialization** — provenance-tracked derived
    triples with dependency graph for efficient re-reasoning.
 5. **Design the write path** — schema-validated ingest with agent feedback
