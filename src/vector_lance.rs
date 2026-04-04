@@ -1,8 +1,7 @@
-//! LanceDB-backed implementation of [`KnowledgeVectorStore`].
+//! `LanceDB`-backed implementation of [`KnowledgeVectorStore`].
 //!
-//! Gated behind `--features lancedb`. Uses `tokio::runtime::Handle::current().block_on()`
-//! to bridge async LanceDB calls into the synchronous trait interface — the Tokio
-//! runtime is guaranteed to exist because the Axum server starts one.
+//! Gated behind `--features lancedb`. Bridges async `LanceDB` calls into the
+//! synchronous trait interface via `block_in_place` + `block_on`.
 
 use std::sync::Arc;
 
@@ -22,21 +21,20 @@ const EMBEDDING_DIM: i32 = 384;
 /// Table name inside the LanceDB database.
 const TABLE_NAME: &str = "vectors";
 
-/// LanceDB-backed vector store for entity embeddings.
+/// `LanceDB`-backed vector store for entity embeddings.
 pub struct LanceVectorStore {
-    #[allow(dead_code)] // Held for future table creation; used in tests via ensure_table.
+    #[allow(dead_code)]
     conn: Connection,
     table: Option<Table>,
 }
 
 impl LanceVectorStore {
-    /// Open (or create) a LanceDB vector store at the given URI.
+    /// Open (or create) a `LanceDB` vector store at the given URI.
     pub async fn open(uri: &str) -> Result<Self> {
         let conn = lancedb::connect(uri)
             .execute()
             .await
             .map_err(|e| Error::Store(format!("LanceDB connect: {e}")))?;
-
         let tables = conn
             .table_names()
             .execute()
@@ -57,13 +55,12 @@ impl LanceVectorStore {
         Ok(Self { conn, table })
     }
 
-    /// Open an in-memory LanceDB store (useful for tests).
+    /// Open an in-memory store (useful for tests).
     pub async fn open_in_memory() -> Result<Self> {
         let conn = lancedb::connect("memory://quipu-vectors")
             .execute()
             .await
             .map_err(|e| Error::Store(format!("LanceDB in-memory connect: {e}")))?;
-
         Ok(Self { conn, table: None })
     }
 
@@ -87,21 +84,30 @@ impl LanceVectorStore {
         ]))
     }
 
-    /// Build a single-row RecordBatch for an embedding insert.
     fn make_batch(
         entity_id: i64,
         text: &str,
         embedding: &[f32],
         valid_from: &str,
     ) -> Result<RecordBatch> {
+        Self::make_batch_typed(entity_id, text, embedding, valid_from, None)
+    }
+
+    /// Build a single-row `RecordBatch` with optional entity type metadata.
+    fn make_batch_typed(
+        entity_id: i64,
+        text: &str,
+        embedding: &[f32],
+        valid_from: &str,
+        entity_type: Option<&str>,
+    ) -> Result<RecordBatch> {
         let entity_ids = Int64Array::from(vec![entity_id]);
         let texts = StringArray::from(vec![text]);
         let valid_froms = StringArray::from(vec![valid_from]);
         let valid_tos = StringArray::from(vec![None::<&str>]);
-        let entity_types = StringArray::from(vec![None::<&str>]);
+        let entity_types = StringArray::from(vec![entity_type]);
         let source_episodes = StringArray::from(vec![None::<&str>]);
 
-        // Build the FixedSizeList for the embedding vector.
         let values = Float32Array::from(embedding.to_vec());
         let vector = FixedSizeListArray::try_new(
             Arc::new(Field::new("item", DataType::Float32, true)),
@@ -150,28 +156,21 @@ impl LanceVectorStore {
         Ok(())
     }
 
-    /// Block on an async future using the current Tokio runtime.
-    fn block_on<F: std::future::Future<Output = T>, T>(f: F) -> Result<T> {
-        let handle = tokio::runtime::Handle::try_current()
-            .map_err(|_| Error::Store("No Tokio runtime available for LanceDB".into()))?;
-        Ok(handle.block_on(f))
-    }
-}
-
-impl KnowledgeVectorStore for LanceVectorStore {
-    fn embed_entity(
+    /// Embed an entity with type metadata for predicate pushdown.
+    pub fn embed_entity_typed(
         &self,
         entity_id: i64,
         text: &str,
         embedding: &[f32],
         valid_from: &str,
+        entity_type: Option<&str>,
     ) -> Result<()> {
-        let batch = Self::make_batch(entity_id, text, embedding, valid_from)?;
+        let batch = Self::make_batch_typed(entity_id, text, embedding, valid_from, entity_type)?;
+        self.add_batch(batch)
+    }
 
-        let handle = tokio::runtime::Handle::try_current()
-            .map_err(|_| Error::Store("No Tokio runtime available for LanceDB".into()))?;
-
-        handle.block_on(async {
+    fn add_batch(&self, batch: RecordBatch) -> Result<()> {
+        Self::block_on(async {
             match &self.table {
                 Some(table) => {
                     table
@@ -187,7 +186,57 @@ impl KnowledgeVectorStore for LanceVectorStore {
                 }
             }
             Ok(())
-        })
+        })?
+    }
+
+    /// Parse a `RecordBatch` into `VectorMatch` values.
+    fn collect_matches(batch: &RecordBatch, out: &mut Vec<VectorMatch>) -> Result<()> {
+        fn col<'a, T: 'static>(batch: &'a RecordBatch, name: &str) -> Result<&'a T> {
+            batch
+                .column_by_name(name)
+                .and_then(|c| c.as_any().downcast_ref::<T>())
+                .ok_or_else(|| Error::Store(format!("missing {name} column")))
+        }
+        let ids = col::<Int64Array>(batch, "entity_id")?;
+        let texts = col::<StringArray>(batch, "text")?;
+        let vf = col::<StringArray>(batch, "valid_from")?;
+        let vt = col::<StringArray>(batch, "valid_to")?;
+        let dist = batch
+            .column_by_name("_distance")
+            .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+        for i in 0..batch.num_rows() {
+            out.push(VectorMatch {
+                entity_id: ids.value(i),
+                text: texts.value(i).to_string(),
+                score: dist.map(|d| 1.0 - d.value(i) as f64).unwrap_or(0.0),
+                valid_from: vf.value(i).to_string(),
+                valid_to: if vt.is_null(i) {
+                    None
+                } else {
+                    Some(vt.value(i).to_string())
+                },
+            });
+        }
+        Ok(())
+    }
+
+    fn block_on<F: std::future::Future<Output = T>, T>(f: F) -> Result<T> {
+        let handle = tokio::runtime::Handle::try_current()
+            .map_err(|_| Error::Store("No Tokio runtime available for LanceDB".into()))?;
+        Ok(tokio::task::block_in_place(|| handle.block_on(f)))
+    }
+}
+
+impl KnowledgeVectorStore for LanceVectorStore {
+    fn embed_entity(
+        &self,
+        entity_id: i64,
+        text: &str,
+        embedding: &[f32],
+        valid_from: &str,
+    ) -> Result<()> {
+        let batch = Self::make_batch(entity_id, text, embedding, valid_from)?;
+        self.add_batch(batch)
     }
 
     fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()> {
@@ -214,23 +263,38 @@ impl KnowledgeVectorStore for LanceVectorStore {
         limit: usize,
         valid_at: Option<&str>,
     ) -> Result<Vec<VectorMatch>> {
+        self.vector_search_filtered(query, limit, None, valid_at)
+    }
+
+    fn vector_search_filtered(
+        &self,
+        query: &[f32],
+        limit: usize,
+        filter: Option<&str>,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<VectorMatch>> {
         let table = match &self.table {
             Some(t) => t,
             None => return Ok(vec![]),
         };
 
         Self::block_on(async {
-            let filter = match valid_at {
-                Some(vt) => {
-                    format!("valid_from <= '{vt}' AND (valid_to IS NULL OR valid_to > '{vt}')")
-                }
-                None => "valid_to IS NULL".to_string(),
-            };
+            // Build combined filter: temporal + optional predicate pushdown.
+            let mut conditions = Vec::new();
+            match valid_at {
+                Some(vt) => conditions.push(format!(
+                    "valid_from <= '{vt}' AND (valid_to IS NULL OR valid_to > '{vt}')"
+                )),
+                None => conditions.push("valid_to IS NULL".to_string()),
+            }
+            if let Some(f) = filter {
+                conditions.push(format!("({f})"));
+            }
 
             let results = table
                 .vector_search(query.to_vec())
                 .map_err(|e| Error::Store(format!("LanceDB vector_search: {e}")))?
-                .only_if(filter)
+                .only_if(conditions.join(" AND "))
                 .limit(limit)
                 .execute()
                 .await
@@ -244,49 +308,9 @@ impl KnowledgeVectorStore for LanceVectorStore {
 
             let mut matches = Vec::new();
             for batch in &batches {
-                let entity_ids = batch
-                    .column_by_name("entity_id")
-                    .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
-                    .ok_or_else(|| Error::Store("missing entity_id column".into()))?;
-                let texts = batch
-                    .column_by_name("text")
-                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                    .ok_or_else(|| Error::Store("missing text column".into()))?;
-                let valid_froms = batch
-                    .column_by_name("valid_from")
-                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                    .ok_or_else(|| Error::Store("missing valid_from column".into()))?;
-                let valid_tos = batch
-                    .column_by_name("valid_to")
-                    .and_then(|c| c.as_any().downcast_ref::<StringArray>())
-                    .ok_or_else(|| Error::Store("missing valid_to column".into()))?;
-
-                // LanceDB returns a _distance column for vector search results.
-                let distances = batch
-                    .column_by_name("_distance")
-                    .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
-
-                for i in 0..batch.num_rows() {
-                    let score = distances
-                        .map(|d| 1.0 - d.value(i) as f64) // L2 distance -> similarity
-                        .unwrap_or(0.0);
-
-                    matches.push(VectorMatch {
-                        entity_id: entity_ids.value(i),
-                        text: texts.value(i).to_string(),
-                        score,
-                        valid_from: valid_froms.value(i).to_string(),
-                        valid_to: if valid_tos.is_null(i) {
-                            None
-                        } else {
-                            Some(valid_tos.value(i).to_string())
-                        },
-                    });
-                }
+                Self::collect_matches(batch, &mut matches)?;
             }
 
-            // Results from LanceDB are already sorted by distance, but re-sort by
-            // our similarity score to be safe.
             matches.sort_by(|a, b| {
                 b.score
                     .partial_cmp(&a.score)
@@ -321,7 +345,7 @@ mod tests {
         (0..dim).map(|i| (seed + i as f32 * 0.1).sin()).collect()
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn lance_embed_and_search() {
         let mut store = LanceVectorStore::open_in_memory().await.unwrap();
 
@@ -350,7 +374,7 @@ mod tests {
         assert_eq!(results[0].entity_id, 1);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn lance_close_embedding() {
         let mut store = LanceVectorStore::open_in_memory().await.unwrap();
 
@@ -363,7 +387,88 @@ mod tests {
         assert_eq!(store.vector_count().unwrap(), 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn lance_filtered_search_by_entity_type() {
+        let mut store = LanceVectorStore::open_in_memory().await.unwrap();
+        let emb_a = make_embedding(1.0, EMBEDDING_DIM as usize);
+        let emb_b = make_embedding(1.1, EMBEDDING_DIM as usize);
+        let type_filter = Some("entity_type = 'http://example.org/Person'");
+
+        let batch = LanceVectorStore::make_batch_typed(
+            1,
+            "Alice",
+            &emb_a,
+            "2026-01-01",
+            Some("http://example.org/Person"),
+        )
+        .unwrap();
+        store.ensure_table(batch).await.unwrap();
+        store
+            .embed_entity_typed(
+                2,
+                "Bot",
+                &emb_b,
+                "2026-01-01",
+                Some("http://example.org/Bot"),
+            )
+            .unwrap();
+
+        // Unfiltered → both; filtered → only Person.
+        assert_eq!(
+            store
+                .vector_search_filtered(&emb_a, 10, None, None)
+                .unwrap()
+                .len(),
+            2
+        );
+        let filtered = store
+            .vector_search_filtered(&emb_a, 10, type_filter, None)
+            .unwrap();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].entity_id, 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn lance_filtered_search_combined_temporal_and_type() {
+        let mut store = LanceVectorStore::open_in_memory().await.unwrap();
+        let emb = make_embedding(1.0, EMBEDDING_DIM as usize);
+        let type_filter = Some("entity_type = 'http://example.org/Person'");
+
+        let batch = LanceVectorStore::make_batch_typed(
+            1,
+            "Old person",
+            &emb,
+            "2026-01-01",
+            Some("http://example.org/Person"),
+        )
+        .unwrap();
+        store.ensure_table(batch).await.unwrap();
+        store.close_embedding(1, "2026-03-01").unwrap();
+        store
+            .embed_entity_typed(
+                2,
+                "Current person",
+                &emb,
+                "2026-03-01",
+                Some("http://example.org/Person"),
+            )
+            .unwrap();
+
+        // Current + type filter → only entity 2.
+        let r = store
+            .vector_search_filtered(&emb, 10, type_filter, None)
+            .unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].entity_id, 2);
+        // Time-travel to Feb + type filter → only entity 1.
+        let r = store
+            .vector_search_filtered(&emb, 10, type_filter, Some("2026-02-01"))
+            .unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].entity_id, 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn lance_temporal_search() {
         let mut store = LanceVectorStore::open_in_memory().await.unwrap();
 
