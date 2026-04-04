@@ -88,3 +88,33 @@ let result2 = validator.validate(data2.as_bytes())?;
 // Or use the convenience reject method
 validator.validate_or_reject(data.as_bytes())?;
 ```
+
+## Code Entity Shapes
+
+Quipu ships SHACL shapes for Bobbin's code entity model in
+`shapes/code-entities.ttl`. These enforce the knowledge-aware bundles
+ontology at write time:
+
+| Shape | Target Class | Required Properties |
+|-------|-------------|-------------------|
+| `CodeModuleShape` | `CodeModule` | filePath, repo, language |
+| `CodeSymbolShape` | `CodeSymbol` | name, definedIn (class CodeModule) |
+| `DocumentShape` | `Document` | filePath |
+| `SectionShape` | `Section` | heading, headingDepth (integer) |
+| `BundleShape` | `Bundle` | rdfs:label, contains (min 1) |
+
+`CodeSymbolShape` constrains `symbolKind` to an enumerated set of values
+(function, method, class, interface, enum, struct, variable, constant,
+module, property, field, constructor, type\_alias).
+
+`BundleShape` requires `contains` members to be instances of CodeModule,
+CodeSymbol, Document, or Section.
+
+Load the shapes via the REST API:
+
+```bash
+curl -s localhost:3030/shapes -X POST \
+  -H "Content-Type: application/json" \
+  -d "{\"action\": \"load\", \"name\": \"code-entities\", \
+       \"turtle\": \"$(cat shapes/code-entities.ttl)\"}"
+```

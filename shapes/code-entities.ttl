@@ -1,0 +1,128 @@
+# SHACL shapes for Bobbin code entity types.
+#
+# Defines validation constraints for CodeModule, CodeSymbol, Document,
+# Section, and Bundle — the core entity model for knowledge-aware bundles.
+#
+# Load via POST /shapes:
+#   curl -s localhost:3030/shapes -X POST \
+#     -H "Content-Type: application/json" \
+#     -d '{"action": "load", "name": "code-entities", "turtle": "<contents>"}'
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix bobbin: <http://aegis.gastown.local/ontology/> .
+
+# ── CodeModule ─────────────────────────────────────────────────
+#
+# A source file in a repository. Every code module must declare its
+# file path, repository, and programming language.
+
+bobbin:CodeModuleShape a sh:NodeShape ;
+    sh:targetClass bobbin:CodeModule ;
+    sh:property [
+        sh:path bobbin:filePath ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:repo ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:language ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── CodeSymbol ─────────────────────────────────────────────────
+#
+# A named symbol (function, class, method, etc.) defined within a
+# CodeModule. The symbolKind is an enumerated string drawn from
+# common language-server symbol categories.
+
+bobbin:CodeSymbolShape a sh:NodeShape ;
+    sh:targetClass bobbin:CodeSymbol ;
+    sh:property [
+        sh:path bobbin:name ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:symbolKind ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in (
+            "function" "method" "class" "interface" "enum"
+            "struct" "variable" "constant" "module" "property"
+            "field" "constructor" "type_alias"
+        ) ;
+    ] ;
+    sh:property [
+        sh:path bobbin:definedIn ;
+        sh:class bobbin:CodeModule ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Document ───────────────────────────────────────────────────
+#
+# A documentation file (Markdown, RST, plain text, etc.).
+
+bobbin:DocumentShape a sh:NodeShape ;
+    sh:targetClass bobbin:Document ;
+    sh:property [
+        sh:path bobbin:filePath ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Section ────────────────────────────────────────────────────
+#
+# A headed section within a Document. headingDepth is a positive
+# integer (1 = top-level heading, 2 = sub-heading, etc.).
+
+bobbin:SectionShape a sh:NodeShape ;
+    sh:targetClass bobbin:Section ;
+    sh:property [
+        sh:path bobbin:heading ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:headingDepth ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Bundle ─────────────────────────────────────────────────────
+#
+# A named collection of code entities. Must have a label and contain
+# at least one member (CodeModule, CodeSymbol, Document, or Section).
+
+bobbin:BundleShape a sh:NodeShape ;
+    sh:targetClass bobbin:Bundle ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:contains ;
+        sh:minCount 1 ;
+        sh:or (
+            [ sh:class bobbin:CodeModule ]
+            [ sh:class bobbin:CodeSymbol ]
+            [ sh:class bobbin:Document ]
+            [ sh:class bobbin:Section ]
+        ) ;
+    ] .

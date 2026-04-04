@@ -327,3 +327,7 @@ ex:alice a ex:Person .
         assert!(!issue.severity.is_empty());
     }
 }
+
+#[cfg(test)]
+#[path = "code_entity_tests.rs"]
+mod code_entity_tests;
