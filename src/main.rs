@@ -1,15 +1,21 @@
-//! Quipu CLI — interactive knowledge graph demo.
+//! Quipu CLI — AI-native knowledge graph.
 //!
 //! Commands:
-//!   quipu load <file.ttl> [--db <path>]  Load a Turtle file into the store
-//!   quipu query <sparql> [--db <path>]   Run a SPARQL SELECT query
+//!   quipu knot <file.ttl> [--shapes <shapes.ttl>] [--db <path>]  Assert facts (with optional SHACL)
+//!   quipu read "<sparql>" [--db <path>]   Run a SPARQL SELECT query
+//!   quipu cord [--type <IRI>] [--limit N] [--db <path>]  List entities
+//!   quipu unravel [--tx N] [--valid-at <date>] [--db <path>]  Time-travel query
+//!   quipu validate --shapes <shapes.ttl> --data <data.ttl>  Validate without writing
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
 //!   quipu stats [--db <path>]            Show store statistics
+//!
+//! Aliases: load=knot, query=read
 
 use std::io::{self, BufRead, Write};
 
 use oxrdfio::RdfFormat;
+use serde_json;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -28,8 +34,11 @@ fn main() {
 
     let cmd = args[1].as_str();
     match cmd {
-        "load" => cmd_load(&args, db_path),
-        "query" => cmd_query(&args, db_path),
+        "knot" | "load" => cmd_knot(&args, db_path),
+        "read" | "query" => cmd_query(&args, db_path),
+        "cord" => cmd_cord(&args, db_path),
+        "unravel" => cmd_unravel(&args, db_path),
+        "validate" => cmd_validate(&args),
         "repl" => cmd_repl(db_path),
         "export" => cmd_export(&args, db_path),
         "stats" => cmd_stats(db_path),
@@ -46,29 +55,55 @@ fn print_usage() {
     eprintln!(
         "quipu — AI-native knowledge graph
 
-USAGE:
-    quipu load <file.ttl> [--db <path>]     Load Turtle/N-Triples into store
-    quipu query \"<sparql>\" [--db <path>]     Run a SPARQL SELECT query
-    quipu repl [--db <path>]                 Interactive SPARQL prompt
-    quipu export [--format ntriples] [--db <path>]  Export current facts
-    quipu stats [--db <path>]                Show store statistics
+COMMANDS:
+    quipu knot <file.ttl> [--shapes <shapes.ttl>] [--db <path>]
+        Assert facts from a Turtle/N-Triples file (with optional SHACL validation)
+
+    quipu read \"<sparql>\" [--db <path>]
+        Run a SPARQL SELECT query
+
+    quipu cord [--type <IRI>] [--limit N] [--db <path>]
+        List entities, optionally filtered by rdf:type
+
+    quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
+        Time-travel query: see facts as they were at a given point
+
+    quipu validate --shapes <shapes.ttl> --data <data.ttl>
+        Validate data against SHACL shapes (dry run, no write)
+
+    quipu repl [--db <path>]
+        Interactive SPARQL prompt
+
+    quipu export [--format ntriples|turtle] [--db <path>]
+        Export current facts as RDF
+
+    quipu stats [--db <path>]
+        Show store statistics
 
 OPTIONS:
     --db <path>    Store file (default: quipu.db)
-    --format <fmt> Export format: ntriples, turtle (default: ntriples)"
+
+ALIASES:
+    load = knot, query = read"
     );
 }
 
-fn cmd_load(args: &[String], db_path: &str) {
+fn cmd_knot(args: &[String], db_path: &str) {
     let file_path = args.get(2);
 
     let file_path = match file_path {
         Some(p) if !p.starts_with("--") => p.as_str(),
         _ => {
-            eprintln!("usage: quipu load <file.ttl> [--db <path>]");
+            eprintln!("usage: quipu knot <file.ttl> [--shapes <shapes.ttl>] [--db <path>]");
             std::process::exit(1);
         }
     };
+
+    // Optional --shapes for SHACL validation before write.
+    let shapes_path = args
+        .windows(2)
+        .find(|w| w[0] == "--shapes")
+        .map(|w| w[1].as_str());
 
     let mut store = match quipu::Store::open(db_path) {
         Ok(s) => s,
@@ -86,6 +121,38 @@ fn cmd_load(args: &[String], db_path: &str) {
         }
     };
 
+    // If shapes provided, validate first.
+    if let Some(sp) = shapes_path {
+        let shapes = match std::fs::read_to_string(sp) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error reading shapes {sp}: {e}");
+                std::process::exit(1);
+            }
+        };
+        match quipu::validate_shapes(&shapes, &data) {
+            Ok(feedback) => {
+                if !feedback.conforms {
+                    eprintln!("SHACL validation failed: {} violation(s)", feedback.violations);
+                    for issue in &feedback.results {
+                        eprintln!(
+                            "  {} on {}: {}",
+                            issue.severity,
+                            issue.focus_node,
+                            issue.message.as_deref().unwrap_or("constraint violated")
+                        );
+                    }
+                    std::process::exit(1);
+                }
+                println!("SHACL validation passed");
+            }
+            Err(e) => {
+                eprintln!("validation error: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     let format = if file_path.ends_with(".nt") || file_path.ends_with(".ntriples") {
         RdfFormat::NTriples
     } else {
@@ -96,7 +163,7 @@ fn cmd_load(args: &[String], db_path: &str) {
     match quipu::ingest_rdf(&mut store, data.as_bytes(), format, None, &now, None, Some(file_path))
     {
         Ok((tx_id, count)) => {
-            println!("loaded {count} triples from {file_path} (tx {tx_id})");
+            println!("knotted {count} facts from {file_path} (tx {tx_id})");
         }
         Err(e) => {
             eprintln!("error ingesting: {e}");
@@ -159,6 +226,174 @@ fn cmd_repl(db_path: &str) {
 
         run_query(&store, trimmed);
         println!();
+    }
+}
+
+fn cmd_cord(args: &[String], db_path: &str) {
+    let type_filter = args
+        .windows(2)
+        .find(|w| w[0] == "--type")
+        .map(|w| w[1].as_str());
+
+    let limit: usize = args
+        .windows(2)
+        .find(|w| w[0] == "--limit")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(100);
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let input = serde_json::json!({
+        "type": type_filter,
+        "limit": limit,
+    });
+
+    match quipu::tool_cord(&store, &input) {
+        Ok(result) => {
+            let entities = result["entities"].as_array().unwrap();
+            for entity in entities {
+                let iri = entity["iri"].as_str().unwrap_or("?");
+                let facts = entity["facts"].as_array().unwrap();
+                println!("{iri}");
+                for fact in facts {
+                    let pred = fact["predicate"].as_str().unwrap_or("?");
+                    let val = &fact["value"];
+                    let val_str = match val {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    println!("  {pred} → {val_str}");
+                }
+                println!();
+            }
+            println!("{} entities", result["count"]);
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_unravel(args: &[String], db_path: &str) {
+    let tx: Option<i64> = args
+        .windows(2)
+        .find(|w| w[0] == "--tx")
+        .and_then(|w| w[1].parse().ok());
+
+    let valid_at = args
+        .windows(2)
+        .find(|w| w[0] == "--valid-at")
+        .map(|w| w[1].as_str());
+
+    if tx.is_none() && valid_at.is_none() {
+        eprintln!("usage: quipu unravel [--tx N] [--valid-at <date>]");
+        eprintln!("  at least one of --tx or --valid-at is required");
+        std::process::exit(1);
+    }
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let input = serde_json::json!({
+        "tx": tx,
+        "valid_at": valid_at,
+    });
+
+    match quipu::tool_unravel(&store, &input) {
+        Ok(result) => {
+            let facts = result["facts"].as_array().unwrap();
+            for fact in facts {
+                let entity = fact["entity"].as_str().unwrap_or("?");
+                let pred = fact["predicate"].as_str().unwrap_or("?");
+                let val = &fact["value"];
+                let val_str = match val {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                let vf = fact["valid_from"].as_str().unwrap_or("?");
+                let vt = fact["valid_to"].as_str().unwrap_or("∞");
+                println!("{entity}  {pred}  {val_str}  [{vf} → {vt}]");
+            }
+            println!("\n{} facts", result["count"]);
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_validate(args: &[String]) {
+    let shapes_path = args
+        .windows(2)
+        .find(|w| w[0] == "--shapes")
+        .map(|w| w[1].as_str());
+    let data_path = args
+        .windows(2)
+        .find(|w| w[0] == "--data")
+        .map(|w| w[1].as_str());
+
+    let (shapes_path, data_path) = match (shapes_path, data_path) {
+        (Some(s), Some(d)) => (s, d),
+        _ => {
+            eprintln!("usage: quipu validate --shapes <shapes.ttl> --data <data.ttl>");
+            std::process::exit(1);
+        }
+    };
+
+    let shapes = match std::fs::read_to_string(shapes_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error reading shapes: {e}");
+            std::process::exit(1);
+        }
+    };
+    let data = match std::fs::read_to_string(data_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error reading data: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match quipu::validate_shapes(&shapes, &data) {
+        Ok(feedback) => {
+            if feedback.conforms {
+                println!("✓ valid ({} warnings)", feedback.warnings);
+            } else {
+                println!("✗ invalid: {} violation(s), {} warning(s)", feedback.violations, feedback.warnings);
+                for issue in &feedback.results {
+                    println!(
+                        "  [{:>9}] {} — {}{}",
+                        issue.severity,
+                        issue.focus_node,
+                        issue.message.as_deref().unwrap_or("constraint violated"),
+                        issue
+                            .path
+                            .as_ref()
+                            .map(|p| format!(" (path: {p})"))
+                            .unwrap_or_default()
+                    );
+                }
+                std::process::exit(1);
+            }
+        }
+        Err(e) => {
+            eprintln!("validation error: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
