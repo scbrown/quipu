@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use oxrdf::Literal;
-use spargebra::algebra::{Expression, GraphPattern, OrderExpression};
+use spargebra::algebra::{AggregateExpression, AggregateFunction, Expression, GraphPattern, OrderExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::{Query, SparqlParser};
 
@@ -187,6 +187,78 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
         }
 
         GraphPattern::Reduced { inner } => eval_pattern(store, inner),
+
+        GraphPattern::Group {
+            inner,
+            variables,
+            aggregates,
+        } => {
+            let (rows, _) = eval_pattern(store, inner)?;
+            let group_keys: Vec<String> = variables.iter().map(|v| v.as_str().to_string()).collect();
+            let agg_vars: Vec<String> = aggregates.iter().map(|(v, _)| v.as_str().to_string()).collect();
+
+            // Group rows by the group-by variables.
+            let mut groups: Vec<(Vec<Option<Value>>, Vec<Bindings>)> = Vec::new();
+            for row in &rows {
+                let key: Vec<Option<Value>> = group_keys.iter().map(|k| row.get(k).cloned()).collect();
+                if let Some(group) = groups.iter_mut().find(|(k, _)| k == &key) {
+                    group.1.push(row.clone());
+                } else {
+                    groups.push((key, vec![row.clone()]));
+                }
+            }
+
+            // If no group keys, all rows form a single group.
+            if group_keys.is_empty() && groups.is_empty() {
+                groups.push((vec![], rows));
+            }
+
+            let mut result_rows = Vec::new();
+            for (key, group_rows) in &groups {
+                let mut result_row = Bindings::new();
+
+                // Set group-by variable bindings.
+                for (i, var) in group_keys.iter().enumerate() {
+                    if let Some(val) = &key[i] {
+                        result_row.insert(var.clone(), val.clone());
+                    }
+                }
+
+                // Compute aggregates.
+                for (i, (_, agg_expr)) in aggregates.iter().enumerate() {
+                    let agg_val = eval_aggregate(store, agg_expr, group_rows);
+                    result_row.insert(agg_vars[i].clone(), agg_val);
+                }
+
+                result_rows.push(result_row);
+            }
+
+            let mut vars = group_keys;
+            vars.extend(agg_vars);
+            Ok((result_rows, vars))
+        }
+
+        GraphPattern::Extend {
+            inner,
+            variable,
+            expression,
+        } => {
+            let (rows, mut vars) = eval_pattern(store, inner)?;
+            let var_name = variable.as_str().to_string();
+            let extended: Vec<Bindings> = rows
+                .into_iter()
+                .map(|mut row| {
+                    if let Some(val) = eval_expr(store, expression, &row) {
+                        row.insert(var_name.clone(), val);
+                    }
+                    row
+                })
+                .collect();
+            if !vars.contains(&var_name) {
+                vars.push(var_name);
+            }
+            Ok((extended, vars))
+        }
 
         _ => Err(Error::InvalidValue(format!(
             "unsupported graph pattern: {pattern}"
@@ -561,6 +633,93 @@ fn compare_values(
         }
         (Some(Value::Str(a)), Some(Value::Str(b))) => pred(a.cmp(&b)),
         _ => false,
+    }
+}
+
+// ── Aggregate evaluation ────────────────────────────────────────
+
+/// Evaluate an aggregate expression over a group of rows.
+fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings]) -> Value {
+    match agg {
+        AggregateExpression::CountSolutions { distinct } => {
+            if *distinct {
+                let mut seen: Vec<&Bindings> = Vec::new();
+                let count = rows.iter().filter(|r| {
+                    if seen.contains(r) { false } else { seen.push(r); true }
+                }).count();
+                Value::Int(count as i64)
+            } else {
+                Value::Int(rows.len() as i64)
+            }
+        }
+        AggregateExpression::FunctionCall { name, expr, distinct } => {
+            let mut values: Vec<Value> = rows
+                .iter()
+                .filter_map(|row| eval_expr(store, expr, row))
+                .collect();
+            if *distinct {
+                let mut deduped = Vec::new();
+                for v in values {
+                    if !deduped.contains(&v) {
+                        deduped.push(v);
+                    }
+                }
+                values = deduped;
+            }
+            match name {
+                AggregateFunction::Count => Value::Int(values.len() as i64),
+                AggregateFunction::Sum => {
+                    let mut sum = 0.0f64;
+                    let mut all_int = true;
+                    for v in &values {
+                        match v {
+                            Value::Int(n) => sum += *n as f64,
+                            Value::Float(f) => { sum += f; all_int = false; }
+                            _ => {}
+                        }
+                    }
+                    if all_int { Value::Int(sum as i64) } else { Value::Float(sum) }
+                }
+                AggregateFunction::Avg => {
+                    if values.is_empty() { return Value::Int(0); }
+                    let mut sum = 0.0f64;
+                    let mut count = 0usize;
+                    for v in &values {
+                        match v {
+                            Value::Int(n) => { sum += *n as f64; count += 1; }
+                            Value::Float(f) => { sum += f; count += 1; }
+                            _ => {}
+                        }
+                    }
+                    if count == 0 { Value::Int(0) } else { Value::Float(sum / count as f64) }
+                }
+                AggregateFunction::Min => {
+                    values.into_iter().reduce(|a, b| {
+                        if compare_option_values(&Some(a.clone()), &Some(b.clone())) == std::cmp::Ordering::Less { a } else { b }
+                    }).unwrap_or(Value::Int(0))
+                }
+                AggregateFunction::Max => {
+                    values.into_iter().reduce(|a, b| {
+                        if compare_option_values(&Some(a.clone()), &Some(b.clone())) == std::cmp::Ordering::Greater { a } else { b }
+                    }).unwrap_or(Value::Int(0))
+                }
+                AggregateFunction::Sample => {
+                    values.into_iter().next().unwrap_or(Value::Int(0))
+                }
+                AggregateFunction::GroupConcat { separator } => {
+                    let sep = separator.as_deref().unwrap_or(" ");
+                    let strs: Vec<String> = values.iter().map(|v| match v {
+                        Value::Str(s) => s.clone(),
+                        Value::Int(n) => n.to_string(),
+                        Value::Float(f) => f.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        _ => String::new(),
+                    }).collect();
+                    Value::Str(strs.join(sep))
+                }
+                AggregateFunction::Custom(_) => Value::Int(0),
+            }
+        }
     }
 }
 
@@ -1076,5 +1235,75 @@ ex:dave a ex:Other ; ex:name "Dave" .
 
         // Alice and Bob are Person, Carol is Employee.
         assert_eq!(result.rows.len(), 2);
+    }
+
+    #[test]
+    fn select_count_all() {
+        let store = test_store_with_data();
+        let result = query(
+            &store,
+            r#"SELECT (COUNT(*) AS ?count) WHERE { ?s <http://example.org/name> ?name }"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0].get("count"), Some(&Value::Int(3)));
+    }
+
+    #[test]
+    fn select_group_by_with_count() {
+        let store = test_store_with_data();
+        let result = query(
+            &store,
+            r#"SELECT ?type (COUNT(?s) AS ?n) WHERE { ?s a ?type } GROUP BY ?type"#,
+        )
+        .unwrap();
+
+        // Two types: Person (2 instances), Employee (1 instance)
+        assert_eq!(result.rows.len(), 2);
+
+        for row in &result.rows {
+            let count = row.get("n").unwrap();
+            match count {
+                Value::Int(1) | Value::Int(2) => {} // valid counts
+                other => panic!("unexpected count: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn select_sum_and_avg() {
+        let store = test_store_with_data();
+
+        let result = query(
+            &store,
+            r#"SELECT (SUM(?age) AS ?total) (AVG(?age) AS ?mean) WHERE {
+                ?s <http://example.org/age> ?age
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 1);
+        // Ages: 30 + 25 + 35 = 90
+        assert_eq!(result.rows[0].get("total"), Some(&Value::Int(90)));
+        // Avg: 90 / 3 = 30.0
+        assert_eq!(result.rows[0].get("mean"), Some(&Value::Float(30.0)));
+    }
+
+    #[test]
+    fn select_min_max() {
+        let store = test_store_with_data();
+
+        let result = query(
+            &store,
+            r#"SELECT (MIN(?age) AS ?youngest) (MAX(?age) AS ?oldest) WHERE {
+                ?s <http://example.org/age> ?age
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0].get("youngest"), Some(&Value::Int(25)));
+        assert_eq!(result.rows[0].get("oldest"), Some(&Value::Int(35)));
     }
 }
