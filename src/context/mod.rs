@@ -14,6 +14,7 @@ use crate::error::Result;
 use crate::sparql;
 use crate::store::Store;
 use crate::types::Value;
+use crate::vector::KnowledgeVectorStore;
 
 /// A knowledge context result — the Quipu counterpart to Bobbin's `ContextBundle`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,11 +100,36 @@ impl Default for ContextPipelineConfig {
 pub struct ContextPipeline<'a> {
     store: &'a Store,
     config: ContextPipelineConfig,
+    /// Optional vector store for FTS. When set, `text_search` tries Tantivy FTS
+    /// before falling back to SPARQL `FILTER(CONTAINS(...))`.
+    vector_store: Option<&'a dyn KnowledgeVectorStore>,
 }
 
 impl<'a> ContextPipeline<'a> {
+    /// Create a pipeline that uses SPARQL text search only.
     pub fn new(store: &'a Store, config: ContextPipelineConfig) -> Self {
-        Self { store, config }
+        Self {
+            store,
+            config,
+            vector_store: None,
+        }
+    }
+
+    /// Create a pipeline with a vector store for FTS-first text search.
+    ///
+    /// When a vector store with an FTS index is provided, `text_search` uses
+    /// Tantivy BM25 ranking. Falls back to SPARQL `CONTAINS` if FTS returns
+    /// no results or the store has no FTS index.
+    pub fn with_vector_store(
+        store: &'a Store,
+        config: ContextPipelineConfig,
+        vector_store: &'a dyn KnowledgeVectorStore,
+    ) -> Self {
+        Self {
+            store,
+            config,
+            vector_store: Some(vector_store),
+        }
     }
 
     /// Query with optional embedding-based semantic search and predicate pushdown.
@@ -120,12 +146,11 @@ impl<'a> ContextPipeline<'a> {
     ) -> Result<KnowledgeContext> {
         let mut ctx = self.query(query)?;
 
-        let semantic_hits = self.store.vector_store().vector_search_filtered(
-            embedding,
-            self.config.max_entities,
-            filter,
-            None,
-        )?;
+        let vs: &dyn KnowledgeVectorStore = self
+            .vector_store
+            .unwrap_or_else(|| self.store.vector_store());
+        let semantic_hits =
+            vs.vector_search_filtered(embedding, self.config.max_entities, filter, None)?;
 
         let mut seen: Vec<String> = ctx.entities.iter().map(|e| e.iri.clone()).collect();
         let mut semantic_count = 0;
@@ -227,7 +252,33 @@ impl<'a> ContextPipeline<'a> {
     }
 
     /// Find entities whose IRIs or literal values match query terms.
+    ///
+    /// Tries `LanceDB` Tantivy FTS first (BM25 ranked), then falls back to
+    /// SPARQL `FILTER(CONTAINS(...))` for SQLite-only stores.
     fn text_search(&self, query: &str) -> Result<Vec<KnowledgeEntity>> {
+        // Try FTS first if a vector store is available.
+        if let Some(vs) = self.vector_store {
+            let fts_hits = vs.text_search(query, self.config.max_entities, None)?;
+            if !fts_hits.is_empty() {
+                let mut entities = Vec::new();
+                for hit in fts_hits {
+                    if let Ok(iri) = self.store.resolve(hit.entity_id)
+                        && let Ok(entity) =
+                            self.build_entity(&iri, KnowledgeRelevance::Direct, hit.score as f32)
+                    {
+                        entities.push(entity);
+                    }
+                }
+                return Ok(entities);
+            }
+        }
+
+        // Fallback: SPARQL substring match.
+        self.text_search_sparql(query)
+    }
+
+    /// SPARQL-based text search fallback (substring match, no ranking).
+    fn text_search_sparql(&self, query: &str) -> Result<Vec<KnowledgeEntity>> {
         // Escape single quotes for SPARQL injection safety.
         let safe_query = query.replace('\\', "\\\\").replace('\'', "\\'");
 

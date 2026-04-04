@@ -81,6 +81,26 @@ pub trait KnowledgeVectorStore {
 
     /// Return the number of current embeddings.
     fn vector_count(&self) -> Result<usize>;
+
+    /// Full-text search over entity text using Tantivy BM25 (when available).
+    ///
+    /// Returns ranked results by BM25 relevance score. Backends without an FTS
+    /// index return an empty vec, signaling the caller to fall back to SPARQL.
+    fn text_search(
+        &self,
+        _query: &str,
+        _limit: usize,
+        _valid_at: Option<&str>,
+    ) -> Result<Vec<VectorMatch>> {
+        Ok(vec![])
+    }
+
+    /// Ensure a full-text search index exists on the `text` column.
+    ///
+    /// No-op for backends that don't support FTS (e.g. `SQLite` vectors table).
+    fn ensure_fts_index(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 // ── SQLite implementation ─────────────────────────────────────────

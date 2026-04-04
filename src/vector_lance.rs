@@ -4,11 +4,13 @@
 //! synchronous trait interface via `block_in_place` + `block_on`.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use arrow_array::{
     Array, ArrayRef, FixedSizeListArray, Float32Array, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use lancedb::index::Index;
 use lancedb::query::{ExecutableQuery, QueryBase};
 use lancedb::{Connection, Table};
 
@@ -23,9 +25,9 @@ const TABLE_NAME: &str = "vectors";
 
 /// `LanceDB`-backed vector store for entity embeddings.
 pub struct LanceVectorStore {
-    #[allow(dead_code)]
     conn: Connection,
     table: Option<Table>,
+    has_fts_index: AtomicBool,
 }
 
 impl LanceVectorStore {
@@ -52,7 +54,11 @@ impl LanceVectorStore {
             None
         };
 
-        Ok(Self { conn, table })
+        Ok(Self {
+            conn,
+            table,
+            has_fts_index: AtomicBool::new(false),
+        })
     }
 
     /// Open an in-memory store (useful for tests).
@@ -61,7 +67,11 @@ impl LanceVectorStore {
             .execute()
             .await
             .map_err(|e| Error::Store(format!("LanceDB in-memory connect: {e}")))?;
-        Ok(Self { conn, table: None })
+        Ok(Self {
+            conn,
+            table: None,
+            has_fts_index: AtomicBool::new(false),
+        })
     }
 
     /// Arrow schema for the vectors table.
@@ -204,11 +214,20 @@ impl LanceVectorStore {
         let dist = batch
             .column_by_name("_distance")
             .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
+        let fts_score = batch
+            .column_by_name("_score")
+            .and_then(|c| c.as_any().downcast_ref::<Float32Array>());
         for i in 0..batch.num_rows() {
+            // Prefer BM25 _score (FTS) over _distance (vector search).
+            let score = if let Some(s) = fts_score {
+                s.value(i) as f64
+            } else {
+                dist.map_or(0.0, |d| 1.0 - d.value(i) as f64)
+            };
             out.push(VectorMatch {
                 entity_id: ids.value(i),
                 text: texts.value(i).to_string(),
-                score: dist.map_or(0.0, |d| 1.0 - d.value(i) as f64),
+                score,
                 valid_from: vf.value(i).to_string(),
                 valid_to: if vt.is_null(i) {
                     None
@@ -332,166 +351,84 @@ impl KnowledgeVectorStore for LanceVectorStore {
             Ok(count)
         })?
     }
+
+    fn text_search(
+        &self,
+        query: &str,
+        limit: usize,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<VectorMatch>> {
+        if !self.has_fts_index.load(Ordering::Acquire) {
+            return Ok(vec![]);
+        }
+        let Some(table) = &self.table else {
+            return Ok(vec![]);
+        };
+
+        Self::block_on(async {
+            use lancedb::index::scalar::FullTextSearchQuery;
+
+            let mut conditions = Vec::new();
+            match valid_at {
+                Some(vt) => conditions.push(format!(
+                    "valid_from <= '{vt}' AND (valid_to IS NULL OR valid_to > '{vt}')"
+                )),
+                None => conditions.push("valid_to IS NULL".to_string()),
+            }
+
+            let mut qb = table
+                .query()
+                .full_text_search(FullTextSearchQuery::new(query.to_string()))
+                .limit(limit);
+            if !conditions.is_empty() {
+                qb = qb.only_if(conditions.join(" AND "));
+            }
+
+            let results = qb
+                .execute()
+                .await
+                .map_err(|e| Error::Store(format!("LanceDB FTS execute: {e}")))?;
+
+            use futures::TryStreamExt;
+            let batches: Vec<RecordBatch> = results
+                .try_collect()
+                .await
+                .map_err(|e| Error::Store(format!("LanceDB FTS collect: {e}")))?;
+
+            let mut matches = Vec::new();
+            for batch in &batches {
+                Self::collect_matches(batch, &mut matches)?;
+            }
+
+            matches.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            matches.truncate(limit);
+            Ok(matches)
+        })?
+    }
+
+    fn ensure_fts_index(&self) -> Result<()> {
+        let Some(table) = &self.table else {
+            return Ok(());
+        };
+
+        Self::block_on(async {
+            table
+                .create_index(&["text"], Index::FTS(Default::default()))
+                .replace(true)
+                .execute()
+                .await
+                .map_err(|e| Error::Store(format!("LanceDB FTS index: {e}")))
+        })??;
+
+        self.has_fts_index.store(true, Ordering::Release);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_embedding(seed: f32, dim: usize) -> Vec<f32> {
-        (0..dim).map(|i| (seed + i as f32 * 0.1).sin()).collect()
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn lance_embed_and_search() {
-        let mut store = LanceVectorStore::open_in_memory().await.unwrap();
-
-        let emb1 = make_embedding(1.0, EMBEDDING_DIM as usize);
-        let emb2 = make_embedding(1.1, EMBEDDING_DIM as usize);
-        let emb3 = make_embedding(5.0, EMBEDDING_DIM as usize);
-
-        // Bootstrap the table with the first insert.
-        let batch =
-            LanceVectorStore::make_batch(1, "Alice the engineer", &emb1, "2026-01-01").unwrap();
-        store.ensure_table(batch).await.unwrap();
-
-        // Remaining inserts go through the trait.
-        store
-            .embed_entity(2, "Bob the developer", &emb2, "2026-01-01")
-            .unwrap();
-        store
-            .embed_entity(3, "Carol the manager", &emb3, "2026-01-01")
-            .unwrap();
-
-        assert_eq!(store.vector_count().unwrap(), 3);
-
-        let results = store.vector_search(&emb1, 3, None).unwrap();
-        assert_eq!(results.len(), 3);
-        // Alice should be top match (closest to query).
-        assert_eq!(results[0].entity_id, 1);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn lance_close_embedding() {
-        let mut store = LanceVectorStore::open_in_memory().await.unwrap();
-
-        let emb = make_embedding(1.0, EMBEDDING_DIM as usize);
-        let batch = LanceVectorStore::make_batch(1, "entity one", &emb, "2026-01-01").unwrap();
-        store.ensure_table(batch).await.unwrap();
-
-        assert_eq!(store.vector_count().unwrap(), 1);
-        store.close_embedding(1, "2026-03-01").unwrap();
-        assert_eq!(store.vector_count().unwrap(), 0);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn lance_filtered_search_by_entity_type() {
-        let mut store = LanceVectorStore::open_in_memory().await.unwrap();
-        let emb_a = make_embedding(1.0, EMBEDDING_DIM as usize);
-        let emb_b = make_embedding(1.1, EMBEDDING_DIM as usize);
-        let type_filter = Some("entity_type = 'http://example.org/Person'");
-
-        let batch = LanceVectorStore::make_batch_typed(
-            1,
-            "Alice",
-            &emb_a,
-            "2026-01-01",
-            Some("http://example.org/Person"),
-        )
-        .unwrap();
-        store.ensure_table(batch).await.unwrap();
-        store
-            .embed_entity_typed(
-                2,
-                "Bot",
-                &emb_b,
-                "2026-01-01",
-                Some("http://example.org/Bot"),
-            )
-            .unwrap();
-
-        // Unfiltered → both; filtered → only Person.
-        assert_eq!(
-            store
-                .vector_search_filtered(&emb_a, 10, None, None)
-                .unwrap()
-                .len(),
-            2
-        );
-        let filtered = store
-            .vector_search_filtered(&emb_a, 10, type_filter, None)
-            .unwrap();
-        assert_eq!(filtered.len(), 1);
-        assert_eq!(filtered[0].entity_id, 1);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn lance_filtered_search_combined_temporal_and_type() {
-        let mut store = LanceVectorStore::open_in_memory().await.unwrap();
-        let emb = make_embedding(1.0, EMBEDDING_DIM as usize);
-        let type_filter = Some("entity_type = 'http://example.org/Person'");
-
-        let batch = LanceVectorStore::make_batch_typed(
-            1,
-            "Old person",
-            &emb,
-            "2026-01-01",
-            Some("http://example.org/Person"),
-        )
-        .unwrap();
-        store.ensure_table(batch).await.unwrap();
-        store.close_embedding(1, "2026-03-01").unwrap();
-        store
-            .embed_entity_typed(
-                2,
-                "Current person",
-                &emb,
-                "2026-03-01",
-                Some("http://example.org/Person"),
-            )
-            .unwrap();
-
-        // Current + type filter → only entity 2.
-        let r = store
-            .vector_search_filtered(&emb, 10, type_filter, None)
-            .unwrap();
-        assert_eq!(r.len(), 1);
-        assert_eq!(r[0].entity_id, 2);
-        // Time-travel to Feb + type filter → only entity 1.
-        let r = store
-            .vector_search_filtered(&emb, 10, type_filter, Some("2026-02-01"))
-            .unwrap();
-        assert_eq!(r.len(), 1);
-        assert_eq!(r[0].entity_id, 1);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn lance_temporal_search() {
-        let mut store = LanceVectorStore::open_in_memory().await.unwrap();
-
-        let emb_old = make_embedding(1.0, EMBEDDING_DIM as usize);
-        let emb_new = make_embedding(2.0, EMBEDDING_DIM as usize);
-
-        // Old embedding.
-        let batch = LanceVectorStore::make_batch(1, "old desc", &emb_old, "2026-01-01").unwrap();
-        store.ensure_table(batch).await.unwrap();
-        store.close_embedding(1, "2026-03-01").unwrap();
-
-        // New embedding.
-        store
-            .embed_entity(1, "new desc", &emb_new, "2026-03-01")
-            .unwrap();
-
-        // Current: only new.
-        let results = store.vector_search(&emb_old, 10, None).unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].text, "new desc");
-
-        // Time-travel to February: only old.
-        let results = store
-            .vector_search(&emb_old, 10, Some("2026-02-01"))
-            .unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].text, "old desc");
-    }
-}
+#[path = "vector_lance_tests.rs"]
+mod tests;
