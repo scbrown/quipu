@@ -37,14 +37,12 @@ pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> bool {
         }
         Expression::Not(inner) => !eval_filter(store, inner, row),
         Expression::Bound(var) => row.contains_key(var.as_str()),
-        Expression::FunctionCall(
-            spargebra::algebra::Function::Regex,
-            args,
-        ) => {
+        Expression::FunctionCall(spargebra::algebra::Function::Regex, args) => {
             if args.len() >= 2 {
-                if let (Some(Value::Str(text)), Some(Value::Str(pattern))) =
-                    (eval_expr(store, &args[0], row), eval_expr(store, &args[1], row))
-                {
+                if let (Some(Value::Str(text)), Some(Value::Str(pattern))) = (
+                    eval_expr(store, &args[0], row),
+                    eval_expr(store, &args[1], row),
+                ) {
                     // Simple regex: just check contains for now.
                     text.contains(&pattern)
                 } else {
@@ -62,9 +60,7 @@ pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> bool {
 pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Value> {
     match expr {
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
-        Expression::NamedNode(n) => {
-            store.lookup(n.as_str()).ok().flatten().map(Value::Ref)
-        }
+        Expression::NamedNode(n) => store.lookup(n.as_str()).ok().flatten().map(Value::Ref),
         Expression::Literal(lit) => Some(literal_to_value(lit)),
         _ => None,
     }
@@ -80,9 +76,7 @@ pub fn compare_values(
 ) -> bool {
     match (eval_expr(store, left, row), eval_expr(store, right, row)) {
         (Some(Value::Int(a)), Some(Value::Int(b))) => pred(a.cmp(&b)),
-        (Some(Value::Float(a)), Some(Value::Float(b))) => {
-            a.partial_cmp(&b).is_some_and(&pred)
-        }
+        (Some(Value::Float(a)), Some(Value::Float(b))) => a.partial_cmp(&b).is_some_and(&pred),
         (Some(Value::Int(a)), Some(Value::Float(b))) => {
             (a as f64).partial_cmp(&b).is_some_and(&pred)
         }

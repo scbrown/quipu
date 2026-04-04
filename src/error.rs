@@ -9,7 +9,9 @@ pub enum Error {
     #[error("unknown term id: {0}")]
     UnknownTerm(i64),
 
-    #[error("contradiction: entity {entity} attribute {attribute} has overlapping valid-time intervals")]
+    #[error(
+        "contradiction: entity {entity} attribute {attribute} has overlapping valid-time intervals"
+    )]
     Contradiction { entity: i64, attribute: i64 },
 
     #[error("{0}")]

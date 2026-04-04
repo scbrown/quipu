@@ -24,14 +24,12 @@ pub fn is_rdf_type_pattern(tp: &TriplePattern) -> bool {
 /// Uses rdfs:subClassOf triples: `SubClass rdfs:subClassOf SuperClass`.
 /// Returns the term IDs of the class and all subclasses.
 pub fn collect_class_and_subclasses(store: &Store, class_iri: &str) -> Result<Vec<i64>> {
-    let class_id = match store.lookup(class_iri)? {
-        Some(id) => id,
-        None => return Ok(vec![]),
+    let Some(class_id) = store.lookup(class_iri)? else {
+        return Ok(vec![]);
     };
 
-    let subclass_pred = match store.lookup(RDFS_SUBCLASS_OF)? {
-        Some(id) => id,
-        None => return Ok(vec![class_id]), // No subClassOf pred -> just the class itself
+    let Some(subclass_pred) = store.lookup(RDFS_SUBCLASS_OF)? else {
+        return Ok(vec![class_id]); // No subClassOf pred -> just the class itself
     };
 
     // BFS to find all subclasses.
@@ -69,20 +67,20 @@ pub fn eval_type_pattern_with_subclasses(
     class_ids: &[i64],
     ctx: &TemporalContext,
 ) -> Result<Vec<Bindings>> {
-    let type_pred_id = match store.lookup(RDF_TYPE)? {
-        Some(id) => id,
-        None => return Ok(vec![]),
+    let Some(type_pred_id) = store.lookup(RDF_TYPE)? else {
+        return Ok(vec![]);
     };
 
     // Subject filter (if bound).
-    let subject_id = if let Some(iri) = super::pattern::resolve_subject_pattern(&tp.subject, bindings) {
-        match store.lookup(&iri)? {
-            Some(id) => Some(id),
-            None => return Ok(vec![]),
-        }
-    } else {
-        None
-    };
+    let subject_id =
+        if let Some(iri) = super::pattern::resolve_subject_pattern(&tp.subject, bindings) {
+            match store.lookup(&iri)? {
+                Some(id) => Some(id),
+                None => return Ok(vec![]),
+            }
+        } else {
+            None
+        };
 
     let mut results = Vec::new();
 
@@ -91,10 +89,7 @@ pub fn eval_type_pattern_with_subclasses(
         let v_bytes = Value::Ref(*class_id).to_bytes();
 
         // Build SQL and params dynamically.
-        let mut conditions = vec![
-            "a = ?1".to_string(),
-            "v = ?2".to_string(),
-        ];
+        let mut conditions = vec!["a = ?1".to_string(), "v = ?2".to_string()];
         let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
         params_vec.push(Box::new(type_pred_id));
         params_vec.push(Box::new(v_bytes.clone()));
@@ -121,7 +116,8 @@ pub fn eval_type_pattern_with_subclasses(
 
         let sql = format!("SELECT e, v FROM facts WHERE {}", conditions.join(" AND "));
         let mut stmt = store.prepare(&sql)?;
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(std::convert::AsRef::as_ref).collect();
         let mut rows = stmt.query(param_refs.as_slice())?;
 
         while let Some(row) = rows.next()? {

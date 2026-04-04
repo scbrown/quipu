@@ -1,8 +1,8 @@
 //! Virtual graph provider trait — federation interface for external data sources.
 //!
 //! The `GraphProvider` trait abstracts over different knowledge graph backends,
-//! enabling Quipu to federate queries across its local SQLite store and external
-//! sources like Graphiti (FalkorDB).
+//! enabling Quipu to federate queries across its local `SQLite` store and external
+//! sources like Graphiti (`FalkorDB`).
 
 use serde_json::Value as JsonValue;
 
@@ -34,7 +34,7 @@ pub trait GraphProvider {
     fn health(&self) -> ProviderStatus;
 }
 
-/// Local provider backed by Quipu's SQLite store.
+/// Local provider backed by Quipu's `SQLite` store.
 pub struct LocalProvider<'a> {
     store: &'a Store,
     label: String,
@@ -67,11 +67,7 @@ impl GraphProvider for LocalProvider<'_> {
     }
 
     fn health(&self) -> ProviderStatus {
-        let fact_count = self
-            .store
-            .current_facts()
-            .ok()
-            .map(|f| f.len() as u64);
+        let fact_count = self.store.current_facts().ok().map(|f| f.len() as u64);
         ProviderStatus {
             name: self.label.clone(),
             healthy: true,
@@ -108,27 +104,24 @@ impl<'a> FederatedProvider<'a> {
         let mut provider_var_added = false;
 
         for provider in &self.providers {
-            match provider.query(sparql) {
-                Ok(result) => {
-                    if variables.is_empty() {
-                        variables = result.variables().to_vec();
-                        if !variables.contains(&"_provider".to_string()) {
-                            variables.push("_provider".to_string());
-                            provider_var_added = true;
-                        }
-                    }
-                    for row in result.rows() {
-                        let mut row = row.clone();
-                        if provider_var_added {
-                            row.insert(
-                                "_provider".to_string(),
-                                crate::types::Value::Str(provider.name().to_string()),
-                            );
-                        }
-                        merged_rows.push(row);
+            if let Ok(result) = provider.query(sparql) {
+                if variables.is_empty() {
+                    variables = result.variables().to_vec();
+                    if !variables.contains(&"_provider".to_string()) {
+                        variables.push("_provider".to_string());
+                        provider_var_added = true;
                     }
                 }
-                Err(_) => continue, // Skip failed providers
+                for row in result.rows() {
+                    let mut row = row.clone();
+                    if provider_var_added {
+                        row.insert(
+                            "_provider".to_string(),
+                            crate::types::Value::Str(provider.name().to_string()),
+                        );
+                    }
+                    merged_rows.push(row);
+                }
             }
         }
 
@@ -144,15 +137,13 @@ impl<'a> FederatedProvider<'a> {
     }
 
     /// List entities from all providers.
-    pub fn entities_all(
-        &self,
-        type_filter: Option<&str>,
-        limit: usize,
-    ) -> Result<JsonValue> {
+    pub fn entities_all(&self, type_filter: Option<&str>, limit: usize) -> Result<JsonValue> {
         let mut all_entities = Vec::new();
 
         for provider in &self.providers {
-            if let Ok(result) = provider.entities(type_filter, limit) && let Some(entities) = result["entities"].as_array() {
+            if let Ok(result) = provider.entities(type_filter, limit)
+                && let Some(entities) = result["entities"].as_array()
+            {
                 for entity in entities {
                     let mut tagged = entity.clone();
                     if let Some(obj) = tagged.as_object_mut() {
@@ -230,12 +221,9 @@ mod tests {
 
     #[test]
     fn test_federated_query() {
-        let store_a = make_store(
-            "@prefix ex: <http://example.org/> .\nex:alice ex:name \"Alice\" .",
-        );
-        let store_b = make_store(
-            "@prefix ex: <http://example.org/> .\nex:bob ex:name \"Bob\" .",
-        );
+        let store_a =
+            make_store("@prefix ex: <http://example.org/> .\nex:alice ex:name \"Alice\" .");
+        let store_b = make_store("@prefix ex: <http://example.org/> .\nex:bob ex:name \"Bob\" .");
 
         let mut fed = FederatedProvider::new();
         fed.add(Box::new(LocalProvider::new(&store_a, "store-a")));
@@ -250,9 +238,7 @@ mod tests {
 
     #[test]
     fn test_federated_health() {
-        let store = make_store(
-            "@prefix ex: <http://example.org/> .\nex:a ex:b \"c\" .",
-        );
+        let store = make_store("@prefix ex: <http://example.org/> .\nex:a ex:b \"c\" .");
         let mut fed = FederatedProvider::new();
         fed.add(Box::new(LocalProvider::new(&store, "test")));
         let statuses = fed.health_all();

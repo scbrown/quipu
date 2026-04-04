@@ -7,8 +7,7 @@
 use std::io::Read;
 
 use rudof_lib::{
-    RDFFormat, ReaderMode, Rudof, RudofConfig, ShaclFormat, ShaclValidationMode,
-    ShapesGraphSource,
+    RDFFormat, ReaderMode, Rudof, RudofConfig, ShaclFormat, ShaclValidationMode, ShapesGraphSource,
 };
 
 use crate::error::{Error, Result};
@@ -56,11 +55,18 @@ impl Validator {
         // Verify the shapes parse by loading them into rudof.
         let mut rudof = RudofConfig::default_config()
             .map_err(|e| Error::InvalidValue(format!("rudof config error: {e}")))
-            .and_then(|cfg| Rudof::new(&cfg)
-            .map_err(|e| Error::InvalidValue(format!("rudof init error: {e}"))))?;
+            .and_then(|cfg| {
+                Rudof::new(&cfg).map_err(|e| Error::InvalidValue(format!("rudof init error: {e}")))
+            })?;
         let mut reader = shapes.as_bytes();
         rudof
-            .read_shacl(&mut reader, "shapes", Some(&ShaclFormat::Turtle), None, None)
+            .read_shacl(
+                &mut reader,
+                "shapes",
+                Some(&ShaclFormat::Turtle),
+                None,
+                None,
+            )
             .map_err(|e| Error::InvalidValue(format!("SHACL parse error: {e}")))?;
         Ok(Self {
             shapes_turtle: shapes.to_string(),
@@ -82,8 +88,9 @@ impl Validator {
     pub fn validate(&self, data: &[u8]) -> Result<ValidationFeedback> {
         let mut rudof = RudofConfig::default_config()
             .map_err(|e| Error::InvalidValue(format!("rudof config error: {e}")))
-            .and_then(|cfg| Rudof::new(&cfg)
-            .map_err(|e| Error::InvalidValue(format!("rudof init error: {e}"))))?;
+            .and_then(|cfg| {
+                Rudof::new(&cfg).map_err(|e| Error::InvalidValue(format!("rudof init error: {e}")))
+            })?;
 
         // Load shapes.
         let mut shapes_reader = self.shapes_turtle.as_bytes();
@@ -127,7 +134,7 @@ impl Validator {
                 path: result.path().map(|p| format!("{p}")),
                 value: result.value().map(|v| format!("{v}")),
                 source_shape: result.source().map(|s| format!("{s}")),
-                message: result.message().map(|m| m.to_string()),
+                message: result.message().map(std::string::ToString::to_string),
             });
         }
 
@@ -146,10 +153,9 @@ impl Validator {
         if feedback.conforms {
             Ok(())
         } else {
-            let msg = feedback
-                .results
-                .first()
-                .map(|r| {
+            let msg = feedback.results.first().map_or_else(
+                || "SHACL validation failed".to_string(),
+                |r| {
                     format!(
                         "SHACL violation on {}: {} (component: {}{})",
                         r.focus_node,
@@ -160,8 +166,8 @@ impl Validator {
                             .map(|p| format!(", path: {p}"))
                             .unwrap_or_default()
                     )
-                })
-                .unwrap_or_else(|| "SHACL validation failed".to_string());
+                },
+            );
             Err(Error::InvalidValue(msg))
         }
     }

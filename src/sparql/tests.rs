@@ -40,11 +40,7 @@ ex:carol a ex:Employee ;
 #[test]
 fn select_all_triples() {
     let store = test_store_with_data();
-    let result = query(
-        &store,
-        "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
-    )
-    .unwrap();
+    let result = query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").unwrap();
 
     assert_eq!(result.variables(), vec!["s", "p", "o"]);
     // 4 for alice + 4 for bob + 3 for carol = 11
@@ -125,21 +121,10 @@ fn select_with_join() {
     let pairs: Vec<(&Value, &Value)> = result
         .rows()
         .iter()
-        .map(|r| {
-            (
-                r.get("name").unwrap(),
-                r.get("friend_name").unwrap(),
-            )
-        })
+        .map(|r| (r.get("name").unwrap(), r.get("friend_name").unwrap()))
         .collect();
-    assert!(pairs.contains(&(
-        &Value::Str("Alice".into()),
-        &Value::Str("Bob".into())
-    )));
-    assert!(pairs.contains(&(
-        &Value::Str("Bob".into()),
-        &Value::Str("Alice".into())
-    )));
+    assert!(pairs.contains(&(&Value::Str("Alice".into()), &Value::Str("Bob".into()))));
+    assert!(pairs.contains(&(&Value::Str("Bob".into()), &Value::Str("Alice".into()))));
 }
 
 #[test]
@@ -214,8 +199,15 @@ fn select_order_by_asc() {
     .unwrap();
 
     assert_eq!(result.rows().len(), 3);
-    let ages: Vec<&Value> = result.rows().iter().map(|r| r.get("age").unwrap()).collect();
-    assert_eq!(ages, vec![&Value::Int(25), &Value::Int(30), &Value::Int(35)]);
+    let ages: Vec<&Value> = result
+        .rows()
+        .iter()
+        .map(|r| r.get("age").unwrap())
+        .collect();
+    assert_eq!(
+        ages,
+        vec![&Value::Int(25), &Value::Int(30), &Value::Int(35)]
+    );
 }
 
 #[test]
@@ -231,8 +223,15 @@ fn select_order_by_desc() {
     .unwrap();
 
     assert_eq!(result.rows().len(), 3);
-    let ages: Vec<&Value> = result.rows().iter().map(|r| r.get("age").unwrap()).collect();
-    assert_eq!(ages, vec![&Value::Int(35), &Value::Int(30), &Value::Int(25)]);
+    let ages: Vec<&Value> = result
+        .rows()
+        .iter()
+        .map(|r| r.get("age").unwrap())
+        .collect();
+    assert_eq!(
+        ages,
+        vec![&Value::Int(35), &Value::Int(30), &Value::Int(25)]
+    );
 }
 
 #[test]
@@ -253,14 +252,20 @@ fn select_optional() {
         .iter()
         .find(|r| r.get("name") == Some(&Value::Str("Carol".into())))
         .expect("Carol should appear");
-    assert!(!carol_row.contains_key("friend"), "Carol should have no friend binding");
+    assert!(
+        !carol_row.contains_key("friend"),
+        "Carol should have no friend binding"
+    );
 
     let alice_row = result
         .rows()
         .iter()
         .find(|r| r.get("name") == Some(&Value::Str("Alice".into())))
         .expect("Alice should appear");
-    assert!(alice_row.contains_key("friend"), "Alice should have a friend binding");
+    assert!(
+        alice_row.contains_key("friend"),
+        "Alice should have a friend binding"
+    );
 }
 
 #[test]
@@ -276,7 +281,11 @@ fn select_order_by_with_limit() {
     .unwrap();
 
     assert_eq!(result.rows().len(), 2);
-    let ages: Vec<&Value> = result.rows().iter().map(|r| r.get("age").unwrap()).collect();
+    let ages: Vec<&Value> = result
+        .rows()
+        .iter()
+        .map(|r| r.get("age").unwrap())
+        .collect();
     assert_eq!(ages, vec![&Value::Int(25), &Value::Int(30)]);
 }
 
@@ -312,7 +321,11 @@ ex:dave a ex:Other ; ex:name "Dave" .
         "SELECT ?s WHERE { ?s a <http://example.org/Person> }",
     )
     .unwrap();
-    assert_eq!(result.rows().len(), 3, "alice + bob + carol are all Persons");
+    assert_eq!(
+        result.rows().len(),
+        3,
+        "alice + bob + carol are all Persons"
+    );
 
     let result = query(
         &store,
@@ -374,7 +387,7 @@ fn select_group_by_with_count() {
     for row in result.rows() {
         let count = row.get("n").unwrap();
         match count {
-            Value::Int(1) | Value::Int(2) => {}
+            Value::Int(1 | 2) => {}
             other => panic!("unexpected count: {other:?}"),
         }
     }
@@ -679,11 +692,7 @@ fn construct_builds_triples() {
 #[test]
 fn describe_returns_entity_facts() {
     let store = test_store_with_data();
-    let result = query(
-        &store,
-        "DESCRIBE <http://example.org/alice>",
-    )
-    .unwrap();
+    let result = query(&store, "DESCRIBE <http://example.org/alice>").unwrap();
     match result {
         QueryResult::Graph(triples) => {
             assert!(

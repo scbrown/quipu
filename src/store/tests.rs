@@ -296,7 +296,11 @@ fn retract_hides_from_current() {
         .unwrap();
 
     let current = store.current_facts().unwrap();
-    assert_eq!(current.len(), 0, "retracted fact should not appear in current state");
+    assert_eq!(
+        current.len(),
+        0,
+        "retracted fact should not appear in current state"
+    );
 
     let history = store.attribute_history(e, a).unwrap();
     assert_eq!(history.len(), 2);

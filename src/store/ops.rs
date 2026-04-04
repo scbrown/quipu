@@ -38,12 +38,7 @@ impl Store {
             for d in datums {
                 let v_bytes = d.value.to_bytes();
                 if d.op == Op::Retract {
-                    close_assertion.execute(params![
-                        timestamp,
-                        d.entity,
-                        d.attribute,
-                        v_bytes,
-                    ])?;
+                    close_assertion.execute(params![timestamp, d.entity, d.attribute, v_bytes,])?;
                 }
                 insert.execute(params![
                     d.entity,
@@ -72,7 +67,9 @@ impl Store {
     ) -> Result<(i64, usize)> {
         let facts = if let Some(pred) = predicate {
             let all = self.entity_facts(entity)?;
-            all.into_iter().filter(|f| f.attribute == pred).collect::<Vec<_>>()
+            all.into_iter()
+                .filter(|f| f.attribute == pred)
+                .collect::<Vec<_>>()
         } else {
             self.entity_facts(entity)?
         };
@@ -122,9 +119,8 @@ impl Store {
 
     /// Time-travel query: return facts as they were at a given point.
     pub fn facts_as_of(&self, as_of: &AsOf) -> Result<Vec<Fact>> {
-        let mut sql = String::from(
-            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts WHERE op = 1",
-        );
+        let mut sql =
+            String::from("SELECT e, a, v, tx, valid_from, valid_to, op FROM facts WHERE op = 1");
         if as_of.tx.is_some() {
             sql.push_str(" AND tx <= ?1");
         }

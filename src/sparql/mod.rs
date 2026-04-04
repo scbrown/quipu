@@ -1,13 +1,14 @@
 //! SPARQL query engine -- evaluates SPARQL queries over the EAVT fact log.
 //!
-//! Parses SPARQL via spargebra, then evaluates against the SQLite fact store.
+//! Parses SPARQL via spargebra, then evaluates against the `SQLite` fact store.
 //! Supports: SELECT, ASK, CONSTRUCT, DESCRIBE with BGP, JOIN, UNION, FILTER,
-//! OPTIONAL (LeftJoin), ORDER BY, GROUP BY, aggregates, HAVING, EXTEND, RDFS
+//! OPTIONAL (`LeftJoin`), ORDER BY, GROUP BY, aggregates, HAVING, EXTEND, RDFS
 //! subclass inference, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
 pub mod filter;
 pub mod pattern;
+pub mod pattern_util;
 pub mod rdfs;
 #[cfg(test)]
 mod tests;
@@ -96,9 +97,7 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
             Ok(QueryResult::Ask(!rows.is_empty()))
         }
         Query::Construct {
-            template,
-            pattern,
-            ..
+            template, pattern, ..
         } => {
             let (rows, _) = pattern::eval_pattern(store, &pattern, ctx)?;
             let triples = eval_construct(store, &template, &rows)?;
@@ -158,7 +157,7 @@ fn eval_construct(
                     None => continue,
                 },
                 TermPattern::BlankNode(b) => Value::Str(format!("_:{}", b.as_str())),
-                _ => continue,
+                TermPattern::Triple(_) => continue,
             };
 
             let triple = Triple {

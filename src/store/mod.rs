@@ -1,4 +1,4 @@
-//! The core fact log store backed by SQLite.
+//! The core fact log store backed by `SQLite`.
 
 pub mod ops;
 #[cfg(test)]
@@ -11,7 +11,7 @@ use crate::schema::INIT_SQL;
 use crate::types::Value;
 use crate::vector::VECTORS_SQL;
 
-/// The core fact log store backed by SQLite.
+/// The core fact log store backed by `SQLite`.
 pub struct Store {
     pub(crate) conn: Connection,
 }
@@ -62,11 +62,11 @@ impl Store {
             "INSERT OR IGNORE INTO terms (iri) VALUES (?1)",
             params![iri],
         )?;
-        let id: i64 = self.conn.query_row(
-            "SELECT id FROM terms WHERE iri = ?1",
-            params![iri],
-            |row| row.get(0),
-        )?;
+        let id: i64 =
+            self.conn
+                .query_row("SELECT id FROM terms WHERE iri = ?1", params![iri], |row| {
+                    row.get(0)
+                })?;
         Ok(id)
     }
 
@@ -81,9 +81,7 @@ impl Store {
 
     /// Look up a term id by IRI, returning None if not interned.
     pub fn lookup(&self, iri: &str) -> Result<Option<i64>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM terms WHERE iri = ?1")?;
+        let mut stmt = self.conn.prepare("SELECT id FROM terms WHERE iri = ?1")?;
         let mut rows = stmt.query(params![iri])?;
         match rows.next()? {
             Some(row) => Ok(Some(row.get(0)?)),
@@ -93,9 +91,9 @@ impl Store {
 
     /// Retrieve a transaction by id.
     pub fn get_transaction(&self, tx_id: i64) -> Result<Option<crate::types::Transaction>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, timestamp, actor, source FROM transactions WHERE id = ?1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, timestamp, actor, source FROM transactions WHERE id = ?1")?;
         let mut rows = stmt.query(params![tx_id])?;
         match rows.next()? {
             Some(row) => Ok(Some(crate::types::Transaction {
@@ -121,18 +119,17 @@ impl Store {
 
     /// Remove a stored shape graph by name.
     pub fn remove_shapes(&self, name: &str) -> Result<bool> {
-        let affected = self.conn.execute(
-            "DELETE FROM shapes WHERE name = ?1",
-            params![name],
-        )?;
+        let affected = self
+            .conn
+            .execute("DELETE FROM shapes WHERE name = ?1", params![name])?;
         Ok(affected > 0)
     }
 
-    /// Get all stored shapes as a list of (name, turtle, loaded_at).
+    /// Get all stored shapes as a list of (name, turtle, `loaded_at`).
     pub fn list_shapes(&self) -> Result<Vec<(String, String, String)>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT name, turtle, loaded_at FROM shapes ORDER BY name",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name, turtle, loaded_at FROM shapes ORDER BY name")?;
         let mut shapes = Vec::new();
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {

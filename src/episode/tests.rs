@@ -8,7 +8,8 @@ fn parse_episode(json: &str) -> Episode {
 
 #[test]
 fn deserialize_episode() {
-    let ep = parse_episode(r#"{
+    let ep = parse_episode(
+        r#"{
         "name": "koror-discovery",
         "episode_body": "Discovered koror runs ct-205",
         "source": "crew/mayor",
@@ -20,7 +21,8 @@ fn deserialize_episode() {
         "edges": [
             {"source": "koror", "target": "ct-205", "relation": "runs_on"}
         ]
-    }"#);
+    }"#,
+    );
 
     assert_eq!(ep.name, "koror-discovery");
     assert_eq!(ep.nodes.len(), 2);
@@ -30,7 +32,8 @@ fn deserialize_episode() {
 
 #[test]
 fn episode_to_turtle_generates_valid_rdf() {
-    let ep = parse_episode(r#"{
+    let ep = parse_episode(
+        r#"{
         "name": "test-episode",
         "episode_body": "Test body",
         "source": "unit-test",
@@ -38,7 +41,8 @@ fn episode_to_turtle_generates_valid_rdf() {
             {"name": "alpha", "type": "ServiceType", "description": "Alpha service"}
         ],
         "edges": []
-    }"#);
+    }"#,
+    );
 
     let ttl = episode_to_turtle(&ep);
 
@@ -60,7 +64,8 @@ fn episode_to_turtle_generates_valid_rdf() {
 fn ingest_episode_writes_to_store() {
     let mut store = Store::open_in_memory().unwrap();
 
-    let ep = parse_episode(r#"{
+    let ep = parse_episode(
+        r#"{
         "name": "infra-scan",
         "episode_body": "Infrastructure scan results",
         "source": "crew/mayor",
@@ -72,7 +77,8 @@ fn ingest_episode_writes_to_store() {
         "edges": [
             {"source": "koror", "target": "ct-205", "relation": "runs"}
         ]
-    }"#);
+    }"#,
+    );
 
     let (tx_id, count) = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap();
 
@@ -105,7 +111,8 @@ fn ingest_episode_writes_to_store() {
 fn node_properties_become_triples() {
     let mut store = Store::open_in_memory().unwrap();
 
-    let ep = parse_episode(r#"{
+    let ep = parse_episode(
+        r#"{
         "name": "prop-test",
         "nodes": [
             {
@@ -119,7 +126,8 @@ fn node_properties_become_triples() {
             }
         ],
         "edges": []
-    }"#);
+    }"#,
+    );
 
     let (_, count) = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap();
 
@@ -150,10 +158,12 @@ fn escape_turtle_handles_quotes() {
 fn minimal_episode_with_body_only() {
     let mut store = Store::open_in_memory().unwrap();
 
-    let ep = parse_episode(r#"{
+    let ep = parse_episode(
+        r#"{
         "name": "simple-note",
         "episode_body": "Koror was rebooted at 14:00 UTC"
-    }"#);
+    }"#,
+    );
 
     let (tx_id, count) = ingest_episode(&mut store, &ep, "2026-04-04T14:00:00Z").unwrap();
     assert!(tx_id > 0);
@@ -190,7 +200,10 @@ fn shacl_validation_rejects_invalid_episode() {
 
     let err = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap_err();
     match err {
-        Error::ValidationFailed { violations, messages } => {
+        Error::ValidationFailed {
+            violations,
+            messages,
+        } => {
             assert!(violations > 0);
             assert!(!messages.is_empty());
         }
@@ -241,11 +254,21 @@ fn batch_ingestion() {
     let mut store = Store::open_in_memory().unwrap();
 
     let episodes: Vec<Episode> = vec![
-        parse_episode(r#"{"name": "batch-1", "nodes": [{"name": "a1", "type": "Thing"}], "edges": []}"#),
-        parse_episode(r#"{"name": "batch-2", "nodes": [{"name": "b1", "type": "Thing"}], "edges": []}"#),
-        parse_episode(r#"{"name": "batch-3", "nodes": [{"name": "c1", "type": "Thing"}], "edges": []}"#),
+        parse_episode(
+            r#"{"name": "batch-1", "nodes": [{"name": "a1", "type": "Thing"}], "edges": []}"#,
+        ),
+        parse_episode(
+            r#"{"name": "batch-2", "nodes": [{"name": "b1", "type": "Thing"}], "edges": []}"#,
+        ),
+        parse_episode(
+            r#"{"name": "batch-3", "nodes": [{"name": "c1", "type": "Thing"}], "edges": []}"#,
+        ),
     ];
-    let timestamps = vec!["2026-04-04T12:00:00Z", "2026-04-04T12:01:00Z", "2026-04-04T12:02:00Z"];
+    let timestamps = vec![
+        "2026-04-04T12:00:00Z",
+        "2026-04-04T12:01:00Z",
+        "2026-04-04T12:02:00Z",
+    ];
 
     let results = ingest_batch(&mut store, &episodes, &timestamps).unwrap();
     assert_eq!(results.len(), 3);
@@ -257,14 +280,16 @@ fn batch_ingestion() {
 fn provenance_query() {
     let mut store = Store::open_in_memory().unwrap();
 
-    let ep = parse_episode(r#"{
+    let ep = parse_episode(
+        r#"{
         "name": "prov-test",
         "nodes": [
             {"name": "server1", "type": "Host"},
             {"name": "server2", "type": "Host"}
         ],
         "edges": []
-    }"#);
+    }"#,
+    );
 
     ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z").unwrap();
 

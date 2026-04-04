@@ -1,4 +1,4 @@
-//! Vector search over entity embeddings, stored in SQLite.
+//! Vector search over entity embeddings, stored in `SQLite`.
 //!
 //! Embeddings are stored as f32 blobs in a `vectors` table alongside temporal
 //! metadata. Search uses brute-force cosine similarity — fast enough for the
@@ -51,7 +51,7 @@ impl Store {
         Ok(())
     }
 
-    /// Close an entity's embedding (set valid_to) when the entity is retracted.
+    /// Close an entity's embedding (set `valid_to`) when the entity is retracted.
     pub fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()> {
         self.conn.execute(
             "UPDATE vectors SET valid_to = ?1 WHERE entity_id = ?2 AND valid_to IS NULL",
@@ -62,7 +62,7 @@ impl Store {
 
     /// Search for similar entities by cosine similarity.
     ///
-    /// Only returns current embeddings (valid_to IS NULL) unless `valid_at` is set.
+    /// Only returns current embeddings (`valid_to` IS NULL) unless `valid_at` is set.
     pub fn vector_search(
         &self,
         query_embedding: &[f32],
@@ -107,7 +107,11 @@ impl Store {
         }
 
         // Sort by score descending, take top N.
-        matches.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        matches.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         matches.truncate(limit);
         Ok(matches)
     }
@@ -119,9 +123,8 @@ impl Store {
             [],
             |row| row.get(0),
         )?;
-        Ok(count as usize)
+        Ok(usize::try_from(count).unwrap_or(0))
     }
-
 }
 
 // ── Embedding math ─────────────────────────────────────────────────
@@ -141,11 +144,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
         norm_b += y * y;
     }
     let denom = norm_a.sqrt() * norm_b.sqrt();
-    if denom == 0.0 {
-        0.0
-    } else {
-        dot / denom
-    }
+    if denom == 0.0 { 0.0 } else { dot / denom }
 }
 
 fn f32_slice_to_bytes(data: &[f32]) -> Vec<u8> {
@@ -182,9 +181,15 @@ mod tests {
         let emb2 = make_embedding(1.1, 8); // similar to emb1
         let emb3 = make_embedding(5.0, 8); // different
 
-        store.embed_entity(e1, "Alice the engineer", &emb1, "2026-01-01").unwrap();
-        store.embed_entity(e2, "Bob the developer", &emb2, "2026-01-01").unwrap();
-        store.embed_entity(e3, "Carol the manager", &emb3, "2026-01-01").unwrap();
+        store
+            .embed_entity(e1, "Alice the engineer", &emb1, "2026-01-01")
+            .unwrap();
+        store
+            .embed_entity(e2, "Bob the developer", &emb2, "2026-01-01")
+            .unwrap();
+        store
+            .embed_entity(e3, "Carol the manager", &emb3, "2026-01-01")
+            .unwrap();
 
         assert_eq!(store.vector_count().unwrap(), 3);
 
@@ -206,11 +211,15 @@ mod tests {
         let emb_new = make_embedding(2.0, 8);
 
         // Old embedding, valid until March.
-        store.embed_entity(e1, "old description", &emb_old, "2026-01-01").unwrap();
+        store
+            .embed_entity(e1, "old description", &emb_old, "2026-01-01")
+            .unwrap();
         store.close_embedding(e1, "2026-03-01").unwrap();
 
         // New embedding, current.
-        store.embed_entity(e1, "new description", &emb_new, "2026-03-01").unwrap();
+        store
+            .embed_entity(e1, "new description", &emb_new, "2026-03-01")
+            .unwrap();
 
         // Current search: only new embedding.
         let results = store.vector_search(&emb_old, 10, None).unwrap();
@@ -218,12 +227,16 @@ mod tests {
         assert_eq!(results[0].text, "new description");
 
         // Time-travel search to February: only old embedding.
-        let results = store.vector_search(&emb_old, 10, Some("2026-02-01")).unwrap();
+        let results = store
+            .vector_search(&emb_old, 10, Some("2026-02-01"))
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].text, "old description");
 
         // Time-travel to April: only new embedding.
-        let results = store.vector_search(&emb_new, 10, Some("2026-04-01")).unwrap();
+        let results = store
+            .vector_search(&emb_new, 10, Some("2026-04-01"))
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].text, "new description");
     }
@@ -258,7 +271,9 @@ mod tests {
         for i in 0..20 {
             let eid = store.intern(&format!("http://example.org/e{i}")).unwrap();
             let emb = make_embedding(i as f32, 8);
-            store.embed_entity(eid, &format!("entity {i}"), &emb, "2026-01-01").unwrap();
+            store
+                .embed_entity(eid, &format!("entity {i}"), &emb, "2026-01-01")
+                .unwrap();
         }
 
         let query = make_embedding(0.0, 8);

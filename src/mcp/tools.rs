@@ -17,20 +17,16 @@ use super::value_to_json;
 pub fn tool_cord(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let limit = input
         .get("limit")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .unwrap_or(100) as usize;
 
     let type_filter = input.get("type").and_then(|v| v.as_str());
     let pred_filter = input.get("predicate").and_then(|v| v.as_str());
 
     let query = if let Some(type_iri) = type_filter {
-        format!(
-            "SELECT DISTINCT ?s WHERE {{ ?s a <{type_iri}> }} LIMIT {limit}"
-        )
+        format!("SELECT DISTINCT ?s WHERE {{ ?s a <{type_iri}> }} LIMIT {limit}")
     } else if let Some(pred_iri) = pred_filter {
-        format!(
-            "SELECT DISTINCT ?s WHERE {{ ?s <{pred_iri}> ?o }} LIMIT {limit}"
-        )
+        format!("SELECT DISTINCT ?s WHERE {{ ?s <{pred_iri}> ?o }} LIMIT {limit}")
     } else {
         format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o }} LIMIT {limit}")
     };
@@ -71,11 +67,11 @@ pub fn tool_cord(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 /// Output: `{ "facts": [...], "count": N }`
 pub fn tool_unravel(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let as_of = AsOf {
-        tx: input.get("tx").and_then(|v| v.as_i64()),
+        tx: input.get("tx").and_then(serde_json::Value::as_i64),
         valid_at: input
             .get("valid_at")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
+            .map(std::string::ToString::to_string),
     };
 
     let facts = store.facts_as_of(&as_of)?;
@@ -145,7 +141,9 @@ pub fn tool_validate(input: &JsonValue) -> Result<JsonValue> {
 
 #[cfg(not(feature = "shacl"))]
 pub fn tool_validate(_input: &JsonValue) -> Result<JsonValue> {
-    Err(Error::InvalidValue("SHACL validation requires the 'shacl' feature".into()))
+    Err(Error::InvalidValue(
+        "SHACL validation requires the 'shacl' feature".into(),
+    ))
 }
 
 /// MCP tool: `quipu_search` -- Semantic vector search over entity embeddings.
@@ -160,7 +158,7 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 
     let limit = input
         .get("limit")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .unwrap_or(10) as usize;
 
     let valid_at = input.get("valid_at").and_then(|v| v.as_str());
@@ -170,7 +168,9 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let results: Vec<JsonValue> = matches
         .iter()
         .map(|m| {
-            let iri = store.resolve(m.entity_id).unwrap_or_else(|_| format!("ref:{}", m.entity_id));
+            let iri = store
+                .resolve(m.entity_id)
+                .unwrap_or_else(|_| format!("ref:{}", m.entity_id));
             serde_json::json!({
                 "entity": iri,
                 "text": m.text,
@@ -321,7 +321,7 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
 
     let limit = input
         .get("limit")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .unwrap_or(10) as usize;
 
     let valid_at = input.get("valid_at").and_then(|v| v.as_str());
@@ -388,6 +388,6 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
     Ok(serde_json::json!({
         "results": results,
         "count": results.len(),
-        "sparql_candidates": candidate_iris.as_ref().map(|c| c.len()),
+        "sparql_candidates": candidate_iris.as_ref().map(std::vec::Vec::len),
     }))
 }
