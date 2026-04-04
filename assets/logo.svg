@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Gradient for the main cord -->
+    <linearGradient id="cordGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#8B5E3C;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#A0714F;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8B5E3C;stop-opacity:1" />
+    </linearGradient>
+    <!-- String colors representing different data types -->
+    <linearGradient id="str1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#E07A5F" />
+      <stop offset="100%" style="stop-color:#C45B3C" />
+    </linearGradient>
+    <linearGradient id="str2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3D85C6" />
+      <stop offset="100%" style="stop-color:#2A6BAD" />
+    </linearGradient>
+    <linearGradient id="str3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#81B29A" />
+      <stop offset="100%" style="stop-color:#5E9B7E" />
+    </linearGradient>
+    <linearGradient id="str4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F2CC8F" />
+      <stop offset="100%" style="stop-color:#D4A95A" />
+    </linearGradient>
+    <linearGradient id="str5" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#9B72AA" />
+      <stop offset="100%" style="stop-color:#7D5691" />
+    </linearGradient>
+    <linearGradient id="str6" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#E07A5F" />
+      <stop offset="100%" style="stop-color:#C45B3C" />
+    </linearGradient>
+    <linearGradient id="str7" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3D85C6" />
+      <stop offset="100%" style="stop-color:#2A6BAD" />
+    </linearGradient>
+    <!-- Subtle shadow -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000033"/>
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#1a1a2e" />
+  <circle cx="256" cy="256" r="232" fill="none" stroke="#2d2d4a" stroke-width="1.5" />
+
+  <!-- Main horizontal cord (slightly curved) -->
+  <path d="M 72 140 Q 256 120 440 140" stroke="url(#cordGrad)" stroke-width="10" fill="none" stroke-linecap="round" filter="url(#shadow)" />
+  <!-- Cord texture lines -->
+  <path d="M 72 140 Q 256 120 440 140" stroke="#725039" stroke-width="2" fill="none" stroke-linecap="round" stroke-dasharray="8 12" opacity="0.5" />
+
+  <!-- String 1 - terracotta, 2 knots -->
+  <path d="M 112 138 Q 108 220 120 280 Q 126 310 116 340 Q 110 370 118 410" stroke="url(#str1)" stroke-width="4.5" fill="none" stroke-linecap="round" />
+  <!-- Knot 1 -->
+  <ellipse cx="120" cy="230" rx="7" ry="5" fill="#E07A5F" stroke="#C45B3C" stroke-width="1.5" />
+  <!-- Knot 2 -->
+  <ellipse cx="117" cy="340" rx="7" ry="5" fill="#E07A5F" stroke="#C45B3C" stroke-width="1.5" />
+
+  <!-- String 2 - blue, 3 knots (longer) -->
+  <path d="M 162 134 Q 155 200 168 270 Q 174 320 162 370 Q 156 410 164 440" stroke="url(#str2)" stroke-width="4.5" fill="none" stroke-linecap="round" />
+  <ellipse cx="166" cy="200" rx="7" ry="5" fill="#3D85C6" stroke="#2A6BAD" stroke-width="1.5" />
+  <ellipse cx="168" cy="290" rx="7" ry="5" fill="#3D85C6" stroke="#2A6BAD" stroke-width="1.5" />
+  <ellipse cx="163" cy="390" rx="7" ry="5" fill="#3D85C6" stroke="#2A6BAD" stroke-width="1.5" />
+
+  <!-- String 3 - green, 1 knot (short) -->
+  <path d="M 212 130 Q 206 190 214 250 Q 218 290 210 320" stroke="url(#str3)" stroke-width="4.5" fill="none" stroke-linecap="round" />
+  <ellipse cx="212" cy="250" rx="7" ry="5" fill="#81B29A" stroke="#5E9B7E" stroke-width="1.5" />
+
+  <!-- String 4 - gold, 2 knots (medium) — center string, slightly thicker -->
+  <path d="M 256 126 Q 248 200 260 280 Q 266 340 254 390 Q 250 420 256 450" stroke="url(#str4)" stroke-width="5" fill="none" stroke-linecap="round" />
+  <ellipse cx="258" cy="220" rx="8" ry="5.5" fill="#F2CC8F" stroke="#D4A95A" stroke-width="1.5" />
+  <ellipse cx="255" cy="370" rx="8" ry="5.5" fill="#F2CC8F" stroke="#D4A95A" stroke-width="1.5" />
+  <!-- Sub-string branching from knot (subsidiary cord) -->
+  <path d="M 258 220 Q 278 260 282 310 Q 284 340 276 360" stroke="#D4A95A" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.8" />
+  <ellipse cx="282" cy="300" rx="5" ry="3.5" fill="#F2CC8F" stroke="#D4A95A" stroke-width="1" />
+
+  <!-- String 5 - purple, 3 knots -->
+  <path d="M 306 128 Q 300 200 312 280 Q 318 340 308 400 Q 304 430 310 460" stroke="url(#str5)" stroke-width="4.5" fill="none" stroke-linecap="round" />
+  <ellipse cx="308" cy="190" rx="7" ry="5" fill="#9B72AA" stroke="#7D5691" stroke-width="1.5" />
+  <ellipse cx="312" cy="300" rx="7" ry="5" fill="#9B72AA" stroke="#7D5691" stroke-width="1.5" />
+  <ellipse cx="308" cy="410" rx="7" ry="5" fill="#9B72AA" stroke="#7D5691" stroke-width="1.5" />
+
+  <!-- String 6 - terracotta, 1 knot -->
+  <path d="M 356 132 Q 350 210 360 290 Q 366 340 358 380" stroke="url(#str6)" stroke-width="4.5" fill="none" stroke-linecap="round" />
+  <ellipse cx="358" cy="280" rx="7" ry="5" fill="#E07A5F" stroke="#C45B3C" stroke-width="1.5" />
+
+  <!-- String 7 - blue, 2 knots -->
+  <path d="M 400 136 Q 394 210 404 290 Q 410 350 400 400 Q 396 430 402 450" stroke="url(#str7)" stroke-width="4.5" fill="none" stroke-linecap="round" />
+  <ellipse cx="402" cy="240" rx="7" ry="5" fill="#3D85C6" stroke="#2A6BAD" stroke-width="1.5" />
+  <ellipse cx="401" cy="380" rx="7" ry="5" fill="#3D85C6" stroke="#2A6BAD" stroke-width="1.5" />
+
+  <!-- Small graph nodes overlaid on some knots to hint at knowledge graph -->
+  <!-- Node connections (subtle, like graph edges) -->
+  <line x1="120" y1="230" x2="166" y2="200" stroke="#ffffff15" stroke-width="1" />
+  <line x1="168" y1="290" x2="212" y2="250" stroke="#ffffff15" stroke-width="1" />
+  <line x1="258" y1="220" x2="308" y2="190" stroke="#ffffff15" stroke-width="1" />
+  <line x1="312" y1="300" x2="358" y2="280" stroke="#ffffff15" stroke-width="1" />
+  <line x1="255" y1="370" x2="308" y2="410" stroke="#ffffff15" stroke-width="1" />
+  <line x1="402" y1="240" x2="358" y2="280" stroke="#ffffff15" stroke-width="1" />
+
+  <!-- Tiny dots at string tips for polish -->
+  <circle cx="118" cy="410" r="2.5" fill="#C45B3C" />
+  <circle cx="164" cy="440" r="2.5" fill="#2A6BAD" />
+  <circle cx="210" cy="320" r="2.5" fill="#5E9B7E" />
+  <circle cx="256" cy="450" r="2.5" fill="#D4A95A" />
+  <circle cx="276" cy="360" r="2.5" fill="#D4A95A" opacity="0.7" />
+  <circle cx="310" cy="460" r="2.5" fill="#7D5691" />
+  <circle cx="358" cy="380" r="2.5" fill="#C45B3C" />
+  <circle cx="402" cy="450" r="2.5" fill="#2A6BAD" />
+</svg>
