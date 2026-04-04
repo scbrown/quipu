@@ -251,6 +251,13 @@ impl Store {
         Self::collect_facts(&mut stmt, params![entity, attribute])
     }
 
+    // ── SQL access (for SPARQL evaluator) ─────────────────────────
+
+    /// Prepare a SQL statement against the underlying connection.
+    pub(crate) fn prepare(&self, sql: &str) -> Result<rusqlite::Statement<'_>> {
+        Ok(self.conn.prepare(sql)?)
+    }
+
     // ── Internal ─────────────────────────────────────────────────
 
     fn collect_facts(

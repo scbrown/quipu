@@ -6,10 +6,12 @@
 pub mod error;
 pub mod rdf;
 pub mod schema;
+pub mod sparql;
 pub mod store;
 pub mod types;
 
 pub use error::{Error, Result};
 pub use rdf::{export_rdf, ingest_rdf};
+pub use sparql::{query as sparql_query, QueryResult};
 pub use store::Store;
 pub use types::{Fact, Op, Term, Transaction, Value};
