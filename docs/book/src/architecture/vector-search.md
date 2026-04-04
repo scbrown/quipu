@@ -1,20 +1,29 @@
 # Vector Search
 
-Quipu stores vector embeddings alongside facts in SQLite and supports
-cosine similarity search with temporal awareness.
+Quipu stores vector embeddings alongside facts and supports cosine
+similarity search with temporal awareness. Two backends are available:
+the default SQLite backend (brute-force) and an optional
+[LanceDB backend](lancedb.md) with approximate nearest neighbor search
+and predicate pushdown.
 
 ## How It Works
 
-Each entity can have an associated embedding -- a float vector that
-captures its semantic meaning. Embeddings are stored in a `vectors` table
-with bitemporal validity (same model as the fact log).
+Each entity can have an associated embedding -- a 384-dimensional float
+vector that captures its semantic meaning (compatible with
+`all-MiniLM-L6-v2`). Both backends implement the `KnowledgeVectorStore`
+trait, so calling code is backend-agnostic.
 
-```
+The default SQLite backend stores embeddings in a `vectors` table with
+bitemporal validity (same model as the fact log):
+
+```text
 vectors(entity_id, text, embedding, valid_from, valid_to)
 ```
 
 Search computes cosine similarity between a query vector and all current
-embeddings, returning the top-N matches ranked by score.
+embeddings, returning the top-N matches ranked by score. For larger
+datasets, the [LanceDB backend](lancedb.md) provides ANN search with
+predicate pushdown.
 
 ## Storing Embeddings
 
@@ -55,9 +64,12 @@ Each `VectorMatch` contains:
 
 The `quipu_hybrid_search` tool combines SPARQL filtering with vector ranking:
 
-1. Execute a SPARQL query to find candidate entities
-2. Compute vector similarity for each candidate
-3. Return results ranked by similarity score
+1. **Extract pushdown filter** -- simple type patterns (`?s a <Type>`) are
+   converted to a filter string for the vector backend
+2. **Vector search with filter** -- LanceDB applies the filter during ANN
+   search; SQLite oversamples 5x and post-filters
+3. **Cross-filter with SPARQL** -- full SPARQL query runs independently,
+   results intersected for consistency
 
 ```json
 {
@@ -72,6 +84,9 @@ The `quipu_hybrid_search` tool combines SPARQL filtering with vector ranking:
 
 This lets you narrow by type or relationship first (SPARQL), then rank by
 semantic meaning (vector) -- combining structured and unstructured search.
+With LanceDB, the type filter is pushed down into the vector index for
+O(log n) filtered search. See [LanceDB Vector Backend](lancedb.md) for
+details.
 
 ## Temporal Vector Search
 

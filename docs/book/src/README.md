@@ -19,13 +19,18 @@ An embeddable Rust library and server for building knowledge graphs with:
   ORDER BY, GROUP BY, aggregates, HAVING, RDFS subclass inference
 - **SHACL validation** -- strict schema enforcement at write time with
   structured agent-friendly feedback
-- **Hybrid search** -- SPARQL + vector similarity in a single query
+- **Hybrid search** -- SPARQL + vector similarity in a single query, with
+  predicate pushdown on LanceDB
+- **Dual vector backends** -- SQLite (default, brute-force) or LanceDB
+  (optional, ANN with pushdown)
 - **Episode ingestion** -- structured write path for agent-extracted knowledge
   (nodes, edges, provenance)
 - **Graph projection** -- materialize subgraphs into petgraph for centrality,
   components, shortest-path algorithms
 - **Federation** -- virtual graph provider trait for multi-source queries
 - **Context pipeline** -- unified knowledge + code context for agent consumption
+- **Automated CI/CD** -- GitHub Actions for testing, release-plz for versioning
+  and changelogs
 - **"SQLite energy"** -- single process, no server required, inspect with `sqlite3`
 
 Three ways to use it:

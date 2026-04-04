@@ -15,10 +15,15 @@
 - [SPARQL Engine](architecture/sparql.md)
 - [SHACL Validation](architecture/shacl.md)
 - [Vector Search](architecture/vector-search.md)
+- [LanceDB Vector Backend](architecture/lancedb.md)
 - [Episode Ingestion](architecture/episodes.md)
 - [Graph Projection](architecture/graph-projection.md)
 - [Context Pipeline](architecture/context-pipeline.md)
 - [Federation](architecture/federation.md)
+
+# Operations
+
+- [CI/CD and Releases](architecture/ci-cd.md)
 
 # Reference
 

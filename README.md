@@ -61,11 +61,13 @@ Facts: 853 | Entities: 127 | Predicates: 34
 | Bitemporal time-travel      | ❌ | ❌ | ✅ |
 | SPARQL 1.1                  | ✅ | ❌ | ✅ |
 | Vector similarity search    | ❌ | ✅ | ✅ |
+| LanceDB ANN + pushdown      | ❌ | ❌ | ✅ |
 | Agent-friendly feedback     | ❌ | ❌ | ✅ |
 | Episode provenance          | ❌ | ✅ | ✅ |
 | Graph algorithms            | ❌ | ❌ | ✅ |
 | Embeddable (no server)      | ❌ | ❌ | ✅ |
 | SQLite-backed               | ❌ | ❌ | ✅ |
+| Automated releases          | ❌ | ❌ | ✅ |
 | Rust / zero dependencies    | ❌ | ❌ | ✅ |
 
 Traditional RDF stores demand too much ceremony. AI-native stores have no structure.
@@ -83,7 +85,8 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 **🤖 AI-Native Features**
 
 - **Episode ingestion** — structured write path for agent-extracted knowledge. Typed nodes, edges, and provenance tracking (`prov:wasGeneratedBy`).
-- **Hybrid search** — SPARQL filters candidates, vector similarity ranks them. Combine structured queries with semantic meaning in one call.
+- **Hybrid search** — SPARQL filters candidates, vector similarity ranks them. Combine structured queries with semantic meaning in one call. Type constraints are pushed down into the vector index for O(log n) filtered search with LanceDB.
+- **Dual vector backends** — default SQLite (brute-force cosine similarity) or optional LanceDB (ANN with predicate pushdown, Arrow columnar storage). Enable with `--features lancedb`.
 - **Context pipeline** — unified knowledge context shaped for agent consumption. Text search + link expansion with configurable depth and budget.
 - **Agent-friendly feedback** — validation errors include what failed, where, why, and what the valid alternatives are.
 
@@ -93,6 +96,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 - **Federation** — `GraphProvider` trait for multi-source queries. Query local and remote Quipu instances in a single operation.
 - **Three interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`). Plus 11 MCP tools for agent integration.
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
+- **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. CI runs fmt, clippy, tests, and markdown lint on every push.
 
 ## 🚀 Quick Start
 
@@ -147,9 +151,9 @@ curl localhost:3030/query -X POST \
 
 ## 🏗️ Architecture
 
-```
+```text
                     ┌──────────────────────────────┐
-                    │         Agent / CLI           │
+                    │    Agent / CLI / Bobbin       │
                     └──────────┬───────────────────┘
                                │
               ┌────────────────┼────────────────┐
@@ -162,19 +166,21 @@ curl localhost:3030/query -X POST \
                                │
         ┌──────────────────────┼──────────────────────┐
         │                      │                      │
-  ┌─────┴─────┐         ┌─────┴─────┐         ┌──────┴──────┐
-  │  SPARQL   │         │   SHACL   │         │   Vector    │
-  │  Engine   │         │ Validator │         │   Search    │
-  └─────┬─────┘         └─────┬─────┘         └──────┬──────┘
-        └──────────────────────┼──────────────────────┘
-                               │
-                    ┌──────────┴───────────┐
-                    │   EAVT Fact Log      │
-                    │   (SQLite)           │
-                    │                      │
-                    │  facts + terms +     │
-                    │  vectors + shapes    │
-                    └──────────────────────┘
+  ┌─────┴─────┐         ┌─────┴─────┐    ┌───────────┴───────────┐
+  │  SPARQL   │         │   SHACL   │    │  KnowledgeVectorStore │
+  │  Engine   │         │ Validator │    │       (trait)         │
+  └─────┬─────┘         └─────┬─────┘    └─────┬─────────┬──────┘
+        │                      │                │         │
+        └──────────┬───────────┘         ┌──────┴───┐ ┌───┴──────┐
+                   │                     │  SQLite  │ │ LanceDB  │
+                   │                     │ (default)│ │(optional)│
+        ┌──────────┴───────────┐         └──────────┘ └──────────┘
+        │   EAVT Fact Log      │
+        │   (SQLite)           │
+        │                      │
+        │  facts + terms +     │
+        │  shapes              │
+        └──────────────────────┘
 ```
 
 ## 🧵 Bobbin Integration
@@ -182,8 +188,39 @@ curl localhost:3030/query -X POST \
 Quipu is designed as a [Bobbin](https://github.com/scbrown/bobbin) subsystem.
 Bobbin holds the thread (code context); Quipu ties knots of structured meaning into it.
 
-When integrated, Bobbin agents get two MCP tools: `knowledge_context` and `knowledge_query`,
-blending code search results with knowledge graph facts in a single response.
+When running as a Bobbin subsystem, agents get 11 MCP tools. The two most
+commonly used for knowledge-aware context:
+
+**`quipu_context`** — unified knowledge discovery. Bobbin merges the result
+with its own code search to give agents both code and knowledge in one response.
+
+```json
+{
+  "tool": "quipu_context",
+  "input": { "query": "traefik reverse proxy", "max_entities": 10 }
+}
+// Returns ranked entities with facts, types, and relevance scores
+```
+
+**`quipu_episode`** — save agent-extracted structured knowledge with full
+provenance tracking.
+
+```json
+{
+  "tool": "quipu_episode",
+  "input": {
+    "name": "deploy-v3",
+    "source": "aegis/ellie",
+    "nodes": [{"name": "traefik", "type": "WebApplication",
+               "properties": {"version": "3.0"}}],
+    "edges": [{"source": "traefik", "target": "kota", "relation": "runs_on"}]
+  }
+}
+```
+
+Embeddings are shared: Bobbin's ONNX pipeline (`all-MiniLM-L6-v2`) provides
+384-dimensional vectors to both its code search and Quipu's knowledge search,
+enabling hybrid queries that span both domains.
 
 ## 📖 Documentation
 
@@ -200,13 +237,16 @@ See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of conten
 ## 🛠️ Development
 
 ```bash
-cargo build              # Build
-cargo test               # Run all tests (109 tests)
-cargo clippy             # Lint (pedantic lints enabled)
-cargo fmt                # Format
+just build               # Build
+just test                # Run all tests
+just lint                # Clippy with -D warnings
+just fmt                 # Format
+just check               # Full quality gate (all pre-commit hooks)
+just docs check          # Markdown lint + mdbook build
 ```
 
 Pre-commit hooks enforce formatting, clippy, tests, and file size limits.
+CI runs the same checks on every push via GitHub Actions.
 
 ## 🤝 Contributing
 

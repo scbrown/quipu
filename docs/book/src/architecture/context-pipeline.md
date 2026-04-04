@@ -58,7 +58,7 @@ Each entity includes its label, types, relevance, and all its facts:
 |-----------|-------|-------------|
 | Direct | 1.0 | Found via text search match |
 | Linked | 0.5 | Discovered by following relationships from direct hits |
-| Semantic | varies | Found via vector similarity (reserved for future) |
+| Semantic | varies | Found via vector similarity search |
 
 ## Configuration
 
