@@ -9,6 +9,10 @@ repository = "https://github.com/scbrown/quipu"
 keywords = ["knowledge-graph", "rdf", "sparql", "ontology", "ai"]
 categories = ["database", "data-structures"]
 
+[[bin]]
+name = "quipu"
+path = "src/main.rs"
+
 [dependencies]
 rusqlite = { version = "0.35", features = ["bundled"] }
 thiserror = "2"
