@@ -18,7 +18,7 @@ use crate::vector::{KnowledgeVectorStore, VectorMatch};
 /// Embedding dimension (matches all-MiniLM-L6-v2 output).
 const EMBEDDING_DIM: i32 = 384;
 
-/// Table name inside the LanceDB database.
+/// Table name inside the `LanceDB` database.
 const TABLE_NAME: &str = "vectors";
 
 /// `LanceDB`-backed vector store for entity embeddings.
@@ -208,7 +208,7 @@ impl LanceVectorStore {
             out.push(VectorMatch {
                 entity_id: ids.value(i),
                 text: texts.value(i).to_string(),
-                score: dist.map(|d| 1.0 - d.value(i) as f64).unwrap_or(0.0),
+                score: dist.map_or(0.0, |d| 1.0 - d.value(i) as f64),
                 valid_from: vf.value(i).to_string(),
                 valid_to: if vt.is_null(i) {
                     None
@@ -240,9 +240,8 @@ impl KnowledgeVectorStore for LanceVectorStore {
     }
 
     fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()> {
-        let table = match &self.table {
-            Some(t) => t,
-            None => return Ok(()),
+        let Some(table) = &self.table else {
+            return Ok(());
         };
 
         Self::block_on(async {
@@ -273,9 +272,8 @@ impl KnowledgeVectorStore for LanceVectorStore {
         filter: Option<&str>,
         valid_at: Option<&str>,
     ) -> Result<Vec<VectorMatch>> {
-        let table = match &self.table {
-            Some(t) => t,
-            None => return Ok(vec![]),
+        let Some(table) = &self.table else {
+            return Ok(vec![]);
         };
 
         Self::block_on(async {
@@ -322,9 +320,8 @@ impl KnowledgeVectorStore for LanceVectorStore {
     }
 
     fn vector_count(&self) -> Result<usize> {
-        let table = match &self.table {
-            Some(t) => t,
-            None => return Ok(0),
+        let Some(table) = &self.table else {
+            return Ok(0);
         };
 
         Self::block_on(async {

@@ -854,7 +854,7 @@ fully combines in one embeddable package.
    Immutable append-only EAVT with bitemporal columns in SQLite. Prototype
    the schema, write path, and time-travel query pattern.
 3. **Prototype in Bobbin** — add a `cairn` module with basic triple store
-   - SHACL validation (rudof). Prove they compose.
+   and SHACL validation (rudof). Prove they compose.
 4. **Design incremental materialization** — provenance-tracked derived
    triples with dependency graph for efficient re-reasoning.
 5. **Design the write path** — schema-validated ingest with agent feedback
