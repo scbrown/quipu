@@ -6,6 +6,7 @@
 
 use serde_json::Value as JsonValue;
 
+use crate::episode::{self, Episode};
 use crate::error::{Error, Result};
 use crate::rdf::ingest_rdf;
 use crate::shacl;
@@ -288,6 +289,31 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
+/// MCP tool: `quipu_episode` — Ingest structured knowledge from an agent episode.
+///
+/// Input: `{ "name": "...", "episode_body": "...", "source": "...",
+///           "group_id": "...", "timestamp": "...",
+///           "nodes": [{ "name": "...", "type": "...", "description": "..." }],
+///           "edges": [{ "source": "...", "target": "...", "relation": "..." }] }`
+/// Output: `{ "tx_id": N, "count": N, "episode": "..." }`
+pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    let ep: Episode = serde_json::from_value(input.clone())
+        .map_err(|e| Error::InvalidValue(format!("invalid episode JSON: {e}")))?;
+
+    let timestamp = input
+        .get("timestamp")
+        .and_then(|v| v.as_str())
+        .unwrap_or("1970-01-01T00:00:00Z");
+
+    let (tx_id, count) = episode::ingest_episode(store, &ep, timestamp)?;
+
+    Ok(serde_json::json!({
+        "tx_id": tx_id,
+        "count": count,
+        "episode": ep.name
+    }))
+}
+
 /// MCP tool definitions as JSON schemas for registration with Bobbin.
 pub fn tool_definitions() -> Vec<JsonValue> {
     vec![
@@ -389,6 +415,63 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     }
                 },
                 "required": ["shapes", "data"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_episode",
+            "description": "Ingest structured knowledge from an agent episode (nodes + edges)",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Episode name/identifier"
+                    },
+                    "episode_body": {
+                        "type": "string",
+                        "description": "Natural language description of the knowledge"
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "Who/what produced this episode"
+                    },
+                    "group_id": {
+                        "type": "string",
+                        "description": "Knowledge graph group (e.g. aegis-ontology)"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "description": "ISO-8601 timestamp for the assertion"
+                    },
+                    "nodes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": { "type": "string" },
+                                "type": { "type": "string" },
+                                "description": { "type": "string" },
+                                "properties": { "type": "object" }
+                            },
+                            "required": ["name"]
+                        },
+                        "description": "Entity nodes to create"
+                    },
+                    "edges": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source": { "type": "string" },
+                                "target": { "type": "string" },
+                                "relation": { "type": "string" }
+                            },
+                            "required": ["source", "target", "relation"]
+                        },
+                        "description": "Relationship edges between nodes"
+                    }
+                },
+                "required": ["name"]
             }
         }),
         serde_json::json!({
@@ -568,9 +651,32 @@ ex:PersonShape a sh:NodeShape ;
     }
 
     #[test]
+    fn test_tool_episode() {
+        let mut store = Store::open_in_memory().unwrap();
+        let input = serde_json::json!({
+            "name": "deploy-event",
+            "episode_body": "Deployed new version of tapestry to ct-236",
+            "source": "crew/mayor",
+            "group_id": "aegis-ontology",
+            "timestamp": "2026-04-04T12:00:00Z",
+            "nodes": [
+                {"name": "tapestry", "type": "WebApplication", "description": "Web UI"},
+                {"name": "ct-236", "type": "LXCContainer"}
+            ],
+            "edges": [
+                {"source": "tapestry", "target": "ct-236", "relation": "deployed_on"}
+            ]
+        });
+        let result = tool_episode(&mut store, &input).unwrap();
+        assert_eq!(result["episode"], "deploy-event");
+        assert!(result["tx_id"].as_i64().unwrap() > 0);
+        assert!(result["count"].as_i64().unwrap() >= 10);
+    }
+
+    #[test]
     fn test_tool_definitions() {
         let defs = tool_definitions();
-        assert_eq!(defs.len(), 6);
+        assert_eq!(defs.len(), 7);
         let names: Vec<&str> = defs
             .iter()
             .map(|d| d["name"].as_str().unwrap())
@@ -581,5 +687,6 @@ ex:PersonShape a sh:NodeShape ;
         assert!(names.contains(&"quipu_unravel"));
         assert!(names.contains(&"quipu_validate"));
         assert!(names.contains(&"quipu_search"));
+        assert!(names.contains(&"quipu_episode"));
     }
 }

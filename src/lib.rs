@@ -3,6 +3,7 @@
 //! This crate implements an immutable bitemporal EAVT fact log backed by SQLite,
 //! designed as a foundation for agent-enforced knowledge graphs.
 
+pub mod episode;
 pub mod error;
 pub mod mcp;
 pub mod rdf;
@@ -13,8 +14,9 @@ pub mod store;
 pub mod types;
 pub mod vector;
 
+pub use episode::{ingest_episode, Episode};
 pub use error::{Error, Result};
-pub use mcp::{tool_cord, tool_definitions, tool_knot, tool_query, tool_search, tool_unravel, tool_validate};
+pub use mcp::{tool_cord, tool_definitions, tool_episode, tool_knot, tool_query, tool_search, tool_unravel, tool_validate};
 pub use rdf::{export_rdf, ingest_rdf};
 pub use shacl::{validate_shapes, ValidationFeedback, Validator};
 pub use sparql::{query as sparql_query, QueryResult};
