@@ -22,6 +22,9 @@ pub enum Error {
         violations: usize,
         messages: Vec<String>,
     },
+
+    #[error("store error: {0}")]
+    Store(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

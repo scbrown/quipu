@@ -1,9 +1,13 @@
-//! Vector search over entity embeddings, stored in `SQLite`.
+//! Vector search over entity embeddings.
 //!
-//! Embeddings are stored as f32 blobs in a `vectors` table alongside temporal
-//! metadata. Search uses brute-force cosine similarity — fast enough for the
-//! <1M fact target. The embedding function is caller-provided (trait), so
-//! Bobbin can supply its ONNX pipeline when Quipu is used as a subsystem.
+//! The [`KnowledgeVectorStore`] trait abstracts vector operations so callers are
+//! decoupled from the underlying backend (`SQLite`, `LanceDB`, etc.).
+//!
+//! The default implementation stores f32 blobs in a `SQLite` `vectors` table
+//! alongside temporal metadata. Search uses brute-force cosine similarity —
+//! fast enough for the <1M fact target. The embedding function is
+//! caller-provided, so Bobbin can supply its ONNX pipeline when Quipu is used
+//! as a subsystem.
 
 use rusqlite::params;
 
@@ -33,9 +37,38 @@ pub struct VectorMatch {
     pub valid_to: Option<String>,
 }
 
-impl Store {
+/// Trait abstracting vector storage backends (`SQLite`, `LanceDB`, etc.).
+pub trait KnowledgeVectorStore {
     /// Store an embedding for an entity.
-    pub fn embed_entity(
+    fn embed_entity(
+        &self,
+        entity_id: i64,
+        text: &str,
+        embedding: &[f32],
+        valid_from: &str,
+    ) -> Result<()>;
+
+    /// Close an entity's embedding (set `valid_to`) when the entity is retracted.
+    fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()>;
+
+    /// Search for similar entities by cosine similarity.
+    ///
+    /// Only returns current embeddings (`valid_to` IS NULL) unless `valid_at` is set.
+    fn vector_search(
+        &self,
+        query: &[f32],
+        limit: usize,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<VectorMatch>>;
+
+    /// Return the number of current embeddings.
+    fn vector_count(&self) -> Result<usize>;
+}
+
+// ── SQLite implementation ─────────────────────────────────────────
+
+impl KnowledgeVectorStore for Store {
+    fn embed_entity(
         &self,
         entity_id: i64,
         text: &str,
@@ -51,8 +84,7 @@ impl Store {
         Ok(())
     }
 
-    /// Close an entity's embedding (set `valid_to`) when the entity is retracted.
-    pub fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()> {
+    fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()> {
         self.conn.execute(
             "UPDATE vectors SET valid_to = ?1 WHERE entity_id = ?2 AND valid_to IS NULL",
             params![valid_to, entity_id],
@@ -60,10 +92,7 @@ impl Store {
         Ok(())
     }
 
-    /// Search for similar entities by cosine similarity.
-    ///
-    /// Only returns current embeddings (`valid_to` IS NULL) unless `valid_at` is set.
-    pub fn vector_search(
+    fn vector_search(
         &self,
         query_embedding: &[f32],
         limit: usize,
@@ -78,7 +107,6 @@ impl Store {
         };
 
         let mut stmt = self.conn.prepare(sql)?;
-        let mut matches = Vec::new();
 
         let rows = if let Some(vt) = valid_at {
             stmt.query(params![vt])?
@@ -86,6 +114,7 @@ impl Store {
             stmt.query([])?
         };
 
+        let mut matches = Vec::new();
         let mut rows = rows;
         while let Some(row) = rows.next()? {
             let entity_id: i64 = row.get(0)?;
@@ -116,8 +145,7 @@ impl Store {
         Ok(matches)
     }
 
-    /// Return the number of current embeddings.
-    pub fn vector_count(&self) -> Result<usize> {
+    fn vector_count(&self) -> Result<usize> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM vectors WHERE valid_to IS NULL",
             [],
@@ -127,9 +155,16 @@ impl Store {
     }
 }
 
+impl Store {
+    /// Return a reference to this store's vector backend.
+    pub fn vector_store(&self) -> &dyn KnowledgeVectorStore {
+        self
+    }
+}
+
 // ── Embedding math ─────────────────────────────────────────────────
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
+pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }
@@ -147,7 +182,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
     if denom == 0.0 { 0.0 } else { dot / denom }
 }
 
-fn f32_slice_to_bytes(data: &[f32]) -> Vec<u8> {
+pub(crate) fn f32_slice_to_bytes(data: &[f32]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(data.len() * 4);
     for f in data {
         bytes.extend_from_slice(&f.to_le_bytes());
@@ -155,7 +190,7 @@ fn f32_slice_to_bytes(data: &[f32]) -> Vec<u8> {
     bytes
 }
 
-fn bytes_to_f32_slice(data: &[u8]) -> Vec<f32> {
+pub(crate) fn bytes_to_f32_slice(data: &[u8]) -> Vec<f32> {
     data.chunks_exact(4)
         .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
         .collect()
@@ -279,5 +314,22 @@ mod tests {
         let query = make_embedding(0.0, 8);
         let results = store.vector_search(&query, 5, None).unwrap();
         assert_eq!(results.len(), 5);
+    }
+
+    #[test]
+    fn vector_store_trait_object() {
+        let store = Store::open_in_memory().unwrap();
+        let vs: &dyn KnowledgeVectorStore = store.vector_store();
+
+        let eid = store.intern("http://example.org/test").unwrap();
+        let emb = make_embedding(1.0, 8);
+
+        vs.embed_entity(eid, "test entity", &emb, "2026-01-01")
+            .unwrap();
+        assert_eq!(vs.vector_count().unwrap(), 1);
+
+        let results = vs.vector_search(&emb, 10, None).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].entity_id, eid);
     }
 }

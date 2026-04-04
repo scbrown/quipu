@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::sparql;
 use crate::store::{AsOf, Store};
 use crate::types::Value;
+use crate::vector::KnowledgeVectorStore;
 
 use super::value_to_json;
 

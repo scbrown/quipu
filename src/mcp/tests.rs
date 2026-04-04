@@ -2,6 +2,7 @@
 
 use super::tools::*;
 use super::*;
+use crate::vector::KnowledgeVectorStore;
 
 fn test_store_with_data() -> Store {
     let mut store = Store::open_in_memory().unwrap();

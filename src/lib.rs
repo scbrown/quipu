@@ -19,6 +19,8 @@ pub mod sparql;
 pub mod store;
 pub mod types;
 pub mod vector;
+#[cfg(feature = "lancedb")]
+pub mod vector_lance;
 
 pub use config::{FederationConfig, QuipuConfig, RemoteEndpoint, ServerConfig};
 pub use context::{
@@ -43,4 +45,6 @@ pub use sparql::{
 };
 pub use store::Store;
 pub use types::{Fact, Op, Term, Transaction, Value};
-pub use vector::VectorMatch;
+pub use vector::{KnowledgeVectorStore, VectorMatch};
+#[cfg(feature = "lancedb")]
+pub use vector_lance::LanceVectorStore;

@@ -33,10 +33,15 @@ axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 petgraph = "0.7"
 toml = "0.8"
+lancedb = { version = "0.27", optional = true }
+arrow-array = { version = "57", optional = true }
+arrow-schema = { version = "57", optional = true }
+futures = { version = "0.3", optional = true }
 
 [features]
 default = ["shacl"]
 shacl = ["dep:rudof_lib"]
+lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
 
 [lints.rust]
 unsafe_code = "deny"
