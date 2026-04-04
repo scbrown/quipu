@@ -148,14 +148,37 @@ pub fn tool_validate(_input: &JsonValue) -> Result<JsonValue> {
 }
 
 /// MCP tool: `quipu_search` -- Semantic vector search over entity embeddings.
+///
+/// Accepts either a pre-computed `embedding` vector or a natural-language
+/// `query` string. When `query` is provided and no `embedding`, the store's
+/// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let embedding: Vec<f32> = input
+    let explicit_embedding: Option<Vec<f32>> = input
         .get("embedding")
         .and_then(|v| v.as_array())
-        .ok_or_else(|| Error::InvalidValue("missing 'embedding' array parameter".into()))?
-        .iter()
-        .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-        .collect();
+        .map(|arr| {
+            arr.iter()
+                .map(|v| v.as_f64().unwrap_or(0.0) as f32)
+                .collect()
+        });
+
+    let query_text = input.get("query").and_then(|v| v.as_str());
+
+    let embedding = match (explicit_embedding, query_text) {
+        (Some(emb), _) => emb,
+        (None, Some(text)) => store.embed_query(text)?.ok_or_else(|| {
+            Error::InvalidValue(
+                "no embedding provider configured; supply a pre-computed 'embedding' or \
+                     attach an EmbeddingProvider to the store"
+                    .into(),
+            )
+        })?,
+        (None, None) => {
+            return Err(Error::InvalidValue(
+                "missing 'embedding' array or 'query' text parameter".into(),
+            ));
+        }
+    };
 
     let limit = input
         .get("limit")
@@ -354,16 +377,39 @@ pub(crate) fn extract_type_filter(sparql: &str) -> Option<String> {
 /// of the old O(n) scan-then-filter path. Complex SPARQL falls back to the
 /// two-phase approach (SPARQL candidates → post-filter).
 ///
-/// Input: `{ "embedding": [f32...], "sparql": "SELECT ?s WHERE {...}", "limit": N, "valid_at": "..." }`
+/// Accepts either a pre-computed `embedding` vector or a natural-language
+/// `query` string. When `query` is provided and no `embedding`, the store's
+/// `EmbeddingProvider` is used to embed the text automatically.
+///
+/// Input: `{ "embedding": [f32...], "query": "text", "sparql": "SELECT ?s WHERE {...}", "limit": N, "valid_at": "..." }`
 /// Output: entities ranked by vector similarity, optionally pre-filtered by SPARQL.
 pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let embedding: Vec<f32> = input
+    let explicit_embedding: Option<Vec<f32>> = input
         .get("embedding")
         .and_then(|v| v.as_array())
-        .ok_or_else(|| Error::InvalidValue("missing 'embedding' array parameter".into()))?
-        .iter()
-        .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-        .collect();
+        .map(|arr| {
+            arr.iter()
+                .map(|v| v.as_f64().unwrap_or(0.0) as f32)
+                .collect()
+        });
+
+    let query_text = input.get("query").and_then(|v| v.as_str());
+
+    let embedding = match (explicit_embedding, query_text) {
+        (Some(emb), _) => emb,
+        (None, Some(text)) => store.embed_query(text)?.ok_or_else(|| {
+            Error::InvalidValue(
+                "no embedding provider configured; supply a pre-computed 'embedding' or \
+                 attach an EmbeddingProvider to the store"
+                    .into(),
+            )
+        })?,
+        (None, None) => {
+            return Err(Error::InvalidValue(
+                "missing 'embedding' array or 'query' text parameter".into(),
+            ));
+        }
+    };
 
     let limit = input
         .get("limit")

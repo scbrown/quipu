@@ -78,15 +78,21 @@ pub fn tool_unified_search(store: &Store, input: &serde_json::Value) -> Result<s
     let pipeline = ContextPipeline::new(store, config);
 
     // If embedding provided, use hybrid search (text + vector).
-    let embedding: Option<Vec<f32>> =
-        input
-            .get("embedding")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-                    .collect()
-            });
+    // When no explicit embedding but an EmbeddingProvider is attached,
+    // auto-embed the query text for seamless natural-language search.
+    let explicit_embedding: Option<Vec<f32>> = input
+        .get("embedding")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|v| v.as_f64().unwrap_or(0.0) as f32)
+                .collect()
+        });
+
+    let embedding = match explicit_embedding {
+        Some(emb) => Some(emb),
+        None => store.embed_query(query)?,
+    };
 
     let ctx = if let Some(ref emb) = embedding {
         pipeline.query_hybrid(query, emb, None)?

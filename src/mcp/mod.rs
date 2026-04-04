@@ -262,39 +262,39 @@ pub fn tool_definitions() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_search",
-            "description": "Semantic vector search over entity embeddings (requires pre-computed embedding)",
+            "description": "Semantic vector search over entity embeddings. Accepts a pre-computed embedding vector or a natural-language query (auto-embedded when an EmbeddingProvider is configured).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "embedding": { "type": "array", "items": { "type": "number" }, "description": "Query embedding vector (f32 array)" },
+                    "query": { "type": "string", "description": "Natural language search query (auto-embedded when EmbeddingProvider is attached)" },
+                    "embedding": { "type": "array", "items": { "type": "number" }, "description": "Pre-computed query embedding vector (f32 array). Takes precedence over query." },
                     "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
                     "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" }
-                },
-                "required": ["embedding"]
+                }
             }
         }),
         serde_json::json!({
             "name": "quipu_hybrid_search",
-            "description": "Combined SPARQL + vector similarity search with predicate pushdown. Simple type constraints (e.g. ?s a <Type>) are pushed into the vector index for O(log n) filtered ANN. Complex SPARQL falls back to candidate post-filtering.",
+            "description": "Combined SPARQL + vector similarity search with predicate pushdown. Accepts a pre-computed embedding or natural-language query. Simple type constraints (e.g. ?s a <Type>) are pushed into the vector index for O(log n) filtered ANN.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "embedding": { "type": "array", "items": { "type": "number" }, "description": "Query embedding vector (f32 array)" },
+                    "query": { "type": "string", "description": "Natural language search query (auto-embedded when EmbeddingProvider is attached)" },
+                    "embedding": { "type": "array", "items": { "type": "number" }, "description": "Pre-computed query embedding vector (f32 array). Takes precedence over query." },
                     "sparql": { "type": "string", "description": "SPARQL SELECT query returning entity IRIs in the first variable. Simple type patterns (e.g. ?s a <Type>) enable predicate pushdown." },
                     "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
                     "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" }
-                },
-                "required": ["embedding"]
+                }
             }
         }),
         serde_json::json!({
             "name": "quipu_unified_search",
-            "description": "Unified knowledge search for Bobbin integration. Combines text and optional vector search, returning results tagged with source='knowledge' and normalized 0-1 scores ready for merging with Bobbin's code search results.",
+            "description": "Unified knowledge search for Bobbin integration. Combines text and optional vector search, returning results tagged with source='knowledge' and normalized 0-1 scores. When an EmbeddingProvider is attached, the query is auto-embedded for semantic search.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "query": { "type": "string", "description": "Natural language search query" },
-                    "embedding": { "type": "array", "items": { "type": "number" }, "description": "Optional query embedding vector for semantic search (f32 array)" },
+                    "embedding": { "type": "array", "items": { "type": "number" }, "description": "Optional pre-computed query embedding. When omitted and EmbeddingProvider is attached, query is auto-embedded." },
                     "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
                     "expand_links": { "type": "boolean", "description": "Expand results via graph links (default: true)" },
                     "max_facts_per_entity": { "type": "integer", "description": "Maximum facts per entity (default: 10)" }

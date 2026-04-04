@@ -1,7 +1,11 @@
 //! Tests for MCP tool handlers.
 
+use std::sync::Arc;
+
 use super::tools::*;
 use super::*;
+use crate::embedding::EmbeddingProvider;
+use crate::error::Result as QResult;
 use crate::vector::KnowledgeVectorStore;
 
 fn test_store_with_data() -> Store {
@@ -418,4 +422,144 @@ fn test_search_results_include_source_field() {
     let input = serde_json::json!({ "embedding": emb, "limit": 5 });
     let result = super::tools::tool_hybrid_search(&store, &input).unwrap();
     assert_eq!(result["results"][0]["source"], "knowledge");
+}
+
+/// Deterministic embedding provider for testing query-text auto-embedding.
+struct TestProvider;
+
+impl EmbeddingProvider for TestProvider {
+    fn embed_text(&self, text: &str) -> QResult<Vec<f32>> {
+        let seed = text.len() as f32;
+        Ok((0..8).map(|i| (seed + i as f32 * 0.1).sin()).collect())
+    }
+
+    fn dimension(&self) -> usize {
+        8
+    }
+}
+
+#[test]
+fn test_search_with_query_text() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(TestProvider));
+    store.embedding_config_mut().auto_embed = true;
+
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:alice rdfs:label "Alice" ; rdfs:comment "A software engineer" .
+ex:bob rdfs:label "Bob" ; rdfs:comment "A data scientist" .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // Search using query text (auto-embedded by provider).
+    let input = serde_json::json!({ "query": "software engineer", "limit": 5 });
+    let result = tool_search(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+    assert_eq!(result["results"][0]["source"], "knowledge");
+}
+
+#[test]
+fn test_search_query_text_without_provider_errors() {
+    let store = Store::open_in_memory().unwrap();
+
+    // No embedding provider → query-text search should fail with a clear message.
+    let input = serde_json::json!({ "query": "software engineer" });
+    let err = tool_search(&store, &input).unwrap_err();
+    assert!(err.to_string().contains("no embedding provider"));
+}
+
+#[test]
+fn test_search_missing_both_params_errors() {
+    let store = Store::open_in_memory().unwrap();
+
+    // Neither query nor embedding → error.
+    let input = serde_json::json!({ "limit": 5 });
+    let err = tool_search(&store, &input).unwrap_err();
+    assert!(err.to_string().contains("missing"));
+}
+
+#[test]
+fn test_search_explicit_embedding_preferred_over_query() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(TestProvider));
+    store.embedding_config_mut().auto_embed = true;
+
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+ex:alice rdfs:label "Alice" .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // When both embedding and query are provided, embedding wins.
+    let emb: Vec<f32> = (0..8).map(|i| (5.0 + i as f32 * 0.1).sin()).collect();
+    let input = serde_json::json!({
+        "embedding": emb,
+        "query": "ignored because embedding takes precedence",
+        "limit": 5
+    });
+    let result = tool_search(&store, &input).unwrap();
+    // Should succeed (uses explicit embedding).
+    assert!(result["count"].as_u64().is_some());
+}
+
+#[test]
+fn test_hybrid_search_with_query_text() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(TestProvider));
+    store.embedding_config_mut().auto_embed = true;
+
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+ex:alice a ex:Person ; rdfs:label "Alice" .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // Hybrid search with query text + SPARQL filter.
+    let input = serde_json::json!({
+        "query": "Alice",
+        "sparql": "SELECT ?s WHERE { ?s a <http://example.org/Person> }",
+        "limit": 5
+    });
+    let result = tool_hybrid_search(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+}
+
+#[test]
+fn test_hybrid_search_query_text_without_provider_errors() {
+    let store = Store::open_in_memory().unwrap();
+
+    let input = serde_json::json!({ "query": "test" });
+    let err = tool_hybrid_search(&store, &input).unwrap_err();
+    assert!(err.to_string().contains("no embedding provider"));
 }

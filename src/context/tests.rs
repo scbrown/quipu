@@ -1,4 +1,8 @@
+use std::sync::Arc;
+
 use super::*;
+use crate::embedding::EmbeddingProvider;
+use crate::error::Result as QResult;
 use crate::rdf::ingest_rdf;
 use crate::store::Store;
 use oxrdfio::RdfFormat;
@@ -245,4 +249,65 @@ fn unified_search_missing_query() {
     let input = serde_json::json!({});
     let result = tool_unified_search(&store, &input);
     assert!(result.is_err());
+}
+
+/// Deterministic embedding provider for testing auto-embed in unified search.
+struct TestEmbedder;
+
+impl EmbeddingProvider for TestEmbedder {
+    fn embed_text(&self, text: &str) -> QResult<Vec<f32>> {
+        let seed = text.len() as f32;
+        Ok((0..8).map(|i| (seed + i as f32 * 0.1).sin()).collect())
+    }
+
+    fn dimension(&self) -> usize {
+        8
+    }
+}
+
+#[test]
+fn unified_search_auto_embeds_query_when_provider_set() {
+    let mut store = setup_test_store();
+    store.set_embedding_provider(Arc::new(TestEmbedder));
+    store.embedding_config_mut().auto_embed = true;
+
+    // Re-ingest data with auto-embed enabled so entities get embeddings.
+    let turtle = r#"
+@prefix ex: <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+ex:nginx rdfs:label "Nginx" ; rdfs:comment "A web server for reverse proxying" .
+"#;
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-02-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // No explicit embedding — the provider should auto-embed the query.
+    let input = serde_json::json!({
+        "query": "web server",
+        "limit": 5,
+        "expand_links": false,
+    });
+    let result = tool_unified_search(&store, &input).unwrap();
+    // Should get results from both text search and auto-embedded vector search.
+    assert!(result["count"].as_u64().unwrap() >= 1);
+}
+
+#[test]
+fn unified_search_no_provider_falls_back_to_text_only() {
+    let store = setup_test_store();
+
+    // No embedding provider → unified search should still work with text-only.
+    let input = serde_json::json!({
+        "query": "traefik",
+        "limit": 5,
+    });
+    let result = tool_unified_search(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
 }

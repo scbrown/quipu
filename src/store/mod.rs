@@ -97,6 +97,23 @@ impl Store {
         self.vector_delegate.is_some()
     }
 
+    /// Returns `true` if an embedding provider is attached.
+    pub fn has_embedding_provider(&self) -> bool {
+        self.embedding_provider.is_some()
+    }
+
+    /// Embed a query string using the attached provider.
+    ///
+    /// Returns `None` if no provider is set. This allows search endpoints
+    /// to accept natural-language `query` text and auto-embed it rather
+    /// than requiring callers to supply pre-computed vectors.
+    pub fn embed_query(&self, text: &str) -> Result<Option<Vec<f32>>> {
+        match &self.embedding_provider {
+            Some(provider) => Ok(Some(provider.embed_text(text)?)),
+            None => Ok(None),
+        }
+    }
+
     // -- Term dictionary --
 
     /// Intern an IRI, returning its integer id.
