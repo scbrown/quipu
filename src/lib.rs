@@ -13,6 +13,7 @@ pub mod mcp;
 pub mod namespace;
 pub mod provider;
 pub mod rdf;
+pub mod reconcile;
 pub mod schema;
 #[cfg(feature = "shacl")]
 pub mod shacl;
@@ -40,6 +41,10 @@ pub use mcp::tools::{
 pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use rdf::{export_rdf, ingest_rdf};
+pub use reconcile::{
+    GoResolver, ImportResolver, PythonResolver, ReconcileReport, RustResolver, default_resolvers,
+    reconcile,
+};
 #[cfg(feature = "shacl")]
 pub use shacl::{ValidationFeedback, Validator, validate_shapes};
 pub use sparql::{

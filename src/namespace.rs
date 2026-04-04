@@ -26,6 +26,19 @@ pub const BOBBIN: &str = "https://bobbin.dev/ontology#";
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 pub const RDFS_SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
 
+// ── Bobbin property IRIs ──────────────────────────────────────
+
+/// `bobbin:imports` — unresolved import edge (target may be literal or ref).
+pub const BOBBIN_IMPORTS: &str = "https://bobbin.dev/ontology#imports";
+/// `bobbin:name` — symbol / entity name.
+pub const BOBBIN_NAME: &str = "https://bobbin.dev/ontology#name";
+/// `bobbin:language` — programming language of a `CodeModule`.
+pub const BOBBIN_LANGUAGE: &str = "https://bobbin.dev/ontology#language";
+/// `bobbin:definedIn` — links a `CodeSymbol` to its parent `CodeModule`.
+pub const BOBBIN_DEFINED_IN: &str = "https://bobbin.dev/ontology#definedIn";
+/// `bobbin:filePath` — file path of a `CodeModule`.
+pub const BOBBIN_FILE_PATH: &str = "https://bobbin.dev/ontology#filePath";
+
 // ── XSD datatype IRIs ──────────────────────────────────────────
 
 pub const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
