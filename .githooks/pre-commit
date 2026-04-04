@@ -7,7 +7,7 @@ echo "Running cargo fmt --check..."
 cargo fmt --check 2>&1 || { echo "Format check failed. Run 'cargo fmt' to fix."; exit 1; }
 
 echo "Running clippy..."
-cargo clippy --all-targets -- -D warnings 2>&1 || { echo "Clippy failed."; exit 1; }
+cargo clippy --all-targets -- -D warnings -A missing-docs 2>&1 || { echo "Clippy failed."; exit 1; }
 
 echo "Checking file sizes..."
 "$ROOT/scripts/check-file-size.sh" || exit 1

@@ -8,6 +8,28 @@ license = "MIT"
 repository = "https://github.com/scbrown/quipu"
 keywords = ["knowledge-graph", "rdf", "sparql", "ontology", "ai"]
 categories = ["database", "data-structures"]
+homepage = "https://github.com/scbrown/quipu"
+documentation = "https://docs.rs/quipu"
+exclude = [
+    ".github/",
+    ".githooks/",
+    ".vale/",
+    ".vale.ini",
+    ".pre-commit-config.yaml",
+    ".markdownlint-cli2.yaml",
+    ".prettierrc.yaml",
+    "docs/",
+    "assets/",
+    "cliff.toml",
+    "justfile",
+    "CONTRIBUTING.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "CHANGELOG.md",
+    "release-plz.toml",
+    "scripts/",
+]
 
 [[bin]]
 name = "quipu"
@@ -46,6 +68,7 @@ lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
 [lints.rust]
 unsafe_code = "deny"
 unused_must_use = "deny"
+missing_docs = "warn"
 
 [lints.clippy]
 # Correctness & safety
