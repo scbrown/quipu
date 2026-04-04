@@ -266,6 +266,77 @@ fn test_tool_definitions() {
 }
 
 #[test]
+fn test_extract_type_filter_simple() {
+    let sparql = "SELECT ?s WHERE { ?s a <http://example.org/Person> }";
+    let filter = super::tools::extract_type_filter(sparql);
+    assert_eq!(
+        filter,
+        Some("entity_type = 'http://example.org/Person'".into())
+    );
+}
+
+#[test]
+fn test_extract_type_filter_rdf_type() {
+    let sparql = "SELECT ?s WHERE { ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Bot> }";
+    let filter = super::tools::extract_type_filter(sparql);
+    assert_eq!(
+        filter,
+        Some("entity_type = 'http://example.org/Bot'".into())
+    );
+}
+
+#[test]
+fn test_extract_type_filter_complex_returns_none() {
+    // FILTER makes this too complex for pushdown
+    let sparql = "SELECT ?s WHERE { ?s a <http://example.org/Person> . FILTER(?s != <http://example.org/bob>) }";
+    let filter = super::tools::extract_type_filter(sparql);
+    assert!(filter.is_none());
+}
+
+#[test]
+fn test_extract_type_filter_no_type_returns_none() {
+    let sparql = "SELECT ?s WHERE { ?s <http://example.org/name> \"Alice\" }";
+    let filter = super::tools::extract_type_filter(sparql);
+    assert!(filter.is_none());
+}
+
+#[test]
+fn test_hybrid_search_includes_pushdown_filter() {
+    let mut store = Store::open_in_memory().unwrap();
+    let ttl = "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .";
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let alice_id = store.intern("http://example.org/alice").unwrap();
+    let emb: Vec<f32> = (0..8).map(|i| (1.0 + i as f32 * 0.1).sin()).collect();
+    store
+        .embed_entity(alice_id, "Alice", &emb, "2026-01-01")
+        .unwrap();
+
+    let input = serde_json::json!({
+        "embedding": emb,
+        "sparql": "SELECT ?s WHERE { ?s a <http://example.org/Person> }",
+        "limit": 5
+    });
+    let result = super::tools::tool_hybrid_search(&store, &input).unwrap();
+
+    // Result should include the pushdown_filter field.
+    assert_eq!(
+        result["pushdown_filter"],
+        "entity_type = 'http://example.org/Person'"
+    );
+    assert_eq!(result["count"], 1);
+}
+
+#[test]
 fn test_hybrid_search_vector_only() {
     let store = test_store_with_data();
 

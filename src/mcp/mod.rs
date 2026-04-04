@@ -275,12 +275,12 @@ pub fn tool_definitions() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_hybrid_search",
-            "description": "Combined SPARQL + vector similarity search. Pre-filter entities with a SPARQL query, then rank by embedding similarity.",
+            "description": "Combined SPARQL + vector similarity search with predicate pushdown. Simple type constraints (e.g. ?s a <Type>) are pushed into the vector index for O(log n) filtered ANN. Complex SPARQL falls back to candidate post-filtering.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "embedding": { "type": "array", "items": { "type": "number" }, "description": "Query embedding vector (f32 array)" },
-                    "sparql": { "type": "string", "description": "SPARQL SELECT query returning entity IRIs in the first variable. Results are used as candidates for vector re-ranking." },
+                    "sparql": { "type": "string", "description": "SPARQL SELECT query returning entity IRIs in the first variable. Simple type patterns (e.g. ?s a <Type>) enable predicate pushdown." },
                     "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
                     "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" }
                 },

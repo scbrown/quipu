@@ -61,6 +61,24 @@ pub trait KnowledgeVectorStore {
         valid_at: Option<&str>,
     ) -> Result<Vec<VectorMatch>>;
 
+    /// Search with an optional predicate pushdown filter.
+    ///
+    /// The `filter` is a SQL-like WHERE clause fragment (e.g.
+    /// `entity_type = 'Person'`). Backends that support predicate pushdown
+    /// (`LanceDB`) apply it during ANN search; others oversample and let the
+    /// caller post-filter.
+    fn vector_search_filtered(
+        &self,
+        query: &[f32],
+        limit: usize,
+        filter: Option<&str>,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<VectorMatch>> {
+        // Default: ignore filter, oversample to give callers room to post-filter.
+        let oversample = if filter.is_some() { limit * 5 } else { limit };
+        self.vector_search(query, oversample, valid_at)
+    }
+
     /// Return the number of current embeddings.
     fn vector_count(&self) -> Result<usize>;
 }

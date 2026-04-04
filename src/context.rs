@@ -104,6 +104,61 @@ impl<'a> ContextPipeline<'a> {
         Self { store, config }
     }
 
+    /// Query with optional embedding-based semantic search and predicate pushdown.
+    ///
+    /// When `embedding` is provided, vector similarity results are merged into
+    /// the text-search and link-expansion results as `Semantic` relevance hits.
+    /// The optional `filter` is forwarded to [`KnowledgeVectorStore::vector_search_filtered`]
+    /// for predicate pushdown on backends that support it (e.g. `LanceDB`).
+    pub fn query_hybrid(
+        &self,
+        query: &str,
+        embedding: &[f32],
+        filter: Option<&str>,
+    ) -> Result<KnowledgeContext> {
+        let mut ctx = self.query(query)?;
+
+        let semantic_hits = self.store.vector_store().vector_search_filtered(
+            embedding,
+            self.config.max_entities,
+            filter,
+            None,
+        )?;
+
+        let mut seen: Vec<String> = ctx.entities.iter().map(|e| e.iri.clone()).collect();
+        let mut semantic_count = 0;
+
+        for hit in semantic_hits {
+            if ctx.entities.len() >= self.config.max_entities {
+                break;
+            }
+            if let Ok(iri) = self.store.resolve(hit.entity_id)
+                && !seen.contains(&iri)
+            {
+                seen.push(iri.clone());
+                if let Ok(entity) =
+                    self.build_entity(&iri, KnowledgeRelevance::Semantic, hit.score as f32)
+                {
+                    semantic_count += 1;
+                    ctx.entities.push(entity);
+                }
+            }
+        }
+
+        ctx.summary.total_entities += semantic_count;
+        ctx.summary.total_facts = ctx.entities.iter().map(|e| e.facts.len()).sum();
+
+        // Re-sort after merging semantic hits.
+        ctx.entities.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        ctx.entities.truncate(self.config.max_entities);
+
+        Ok(ctx)
+    }
+
     /// Query the knowledge graph for entities relevant to the given query string.
     ///
     /// Strategy:

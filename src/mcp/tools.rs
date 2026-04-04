@@ -308,7 +308,50 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
+/// Extract a `LanceDB` predicate-pushdown filter from a simple SPARQL type query.
+///
+/// Recognises patterns like `SELECT ?s WHERE { ?s a <TypeIRI> }` and converts
+/// them to `entity_type = 'TypeIRI'`. Returns `None` for complex queries that
+/// cannot be reduced to a single type constraint.
+pub(crate) fn extract_type_filter(sparql: &str) -> Option<String> {
+    // Normalise whitespace for matching.
+    let normalised: String = sparql.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    // Match: ... { ?<var> a <IRI> } or ... { ?<var> a <IRI> . }
+    // Also match rdf:type in full IRI form.
+    let type_predicates = [" a ", " <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> "];
+
+    for pred in &type_predicates {
+        if let Some(pos) = normalised.find(pred) {
+            let after = &normalised[pos + pred.len()..];
+            // Extract the IRI between < and >
+            if let Some(start) = after.find('<')
+                && let Some(end) = after[start..].find('>')
+            {
+                let iri = &after[start + 1..start + end];
+                // Verify this looks like a simple single-pattern query
+                // (no UNION, OPTIONAL, FILTER, etc.)
+                let upper = normalised.to_uppercase();
+                if !upper.contains("UNION")
+                    && !upper.contains("OPTIONAL")
+                    && !upper.contains("FILTER")
+                    && !upper.contains("MINUS")
+                {
+                    return Some(format!("entity_type = '{iri}'"));
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// MCP tool: `quipu_hybrid_search` — Combined SPARQL + vector similarity search.
+///
+/// When the SPARQL query is a simple type constraint (e.g. `?s a <Type>`), the
+/// type is pushed down into `LanceDB`'s filtered ANN search for O(log n) instead
+/// of the old O(n) scan-then-filter path. Complex SPARQL falls back to the
+/// two-phase approach (SPARQL candidates → post-filter).
 ///
 /// Input: `{ "embedding": [f32...], "sparql": "SELECT ?s WHERE {...}", "limit": N, "valid_at": "..." }`
 /// Output: entities ranked by vector similarity, optionally pre-filtered by SPARQL.
@@ -329,12 +372,15 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
     let valid_at = input.get("valid_at").and_then(|v| v.as_str());
     let sparql_filter = input.get("sparql").and_then(|v| v.as_str());
 
-    // Step 1: If SPARQL filter provided, get candidate entity IRIs.
+    // Try to extract a pushdown filter from SPARQL type constraints.
+    let pushdown = sparql_filter.and_then(extract_type_filter);
+
+    // Step 1: If SPARQL filter provided, get candidate entity IRIs for post-filter.
+    // This is always needed as a fallback (SQLite) and safety net (complex SPARQL).
     let candidate_iris: Option<Vec<String>> = if let Some(sparql) = sparql_filter {
         let result = crate::sparql::query(store, sparql)?;
         let mut iris = Vec::new();
         for row in result.rows() {
-            // Take the first variable's value as the entity IRI.
             if let Some(first_var) = result.variables().first() {
                 match row.get(first_var) {
                     Some(crate::types::Value::Ref(id)) => {
@@ -352,10 +398,17 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
         None
     };
 
-    // Step 2: Vector search (over all embeddings or full store).
-    let all_matches = store.vector_search(&embedding, limit * 5, valid_at)?;
+    // Step 2: Vector search with predicate pushdown (LanceDB) or oversample (SQLite).
+    let all_matches = store.vector_store().vector_search_filtered(
+        &embedding,
+        limit,
+        pushdown.as_deref(),
+        valid_at,
+    )?;
 
-    // Step 3: Filter by SPARQL candidates if present, then rank.
+    // Step 3: Post-filter by SPARQL candidates when present.
+    // With LanceDB pushdown the filter is redundant but harmless (belt + suspenders).
+    // With SQLite fallback (oversampled, no pushdown) this is essential.
     let filtered: Vec<_> = if let Some(ref candidates) = candidate_iris {
         all_matches
             .into_iter()
@@ -391,5 +444,6 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
         "results": results,
         "count": results.len(),
         "sparql_candidates": candidate_iris.as_ref().map(std::vec::Vec::len),
+        "pushdown_filter": pushdown,
     }))
 }
