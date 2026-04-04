@@ -11,11 +11,13 @@ pub mod shacl;
 pub mod sparql;
 pub mod store;
 pub mod types;
+pub mod vector;
 
 pub use error::{Error, Result};
-pub use mcp::{tool_cord, tool_definitions, tool_knot, tool_query, tool_unravel, tool_validate};
+pub use mcp::{tool_cord, tool_definitions, tool_knot, tool_query, tool_search, tool_unravel, tool_validate};
 pub use rdf::{export_rdf, ingest_rdf};
 pub use shacl::{validate_shapes, ValidationFeedback, Validator};
 pub use sparql::{query as sparql_query, QueryResult};
 pub use store::Store;
 pub use types::{Fact, Op, Term, Transaction, Value};
+pub use vector::VectorMatch;

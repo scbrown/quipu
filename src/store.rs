@@ -3,10 +3,11 @@ use rusqlite::{Connection, params};
 use crate::error::{Error, Result};
 use crate::schema::INIT_SQL;
 use crate::types::{Fact, Op, Transaction, Value};
+use crate::vector::VECTORS_SQL;
 
 /// The core fact log store backed by SQLite.
 pub struct Store {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 /// A write-side assertion or retraction within a transaction.
@@ -43,6 +44,7 @@ impl Store {
     fn init(conn: Connection) -> Result<Self> {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(INIT_SQL)?;
+        conn.execute_batch(VECTORS_SQL)?;
         Ok(Self { conn })
     }
 

@@ -242,6 +242,52 @@ pub fn tool_validate(input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
+/// MCP tool: `quipu_search` — Semantic vector search over entity embeddings.
+///
+/// Input: `{ "embedding": [f32...], "limit": N, "valid_at": "..." }`
+/// Output: `{ "results": [{ "entity": "...", "text": "...", "score": N }, ...] }`
+///
+/// Note: The caller must provide pre-computed embeddings. When integrated with
+/// Bobbin, the MCP server can embed the query text using the ONNX pipeline
+/// before calling this tool.
+pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let embedding: Vec<f32> = input
+        .get("embedding")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| Error::InvalidValue("missing 'embedding' array parameter".into()))?
+        .iter()
+        .map(|v| v.as_f64().unwrap_or(0.0) as f32)
+        .collect();
+
+    let limit = input
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10) as usize;
+
+    let valid_at = input.get("valid_at").and_then(|v| v.as_str());
+
+    let matches = store.vector_search(&embedding, limit, valid_at)?;
+
+    let results: Vec<JsonValue> = matches
+        .iter()
+        .map(|m| {
+            let iri = store.resolve(m.entity_id).unwrap_or_else(|_| format!("ref:{}", m.entity_id));
+            serde_json::json!({
+                "entity": iri,
+                "text": m.text,
+                "score": m.score,
+                "valid_from": m.valid_from,
+                "valid_to": m.valid_to
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "results": results,
+        "count": results.len()
+    }))
+}
+
 /// MCP tool definitions as JSON schemas for registration with Bobbin.
 pub fn tool_definitions() -> Vec<JsonValue> {
     vec![
@@ -343,6 +389,29 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     }
                 },
                 "required": ["shapes", "data"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_search",
+            "description": "Semantic vector search over entity embeddings (requires pre-computed embedding)",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "embedding": {
+                        "type": "array",
+                        "items": { "type": "number" },
+                        "description": "Query embedding vector (f32 array)"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum results (default: 10)"
+                    },
+                    "valid_at": {
+                        "type": "string",
+                        "description": "Point-in-time for temporal filtering (ISO-8601)"
+                    }
+                },
+                "required": ["embedding"]
             }
         }),
     ]
@@ -501,7 +570,7 @@ ex:PersonShape a sh:NodeShape ;
     #[test]
     fn test_tool_definitions() {
         let defs = tool_definitions();
-        assert_eq!(defs.len(), 5);
+        assert_eq!(defs.len(), 6);
         let names: Vec<&str> = defs
             .iter()
             .map(|d| d["name"].as_str().unwrap())
@@ -511,5 +580,6 @@ ex:PersonShape a sh:NodeShape ;
         assert!(names.contains(&"quipu_cord"));
         assert!(names.contains(&"quipu_unravel"));
         assert!(names.contains(&"quipu_validate"));
+        assert!(names.contains(&"quipu_search"));
     }
 }
