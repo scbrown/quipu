@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
-use spargebra::algebra::OrderExpression;
 use spargebra::algebra::GraphPattern;
+use spargebra::algebra::OrderExpression;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use crate::error::{Error, Result};
@@ -12,11 +12,17 @@ use crate::types::Value;
 
 use super::aggregate::eval_aggregate;
 use super::filter::eval_filter;
-use super::rdfs::{collect_class_and_subclasses, eval_type_pattern_with_subclasses, is_rdf_type_pattern};
+use super::rdfs::{
+    collect_class_and_subclasses, eval_type_pattern_with_subclasses, is_rdf_type_pattern,
+};
 use super::{Bindings, TemporalContext};
 
 /// Evaluate a graph pattern, returning rows and the variable names encountered.
-pub fn eval_pattern(store: &Store, pattern: &GraphPattern, ctx: &TemporalContext) -> Result<(Vec<Bindings>, Vec<String>)> {
+pub fn eval_pattern(
+    store: &Store,
+    pattern: &GraphPattern,
+    ctx: &TemporalContext,
+) -> Result<(Vec<Bindings>, Vec<String>)> {
     match pattern {
         GraphPattern::Bgp { patterns } => eval_bgp(store, patterns, ctx),
 
@@ -102,8 +108,7 @@ pub fn eval_pattern(store: &Store, pattern: &GraphPattern, ctx: &TemporalContext
                     if let Some(merged) = merge_bindings(l, r) {
                         let passes = expression
                             .as_ref()
-                            .map(|e| eval_filter(store, e, &merged))
-                            .unwrap_or(true);
+                            .is_none_or(|e| eval_filter(store, e, &merged));
                         if passes {
                             results.push(merged);
                             matched = true;
@@ -159,13 +164,18 @@ pub fn eval_pattern(store: &Store, pattern: &GraphPattern, ctx: &TemporalContext
             aggregates,
         } => {
             let (rows, _) = eval_pattern(store, inner, ctx)?;
-            let group_keys: Vec<String> = variables.iter().map(|v| v.as_str().to_string()).collect();
-            let agg_vars: Vec<String> = aggregates.iter().map(|(v, _)| v.as_str().to_string()).collect();
+            let group_keys: Vec<String> =
+                variables.iter().map(|v| v.as_str().to_string()).collect();
+            let agg_vars: Vec<String> = aggregates
+                .iter()
+                .map(|(v, _)| v.as_str().to_string())
+                .collect();
 
             // Group rows by the group-by variables.
             let mut groups: Vec<(Vec<Option<Value>>, Vec<Bindings>)> = Vec::new();
             for row in &rows {
-                let key: Vec<Option<Value>> = group_keys.iter().map(|k| row.get(k).cloned()).collect();
+                let key: Vec<Option<Value>> =
+                    group_keys.iter().map(|k| row.get(k).cloned()).collect();
                 if let Some(group) = groups.iter_mut().find(|(k, _)| k == &key) {
                     group.1.push(row.clone());
                 } else {
@@ -232,7 +242,11 @@ pub fn eval_pattern(store: &Store, pattern: &GraphPattern, ctx: &TemporalContext
 }
 
 /// Evaluate a basic graph pattern -- a set of triple patterns.
-pub fn eval_bgp(store: &Store, patterns: &[TriplePattern], ctx: &TemporalContext) -> Result<(Vec<Bindings>, Vec<String>)> {
+pub fn eval_bgp(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+) -> Result<(Vec<Bindings>, Vec<String>)> {
     if patterns.is_empty() {
         return Ok((vec![HashMap::new()], vec![]));
     }
@@ -333,7 +347,8 @@ pub fn eval_triple_pattern(
     let sql = format!("SELECT e, a, v FROM facts{where_clause}");
     let mut stmt = store.prepare(&sql)?;
 
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = sql_params.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        sql_params.iter().map(std::convert::AsRef::as_ref).collect();
     let mut rows = stmt.query(param_refs.as_slice())?;
 
     let mut results = Vec::new();
@@ -389,105 +404,8 @@ pub fn eval_triple_pattern(
     Ok(results)
 }
 
-/// Try to bind a variable. Returns false if incompatible with existing binding.
-pub fn bind_var(bindings: &mut Bindings, var: &str, value: Value, compatible: &mut bool) -> bool {
-    if let Some(existing) = bindings.get(var) {
-        if existing != &value {
-            *compatible = false;
-            return false;
-        }
-    } else {
-        bindings.insert(var.to_string(), value);
-    }
-    true
-}
-
-/// Resolve a subject pattern to an IRI string if it's bound.
-pub fn resolve_subject_pattern(pattern: &TermPattern, bindings: &Bindings) -> Option<String> {
-    match pattern {
-        TermPattern::NamedNode(n) => Some(n.as_str().to_string()),
-        TermPattern::BlankNode(b) => Some(format!("_:{}", b.as_str())),
-        TermPattern::Variable(v) => match bindings.get(v.as_str()) {
-            Some(Value::Ref(_)) => None,
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-/// Resolve a predicate pattern to an IRI string if it's bound.
-pub fn resolve_predicate_pattern(pattern: &NamedNodePattern, bindings: &Bindings) -> Option<String> {
-    match pattern {
-        NamedNodePattern::NamedNode(n) => Some(n.as_str().to_string()),
-        NamedNodePattern::Variable(v) => match bindings.get(v.as_str()) {
-            Some(Value::Ref(_)) => None,
-            _ => None,
-        },
-    }
-}
-
-/// Resolve an object pattern to a Value if it's a concrete term.
-pub fn resolve_object_pattern(
-    store: &Store,
-    pattern: &TermPattern,
-    bindings: &Bindings,
-) -> Result<Option<Value>> {
-    match pattern {
-        TermPattern::NamedNode(n) => {
-            if let Some(id) = store.lookup(n.as_str())? {
-                Ok(Some(Value::Ref(id)))
-            } else {
-                Ok(Some(Value::Ref(-1))) // Will never match
-            }
-        }
-        TermPattern::Literal(lit) => Ok(Some(super::filter::literal_to_value(lit))),
-        TermPattern::Variable(v) => {
-            // If already bound, use that value.
-            Ok(bindings.get(v.as_str()).cloned())
-        }
-        _ => Ok(None),
-    }
-}
-
-/// Get all variable names from a triple pattern.
-pub fn triple_pattern_vars(tp: &TriplePattern) -> Vec<String> {
-    let mut vars = Vec::new();
-    if let TermPattern::Variable(v) = &tp.subject {
-        vars.push(v.as_str().to_string());
-    }
-    if let NamedNodePattern::Variable(v) = &tp.predicate {
-        vars.push(v.as_str().to_string());
-    }
-    if let TermPattern::Variable(v) = &tp.object {
-        vars.push(v.as_str().to_string());
-    }
-    vars
-}
-
-/// Join two sets of bindings on shared variables.
-pub fn join_rows(left: &[Bindings], right: &[Bindings]) -> Vec<Bindings> {
-    let mut results = Vec::new();
-    for l in left {
-        for r in right {
-            if let Some(merged) = merge_bindings(l, r) {
-                results.push(merged);
-            }
-        }
-    }
-    results
-}
-
-/// Merge two binding rows. Returns None if they conflict on shared variables.
-pub fn merge_bindings(a: &Bindings, b: &Bindings) -> Option<Bindings> {
-    let mut merged = a.clone();
-    for (k, v) in b {
-        if let Some(existing) = merged.get(k) {
-            if existing != v {
-                return None;
-            }
-        } else {
-            merged.insert(k.clone(), v.clone());
-        }
-    }
-    Some(merged)
-}
+// Re-export from pattern_util for callers that import from pattern.
+pub use super::pattern_util::{
+    bind_var, join_rows, merge_bindings, resolve_object_pattern, resolve_predicate_pattern,
+    resolve_subject_pattern, triple_pattern_vars,
+};

@@ -1,6 +1,6 @@
 //! Quipu -- AI-native knowledge graph with strict ontology enforcement.
 //!
-//! This crate implements an immutable bitemporal EAVT fact log backed by SQLite,
+//! This crate implements an immutable bitemporal EAVT fact log backed by `SQLite`,
 //! designed as a foundation for agent-enforced knowledge graphs.
 
 pub mod config;
@@ -19,18 +19,27 @@ pub mod store;
 pub mod types;
 pub mod vector;
 
-pub use config::{QuipuConfig, ServerConfig, FederationConfig, RemoteEndpoint};
-pub use context::{tool_context, ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact, KnowledgeRelevance};
-pub use episode::{episode_provenance, ingest_batch, ingest_episode, Episode};
+pub use config::{FederationConfig, QuipuConfig, RemoteEndpoint, ServerConfig};
+pub use context::{
+    ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
+    KnowledgeRelevance, tool_context,
+};
+pub use episode::{Episode, episode_provenance, ingest_batch, ingest_episode};
 pub use error::{Error, Result};
-pub use graph::{tool_project, ProjectedGraph};
-pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
+pub use graph::{ProjectedGraph, tool_project};
+pub use mcp::tools::{
+    tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_search, tool_shapes,
+    tool_unravel, tool_validate,
+};
 pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
-pub use mcp::tools::{tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_search, tool_shapes, tool_unravel, tool_validate};
+pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use rdf::{export_rdf, ingest_rdf};
 #[cfg(feature = "shacl")]
-pub use shacl::{validate_shapes, ValidationFeedback, Validator};
-pub use sparql::{query as sparql_query, query_temporal as sparql_query_temporal, QueryResult, TemporalContext, Triple};
+pub use shacl::{ValidationFeedback, Validator, validate_shapes};
+pub use sparql::{
+    QueryResult, TemporalContext, Triple, query as sparql_query,
+    query_temporal as sparql_query_temporal,
+};
 pub use store::Store;
 pub use types::{Fact, Op, Term, Transaction, Value};
 pub use vector::VectorMatch;

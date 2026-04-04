@@ -18,10 +18,13 @@ pub fn cmd_episode(args: &[String], db_path: &str) {
 
     let json_str = if file_arg == "-" {
         let mut buf = String::new();
-        io::stdin().lock().read_to_string(&mut buf).unwrap_or_else(|e| {
-            eprintln!("error reading stdin: {e}");
-            std::process::exit(1);
-        });
+        io::stdin()
+            .lock()
+            .read_to_string(&mut buf)
+            .unwrap_or_else(|e| {
+                eprintln!("error reading stdin: {e}");
+                std::process::exit(1);
+            });
         buf
     } else {
         match std::fs::read_to_string(file_arg) {
@@ -114,7 +117,7 @@ pub fn cmd_retract(args: &[String], db_path: &str) {
 }
 
 pub fn cmd_shapes(args: &[String], db_path: &str) {
-    let action = args.get(2).map(|s| s.as_str()).unwrap_or("list");
+    let action = args.get(2).map_or("list", std::string::String::as_str);
 
     let store = match quipu::Store::open(db_path) {
         Ok(s) => s,
@@ -219,12 +222,9 @@ pub fn cmd_validate(args: &[String]) {
         .find(|w| w[0] == "--data")
         .map(|w| w[1].as_str());
 
-    let (shapes_path, data_path) = match (shapes_path, data_path) {
-        (Some(s), Some(d)) => (s, d),
-        _ => {
-            eprintln!("usage: quipu validate --shapes <shapes.ttl> --data <data.ttl>");
-            std::process::exit(1);
-        }
+    let (Some(shapes_path), Some(data_path)) = (shapes_path, data_path) else {
+        eprintln!("usage: quipu validate --shapes <shapes.ttl> --data <data.ttl>");
+        std::process::exit(1);
     };
 
     let shapes = match std::fs::read_to_string(shapes_path) {
@@ -247,7 +247,10 @@ pub fn cmd_validate(args: &[String]) {
             if feedback.conforms {
                 println!("valid ({} warnings)", feedback.warnings);
             } else {
-                println!("invalid: {} violation(s), {} warning(s)", feedback.violations, feedback.warnings);
+                println!(
+                    "invalid: {} violation(s), {} warning(s)",
+                    feedback.violations, feedback.warnings
+                );
                 for issue in &feedback.results {
                     println!(
                         "  [{:>9}] {} -- {}{}",
@@ -312,8 +315,7 @@ pub fn cmd_export(args: &[String], db_path: &str) {
     let format = args
         .windows(2)
         .find(|w| w[0] == "--format")
-        .map(|w| w[1].as_str())
-        .unwrap_or("ntriples");
+        .map_or("ntriples", |w| w[1].as_str());
 
     let rdf_format = match format {
         "ntriples" | "nt" => RdfFormat::NTriples,
@@ -387,35 +389,33 @@ fn run_query(store: &quipu::Store, sparql: &str) {
 
 fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalContext) {
     match quipu::sparql_query_temporal(store, sparql, ctx) {
-        Ok(result) => {
-            match result {
-                quipu::QueryResult::Select { variables, rows } => {
-                    println!("{}", variables.join("\t"));
-                    println!("{}", "-".repeat(variables.len() * 20));
-                    for row in &rows {
-                        let cols: Vec<String> = variables
-                            .iter()
-                            .map(|v| match row.get(v) {
-                                Some(val) => format_value(store, val),
-                                None => "(unbound)".to_string(),
-                            })
-                            .collect();
-                        println!("{}", cols.join("\t"));
-                    }
-                    println!("\n{} results", rows.len());
+        Ok(result) => match result {
+            quipu::QueryResult::Select { variables, rows } => {
+                println!("{}", variables.join("\t"));
+                println!("{}", "-".repeat(variables.len() * 20));
+                for row in &rows {
+                    let cols: Vec<String> = variables
+                        .iter()
+                        .map(|v| match row.get(v) {
+                            Some(val) => format_value(store, val),
+                            None => "(unbound)".to_string(),
+                        })
+                        .collect();
+                    println!("{}", cols.join("\t"));
                 }
-                quipu::QueryResult::Ask(result) => {
-                    println!("{result}");
-                }
-                quipu::QueryResult::Graph(triples) => {
-                    for t in &triples {
-                        let obj_str = format_value(store, &t.object);
-                        println!("{}\t{}\t{}", t.subject, t.predicate, obj_str);
-                    }
-                    println!("\n{} triples", triples.len());
-                }
+                println!("\n{} results", rows.len());
             }
-        }
+            quipu::QueryResult::Ask(result) => {
+                println!("{result}");
+            }
+            quipu::QueryResult::Graph(triples) => {
+                for t in &triples {
+                    let obj_str = format_value(store, &t.object);
+                    println!("{}\t{}\t{}", t.subject, t.predicate, obj_str);
+                }
+                println!("\n{} triples", triples.len());
+            }
+        },
         Err(e) => {
             eprintln!("query error: {e}");
         }

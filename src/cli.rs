@@ -61,7 +61,10 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
         match quipu::validate_shapes(&shapes, &data) {
             Ok(feedback) => {
                 if !feedback.conforms {
-                    eprintln!("SHACL validation failed: {} violation(s)", feedback.violations);
+                    eprintln!(
+                        "SHACL validation failed: {} violation(s)",
+                        feedback.violations
+                    );
                     for issue in &feedback.results {
                         eprintln!(
                             "  {} on {}: {}",
@@ -88,8 +91,15 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
     };
 
     let now = chrono_now();
-    match quipu::ingest_rdf(&mut store, data.as_bytes(), format, None, &now, None, Some(file_path))
-    {
+    match quipu::ingest_rdf(
+        &mut store,
+        data.as_bytes(),
+        format,
+        None,
+        &now,
+        None,
+        Some(file_path),
+    ) {
         Ok((tx_id, count)) => {
             println!("knotted {count} facts from {file_path} (tx {tx_id})");
         }
@@ -104,7 +114,9 @@ pub fn cmd_query(args: &[String], db_path: &str) {
     let sparql = match args.get(2) {
         Some(q) if !q.starts_with("--") => q,
         _ => {
-            eprintln!("usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--db <path>]");
+            eprintln!(
+                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--db <path>]"
+            );
             std::process::exit(1);
         }
     };
@@ -127,10 +139,7 @@ pub fn cmd_query(args: &[String], db_path: &str) {
         }
     };
 
-    let ctx = quipu::TemporalContext {
-        valid_at,
-        as_of_tx,
-    };
+    let ctx = quipu::TemporalContext { valid_at, as_of_tx };
 
     run_query_temporal(&store, sparql, &ctx);
 }
@@ -254,35 +263,33 @@ pub fn format_value(store: &quipu::Store, val: &quipu::Value) -> String {
 
 fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalContext) {
     match quipu::sparql_query_temporal(store, sparql, ctx) {
-        Ok(result) => {
-            match result {
-                quipu::QueryResult::Select { variables, rows } => {
-                    println!("{}", variables.join("\t"));
-                    println!("{}", "-".repeat(variables.len() * 20));
-                    for row in &rows {
-                        let cols: Vec<String> = variables
-                            .iter()
-                            .map(|v| match row.get(v) {
-                                Some(val) => format_value(store, val),
-                                None => "(unbound)".to_string(),
-                            })
-                            .collect();
-                        println!("{}", cols.join("\t"));
-                    }
-                    println!("\n{} results", rows.len());
+        Ok(result) => match result {
+            quipu::QueryResult::Select { variables, rows } => {
+                println!("{}", variables.join("\t"));
+                println!("{}", "-".repeat(variables.len() * 20));
+                for row in &rows {
+                    let cols: Vec<String> = variables
+                        .iter()
+                        .map(|v| match row.get(v) {
+                            Some(val) => format_value(store, val),
+                            None => "(unbound)".to_string(),
+                        })
+                        .collect();
+                    println!("{}", cols.join("\t"));
                 }
-                quipu::QueryResult::Ask(result) => {
-                    println!("{result}");
-                }
-                quipu::QueryResult::Graph(triples) => {
-                    for t in &triples {
-                        let obj_str = format_value(store, &t.object);
-                        println!("{}\t{}\t{}", t.subject, t.predicate, obj_str);
-                    }
-                    println!("\n{} triples", triples.len());
-                }
+                println!("\n{} results", rows.len());
             }
-        }
+            quipu::QueryResult::Ask(result) => {
+                println!("{result}");
+            }
+            quipu::QueryResult::Graph(triples) => {
+                for t in &triples {
+                    let obj_str = format_value(store, &t.object);
+                    println!("{}\t{}\t{}", t.subject, t.predicate, obj_str);
+                }
+                println!("\n{} triples", triples.len());
+            }
+        },
         Err(e) => {
             eprintln!("query error: {e}");
         }

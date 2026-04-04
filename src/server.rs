@@ -8,7 +8,7 @@
 //!   POST /validate   — SHACL validation (dry run)
 //!   POST /episode    — Structured episode ingestion
 //!   POST /search     — Vector similarity search
-//!   POST /hybrid_search — Combined SPARQL + vector search
+//!   POST /`hybrid_search` — Combined SPARQL + vector search
 //!   POST /retract    — Retract entity facts
 //!   POST /shapes     — Manage persistent SHACL shapes
 //!   GET  /health     — Health check

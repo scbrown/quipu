@@ -47,7 +47,7 @@ const TAG_BOOL: u8 = 4;
 const TAG_BYTES: u8 = 5;
 
 impl Value {
-    /// Encode to a tagged blob for SQLite storage.
+    /// Encode to a tagged blob for `SQLite` storage.
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             Self::Ref(id) => {

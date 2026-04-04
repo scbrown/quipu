@@ -4,9 +4,9 @@
 //! Model Context Protocol tool calling convention. Bobbin's MCP server
 //! delegates knowledge graph operations to these handlers.
 
-pub mod tools;
 #[cfg(test)]
 mod tests;
+pub mod tools;
 
 use serde_json::Value as JsonValue;
 
@@ -29,8 +29,8 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         valid_at: input
             .get("valid_at")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        as_of_tx: input.get("tx").and_then(|v| v.as_i64()),
+            .map(std::string::ToString::to_string),
+        as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
     };
 
     let result = sparql::query_temporal(store, query_str, &ctx)?;
@@ -54,9 +54,7 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "count": json_rows.len()
             }))
         }
-        QueryResult::Ask(result) => {
-            Ok(serde_json::json!({ "result": result }))
-        }
+        QueryResult::Ask(result) => Ok(serde_json::json!({ "result": result })),
         QueryResult::Graph(triples) => {
             let json_triples: Vec<JsonValue> = triples
                 .iter()

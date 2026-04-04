@@ -20,9 +20,7 @@ const BLANK_PREFIX: &str = "_:";
 fn intern_subject(store: &Store, subject: &NamedOrBlankNode) -> Result<i64> {
     match subject {
         NamedOrBlankNode::NamedNode(n) => store.intern(n.as_str()),
-        NamedOrBlankNode::BlankNode(b) => {
-            store.intern(&format!("{BLANK_PREFIX}{}", b.as_str()))
-        }
+        NamedOrBlankNode::BlankNode(b) => store.intern(&format!("{BLANK_PREFIX}{}", b.as_str())),
     }
 }
 
@@ -42,8 +40,7 @@ fn term_to_value(store: &Store, term: &OxTerm) -> Result<Value> {
             Ok(Value::Ref(id))
         }
         OxTerm::Literal(lit) => literal_to_value(lit),
-        #[allow(unreachable_patterns)]
-        _ => Err(Error::InvalidValue(
+        OxTerm::Triple(_) => Err(Error::InvalidValue(
             "unsupported RDF term type in object position".into(),
         )),
     }
@@ -97,15 +94,13 @@ fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
         Value::Ref(id) => {
             let iri = store.resolve(*id)?;
             if let Some(bnode_id) = iri.strip_prefix(BLANK_PREFIX) {
-                Ok(OxTerm::BlankNode(
-                    BlankNode::new(bnode_id)
-                        .map_err(|e| Error::InvalidValue(format!("bad blank node: {e}")))?,
-                ))
+                Ok(OxTerm::BlankNode(BlankNode::new(bnode_id).map_err(
+                    |e| Error::InvalidValue(format!("bad blank node: {e}")),
+                )?))
             } else {
-                Ok(OxTerm::NamedNode(
-                    NamedNode::new(&iri)
-                        .map_err(|e| Error::InvalidValue(format!("bad IRI: {e}")))?,
-                ))
+                Ok(OxTerm::NamedNode(NamedNode::new(&iri).map_err(|e| {
+                    Error::InvalidValue(format!("bad IRI: {e}"))
+                })?))
             }
         }
         Value::Str(s) => {
@@ -117,9 +112,8 @@ fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
                     && lang.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
                 {
                     return Ok(OxTerm::Literal(
-                        Literal::new_language_tagged_literal(val, lang).map_err(|e| {
-                            Error::InvalidValue(format!("bad language tag: {e}"))
-                        })?,
+                        Literal::new_language_tagged_literal(val, lang)
+                            .map_err(|e| Error::InvalidValue(format!("bad language tag: {e}")))?,
                     ));
                 }
             }
@@ -152,9 +146,9 @@ fn id_to_subject(store: &Store, id: i64) -> Result<NamedOrBlankNode> {
                 .map_err(|e| Error::InvalidValue(format!("bad blank node: {e}")))?,
         ))
     } else {
-        Ok(NamedOrBlankNode::NamedNode(
-            NamedNode::new(&iri).map_err(|e| Error::InvalidValue(format!("bad IRI: {e}")))?,
-        ))
+        Ok(NamedOrBlankNode::NamedNode(NamedNode::new(&iri).map_err(
+            |e| Error::InvalidValue(format!("bad IRI: {e}")),
+        )?))
     }
 }
 
@@ -168,7 +162,7 @@ fn id_to_predicate(store: &Store, id: i64) -> Result<NamedNode> {
 
 /// Parse RDF from a reader and ingest all triples into the fact log.
 ///
-/// Supported formats: Turtle, N-Triples, N-Quads, RDF/XML, JSON-LD, TriG.
+/// Supported formats: Turtle, N-Triples, N-Quads, RDF/XML, JSON-LD, `TriG`.
 /// Returns the transaction id and the number of triples ingested.
 pub fn ingest_rdf(
     store: &mut Store,
@@ -181,15 +175,14 @@ pub fn ingest_rdf(
 ) -> Result<(i64, usize)> {
     let mut parser = RdfParser::from_format(format);
     if let Some(base) = base_iri {
-        parser = parser.with_base_iri(base).map_err(|e| {
-            Error::InvalidValue(format!("bad base IRI: {e}"))
-        })?;
+        parser = parser
+            .with_base_iri(base)
+            .map_err(|e| Error::InvalidValue(format!("bad base IRI: {e}")))?;
     }
 
     let mut datums = Vec::new();
     for result in parser.for_reader(reader) {
-        let quad =
-            result.map_err(|e| Error::InvalidValue(format!("RDF parse error: {e}")))?;
+        let quad = result.map_err(|e| Error::InvalidValue(format!("RDF parse error: {e}")))?;
         let triple = Triple::from(quad);
 
         let e = intern_subject(store, &triple.subject)?;
@@ -217,7 +210,7 @@ pub fn ingest_rdf(
 
 /// Serialize current facts as RDF in the specified format.
 ///
-/// Supported output formats: Turtle, N-Triples, N-Quads, RDF/XML, TriG.
+/// Supported output formats: Turtle, N-Triples, N-Quads, RDF/XML, `TriG`.
 pub fn export_rdf(store: &Store, format: RdfFormat) -> Result<Vec<u8>> {
     let facts = store.current_facts()?;
     let mut buf = Vec::new();
@@ -453,14 +446,14 @@ _:node1 <http://example.org/label> "test" .
         assert_eq!(count, 2);
 
         // The blank node should be in the term dictionary.
-        let bnode_id = store.lookup("_:node1").unwrap().expect("blank node interned");
+        let bnode_id = store
+            .lookup("_:node1")
+            .unwrap()
+            .expect("blank node interned");
         assert!(bnode_id > 0);
 
         // The reference should point to the blank node.
-        let thing_id = store
-            .lookup("http://example.org/thing")
-            .unwrap()
-            .unwrap();
+        let thing_id = store.lookup("http://example.org/thing").unwrap().unwrap();
         let facts = store.entity_facts(thing_id).unwrap();
         assert_eq!(facts[0].value, Value::Ref(bnode_id));
     }

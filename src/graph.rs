@@ -1,10 +1,10 @@
-//! Graph projection — materialize the fact store into a petgraph DiGraph
-//! for running graph algorithms (PageRank, shortest path, connected components).
+//! Graph projection — materialize the fact store into a petgraph `DiGraph`
+//! for running graph algorithms (`PageRank`, shortest path, connected components).
 
 use std::collections::HashMap;
 
-use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo;
+use petgraph::graph::{DiGraph, NodeIndex};
 use serde_json::Value as JsonValue;
 
 use crate::error::Result;
@@ -46,23 +46,24 @@ pub fn project(
     let facts = store.current_facts()?;
 
     // If type filter is set, find matching entity IDs.
-    let type_entity_ids: Option<std::collections::HashSet<i64>> = if let Some(type_iri) = type_filter {
-        let rdf_type_id = store.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
-        let type_val_id = store.lookup(type_iri)?;
-        match (rdf_type_id, type_val_id) {
-            (Some(rdf_type), Some(type_val)) => {
-                let ids: std::collections::HashSet<i64> = facts
-                    .iter()
-                    .filter(|f| f.attribute == rdf_type && f.value == Value::Ref(type_val))
-                    .map(|f| f.entity)
-                    .collect();
-                Some(ids)
+    let type_entity_ids: Option<std::collections::HashSet<i64>> =
+        if let Some(type_iri) = type_filter {
+            let rdf_type_id = store.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
+            let type_val_id = store.lookup(type_iri)?;
+            match (rdf_type_id, type_val_id) {
+                (Some(rdf_type), Some(type_val)) => {
+                    let ids: std::collections::HashSet<i64> = facts
+                        .iter()
+                        .filter(|f| f.attribute == rdf_type && f.value == Value::Ref(type_val))
+                        .map(|f| f.entity)
+                        .collect();
+                    Some(ids)
+                }
+                _ => Some(std::collections::HashSet::new()),
             }
-            _ => Some(std::collections::HashSet::new()),
-        }
-    } else {
-        None
-    };
+        } else {
+            None
+        };
 
     let pred_id_filter: Option<i64> = if let Some(pred_iri) = predicate_filter {
         store.lookup(pred_iri)?.or(Some(-1)) // -1 means "not found, match nothing"
@@ -75,9 +76,9 @@ pub fn project(
     let mut node_to_entity: HashMap<NodeIndex, i64> = HashMap::new();
 
     let ensure_node = |graph: &mut DiGraph<i64, i64>,
-                           e2n: &mut HashMap<i64, NodeIndex>,
-                           n2e: &mut HashMap<NodeIndex, i64>,
-                           entity_id: i64|
+                       e2n: &mut HashMap<i64, NodeIndex>,
+                       n2e: &mut HashMap<NodeIndex, i64>,
+                       entity_id: i64|
      -> NodeIndex {
         *e2n.entry(entity_id).or_insert_with(|| {
             let idx = graph.add_node(entity_id);
@@ -106,8 +107,18 @@ pub fn project(
                 continue;
             }
 
-            let src = ensure_node(&mut graph, &mut entity_to_node, &mut node_to_entity, source_id);
-            let tgt = ensure_node(&mut graph, &mut entity_to_node, &mut node_to_entity, *target_id);
+            let src = ensure_node(
+                &mut graph,
+                &mut entity_to_node,
+                &mut node_to_entity,
+                source_id,
+            );
+            let tgt = ensure_node(
+                &mut graph,
+                &mut entity_to_node,
+                &mut node_to_entity,
+                *target_id,
+            );
             graph.add_edge(src, tgt, pred_id);
         }
     }
@@ -160,9 +171,8 @@ pub fn shortest_path(
     let from_id = store.lookup(from_iri)?;
     let to_id = store.lookup(to_iri)?;
 
-    let (from_id, to_id) = match (from_id, to_id) {
-        (Some(f), Some(t)) => (f, t),
-        _ => return Ok(None),
+    let (Some(from_id), Some(to_id)) = (from_id, to_id) else {
+        return Ok(None);
     };
 
     let from_idx = match pg.entity_to_node.get(&from_id) {
@@ -175,13 +185,7 @@ pub fn shortest_path(
     };
 
     // BFS shortest path (unweighted).
-    let path = algo::astar(
-        &pg.graph,
-        from_idx,
-        |n| n == to_idx,
-        |_| 1,
-        |_| 0,
-    );
+    let path = algo::astar(&pg.graph, from_idx, |n| n == to_idx, |_| 1, |_| 0);
 
     match path {
         Some((_cost, nodes)) => {
@@ -221,7 +225,7 @@ pub fn tool_project(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         "in_degree" => {
             let limit = input
                 .get("limit")
-                .and_then(|v| v.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .unwrap_or(20) as usize;
             let degrees = in_degree(&pg);
             let results: Vec<JsonValue> = degrees
@@ -247,11 +251,7 @@ pub fn tool_project(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 .map(|comp| {
                     let iris: Vec<String> = comp
                         .into_iter()
-                        .map(|id| {
-                            store
-                                .resolve(id)
-                                .unwrap_or_else(|_| format!("ref:{id}"))
-                        })
+                        .map(|id| store.resolve(id).unwrap_or_else(|_| format!("ref:{id}")))
                         .collect();
                     serde_json::json!({"entities": iris, "size": iris.len()})
                 })
@@ -263,18 +263,12 @@ pub fn tool_project(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             }))
         }
         "shortest_path" => {
-            let from = input
-                .get("from")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    crate::Error::InvalidValue("missing 'from' IRI for shortest_path".into())
-                })?;
-            let to = input
-                .get("to")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    crate::Error::InvalidValue("missing 'to' IRI for shortest_path".into())
-                })?;
+            let from = input.get("from").and_then(|v| v.as_str()).ok_or_else(|| {
+                crate::Error::InvalidValue("missing 'from' IRI for shortest_path".into())
+            })?;
+            let to = input.get("to").and_then(|v| v.as_str()).ok_or_else(|| {
+                crate::Error::InvalidValue("missing 'to' IRI for shortest_path".into())
+            })?;
             let path = shortest_path(store, &pg, from, to)?;
             Ok(serde_json::json!({
                 "algorithm": "shortest_path",

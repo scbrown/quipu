@@ -164,10 +164,7 @@ fn episode_to_turtle(episode: &Episode) -> String {
         escape_turtle(&episode.name)
     ));
     if let Some(body) = &episode.episode_body {
-        ttl.push_str(&format!(
-            " ;\n    rdfs:comment \"{}\"",
-            escape_turtle(body)
-        ));
+        ttl.push_str(&format!(" ;\n    rdfs:comment \"{}\"", escape_turtle(body)));
     }
     if let Some(source) = &episode.source {
         ttl.push_str(&format!(
@@ -176,10 +173,7 @@ fn episode_to_turtle(episode: &Episode) -> String {
         ));
     }
     if let Some(gid) = &episode.group_id {
-        ttl.push_str(&format!(
-            " ;\n    aegis:groupId \"{}\"",
-            escape_turtle(gid)
-        ));
+        ttl.push_str(&format!(" ;\n    aegis:groupId \"{}\"", escape_turtle(gid)));
     }
     ttl.push_str(" .\n\n");
 
@@ -199,10 +193,7 @@ fn episode_to_turtle(episode: &Episode) -> String {
         ));
 
         if let Some(desc) = &node.description {
-            ttl.push_str(&format!(
-                " ;\n    rdfs:comment \"{}\"",
-                escape_turtle(desc)
-            ));
+            ttl.push_str(&format!(" ;\n    rdfs:comment \"{}\"", escape_turtle(desc)));
         }
 
         // Link to episode provenance.
@@ -216,26 +207,17 @@ fn episode_to_turtle(episode: &Episode) -> String {
                 let pred = sanitize_iri_local(key);
                 match val {
                     serde_json::Value::String(s) => {
-                        ttl.push_str(&format!(
-                            " ;\n    aegis:{pred} \"{}\"",
-                            escape_turtle(s)
-                        ));
+                        ttl.push_str(&format!(" ;\n    aegis:{pred} \"{}\"", escape_turtle(s)));
                     }
                     serde_json::Value::Number(n) => {
                         if let Some(i) = n.as_i64() {
-                            ttl.push_str(&format!(
-                                " ;\n    aegis:{pred} \"{i}\"^^xsd:integer"
-                            ));
+                            ttl.push_str(&format!(" ;\n    aegis:{pred} \"{i}\"^^xsd:integer"));
                         } else if let Some(f) = n.as_f64() {
-                            ttl.push_str(&format!(
-                                " ;\n    aegis:{pred} \"{f}\"^^xsd:double"
-                            ));
+                            ttl.push_str(&format!(" ;\n    aegis:{pred} \"{f}\"^^xsd:double"));
                         }
                     }
                     serde_json::Value::Bool(b) => {
-                        ttl.push_str(&format!(
-                            " ;\n    aegis:{pred} \"{b}\"^^xsd:boolean"
-                        ));
+                        ttl.push_str(&format!(" ;\n    aegis:{pred} \"{b}\"^^xsd:boolean"));
                     }
                     _ => {} // skip arrays/objects/null
                 }
@@ -277,7 +259,6 @@ fn escape_turtle(s: &str) -> String {
         .replace('\r', "\\r")
         .replace('\t', "\\t")
 }
-
 
 #[cfg(test)]
 mod tests;
