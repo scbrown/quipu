@@ -127,8 +127,21 @@ impl Store {
                 "INSERT INTO facts (e, a, v, tx, valid_from, valid_to, op) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?;
+            let mut close_assertion = tx.prepare(
+                "UPDATE facts SET valid_to = ?1 \
+                 WHERE e = ?2 AND a = ?3 AND v = ?4 AND op = 1 AND valid_to IS NULL",
+            )?;
             for d in datums {
                 let v_bytes = d.value.to_bytes();
+                if d.op == Op::Retract {
+                    // Close the original assertion by setting its valid_to.
+                    close_assertion.execute(params![
+                        timestamp,
+                        d.entity,
+                        d.attribute,
+                        v_bytes,
+                    ])?;
+                }
                 insert.execute(params![
                     d.entity,
                     d.attribute,
@@ -592,12 +605,35 @@ mod tests {
             )
             .unwrap();
 
-        // Current facts filters on op=1, so retractions don't appear as "current"
-        // but the original assertion still has valid_to=NULL. In a full implementation,
-        // the retract would update valid_to on the original. For now, the retraction
-        // fact coexists and the history shows both.
+        // After retraction, the original assertion's valid_to is set to the
+        // retract timestamp, so it no longer appears in current_facts().
+        let current = store.current_facts().unwrap();
+        assert_eq!(current.len(), 0, "retracted fact should not appear in current state");
+
+        // The history still shows both entries (assert + retract).
         let history = store.attribute_history(e, a).unwrap();
         assert_eq!(history.len(), 2);
+        assert_eq!(history[0].op, Op::Assert);
+        assert_eq!(history[0].valid_to, Some("2026-02-01T00:00:00Z".into()));
         assert_eq!(history[1].op, Op::Retract);
+
+        // Time-travel to before the retract still sees the fact.
+        let before_retract = store
+            .facts_as_of(&AsOf {
+                tx: None,
+                valid_at: Some("2026-01-15".into()),
+            })
+            .unwrap();
+        assert_eq!(before_retract.len(), 1);
+        assert_eq!(before_retract[0].value, Value::Str("old-label".into()));
+
+        // Time-travel to after the retract sees nothing.
+        let after_retract = store
+            .facts_as_of(&AsOf {
+                tx: None,
+                valid_at: Some("2026-03-01".into()),
+            })
+            .unwrap();
+        assert_eq!(after_retract.len(), 0);
     }
 }
