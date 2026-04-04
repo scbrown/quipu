@@ -250,7 +250,7 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 fn test_tool_definitions() {
     let defs = tool_definitions();
-    assert_eq!(defs.len(), 9);
+    assert_eq!(defs.len(), 10);
     let names: Vec<&str> = defs
         .iter()
         .map(|d| d["name"].as_str().unwrap())
@@ -261,7 +261,64 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_unravel"));
     assert!(names.contains(&"quipu_validate"));
     assert!(names.contains(&"quipu_search"));
+    assert!(names.contains(&"quipu_hybrid_search"));
     assert!(names.contains(&"quipu_episode"));
     assert!(names.contains(&"quipu_retract"));
     assert!(names.contains(&"quipu_shapes"));
+}
+
+#[test]
+fn test_hybrid_search_vector_only() {
+    let store = test_store_with_data();
+
+    // Embed an entity for vector search.
+    let eid = store.intern("http://example.org/alice").unwrap();
+    let emb: Vec<f32> = (0..8).map(|i| (1.0 + i as f32 * 0.1).sin()).collect();
+    store.embed_entity(eid, "Alice the person", &emb, "2026-01-01").unwrap();
+
+    // Hybrid search with no SPARQL filter — behaves like plain vector search.
+    let input = serde_json::json!({
+        "embedding": emb,
+        "limit": 5
+    });
+    let result = super::tools::tool_hybrid_search(&store, &input).unwrap();
+    assert_eq!(result["count"], 1);
+    assert!(result["sparql_candidates"].is_null());
+}
+
+#[test]
+fn test_hybrid_search_with_sparql_filter() {
+    let mut store = Store::open_in_memory().unwrap();
+
+    // Ingest two entities.
+    let ttl = "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .\nex:bob a ex:Bot ; ex:name \"Bob\" .";
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    ).unwrap();
+
+    // Embed both.
+    let alice_id = store.intern("http://example.org/alice").unwrap();
+    let bob_id = store.intern("http://example.org/bob").unwrap();
+    let emb_a: Vec<f32> = (0..8).map(|i| (1.0 + i as f32 * 0.1).sin()).collect();
+    let emb_b: Vec<f32> = (0..8).map(|i| (1.1 + i as f32 * 0.1).sin()).collect();
+    store.embed_entity(alice_id, "Alice", &emb_a, "2026-01-01").unwrap();
+    store.embed_entity(bob_id, "Bob", &emb_b, "2026-01-01").unwrap();
+
+    // Hybrid search: SPARQL filters to only Person, vector ranks.
+    let input = serde_json::json!({
+        "embedding": emb_a,
+        "sparql": "SELECT ?s WHERE { ?s a <http://example.org/Person> }",
+        "limit": 5
+    });
+    let result = super::tools::tool_hybrid_search(&store, &input).unwrap();
+    assert_eq!(result["count"], 1); // Only Alice (Person), not Bob (Bot).
+    assert_eq!(result["sparql_candidates"], 1);
+    let entity = result["results"][0]["entity"].as_str().unwrap();
+    assert!(entity.contains("alice"));
 }

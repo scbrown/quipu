@@ -26,7 +26,7 @@ pub use error::{Error, Result};
 pub use graph::{tool_project, ProjectedGraph};
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
-pub use mcp::tools::{tool_cord, tool_episode, tool_retract, tool_search, tool_shapes, tool_unravel, tool_validate};
+pub use mcp::tools::{tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_search, tool_shapes, tool_unravel, tool_validate};
 pub use rdf::{export_rdf, ingest_rdf};
 #[cfg(feature = "shacl")]
 pub use shacl::{validate_shapes, ValidationFeedback, Validator};

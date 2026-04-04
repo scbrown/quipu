@@ -275,6 +275,20 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                 "required": ["embedding"]
             }
         }),
+        serde_json::json!({
+            "name": "quipu_hybrid_search",
+            "description": "Combined SPARQL + vector similarity search. Pre-filter entities with a SPARQL query, then rank by embedding similarity.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "embedding": { "type": "array", "items": { "type": "number" }, "description": "Query embedding vector (f32 array)" },
+                    "sparql": { "type": "string", "description": "SPARQL SELECT query returning entity IRIs in the first variable. Results are used as candidates for vector re-ranking." },
+                    "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
+                    "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" }
+                },
+                "required": ["embedding"]
+            }
+        }),
     ]
 }
 
