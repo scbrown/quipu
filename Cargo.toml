@@ -1,0 +1,10 @@
+[package]
+name = "quipu"
+version = "0.1.0"
+edition = "2024"
+description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
+authors = ["Steve Brown"]
+license = "MIT"
+repository = "https://github.com/scbrown/quipu"
+keywords = ["knowledge-graph", "rdf", "sparql", "ontology", "ai"]
+categories = ["database", "data-structures"]

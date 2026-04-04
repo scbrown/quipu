@@ -1,0 +1,24 @@
+[book]
+title = "quipu Documentation"
+authors = ["Steve Brown"]
+description = "Documentation for quipu"
+src = "src"
+language = "en"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "coal"
+preferred-dark-theme = "coal"
+git-repository-url = "https://github.com/scbrown/quipu"
+edit-url-template = "https://github.com/scbrown/quipu/edit/main/docs/book/{path}"
+additional-css = ["custom/css/custom.css"]
+site-url = "/quipu/"
+
+[output.html.search]
+enable = true
+
+[output.linkcheck]
+warning-policy = "warn"
+optional = true
