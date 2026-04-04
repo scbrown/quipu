@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+echo "Running clippy..."
+cargo clippy --all-targets -- -D warnings 2>&1 || { echo "Clippy failed."; exit 1; }
+echo "Checking file sizes..."
+"$(git rev-parse --show-toplevel)/scripts/check-file-size.sh" || exit 1
+echo "Pre-commit checks passed."

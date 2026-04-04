@@ -1,0 +1,290 @@
+//! CLI command handlers for the `quipu` binary.
+
+use oxrdfio::RdfFormat;
+
+/// Simple ISO-8601 timestamp without pulling in chrono.
+pub fn chrono_now() -> String {
+    let epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let days = epoch / 86400;
+    let years = 1970 + days / 365;
+    let remaining_days = days % 365;
+    let months = remaining_days / 30 + 1;
+    let day = remaining_days % 30 + 1;
+    let secs_today = epoch % 86400;
+    let hours = secs_today / 3600;
+    let mins = (secs_today % 3600) / 60;
+    let secs = secs_today % 60;
+    format!("{years:04}-{months:02}-{day:02}T{hours:02}:{mins:02}:{secs:02}Z")
+}
+
+pub fn cmd_knot(args: &[String], db_path: &str) {
+    let file_path = match args.get(2) {
+        Some(p) if !p.starts_with("--") => p.as_str(),
+        _ => {
+            eprintln!("usage: quipu knot <file.ttl> [--shapes <shapes.ttl>] [--db <path>]");
+            std::process::exit(1);
+        }
+    };
+
+    let shapes_path = args
+        .windows(2)
+        .find(|w| w[0] == "--shapes")
+        .map(|w| w[1].as_str());
+
+    let mut store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let data = match std::fs::read_to_string(file_path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("error reading {file_path}: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    if let Some(sp) = shapes_path {
+        let shapes = match std::fs::read_to_string(sp) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error reading shapes {sp}: {e}");
+                std::process::exit(1);
+            }
+        };
+        match quipu::validate_shapes(&shapes, &data) {
+            Ok(feedback) => {
+                if !feedback.conforms {
+                    eprintln!("SHACL validation failed: {} violation(s)", feedback.violations);
+                    for issue in &feedback.results {
+                        eprintln!(
+                            "  {} on {}: {}",
+                            issue.severity,
+                            issue.focus_node,
+                            issue.message.as_deref().unwrap_or("constraint violated")
+                        );
+                    }
+                    std::process::exit(1);
+                }
+                println!("SHACL validation passed");
+            }
+            Err(e) => {
+                eprintln!("validation error: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    let format = if file_path.ends_with(".nt") || file_path.ends_with(".ntriples") {
+        RdfFormat::NTriples
+    } else {
+        RdfFormat::Turtle
+    };
+
+    let now = chrono_now();
+    match quipu::ingest_rdf(&mut store, data.as_bytes(), format, None, &now, None, Some(file_path))
+    {
+        Ok((tx_id, count)) => {
+            println!("knotted {count} facts from {file_path} (tx {tx_id})");
+        }
+        Err(e) => {
+            eprintln!("error ingesting: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+pub fn cmd_query(args: &[String], db_path: &str) {
+    let sparql = match args.get(2) {
+        Some(q) if !q.starts_with("--") => q,
+        _ => {
+            eprintln!("usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--db <path>]");
+            std::process::exit(1);
+        }
+    };
+
+    let valid_at = args
+        .windows(2)
+        .find(|w| w[0] == "--valid-at")
+        .map(|w| w[1].clone());
+
+    let as_of_tx: Option<i64> = args
+        .windows(2)
+        .find(|w| w[0] == "--tx")
+        .and_then(|w| w[1].parse().ok());
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let ctx = quipu::TemporalContext {
+        valid_at,
+        as_of_tx,
+    };
+
+    run_query_temporal(&store, sparql, &ctx);
+}
+
+pub fn cmd_cord(args: &[String], db_path: &str) {
+    let type_filter = args
+        .windows(2)
+        .find(|w| w[0] == "--type")
+        .map(|w| w[1].as_str());
+
+    let limit: usize = args
+        .windows(2)
+        .find(|w| w[0] == "--limit")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(100);
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let input = serde_json::json!({
+        "type": type_filter,
+        "limit": limit,
+    });
+
+    match quipu::tool_cord(&store, &input) {
+        Ok(result) => {
+            let entities = result["entities"].as_array().unwrap();
+            for entity in entities {
+                let iri = entity["iri"].as_str().unwrap_or("?");
+                let facts = entity["facts"].as_array().unwrap();
+                println!("{iri}");
+                for fact in facts {
+                    let pred = fact["predicate"].as_str().unwrap_or("?");
+                    let val = &fact["value"];
+                    let val_str = match val {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    println!("  {pred} -> {val_str}");
+                }
+                println!();
+            }
+            println!("{} entities", result["count"]);
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+pub fn cmd_unravel(args: &[String], db_path: &str) {
+    let tx: Option<i64> = args
+        .windows(2)
+        .find(|w| w[0] == "--tx")
+        .and_then(|w| w[1].parse().ok());
+
+    let valid_at = args
+        .windows(2)
+        .find(|w| w[0] == "--valid-at")
+        .map(|w| w[1].as_str());
+
+    if tx.is_none() && valid_at.is_none() {
+        eprintln!("usage: quipu unravel [--tx N] [--valid-at <date>]");
+        eprintln!("  at least one of --tx or --valid-at is required");
+        std::process::exit(1);
+    }
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let input = serde_json::json!({
+        "tx": tx,
+        "valid_at": valid_at,
+    });
+
+    match quipu::tool_unravel(&store, &input) {
+        Ok(result) => {
+            let facts = result["facts"].as_array().unwrap();
+            for fact in facts {
+                let entity = fact["entity"].as_str().unwrap_or("?");
+                let pred = fact["predicate"].as_str().unwrap_or("?");
+                let val = &fact["value"];
+                let val_str = match val {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                let vf = fact["valid_from"].as_str().unwrap_or("?");
+                let vt = fact["valid_to"].as_str().unwrap_or("inf");
+                println!("{entity}  {pred}  {val_str}  [{vf} -> {vt}]");
+            }
+            println!("\n{} facts", result["count"]);
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+pub fn format_value(store: &quipu::Store, val: &quipu::Value) -> String {
+    match val {
+        quipu::Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
+        quipu::Value::Str(s) => format!("\"{s}\""),
+        quipu::Value::Int(n) => n.to_string(),
+        quipu::Value::Float(f) => f.to_string(),
+        quipu::Value::Bool(b) => b.to_string(),
+        quipu::Value::Bytes(b) => format!("<{} bytes>", b.len()),
+    }
+}
+
+fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalContext) {
+    match quipu::sparql_query_temporal(store, sparql, ctx) {
+        Ok(result) => {
+            match result {
+                quipu::QueryResult::Select { variables, rows } => {
+                    println!("{}", variables.join("\t"));
+                    println!("{}", "-".repeat(variables.len() * 20));
+                    for row in &rows {
+                        let cols: Vec<String> = variables
+                            .iter()
+                            .map(|v| match row.get(v) {
+                                Some(val) => format_value(store, val),
+                                None => "(unbound)".to_string(),
+                            })
+                            .collect();
+                        println!("{}", cols.join("\t"));
+                    }
+                    println!("\n{} results", rows.len());
+                }
+                quipu::QueryResult::Ask(result) => {
+                    println!("{result}");
+                }
+                quipu::QueryResult::Graph(triples) => {
+                    for t in &triples {
+                        let obj_str = format_value(store, &t.object);
+                        println!("{}\t{}\t{}", t.subject, t.predicate, obj_str);
+                    }
+                    println!("\n{} triples", triples.len());
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("query error: {e}");
+        }
+    }
+}

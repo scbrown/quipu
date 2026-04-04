@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
-use crate::sparql::{self, TemporalContext};
+use crate::sparql;
 use crate::store::Store;
 use crate::types::Value;
 
@@ -183,7 +183,7 @@ impl<'a> ContextPipeline<'a> {
         let result = sparql::query(self.store, &sparql)?;
 
         let mut entities = Vec::new();
-        for row in &result.rows {
+        for row in result.rows() {
             if let Some(Value::Ref(id)) = row.get("s") {
                 let iri = self.store.resolve(*id)?;
                 if let Ok(entity) = self.build_entity(&iri, KnowledgeRelevance::Direct, 1.0) {
@@ -217,7 +217,7 @@ impl<'a> ContextPipeline<'a> {
         let mut neighbors = Vec::new();
 
         if let Ok(result) = sparql::query(self.store, &sparql_out) {
-            for row in &result.rows {
+            for row in result.rows() {
                 if let Some(Value::Ref(id)) = row.get("o") {
                     let neighbor_iri = self.store.resolve(*id)?;
                     if let Ok(entity) = self.build_entity(&neighbor_iri, KnowledgeRelevance::Linked, 0.5) {
@@ -228,7 +228,7 @@ impl<'a> ContextPipeline<'a> {
         }
 
         if let Ok(result) = sparql::query(self.store, &sparql_in) {
-            for row in &result.rows {
+            for row in result.rows() {
                 if let Some(Value::Ref(id)) = row.get("s") {
                     let neighbor_iri = self.store.resolve(*id)?;
                     if let Ok(entity) = self.build_entity(&neighbor_iri, KnowledgeRelevance::Linked, 0.5) {
@@ -256,7 +256,7 @@ impl<'a> ContextPipeline<'a> {
         let mut types = Vec::new();
         let mut facts = Vec::new();
 
-        for row in &result.rows {
+        for row in result.rows() {
             let pred_str = match row.get("p") {
                 Some(Value::Ref(id)) => self.store.resolve(*id)?,
                 _ => continue,
@@ -379,7 +379,7 @@ ex:koror rdf:type ex:ProxmoxNode ;
         });
 
         let ctx = pipeline.query("traefik").unwrap();
-        assert!(ctx.entities.len() >= 1);
+        assert!(!ctx.entities.is_empty());
         assert!(ctx.entities.iter().any(|e| e.iri.contains("traefik")));
         assert_eq!(ctx.entities[0].relevance, KnowledgeRelevance::Direct);
     }
@@ -436,7 +436,7 @@ ex:koror rdf:type ex:ProxmoxNode ;
         });
 
         let result = tool_context(&store, &input).unwrap();
-        assert!(result["entities"].as_array().unwrap().len() >= 1);
+        assert!(!result["entities"].as_array().unwrap().is_empty());
         assert!(result["summary"]["direct_hits"].as_u64().unwrap() >= 1);
     }
 
