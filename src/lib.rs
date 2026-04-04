@@ -3,6 +3,7 @@
 //! This crate implements an immutable bitemporal EAVT fact log backed by SQLite,
 //! designed as a foundation for agent-enforced knowledge graphs.
 
+pub mod config;
 pub mod episode;
 pub mod error;
 pub mod graph;
@@ -16,6 +17,7 @@ pub mod store;
 pub mod types;
 pub mod vector;
 
+pub use config::{QuipuConfig, ServerConfig, FederationConfig, RemoteEndpoint};
 pub use episode::{episode_provenance, ingest_batch, ingest_episode, Episode};
 pub use error::{Error, Result};
 pub use graph::{tool_project, ProjectedGraph};

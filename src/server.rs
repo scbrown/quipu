@@ -34,19 +34,25 @@ type SharedStore = Arc<Mutex<quipu::Store>>;
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    let db_path = args
+    let db_flag = args
         .windows(2)
         .find(|w| w[0] == "--db")
-        .map(|w| w[1].as_str())
-        .unwrap_or("quipu.db");
+        .map(|w| w[1].as_str());
 
-    let bind_addr = args
+    let bind_flag = args
         .windows(2)
         .find(|w| w[0] == "--bind")
-        .map(|w| w[1].as_str())
-        .unwrap_or("0.0.0.0:3030");
+        .map(|w| w[1].as_str());
 
-    let store = quipu::Store::open(db_path).unwrap_or_else(|e| {
+    // Load config from .bobbin/config.toml, then apply CLI overrides.
+    let config = quipu::QuipuConfig::load(std::path::Path::new("."))
+        .with_db_override(db_flag)
+        .with_bind_override(bind_flag);
+
+    let db_path = config.store_path.to_string_lossy().to_string();
+    let bind_addr = config.server.bind.clone();
+
+    let store = quipu::Store::open(&db_path).unwrap_or_else(|e| {
         eprintln!("error opening store {db_path}: {e}");
         std::process::exit(1);
     });
@@ -70,7 +76,7 @@ async fn main() {
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
 
-    let listener = tokio::net::TcpListener::bind(bind_addr)
+    let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .unwrap_or_else(|e| {
             eprintln!("error binding {bind_addr}: {e}");

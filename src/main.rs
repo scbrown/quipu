@@ -26,12 +26,17 @@ fn main() {
         return;
     }
 
-    // Parse --db flag from anywhere in args.
-    let db_path = args
+    // Parse --db flag from anywhere in args (overrides config file).
+    let db_flag = args
         .windows(2)
         .find(|w| w[0] == "--db")
-        .map(|w| w[1].as_str())
-        .unwrap_or("quipu.db");
+        .map(|w| w[1].as_str());
+
+    // Load config from .bobbin/config.toml, then apply CLI overrides.
+    let config = quipu::QuipuConfig::load(std::path::Path::new("."))
+        .with_db_override(db_flag);
+    let db_path_buf = config.store_path.to_string_lossy().to_string();
+    let db_path: &str = &db_path_buf;
 
     let cmd = args[1].as_str();
     match cmd {
