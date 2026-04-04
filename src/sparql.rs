@@ -228,6 +228,18 @@ fn eval_triple_pattern(
     tp: &TriplePattern,
     bindings: &Bindings,
 ) -> Result<Vec<Bindings>> {
+    // ── RDFS type-hierarchy expansion ────────────────────────────
+    // If the pattern is `?x a <SomeClass>`, expand to also match
+    // instances of all subclasses of SomeClass.
+    if is_rdf_type_pattern(tp) {
+        if let TermPattern::NamedNode(class_node) = &tp.object {
+            let class_ids = collect_class_and_subclasses(store, class_node.as_str())?;
+            if !class_ids.is_empty() {
+                return eval_type_pattern_with_subclasses(store, tp, bindings, &class_ids);
+            }
+        }
+    }
+
     // Build SQL query with conditions based on bound values.
     let mut conditions = Vec::new();
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -552,6 +564,136 @@ fn compare_values(
     }
 }
 
+// ── RDFS type-hierarchy helpers ──────────────────────────────────
+
+const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const RDFS_SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+
+/// Check if a triple pattern has rdf:type as predicate and a concrete class as object.
+fn is_rdf_type_pattern(tp: &TriplePattern) -> bool {
+    matches!(&tp.predicate, NamedNodePattern::NamedNode(n) if n.as_str() == RDF_TYPE)
+        && matches!(&tp.object, TermPattern::NamedNode(_))
+}
+
+/// Collect a class and all its subclasses (transitive) from the fact log.
+///
+/// Uses rdfs:subClassOf triples: `SubClass rdfs:subClassOf SuperClass`.
+/// Returns the term IDs of the class and all subclasses.
+fn collect_class_and_subclasses(store: &Store, class_iri: &str) -> Result<Vec<i64>> {
+    let class_id = match store.lookup(class_iri)? {
+        Some(id) => id,
+        None => return Ok(vec![]),
+    };
+
+    let subclass_pred = match store.lookup(RDFS_SUBCLASS_OF)? {
+        Some(id) => id,
+        None => return Ok(vec![class_id]), // No subClassOf pred → just the class itself
+    };
+
+    // BFS to find all subclasses.
+    let mut result = vec![class_id];
+    let mut frontier = vec![class_id];
+
+    while !frontier.is_empty() {
+        let mut next_frontier = Vec::new();
+        for super_id in &frontier {
+            // Find all X where X rdfs:subClassOf super_id (as a Ref value)
+            let target_bytes = Value::Ref(*super_id).to_bytes();
+            let mut stmt = store.prepare(
+                "SELECT e FROM facts WHERE a = ?1 AND v = ?2 AND op = 1 AND valid_to IS NULL",
+            )?;
+            let mut rows = stmt.query(rusqlite::params![subclass_pred, target_bytes])?;
+            while let Some(row) = rows.next()? {
+                let sub_id: i64 = row.get(0)?;
+                if !result.contains(&sub_id) {
+                    result.push(sub_id);
+                    next_frontier.push(sub_id);
+                }
+            }
+        }
+        frontier = next_frontier;
+    }
+
+    Ok(result)
+}
+
+/// Evaluate a `?x a <Class>` pattern with subclass expansion.
+fn eval_type_pattern_with_subclasses(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    class_ids: &[i64],
+) -> Result<Vec<Bindings>> {
+    let type_pred_id = match store.lookup(RDF_TYPE)? {
+        Some(id) => id,
+        None => return Ok(vec![]),
+    };
+
+    // Subject filter (if bound).
+    let subject_id = if let Some(iri) = resolve_subject_pattern(&tp.subject, bindings) {
+        match store.lookup(&iri)? {
+            Some(id) => Some(id),
+            None => return Ok(vec![]),
+        }
+    } else {
+        None
+    };
+
+    let mut results = Vec::new();
+
+    // For each class in the hierarchy, find instances.
+    for class_id in class_ids {
+        let v_bytes = Value::Ref(*class_id).to_bytes();
+        let sql = if subject_id.is_some() {
+            "SELECT e, v FROM facts WHERE a = ?1 AND v = ?2 AND e = ?3 AND op = 1 AND valid_to IS NULL"
+        } else {
+            "SELECT e, v FROM facts WHERE a = ?1 AND v = ?2 AND op = 1 AND valid_to IS NULL"
+        };
+
+        let mut stmt = store.prepare(sql)?;
+        let mut rows = if let Some(sid) = subject_id {
+            stmt.query(rusqlite::params![type_pred_id, v_bytes, sid])?
+        } else {
+            stmt.query(rusqlite::params![type_pred_id, v_bytes])?
+        };
+
+        while let Some(row) = rows.next()? {
+            let e_id: i64 = row.get(0)?;
+            let v_bytes_row: Vec<u8> = row.get(1)?;
+            let v = Value::from_bytes(&v_bytes_row)?;
+
+            let mut new_bindings = bindings.clone();
+            let mut compatible = true;
+
+            // Bind subject variable.
+            if let TermPattern::Variable(var) = &tp.subject {
+                let e_iri = store.resolve(e_id)?;
+                let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
+                    Value::Ref(term_id)
+                } else {
+                    Value::Str(e_iri)
+                };
+                if !bind_var(&mut new_bindings, var.as_str(), e_val, &mut compatible) {
+                    continue;
+                }
+            }
+
+            // Bind object variable (always the matched class).
+            if let TermPattern::Variable(var) = &tp.object {
+                if !bind_var(&mut new_bindings, var.as_str(), v, &mut compatible) {
+                    continue;
+                }
+            }
+
+            if compatible {
+                results.push(new_bindings);
+            }
+        }
+    }
+
+    Ok(results)
+}
+
 /// Compare two optional Values for ordering (used by ORDER BY).
 fn compare_option_values(a: &Option<Value>, b: &Option<Value>) -> std::cmp::Ordering {
     match (a, b) {
@@ -855,5 +997,84 @@ ex:carol a ex:Employee ;
         assert_eq!(result.rows.len(), 2);
         let ages: Vec<&Value> = result.rows.iter().map(|r| r.get("age").unwrap()).collect();
         assert_eq!(ages, vec![&Value::Int(25), &Value::Int(30)]);
+    }
+
+    #[test]
+    fn rdfs_subclass_type_query() {
+        // Set up a class hierarchy: Employee rdfs:subClassOf Person
+        let mut store = Store::open_in_memory().unwrap();
+        let turtle = r#"
+@prefix ex: <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Employee rdfs:subClassOf ex:Person .
+ex:Manager rdfs:subClassOf ex:Employee .
+
+ex:alice a ex:Person ; ex:name "Alice" .
+ex:bob a ex:Employee ; ex:name "Bob" .
+ex:carol a ex:Manager ; ex:name "Carol" .
+ex:dave a ex:Other ; ex:name "Dave" .
+"#;
+        ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+        // Query for all Person instances — should include Person, Employee, and Manager.
+        let result = query(
+            &store,
+            "SELECT ?s WHERE { ?s a <http://example.org/Person> }",
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 3, "alice + bob + carol are all Persons");
+
+        // Query for Employee — should include Employee and Manager.
+        let result = query(
+            &store,
+            "SELECT ?s WHERE { ?s a <http://example.org/Employee> }",
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 2, "bob + carol are Employees");
+
+        // Query for Manager — only carol.
+        let result = query(
+            &store,
+            "SELECT ?s WHERE { ?s a <http://example.org/Manager> }",
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 1, "only carol is a Manager");
+
+        // Query for Other — only dave (no subclass hierarchy).
+        let result = query(
+            &store,
+            "SELECT ?s WHERE { ?s a <http://example.org/Other> }",
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 1, "only dave is Other");
+    }
+
+    #[test]
+    fn rdfs_subclass_no_hierarchy() {
+        // Without any rdfs:subClassOf triples, queries work normally.
+        let store = test_store_with_data();
+        let result = query(
+            &store,
+            r#"SELECT ?s WHERE { ?s a <http://example.org/Person> }"#,
+        )
+        .unwrap();
+
+        // Alice and Bob are Person, Carol is Employee.
+        assert_eq!(result.rows.len(), 2);
     }
 }
