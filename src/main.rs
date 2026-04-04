@@ -195,10 +195,20 @@ fn cmd_query(args: &[String], db_path: &str) {
     let sparql = match args.get(2) {
         Some(q) if !q.starts_with("--") => q,
         _ => {
-            eprintln!("usage: quipu query \"SELECT ...\" [--db <path>]");
+            eprintln!("usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--db <path>]");
             std::process::exit(1);
         }
     };
+
+    let valid_at = args
+        .windows(2)
+        .find(|w| w[0] == "--valid-at")
+        .map(|w| w[1].clone());
+
+    let as_of_tx: Option<i64> = args
+        .windows(2)
+        .find(|w| w[0] == "--tx")
+        .and_then(|w| w[1].parse().ok());
 
     let store = match quipu::Store::open(db_path) {
         Ok(s) => s,
@@ -208,7 +218,12 @@ fn cmd_query(args: &[String], db_path: &str) {
         }
     };
 
-    run_query(&store, sparql);
+    let ctx = quipu::TemporalContext {
+        valid_at,
+        as_of_tx,
+    };
+
+    run_query_temporal(&store, sparql, &ctx);
 }
 
 fn cmd_repl(db_path: &str) {
@@ -694,7 +709,11 @@ fn cmd_stats(db_path: &str) {
 }
 
 fn run_query(store: &quipu::Store, sparql: &str) {
-    match quipu::sparql_query(store, sparql) {
+    run_query_temporal(store, sparql, &quipu::TemporalContext::default());
+}
+
+fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalContext) {
+    match quipu::sparql_query_temporal(store, sparql, ctx) {
         Ok(result) => {
             // Print header.
             println!("{}", result.variables.join("\t"));

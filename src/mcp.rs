@@ -10,13 +10,13 @@ use crate::episode::{self, Episode};
 use crate::error::{Error, Result};
 use crate::rdf::ingest_rdf;
 use crate::shacl;
-use crate::sparql;
+use crate::sparql::{self, TemporalContext};
 use crate::store::{AsOf, Store};
 use crate::types::Value;
 
 /// MCP tool: `quipu_query` — Execute a SPARQL SELECT query.
 ///
-/// Input: `{ "query": "SELECT ..." }`
+/// Input: `{ "query": "SELECT ...", "valid_at": "...", "tx": N }`
 /// Output: `{ "variables": [...], "rows": [{ "var": "value", ... }, ...] }`
 pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let query_str = input
@@ -24,7 +24,15 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::InvalidValue("missing 'query' parameter".into()))?;
 
-    let result = sparql::query(store, query_str)?;
+    let ctx = TemporalContext {
+        valid_at: input
+            .get("valid_at")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        as_of_tx: input.get("tx").and_then(|v| v.as_i64()),
+    };
+
+    let result = sparql::query_temporal(store, query_str, &ctx)?;
 
     let rows: Vec<JsonValue> = result
         .rows
@@ -434,13 +442,21 @@ pub fn tool_definitions() -> Vec<JsonValue> {
     vec![
         serde_json::json!({
             "name": "quipu_query",
-            "description": "Execute a SPARQL SELECT query against the knowledge graph",
+            "description": "Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx)",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
                         "description": "SPARQL SELECT query"
+                    },
+                    "valid_at": {
+                        "type": "string",
+                        "description": "Point-in-time for valid-time filtering (ISO-8601). Omit for current state."
+                    },
+                    "tx": {
+                        "type": "integer",
+                        "description": "Maximum transaction ID to consider. Omit for all transactions."
                     }
                 },
                 "required": ["query"]

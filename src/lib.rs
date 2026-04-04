@@ -19,7 +19,7 @@ pub use error::{Error, Result};
 pub use mcp::{tool_cord, tool_definitions, tool_episode, tool_knot, tool_query, tool_retract, tool_search, tool_shapes, tool_unravel, tool_validate};
 pub use rdf::{export_rdf, ingest_rdf};
 pub use shacl::{validate_shapes, ValidationFeedback, Validator};
-pub use sparql::{query as sparql_query, QueryResult};
+pub use sparql::{query as sparql_query, query_temporal as sparql_query_temporal, QueryResult, TemporalContext};
 pub use store::Store;
 pub use types::{Fact, Op, Term, Transaction, Value};
 pub use vector::VectorMatch;

@@ -29,14 +29,28 @@ pub struct QueryResult {
     pub rows: Vec<Bindings>,
 }
 
-/// Execute a SPARQL SELECT query against the store.
+/// Temporal context for time-travel SPARQL queries.
+#[derive(Debug, Clone, Default)]
+pub struct TemporalContext {
+    /// Point-in-time for valid-time filtering (None = current only).
+    pub valid_at: Option<String>,
+    /// Maximum transaction id to consider (None = all).
+    pub as_of_tx: Option<i64>,
+}
+
+/// Execute a SPARQL SELECT query against the store (current state).
 pub fn query(store: &Store, sparql: &str) -> Result<QueryResult> {
+    query_temporal(store, sparql, &TemporalContext::default())
+}
+
+/// Execute a SPARQL SELECT query with temporal context (time-travel).
+pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Result<QueryResult> {
     let parsed = SparqlParser::new()
         .parse_query(sparql)
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 
     match parsed {
-        Query::Select { pattern, .. } => eval_select(store, &pattern),
+        Query::Select { pattern, .. } => eval_select(store, &pattern, ctx),
         _ => Err(Error::InvalidValue(
             "only SELECT queries are currently supported".into(),
         )),
@@ -44,8 +58,8 @@ pub fn query(store: &Store, sparql: &str) -> Result<QueryResult> {
 }
 
 /// Evaluate a SELECT query's graph pattern.
-fn eval_select(store: &Store, pattern: &GraphPattern) -> Result<QueryResult> {
-    let (rows, vars) = eval_pattern(store, pattern)?;
+fn eval_select(store: &Store, pattern: &GraphPattern, ctx: &TemporalContext) -> Result<QueryResult> {
+    let (rows, vars) = eval_pattern(store, pattern, ctx)?;
     Ok(QueryResult {
         variables: vars,
         rows,
@@ -53,13 +67,13 @@ fn eval_select(store: &Store, pattern: &GraphPattern) -> Result<QueryResult> {
 }
 
 /// Evaluate a graph pattern, returning rows and the variable names encountered.
-fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>, Vec<String>)> {
+fn eval_pattern(store: &Store, pattern: &GraphPattern, ctx: &TemporalContext) -> Result<(Vec<Bindings>, Vec<String>)> {
     match pattern {
-        GraphPattern::Bgp { patterns } => eval_bgp(store, patterns),
+        GraphPattern::Bgp { patterns } => eval_bgp(store, patterns, ctx),
 
         GraphPattern::Join { left, right } => {
-            let (left_rows, left_vars) = eval_pattern(store, left)?;
-            let (right_rows, right_vars) = eval_pattern(store, right)?;
+            let (left_rows, left_vars) = eval_pattern(store, left, ctx)?;
+            let (right_rows, right_vars) = eval_pattern(store, right, ctx)?;
             let joined = join_rows(&left_rows, &right_rows);
             let mut vars = left_vars;
             for v in right_vars {
@@ -71,7 +85,7 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
         }
 
         GraphPattern::Filter { expr, inner } => {
-            let (rows, vars) = eval_pattern(store, inner)?;
+            let (rows, vars) = eval_pattern(store, inner, ctx)?;
             let filtered = rows
                 .into_iter()
                 .filter(|row| eval_filter(store, expr, row))
@@ -80,7 +94,7 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
         }
 
         GraphPattern::Project { inner, variables } => {
-            let (rows, _) = eval_pattern(store, inner)?;
+            let (rows, _) = eval_pattern(store, inner, ctx)?;
             let var_names: Vec<String> = variables.iter().map(|v| v.as_str().to_string()).collect();
             let projected: Vec<Bindings> = rows
                 .into_iter()
@@ -94,7 +108,7 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
         }
 
         GraphPattern::Distinct { inner } => {
-            let (rows, vars) = eval_pattern(store, inner)?;
+            let (rows, vars) = eval_pattern(store, inner, ctx)?;
             let mut seen = Vec::new();
             let mut unique = Vec::new();
             for row in rows {
@@ -111,7 +125,7 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
             start,
             length,
         } => {
-            let (rows, vars) = eval_pattern(store, inner)?;
+            let (rows, vars) = eval_pattern(store, inner, ctx)?;
             let sliced: Vec<Bindings> = match length {
                 Some(len) => rows.into_iter().skip(*start).take(*len).collect(),
                 None => rows.into_iter().skip(*start).collect(),
@@ -124,8 +138,8 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
             right,
             expression,
         } => {
-            let (left_rows, left_vars) = eval_pattern(store, left)?;
-            let (right_rows, right_vars) = eval_pattern(store, right)?;
+            let (left_rows, left_vars) = eval_pattern(store, left, ctx)?;
+            let (right_rows, right_vars) = eval_pattern(store, right, ctx)?;
             let mut vars = left_vars;
             for v in &right_vars {
                 if !vars.contains(v) {
@@ -155,8 +169,8 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
         }
 
         GraphPattern::Union { left, right } => {
-            let (mut left_rows, left_vars) = eval_pattern(store, left)?;
-            let (right_rows, right_vars) = eval_pattern(store, right)?;
+            let (mut left_rows, left_vars) = eval_pattern(store, left, ctx)?;
+            let (right_rows, right_vars) = eval_pattern(store, right, ctx)?;
             left_rows.extend(right_rows);
             let mut vars = left_vars;
             for v in right_vars {
@@ -168,7 +182,7 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
         }
 
         GraphPattern::OrderBy { inner, expression } => {
-            let (mut rows, vars) = eval_pattern(store, inner)?;
+            let (mut rows, vars) = eval_pattern(store, inner, ctx)?;
             rows.sort_by(|a, b| {
                 for ord_expr in expression {
                     let (expr, ascending) = match ord_expr {
@@ -188,14 +202,14 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
             Ok((rows, vars))
         }
 
-        GraphPattern::Reduced { inner } => eval_pattern(store, inner),
+        GraphPattern::Reduced { inner } => eval_pattern(store, inner, ctx),
 
         GraphPattern::Group {
             inner,
             variables,
             aggregates,
         } => {
-            let (rows, _) = eval_pattern(store, inner)?;
+            let (rows, _) = eval_pattern(store, inner, ctx)?;
             let group_keys: Vec<String> = variables.iter().map(|v| v.as_str().to_string()).collect();
             let agg_vars: Vec<String> = aggregates.iter().map(|(v, _)| v.as_str().to_string()).collect();
 
@@ -245,7 +259,7 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
             variable,
             expression,
         } => {
-            let (rows, mut vars) = eval_pattern(store, inner)?;
+            let (rows, mut vars) = eval_pattern(store, inner, ctx)?;
             let var_name = variable.as_str().to_string();
             let extended: Vec<Bindings> = rows
                 .into_iter()
@@ -269,7 +283,7 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
 }
 
 /// Evaluate a basic graph pattern — a set of triple patterns.
-fn eval_bgp(store: &Store, patterns: &[TriplePattern]) -> Result<(Vec<Bindings>, Vec<String>)> {
+fn eval_bgp(store: &Store, patterns: &[TriplePattern], ctx: &TemporalContext) -> Result<(Vec<Bindings>, Vec<String>)> {
     if patterns.is_empty() {
         return Ok((vec![HashMap::new()], vec![]));
     }
@@ -280,7 +294,7 @@ fn eval_bgp(store: &Store, patterns: &[TriplePattern]) -> Result<(Vec<Bindings>,
     for tp in patterns {
         let mut new_rows = Vec::new();
         for existing in &result_rows {
-            let matches = eval_triple_pattern(store, tp, existing)?;
+            let matches = eval_triple_pattern(store, tp, existing, ctx)?;
             new_rows.extend(matches);
         }
         result_rows = new_rows;
@@ -301,6 +315,7 @@ fn eval_triple_pattern(
     store: &Store,
     tp: &TriplePattern,
     bindings: &Bindings,
+    ctx: &TemporalContext,
 ) -> Result<Vec<Bindings>> {
     // ── RDFS type-hierarchy expansion ────────────────────────────
     // If the pattern is `?x a <SomeClass>`, expand to also match
@@ -309,7 +324,7 @@ fn eval_triple_pattern(
         if let TermPattern::NamedNode(class_node) = &tp.object {
             let class_ids = collect_class_and_subclasses(store, class_node.as_str())?;
             if !class_ids.is_empty() {
-                return eval_type_pattern_with_subclasses(store, tp, bindings, &class_ids);
+                return eval_type_pattern_with_subclasses(store, tp, bindings, &class_ids, ctx);
             }
         }
     }
@@ -345,9 +360,22 @@ fn eval_triple_pattern(
         sql_params.push(Box::new(bytes));
     }
 
-    // Always filter to current state.
+    // Temporal filtering.
     conditions.push("op = 1".to_string());
-    conditions.push("valid_to IS NULL".to_string());
+    if let Some(vt) = &ctx.valid_at {
+        conditions.push(format!("valid_from <= ?{}", sql_params.len() + 1));
+        sql_params.push(Box::new(vt.clone()));
+        conditions.push(format!(
+            "(valid_to IS NULL OR valid_to > ?{})",
+            sql_params.len()
+        ));
+    } else {
+        conditions.push("valid_to IS NULL".to_string());
+    }
+    if let Some(tx) = ctx.as_of_tx {
+        conditions.push(format!("tx <= ?{}", sql_params.len() + 1));
+        sql_params.push(Box::new(tx));
+    }
 
     let where_clause = if conditions.is_empty() {
         String::new()
@@ -784,6 +812,7 @@ fn eval_type_pattern_with_subclasses(
     tp: &TriplePattern,
     bindings: &Bindings,
     class_ids: &[i64],
+    ctx: &TemporalContext,
 ) -> Result<Vec<Bindings>> {
     let type_pred_id = match store.lookup(RDF_TYPE)? {
         Some(id) => id,
@@ -805,18 +834,40 @@ fn eval_type_pattern_with_subclasses(
     // For each class in the hierarchy, find instances.
     for class_id in class_ids {
         let v_bytes = Value::Ref(*class_id).to_bytes();
-        let sql = if subject_id.is_some() {
-            "SELECT e, v FROM facts WHERE a = ?1 AND v = ?2 AND e = ?3 AND op = 1 AND valid_to IS NULL"
-        } else {
-            "SELECT e, v FROM facts WHERE a = ?1 AND v = ?2 AND op = 1 AND valid_to IS NULL"
-        };
 
-        let mut stmt = store.prepare(sql)?;
-        let mut rows = if let Some(sid) = subject_id {
-            stmt.query(rusqlite::params![type_pred_id, v_bytes, sid])?
+        // Build SQL and params dynamically.
+        let mut conditions = vec![
+            "a = ?1".to_string(),
+            "v = ?2".to_string(),
+        ];
+        let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        params_vec.push(Box::new(type_pred_id));
+        params_vec.push(Box::new(v_bytes.clone()));
+
+        if let Some(sid) = subject_id {
+            conditions.push(format!("e = ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(sid));
+        }
+        conditions.push("op = 1".to_string());
+        if let Some(vt) = &ctx.valid_at {
+            conditions.push(format!("valid_from <= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(vt.clone()));
+            conditions.push(format!(
+                "(valid_to IS NULL OR valid_to > ?{})",
+                params_vec.len()
+            ));
         } else {
-            stmt.query(rusqlite::params![type_pred_id, v_bytes])?
-        };
+            conditions.push("valid_to IS NULL".to_string());
+        }
+        if let Some(tx) = ctx.as_of_tx {
+            conditions.push(format!("tx <= ?{}", params_vec.len() + 1));
+            params_vec.push(Box::new(tx));
+        }
+
+        let sql = format!("SELECT e, v FROM facts WHERE {}", conditions.join(" AND "));
+        let mut stmt = store.prepare(&sql)?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let mut rows = stmt.query(param_refs.as_slice())?;
 
         while let Some(row) = rows.next()? {
             let e_id: i64 = row.get(0)?;
@@ -1382,5 +1433,153 @@ ex:a3 ex:dept "Sales" ; ex:salary "90"^^xsd:integer .
                 _ => panic!("unexpected dept: {dept:?}"),
             }
         }
+    }
+
+    #[test]
+    fn temporal_sparql_valid_at() {
+        let mut store = Store::open_in_memory().unwrap();
+
+        // TX 1: server was "active" from Jan.
+        ingest_rdf(
+            &mut store,
+            r#"@prefix ex: <http://example.org/> .
+ex:server ex:status "active" ."#
+                .as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-01-01",
+            None,
+            None,
+        )
+        .unwrap();
+
+        // Retract "active" and assert "decommissioned" from March.
+        let e = store.lookup("http://example.org/server").unwrap().unwrap();
+        let a = store.lookup("http://example.org/status").unwrap().unwrap();
+        store
+            .transact(
+                &[
+                    crate::store::Datum {
+                        entity: e,
+                        attribute: a,
+                        value: Value::Str("active".into()),
+                        valid_from: "2026-01-01".into(),
+                        valid_to: None,
+                        op: crate::types::Op::Retract,
+                    },
+                    crate::store::Datum {
+                        entity: e,
+                        attribute: a,
+                        value: Value::Str("decommissioned".into()),
+                        valid_from: "2026-03-01".into(),
+                        valid_to: None,
+                        op: crate::types::Op::Assert,
+                    },
+                ],
+                "2026-03-01",
+                None,
+                None,
+            )
+            .unwrap();
+
+        // Current SPARQL: only "decommissioned".
+        let result = query(
+            &store,
+            "SELECT ?status WHERE { <http://example.org/server> <http://example.org/status> ?status }",
+        )
+        .unwrap();
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(
+            result.rows[0].get("status"),
+            Some(&Value::Str("decommissioned".into()))
+        );
+
+        // Time-travel to February: "active" should be visible.
+        let ctx = TemporalContext {
+            valid_at: Some("2026-02-01".into()),
+            as_of_tx: None,
+        };
+        let result = query_temporal(
+            &store,
+            "SELECT ?status WHERE { <http://example.org/server> <http://example.org/status> ?status }",
+            &ctx,
+        )
+        .unwrap();
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(
+            result.rows[0].get("status"),
+            Some(&Value::Str("active".into()))
+        );
+
+        // Time-travel to April: "decommissioned".
+        let ctx = TemporalContext {
+            valid_at: Some("2026-04-01".into()),
+            as_of_tx: None,
+        };
+        let result = query_temporal(
+            &store,
+            "SELECT ?status WHERE { <http://example.org/server> <http://example.org/status> ?status }",
+            &ctx,
+        )
+        .unwrap();
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(
+            result.rows[0].get("status"),
+            Some(&Value::Str("decommissioned".into()))
+        );
+    }
+
+    #[test]
+    fn temporal_sparql_as_of_tx() {
+        let mut store = Store::open_in_memory().unwrap();
+
+        // TX 1: Alice.
+        ingest_rdf(
+            &mut store,
+            "@prefix ex: <http://example.org/> .\nex:alice ex:name \"Alice\" .".as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-01-01",
+            None,
+            None,
+        )
+        .unwrap();
+
+        // TX 2: Bob.
+        ingest_rdf(
+            &mut store,
+            "@prefix ex: <http://example.org/> .\nex:bob ex:name \"Bob\" .".as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-02-01",
+            None,
+            None,
+        )
+        .unwrap();
+
+        // Current: both.
+        let result = query(
+            &store,
+            "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+        )
+        .unwrap();
+        assert_eq!(result.rows.len(), 2);
+
+        // As of TX 1: only Alice.
+        let ctx = TemporalContext {
+            valid_at: None,
+            as_of_tx: Some(1),
+        };
+        let result = query_temporal(
+            &store,
+            "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+            &ctx,
+        )
+        .unwrap();
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(
+            result.rows[0].get("name"),
+            Some(&Value::Str("Alice".into()))
+        );
     }
 }
