@@ -287,6 +287,21 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                 "required": ["embedding"]
             }
         }),
+        serde_json::json!({
+            "name": "quipu_unified_search",
+            "description": "Unified knowledge search for Bobbin integration. Combines text and optional vector search, returning results tagged with source='knowledge' and normalized 0-1 scores ready for merging with Bobbin's code search results.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Natural language search query" },
+                    "embedding": { "type": "array", "items": { "type": "number" }, "description": "Optional query embedding vector for semantic search (f32 array)" },
+                    "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
+                    "expand_links": { "type": "boolean", "description": "Expand results via graph links (default: true)" },
+                    "max_facts_per_entity": { "type": "integer", "description": "Maximum facts per entity (default: 10)" }
+                },
+                "required": ["query"]
+            }
+        }),
     ]
 }
 

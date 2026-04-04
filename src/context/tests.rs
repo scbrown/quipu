@@ -1,5 +1,6 @@
 use super::*;
 use crate::rdf::ingest_rdf;
+use crate::store::Store;
 use oxrdfio::RdfFormat;
 
 fn setup_test_store() -> Store {
@@ -131,6 +132,23 @@ fn tool_context_handler() {
 }
 
 #[test]
+fn entities_have_knowledge_source() {
+    let store = setup_test_store();
+    let pipeline = ContextPipeline::new(
+        &store,
+        ContextPipelineConfig {
+            expand_links: true,
+            ..Default::default()
+        },
+    );
+
+    let ctx = pipeline.query("traefik").unwrap();
+    for entity in &ctx.entities {
+        assert_eq!(entity.source, "knowledge");
+    }
+}
+
+#[test]
 fn no_match_returns_empty() {
     let store = Store::open_in_memory().unwrap();
     let pipeline = ContextPipeline::new(&store, ContextPipelineConfig::default());
@@ -170,4 +188,61 @@ fn facts_have_correct_types() {
     let port = traefik.facts.iter().find(|f| f.predicate.contains("port"));
     assert!(port.is_some());
     assert_eq!(port.unwrap().value_type, FactValueType::Literal);
+}
+
+#[test]
+fn unified_search_text_only() {
+    let store = setup_test_store();
+    let input = serde_json::json!({
+        "query": "traefik",
+        "limit": 5,
+        "expand_links": false
+    });
+    let result = tool_unified_search(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+    let first = &result["results"][0];
+    assert_eq!(first["source"], "knowledge");
+    assert!(first["score"].as_f64().unwrap() > 0.0);
+    assert!(first["entity"].as_str().unwrap().contains("traefik"));
+}
+
+#[test]
+fn unified_search_with_embedding() {
+    let store = setup_test_store();
+    use crate::vector::KnowledgeVectorStore;
+
+    let eid = store.intern("http://example.org/traefik").unwrap();
+    let emb: Vec<f32> = (0..8).map(|i| (2.0 + i as f32 * 0.1).sin()).collect();
+    store
+        .embed_entity(eid, "Traefik reverse proxy", &emb, "2026-01-01")
+        .unwrap();
+
+    let input = serde_json::json!({
+        "query": "proxy",
+        "embedding": emb,
+        "limit": 5
+    });
+    let result = tool_unified_search(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+    for r in result["results"].as_array().unwrap() {
+        assert_eq!(r["source"], "knowledge");
+    }
+    assert!(result["summary"]["total_entities"].as_u64().unwrap() >= 1);
+}
+
+#[test]
+fn unified_search_empty_results() {
+    let store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({ "query": "nonexistent" });
+    let result = tool_unified_search(&store, &input).unwrap();
+    assert_eq!(result["count"], 0);
+    assert!(result["results"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn unified_search_missing_query() {
+    let store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({});
+    let result = tool_unified_search(&store, &input);
+    assert!(result.is_err());
 }

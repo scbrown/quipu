@@ -31,6 +31,8 @@ pub struct KnowledgeEntity {
     pub types: Vec<String>,
     pub relevance: KnowledgeRelevance,
     pub score: f32,
+    /// Source identifier for unified search (e.g. "knowledge" vs Bobbin's "code").
+    pub source: String,
     pub facts: Vec<KnowledgeFact>,
 }
 
@@ -366,42 +368,15 @@ impl<'a> ContextPipeline<'a> {
             types,
             relevance,
             score,
+            source: "knowledge".to_string(),
             facts,
         })
     }
 }
 
-/// MCP tool handler: `quipu_context` — query for knowledge context.
-///
-/// Input: `{ "query": "...", "max_entities": N, "expand_links": bool }`
-/// Output: `KnowledgeContext` as JSON
-pub fn tool_context(store: &Store, input: &serde_json::Value) -> Result<serde_json::Value> {
-    let query = input
-        .get("query")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| crate::error::Error::InvalidValue("missing 'query' parameter".into()))?;
+pub mod tools;
 
-    let mut config = ContextPipelineConfig::default();
-
-    if let Some(max) = input
-        .get("max_entities")
-        .and_then(serde_json::Value::as_u64)
-    {
-        config.max_entities = max as usize;
-    }
-    if let Some(expand) = input
-        .get("expand_links")
-        .and_then(serde_json::Value::as_bool)
-    {
-        config.expand_links = expand;
-    }
-
-    let pipeline = ContextPipeline::new(store, config);
-    let result = pipeline.query(query)?;
-
-    Ok(serde_json::to_value(result).unwrap())
-}
+pub use tools::{tool_context, tool_unified_search};
 
 #[cfg(test)]
-#[path = "context_tests.rs"]
 mod tests;

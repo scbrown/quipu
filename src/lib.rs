@@ -26,7 +26,7 @@ pub mod vector_lance;
 pub use config::{EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ServerConfig};
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
-    KnowledgeRelevance, tool_context,
+    KnowledgeRelevance, tool_context, tool_unified_search,
 };
 pub use embedding::{EmbeddingProvider, build_entity_text};
 pub use episode::{Episode, episode_provenance, ingest_batch, ingest_episode};

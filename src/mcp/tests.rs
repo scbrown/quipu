@@ -251,7 +251,7 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 fn test_tool_definitions() {
     let defs = tool_definitions();
-    assert_eq!(defs.len(), 10);
+    assert_eq!(defs.len(), 11);
     let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"quipu_query"));
     assert!(names.contains(&"quipu_knot"));
@@ -260,6 +260,7 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_validate"));
     assert!(names.contains(&"quipu_search"));
     assert!(names.contains(&"quipu_hybrid_search"));
+    assert!(names.contains(&"quipu_unified_search"));
     assert!(names.contains(&"quipu_episode"));
     assert!(names.contains(&"quipu_retract"));
     assert!(names.contains(&"quipu_shapes"));
@@ -397,4 +398,24 @@ fn test_hybrid_search_with_sparql_filter() {
     assert_eq!(result["sparql_candidates"], 1);
     let entity = result["results"][0]["entity"].as_str().unwrap();
     assert!(entity.contains("alice"));
+}
+
+#[test]
+fn test_search_results_include_source_field() {
+    let store = test_store_with_data();
+    let eid = store.intern("http://example.org/alice").unwrap();
+    let emb: Vec<f32> = (0..8).map(|i| (1.0 + i as f32 * 0.1).sin()).collect();
+    store
+        .embed_entity(eid, "Alice the person", &emb, "2026-01-01")
+        .unwrap();
+
+    // tool_search results should have source: "knowledge"
+    let input = serde_json::json!({ "embedding": emb, "limit": 5 });
+    let result = super::tools::tool_search(&store, &input).unwrap();
+    assert_eq!(result["results"][0]["source"], "knowledge");
+
+    // tool_hybrid_search results should also have source: "knowledge"
+    let input = serde_json::json!({ "embedding": emb, "limit": 5 });
+    let result = super::tools::tool_hybrid_search(&store, &input).unwrap();
+    assert_eq!(result["results"][0]["source"], "knowledge");
 }

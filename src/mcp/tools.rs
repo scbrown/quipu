@@ -176,6 +176,7 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "entity": iri,
                 "text": m.text,
                 "score": m.score,
+                "source": "knowledge",
                 "valid_from": m.valid_from,
                 "valid_to": m.valid_to
             })
@@ -434,6 +435,7 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
                 "entity": iri,
                 "text": m.text,
                 "score": m.score,
+                "source": "knowledge",
                 "valid_from": m.valid_from,
                 "valid_to": m.valid_to
             })
