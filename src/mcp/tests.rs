@@ -1,5 +1,6 @@
 //! Tests for MCP tool handlers.
 
+use super::graphiti::*;
 use super::tools::*;
 use super::*;
 use crate::vector::KnowledgeVectorStore;
@@ -418,4 +419,140 @@ fn test_search_results_include_source_field() {
     let input = serde_json::json!({ "embedding": emb, "limit": 5 });
     let result = super::tools::tool_hybrid_search(&store, &input).unwrap();
     assert_eq!(result["results"][0]["source"], "knowledge");
+}
+
+// ── Graphiti-compatible endpoint tests ──────────────────────────
+
+#[test]
+fn test_tool_search_nodes_basic() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "Alice",
+        "max_results": 10
+    });
+    let result = tool_search_nodes(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+    let nodes = result["nodes"].as_array().unwrap();
+    assert!(!nodes.is_empty());
+    // Each node should have the expected Graphiti fields.
+    let node = &nodes[0];
+    assert!(node.get("uuid").is_some());
+    assert!(node.get("name").is_some());
+    assert!(node.get("labels").is_some());
+}
+
+#[test]
+fn test_tool_search_nodes_with_type_filter() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "Alice",
+        "entity_type_filter": "http://example.org/Person"
+    });
+    let result = tool_search_nodes(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+}
+
+#[test]
+fn test_tool_search_nodes_no_results() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "nonexistent_entity_xyz_12345"
+    });
+    let result = tool_search_nodes(&store, &input).unwrap();
+    assert_eq!(result["count"], 0);
+}
+
+#[test]
+fn test_tool_search_nodes_missing_query() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({});
+    let result = tool_search_nodes(&store, &input);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_tool_episodes_complete_basic() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "daily-standup",
+        "episode_body": "Team discussed migration progress and blockers.",
+        "group_id": "engineering",
+        "source_description": "crew/scribe",
+        "timestamp": "2026-04-04T09:00:00Z"
+    });
+    let result = tool_episodes_complete(&mut store, &input).unwrap();
+    assert_eq!(result["episode"], "daily-standup");
+    assert!(result["tx_id"].as_i64().unwrap() > 0);
+    assert!(result["count"].as_i64().unwrap() >= 1);
+}
+
+#[test]
+fn test_tool_episodes_complete_minimal() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "bare-event"
+    });
+    let result = tool_episodes_complete(&mut store, &input).unwrap();
+    assert_eq!(result["episode"], "bare-event");
+    assert!(result["tx_id"].as_i64().unwrap() > 0);
+}
+
+#[test]
+fn test_tool_episodes_complete_missing_name() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "episode_body": "some body"
+    });
+    let result = tool_episodes_complete(&mut store, &input);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_tool_episodes_complete_provenance_persists() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "deploy-v2",
+        "episode_body": "Deployed version 2 to production",
+        "source_description": "ci/pipeline",
+        "timestamp": "2026-04-04T10:00:00Z"
+    });
+    tool_episodes_complete(&mut store, &input).unwrap();
+
+    // Verify the episode provenance entity was created via SPARQL.
+    let query_input = serde_json::json!({
+        "query": "SELECT ?s WHERE { ?s a <http://www.w3.org/ns/prov#Activity> }"
+    });
+    let result = tool_query(&store, &query_input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+}
+
+#[test]
+fn test_tool_search_nodes_group_filter() {
+    let mut store = Store::open_in_memory().unwrap();
+
+    // Ingest an episode with group_id to create entities with groupId facts.
+    let ep_input = serde_json::json!({
+        "name": "team-event",
+        "episode_body": "Team alpha progress update",
+        "group_id": "alpha",
+        "nodes": [
+            {"name": "widget", "type": "Component", "description": "Main widget"}
+        ],
+        "timestamp": "2026-04-04T12:00:00Z"
+    });
+    tool_episode(&mut store, &ep_input).unwrap();
+
+    // Search with matching group_ids.
+    let input = serde_json::json!({
+        "query": "widget",
+        "group_ids": ["alpha"]
+    });
+    let result = tool_search_nodes(&store, &input).unwrap();
+    // The episode provenance entity has groupId "alpha" and contains "widget" in body.
+    // The widget node itself doesn't have groupId, so it should be filtered out.
+    // This tests that group filtering works.
+    let nodes = result["nodes"].as_array().unwrap();
+    for node in nodes {
+        assert_eq!(node["group_id"], "alpha");
+    }
 }

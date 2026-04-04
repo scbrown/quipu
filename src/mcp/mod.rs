@@ -4,6 +4,7 @@
 //! Model Context Protocol tool calling convention. Bobbin's MCP server
 //! delegates knowledge graph operations to these handlers.
 
+pub mod graphiti;
 #[cfg(test)]
 mod tests;
 pub mod tools;

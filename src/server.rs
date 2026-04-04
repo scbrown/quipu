@@ -12,6 +12,8 @@
 //!   POST /`unified_search` — Unified search for Bobbin integration (code + knowledge)
 //!   POST /retract    — Retract entity facts
 //!   POST /shapes     — Manage persistent SHACL shapes
+//!   POST /search/nodes      — Graphiti-compatible: semantic node search
+//!   POST /episodes/complete — Graphiti-compatible: flat episode ingestion
 //!   GET  /health     — Health check
 //!   GET  /stats      — Store statistics
 //!
@@ -77,6 +79,8 @@ async fn main() {
         .route("/shapes", post(shapes))
         .route("/project", post(project_graph))
         .route("/context", post(context))
+        .route("/search/nodes", post(search_nodes))
+        .route("/episodes/complete", post(episodes_complete))
         .with_state(state);
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
@@ -232,6 +236,24 @@ async fn context(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let store = store.lock().unwrap();
     let result = quipu::tool_context(&store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn search_nodes(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let store = store.lock().unwrap();
+    let result = quipu::tool_search_nodes(&store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn episodes_complete(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let mut store = store.lock().unwrap();
+    let result = quipu::tool_episodes_complete(&mut store, &input)?;
     Ok(axum::Json(result))
 }
 
