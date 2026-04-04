@@ -6,13 +6,14 @@
 //!   quipu cord [--type <IRI>] [--limit N] [--db <path>]  List entities
 //!   quipu unravel [--tx N] [--valid-at <date>] [--db <path>]  Time-travel query
 //!   quipu validate --shapes <shapes.ttl> --data <data.ttl>  Validate without writing
+//!   quipu episode <file.json> [--db <path>]  Ingest a structured episode (or - for stdin)
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
 //!   quipu stats [--db <path>]            Show store statistics
 //!
 //! Aliases: load=knot, query=read
 
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
 
 use oxrdfio::RdfFormat;
 use serde_json;
@@ -38,6 +39,7 @@ fn main() {
         "read" | "query" => cmd_query(&args, db_path),
         "cord" => cmd_cord(&args, db_path),
         "unravel" => cmd_unravel(&args, db_path),
+        "episode" => cmd_episode(&args, db_path),
         "validate" => cmd_validate(&args),
         "repl" => cmd_repl(db_path),
         "export" => cmd_export(&args, db_path),
@@ -67,6 +69,9 @@ COMMANDS:
 
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
         Time-travel query: see facts as they were at a given point
+
+    quipu episode <file.json> [--db <path>]
+        Ingest a structured episode (nodes + edges) from JSON (use - for stdin)
 
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
         Validate data against SHACL shapes (dry run, no write)
@@ -330,6 +335,64 @@ fn cmd_unravel(args: &[String], db_path: &str) {
         }
         Err(e) => {
             eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_episode(args: &[String], db_path: &str) {
+    let file_arg = match args.get(2) {
+        Some(p) if !p.starts_with("--") => p.as_str(),
+        _ => {
+            eprintln!("usage: quipu episode <file.json> [--db <path>]");
+            eprintln!("  use - to read from stdin");
+            std::process::exit(1);
+        }
+    };
+
+    let json_str = if file_arg == "-" {
+        let mut buf = String::new();
+        io::stdin().lock().read_to_string(&mut buf).unwrap_or_else(|e| {
+            eprintln!("error reading stdin: {e}");
+            std::process::exit(1);
+        });
+        buf
+    } else {
+        match std::fs::read_to_string(file_arg) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("error reading {file_arg}: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
+
+    let episode: quipu::Episode = match serde_json::from_str(&json_str) {
+        Ok(ep) => ep,
+        Err(e) => {
+            eprintln!("error parsing episode JSON: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let mut store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let now = chrono_now();
+    match quipu::ingest_episode(&mut store, &episode, &now) {
+        Ok((tx_id, count)) => {
+            println!(
+                "ingested episode \"{}\" — {count} facts (tx {tx_id})",
+                episode.name
+            );
+        }
+        Err(e) => {
+            eprintln!("error ingesting episode: {e}");
             std::process::exit(1);
         }
     }
