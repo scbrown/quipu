@@ -1,8 +1,10 @@
 //! SPARQL query engine — evaluates SPARQL queries over the EAVT fact log.
 //!
 //! Parses SPARQL via spargebra, then evaluates against the SQLite fact store.
-//! Currently supports: SELECT queries with basic graph patterns (BGP),
-//! FILTER (comparison, BOUND, regex), PROJECT, DISTINCT, LIMIT/OFFSET.
+//! Supports: SELECT with BGP, JOIN, UNION, FILTER, OPTIONAL (LeftJoin),
+//! ORDER BY, GROUP BY, aggregates (COUNT, SUM, AVG, MIN, MAX, SAMPLE,
+//! GROUP_CONCAT), HAVING, EXTEND, RDFS subclass inference, PROJECT,
+//! DISTINCT, REDUCED, LIMIT/OFFSET.
 
 use std::collections::HashMap;
 
@@ -1305,5 +1307,80 @@ ex:dave a ex:Other ; ex:name "Dave" .
         assert_eq!(result.rows.len(), 1);
         assert_eq!(result.rows[0].get("youngest"), Some(&Value::Int(25)));
         assert_eq!(result.rows[0].get("oldest"), Some(&Value::Int(35)));
+    }
+
+    #[test]
+    fn having_filters_groups() {
+        let store = test_store_with_data();
+        // Person has 2 instances, Employee has 1. HAVING(COUNT > 1) keeps only Person.
+        let result = query(
+            &store,
+            r#"SELECT ?type (COUNT(?s) AS ?n) WHERE {
+                ?s a ?type
+            } GROUP BY ?type HAVING (COUNT(?s) > 1)"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0].get("n"), Some(&Value::Int(2)));
+    }
+
+    #[test]
+    fn count_star_empty_result() {
+        let store = test_store_with_data();
+        let result = query(
+            &store,
+            r#"SELECT (COUNT(*) AS ?cnt) WHERE {
+                ?s <http://example.org/nonexistent> ?o
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0].get("cnt"), Some(&Value::Int(0)));
+    }
+
+    #[test]
+    fn group_by_with_sum() {
+        // Use department-style data to test GROUP BY + SUM.
+        let mut store = Store::open_in_memory().unwrap();
+        let turtle = r#"
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:a1 ex:dept "Eng" ; ex:salary "100"^^xsd:integer .
+ex:a2 ex:dept "Eng" ; ex:salary "120"^^xsd:integer .
+ex:a3 ex:dept "Sales" ; ex:salary "90"^^xsd:integer .
+"#;
+        ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+        let result = query(
+            &store,
+            r#"SELECT ?dept (SUM(?sal) AS ?total) WHERE {
+                ?s <http://example.org/dept> ?dept .
+                ?s <http://example.org/salary> ?sal .
+            } GROUP BY ?dept"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 2);
+        for row in &result.rows {
+            let dept = row.get("dept").unwrap();
+            let total = row.get("total").unwrap();
+            match dept {
+                Value::Str(d) if d == "Eng" => assert_eq!(total, &Value::Int(220)),
+                Value::Str(d) if d == "Sales" => assert_eq!(total, &Value::Int(90)),
+                _ => panic!("unexpected dept: {dept:?}"),
+            }
+        }
     }
 }
