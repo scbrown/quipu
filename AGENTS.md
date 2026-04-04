@@ -70,11 +70,13 @@ This runs all pre-commit hooks including:
 1. **Run quality gates** — `just check` must pass
 2. **Build docs** — `just docs build` must succeed (if docs changed)
 3. **Commit and push**:
+
    ```bash
    git add <files>
    git commit -m "<type>: <description>"
    git push
    ```
+
 4. **Verify** — All changes committed AND pushed
 
 **CRITICAL RULES:**
