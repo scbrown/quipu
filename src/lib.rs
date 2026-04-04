@@ -1,4 +1,4 @@
-//! Quipu — AI-native knowledge graph with strict ontology enforcement.
+//! Quipu -- AI-native knowledge graph with strict ontology enforcement.
 //!
 //! This crate implements an immutable bitemporal EAVT fact log backed by SQLite,
 //! designed as a foundation for agent-enforced knowledge graphs.
@@ -24,10 +24,11 @@ pub use episode::{episode_provenance, ingest_batch, ingest_episode, Episode};
 pub use error::{Error, Result};
 pub use graph::{tool_project, ProjectedGraph};
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
-pub use mcp::{tool_cord, tool_definitions, tool_episode, tool_knot, tool_query, tool_retract, tool_search, tool_shapes, tool_unravel, tool_validate};
+pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
+pub use mcp::tools::{tool_cord, tool_episode, tool_retract, tool_search, tool_shapes, tool_unravel, tool_validate};
 pub use rdf::{export_rdf, ingest_rdf};
 pub use shacl::{validate_shapes, ValidationFeedback, Validator};
-pub use sparql::{query as sparql_query, query_temporal as sparql_query_temporal, QueryResult, TemporalContext};
+pub use sparql::{query as sparql_query, query_temporal as sparql_query_temporal, QueryResult, TemporalContext, Triple};
 pub use store::Store;
 pub use types::{Fact, Op, Term, Transaction, Value};
 pub use vector::VectorMatch;

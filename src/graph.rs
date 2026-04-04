@@ -74,7 +74,7 @@ pub fn project(
     let mut entity_to_node: HashMap<i64, NodeIndex> = HashMap::new();
     let mut node_to_entity: HashMap<NodeIndex, i64> = HashMap::new();
 
-    let mut ensure_node = |graph: &mut DiGraph<i64, i64>,
+    let ensure_node = |graph: &mut DiGraph<i64, i64>,
                            e2n: &mut HashMap<i64, NodeIndex>,
                            n2e: &mut HashMap<NodeIndex, i64>,
                            entity_id: i64|
@@ -93,17 +93,17 @@ pub fn project(
             let pred_id = fact.attribute;
 
             // Apply predicate filter.
-            if let Some(filter_id) = pred_id_filter {
-                if pred_id != filter_id {
-                    continue;
-                }
+            if let Some(filter_id) = pred_id_filter
+                && pred_id != filter_id
+            {
+                continue;
             }
 
             // Apply type filter.
-            if let Some(ref type_ids) = type_entity_ids {
-                if !type_ids.contains(&source_id) {
-                    continue;
-                }
+            if let Some(ref type_ids) = type_entity_ids
+                && !type_ids.contains(&source_id)
+            {
+                continue;
             }
 
             let src = ensure_node(&mut graph, &mut entity_to_node, &mut node_to_entity, source_id);

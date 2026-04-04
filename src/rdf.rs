@@ -397,10 +397,10 @@ ex:bob a ex:Person ;
             ),
             (
                 Literal::new_typed_literal(
-                    "3.14",
+                    "3.25",
                     NamedNode::new_unchecked(format!("{xsd}double")),
                 ),
-                Value::Float(3.14),
+                Value::Float(3.25),
             ),
             (
                 Literal::new_typed_literal(

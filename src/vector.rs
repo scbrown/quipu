@@ -7,7 +7,7 @@
 
 use rusqlite::params;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::store::Store;
 
 /// Schema for the vectors table, created alongside the fact log.
@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn embedding_round_trip() {
-        let original: Vec<f32> = vec![1.0, -2.5, 3.14, 0.0, f32::MAX, f32::MIN];
+        let original: Vec<f32> = vec![1.0, -2.5, 3.25, 0.0, f32::MAX, f32::MIN];
         let bytes = f32_slice_to_bytes(&original);
         let decoded = bytes_to_f32_slice(&bytes);
         assert_eq!(original, decoded);

@@ -99,7 +99,7 @@ async fn stats(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>
 
     let mut entities = std::collections::HashSet::new();
     let mut predicates = std::collections::HashSet::new();
-    for row in &result.rows {
+    for row in result.rows() {
         if let Some(quipu::Value::Ref(id)) = row.get("s") {
             entities.insert(*id);
         }
@@ -109,7 +109,7 @@ async fn stats(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>
     }
 
     Ok(axum::Json(json!({
-        "facts": result.rows.len(),
+        "facts": result.rows().len(),
         "entities": entities.len(),
         "predicates": predicates.len()
     })))
