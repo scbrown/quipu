@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use oxrdf::Literal;
-use spargebra::algebra::{Expression, GraphPattern};
+use spargebra::algebra::{Expression, GraphPattern, OrderExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 use spargebra::{Query, SparqlParser};
 
@@ -117,6 +117,41 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
             Ok((sliced, vars))
         }
 
+        GraphPattern::LeftJoin {
+            left,
+            right,
+            expression,
+        } => {
+            let (left_rows, left_vars) = eval_pattern(store, left)?;
+            let (right_rows, right_vars) = eval_pattern(store, right)?;
+            let mut vars = left_vars;
+            for v in &right_vars {
+                if !vars.contains(v) {
+                    vars.push(v.clone());
+                }
+            }
+            let mut results = Vec::new();
+            for l in &left_rows {
+                let mut matched = false;
+                for r in &right_rows {
+                    if let Some(merged) = merge_bindings(l, r) {
+                        let passes = expression
+                            .as_ref()
+                            .map(|e| eval_filter(store, e, &merged))
+                            .unwrap_or(true);
+                        if passes {
+                            results.push(merged);
+                            matched = true;
+                        }
+                    }
+                }
+                if !matched {
+                    results.push(l.clone());
+                }
+            }
+            Ok((results, vars))
+        }
+
         GraphPattern::Union { left, right } => {
             let (mut left_rows, left_vars) = eval_pattern(store, left)?;
             let (right_rows, right_vars) = eval_pattern(store, right)?;
@@ -129,6 +164,29 @@ fn eval_pattern(store: &Store, pattern: &GraphPattern) -> Result<(Vec<Bindings>,
             }
             Ok((left_rows, vars))
         }
+
+        GraphPattern::OrderBy { inner, expression } => {
+            let (mut rows, vars) = eval_pattern(store, inner)?;
+            rows.sort_by(|a, b| {
+                for ord_expr in expression {
+                    let (expr, ascending) = match ord_expr {
+                        OrderExpression::Asc(e) => (e, true),
+                        OrderExpression::Desc(e) => (e, false),
+                    };
+                    let va = eval_expr(store, expr, a);
+                    let vb = eval_expr(store, expr, b);
+                    let cmp = compare_option_values(&va, &vb);
+                    let cmp = if ascending { cmp } else { cmp.reverse() };
+                    if cmp != std::cmp::Ordering::Equal {
+                        return cmp;
+                    }
+                }
+                std::cmp::Ordering::Equal
+            });
+            Ok((rows, vars))
+        }
+
+        GraphPattern::Reduced { inner } => eval_pattern(store, inner),
 
         _ => Err(Error::InvalidValue(format!(
             "unsupported graph pattern: {pattern}"
@@ -494,6 +552,24 @@ fn compare_values(
     }
 }
 
+/// Compare two optional Values for ordering (used by ORDER BY).
+fn compare_option_values(a: &Option<Value>, b: &Option<Value>) -> std::cmp::Ordering {
+    match (a, b) {
+        (None, None) => std::cmp::Ordering::Equal,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (Some(va), Some(vb)) => match (va, vb) {
+            (Value::Int(a), Value::Int(b)) => a.cmp(b),
+            (Value::Float(a), Value::Float(b)) => a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal),
+            (Value::Int(a), Value::Float(b)) => (*a as f64).partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal),
+            (Value::Float(a), Value::Int(b)) => a.partial_cmp(&(*b as f64)).unwrap_or(std::cmp::Ordering::Equal),
+            (Value::Str(a), Value::Str(b)) => a.cmp(b),
+            (Value::Bool(a), Value::Bool(b)) => a.cmp(b),
+            (Value::Ref(a), Value::Ref(b)) => a.cmp(b),
+            _ => std::cmp::Ordering::Equal,
+        },
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -696,5 +772,88 @@ ex:carol a ex:Employee ;
         .unwrap();
 
         assert_eq!(result.rows.len(), 3);
+    }
+
+    #[test]
+    fn select_order_by_asc() {
+        let store = test_store_with_data();
+        let result = query(
+            &store,
+            r#"SELECT ?name ?age WHERE {
+                ?s <http://example.org/name> ?name .
+                ?s <http://example.org/age> ?age .
+            } ORDER BY ?age"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 3);
+        let ages: Vec<&Value> = result.rows.iter().map(|r| r.get("age").unwrap()).collect();
+        assert_eq!(ages, vec![&Value::Int(25), &Value::Int(30), &Value::Int(35)]);
+    }
+
+    #[test]
+    fn select_order_by_desc() {
+        let store = test_store_with_data();
+        let result = query(
+            &store,
+            r#"SELECT ?name ?age WHERE {
+                ?s <http://example.org/name> ?name .
+                ?s <http://example.org/age> ?age .
+            } ORDER BY DESC(?age)"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 3);
+        let ages: Vec<&Value> = result.rows.iter().map(|r| r.get("age").unwrap()).collect();
+        assert_eq!(ages, vec![&Value::Int(35), &Value::Int(30), &Value::Int(25)]);
+    }
+
+    #[test]
+    fn select_optional() {
+        let store = test_store_with_data();
+        // All people have names; only alice and bob have "knows" relationships.
+        // Carol doesn't know anyone, but should still appear with unbound ?friend.
+        let result = query(
+            &store,
+            r#"SELECT ?name ?friend WHERE {
+                ?s <http://example.org/name> ?name .
+                OPTIONAL { ?s <http://example.org/knows> ?friend }
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 3);
+        // Carol's row should have name but no friend binding.
+        let carol_row = result
+            .rows
+            .iter()
+            .find(|r| r.get("name") == Some(&Value::Str("Carol".into())))
+            .expect("Carol should appear");
+        assert!(!carol_row.contains_key("friend"), "Carol should have no friend binding");
+
+        // Alice and Bob should have friend bindings.
+        let alice_row = result
+            .rows
+            .iter()
+            .find(|r| r.get("name") == Some(&Value::Str("Alice".into())))
+            .expect("Alice should appear");
+        assert!(alice_row.contains_key("friend"), "Alice should have a friend binding");
+    }
+
+    #[test]
+    fn select_order_by_with_limit() {
+        let store = test_store_with_data();
+        let result = query(
+            &store,
+            r#"SELECT ?name ?age WHERE {
+                ?s <http://example.org/name> ?name .
+                ?s <http://example.org/age> ?age .
+            } ORDER BY ?age LIMIT 2"#,
+        )
+        .unwrap();
+
+        assert_eq!(result.rows.len(), 2);
+        let ages: Vec<&Value> = result.rows.iter().map(|r| r.get("age").unwrap()).collect();
+        assert_eq!(ages, vec![&Value::Int(25), &Value::Int(30)]);
     }
 }
