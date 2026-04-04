@@ -14,12 +14,16 @@ use crate::error::{Error, Result};
 use crate::schema::INIT_SQL;
 use crate::types::Value;
 use crate::vector::VECTORS_SQL;
+use crate::vector_delegate::{DelegatingVectorStore, VectorSearchDelegate};
 
 /// The core fact log store backed by `SQLite`.
 pub struct Store {
     pub(crate) conn: Connection,
     pub(crate) embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     pub(crate) embedding_config: EmbeddingConfig,
+    /// When set, vector search is delegated to an external provider (e.g.
+    /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
+    pub(crate) vector_delegate: Option<DelegatingVectorStore>,
 }
 
 /// A write-side assertion or retraction within a transaction.
@@ -61,6 +65,7 @@ impl Store {
             conn,
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
+            vector_delegate: None,
         })
     }
 
@@ -77,6 +82,19 @@ impl Store {
     /// Get a reference to the embedding config.
     pub fn embedding_config(&self) -> &EmbeddingConfig {
         &self.embedding_config
+    }
+
+    /// Set an external vector search delegate.
+    ///
+    /// When set, all vector search methods forward to the delegate and
+    /// auto-embedding on write is skipped (embeddings belong in the delegate).
+    pub fn set_vector_search_delegate(&mut self, delegate: Arc<dyn VectorSearchDelegate>) {
+        self.vector_delegate = Some(DelegatingVectorStore::new(delegate));
+    }
+
+    /// Returns `true` if vector search is delegated to an external provider.
+    pub fn has_vector_delegate(&self) -> bool {
+        self.vector_delegate.is_some()
     }
 
     // -- Term dictionary --

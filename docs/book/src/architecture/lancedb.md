@@ -67,6 +67,37 @@ pub trait KnowledgeVectorStore {
 The `Store::vector_store()` method returns `&dyn KnowledgeVectorStore`,
 so calling code is backend-agnostic.
 
+## Delegated Vector Search
+
+When Quipu is used as a Bobbin dependency, embeddings are rebuildable derived
+data that belong in the index layer (Bobbin), not the durable knowledge layer
+(Quipu). The `VectorSearchDelegate` trait enables this separation:
+
+```rust
+pub trait VectorSearchDelegate: Send + Sync {
+    fn vector_search(&self, query: &[f32], limit: usize,
+                     valid_at: Option<&str>) -> Result<Vec<VectorMatch>>;
+    fn vector_search_filtered(&self, query: &[f32], limit: usize,
+                              filter: Option<&str>,
+                              valid_at: Option<&str>) -> Result<Vec<VectorMatch>>;
+    fn text_search(&self, query: &str, limit: usize,
+                   valid_at: Option<&str>) -> Result<Vec<VectorMatch>>;
+    fn vector_count(&self) -> Result<usize>;
+}
+```
+
+When a delegate is set via `Store::set_vector_search_delegate()`:
+
+- **Search forwards to delegate**: `vector_store()` returns a wrapper that
+  routes all search calls to the delegate
+- **Auto-embedding is skipped**: the transact hook does not generate embeddings
+  (Bobbin owns the embedding lifecycle)
+- **Write methods are no-ops**: `embed_entity()` and `close_embedding()` on the
+  delegated store silently succeed without writing
+
+When no delegate is set (standalone mode), Quipu falls back to its own
+SQLite or LanceDB vectors as before.
+
 ## Hybrid Search with Predicate Pushdown
 
 The `quipu_hybrid_search` tool uses a three-phase approach:

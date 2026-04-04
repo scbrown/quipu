@@ -409,6 +409,56 @@ ex:alice rdfs:label "Alice the Great" .
     }
 
     #[test]
+    fn auto_embed_skipped_with_delegate() {
+        use crate::vector::VectorMatch;
+        use crate::vector_delegate::VectorSearchDelegate;
+
+        struct EmptyDelegate;
+        impl VectorSearchDelegate for EmptyDelegate {
+            fn vector_search(
+                &self,
+                _q: &[f32],
+                _l: usize,
+                _v: Option<&str>,
+            ) -> crate::error::Result<Vec<VectorMatch>> {
+                Ok(vec![])
+            }
+            fn vector_count(&self) -> crate::error::Result<usize> {
+                Ok(0)
+            }
+        }
+
+        let mut store = Store::open_in_memory().unwrap();
+        store.set_embedding_provider(Arc::new(DummyProvider));
+        store.embedding_config_mut().auto_embed = true;
+        store.set_vector_search_delegate(Arc::new(EmptyDelegate));
+
+        let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:alice rdfs:label "Alice" .
+"#;
+        ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01",
+            None,
+            None,
+        )
+        .unwrap();
+
+        // Auto-embed should be skipped — local vectors table stays empty.
+        let local_count: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM vectors", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(local_count, 0, "auto-embed should be skipped with delegate");
+    }
+
+    #[test]
     fn touched_entity_ids_deduplicates() {
         let datums = vec![
             Datum {

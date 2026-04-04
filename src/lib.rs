@@ -20,6 +20,7 @@ pub mod sparql;
 pub mod store;
 pub mod types;
 pub mod vector;
+pub mod vector_delegate;
 #[cfg(feature = "lancedb")]
 pub mod vector_lance;
 
@@ -48,5 +49,6 @@ pub use sparql::{
 pub use store::Store;
 pub use types::{Fact, Op, Term, Transaction, Value};
 pub use vector::{KnowledgeVectorStore, VectorMatch};
+pub use vector_delegate::VectorSearchDelegate;
 #[cfg(feature = "lancedb")]
 pub use vector_lance::LanceVectorStore;

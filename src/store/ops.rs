@@ -56,7 +56,10 @@ impl Store {
         tx.commit()?;
 
         // Post-transact hook: auto-embed touched entities.
+        // Skipped when a vector search delegate is set — embeddings belong in
+        // the external index layer (e.g. Bobbin's LanceDB).
         if self.embedding_config.auto_embed
+            && self.vector_delegate.is_none()
             && let Some(provider) = &self.embedding_provider
         {
             let entity_ids = embedding::touched_entity_ids(datums);
