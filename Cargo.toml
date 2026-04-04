@@ -29,6 +29,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+petgraph = "0.7"
 
 [dev-dependencies]
 tempfile = "3"

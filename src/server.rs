@@ -65,6 +65,7 @@ async fn main() {
         .route("/search", post(search))
         .route("/retract", post(retract))
         .route("/shapes", post(shapes))
+        .route("/project", post(project_graph))
         .with_state(state);
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
@@ -184,6 +185,15 @@ async fn shapes(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let store = store.lock().unwrap();
     let result = quipu::tool_shapes(&store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn project_graph(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let store = store.lock().unwrap();
+    let result = quipu::tool_project(&store, &input)?;
     Ok(axum::Json(result))
 }
 
