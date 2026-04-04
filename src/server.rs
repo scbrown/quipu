@@ -10,6 +10,8 @@
 //!   POST /search     — Vector similarity search
 //!   POST /`hybrid_search` — Combined SPARQL + vector search
 //!   POST /`unified_search` — Unified search for Bobbin integration (code + knowledge)
+//!   POST /`search_nodes` — Search entities by natural language query
+//!   POST /`search_facts` — Search relationships/edges by natural language
 //!   POST /retract    — Retract entity facts
 //!   POST /shapes     — Manage persistent SHACL shapes
 //!   GET  /health     — Health check
@@ -73,6 +75,8 @@ async fn main() {
         .route("/search", post(search))
         .route("/hybrid_search", post(hybrid_search))
         .route("/unified_search", post(unified_search))
+        .route("/search_nodes", post(search_nodes))
+        .route("/search_facts", post(search_facts))
         .route("/retract", post(retract))
         .route("/shapes", post(shapes))
         .route("/project", post(project_graph))
@@ -196,6 +200,24 @@ async fn unified_search(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let store = store.lock().unwrap();
     let result = quipu::tool_unified_search(&store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn search_nodes(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let store = store.lock().unwrap();
+    let result = quipu::tool_search_nodes(&store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn search_facts(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let store = store.lock().unwrap();
+    let result = quipu::tool_search_facts(&store, &input)?;
     Ok(axum::Json(result))
 }
 

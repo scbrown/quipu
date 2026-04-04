@@ -4,6 +4,7 @@
 //! Model Context Protocol tool calling convention. Bobbin's MCP server
 //! delegates knowledge graph operations to these handlers.
 
+pub mod search;
 #[cfg(test)]
 mod tests;
 pub mod tools;
@@ -285,6 +286,33 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
                     "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" }
                 }
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_search_nodes",
+            "description": "Search for entities in the knowledge graph by natural language query. Uses text matching on entity names, labels, and values. Replaces Graphiti's search_nodes.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Natural language search query" },
+                    "group_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: filter to entities from these knowledge graph groups" },
+                    "max_results": { "type": "integer", "description": "Maximum results (default: 10)" },
+                    "entity_type_filter": { "type": "string", "description": "Optional: filter by rdf:type IRI" }
+                },
+                "required": ["query"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_search_facts",
+            "description": "Search for relationships/edges in the knowledge graph by natural language query. Finds facts where the predicate or value matches the query. Replaces Graphiti's search_memory_facts.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Natural language search query" },
+                    "group_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: filter to facts from these knowledge graph groups" },
+                    "max_results": { "type": "integer", "description": "Maximum results (default: 10)" }
+                },
+                "required": ["query"]
             }
         }),
         serde_json::json!({

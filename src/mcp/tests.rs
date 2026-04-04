@@ -255,7 +255,7 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 fn test_tool_definitions() {
     let defs = tool_definitions();
-    assert_eq!(defs.len(), 11);
+    assert_eq!(defs.len(), 13);
     let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"quipu_query"));
     assert!(names.contains(&"quipu_knot"));
@@ -268,6 +268,8 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_episode"));
     assert!(names.contains(&"quipu_retract"));
     assert!(names.contains(&"quipu_shapes"));
+    assert!(names.contains(&"quipu_search_nodes"));
+    assert!(names.contains(&"quipu_search_facts"));
 }
 
 #[test]
@@ -562,4 +564,175 @@ fn test_hybrid_search_query_text_without_provider_errors() {
     let input = serde_json::json!({ "query": "test" });
     let err = tool_hybrid_search(&store, &input).unwrap_err();
     assert!(err.to_string().contains("no embedding provider"));
+}
+
+#[test]
+fn test_tool_search_nodes_basic() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "Alice",
+        "max_results": 10
+    });
+    let result = super::search::tool_search_nodes(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+    let nodes = result["nodes"].as_array().unwrap();
+    // At least one node should have "alice" in its IRI.
+    assert!(
+        nodes
+            .iter()
+            .any(|n| n["iri"].as_str().unwrap().contains("alice"))
+    );
+}
+
+#[test]
+fn test_tool_search_nodes_with_type_filter() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "Alice",
+        "entity_type_filter": "http://example.org/Person",
+        "max_results": 10
+    });
+    let result = super::search::tool_search_nodes(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+}
+
+#[test]
+fn test_tool_search_nodes_no_match() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "zzz_nonexistent_entity",
+        "max_results": 10
+    });
+    let result = super::search::tool_search_nodes(&store, &input).unwrap();
+    assert_eq!(result["count"], 0);
+}
+
+#[test]
+fn test_tool_search_nodes_returns_label_and_types() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "Alice",
+        "max_results": 10
+    });
+    let result = super::search::tool_search_nodes(&store, &input).unwrap();
+    let nodes = result["nodes"].as_array().unwrap();
+    let alice = nodes
+        .iter()
+        .find(|n| n["iri"].as_str().unwrap().contains("alice"))
+        .unwrap();
+    // Should have types populated.
+    assert!(!alice["types"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn test_tool_search_nodes_with_group_ids() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "test-ep",
+        "source": "test",
+        "group_id": "my-group",
+        "timestamp": "2026-04-04T12:00:00Z",
+        "nodes": [
+            {"name": "ServerAlpha", "type": "Server", "description": "Production server"}
+        ],
+        "edges": []
+    });
+    super::tools::tool_episode(&mut store, &input).unwrap();
+
+    // Search with matching group_id.
+    let search_input = serde_json::json!({
+        "query": "ServerAlpha",
+        "group_ids": ["my-group"],
+        "max_results": 10
+    });
+    let result = super::search::tool_search_nodes(&store, &search_input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+
+    // Search with non-matching group_id.
+    let search_input = serde_json::json!({
+        "query": "ServerAlpha",
+        "group_ids": ["wrong-group"],
+        "max_results": 10
+    });
+    let result = super::search::tool_search_nodes(&store, &search_input).unwrap();
+    assert_eq!(result["count"], 0);
+}
+
+#[test]
+fn test_tool_search_facts_basic() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "name",
+        "max_results": 10
+    });
+    let result = super::search::tool_search_facts(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+    let facts = result["facts"].as_array().unwrap();
+    // Should find name predicates.
+    assert!(
+        facts
+            .iter()
+            .any(|f| f["predicate"].as_str().unwrap().contains("name"))
+    );
+}
+
+#[test]
+fn test_tool_search_facts_by_value() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "Alice",
+        "max_results": 10
+    });
+    let result = super::search::tool_search_facts(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+    let facts = result["facts"].as_array().unwrap();
+    assert!(
+        facts
+            .iter()
+            .any(|f| f["target"].as_str().unwrap() == "Alice")
+    );
+}
+
+#[test]
+fn test_tool_search_facts_no_match() {
+    let store = test_store_with_data();
+    let input = serde_json::json!({
+        "query": "zzz_nonexistent_predicate",
+        "max_results": 10
+    });
+    let result = super::search::tool_search_facts(&store, &input).unwrap();
+    assert_eq!(result["count"], 0);
+}
+
+#[test]
+fn test_tool_search_facts_with_provenance() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "deploy-ep",
+        "source": "test",
+        "group_id": "ops-group",
+        "timestamp": "2026-04-04T12:00:00Z",
+        "nodes": [
+            {"name": "AppBeta", "type": "Application"},
+            {"name": "HostGamma", "type": "Host"}
+        ],
+        "edges": [
+            {"source": "AppBeta", "target": "HostGamma", "relation": "deployed_on"}
+        ]
+    });
+    super::tools::tool_episode(&mut store, &input).unwrap();
+
+    let search_input = serde_json::json!({
+        "query": "deployed_on",
+        "max_results": 10
+    });
+    let result = super::search::tool_search_facts(&store, &search_input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+    let facts = result["facts"].as_array().unwrap();
+    let deploy_fact = facts
+        .iter()
+        .find(|f| f["predicate"].as_str().unwrap().contains("deployed_on"))
+        .unwrap();
+    // Should have provenance from the episode.
+    assert!(!deploy_fact["provenance"].is_null());
 }

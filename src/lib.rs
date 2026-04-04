@@ -34,6 +34,7 @@ pub use embedding::{EmbeddingProvider, build_entity_text};
 pub use episode::{Episode, episode_provenance, ingest_batch, ingest_episode};
 pub use error::{Error, Result};
 pub use graph::{ProjectedGraph, tool_project};
+pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
     tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_search, tool_shapes,
     tool_unravel, tool_validate,
