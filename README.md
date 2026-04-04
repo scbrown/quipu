@@ -147,7 +147,7 @@ curl localhost:3030/query -X POST \
 
 ## 🏗️ Architecture
 
-```
+```text
                     ┌──────────────────────────────┐
                     │         Agent / CLI           │
                     └──────────┬───────────────────┘

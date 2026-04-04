@@ -9,7 +9,7 @@ Each entity can have an associated embedding -- a float vector that
 captures its semantic meaning. Embeddings are stored in a `vectors` table
 with bitemporal validity (same model as the fact log).
 
-```
+```text
 vectors(entity_id, text, embedding, valid_from, valid_to)
 ```
 

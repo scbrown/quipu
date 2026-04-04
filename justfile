@@ -60,4 +60,3 @@ docs cmd="build":
         check)    just docs lint && just docs build ;;
         *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check" ;;
     esac
-
