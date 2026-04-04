@@ -20,6 +20,7 @@ oxrdf = "0.3"
 oxttl = "0.2"
 oxrdfio = "0.2"
 spargebra = "0.4"
+rudof_lib = "0.2.8"
 
 [dev-dependencies]
 tempfile = "3"

@@ -12,6 +12,7 @@
 - [EAVT Fact Log](architecture/eavt.md)
 - [RDF Data Model](architecture/rdf.md)
 - [SPARQL Engine](architecture/sparql.md)
+- [SHACL Validation](architecture/shacl.md)
 
 # Reference
 
