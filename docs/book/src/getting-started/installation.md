@@ -9,13 +9,32 @@ Add to your `Cargo.toml`:
 quipu = { git = "https://github.com/scbrown/quipu" }
 ```
 
+To use SHACL validation (enabled by default):
+
+```toml
+[dependencies]
+quipu = { git = "https://github.com/scbrown/quipu", features = ["shacl"] }
+```
+
+To exclude SHACL (smaller binary, faster compile):
+
+```toml
+[dependencies]
+quipu = { git = "https://github.com/scbrown/quipu", default-features = false }
+```
+
 ## From Source
 
 ```bash
 git clone https://github.com/scbrown/quipu
 cd quipu
-cargo build
+cargo build --release
 ```
+
+This produces two binaries:
+
+- `target/release/quipu` -- CLI tool
+- `target/release/quipu-server` -- REST API server
 
 ## Requirements
 
