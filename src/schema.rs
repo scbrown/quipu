@@ -28,4 +28,11 @@ CREATE INDEX IF NOT EXISTS idx_eavt ON facts(e, a, v, valid_from);
 CREATE INDEX IF NOT EXISTS idx_aevt ON facts(a, e, v, valid_from);
 CREATE INDEX IF NOT EXISTS idx_vaet ON facts(v, a, e, valid_from);
 CREATE INDEX IF NOT EXISTS idx_tx   ON facts(tx);
+
+-- Persistent SHACL shape storage for auto-validation on writes.
+CREATE TABLE IF NOT EXISTS shapes (
+    name      TEXT PRIMARY KEY,
+    turtle    TEXT NOT NULL,
+    loaded_at TEXT NOT NULL
+);
 "#;

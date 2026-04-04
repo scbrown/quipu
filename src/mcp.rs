@@ -64,8 +64,18 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let actor = input.get("actor").and_then(|v| v.as_str());
     let source = input.get("source").and_then(|v| v.as_str());
 
-    // Optional SHACL validation.
-    if let Some(shapes) = input.get("shapes").and_then(|v| v.as_str()) {
+    // SHACL validation: combine per-request shapes with stored shapes.
+    let request_shapes = input.get("shapes").and_then(|v| v.as_str());
+    let stored_shapes = store.get_combined_shapes()?;
+
+    let combined_shapes = match (request_shapes, &stored_shapes) {
+        (Some(req), Some(stored)) => Some(format!("{stored}\n\n{req}")),
+        (Some(req), None) => Some(req.to_string()),
+        (None, Some(stored)) => Some(stored.clone()),
+        (None, None) => None,
+    };
+
+    if let Some(shapes) = &combined_shapes {
         let feedback = shacl::validate_shapes(shapes, turtle)?;
         if !feedback.conforms {
             let issues: Vec<JsonValue> = feedback
@@ -289,6 +299,71 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
+/// MCP tool: `quipu_shapes` — Manage persistent SHACL shapes.
+///
+/// Input: `{ "action": "load|list|remove", "name": "...", "turtle": "...", "timestamp": "..." }`
+/// Output depends on action.
+pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let action = input
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("list");
+
+    match action {
+        "load" => {
+            let name = input
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidValue("missing 'name' for shape".into()))?;
+            let turtle = input
+                .get("turtle")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidValue("missing 'turtle' for shape".into()))?;
+            let timestamp = input
+                .get("timestamp")
+                .and_then(|v| v.as_str())
+                .unwrap_or("1970-01-01T00:00:00Z");
+
+            // Validate the shapes parse correctly.
+            shacl::validate_shapes(turtle, "@prefix ex: <http://example.org/> .\n")?;
+
+            store.load_shapes(name, turtle, timestamp)?;
+            Ok(serde_json::json!({
+                "action": "loaded",
+                "name": name
+            }))
+        }
+        "remove" => {
+            let name = input
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidValue("missing 'name' for removal".into()))?;
+            let removed = store.remove_shapes(name)?;
+            Ok(serde_json::json!({
+                "action": "removed",
+                "name": name,
+                "found": removed
+            }))
+        }
+        "list" | _ => {
+            let shapes = store.list_shapes()?;
+            let items: Vec<JsonValue> = shapes
+                .iter()
+                .map(|(name, _, loaded_at)| {
+                    serde_json::json!({
+                        "name": name,
+                        "loaded_at": loaded_at
+                    })
+                })
+                .collect();
+            Ok(serde_json::json!({
+                "shapes": items,
+                "count": items.len()
+            }))
+        }
+    }
+}
+
 /// MCP tool: `quipu_retract` — Retract facts for an entity.
 ///
 /// Input: `{ "entity": "<IRI>", "predicate": "<optional IRI>", "timestamp": "..." }`
@@ -455,6 +530,32 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     }
                 },
                 "required": ["shapes", "data"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_shapes",
+            "description": "Manage persistent SHACL shapes (load, list, remove). Loaded shapes auto-validate on writes.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["load", "list", "remove"],
+                        "description": "Action to perform (default: list)"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Shape graph name (required for load/remove)"
+                    },
+                    "turtle": {
+                        "type": "string",
+                        "description": "SHACL shapes in Turtle format (required for load)"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "description": "ISO-8601 timestamp"
+                    }
+                }
             }
         }),
         serde_json::json!({
@@ -798,9 +899,51 @@ ex:PersonShape a sh:NodeShape ;
     }
 
     #[test]
+    fn test_tool_shapes_load_and_enforce() {
+        let mut store = Store::open_in_memory().unwrap();
+
+        // Load a shape that requires ex:name on ex:Person.
+        let shapes = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+ex:PersonShape a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [ sh:path ex:name ; sh:minCount 1 ] .
+"#;
+        let load_input = serde_json::json!({
+            "action": "load",
+            "name": "person-rules",
+            "turtle": shapes,
+            "timestamp": "2026-04-04"
+        });
+        tool_shapes(&store, &load_input).unwrap();
+
+        // Verify it's listed.
+        let list_input = serde_json::json!({ "action": "list" });
+        let list_result = tool_shapes(&store, &list_input).unwrap();
+        assert_eq!(list_result["count"], 1);
+
+        // Write valid data — should succeed.
+        let good_input = serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .",
+            "timestamp": "2026-04-04T01:00:00Z"
+        });
+        let good_result = tool_knot(&mut store, &good_input).unwrap();
+        assert_eq!(good_result["conforms"], true);
+
+        // Write invalid data — should fail validation.
+        let bad_input = serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> .\nex:bob a ex:Person .",
+            "timestamp": "2026-04-04T02:00:00Z"
+        });
+        let bad_result = tool_knot(&mut store, &bad_input).unwrap();
+        assert_eq!(bad_result["conforms"], false);
+    }
+
+    #[test]
     fn test_tool_definitions() {
         let defs = tool_definitions();
-        assert_eq!(defs.len(), 8);
+        assert_eq!(defs.len(), 9);
         let names: Vec<&str> = defs
             .iter()
             .map(|d| d["name"].as_str().unwrap())
@@ -813,5 +956,6 @@ ex:PersonShape a sh:NodeShape ;
         assert!(names.contains(&"quipu_search"));
         assert!(names.contains(&"quipu_episode"));
         assert!(names.contains(&"quipu_retract"));
+        assert!(names.contains(&"quipu_shapes"));
     }
 }

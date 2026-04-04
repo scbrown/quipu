@@ -305,6 +305,54 @@ impl Store {
         Self::collect_facts(&mut stmt, params![entity, attribute])
     }
 
+    // ── Shape storage ─────────────────────────────────────────────
+
+    /// Store a named SHACL shape graph for auto-validation on writes.
+    pub fn load_shapes(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO shapes (name, turtle, loaded_at) VALUES (?1, ?2, ?3)",
+            params![name, turtle, timestamp],
+        )?;
+        Ok(())
+    }
+
+    /// Remove a stored shape graph by name.
+    pub fn remove_shapes(&self, name: &str) -> Result<bool> {
+        let affected = self.conn.execute(
+            "DELETE FROM shapes WHERE name = ?1",
+            params![name],
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// Get all stored shapes as a list of (name, turtle, loaded_at).
+    pub fn list_shapes(&self) -> Result<Vec<(String, String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT name, turtle, loaded_at FROM shapes ORDER BY name",
+        )?;
+        let mut shapes = Vec::new();
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            shapes.push((row.get(0)?, row.get(1)?, row.get(2)?));
+        }
+        Ok(shapes)
+    }
+
+    /// Get all stored shapes concatenated as a single Turtle string.
+    /// Returns None if no shapes are stored.
+    pub fn get_combined_shapes(&self) -> Result<Option<String>> {
+        let shapes = self.list_shapes()?;
+        if shapes.is_empty() {
+            return Ok(None);
+        }
+        let combined = shapes
+            .iter()
+            .map(|(_, turtle, _)| turtle.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        Ok(Some(combined))
+    }
+
     // ── SQL access (for SPARQL evaluator) ─────────────────────────
 
     /// Prepare a SQL statement against the underlying connection.

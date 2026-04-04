@@ -41,6 +41,7 @@ fn main() {
         "unravel" => cmd_unravel(&args, db_path),
         "episode" => cmd_episode(&args, db_path),
         "retract" => cmd_retract(&args, db_path),
+        "shapes" => cmd_shapes(&args, db_path),
         "validate" => cmd_validate(&args),
         "repl" => cmd_repl(db_path),
         "export" => cmd_export(&args, db_path),
@@ -76,6 +77,15 @@ COMMANDS:
 
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
         Retract all facts for an entity (or just those with a given predicate)
+
+    quipu shapes load <name> <file.ttl> [--db <path>]
+        Load SHACL shapes for auto-validation on writes
+
+    quipu shapes list [--db <path>]
+        List loaded shape graphs
+
+    quipu shapes remove <name> [--db <path>]
+        Remove a loaded shape graph
 
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
         Validate data against SHACL shapes (dry run, no write)
@@ -447,6 +457,102 @@ fn cmd_retract(args: &[String], db_path: &str) {
         Err(e) => {
             eprintln!("error: {e}");
             std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_shapes(args: &[String], db_path: &str) {
+    let action = args.get(2).map(|s| s.as_str()).unwrap_or("list");
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match action {
+        "load" => {
+            let name = match args.get(3) {
+                Some(n) if !n.starts_with("--") => n.as_str(),
+                _ => {
+                    eprintln!("usage: quipu shapes load <name> <file.ttl> [--db <path>]");
+                    std::process::exit(1);
+                }
+            };
+            let file_path = match args.get(4) {
+                Some(p) if !p.starts_with("--") => p.as_str(),
+                _ => {
+                    eprintln!("usage: quipu shapes load <name> <file.ttl> [--db <path>]");
+                    std::process::exit(1);
+                }
+            };
+            let turtle = match std::fs::read_to_string(file_path) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("error reading {file_path}: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let input = serde_json::json!({
+                "action": "load",
+                "name": name,
+                "turtle": turtle,
+                "timestamp": chrono_now(),
+            });
+            match quipu::tool_shapes(&store, &input) {
+                Ok(_) => println!("loaded shape graph \"{name}\" from {file_path}"),
+                Err(e) => {
+                    eprintln!("error loading shapes: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "remove" => {
+            let name = match args.get(3) {
+                Some(n) if !n.starts_with("--") => n.as_str(),
+                _ => {
+                    eprintln!("usage: quipu shapes remove <name> [--db <path>]");
+                    std::process::exit(1);
+                }
+            };
+            let input = serde_json::json!({ "action": "remove", "name": name });
+            match quipu::tool_shapes(&store, &input) {
+                Ok(result) => {
+                    if result["found"].as_bool().unwrap_or(false) {
+                        println!("removed shape graph \"{name}\"");
+                    } else {
+                        println!("shape graph \"{name}\" not found");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "list" | _ => {
+            let input = serde_json::json!({ "action": "list" });
+            match quipu::tool_shapes(&store, &input) {
+                Ok(result) => {
+                    let shapes = result["shapes"].as_array().unwrap();
+                    if shapes.is_empty() {
+                        println!("no shapes loaded");
+                    } else {
+                        for shape in shapes {
+                            let name = shape["name"].as_str().unwrap_or("?");
+                            let loaded = shape["loaded_at"].as_str().unwrap_or("?");
+                            println!("  {name} (loaded: {loaded})");
+                        }
+                        println!("\n{} shape graph(s)", shapes.len());
+                    }
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
         }
     }
 }
