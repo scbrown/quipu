@@ -32,7 +32,9 @@ pub fn resolve_subject_pattern(pattern: &TermPattern, bindings: &Bindings) -> Op
             Some(Value::Ref(_)) => None,
             _ => None,
         },
-        TermPattern::Literal(_) | TermPattern::Triple(_) => None,
+        TermPattern::Literal(_) => None,
+        #[cfg(feature = "shacl")]
+        TermPattern::Triple(_) => None,
     }
 }
 
@@ -69,7 +71,9 @@ pub fn resolve_object_pattern(
             // If already bound, use that value.
             Ok(bindings.get(v.as_str()).cloned())
         }
-        TermPattern::BlankNode(_) | TermPattern::Triple(_) => Ok(None),
+        TermPattern::BlankNode(_) => Ok(None),
+        #[cfg(feature = "shacl")]
+        TermPattern::Triple(_) => Ok(None),
     }
 }
 

@@ -9,7 +9,9 @@
 
 use serde::Deserialize;
 
-use crate::error::{Error, Result};
+#[cfg(feature = "shacl")]
+use crate::error::Error;
+use crate::error::Result;
 use crate::namespace;
 use crate::rdf::ingest_rdf;
 #[cfg(feature = "shacl")]

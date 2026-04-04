@@ -41,9 +41,8 @@ fn term_to_value(store: &Store, term: &OxTerm) -> Result<Value> {
             Ok(Value::Ref(id))
         }
         OxTerm::Literal(lit) => literal_to_value(lit),
-        OxTerm::Triple(_) => Err(Error::InvalidValue(
-            "unsupported RDF term type in object position".into(),
-        )),
+        #[cfg(feature = "shacl")]
+        OxTerm::Triple(_) => Err(Error::InvalidValue("unsupported RDF term type".into())),
     }
 }
 

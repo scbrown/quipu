@@ -157,6 +157,7 @@ fn eval_construct(
                     None => continue,
                 },
                 TermPattern::BlankNode(b) => Value::Str(format!("_:{}", b.as_str())),
+                #[cfg(feature = "shacl")]
                 TermPattern::Triple(_) => continue,
             };
 
