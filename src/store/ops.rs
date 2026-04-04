@@ -2,6 +2,7 @@
 
 use rusqlite::params;
 
+use crate::embedding;
 use crate::error::Result;
 use crate::types::{Fact, Op, Value};
 
@@ -53,6 +54,22 @@ impl Store {
         }
 
         tx.commit()?;
+
+        // Post-transact hook: auto-embed touched entities.
+        if self.embedding_config.auto_embed
+            && let Some(provider) = &self.embedding_provider
+        {
+            let entity_ids = embedding::touched_entity_ids(datums);
+            embedding::auto_embed_entities(
+                self,
+                provider,
+                &entity_ids,
+                timestamp,
+                self.embedding_config.embed_batch_size,
+                datums,
+            )?;
+        }
+
         Ok(tx_id)
     }
 

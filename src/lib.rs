@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod context;
+pub mod embedding;
 pub mod episode;
 pub mod error;
 pub mod graph;
@@ -22,11 +23,12 @@ pub mod vector;
 #[cfg(feature = "lancedb")]
 pub mod vector_lance;
 
-pub use config::{FederationConfig, QuipuConfig, RemoteEndpoint, ServerConfig};
+pub use config::{EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ServerConfig};
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
     KnowledgeRelevance, tool_context,
 };
+pub use embedding::{EmbeddingProvider, build_entity_text};
 pub use episode::{Episode, episode_provenance, ingest_batch, ingest_episode};
 pub use error::{Error, Result};
 pub use graph::{ProjectedGraph, tool_project};

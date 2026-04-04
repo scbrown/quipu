@@ -37,6 +37,9 @@ pub struct QuipuConfig {
 
     /// Federation configuration for remote Quipu instances.
     pub federation: FederationConfig,
+
+    /// Embedding configuration for auto-embedding on write.
+    pub embedding: EmbeddingConfig,
 }
 
 impl Default for QuipuConfig {
@@ -47,6 +50,7 @@ impl Default for QuipuConfig {
             base_ns: namespace::DEFAULT_BASE_NS.to_string(),
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
+            embedding: EmbeddingConfig::default(),
         }
     }
 }
@@ -77,6 +81,26 @@ impl Default for ServerConfig {
 pub struct FederationConfig {
     /// List of remote Quipu endpoints.
     pub remotes: Vec<RemoteEndpoint>,
+}
+
+/// Embedding configuration for auto-embedding on write.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct EmbeddingConfig {
+    /// Whether to auto-embed entities after writes (default: false).
+    pub auto_embed: bool,
+
+    /// Number of entities to embed in each batch (default: 32).
+    pub embed_batch_size: usize,
+}
+
+impl Default for EmbeddingConfig {
+    fn default() -> Self {
+        Self {
+            auto_embed: false,
+            embed_batch_size: 32,
+        }
+    }
 }
 
 /// A remote Quipu endpoint for federation.
@@ -147,6 +171,8 @@ mod tests {
         assert_eq!(cfg.server.bind, "127.0.0.1:3030");
         assert!(!cfg.server.enabled);
         assert!(cfg.federation.remotes.is_empty());
+        assert!(!cfg.embedding.auto_embed);
+        assert_eq!(cfg.embedding.embed_batch_size, 32);
     }
 
     #[test]
@@ -163,6 +189,10 @@ bind = "0.0.0.0:8080"
 [[quipu.federation.remotes]]
 name = "prod"
 url = "http://quipu.svc:3030"
+
+[quipu.embedding]
+auto_embed = true
+embed_batch_size = 64
 "#;
         let file: ConfigFile = toml::from_str(toml_str).unwrap();
         let cfg = file.quipu;
@@ -173,6 +203,8 @@ url = "http://quipu.svc:3030"
         assert_eq!(cfg.federation.remotes.len(), 1);
         assert_eq!(cfg.federation.remotes[0].name, "prod");
         assert_eq!(cfg.federation.remotes[0].url, "http://quipu.svc:3030");
+        assert!(cfg.embedding.auto_embed);
+        assert_eq!(cfg.embedding.embed_batch_size, 64);
     }
 
     #[test]

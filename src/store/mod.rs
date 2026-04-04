@@ -4,8 +4,12 @@ pub mod ops;
 #[cfg(test)]
 mod tests;
 
+use std::sync::Arc;
+
 use rusqlite::{Connection, params};
 
+use crate::config::EmbeddingConfig;
+use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
 use crate::schema::INIT_SQL;
 use crate::types::Value;
@@ -14,6 +18,8 @@ use crate::vector::VECTORS_SQL;
 /// The core fact log store backed by `SQLite`.
 pub struct Store {
     pub(crate) conn: Connection,
+    pub(crate) embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
+    pub(crate) embedding_config: EmbeddingConfig,
 }
 
 /// A write-side assertion or retraction within a transaction.
@@ -51,7 +57,26 @@ impl Store {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(INIT_SQL)?;
         conn.execute_batch(VECTORS_SQL)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            embedding_provider: None,
+            embedding_config: EmbeddingConfig::default(),
+        })
+    }
+
+    /// Attach an embedding provider for auto-embedding on write.
+    pub fn set_embedding_provider(&mut self, provider: Arc<dyn EmbeddingProvider>) {
+        self.embedding_provider = Some(provider);
+    }
+
+    /// Get a mutable reference to the embedding config.
+    pub fn embedding_config_mut(&mut self) -> &mut EmbeddingConfig {
+        &mut self.embedding_config
+    }
+
+    /// Get a reference to the embedding config.
+    pub fn embedding_config(&self) -> &EmbeddingConfig {
+        &self.embedding_config
     }
 
     // -- Term dictionary --

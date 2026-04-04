@@ -16,7 +16,7 @@ trait, so calling code is backend-agnostic.
 The default SQLite backend stores embeddings in a `vectors` table with
 bitemporal validity (same model as the fact log):
 
-```text
+```sql
 vectors(entity_id, text, embedding, valid_from, valid_to)
 ```
 
