@@ -14,7 +14,7 @@ pub mod store;
 pub mod types;
 pub mod vector;
 
-pub use episode::{ingest_episode, Episode};
+pub use episode::{episode_provenance, ingest_batch, ingest_episode, Episode};
 pub use error::{Error, Result};
 pub use mcp::{tool_cord, tool_definitions, tool_episode, tool_knot, tool_query, tool_retract, tool_search, tool_shapes, tool_unravel, tool_validate};
 pub use rdf::{export_rdf, ingest_rdf};

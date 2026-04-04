@@ -14,6 +14,12 @@ pub enum Error {
 
     #[error("{0}")]
     InvalidValue(String),
+
+    #[error("SHACL validation failed: {violations} violation(s)")]
+    ValidationFailed {
+        violations: usize,
+        messages: Vec<String>,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
