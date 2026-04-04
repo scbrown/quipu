@@ -2321,6 +2321,8 @@ dependencies = [
  "oxttl",
  "rudof_lib",
  "rusqlite",
+ "serde",
+ "serde_json",
  "spargebra",
  "tempfile",
  "thiserror 2.0.18",
