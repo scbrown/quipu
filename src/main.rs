@@ -40,6 +40,7 @@ fn main() {
         "cord" => cmd_cord(&args, db_path),
         "unravel" => cmd_unravel(&args, db_path),
         "episode" => cmd_episode(&args, db_path),
+        "retract" => cmd_retract(&args, db_path),
         "validate" => cmd_validate(&args),
         "repl" => cmd_repl(db_path),
         "export" => cmd_export(&args, db_path),
@@ -72,6 +73,9 @@ COMMANDS:
 
     quipu episode <file.json> [--db <path>]
         Ingest a structured episode (nodes + edges) from JSON (use - for stdin)
+
+    quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
+        Retract all facts for an entity (or just those with a given predicate)
 
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
         Validate data against SHACL shapes (dry run, no write)
@@ -393,6 +397,55 @@ fn cmd_episode(args: &[String], db_path: &str) {
         }
         Err(e) => {
             eprintln!("error ingesting episode: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_retract(args: &[String], db_path: &str) {
+    let entity_iri = match args.get(2) {
+        Some(iri) if !iri.starts_with("--") => iri.as_str(),
+        _ => {
+            eprintln!("usage: quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]");
+            std::process::exit(1);
+        }
+    };
+
+    let predicate_iri = args
+        .windows(2)
+        .find(|w| w[0] == "--predicate")
+        .map(|w| w[1].as_str());
+
+    let mut store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let mut input = serde_json::json!({
+        "entity": entity_iri,
+        "timestamp": chrono_now(),
+    });
+    if let Some(pred) = predicate_iri {
+        input["predicate"] = serde_json::json!(pred);
+    }
+
+    match quipu::tool_retract(&mut store, &input) {
+        Ok(result) => {
+            let count = result["retracted"].as_u64().unwrap_or(0);
+            if count == 0 {
+                println!("no facts found for {entity_iri}");
+            } else {
+                println!(
+                    "retracted {count} fact(s) from {entity_iri} (tx {})",
+                    result["tx_id"]
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
             std::process::exit(1);
         }
     }

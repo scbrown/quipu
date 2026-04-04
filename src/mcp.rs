@@ -289,6 +289,46 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
+/// MCP tool: `quipu_retract` — Retract facts for an entity.
+///
+/// Input: `{ "entity": "<IRI>", "predicate": "<optional IRI>", "timestamp": "..." }`
+/// Output: `{ "tx_id": N, "retracted": N }`
+pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    let entity_iri = input
+        .get("entity")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::InvalidValue("missing 'entity' IRI parameter".into()))?;
+
+    let entity_id = store
+        .lookup(entity_iri)?
+        .ok_or_else(|| Error::InvalidValue(format!("entity not found: {entity_iri}")))?;
+
+    let predicate_id = if let Some(pred_iri) = input.get("predicate").and_then(|v| v.as_str()) {
+        Some(
+            store
+                .lookup(pred_iri)?
+                .ok_or_else(|| Error::InvalidValue(format!("predicate not found: {pred_iri}")))?,
+        )
+    } else {
+        None
+    };
+
+    let timestamp = input
+        .get("timestamp")
+        .and_then(|v| v.as_str())
+        .unwrap_or("1970-01-01T00:00:00Z");
+
+    let actor = input.get("actor").and_then(|v| v.as_str());
+
+    let (tx_id, count) = store.retract_entity(entity_id, predicate_id, timestamp, actor)?;
+
+    Ok(serde_json::json!({
+        "tx_id": tx_id,
+        "retracted": count,
+        "entity": entity_iri
+    }))
+}
+
 /// MCP tool: `quipu_episode` — Ingest structured knowledge from an agent episode.
 ///
 /// Input: `{ "name": "...", "episode_body": "...", "source": "...",
@@ -415,6 +455,32 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     }
                 },
                 "required": ["shapes", "data"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_retract",
+            "description": "Retract facts for an entity (all facts, or filtered by predicate)",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "entity": {
+                        "type": "string",
+                        "description": "IRI of the entity to retract"
+                    },
+                    "predicate": {
+                        "type": "string",
+                        "description": "Optional: only retract facts with this predicate IRI"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "description": "ISO-8601 timestamp for the retraction"
+                    },
+                    "actor": {
+                        "type": "string",
+                        "description": "Who is performing the retraction"
+                    }
+                },
+                "required": ["entity"]
             }
         }),
         serde_json::json!({
@@ -674,9 +740,67 @@ ex:PersonShape a sh:NodeShape ;
     }
 
     #[test]
+    fn test_tool_retract_entity() {
+        let mut store = Store::open_in_memory().unwrap();
+        let turtle = "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .";
+        ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01",
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(store.current_facts().unwrap().len(), 2);
+
+        let input = serde_json::json!({
+            "entity": "http://example.org/alice",
+            "timestamp": "2026-02-01"
+        });
+        let result = tool_retract(&mut store, &input).unwrap();
+        assert_eq!(result["retracted"], 2);
+        assert!(result["tx_id"].as_i64().unwrap() > 0);
+
+        assert_eq!(store.current_facts().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_tool_retract_predicate() {
+        let mut store = Store::open_in_memory().unwrap();
+        let turtle = "@prefix ex: <http://example.org/> .\nex:bob a ex:Person ; ex:name \"Bob\" ; ex:age \"30\"^^<http://www.w3.org/2001/XMLSchema#integer> .";
+        ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01",
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(store.current_facts().unwrap().len(), 3);
+
+        // Retract only the name predicate.
+        let input = serde_json::json!({
+            "entity": "http://example.org/bob",
+            "predicate": "http://example.org/name",
+            "timestamp": "2026-02-01"
+        });
+        let result = tool_retract(&mut store, &input).unwrap();
+        assert_eq!(result["retracted"], 1);
+
+        // 2 facts remain (type + age).
+        assert_eq!(store.current_facts().unwrap().len(), 2);
+    }
+
+    #[test]
     fn test_tool_definitions() {
         let defs = tool_definitions();
-        assert_eq!(defs.len(), 7);
+        assert_eq!(defs.len(), 8);
         let names: Vec<&str> = defs
             .iter()
             .map(|d| d["name"].as_str().unwrap())
@@ -688,5 +812,6 @@ ex:PersonShape a sh:NodeShape ;
         assert!(names.contains(&"quipu_validate"));
         assert!(names.contains(&"quipu_search"));
         assert!(names.contains(&"quipu_episode"));
+        assert!(names.contains(&"quipu_retract"));
     }
 }

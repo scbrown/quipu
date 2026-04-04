@@ -160,6 +160,45 @@ impl Store {
         Ok(tx_id)
     }
 
+    /// Retract all current facts for an entity (or just those matching a predicate).
+    ///
+    /// Returns `(tx_id, count)` of retracted facts.
+    pub fn retract_entity(
+        &mut self,
+        entity: i64,
+        predicate: Option<i64>,
+        timestamp: &str,
+        actor: Option<&str>,
+    ) -> Result<(i64, usize)> {
+        let facts = if let Some(pred) = predicate {
+            // Only retract facts for this predicate.
+            let all = self.entity_facts(entity)?;
+            all.into_iter().filter(|f| f.attribute == pred).collect::<Vec<_>>()
+        } else {
+            self.entity_facts(entity)?
+        };
+
+        if facts.is_empty() {
+            return Ok((0, 0));
+        }
+
+        let datums: Vec<Datum> = facts
+            .iter()
+            .map(|f| Datum {
+                entity: f.entity,
+                attribute: f.attribute,
+                value: f.value.clone(),
+                valid_from: f.valid_from.clone(),
+                valid_to: None,
+                op: Op::Retract,
+            })
+            .collect();
+
+        let count = datums.len();
+        let tx_id = self.transact(&datums, timestamp, actor, Some("retract"))?;
+        Ok((tx_id, count))
+    }
+
     // ── Read path ────────────────────────────────────────────────
 
     /// Return the current state: all asserted facts that have not been retracted
