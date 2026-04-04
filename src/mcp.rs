@@ -9,6 +9,7 @@ use serde_json::Value as JsonValue;
 use crate::episode::{self, Episode};
 use crate::error::{Error, Result};
 use crate::rdf::ingest_rdf;
+#[cfg(feature = "shacl")]
 use crate::shacl;
 use crate::sparql::{self, TemporalContext};
 use crate::store::{AsOf, Store};
@@ -76,6 +77,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let request_shapes = input.get("shapes").and_then(|v| v.as_str());
     let stored_shapes = store.get_combined_shapes()?;
 
+    #[allow(unused_variables)]
     let combined_shapes = match (request_shapes, &stored_shapes) {
         (Some(req), Some(stored)) => Some(format!("{stored}\n\n{req}")),
         (Some(req), None) => Some(req.to_string()),
@@ -83,6 +85,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         (None, None) => None,
     };
 
+    #[cfg(feature = "shacl")]
     if let Some(shapes) = &combined_shapes {
         let feedback = shacl::validate_shapes(shapes, turtle)?;
         if !feedback.conforms {
@@ -225,6 +228,7 @@ pub fn tool_unravel(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 ///
 /// Input: `{ "shapes": "<shapes turtle>", "data": "<data turtle>" }`
 /// Output: validation feedback JSON
+#[cfg(feature = "shacl")]
 pub fn tool_validate(input: &JsonValue) -> Result<JsonValue> {
     let shapes = input
         .get("shapes")
@@ -259,6 +263,11 @@ pub fn tool_validate(input: &JsonValue) -> Result<JsonValue> {
         "warnings": feedback.warnings,
         "issues": issues
     }))
+}
+
+#[cfg(not(feature = "shacl"))]
+pub fn tool_validate(_input: &JsonValue) -> Result<JsonValue> {
+    Err(Error::InvalidValue("SHACL validation requires the 'shacl' feature".into()))
 }
 
 /// MCP tool: `quipu_search` — Semantic vector search over entity embeddings.
@@ -332,7 +341,8 @@ pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("1970-01-01T00:00:00Z");
 
-            // Validate the shapes parse correctly.
+            // Validate the shapes parse correctly (requires shacl feature).
+            #[cfg(feature = "shacl")]
             shacl::validate_shapes(turtle, "@prefix ex: <http://example.org/> .\n")?;
 
             store.load_shapes(name, turtle, timestamp)?;

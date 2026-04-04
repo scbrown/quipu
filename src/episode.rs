@@ -11,6 +11,7 @@ use serde::Deserialize;
 
 use crate::error::{Error, Result};
 use crate::rdf::ingest_rdf;
+#[cfg(feature = "shacl")]
 use crate::shacl;
 use crate::store::Store;
 
@@ -67,6 +68,7 @@ pub fn ingest_episode(
     let turtle = episode_to_turtle(episode);
 
     // SHACL validation gate: if shapes provided, validate before writing.
+    #[cfg(feature = "shacl")]
     if let Some(shapes) = &episode.shapes {
         let feedback = shacl::validate_shapes(shapes, &turtle)?;
         if !feedback.conforms {

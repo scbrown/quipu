@@ -12,6 +12,7 @@ pub mod mcp;
 pub mod provider;
 pub mod rdf;
 pub mod schema;
+#[cfg(feature = "shacl")]
 pub mod shacl;
 pub mod sparql;
 pub mod store;
@@ -26,6 +27,7 @@ pub use graph::{tool_project, ProjectedGraph};
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use mcp::{tool_cord, tool_definitions, tool_episode, tool_knot, tool_query, tool_retract, tool_search, tool_shapes, tool_unravel, tool_validate};
 pub use rdf::{export_rdf, ingest_rdf};
+#[cfg(feature = "shacl")]
 pub use shacl::{validate_shapes, ValidationFeedback, Validator};
 pub use sparql::{query as sparql_query, query_temporal as sparql_query_temporal, QueryResult, TemporalContext};
 pub use store::Store;
