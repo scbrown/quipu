@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use spargebra::algebra::GraphPattern;
 use spargebra::algebra::OrderExpression;
+use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use crate::error::{Error, Result};
@@ -235,10 +236,36 @@ pub fn eval_pattern(
             Ok((extended, vars))
         }
 
+        GraphPattern::Path {
+            subject,
+            path,
+            object,
+        } => eval_path(store, subject, path, object, ctx),
+
         _ => Err(Error::InvalidValue(format!(
             "unsupported graph pattern: {pattern}"
         ))),
     }
+}
+
+/// Evaluate a property path pattern (SPARQL 1.1 property paths).
+fn eval_path(
+    store: &Store,
+    subject: &TermPattern,
+    path: &PropertyPathExpression,
+    object: &TermPattern,
+    ctx: &TemporalContext,
+) -> Result<(Vec<Bindings>, Vec<String>)> {
+    use super::property_path::{eval_path_pattern, path_pattern_vars};
+
+    let seed = vec![HashMap::new()];
+    let mut all_rows = Vec::new();
+    for existing in &seed {
+        let rows = eval_path_pattern(store, subject, path, object, existing, ctx)?;
+        all_rows.extend(rows);
+    }
+    let vars = path_pattern_vars(subject, object);
+    Ok((all_rows, vars))
 }
 
 /// Evaluate a basic graph pattern -- a set of triple patterns.
@@ -361,19 +388,33 @@ pub fn eval_triple_pattern(
         let mut new_bindings = bindings.clone();
         let mut compatible = true;
 
-        // Bind subject variable.
-        if let TermPattern::Variable(var) = &tp.subject {
-            let e_iri = store.resolve(e_id)?;
-            let e_val = if e_iri.starts_with("_:") {
-                Value::Str(e_iri)
-            } else if let Some(term_id) = store.lookup(&e_iri)? {
-                Value::Ref(term_id)
-            } else {
-                Value::Str(e_iri)
-            };
-            if !bind_var(&mut new_bindings, var.as_str(), e_val, &mut compatible) {
-                continue;
+        // Bind subject variable (or blank node used as join variable).
+        match &tp.subject {
+            TermPattern::Variable(var) => {
+                let e_iri = store.resolve(e_id)?;
+                let e_val = if e_iri.starts_with("_:") {
+                    Value::Str(e_iri)
+                } else if let Some(term_id) = store.lookup(&e_iri)? {
+                    Value::Ref(term_id)
+                } else {
+                    Value::Str(e_iri)
+                };
+                if !bind_var(&mut new_bindings, var.as_str(), e_val, &mut compatible) {
+                    continue;
+                }
             }
+            TermPattern::BlankNode(b) => {
+                let e_iri = store.resolve(e_id)?;
+                let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
+                    Value::Ref(term_id)
+                } else {
+                    Value::Str(e_iri)
+                };
+                if !bind_var(&mut new_bindings, b.as_str(), e_val, &mut compatible) {
+                    continue;
+                }
+            }
+            _ => {}
         }
 
         // Bind predicate variable.
@@ -389,11 +430,19 @@ pub fn eval_triple_pattern(
             }
         }
 
-        // Bind object variable.
-        if let TermPattern::Variable(var) = &tp.object
-            && !bind_var(&mut new_bindings, var.as_str(), v, &mut compatible)
-        {
-            continue;
+        // Bind object variable (or blank node used as join variable).
+        match &tp.object {
+            TermPattern::Variable(var) => {
+                if !bind_var(&mut new_bindings, var.as_str(), v, &mut compatible) {
+                    continue;
+                }
+            }
+            TermPattern::BlankNode(b) => {
+                if !bind_var(&mut new_bindings, b.as_str(), v, &mut compatible) {
+                    continue;
+                }
+            }
+            _ => {}
         }
 
         if compatible {

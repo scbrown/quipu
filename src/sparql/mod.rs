@@ -9,6 +9,7 @@ pub mod aggregate;
 pub mod filter;
 pub mod pattern;
 pub mod pattern_util;
+pub mod property_path;
 pub mod rdfs;
 #[cfg(test)]
 mod tests;

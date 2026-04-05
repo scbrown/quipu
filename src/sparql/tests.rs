@@ -707,3 +707,181 @@ fn describe_returns_entity_facts() {
         other => panic!("expected Graph result, got {other:?}"),
     }
 }
+
+// ── Property path tests ─────────────────────────────────────────
+
+fn test_store_with_graph() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = r#"
+@prefix ex: <http://example.org/> .
+
+ex:a ex:edge ex:b .
+ex:b ex:edge ex:c .
+ex:c ex:edge ex:d .
+ex:a ex:alt  ex:d .
+ex:b ex:link ex:d .
+"#;
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-04-04T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store
+}
+
+#[test]
+fn path_sequence() {
+    let store = test_store_with_graph();
+    let result = query(
+        &store,
+        "SELECT ?x ?z WHERE { ?x <http://example.org/edge>/<http://example.org/edge> ?z }",
+    )
+    .unwrap();
+
+    let pairs: Vec<(String, String)> = result
+        .rows()
+        .iter()
+        .map(|r| {
+            let x = value_to_iri(&store, r.get("x").unwrap());
+            let z = value_to_iri(&store, r.get("z").unwrap());
+            (x, z)
+        })
+        .collect();
+
+    assert!(pairs.contains(&("http://example.org/a".into(), "http://example.org/c".into())));
+    assert!(pairs.contains(&("http://example.org/b".into(), "http://example.org/d".into())));
+    assert_eq!(pairs.len(), 2);
+}
+
+#[test]
+fn path_alternative() {
+    let store = test_store_with_graph();
+    let result = query(
+        &store,
+        "SELECT ?x ?y WHERE { ?x (<http://example.org/edge>|<http://example.org/alt>) ?y }",
+    )
+    .unwrap();
+
+    // edge: a->b, b->c, c->d; alt: a->d = 4 pairs
+    assert_eq!(result.rows().len(), 4);
+}
+
+#[test]
+fn path_inverse() {
+    let store = test_store_with_graph();
+    let result = query(
+        &store,
+        "SELECT ?x WHERE { <http://example.org/c> ^<http://example.org/edge> ?x }",
+    )
+    .unwrap();
+
+    let iris: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|r| value_to_iri(&store, r.get("x").unwrap()))
+        .collect();
+
+    assert_eq!(iris.len(), 1);
+    assert!(iris.contains(&"http://example.org/b".into()));
+}
+
+#[test]
+fn path_zero_or_more() {
+    let store = test_store_with_graph();
+    let result = query(
+        &store,
+        "SELECT ?y WHERE { <http://example.org/a> <http://example.org/edge>* ?y }",
+    )
+    .unwrap();
+
+    let iris: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|r| value_to_iri(&store, r.get("y").unwrap()))
+        .collect();
+
+    assert!(iris.contains(&"http://example.org/a".into()), "zero steps");
+    assert!(iris.contains(&"http://example.org/b".into()), "one step");
+    assert!(iris.contains(&"http://example.org/c".into()), "two steps");
+    assert!(iris.contains(&"http://example.org/d".into()), "three steps");
+    assert_eq!(iris.len(), 4);
+}
+
+#[test]
+fn path_one_or_more() {
+    let store = test_store_with_graph();
+    let result = query(
+        &store,
+        "SELECT ?y WHERE { <http://example.org/a> <http://example.org/edge>+ ?y }",
+    )
+    .unwrap();
+
+    let iris: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|r| value_to_iri(&store, r.get("y").unwrap()))
+        .collect();
+
+    assert!(
+        !iris.contains(&"http://example.org/a".into()),
+        "no zero steps"
+    );
+    assert!(iris.contains(&"http://example.org/b".into()));
+    assert!(iris.contains(&"http://example.org/c".into()));
+    assert!(iris.contains(&"http://example.org/d".into()));
+    assert_eq!(iris.len(), 3);
+}
+
+#[test]
+fn path_zero_or_one() {
+    let store = test_store_with_graph();
+    let result = query(
+        &store,
+        "SELECT ?y WHERE { <http://example.org/a> <http://example.org/edge>? ?y }",
+    )
+    .unwrap();
+
+    let iris: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|r| value_to_iri(&store, r.get("y").unwrap()))
+        .collect();
+
+    assert!(iris.contains(&"http://example.org/a".into()), "zero steps");
+    assert!(iris.contains(&"http://example.org/b".into()), "one step");
+}
+
+#[test]
+fn path_transitive_with_fixed_object() {
+    let store = test_store_with_graph();
+    let result = query(
+        &store,
+        "SELECT ?x WHERE { ?x <http://example.org/edge>+ <http://example.org/d> }",
+    )
+    .unwrap();
+
+    let iris: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|r| value_to_iri(&store, r.get("x").unwrap()))
+        .collect();
+
+    assert!(iris.contains(&"http://example.org/a".into()));
+    assert!(iris.contains(&"http://example.org/b".into()));
+    assert!(iris.contains(&"http://example.org/c".into()));
+    assert_eq!(iris.len(), 3);
+}
+
+/// Helper: resolve a `Value::Ref` to its IRI string.
+fn value_to_iri(store: &Store, val: &Value) -> String {
+    match val {
+        Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("?{id}")),
+        Value::Str(s) => s.clone(),
+        other => format!("{other:?}"),
+    }
+}
