@@ -12,6 +12,38 @@ use serde::Deserialize;
 
 use crate::namespace;
 
+/// Vector storage backend selection.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VectorBackend {
+    /// `SQLite`-backed vectors (default, brute-force cosine similarity).
+    #[default]
+    Sqlite,
+    /// `LanceDB`-backed vectors (ANN search, FTS, predicate pushdown).
+    #[serde(alias = "lance")]
+    Lancedb,
+}
+
+/// Vector storage backend configuration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct VectorConfig {
+    /// Which backend to use for vector storage (default: sqlite).
+    pub backend: VectorBackend,
+
+    /// Path to the `LanceDB` database directory (default: `.bobbin/quipu/quipu-vectors`).
+    pub lancedb_path: PathBuf,
+}
+
+impl Default for VectorConfig {
+    fn default() -> Self {
+        Self {
+            backend: VectorBackend::Sqlite,
+            lancedb_path: PathBuf::from(".bobbin/quipu/quipu-vectors"),
+        }
+    }
+}
+
 /// Top-level config file structure — we only care about the `[quipu]` section.
 #[derive(Debug, Default, Deserialize)]
 struct ConfigFile {
@@ -40,6 +72,9 @@ pub struct QuipuConfig {
 
     /// Embedding configuration for auto-embedding on write.
     pub embedding: EmbeddingConfig,
+
+    /// Vector storage backend configuration.
+    pub vector: VectorConfig,
 }
 
 impl Default for QuipuConfig {
@@ -51,6 +86,7 @@ impl Default for QuipuConfig {
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
             embedding: EmbeddingConfig::default(),
+            vector: VectorConfig::default(),
         }
     }
 }
@@ -173,6 +209,11 @@ mod tests {
         assert!(cfg.federation.remotes.is_empty());
         assert!(!cfg.embedding.auto_embed);
         assert_eq!(cfg.embedding.embed_batch_size, 32);
+        assert_eq!(cfg.vector.backend, VectorBackend::Sqlite);
+        assert_eq!(
+            cfg.vector.lancedb_path,
+            PathBuf::from(".bobbin/quipu/quipu-vectors")
+        );
     }
 
     #[test]
@@ -205,6 +246,32 @@ embed_batch_size = 64
         assert_eq!(cfg.federation.remotes[0].url, "http://quipu.svc:3030");
         assert!(cfg.embedding.auto_embed);
         assert_eq!(cfg.embedding.embed_batch_size, 64);
+    }
+
+    #[test]
+    fn parse_vector_config() {
+        let toml_str = r#"
+[quipu]
+store_path = "/data/quipu.db"
+
+[quipu.vector]
+backend = "lancedb"
+lancedb_path = "/data/vectors"
+"#;
+        let file: ConfigFile = toml::from_str(toml_str).unwrap();
+        let cfg = file.quipu;
+        assert_eq!(cfg.vector.backend, VectorBackend::Lancedb);
+        assert_eq!(cfg.vector.lancedb_path, PathBuf::from("/data/vectors"));
+    }
+
+    #[test]
+    fn parse_vector_config_lance_alias() {
+        let toml_str = r#"
+[quipu.vector]
+backend = "lance"
+"#;
+        let file: ConfigFile = toml::from_str(toml_str).unwrap();
+        assert_eq!(file.quipu.vector.backend, VectorBackend::Lancedb);
     }
 
     #[test]

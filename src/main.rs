@@ -48,12 +48,33 @@ fn main() {
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_commands::cmd_export(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
+        "migrate-vectors" => cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
         _ => {
             eprintln!("unknown command: {cmd}");
             print_usage();
             std::process::exit(1);
         }
+    }
+}
+
+fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
+    #[cfg(feature = "lancedb")]
+    {
+        // LanceDB requires a Tokio runtime for async operations.
+        let rt = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
+            eprintln!("error creating Tokio runtime: {e}");
+            std::process::exit(1);
+        });
+        let _guard = rt.enter();
+        cli_commands::cmd_migrate_vectors(args, config);
+    }
+    #[cfg(not(feature = "lancedb"))]
+    {
+        let _ = (args, config);
+        eprintln!("error: migrate-vectors requires the 'lancedb' feature");
+        eprintln!("  rebuild with: cargo build --features lancedb");
+        std::process::exit(1);
     }
 }
 
@@ -73,6 +94,7 @@ COMMANDS:
     quipu repl [--db <path>]
     quipu export [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
+    quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
 OPTIONS:
     --db <path>    Store file (default: quipu.db)

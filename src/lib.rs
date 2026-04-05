@@ -10,6 +10,8 @@ pub mod episode;
 pub mod error;
 pub mod graph;
 pub mod mcp;
+#[cfg(feature = "lancedb")]
+pub mod migration;
 pub mod namespace;
 pub mod provider;
 pub mod rdf;
@@ -25,7 +27,10 @@ pub mod vector_delegate;
 #[cfg(feature = "lancedb")]
 pub mod vector_lance;
 
-pub use config::{EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ServerConfig};
+pub use config::{
+    EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ServerConfig, VectorBackend,
+    VectorConfig,
+};
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
     KnowledgeRelevance, tool_context, tool_unified_search,
@@ -41,6 +46,8 @@ pub use mcp::tools::{
     tool_unravel, tool_validate,
 };
 pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
+#[cfg(feature = "lancedb")]
+pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use rdf::{export_rdf, ingest_rdf};
 pub use reconcile::{

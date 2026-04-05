@@ -15,7 +15,6 @@ use crate::error::Result;
 use crate::namespace;
 use crate::store::Store;
 use crate::types::{Op, Value};
-use crate::vector::KnowledgeVectorStore;
 
 use super::store::Datum;
 
@@ -135,6 +134,10 @@ pub(crate) fn auto_embed_entities(
     batch_size: usize,
     datums: &[Datum],
 ) -> Result<usize> {
+    // Route vector writes through the configured backend (LanceDB, delegate,
+    // or built-in SQLite) so auto-embed works with any vector backend.
+    let vs = store.vector_store();
+
     // Determine which entities had retractions (need close_embedding).
     let retracted: BTreeSet<i64> = datums
         .iter()
@@ -144,7 +147,7 @@ pub(crate) fn auto_embed_entities(
 
     // Close embeddings for entities that had retractions.
     for &eid in &retracted {
-        store.close_embedding(eid, timestamp)?;
+        vs.close_embedding(eid, timestamp)?;
     }
 
     // Build texts for all touched entities.
@@ -155,7 +158,7 @@ pub(crate) fn auto_embed_entities(
             // For assertions on entities without prior retractions,
             // close the old embedding before creating a new one.
             if !retracted.contains(&eid) {
-                store.close_embedding(eid, timestamp)?;
+                vs.close_embedding(eid, timestamp)?;
             }
             to_embed.push((eid, text));
         }
@@ -169,7 +172,7 @@ pub(crate) fn auto_embed_entities(
         let embeddings = provider.embed_batch(&texts)?;
 
         for ((eid, text), emb) in chunk.iter().zip(embeddings.iter()) {
-            store.embed_entity(*eid, text, emb, timestamp)?;
+            vs.embed_entity(*eid, text, emb, timestamp)?;
             embedded += 1;
         }
     }
@@ -181,6 +184,7 @@ pub(crate) fn auto_embed_entities(
 mod tests {
     use super::*;
     use crate::rdf::ingest_rdf;
+    use crate::vector::KnowledgeVectorStore;
 
     /// Dummy embedding provider for tests — returns a deterministic
     /// embedding based on text length.

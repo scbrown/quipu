@@ -13,7 +13,7 @@ use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
 use crate::schema::INIT_SQL;
 use crate::types::Value;
-use crate::vector::VECTORS_SQL;
+use crate::vector::{KnowledgeVectorStore, VECTORS_SQL};
 use crate::vector_delegate::{DelegatingVectorStore, VectorSearchDelegate};
 
 /// The core fact log store backed by `SQLite`.
@@ -24,6 +24,10 @@ pub struct Store {
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
     pub(crate) vector_delegate: Option<DelegatingVectorStore>,
+    /// When set, vector operations use this local backend instead of the
+    /// built-in `SQLite` vectors table. Unlike `vector_delegate`, this is a
+    /// full read+write backend and auto-embedding still works.
+    pub(crate) local_vector_backend: Option<Box<dyn KnowledgeVectorStore + Send + Sync>>,
 }
 
 /// A write-side assertion or retraction within a transaction.
@@ -66,6 +70,7 @@ impl Store {
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
             vector_delegate: None,
+            local_vector_backend: None,
         })
     }
 
@@ -95,6 +100,23 @@ impl Store {
     /// Returns `true` if vector search is delegated to an external provider.
     pub fn has_vector_delegate(&self) -> bool {
         self.vector_delegate.is_some()
+    }
+
+    /// Set a local vector backend (e.g. `LanceDB`) that replaces the built-in
+    /// `SQLite` vectors table for all vector operations.
+    ///
+    /// Unlike [`set_vector_search_delegate`], this is a full read+write backend
+    /// and auto-embedding on write still works.
+    pub fn set_local_vector_backend(
+        &mut self,
+        backend: Box<dyn KnowledgeVectorStore + Send + Sync>,
+    ) {
+        self.local_vector_backend = Some(backend);
+    }
+
+    /// Returns `true` if a local vector backend is configured.
+    pub fn has_local_vector_backend(&self) -> bool {
+        self.local_vector_backend.is_some()
     }
 
     /// Returns `true` if an embedding provider is attached.

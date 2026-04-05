@@ -196,11 +196,12 @@ impl KnowledgeVectorStore for Store {
 impl Store {
     /// Return a reference to this store's vector backend.
     ///
-    /// When a [`VectorSearchDelegate`] is set, returns a wrapper that forwards
-    /// search to the delegate. Otherwise returns the local `SQLite` implementation.
+    /// Priority: external delegate > local backend (`LanceDB`) > built-in `SQLite`.
     pub fn vector_store(&self) -> &dyn KnowledgeVectorStore {
         if let Some(ref delegate) = self.vector_delegate {
             delegate
+        } else if let Some(ref backend) = self.local_vector_backend {
+            backend.as_ref()
         } else {
             self
         }

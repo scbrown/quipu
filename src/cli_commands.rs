@@ -388,6 +388,60 @@ pub fn cmd_stats(db_path: &str) {
     }
 }
 
+#[cfg(feature = "lancedb")]
+pub fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
+    let from = args
+        .windows(2)
+        .find(|w| w[0] == "--from")
+        .map_or("sqlite", |w| w[1].as_str());
+    let to = args
+        .windows(2)
+        .find(|w| w[0] == "--to")
+        .map_or("lancedb", |w| w[1].as_str());
+    let dry_run = args.iter().any(|a| a == "--dry-run");
+
+    if from != "sqlite" || to != "lancedb" {
+        eprintln!(
+            "usage: quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]"
+        );
+        std::process::exit(1);
+    }
+
+    let db_path = config.store_path.to_string_lossy();
+    let store = match quipu::Store::open(&db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let lance_path = config.vector.lancedb_path.to_string_lossy().to_string();
+    match quipu::migrate_sqlite_to_lancedb(&store, &lance_path, dry_run, 1000) {
+        Ok(result) => {
+            if dry_run {
+                println!(
+                    "dry run: {} vector(s) would be migrated, {} skipped",
+                    result.migrated, result.skipped
+                );
+            } else {
+                println!(
+                    "migrated {} vector(s) to LanceDB ({} skipped)",
+                    result.migrated, result.skipped
+                );
+                if result.migrated > 0 || result.skipped == 0 {
+                    println!("  LanceDB path: {lance_path}");
+                    println!("  Set vector.backend = \"lancedb\" in .bobbin/config.toml to use it");
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("migration error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn run_query(store: &quipu::Store, sparql: &str) {
     run_query_temporal(store, sparql, &quipu::TemporalContext::default());
 }
