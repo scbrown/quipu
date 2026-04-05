@@ -12,6 +12,8 @@
 //!   POST /`unified_search` — Unified search for Bobbin integration (code + knowledge)
 //!   POST /`search_nodes` — Search entities by natural language query
 //!   POST /`search_facts` — Search relationships/edges by natural language
+//!   POST /search/nodes — Graphiti-compatible semantic entity search
+//!   POST /episodes/complete — Graphiti-compatible flat episode ingestion
 //!   POST /retract    — Retract entity facts
 //!   POST /shapes     — Manage persistent SHACL shapes
 //!   GET  /health     — Health check
@@ -77,6 +79,8 @@ async fn main() {
         .route("/unified_search", post(unified_search))
         .route("/search_nodes", post(search_nodes))
         .route("/search_facts", post(search_facts))
+        .route("/search/nodes", post(graphiti_search_nodes))
+        .route("/episodes/complete", post(episodes_complete))
         .route("/retract", post(retract))
         .route("/shapes", post(shapes))
         .route("/project", post(project_graph))
@@ -218,6 +222,24 @@ async fn search_facts(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let store = store.lock().unwrap();
     let result = quipu::tool_search_facts(&store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn graphiti_search_nodes(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let store = store.lock().unwrap();
+    let result = quipu::mcp::graphiti::tool_search_nodes(&store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn episodes_complete(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let mut store = store.lock().unwrap();
+    let result = quipu::tool_episodes_complete(&mut store, &input)?;
     Ok(axum::Json(result))
 }
 

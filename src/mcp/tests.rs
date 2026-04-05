@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use super::graphiti::*;
 use super::tools::*;
 use super::*;
 use crate::embedding::EmbeddingProvider;
@@ -255,7 +256,7 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 fn test_tool_definitions() {
     let defs = tool_definitions();
-    assert_eq!(defs.len(), 13);
+    assert_eq!(defs.len(), 14);
     let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"quipu_query"));
     assert!(names.contains(&"quipu_knot"));
@@ -270,6 +271,7 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_shapes"));
     assert!(names.contains(&"quipu_search_nodes"));
     assert!(names.contains(&"quipu_search_facts"));
+    assert!(names.contains(&"quipu_episodes_complete"));
 }
 
 #[test]
@@ -566,6 +568,8 @@ fn test_hybrid_search_query_text_without_provider_errors() {
     assert!(err.to_string().contains("no embedding provider"));
 }
 
+// ── search module tests (text-matching search_nodes / search_facts) ──
+
 #[test]
 fn test_tool_search_nodes_basic() {
     let store = test_store_with_data();
@@ -735,4 +739,174 @@ fn test_tool_search_facts_with_provenance() {
         .unwrap();
     // Should have provenance from the episode.
     assert!(!deploy_fact["provenance"].is_null());
+}
+
+// ── Graphiti-compatible endpoint tests ────────────────────────────
+
+#[test]
+fn test_search_nodes_sparql_fallback() {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+@prefix aegis: <https://aegis.dev/ns/> .
+
+ex:tapestry a aegis:WebApplication ;
+    rdfs:label "tapestry" ;
+    rdfs:comment "Web UI for Gas Town" .
+ex:quipu a aegis:KnowledgeGraph ;
+    rdfs:label "quipu" ;
+    rdfs:comment "AI-native knowledge graph" .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // Search by label text — no embedding provider, uses SPARQL fallback.
+    let input = serde_json::json!({ "query": "tapestry", "max_results": 5 });
+    let result = tool_search_nodes(&store, &input).unwrap();
+    assert_eq!(result["count"], 1);
+    assert_eq!(result["nodes"][0]["name"], "tapestry");
+}
+
+#[test]
+fn test_search_nodes_with_type_filter() {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <https://aegis.dev/ns/> .
+
+aegis:tapestry a aegis:WebApplication ;
+    rdfs:label "tapestry" ;
+    rdfs:comment "Web UI" .
+aegis:quipu a aegis:KnowledgeGraph ;
+    rdfs:label "quipu" ;
+    rdfs:comment "Knowledge graph" .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // Filter to only WebApplication entities.
+    let input = serde_json::json!({
+        "query": "tapestry",
+        "entity_type_filter": "WebApplication",
+        "max_results": 5
+    });
+    let result = tool_search_nodes(&store, &input).unwrap();
+    assert_eq!(result["count"], 1);
+    assert!(
+        result["nodes"][0]["type"]
+            .as_str()
+            .unwrap()
+            .contains("WebApplication")
+    );
+}
+
+#[test]
+fn test_search_nodes_missing_query_errors() {
+    let store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({ "max_results": 5 });
+    let err = tool_search_nodes(&store, &input).unwrap_err();
+    assert!(err.to_string().contains("missing 'query'"));
+}
+
+#[test]
+fn test_search_nodes_with_vector_search() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(TestProvider));
+    store.embedding_config_mut().auto_embed = true;
+
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:alice rdfs:label "Alice" ; rdfs:comment "A software engineer" .
+ex:bob rdfs:label "Bob" ; rdfs:comment "A data scientist" .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let input = serde_json::json!({ "query": "engineer", "max_results": 5 });
+    let result = tool_search_nodes(&store, &input).unwrap();
+    assert!(result["count"].as_u64().unwrap() >= 1);
+}
+
+#[test]
+fn test_episodes_complete_basic() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "meeting-notes-2026-04",
+        "episode_body": "Discussed the new auth middleware requirements",
+        "group_id": "aegis-ontology",
+        "source_description": "crew/ellie",
+        "timestamp": "2026-04-04T14:00:00Z"
+    });
+    let result = tool_episodes_complete(&mut store, &input).unwrap();
+    assert_eq!(result["episode"], "meeting-notes-2026-04");
+    assert!(result["tx_id"].as_i64().unwrap() > 0);
+    assert!(result["count"].as_i64().unwrap() >= 1);
+}
+
+#[test]
+fn test_episodes_complete_minimal() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "quick-note"
+    });
+    let result = tool_episodes_complete(&mut store, &input).unwrap();
+    assert_eq!(result["episode"], "quick-note");
+    assert!(result["tx_id"].as_i64().unwrap() > 0);
+}
+
+#[test]
+fn test_episodes_complete_missing_name_errors() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "episode_body": "some text"
+    });
+    let err = tool_episodes_complete(&mut store, &input).unwrap_err();
+    assert!(err.to_string().contains("missing 'name'"));
+}
+
+#[test]
+fn test_episodes_complete_provenance_queryable() {
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "deploy-v2",
+        "episode_body": "Deployed version 2 to production",
+        "source_description": "ci/pipeline",
+        "timestamp": "2026-04-04T15:00:00Z"
+    });
+    tool_episodes_complete(&mut store, &input).unwrap();
+
+    // The episode provenance entity should be queryable via SPARQL.
+    let q = serde_json::json!({
+        "query": "SELECT ?label WHERE { ?s a <http://www.w3.org/ns/prov#Activity> ; <http://www.w3.org/2000/01/rdf-schema#label> ?label }"
+    });
+    let result = tool_query(&store, &q).unwrap();
+    assert_eq!(result["count"], 1);
+    assert_eq!(result["rows"][0]["label"], "deploy-v2");
 }

@@ -4,6 +4,7 @@
 //! Model Context Protocol tool calling convention. Bobbin's MCP server
 //! delegates knowledge graph operations to these handlers.
 
+pub mod graphiti;
 pub mod search;
 #[cfg(test)]
 mod tests;
@@ -313,6 +314,21 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "max_results": { "type": "integer", "description": "Maximum results (default: 10)" }
                 },
                 "required": ["query"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_episodes_complete",
+            "description": "Graphiti-compatible flat episode ingestion. Accepts name, body text, group, and source — converts to Quipu episode and ingests.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Episode name/identifier" },
+                    "episode_body": { "type": "string", "description": "Natural language body of the episode" },
+                    "group_id": { "type": "string", "description": "Knowledge graph group (e.g. aegis-ontology)" },
+                    "source_description": { "type": "string", "description": "Who/what produced this episode" },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the assertion" }
+                },
+                "required": ["name"]
             }
         }),
         serde_json::json!({
