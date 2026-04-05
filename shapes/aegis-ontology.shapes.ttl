@@ -1,0 +1,678 @@
+# SHACL shapes for the aegis homelab ontology.
+#
+# Defines validation constraints for all entity labels and relationships
+# in the ontology extraction guide (docs/ontology-extraction-guide.md).
+#
+# Load via POST /shapes:
+#   curl -s localhost:3030/shapes -X POST \
+#     -H "Content-Type: application/json" \
+#     -d '{"action": "load", "name": "aegis-ontology", "turtle": "<contents>"}'
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis:  <http://aegis.gastown.local/ontology/> .
+
+# ════════��══════════════════════════════════════════════════════════
+# Infrastructure
+# ═════════════════════════════���═════════════════════════════════════
+
+# ── LXCContainer ──────────────────────────────────────────────────
+#
+# A Proxmox LXC container. Must have a container ID, IP address,
+# and hostname.
+
+aegis:LXCContainerShape a sh:NodeShape ;
+    sh:targetClass aegis:LXCContainer ;
+    sh:property [
+        sh:path aegis:ctId ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:ipAddress ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:hostname ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── ProxmoxNode ────────��────────────────────────────────────��────
+#
+# A physical Proxmox host (e.g., koror, kota).
+
+aegis:ProxmoxNodeShape a sh:NodeShape ;
+    sh:targetClass aegis:ProxmoxNode ;
+    sh:property [
+        sh:path aegis:nodeId ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:role ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── BareMetalHost ─────────────────────────────────────────��──────
+#
+# A non-Proxmox host (e.g., luvu, a Pi).
+
+aegis:BareMetalHostShape a sh:NodeShape ;
+    sh:targetClass aegis:BareMetalHost ;
+    sh:property [
+        sh:path aegis:ipAddress ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:hostname ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── SystemdService ───────���───────────────────────────────────���───
+#
+# A systemd unit running on a host or container.
+
+aegis:SystemdServiceShape a sh:NodeShape ;
+    sh:targetClass aegis:SystemdService ;
+    sh:property [
+        sh:path aegis:port ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:healthEndpoint ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── WebApplication ───────���───────────────────────────────────────
+#
+# An HTTP-serving service (Tapestry, Forgejo, Grafana, etc.).
+
+aegis:WebApplicationShape a sh:NodeShape ;
+    sh:targetClass aegis:WebApplication ;
+    sh:property [
+        sh:path aegis:externalUrl ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── DatabaseService ──��───────────────────────────────────────���───
+#
+# A data store (PostgreSQL, FalkorDB, Dolt, etc.).
+
+aegis:DatabaseServiceShape a sh:NodeShape ;
+    sh:targetClass aegis:DatabaseService ;
+    sh:property [
+        sh:path aegis:dataPath ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:storageBackend ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── ZFSDataset ─────────────────────────────────────���─────────────
+#
+# A ZFS dataset for storage.
+
+aegis:ZFSDatasetShape a sh:NodeShape ;
+    sh:targetClass aegis:ZFSDataset ;
+    sh:property [
+        sh:path aegis:pool ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:mountpoint ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── ReverseProxyRoute ─────��────────────────────────────────────��─
+#
+# A Traefik route mapping hostname to backend.
+
+aegis:ReverseProxyRouteShape a sh:NodeShape ;
+    sh:targetClass aegis:ReverseProxyRoute ;
+    sh:property [
+        sh:path aegis:hostname ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:backend ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ════════════════════════════════════════��══════════════════════════
+# Agent Platform
+# ═════════��═════════════════════════════════════════════════════════
+
+# ── Rig ─────────��──────────────────────────��─────────────────────
+#
+# A gastown rig (aegis, quipu, bobbin, etc.).
+
+aegis:RigShape a sh:NodeShape ;
+    sh:targetClass aegis:Rig ;
+    sh:property [
+        sh:path aegis:prefix ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:purpose ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── CrewMember ───────────────────────────────────────────────────
+#
+# A crew agent (malcolm, goldblum, ellie, etc.).
+
+aegis:CrewMemberShape a sh:NodeShape ;
+    sh:targetClass aegis:CrewMember ;
+    sh:property [
+        sh:path aegis:role ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:tier ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:domain ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Polecat ──────────────���───────────────────────────────────────
+#
+# A worker agent dispatched to execute a formula.
+
+aegis:PolecatShape a sh:NodeShape ;
+    sh:targetClass aegis:Polecat ;
+    sh:property [
+        sh:path aegis:rig ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:status ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── CLI ─────────��───────────────────────────���────────────────────
+#
+# A command-line tool (gt, bd, bobbin, etc.).
+
+aegis:CLIShape a sh:NodeShape ;
+    sh:targetClass aegis:CLI ;
+    sh:property [
+        sh:path aegis:binary ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:version ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── MCPServer ────────────────���─────────────────────────────��─────
+#
+# An MCP server providing tools to agents.
+
+aegis:MCPServerShape a sh:NodeShape ;
+    sh:targetClass aegis:MCPServer ;
+    sh:property [
+        sh:path aegis:port ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:tools ;
+        sh:datatype xsd:string ;
+    ] .
+
+# ── Plugin ─────────��──────────────────────────��──────────────────
+#
+# A gastown plugin (marshal, witness, refinery, etc.).
+
+aegis:PluginShape a sh:NodeShape ;
+    sh:targetClass aegis:Plugin ;
+    sh:property [
+        sh:path aegis:pluginType ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:triggers ;
+        sh:datatype xsd:string ;
+    ] .
+
+# ── Skill ──────────────��──────────────────────────────────��──────
+#
+# A Claude Code skill available to agents.
+
+aegis:SkillShape a sh:NodeShape ;
+    sh:targetClass aegis:Skill ;
+    sh:property [
+        sh:path aegis:skillName ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Formula ────��─────────────────────────────────────────────────
+#
+# A molecule template defining a polecat workflow.
+
+aegis:FormulaShape a sh:NodeShape ;
+    sh:targetClass aegis:Formula ;
+    sh:property [
+        sh:path aegis:formulaName ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ════════════════════════════════════════════���══════════════════════
+# People & Family
+# ═════════���════════════════���═════════════════════════��══════════════
+
+# ── Person ────────────��──────────────────────────────────────────
+
+aegis:PersonShape a sh:NodeShape ;
+    sh:targetClass aegis:Person .
+
+# ── FamilyMember ─────────────────────────────────────────────────
+
+aegis:FamilyMemberShape a sh:NodeShape ;
+    sh:targetClass aegis:FamilyMember ;
+    sh:property [
+        sh:path aegis:relationship ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ══════════��═════════════════════════════��══════════════════════════
+# Knowledge
+# ═════════════════════════════════════════════════════════════���═════
+
+# ── Directive ───────────────���────────────────────────────────────
+#
+# A Stiwi directive from HLA.
+
+aegis:DirectiveShape a sh:NodeShape ;
+    sh:targetClass aegis:Directive ;
+    sh:property [
+        sh:path aegis:authority ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:issuedBy ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Observation ─────���────────────────────────────────────────────
+#
+# An agent observation from Pensieve.
+
+aegis:ObservationShape a sh:NodeShape ;
+    sh:targetClass aegis:Observation ;
+    sh:property [
+        sh:path aegis:source ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:confidence ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── DecisionRecord ──────────���────────────────────────────────��───
+#
+# An architectural decision record (ADR).
+
+aegis:DecisionRecordShape a sh:NodeShape ;
+    sh:targetClass aegis:DecisionRecord ;
+    sh:property [
+        sh:path aegis:status ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:alternatives ;
+        sh:datatype xsd:string ;
+    ] .
+
+# ── DesignDoc ──────────────────────────────────────��─────────────
+#
+# A design document.
+
+aegis:DesignDocShape a sh:NodeShape ;
+    sh:targetClass aegis:DesignDoc ;
+    sh:property [
+        sh:path aegis:status ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:author ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ════════��═════════════════════════════════════���════════════════════
+# Artifacts
+# ══════���══════════════════��═════════════════════════════════════════
+
+# ── GitCommit ────────────────────────────────────────────────────
+#
+# A specific git commit.
+
+aegis:GitCommitShape a sh:NodeShape ;
+    sh:targetClass aegis:GitCommit ;
+    sh:property [
+        sh:path aegis:hash ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:repo ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:author ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:date ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── GitRepo ────────���─────────────────────────────��───────────────
+#
+# A git repository.
+
+aegis:GitRepoShape a sh:NodeShape ;
+    sh:targetClass aegis:GitRepo ;
+    sh:property [
+        sh:path aegis:url ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:host ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── ConfigFile ─────────────────────────────────────────���─────────
+#
+# A configuration file for a service.
+
+aegis:ConfigFileShape a sh:NodeShape ;
+    sh:targetClass aegis:ConfigFile ;
+    sh:property [
+        sh:path aegis:path ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:service ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Script ───────���───────────────────────────────────────────────
+#
+# An automation script.
+
+aegis:ScriptShape a sh:NodeShape ;
+    sh:targetClass aegis:Script ;
+    sh:property [
+        sh:path aegis:path ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:trigger ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:schedule ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── CronJob ─────��───────────────────────────────────────��────────
+#
+# A scheduled cron job.
+
+aegis:CronJobShape a sh:NodeShape ;
+    sh:targetClass aegis:CronJob ;
+    sh:property [
+        sh:path aegis:schedule ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:script ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:host ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── AnsibleRole ────────��───────────────────────────────��─────────
+#
+# An IaC role in the goldblum repo.
+
+aegis:AnsibleRoleShape a sh:NodeShape ;
+    sh:targetClass aegis:AnsibleRole ;
+    sh:property [
+        sh:path aegis:roleName ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:target ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── DockerImage ──────��───────────────────────────────────────────
+#
+# A container image.
+
+aegis:DockerImageShape a sh:NodeShape ;
+    sh:targetClass aegis:DockerImage ;
+    sh:property [
+        sh:path aegis:registry ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:tag ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Bead ────��─────────────────────────────────��──────────────────
+#
+# A work item tracked in beads.
+
+aegis:BeadShape a sh:NodeShape ;
+    sh:targetClass aegis:Bead ;
+    sh:property [
+        sh:path aegis:beadId ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:priority ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:status ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ══════��════════════════════════════════════════════════════════════
+# Media
+# ══════���════════════════════════════════════════════════════════════
+
+# ── MediaLibrary ─────────────────────────────────────────────────
+
+aegis:MediaLibraryShape a sh:NodeShape ;
+    sh:targetClass aegis:MediaLibrary .
+
+# ── ThemePark ────────────────────────────────────────────────────
+
+aegis:ThemeParkShape a sh:NodeShape ;
+    sh:targetClass aegis:ThemePark .
+
+# ═════���══════════════════════════════════════��══════════════════════
+# Relationship Constraints
+# ═══════════════════════════════════════════════════════════════════
+#
+# These PropertyShapes constrain relationship edges to valid
+# domain/range combinations.
+
+# runs_on: service/container → infrastructure host
+aegis:RunsOnShape a sh:PropertyShape ;
+    sh:path aegis:runs_on ;
+    sh:or (
+        [ sh:class aegis:ProxmoxNode ]
+        [ sh:class aegis:BareMetalHost ]
+        [ sh:class aegis:LXCContainer ]
+    ) .
+
+# depends_on: any entity → any entity
+aegis:DependsOnShape a sh:PropertyShape ;
+    sh:path aegis:depends_on .
+
+# connects_to: any entity → any entity (network/API)
+aegis:ConnectsToShape a sh:PropertyShape ;
+    sh:path aegis:connects_to .
+
+# managed_by: entity → CrewMember or Person
+aegis:ManagedByShape a sh:PropertyShape ;
+    sh:path aegis:managed_by ;
+    sh:or (
+        [ sh:class aegis:CrewMember ]
+        [ sh:class aegis:Person ]
+    ) .
+
+# member_of: entity → Rig or group
+aegis:MemberOfShape a sh:PropertyShape ;
+    sh:path aegis:member_of ;
+    sh:class aegis:Rig .
+
+# reports_to: CrewMember → CrewMember
+aegis:ReportsToShape a sh:PropertyShape ;
+    sh:path aegis:reports_to ;
+    sh:class aegis:CrewMember .
+
+# backs_up: storage → entity
+aegis:BacksUpShape a sh:PropertyShape ;
+    sh:path aegis:backs_up .
+
+# routes_to: ReverseProxyRoute → service
+aegis:RoutesToShape a sh:PropertyShape ;
+    sh:path aegis:routes_to .
+
+# monitors: monitoring service → entity
+aegis:MonitorsShape a sh:PropertyShape ;
+    sh:path aegis:monitors .
+
+# applies_to: Directive/DecisionRecord → entity
+aegis:AppliesToShape a sh:PropertyShape ;
+    sh:path aegis:applies_to .
+
+# derived_from: provenance link
+aegis:DerivedFromShape a sh:PropertyShape ;
+    sh:path aegis:derived_from .
+
+# deployed_on: temporal deployment (value is dateTime)
+aegis:DeployedOnShape a sh:PropertyShape ;
+    sh:path aegis:deployed_on ;
+    sh:datatype xsd:dateTime .
+
+# owns: Person → entity (domain ownership)
+aegis:OwnsShape a sh:PropertyShape ;
+    sh:path aegis:owns .
+
+# committed_to: GitCommit → GitRepo
+aegis:CommittedToShape a sh:PropertyShape ;
+    sh:path aegis:committed_to ;
+    sh:class aegis:GitRepo .
+
+# authored_by: GitCommit/Bead → Person/CrewMember
+aegis:AuthoredByShape a sh:PropertyShape ;
+    sh:path aegis:authored_by ;
+    sh:or (
+        [ sh:class aegis:Person ]
+        [ sh:class aegis:CrewMember ]
+    ) .
+
+# modifies: GitCommit → entity
+aegis:ModifiesShape a sh:PropertyShape ;
+    sh:path aegis:modifies .
+
+# implements: GitCommit → Bead
+aegis:ImplementsShape a sh:PropertyShape ;
+    sh:path aegis:implements ;
+    sh:class aegis:Bead .
+
+# triggered_by: entity → CronJob/Script
+aegis:TriggeredByShape a sh:PropertyShape ;
+    sh:path aegis:triggered_by ;
+    sh:or (
+        [ sh:class aegis:CronJob ]
+        [ sh:class aegis:Script ]
+    ) .
+
+# configured_in: entity → ConfigFile/AnsibleRole
+aegis:ConfiguredInShape a sh:PropertyShape ;
+    sh:path aegis:configured_in ;
+    sh:or (
+        [ sh:class aegis:ConfigFile ]
+        [ sh:class aegis:AnsibleRole ]
+    ) .
