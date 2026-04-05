@@ -103,3 +103,32 @@ mark {
     padding: 0.1rem 0.2rem;
     border-radius: 2px;
 }
+
+/* SPARQL/Turtle code block accent — left border indicates query language */
+code.language-sparql,
+code.language-turtle {
+    border-left: 3px solid #bd93f9;
+    padding-left: 0.6rem;
+    display: block;
+}
+
+/* Results table styling — tighter for inline query results */
+.results-table table {
+    font-size: 0.9em;
+}
+
+/* Persona badge styling */
+.persona-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+/* Mermaid diagram container */
+.mermaid {
+    text-align: center;
+    margin: 1rem 0;
+}

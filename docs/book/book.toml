@@ -1,12 +1,15 @@
 [book]
-title = "quipu Documentation"
+title = "Quipu — AI-Native Knowledge Graph"
 authors = ["Steve Brown"]
-description = "Documentation for quipu"
+description = "Structured knowledge encoded in knotted strings"
 src = "src"
 language = "en"
 
 [build]
 build-dir = "book"
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
 
 [output.html]
 default-theme = "coal"
@@ -14,6 +17,7 @@ preferred-dark-theme = "coal"
 git-repository-url = "https://github.com/scbrown/quipu"
 edit-url-template = "https://github.com/scbrown/quipu/edit/main/docs/book/{path}"
 additional-css = ["custom/css/custom.css"]
+additional-js = ["custom/js/mermaid-init.js"]
 site-url = "/quipu/"
 
 [output.html.search]

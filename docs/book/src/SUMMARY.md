@@ -8,22 +8,19 @@
 - [Quick Start](getting-started/quick-start.md)
 - [Configuration](getting-started/configuration.md)
 
-# Architecture
+# Concepts
 
-- [EAVT Fact Log](architecture/eavt.md)
-- [RDF Data Model](architecture/rdf.md)
-- [SPARQL Engine](architecture/sparql.md)
-- [SHACL Validation](architecture/shacl.md)
-- [Vector Search](architecture/vector-search.md)
-- [LanceDB Vector Backend](architecture/lancedb.md)
-- [Episode Ingestion](architecture/episodes.md)
-- [Graph Projection](architecture/graph-projection.md)
-- [Context Pipeline](architecture/context-pipeline.md)
-- [Federation](architecture/federation.md)
+- [Triples and the Knowledge Graph](concepts/triples.md)
+- [The Temporal Model](concepts/temporal-model.md)
+- [SHACL Validation](concepts/shacl-validation.md)
 
-# Operations
+# Tutorials
 
-- [CI/CD and Releases](architecture/ci-cd.md)
+- [SPARQL from Zero](tutorials/sparql.md)
+- [The Homelab Operator](tutorials/homelab-operator.md)
+- [The AI Agent Builder](tutorials/agent-builder.md)
+- [The Code Archaeologist](tutorials/code-archaeologist.md)
+- [The Knowledge Gardener](tutorials/knowledge-gardener.md)
 
 # Reference
 
@@ -31,4 +28,14 @@
 - [REST API](reference/rest-api.md)
 - [MCP Tools](reference/mcp-tools.md)
 - [Rust API](reference/api.md)
+
+# Recipes
+
+- [Impact Analysis](recipes/impact-analysis.md)
+- [Incident Correlation](recipes/incident-correlation.md)
+- [Knowledge Ingestion](recipes/knowledge-ingestion.md)
+
+# Operations
+
+- [CI/CD and Releases](architecture/ci-cd.md)
 - [Contributing](reference/contributing.md)
