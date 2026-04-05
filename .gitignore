@@ -21,3 +21,6 @@ docs/book/book/
 
 # Rust
 /target/
+
+# Trunk build output
+quipu-ui/dist/

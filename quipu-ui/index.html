@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quipu — Knowledge Graph Explorer</title>
+<link data-trunk rel="css" href="style.css">
+<!-- Graphology (data model + algorithms) -->
+<script src="https://cdn.jsdelivr.net/npm/graphology@0.25.4/dist/graphology.umd.min.js"></script>
+<!-- Sigma.js v3 (WebGL rendering) -->
+<script src="https://cdn.jsdelivr.net/npm/sigma@3.0.0/build/sigma.min.js"></script>
+<!-- Force layout -->
+<script src="https://cdn.jsdelivr.net/npm/graphology-layout-forceatlas2@0.10.1/dist/graphology-layout-forceatlas2.min.js"></script>
+<link data-trunk rel="rust" data-wasm-opt="z">
+</head>
+<body>
+<div id="app"></div>
+<script>
+// Bridge: Rust WASM calls these functions to control Sigma.js
+window.__quipu = {
+    graph: null,
+    renderer: null,
+    fa2Layout: null,
+    fa2Running: false,
+
+    // Initialize Sigma.js on a container element
+    initGraph: function(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) { console.error("Container not found:", containerId); return false; }
+
+        this.graph = new graphology.Graph();
+        this.renderer = new Sigma(this.graph, container, {
+            renderLabels: true,
+            labelFont: "'SF Mono', 'Cascadia Code', 'Fira Code', monospace",
+            labelSize: 11,
+            labelColor: { color: "#e0e0e0" },
+            defaultNodeColor: "#8892a4",
+            defaultEdgeColor: "#2a2a4a",
+            defaultEdgeType: "arrow",
+            labelRenderedSizeThreshold: 6,
+            nodeProgramClasses: {},
+            minCameraRatio: 0.05,
+            maxCameraRatio: 10,
+        });
+
+        // Wire up click events -> Rust callbacks
+        this.renderer.on("clickNode", function(event) {
+            if (window.__quipu_on_node_click) {
+                window.__quipu_on_node_click(event.node);
+            }
+        });
+
+        this.renderer.on("doubleClickNode", function(event) {
+            event.preventSigmaDefault();
+            if (window.__quipu_on_node_dblclick) {
+                window.__quipu_on_node_dblclick(event.node);
+            }
+        });
+
+        this.renderer.on("clickStage", function() {
+            if (window.__quipu_on_stage_click) {
+                window.__quipu_on_stage_click();
+            }
+        });
+
+        // Semantic zoom: adjust label detail based on camera ratio
+        this.renderer.on("afterRender", function() {
+            // Available for future semantic zoom logic
+        });
+
+        return true;
+    },
+
+    // Add a node to the graph
+    addNode: function(id, label, type, x, y) {
+        if (this.graph.hasNode(id)) return;
+        const colors = {
+            "Host": "#4cc9f0",
+            "Service": "#4ecca3",
+            "Person": "#f7a072",
+            "Organization": "#e94560",
+            "Event": "#fca311",
+            "Place": "#533483",
+            "Concept": "#8892a4",
+        };
+        this.graph.addNode(id, {
+            label: label,
+            x: x || Math.random() * 100,
+            y: y || Math.random() * 100,
+            size: 8,
+            color: colors[type] || "#8892a4",
+            type: type || "default",
+        });
+    },
+
+    // Add an edge
+    addEdge: function(source, target, label) {
+        const key = source + "->" + target + ":" + label;
+        if (this.graph.hasEdge(key)) return;
+        try {
+            this.graph.addEdgeWithKey(key, source, target, {
+                label: label,
+                size: 1,
+                color: "#2a2a4a",
+            });
+        } catch(e) {
+            // source or target may not exist
+        }
+    },
+
+    // Clear the graph
+    clear: function() {
+        if (this.graph) this.graph.clear();
+    },
+
+    // Run ForceAtlas2 layout
+    startLayout: function() {
+        if (!this.graph || this.fa2Running) return;
+        this.fa2Running = true;
+        var self = this;
+        var settings = {
+            iterations: 100,
+            settings: {
+                gravity: 1,
+                scalingRatio: 2,
+                strongGravityMode: true,
+                barnesHutOptimize: true,
+            }
+        };
+        // Run synchronously in batches
+        forceAtlas2.assign(this.graph, settings);
+        this.fa2Running = false;
+        if (this.renderer) this.renderer.refresh();
+    },
+
+    // Get all node IDs
+    getNodeIds: function() {
+        if (!this.graph) return "[]";
+        return JSON.stringify(this.graph.nodes());
+    },
+
+    // Get node attributes
+    getNodeAttrs: function(id) {
+        if (!this.graph || !this.graph.hasNode(id)) return "{}";
+        return JSON.stringify(this.graph.getNodeAttributes(id));
+    },
+
+    // Get neighbors
+    getNeighbors: function(id) {
+        if (!this.graph || !this.graph.hasNode(id)) return "[]";
+        return JSON.stringify(this.graph.neighbors(id));
+    },
+
+    // Filter nodes by type visibility
+    setNodeVisibility: function(nodeId, visible) {
+        if (!this.graph || !this.graph.hasNode(nodeId)) return;
+        this.graph.setNodeAttribute(nodeId, "hidden", !visible);
+        if (this.renderer) this.renderer.refresh();
+    },
+
+    // Highlight a node
+    highlightNode: function(nodeId) {
+        if (!this.graph) return;
+        this.graph.forEachNode(function(node, attrs) {
+            if (node === nodeId) {
+                attrs.highlighted = true;
+                attrs.size = 12;
+            } else {
+                attrs.highlighted = false;
+                attrs.size = 8;
+            }
+        });
+        if (this.renderer) this.renderer.refresh();
+    },
+
+    // Focus camera on node
+    focusNode: function(nodeId) {
+        if (!this.renderer || !this.graph || !this.graph.hasNode(nodeId)) return;
+        var pos = this.graph.getNodeAttributes(nodeId);
+        this.renderer.getCamera().animate(
+            { x: pos.x, y: pos.y, ratio: 0.3 },
+            { duration: 300 }
+        );
+    },
+
+    // Get graph stats
+    stats: function() {
+        if (!this.graph) return JSON.stringify({nodes: 0, edges: 0});
+        return JSON.stringify({
+            nodes: this.graph.order,
+            edges: this.graph.size
+        });
+    },
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+/home/braino/gt/quipu/polecats/nux/quipu/quipu-ui/target/debug/deps/manyhow-c9d03070e67c083c.d: /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/lib.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/span_ranged.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/macro_rules.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/error.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/parse_to_tokens.rs
+
+/home/braino/gt/quipu/polecats/nux/quipu/quipu-ui/target/debug/deps/libmanyhow-c9d03070e67c083c.rlib: /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/lib.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/span_ranged.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/macro_rules.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/error.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/parse_to_tokens.rs
+
+/home/braino/gt/quipu/polecats/nux/quipu/quipu-ui/target/debug/deps/libmanyhow-c9d03070e67c083c.rmeta: /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/lib.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/span_ranged.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/macro_rules.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/error.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/parse_to_tokens.rs
+
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/lib.rs:
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/span_ranged.rs:
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/macro_rules.rs:
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/error.rs:
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/manyhow-0.11.4/src/parse_to_tokens.rs:

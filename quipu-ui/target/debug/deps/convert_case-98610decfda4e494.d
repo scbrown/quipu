@@ -1,0 +1,11 @@
+/home/braino/gt/quipu/polecats/nux/quipu/quipu-ui/target/debug/deps/convert_case-98610decfda4e494.d: /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/lib.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/boundary.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/case.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/converter.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/pattern.rs
+
+/home/braino/gt/quipu/polecats/nux/quipu/quipu-ui/target/debug/deps/libconvert_case-98610decfda4e494.rlib: /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/lib.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/boundary.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/case.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/converter.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/pattern.rs
+
+/home/braino/gt/quipu/polecats/nux/quipu/quipu-ui/target/debug/deps/libconvert_case-98610decfda4e494.rmeta: /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/lib.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/boundary.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/case.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/converter.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/pattern.rs
+
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/lib.rs:
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/boundary.rs:
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/case.rs:
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/converter.rs:
+/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/convert_case-0.11.0/src/pattern.rs:

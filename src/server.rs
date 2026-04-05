@@ -18,6 +18,7 @@
 //!   POST /shapes     — Manage persistent SHACL shapes
 //!   GET  /health     — Health check
 //!   GET  /stats      — Store statistics
+//!   GET  /entity/:iri — Content-negotiated entity (HTML or JSON-LD)
 //!
 //! Usage:
 //!   quipu-server [--db <path>] [--bind <addr>]
@@ -27,8 +28,8 @@ use std::sync::{Arc, Mutex};
 
 use axum::{
     Router,
-    extract::State,
-    http::StatusCode,
+    extract::{Path, State},
+    http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
 };
@@ -89,6 +90,7 @@ async fn main() {
         .route("/shapes", post(shapes))
         .route("/project", post(project_graph))
         .route("/context", post(context))
+        .route("/entity/{iri}", get(entity_conneg))
         .with_state(state);
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
@@ -285,6 +287,80 @@ async fn context(
     let store = store.lock().unwrap();
     let result = quipu::tool_context(&store, &input)?;
     Ok(axum::Json(result))
+}
+
+// ── Content negotiation for entity URLs ───────────────────────────
+
+async fn entity_conneg(
+    State(store): State<SharedStore>,
+    Path(iri): Path<String>,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, AppError> {
+    let accept = headers
+        .get("accept")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("text/html");
+
+    if accept.contains("application/ld+json") || accept.contains("application/json") {
+        // Return JSON-LD
+        let store = store.lock().unwrap();
+        let decoded_iri = iri.replace("%23", "#").replace("%20", " ");
+        let sparql = format!("SELECT ?p ?o WHERE {{ <{decoded_iri}> ?p ?o }}",);
+        let result = quipu::sparql_query(&store, &sparql)?;
+
+        let mut props = serde_json::Map::new();
+        props.insert("@context".to_string(), json!("https://schema.org"));
+        props.insert("@id".to_string(), json!(decoded_iri));
+
+        for row in result.rows() {
+            if let (Some(quipu::Value::Ref(p_id)), Some(val)) = (row.get("p"), row.get("o")) {
+                let p_name = store.resolve(*p_id).unwrap_or_else(|_| format!("{p_id}"));
+                let short_p = short_name_server(&p_name);
+                let json_val = match val {
+                    quipu::Value::Ref(id) => {
+                        let name = store.resolve(*id).unwrap_or_else(|_| format!("{id}"));
+                        json!({"@id": name})
+                    }
+                    quipu::Value::Str(s) => json!(s),
+                    quipu::Value::Int(i) => json!(i),
+                    quipu::Value::Float(f) => json!(f),
+                    quipu::Value::Bool(b) => json!(b),
+                    quipu::Value::Bytes(_) => json!("[binary]"),
+                };
+
+                if let Some(existing) = props.get_mut(&short_p) {
+                    if let serde_json::Value::Array(arr) = existing {
+                        arr.push(json_val);
+                    } else {
+                        let prev = existing.clone();
+                        *existing = json!(vec![prev, json_val]);
+                    }
+                } else {
+                    props.insert(short_p, json_val);
+                }
+            }
+        }
+
+        Ok((
+            [(axum::http::header::CONTENT_TYPE, "application/ld+json")],
+            axum::Json(serde_json::Value::Object(props)),
+        )
+            .into_response())
+    } else {
+        // Return HTML (the SPA handles client-side routing)
+        Ok(Html(UI_HTML).into_response())
+    }
+}
+
+fn short_name_server(iri: &str) -> String {
+    let iri = iri.trim_start_matches('<').trim_end_matches('>');
+    if let Some(pos) = iri.rfind('#') {
+        return iri[pos + 1..].to_string();
+    }
+    if let Some(pos) = iri.rfind('/') {
+        return iri[pos + 1..].to_string();
+    }
+    iri.to_string()
 }
 
 // ── Error handling ─────────────────────────────────────────────────
