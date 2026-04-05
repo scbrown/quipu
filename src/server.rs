@@ -29,12 +29,14 @@ use axum::{
     Router,
     extract::State,
     http::StatusCode,
-    response::IntoResponse,
+    response::{Html, IntoResponse},
     routing::{get, post},
 };
 use serde_json::{Value as JsonValue, json};
 
 type SharedStore = Arc<Mutex<quipu::Store>>;
+
+const UI_HTML: &str = include_str!("../ui/index.html");
 
 #[tokio::main]
 async fn main() {
@@ -66,6 +68,8 @@ async fn main() {
     let state: SharedStore = Arc::new(Mutex::new(store));
 
     let app = Router::new()
+        .route("/", get(ui))
+        .route("/ui", get(ui))
         .route("/health", get(health))
         .route("/stats", get(stats))
         .route("/query", post(query))
@@ -99,7 +103,11 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// ── Handlers ───────────────────────────────────────────────────────
+// ── Handlers ───────────────────────────────────────────────────────────
+
+async fn ui() -> Html<&'static str> {
+    Html(UI_HTML)
+}
 
 async fn health() -> impl IntoResponse {
     axum::Json(json!({"status": "ok"}))

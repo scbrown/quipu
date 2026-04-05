@@ -94,7 +94,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — `GraphProvider` trait for multi-source queries. Query local and remote Quipu instances in a single operation.
-- **Three interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`). Plus 11 MCP tools for agent integration.
+- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI. Plus 11 MCP tools for agent integration.
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. CI runs fmt, clippy, tests, and markdown lint on every push.
 
@@ -139,15 +139,26 @@ quipu read "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10" --db my.db
 quipu repl --db my.db
 ```
 
-### 🌐 REST API
+### 🌐 REST API & Web UI
 
 ```bash
 quipu-server --db my.db --bind 0.0.0.0:3030
 
+# Open the interactive graph explorer in your browser
+open http://localhost:3030
+
+# Or use the REST API directly
 curl localhost:3030/query -X POST \
   -H "Content-Type: application/json" \
   -d '{"query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 5"}'
 ```
+
+The built-in web UI provides:
+
+- **Graph Explorer** — force-directed visualization with type-based coloring, entity search, and detail panel
+- **SPARQL Workbench** — syntax-highlighted editor with time-travel parameters and tabular/JSON results
+- **Episode Timeline** — chronological view of ingested episodes with extracted entities
+- **Schema Inspector** — type distribution, SHACL shape browser, and validation runner
 
 ## 🏗️ Architecture
 

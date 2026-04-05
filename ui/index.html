@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quipu — Knowledge Graph Explorer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+<style>
+:root {
+  --bg: #1a1a2e;
+  --bg-surface: #16213e;
+  --bg-elevated: #0f3460;
+  --text: #e0e0e0;
+  --text-muted: #8892a4;
+  --accent: #e94560;
+  --accent-dim: #533483;
+  --border: #2a2a4a;
+  --success: #4ecca3;
+  --warning: #fca311;
+  --error: #e94560;
+  --node-host: #4cc9f0;
+  --node-service: #4ecca3;
+  --node-person: #f7a072;
+  --node-default: #8892a4;
+  --radius: 6px;
+  --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  height: 48px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+header h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+header h1 span { color: var(--accent); }
+
+header .stats {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+header .stats .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--error);
+}
+
+header .stats .dot.ok { background: var(--success); }
+
+/* ── Nav ── */
+nav {
+  display: flex;
+  gap: 0;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+nav a {
+  padding: 0.6rem 1.2rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+nav a:hover { color: var(--text); }
+nav a.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Main ── */
+main {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.view {
+  display: none;
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+.view.active { display: flex; }
+
+/* ── Explorer ── */
+#explorer {
+  flex-direction: row;
+}
+
+#explorer .sidebar {
+  width: 280px;
+  min-width: 200px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+#explorer .sidebar .search-box {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+#explorer .sidebar input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+#explorer .sidebar input:focus {
+  border-color: var(--accent);
+}
+
+#explorer .sidebar .type-filters {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.type-badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+
+.type-badge:hover, .type-badge.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+#explorer .entity-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+.entity-item {
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  border-left: 3px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.entity-item:hover {
+  background: var(--bg-elevated);
+}
+
+.entity-item.selected {
+  background: var(--bg-elevated);
+  border-left-color: var(--accent);
+}
+
+.entity-item .type-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.entity-item .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#explorer .graph-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+#cy {
+  flex: 1;
+  background: var(--bg);
+}
+
+#explorer .detail-panel {
+  width: 320px;
+  min-width: 240px;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 0.75rem;
+  flex-shrink: 0;
+  display: none;
+}
+
+#explorer .detail-panel.open { display: block; }
+
+#explorer .detail-panel h3 {
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  word-break: break-all;
+}
+
+.fact-table {
+  width: 100%;
+  font-size: 0.75rem;
+  border-collapse: collapse;
+}
+
+.fact-table th {
+  text-align: left;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  font-weight: 500;
+}
+
+.fact-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  word-break: break-all;
+  max-width: 200px;
+}
+
+.fact-table td.pred { color: var(--accent); font-family: var(--mono); }
+
+/* ── Workbench ── */
+#workbench {
+  flex-direction: column;
+}
+
+#workbench .editor-area {
+  display: flex;
+  flex-direction: column;
+  height: 45%;
+  min-height: 200px;
+  border-bottom: 1px solid var(--border);
+}
+
+#workbench .editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+
+#workbench .editor-toolbar label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+#workbench .editor-toolbar input[type="text"] {
+  padding: 0.25rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-family: var(--mono);
+  width: 160px;
+}
+
+#workbench .editor-toolbar input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.btn {
+  padding: 0.3rem 0.8rem;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-secondary {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+#workbench .cm-wrapper {
+  flex: 1;
+  overflow: hidden;
+}
+
+#workbench .cm-wrapper .CodeMirror {
+  height: 100%;
+  font-size: 0.85rem;
+}
+
+#workbench .results-area {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#workbench .results-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  gap: 0.5rem;
+}
+
+.results-toolbar .result-meta {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.results-format-btn {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.results-format-btn.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-color: var(--accent-dim);
+}
+
+#results-container {
+  flex: 1;
+  overflow: auto;
+  padding: 0.5rem;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-family: var(--mono);
+}
+
+.results-table th {
+  text-align: left;
+  padding: 6px 10px;
+  background: var(--bg-surface);
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+}
+
+.results-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.results-table tr:hover td {
+  background: var(--bg-elevated);
+}
+
+pre.json-result {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  padding: 0.5rem;
+}
+
+.query-examples {
+  padding: 0.5rem;
+}
+
+.query-examples h4 {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.example-query {
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+
+.example-query:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+.example-query .label {
+  font-family: -apple-system, sans-serif;
+  color: var(--text);
+  font-size: 0.8rem;
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* ── Timeline ── */
+#timeline {
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+#timeline .timeline-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  gap: 0.5rem;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.timeline-entries {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.timeline-entry {
+  position: relative;
+  padding: 0.75rem 1rem;
+  padding-left: 2rem;
+  margin-bottom: 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.timeline-entry:hover { border-color: var(--accent-dim); }
+.timeline-entry.expanded { border-color: var(--accent); }
+
+.timeline-entry::before {
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  top: 1rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+}
+
+.timeline-entry .entry-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.timeline-entry .entry-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.timeline-entry .entry-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+.timeline-entry .entry-source {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.timeline-entry .entry-body {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  display: none;
+  white-space: pre-wrap;
+}
+
+.timeline-entry.expanded .entry-body { display: block; }
+
+.timeline-entry .entry-graph {
+  margin-top: 0.5rem;
+  display: none;
+}
+
+.timeline-entry.expanded .entry-graph { display: block; }
+
+.mini-graph {
+  height: 200px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.entry-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 0.5rem;
+}
+
+.entry-node-tag {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+/* ── Shapes ── */
+#shapes {
+  flex-direction: row;
+}
+
+#shapes .shapes-sidebar {
+  width: 280px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+#shapes .shapes-sidebar h3 {
+  padding: 0.6rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.shape-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.shape-item {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.shape-item:hover { background: var(--bg-elevated); }
+.shape-item.selected { background: var(--bg-elevated); border-left: 3px solid var(--accent); }
+
+.shape-item .shape-name { font-weight: 600; }
+.shape-item .shape-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
+
+#shapes .shapes-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#shapes .shapes-main .tab-bar {
+  display: flex;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+}
+
+#shapes .shapes-main .tab-bar button {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+#shapes .shapes-main .tab-bar button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.shapes-content {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+}
+
+.shape-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.shape-card h4 {
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.shape-card .constraint {
+  font-size: 0.8rem;
+  padding: 0.25rem 0;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.constraint .label {
+  color: var(--text-muted);
+  min-width: 80px;
+}
+
+.type-distribution {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.type-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+
+.type-card .type-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  word-break: break-all;
+}
+
+.type-card .type-count {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: var(--mono);
+}
+
+/* ── Validation ── */
+.validation-result {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  border-left: 3px solid;
+}
+
+.validation-result.violation {
+  background: rgba(233, 69, 96, 0.1);
+  border-left-color: var(--error);
+}
+
+.validation-result.warning {
+  background: rgba(252, 163, 17, 0.1);
+  border-left-color: var(--warning);
+}
+
+.validation-result .focus { font-family: var(--mono); font-size: 0.75rem; }
+.validation-result .message { margin-top: 0.25rem; }
+
+/* ── Empty state ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2rem;
+}
+
+.empty-state .icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.3;
+}
+
+.empty-state p {
+  font-size: 0.9rem;
+  max-width: 400px;
+}
+
+/* ── Spinner ── */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  z-index: 1000;
+  animation: fadeIn 0.2s;
+  max-width: 400px;
+}
+
+.toast.error { border-color: var(--error); }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  #explorer { flex-direction: column; }
+  #explorer .sidebar { width: 100%; height: 200px; min-width: 0; border-right: none; border-bottom: 1px solid var(--border); }
+  #explorer .detail-panel { width: 100%; min-width: 0; border-left: none; border-top: 1px solid var(--border); max-height: 300px; }
+  #shapes { flex-direction: column; }
+  #shapes .shapes-sidebar { width: 100%; height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Q</span>UIPU</h1>
+  <div class="stats" id="header-stats">
+    <span class="dot" id="health-dot"></span>
+    <span id="stats-text">connecting...</span>
+  </div>
+</header>
+
+<nav id="main-nav">
+  <a href="#explorer">Explorer</a>
+  <a href="#workbench">Workbench</a>
+  <a href="#timeline">Timeline</a>
+  <a href="#shapes">Shapes</a>
+</nav>
+
+<main>
+  <!-- ── Graph Explorer ── -->
+  <section id="explorer" class="view">
+    <div class="sidebar">
+      <div class="search-box">
+        <input type="text" id="entity-search" placeholder="Search entities...">
+      </div>
+      <div class="type-filters" id="type-filters"></div>
+      <div class="entity-list" id="entity-list"></div>
+    </div>
+    <div class="graph-area">
+      <div id="cy"></div>
+    </div>
+    <div class="detail-panel" id="detail-panel">
+      <h3 id="detail-title"></h3>
+      <table class="fact-table">
+        <thead><tr><th>Predicate</th><th>Value</th></tr></thead>
+        <tbody id="detail-facts"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SPARQL Workbench ── -->
+  <section id="workbench" class="view">
+    <div class="editor-area">
+      <div class="editor-toolbar">
+        <button class="btn" id="run-query" title="Ctrl+Enter">Run</button>
+        <button class="btn btn-secondary" id="btn-examples">Examples</button>
+        <span style="flex:1"></span>
+        <label>valid_at:</label>
+        <input type="text" id="valid-at" placeholder="ISO-8601">
+        <label>tx:</label>
+        <input type="text" id="tx-id" placeholder="tx ID" style="width:80px">
+      </div>
+      <div class="cm-wrapper">
+        <textarea id="sparql-editor">SELECT ?s ?p ?o
+WHERE {
+  ?s ?p ?o
+}
+LIMIT 25</textarea>
+      </div>
+    </div>
+    <div class="results-area">
+      <div class="results-toolbar">
+        <button class="results-format-btn active" data-format="table">Table</button>
+        <button class="results-format-btn" data-format="json">JSON</button>
+        <span class="result-meta" id="result-meta"></span>
+      </div>
+      <div id="results-container">
+        <div class="query-examples" id="query-examples">
+          <h4>Example Queries</h4>
+          <div class="example-query" data-query="SELECT ?s ?type WHERE { ?s a ?type } LIMIT 50">
+            <span class="label">All entity types</span>
+            SELECT ?s ?type WHERE { ?s a ?type } LIMIT 50
+          </div>
+          <div class="example-query" data-query="SELECT ?entity ?pred ?val WHERE { ?entity ?pred ?val . ?entity a &lt;http://aegis.gastown.local/ontology/LXCContainer&gt; } LIMIT 50">
+            <span class="label">LXC Containers</span>
+            ?entity a aegis:LXCContainer
+          </div>
+          <div class="example-query" data-query="SELECT ?s ?name WHERE { ?s &lt;http://www.w3.org/2000/01/rdf-schema#label&gt; ?name } LIMIT 50">
+            <span class="label">Named entities</span>
+            ?s rdfs:label ?name
+          </div>
+          <div class="example-query" data-query="SELECT ?type (COUNT(?s) AS ?count) WHERE { ?s a ?type } GROUP BY ?type ORDER BY DESC(?count)">
+            <span class="label">Type distribution</span>
+            Count entities per type
+          </div>
+          <div class="example-query" data-query="SELECT ?ep ?body ?source WHERE { ?ep a &lt;http://www.w3.org/ns/prov#Activity&gt; . OPTIONAL { ?ep &lt;http://aegis.gastown.local/ontology/episodeBody&gt; ?body } . OPTIONAL { ?ep &lt;http://aegis.gastown.local/ontology/source&gt; ?source } } LIMIT 50">
+            <span class="label">Episodes</span>
+            List provenance activities
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Episode Timeline ── -->
+  <section id="timeline" class="view">
+    <div class="timeline-toolbar">
+      <button class="btn" id="load-episodes">Load Episodes</button>
+      <span style="flex:1"></span>
+      <span class="result-meta" id="timeline-meta"></span>
+    </div>
+    <div class="timeline-entries" id="timeline-entries">
+      <div class="empty-state">
+        <div class="icon">&#x1F4DC;</div>
+        <p>Click "Load Episodes" to view ingested episodes and their extracted knowledge.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Schema Inspector ── -->
+  <section id="shapes" class="view">
+    <div class="shapes-sidebar">
+      <h3>Loaded Shapes</h3>
+      <div class="shape-list" id="shape-list"></div>
+    </div>
+    <div class="shapes-main">
+      <div class="tab-bar">
+        <button class="active" data-tab="distribution">Distribution</button>
+        <button data-tab="browser">Shape Browser</button>
+        <button data-tab="validation">Validation</button>
+      </div>
+      <div class="shapes-content" id="shapes-content"></div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.4/cytoscape.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sparql/sparql.min.js"></script>
+<script>
+'use strict';
+
+const API = window.location.origin;
+
+// ── State ──
+const state = {
+  entities: [],
+  types: new Set(),
+  activeType: null,
+  selectedEntity: null,
+  cy: null,
+  editor: null,
+  resultFormat: 'table',
+  lastResult: null,
+  shapesTab: 'distribution',
+};
+
+// ── API helpers ──
+async function api(endpoint, body) {
+  const opts = body !== undefined
+    ? { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }
+    : { method: 'GET' };
+  const res = await fetch(API + endpoint, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+function toast(msg, isError) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function shortIri(iri) {
+  if (typeof iri !== 'string') return String(iri);
+  const prefixes = {
+    'http://aegis.gastown.local/ontology/': 'aegis:',
+    'http://www.w3.org/1999/02/22-rdf-syntax-ns#': 'rdf:',
+    'http://www.w3.org/2000/01/rdf-schema#': 'rdfs:',
+    'http://www.w3.org/2001/XMLSchema#': 'xsd:',
+    'http://www.w3.org/ns/prov#': 'prov:',
+    'http://www.w3.org/ns/shacl#': 'sh:',
+    'https://bobbin.dev/ontology#': 'bobbin:',
+  };
+  for (const [full, short] of Object.entries(prefixes)) {
+    if (iri.startsWith(full)) return short + iri.slice(full.length);
+  }
+  // Fallback: show last segment
+  const hash = iri.lastIndexOf('#');
+  const slash = iri.lastIndexOf('/');
+  const idx = Math.max(hash, slash);
+  return idx >= 0 ? iri.slice(idx + 1) : iri;
+}
+
+function typeColor(typeIri) {
+  const s = shortIri(typeIri).toLowerCase();
+  if (s.includes('host') || s.includes('node') || s.includes('container') || s.includes('server') || s.includes('baremetal'))
+    return 'var(--node-host)';
+  if (s.includes('service') || s.includes('app') || s.includes('web'))
+    return 'var(--node-service)';
+  if (s.includes('person') || s.includes('crew') || s.includes('member'))
+    return 'var(--node-person)';
+  return 'var(--node-default)';
+}
+
+// ── Router ──
+function navigate() {
+  const hash = location.hash.slice(1) || 'explorer';
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+
+  const view = document.getElementById(hash);
+  const link = document.querySelector(`nav a[href="#${hash}"]`);
+  if (view) view.classList.add('active');
+  if (link) link.classList.add('active');
+
+  if (hash === 'explorer' && !state.entities.length) loadEntities();
+  if (hash === 'shapes') loadShapes();
+}
+
+window.addEventListener('hashchange', navigate);
+
+// ── Health & Stats ──
+async function checkHealth() {
+  try {
+    const [health, stats] = await Promise.all([api('/health'), api('/stats')]);
+    const dot = document.getElementById('health-dot');
+    const text = document.getElementById('stats-text');
+    dot.className = 'dot ok';
+    text.textContent = `${stats.entities} entities | ${stats.facts} facts | ${stats.predicates} predicates`;
+  } catch {
+    document.getElementById('health-dot').className = 'dot';
+    document.getElementById('stats-text').textContent = 'disconnected';
+  }
+}
+
+// ── Explorer ──
+async function loadEntities() {
+  try {
+    const data = await api('/cord', { limit: 500 });
+    state.entities = data.entities || [];
+    state.types.clear();
+
+    for (const ent of state.entities) {
+      const typeFact = (ent.facts || []).find(f =>
+        f.predicate === 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
+      );
+      ent._type = typeFact ? typeFact.value : null;
+      ent._label = shortIri(ent.iri);
+      if (ent._type) state.types.add(ent._type);
+    }
+
+    renderTypeFilters();
+    renderEntityList();
+    renderGraph();
+  } catch (e) {
+    toast('Failed to load entities: ' + e.message, true);
+  }
+}
+
+function renderTypeFilters() {
+  const container = document.getElementById('type-filters');
+  container.innerHTML = '';
+  const allBtn = document.createElement('span');
+  allBtn.className = 'type-badge' + (!state.activeType ? ' active' : '');
+  allBtn.textContent = 'All';
+  allBtn.onclick = () => { state.activeType = null; renderTypeFilters(); renderEntityList(); renderGraph(); };
+  container.appendChild(allBtn);
+
+  for (const t of state.types) {
+    const badge = document.createElement('span');
+    badge.className = 'type-badge' + (state.activeType === t ? ' active' : '');
+    badge.textContent = shortIri(t);
+    badge.style.borderColor = typeColor(t);
+    if (state.activeType === t) badge.style.background = typeColor(t) + '22';
+    badge.onclick = () => {
+      state.activeType = state.activeType === t ? null : t;
+      renderTypeFilters();
+      renderEntityList();
+      renderGraph();
+    };
+    container.appendChild(badge);
+  }
+}
+
+function filteredEntities() {
+  let ents = state.entities;
+  if (state.activeType) ents = ents.filter(e => e._type === state.activeType);
+  const q = document.getElementById('entity-search').value.toLowerCase();
+  if (q) ents = ents.filter(e => e._label.toLowerCase().includes(q) || e.iri.toLowerCase().includes(q));
+  return ents;
+}
+
+function renderEntityList() {
+  const container = document.getElementById('entity-list');
+  const ents = filteredEntities();
+  container.innerHTML = '';
+
+  for (const ent of ents) {
+    const div = document.createElement('div');
+    div.className = 'entity-item' + (state.selectedEntity === ent.iri ? ' selected' : '');
+
+    const dot = document.createElement('span');
+    dot.className = 'type-dot';
+    dot.style.background = typeColor(ent._type || '');
+
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = ent._label;
+    name.title = ent.iri;
+
+    div.appendChild(dot);
+    div.appendChild(name);
+    div.onclick = () => selectEntity(ent);
+    container.appendChild(div);
+  }
+}
+
+function selectEntity(ent) {
+  state.selectedEntity = ent.iri;
+  renderEntityList();
+  showDetail(ent);
+
+  if (state.cy) {
+    state.cy.elements().removeClass('highlighted');
+    const node = state.cy.getElementById(ent.iri);
+    if (node.length) {
+      node.addClass('highlighted');
+      node.connectedEdges().addClass('highlighted');
+      node.neighborhood().nodes().addClass('highlighted');
+      state.cy.animate({ center: { eles: node }, duration: 300 });
+    }
+  }
+}
+
+function showDetail(ent) {
+  const panel = document.getElementById('detail-panel');
+  panel.classList.add('open');
+  document.getElementById('detail-title').textContent = shortIri(ent.iri);
+  document.getElementById('detail-title').title = ent.iri;
+
+  const tbody = document.getElementById('detail-facts');
+  tbody.innerHTML = '';
+  for (const fact of (ent.facts || [])) {
+    const tr = document.createElement('tr');
+    const tdP = document.createElement('td');
+    tdP.className = 'pred';
+    tdP.textContent = shortIri(fact.predicate);
+    tdP.title = fact.predicate;
+    const tdV = document.createElement('td');
+    tdV.textContent = shortIri(String(fact.value));
+    tdV.title = String(fact.value);
+    tr.appendChild(tdP);
+    tr.appendChild(tdV);
+    tbody.appendChild(tr);
+  }
+}
+
+function renderGraph() {
+  const ents = filteredEntities();
+  const nodes = [];
+  const edges = [];
+  const nodeSet = new Set();
+
+  for (const ent of ents) {
+    if (!nodeSet.has(ent.iri)) {
+      nodeSet.add(ent.iri);
+      nodes.push({
+        data: {
+          id: ent.iri,
+          label: ent._label,
+          type: ent._type || '',
+          color: typeColor(ent._type || ''),
+        }
+      });
+    }
+
+    for (const fact of (ent.facts || [])) {
+      if (typeof fact.value === 'string' && fact.value.startsWith('http') &&
+          fact.predicate !== 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type') {
+        // Add target node if it's in our entity set
+        const targetEnt = ents.find(e => e.iri === fact.value);
+        if (targetEnt && !nodeSet.has(fact.value)) {
+          nodeSet.add(fact.value);
+          nodes.push({
+            data: {
+              id: fact.value,
+              label: shortIri(fact.value),
+              type: targetEnt._type || '',
+              color: typeColor(targetEnt._type || ''),
+            }
+          });
+        }
+        if (nodeSet.has(fact.value)) {
+          edges.push({
+            data: {
+              source: ent.iri,
+              target: fact.value,
+              label: shortIri(fact.predicate),
+            }
+          });
+        }
+      }
+    }
+  }
+
+  if (state.cy) state.cy.destroy();
+
+  state.cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: { nodes, edges },
+    style: [
+      {
+        selector: 'node',
+        style: {
+          'label': 'data(label)',
+          'background-color': 'data(color)',
+          'color': '#e0e0e0',
+          'font-size': '10px',
+          'text-valign': 'bottom',
+          'text-margin-y': 4,
+          'width': 24,
+          'height': 24,
+          'border-width': 1,
+          'border-color': '#2a2a4a',
+          'text-max-width': '80px',
+          'text-wrap': 'ellipsis',
+        }
+      },
+      {
+        selector: 'node.highlighted',
+        style: {
+          'border-width': 3,
+          'border-color': '#e94560',
+          'width': 32,
+          'height': 32,
+        }
+      },
+      {
+        selector: 'edge',
+        style: {
+          'width': 1,
+          'line-color': '#2a2a4a',
+          'target-arrow-color': '#2a2a4a',
+          'target-arrow-shape': 'triangle',
+          'arrow-scale': 0.6,
+          'curve-style': 'bezier',
+          'label': 'data(label)',
+          'font-size': '7px',
+          'color': '#8892a4',
+          'text-rotation': 'autorotate',
+          'text-margin-y': -8,
+        }
+      },
+      {
+        selector: 'edge.highlighted',
+        style: {
+          'width': 2,
+          'line-color': '#e94560',
+          'target-arrow-color': '#e94560',
+        }
+      },
+    ],
+    layout: {
+      name: nodes.length > 100 ? 'grid' : 'cose',
+      animate: false,
+      nodeRepulsion: function() { return 8000; },
+      idealEdgeLength: function() { return 120; },
+      nodeDimensionsIncludeLabels: true,
+    },
+    minZoom: 0.1,
+    maxZoom: 4,
+  });
+
+  state.cy.on('tap', 'node', function(evt) {
+    const nodeId = evt.target.id();
+    const ent = state.entities.find(e => e.iri === nodeId);
+    if (ent) selectEntity(ent);
+  });
+}
+
+document.getElementById('entity-search').addEventListener('input', () => {
+  renderEntityList();
+});
+
+// ── Workbench ──
+function initEditor() {
+  state.editor = CodeMirror.fromTextArea(document.getElementById('sparql-editor'), {
+    mode: 'sparql',
+    theme: 'material-darker',
+    lineNumbers: true,
+    matchBrackets: true,
+    indentUnit: 2,
+    tabSize: 2,
+    lineWrapping: true,
+  });
+
+  state.editor.setOption('extraKeys', {
+    'Ctrl-Enter': runQuery,
+    'Cmd-Enter': runQuery,
+  });
+}
+
+async function runQuery() {
+  const sparql = state.editor.getValue().trim();
+  if (!sparql) return;
+
+  const btn = document.getElementById('run-query');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  const meta = document.getElementById('result-meta');
+  meta.textContent = 'running...';
+
+  try {
+    const body = { query: sparql };
+    const validAt = document.getElementById('valid-at').value.trim();
+    const txId = document.getElementById('tx-id').value.trim();
+    if (validAt) body.valid_at = validAt;
+    if (txId) body.tx = parseInt(txId, 10);
+
+    const t0 = performance.now();
+    const data = await api('/query', body);
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+
+    state.lastResult = data;
+    meta.textContent = `${data.count || 0} rows | ${elapsed}s`;
+
+    // Hide examples
+    document.getElementById('query-examples').style.display = 'none';
+    renderResults();
+  } catch (e) {
+    meta.textContent = 'error';
+    const container = document.getElementById('results-container');
+    document.getElementById('query-examples').style.display = 'none';
+    container.innerHTML = `<pre class="json-result" style="color:var(--error)">${escapeHtml(e.message)}</pre>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run';
+  }
+}
+
+function renderResults() {
+  const container = document.getElementById('results-container');
+  const data = state.lastResult;
+  if (!data) return;
+
+  if (state.resultFormat === 'json') {
+    container.innerHTML = `<pre class="json-result">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+    return;
+  }
+
+  // Table view
+  if (data.rows && data.variables) {
+    let html = '<table class="results-table"><thead><tr>';
+    for (const v of data.variables) html += `<th>${escapeHtml(v)}</th>`;
+    html += '</tr></thead><tbody>';
+    for (const row of data.rows) {
+      html += '<tr>';
+      for (const v of data.variables) {
+        const val = row[v];
+        const display = val != null ? shortIri(String(val)) : '';
+        const full = val != null ? String(val) : '';
+        html += `<td title="${escapeHtml(full)}">${escapeHtml(display)}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } else if (data.triples) {
+    let html = '<table class="results-table"><thead><tr><th>Subject</th><th>Predicate</th><th>Object</th></tr></thead><tbody>';
+    for (const t of data.triples) {
+      html += `<tr><td>${escapeHtml(shortIri(t.subject))}</td><td>${escapeHtml(shortIri(t.predicate))}</td><td>${escapeHtml(shortIri(String(t.object)))}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } else if (data.result !== undefined) {
+    container.innerHTML = `<pre class="json-result">ASK result: ${data.result}</pre>`;
+  } else {
+    container.innerHTML = `<pre class="json-result">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+  }
+}
+
+// Result format buttons
+document.querySelectorAll('.results-format-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.results-format-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.resultFormat = btn.dataset.format;
+    renderResults();
+  });
+});
+
+// Example queries
+document.getElementById('query-examples').addEventListener('click', (e) => {
+  const ex = e.target.closest('.example-query');
+  if (ex && state.editor) {
+    state.editor.setValue(ex.dataset.query);
+    runQuery();
+  }
+});
+
+document.getElementById('run-query').addEventListener('click', runQuery);
+
+document.getElementById('btn-examples').addEventListener('click', () => {
+  const ex = document.getElementById('query-examples');
+  ex.style.display = ex.style.display === 'none' ? 'block' : 'none';
+});
+
+// ── Timeline ──
+async function loadEpisodes() {
+  const btn = document.getElementById('load-episodes');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const data = await api('/query', {
+      query: `SELECT ?ep ?name ?body ?source ?time WHERE {
+  ?ep a <http://www.w3.org/ns/prov#Activity> .
+  OPTIONAL { ?ep <http://www.w3.org/2000/01/rdf-schema#label> ?name }
+  OPTIONAL { ?ep <http://aegis.gastown.local/ontology/episodeBody> ?body }
+  OPTIONAL { ?ep <http://aegis.gastown.local/ontology/source> ?source }
+  OPTIONAL { ?ep <http://aegis.gastown.local/ontology/groupId> ?time }
+} LIMIT 200`
+    });
+
+    const meta = document.getElementById('timeline-meta');
+    meta.textContent = `${data.count || 0} episodes`;
+
+    const container = document.getElementById('timeline-entries');
+
+    if (!data.rows || data.rows.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">&#x1F4ED;</div><p>No episodes found. Ingest episodes via POST /episode to see them here.</p></div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    for (const row of data.rows) {
+      const entry = document.createElement('div');
+      entry.className = 'timeline-entry';
+
+      const epIri = row.ep || '';
+      const name = row.name || shortIri(epIri);
+      const body = row.body || '';
+      const source = row.source || '';
+      const time = row.time || '';
+
+      entry.innerHTML = `
+        <div class="entry-header">
+          <span class="entry-name">${escapeHtml(shortIri(name))}</span>
+          <span class="entry-time">${escapeHtml(time)}</span>
+        </div>
+        <div class="entry-source">${source ? 'Source: ' + escapeHtml(source) : ''}</div>
+        <div class="entry-body">${body ? escapeHtml(body) : '<em>No body text</em>'}</div>
+      `;
+
+      entry.onclick = () => {
+        entry.classList.toggle('expanded');
+        if (entry.classList.contains('expanded') && !entry.dataset.loaded) {
+          loadEpisodeEntities(entry, epIri);
+        }
+      };
+
+      container.appendChild(entry);
+    }
+  } catch (e) {
+    toast('Failed to load episodes: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load Episodes';
+  }
+}
+
+async function loadEpisodeEntities(entry, epIri) {
+  entry.dataset.loaded = '1';
+  try {
+    const data = await api('/query', {
+      query: `SELECT ?s ?p ?o WHERE {
+  ?s <http://www.w3.org/ns/prov#wasGeneratedBy> <${epIri}> .
+  ?s ?p ?o
+} LIMIT 100`
+    });
+
+    if (data.rows && data.rows.length > 0) {
+      const nodesDiv = document.createElement('div');
+      nodesDiv.className = 'entry-nodes';
+      const seen = new Set();
+      for (const row of data.rows) {
+        const s = row.s;
+        if (s && !seen.has(s)) {
+          seen.add(s);
+          const tag = document.createElement('span');
+          tag.className = 'entry-node-tag';
+          tag.textContent = shortIri(s);
+          tag.title = s;
+          nodesDiv.appendChild(tag);
+        }
+      }
+      entry.querySelector('.entry-body').after(nodesDiv);
+    }
+  } catch { /* ignore */ }
+}
+
+document.getElementById('load-episodes').addEventListener('click', loadEpisodes);
+
+// ── Shapes ──
+async function loadShapes() {
+  try {
+    const data = await api('/shapes', { action: 'list' });
+    const list = document.getElementById('shape-list');
+    list.innerHTML = '';
+
+    if (!data.shapes || data.shapes.length === 0) {
+      list.innerHTML = '<div style="padding:0.5rem;color:var(--text-muted);font-size:0.8rem">No shapes loaded</div>';
+    } else {
+      for (const shape of data.shapes) {
+        const item = document.createElement('div');
+        item.className = 'shape-item';
+        item.innerHTML = `<div class="shape-name">${escapeHtml(shape.name)}</div><div class="shape-date">${escapeHtml(shape.loaded_at)}</div>`;
+        list.appendChild(item);
+      }
+    }
+  } catch { /* ignore */ }
+
+  renderShapesTab();
+}
+
+async function renderShapesTab() {
+  const content = document.getElementById('shapes-content');
+
+  if (state.shapesTab === 'distribution') {
+    content.innerHTML = '<div style="text-align:center;padding:2rem"><span class="spinner"></span></div>';
+    try {
+      const data = await api('/query', {
+        query: 'SELECT ?type (COUNT(?s) AS ?count) WHERE { ?s a ?type } GROUP BY ?type ORDER BY DESC(?count)'
+      });
+
+      if (!data.rows || data.rows.length === 0) {
+        content.innerHTML = '<div class="empty-state"><p>No entities in the graph yet.</p></div>';
+        return;
+      }
+
+      let html = '<div class="type-distribution">';
+      for (const row of data.rows) {
+        const typeName = shortIri(row.type || '');
+        const count = row.count || 0;
+        html += `<div class="type-card"><div class="type-name" style="color:${typeColor(row.type)}">${escapeHtml(typeName)}</div><div class="type-count">${count}</div></div>`;
+      }
+      html += '</div>';
+      content.innerHTML = html;
+    } catch (e) {
+      content.innerHTML = `<div class="empty-state"><p>Error: ${escapeHtml(e.message)}</p></div>`;
+    }
+  } else if (state.shapesTab === 'browser') {
+    content.innerHTML = '<div class="empty-state"><p>Shape browser shows SHACL constraint details. Load shapes via POST /shapes to see them here.</p></div>';
+  } else if (state.shapesTab === 'validation') {
+    content.innerHTML = `
+      <h4 style="margin-bottom:0.75rem;font-size:0.9rem">Run Validation</h4>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem">
+        Validate RDF data against loaded SHACL shapes.
+      </p>
+      <textarea id="validate-data" style="width:100%;height:150px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:0.8rem;padding:0.5rem;resize:vertical" placeholder="Paste Turtle RDF data to validate..."></textarea>
+      <textarea id="validate-shapes" style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:0.8rem;padding:0.5rem;margin-top:0.5rem;resize:vertical" placeholder="Paste SHACL shapes (Turtle)..."></textarea>
+      <button class="btn" style="margin-top:0.5rem" onclick="runValidation()">Validate</button>
+      <div id="validation-results" style="margin-top:1rem"></div>
+    `;
+  }
+}
+
+// eslint-disable-next-line no-unused-vars -- called from inline onclick
+async function runValidation() {
+  const data = document.getElementById('validate-data').value.trim();
+  const shapes = document.getElementById('validate-shapes').value.trim();
+  if (!data || !shapes) { toast('Both data and shapes are required', true); return; }
+
+  const resultsEl = document.getElementById('validation-results');
+  resultsEl.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const result = await api('/validate', { shapes, data });
+    if (result.conforms) {
+      resultsEl.innerHTML = '<div class="validation-result" style="border-left-color:var(--success);background:rgba(78,204,163,0.1)">Data conforms to shapes.</div>';
+    } else {
+      let html = `<div style="margin-bottom:0.5rem;font-size:0.85rem;color:var(--error)">${result.violations} violation(s), ${result.warnings} warning(s)</div>`;
+      for (const issue of (result.issues || [])) {
+        const cls = issue.severity.includes('Violation') ? 'violation' : 'warning';
+        html += `<div class="validation-result ${cls}">
+          <div class="focus">${escapeHtml(shortIri(issue.focus_node))} &rarr; ${escapeHtml(shortIri(issue.path))}</div>
+          <div class="message">${escapeHtml(issue.message || issue.component)}</div>
+        </div>`;
+      }
+      resultsEl.innerHTML = html;
+    }
+  } catch (e) {
+    resultsEl.innerHTML = `<div class="validation-result violation">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+document.querySelector('#shapes .tab-bar').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  document.querySelectorAll('#shapes .tab-bar button').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  state.shapesTab = e.target.dataset.tab;
+  renderShapesTab();
+});
+
+// ── Utilities ──
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ── Init ──
+window.addEventListener('DOMContentLoaded', () => {
+  initEditor();
+  checkHealth();
+  setInterval(checkHealth, 30000);
+  navigate();
+});
+
+window.addEventListener('load', () => {
+  if (!location.hash) location.hash = '#explorer';
+});
+</script>
+</body>
+</html>
