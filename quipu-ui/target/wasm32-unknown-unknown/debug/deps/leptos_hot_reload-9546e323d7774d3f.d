@@ -1,9 +1,0 @@
-/home/braino/gt/quipu/polecats/nux/quipu/quipu-ui/target/wasm32-unknown-unknown/debug/deps/leptos_hot_reload-9546e323d7774d3f.d: /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/lib.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/diff.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/node.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/parsing.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/patch.js
-
-/home/braino/gt/quipu/polecats/nux/quipu/quipu-ui/target/wasm32-unknown-unknown/debug/deps/libleptos_hot_reload-9546e323d7774d3f.rmeta: /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/lib.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/diff.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/node.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/parsing.rs /home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/patch.js
-
-/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/lib.rs:
-/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/diff.rs:
-/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/node.rs:
-/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/parsing.rs:
-/home/braino/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/leptos_hot_reload-0.8.6/src/patch.js:
