@@ -245,6 +245,56 @@ mdbook serve docs/book
 
 See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of contents.
 
+## 📋 Feature Matrix
+
+| Feature | Status | Notes |
+|---------|:------:|-------|
+| **Core** | | |
+| EAVT bitemporal fact log | ✅ | Immutable, time-travel queries |
+| RDF data model (oxrdf) | ✅ | Turtle, N-Triples, JSON-LD, RDF/XML |
+| SQLite storage | ✅ | Single-file, embeddable |
+| Retraction with valid-time closure | ✅ | |
+| **SPARQL 1.1** | | |
+| SELECT / ASK / CONSTRUCT / DESCRIBE | ✅ | |
+| BGP, JOIN, UNION, FILTER, OPTIONAL | ✅ | |
+| ORDER BY, GROUP BY, HAVING | ✅ | |
+| Aggregates (COUNT, SUM, AVG, MIN, MAX) | ✅ | |
+| BIND / Extend | ✅ | |
+| Property paths | ✅ | |
+| Temporal queries (valid_at, as_of_tx) | ✅ | |
+| RDFS subclass inference | ✅ | |
+| SPARQL UPDATE | 🔜 | Planned |
+| Named graphs | 🔜 | Planned |
+| Full SPARQL federation (SERVICE) | 🔜 | Planned |
+| **Schema & Validation** | | |
+| SHACL write-time validation | ✅ | Optional `shacl` feature |
+| Persistent shape storage | ✅ | |
+| Aegis ontology shapes | ✅ | Infrastructure entities |
+| Code entity shapes | ✅ | CodeModule, CodeSymbol, etc. |
+| OWL reasoning | 🔜 | Planned |
+| **AI-Native** | | |
+| Episode ingestion (Graphiti-compatible) | ✅ | Typed nodes, edges, provenance |
+| SQLite vector search (cosine) | ✅ | Default backend |
+| LanceDB ANN + predicate pushdown | ✅ | Optional `lancedb` feature |
+| LanceDB full-text search | ✅ | |
+| Hybrid SPARQL + vector search | ✅ | |
+| Auto-embed on write | ✅ | Knot/episode hooks |
+| ONNX embedding pipeline | ✅ | Shared with Bobbin |
+| Context pipeline | ✅ | Text search + link expansion |
+| **Interfaces** | | |
+| Rust crate (embed) | ✅ | |
+| CLI (`quipu`) | ✅ | knot, read, repl, episode, etc. |
+| REST API (`quipu-server`) | ✅ | Axum-based |
+| Web UI | ✅ | Graph explorer, SPARQL workbench |
+| MCP tools (11) | ✅ | Agent integration |
+| Python bindings | 🔜 | Planned |
+| **Infrastructure** | | |
+| Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |
+| GraphProvider federation trait | ✅ | Multi-source queries |
+| Bobbin integration | ✅ | Namespace, IRI patterns, search |
+| Automated releases (release-plz) | ✅ | |
+| Clustering / replication | 🔜 | Planned |
+
 ## 🛠️ Development
 
 ```bash
