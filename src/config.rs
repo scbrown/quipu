@@ -40,6 +40,9 @@ pub struct QuipuConfig {
 
     /// Embedding configuration for auto-embedding on write.
     pub embedding: EmbeddingConfig,
+
+    /// Vector storage backend configuration.
+    pub vector: VectorConfig,
 }
 
 impl Default for QuipuConfig {
@@ -51,6 +54,7 @@ impl Default for QuipuConfig {
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
             embedding: EmbeddingConfig::default(),
+            vector: VectorConfig::default(),
         }
     }
 }
@@ -99,6 +103,37 @@ impl Default for EmbeddingConfig {
         Self {
             auto_embed: false,
             embed_batch_size: 32,
+        }
+    }
+}
+
+/// Which vector storage backend to use.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum VectorBackend {
+    /// `SQLite` brute-force cosine similarity (default).
+    #[default]
+    Sqlite,
+    /// `LanceDB` ANN search (requires `--features lancedb`).
+    Lancedb,
+}
+
+/// Vector storage configuration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct VectorConfig {
+    /// Which backend to use for vector storage.
+    pub backend: VectorBackend,
+
+    /// Path to the `LanceDB` database directory (default: `./quipu-vectors`).
+    pub lancedb_path: PathBuf,
+}
+
+impl Default for VectorConfig {
+    fn default() -> Self {
+        Self {
+            backend: VectorBackend::default(),
+            lancedb_path: PathBuf::from("./quipu-vectors"),
         }
     }
 }
@@ -173,6 +208,8 @@ mod tests {
         assert!(cfg.federation.remotes.is_empty());
         assert!(!cfg.embedding.auto_embed);
         assert_eq!(cfg.embedding.embed_batch_size, 32);
+        assert_eq!(cfg.vector.backend, VectorBackend::Sqlite);
+        assert_eq!(cfg.vector.lancedb_path, PathBuf::from("./quipu-vectors"));
     }
 
     #[test]
@@ -193,6 +230,10 @@ url = "http://quipu.svc:3030"
 [quipu.embedding]
 auto_embed = true
 embed_batch_size = 64
+
+[quipu.vector]
+backend = "lancedb"
+lancedb_path = "/data/vectors"
 "#;
         let file: ConfigFile = toml::from_str(toml_str).unwrap();
         let cfg = file.quipu;
@@ -205,6 +246,8 @@ embed_batch_size = 64
         assert_eq!(cfg.federation.remotes[0].url, "http://quipu.svc:3030");
         assert!(cfg.embedding.auto_embed);
         assert_eq!(cfg.embedding.embed_batch_size, 64);
+        assert_eq!(cfg.vector.backend, VectorBackend::Lancedb);
+        assert_eq!(cfg.vector.lancedb_path, PathBuf::from("/data/vectors"));
     }
 
     #[test]

@@ -179,6 +179,57 @@ impl LanceVectorStore {
         self.add_batch(batch)
     }
 
+    /// Add a pre-built `RecordBatch` to the table, creating it if it doesn't
+    /// exist yet.
+    ///
+    /// Used by the migration path for bulk inserts.
+    pub fn add_record_batch(&self, batch: RecordBatch) -> Result<()> {
+        Self::block_on(async {
+            match &self.table {
+                Some(table) => {
+                    table
+                        .add(vec![batch])
+                        .execute()
+                        .await
+                        .map_err(|e| Error::Store(format!("LanceDB add: {e}")))?;
+                }
+                None => {
+                    return Err(Error::Store(
+                        "LanceDB table not initialized — use ensure_table_from_batch() for first insert".into(),
+                    ));
+                }
+            }
+            Ok(())
+        })?
+    }
+
+    /// Create the table from a `RecordBatch` if it doesn't exist, or add to it.
+    ///
+    /// This is the entry point for migration — handles the first-batch create.
+    pub fn ensure_table_from_batch(&mut self, batch: RecordBatch) -> Result<()> {
+        Self::block_on(async {
+            match &self.table {
+                Some(table) => {
+                    table
+                        .add(vec![batch])
+                        .execute()
+                        .await
+                        .map_err(|e| Error::Store(format!("LanceDB add: {e}")))?;
+                }
+                None => {
+                    let table = self
+                        .conn
+                        .create_table(TABLE_NAME, vec![batch])
+                        .execute()
+                        .await
+                        .map_err(|e| Error::Store(format!("LanceDB create table: {e}")))?;
+                    self.table = Some(table);
+                }
+            }
+            Ok(())
+        })?
+    }
+
     fn add_batch(&self, batch: RecordBatch) -> Result<()> {
         Self::block_on(async {
             match &self.table {

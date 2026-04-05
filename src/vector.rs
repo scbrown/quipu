@@ -196,14 +196,31 @@ impl KnowledgeVectorStore for Store {
 impl Store {
     /// Return a reference to this store's vector backend.
     ///
-    /// When a [`VectorSearchDelegate`] is set, returns a wrapper that forwards
-    /// search to the delegate. Otherwise returns the local `SQLite` implementation.
+    /// Priority: external delegate > local `LanceDB` backend > `SQLite`.
     pub fn vector_store(&self) -> &dyn KnowledgeVectorStore {
         if let Some(ref delegate) = self.vector_delegate {
-            delegate
-        } else {
-            self
+            return delegate;
         }
+        #[cfg(feature = "lancedb")]
+        if let Some(ref lance) = self.lance_backend {
+            return lance;
+        }
+        self
+    }
+
+    /// Set a local `LanceDB` backend for vector operations.
+    ///
+    /// Unlike [`set_vector_search_delegate`](Store::set_vector_search_delegate),
+    /// the lance backend is Quipu-owned — both reads and writes go through it.
+    #[cfg(feature = "lancedb")]
+    pub fn set_lance_backend(&mut self, store: crate::vector_lance::LanceVectorStore) {
+        self.lance_backend = Some(store);
+    }
+
+    /// Returns `true` if a local `LanceDB` backend is configured.
+    #[cfg(feature = "lancedb")]
+    pub fn has_lance_backend(&self) -> bool {
+        self.lance_backend.is_some()
     }
 }
 

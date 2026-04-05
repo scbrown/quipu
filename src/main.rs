@@ -48,6 +48,7 @@ fn main() {
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_commands::cmd_export(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
+        "migrate-vectors" => cli_commands::cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
         _ => {
             eprintln!("unknown command: {cmd}");
@@ -73,6 +74,7 @@ COMMANDS:
     quipu repl [--db <path>]
     quipu export [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
+    quipu migrate-vectors [--dry-run] [--to <path>] [--db <path>]
 
 OPTIONS:
     --db <path>    Store file (default: quipu.db)

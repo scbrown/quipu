@@ -24,6 +24,11 @@ pub struct Store {
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
     pub(crate) vector_delegate: Option<DelegatingVectorStore>,
+    /// When set, vector operations use a local `LanceDB` backend instead of
+    /// `SQLite`. Unlike `vector_delegate`, this is Quipu-owned — writes go
+    /// through it.
+    #[cfg(feature = "lancedb")]
+    pub(crate) lance_backend: Option<crate::vector_lance::LanceVectorStore>,
 }
 
 /// A write-side assertion or retraction within a transaction.
@@ -66,6 +71,8 @@ impl Store {
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
             vector_delegate: None,
+            #[cfg(feature = "lancedb")]
+            lance_backend: None,
         })
     }
 

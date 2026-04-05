@@ -388,6 +388,75 @@ pub fn cmd_stats(db_path: &str) {
     }
 }
 
+/// Migrate vectors from SQLite to LanceDB.
+///
+/// Flags: `--dry-run` (report counts only), `--to <path>` (LanceDB directory).
+#[cfg(feature = "lancedb")]
+pub fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
+    let dry_run = args.iter().any(|a| a == "--dry-run");
+
+    let lance_path = args
+        .windows(2)
+        .find(|w| w[0] == "--to")
+        .map(|w| w[1].as_str())
+        .unwrap_or_else(|| {
+            config
+                .vector
+                .lancedb_path
+                .to_str()
+                .unwrap_or("./quipu-vectors")
+        });
+
+    let db_path = config.store_path.to_string_lossy();
+
+    if dry_run {
+        println!("dry run: reading vectors from {db_path}");
+    } else {
+        println!("migrating vectors: {db_path} → {lance_path}");
+    }
+
+    let rt = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
+        eprintln!("error creating runtime: {e}");
+        std::process::exit(1);
+    });
+
+    let mut lance = rt.block_on(async {
+        quipu::LanceVectorStore::open(lance_path)
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("error opening LanceDB at {lance_path}: {e}");
+                std::process::exit(1);
+            })
+    });
+
+    match quipu::migrate_vectors(&db_path, &mut lance, dry_run) {
+        Ok(report) => {
+            if dry_run {
+                println!(
+                    "dry run complete: {} total, {} would migrate, {} would skip",
+                    report.total, report.migrated, report.skipped
+                );
+            } else {
+                println!(
+                    "migration complete: {} total, {} migrated, {} skipped",
+                    report.total, report.migrated, report.skipped
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("migration error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(not(feature = "lancedb"))]
+pub fn cmd_migrate_vectors(_args: &[String], _config: &quipu::QuipuConfig) {
+    eprintln!("error: migrate-vectors requires the 'lancedb' feature");
+    eprintln!("  rebuild with: cargo build --features lancedb");
+    std::process::exit(1);
+}
+
 fn run_query(store: &quipu::Store, sparql: &str) {
     run_query_temporal(store, sparql, &quipu::TemporalContext::default());
 }
