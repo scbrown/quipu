@@ -215,6 +215,24 @@ impl Store {
         Self::collect_facts(&mut stmt, params![entity, attribute])
     }
 
+    // -- Counts (for observability) --
+
+    /// Count active facts (asserted and not retracted).
+    pub fn fact_count(&self) -> Result<i64> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(*) FROM facts WHERE op = 1 AND valid_to IS NULL",
+            [],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// Count stored SHACL shape graphs.
+    pub fn shape_count(&self) -> Result<i64> {
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM shapes", [], |row| row.get(0))?)
+    }
+
     // -- Internal --
 
     fn collect_facts(

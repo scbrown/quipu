@@ -13,6 +13,7 @@ pub mod mcp;
 #[cfg(feature = "lancedb")]
 pub mod migration;
 pub mod namespace;
+pub mod observability;
 pub mod provider;
 pub mod rdf;
 pub mod reconcile;
