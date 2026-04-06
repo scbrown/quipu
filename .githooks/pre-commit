@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
+# Shim: delegates to pre-commit framework.
+# Install with: pre-commit install
+# Or use this hook via: git config core.hooksPath .githooks
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+if command -v pre-commit &>/dev/null; then
+    exec pre-commit run --hook-stage pre-commit
+else
+    echo "WARNING: pre-commit not installed. Run 'pip install pre-commit && pre-commit install'" >&2
+    echo "Falling back to basic checks..." >&2
 
-echo "Running cargo fmt --check..."
-cargo fmt --check 2>&1 || { echo "Format check failed. Run 'cargo fmt' to fix."; exit 1; }
-
-echo "Running clippy..."
-cargo clippy --all-targets -- -D warnings -A missing-docs 2>&1 || { echo "Clippy failed."; exit 1; }
-
-echo "Checking file sizes..."
-"$ROOT/scripts/check-file-size.sh" || exit 1
-
-echo "Pre-commit checks passed."
+    cargo fmt --check 2>&1 || { echo "Format check failed. Run 'cargo fmt' to fix."; exit 1; }
+    cargo clippy --all-targets -- -D warnings -A missing-docs 2>&1 || { echo "Clippy failed."; exit 1; }
+fi
