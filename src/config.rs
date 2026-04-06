@@ -128,6 +128,15 @@ pub struct EmbeddingConfig {
 
     /// Number of entities to embed in each batch (default: 32).
     pub embed_batch_size: usize,
+
+    /// Path to the ONNX model file (e.g. all-MiniLM-L6-v2/onnx/model.onnx).
+    pub model_path: Option<PathBuf>,
+
+    /// Path to the tokenizer.json file (same directory as model typically).
+    pub tokenizer_path: Option<PathBuf>,
+
+    /// Embedding dimension (default: 384 for all-MiniLM-L6-v2).
+    pub dimension: usize,
 }
 
 impl Default for EmbeddingConfig {
@@ -135,6 +144,9 @@ impl Default for EmbeddingConfig {
         Self {
             auto_embed: false,
             embed_batch_size: 32,
+            model_path: None,
+            tokenizer_path: None,
+            dimension: 384,
         }
     }
 }

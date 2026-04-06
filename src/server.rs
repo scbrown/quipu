@@ -33,6 +33,7 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{get, post},
 };
+use quipu::EmbeddingProvider;
 use serde_json::{Value as JsonValue, json};
 
 type SharedStore = Arc<Mutex<quipu::Store>>;
@@ -61,12 +62,51 @@ async fn main() {
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();
 
-    let store = quipu::Store::open(&db_path).unwrap_or_else(|e| {
+    let mut store = quipu::Store::open(&db_path).unwrap_or_else(|e| {
         eprintln!("error opening store {db_path}: {e}");
         std::process::exit(1);
     });
 
+    // Initialize ONNX embedding provider if configured.
+    if let (Some(model_path), Some(tokenizer_path)) = (
+        &config.embedding.model_path,
+        &config.embedding.tokenizer_path,
+    ) {
+        match quipu::OnnxEmbeddingProvider::load(
+            model_path,
+            tokenizer_path,
+            config.embedding.dimension,
+        ) {
+            Ok(provider) => {
+                let dim = provider.dimension();
+                store.set_embedding_provider(Arc::new(provider));
+                store.embedding_config_mut().auto_embed = config.embedding.auto_embed;
+                store.embedding_config_mut().embed_batch_size = config.embedding.embed_batch_size;
+                eprintln!(
+                    "ONNX embedding provider loaded (dim={dim}, auto_embed={})",
+                    config.embedding.auto_embed
+                );
+            }
+            Err(e) => {
+                eprintln!("warning: failed to load ONNX embedder: {e}");
+                eprintln!("  model: {}", model_path.display());
+                eprintln!("  tokenizer: {}", tokenizer_path.display());
+                eprintln!("  vector search will be unavailable");
+            }
+        }
+    }
+
     let state: SharedStore = Arc::new(Mutex::new(store));
+
+    // Run one-shot embedding backfill if requested (before serving).
+    if args.iter().any(|a| a == "--embed-backfill") {
+        eprintln!("Running embedding backfill for all entities...");
+        let mut s = state.lock().unwrap();
+        match backfill_embeddings(&mut s) {
+            Ok(count) => eprintln!("Backfill complete: {count} entities embedded"),
+            Err(e) => eprintln!("Backfill error: {e}"),
+        }
+    }
 
     let app = Router::new()
         .route("/", get(ui))
@@ -90,6 +130,7 @@ async fn main() {
         .route("/shapes", post(shapes))
         .route("/project", post(project_graph))
         .route("/context", post(context))
+        .route("/embed_backfill", post(embed_backfill))
         .route("/entity/{iri}", get(entity_conneg))
         .with_state(state);
 
@@ -287,6 +328,71 @@ async fn context(
     let store = store.lock().unwrap();
     let result = quipu::tool_context(&store, &input)?;
     Ok(axum::Json(result))
+}
+
+// ── Embedding backfill ────────────────────────────────────────────
+
+fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Result<usize, String> {
+    let provider = store
+        .embedding_provider()
+        .ok_or("No embedding provider configured")?;
+    let result = quipu::sparql_query(store, "SELECT DISTINCT ?s WHERE { ?s ?p ?o }")
+        .map_err(|e| format!("{e}"))?;
+    let entity_ids: Vec<i64> = result
+        .rows()
+        .iter()
+        .filter_map(|row| {
+            if let Some(quipu::Value::Ref(id)) = row.get("s") {
+                Some(*id)
+            } else {
+                None
+            }
+        })
+        .collect();
+    if entity_ids.is_empty() {
+        return Ok(0);
+    }
+    let ts = format!(
+        "{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    );
+    let mut embedded = 0;
+    for chunk in entity_ids.chunks(32) {
+        let pairs: Vec<(i64, String)> = chunk
+            .iter()
+            .filter_map(|&eid| {
+                quipu::build_entity_text(store, eid)
+                    .ok()
+                    .filter(|t| !t.is_empty())
+                    .map(|t| (eid, t))
+            })
+            .collect();
+        if pairs.is_empty() {
+            continue;
+        }
+        let texts: Vec<&str> = pairs.iter().map(|(_, t)| t.as_str()).collect();
+        let embs = provider.embed_batch(&texts).map_err(|e| e.to_string())?;
+        let vs = store.vector_store();
+        for ((eid, text), emb) in pairs.iter().zip(embs.iter()) {
+            vs.embed_entity(*eid, text, emb, &ts)
+                .map_err(|e| e.to_string())?;
+            embedded += 1;
+        }
+    }
+    Ok(embedded)
+}
+
+async fn embed_backfill(
+    State(store): State<SharedStore>,
+) -> std::result::Result<axum::Json<JsonValue>, AppError> {
+    let mut s = store.lock().unwrap();
+    match backfill_embeddings(&mut s) {
+        Ok(n) => Ok(axum::Json(json!({"status": "ok", "entities_embedded": n}))),
+        Err(e) => Ok(axum::Json(json!({"status": "error", "error": e}))),
+    }
 }
 
 // ── Content negotiation for entity URLs ───────────────────────────

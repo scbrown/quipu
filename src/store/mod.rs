@@ -124,6 +124,11 @@ impl Store {
         self.embedding_provider.is_some()
     }
 
+    /// Returns a clone of the embedding provider, if one is attached.
+    pub fn embedding_provider(&self) -> Option<Arc<dyn EmbeddingProvider>> {
+        self.embedding_provider.clone()
+    }
+
     /// Embed a query string using the attached provider.
     ///
     /// Returns `None` if no provider is set. This allows search endpoints

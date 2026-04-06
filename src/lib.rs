@@ -13,6 +13,8 @@ pub mod mcp;
 #[cfg(feature = "lancedb")]
 pub mod migration;
 pub mod namespace;
+#[cfg(feature = "onnx")]
+pub mod onnx_embedder;
 pub mod provider;
 pub mod rdf;
 pub mod reconcile;
@@ -48,6 +50,8 @@ pub use mcp::tools::{
 pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
 #[cfg(feature = "lancedb")]
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
+#[cfg(feature = "onnx")]
+pub use onnx_embedder::OnnxEmbeddingProvider;
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use rdf::{export_rdf, ingest_rdf};
 pub use reconcile::{
