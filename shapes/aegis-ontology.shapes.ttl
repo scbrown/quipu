@@ -13,6 +13,20 @@
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix aegis:  <http://aegis.gastown.local/ontology/> .
 
+# ═══════════════════════════════════════════════════════════════════
+# Global Constraints
+# ═══════════════════════════════════════════════════════════════════
+
+# All aegis entities must have at least one rdfs:label.
+aegis:LabelRequiredShape a sh:NodeShape ;
+    sh:targetSubjectsOf aegis:runs_on, aegis:depends_on, aegis:managed_by,
+        aegis:member_of, aegis:owns, aegis:monitors, aegis:routes_to,
+        aegis:connects_to, aegis:deployed_on ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ════════��══════════════════════════════════════════════════════════
 # Infrastructure
 # ═════════════════════════════���═════════════════════════════════════
@@ -26,7 +40,7 @@ aegis:LXCContainerShape a sh:NodeShape ;
     sh:targetClass aegis:LXCContainer ;
     sh:property [
         sh:path aegis:ctId ;
-        sh:datatype xsd:string ;
+        sh:datatype xsd:integer ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
@@ -89,6 +103,13 @@ aegis:SystemdServiceShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:healthEndpoint ;
         sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:healthScore ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 100 ;
         sh:maxCount 1 ;
     ] .
 
@@ -158,9 +179,52 @@ aegis:ReverseProxyRouteShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] .
 
+# ── NetworkSegment ───────────────────────────────────────────────
+#
+# A VLAN, subnet, or DNS zone.
+
+aegis:NetworkSegmentShape a sh:NodeShape ;
+    sh:targetClass aegis:NetworkSegment ;
+    sh:property [
+        sh:path aegis:subnet ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:gateway ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:purpose ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
 # ════════════════════════════════════════��══════════════════════════
 # Agent Platform
 # ═════════��═════════════════════════════════════════════════════════
+
+# ── AgentTool ────────────────────────────────────────────────────
+#
+# A tool in the agent platform (parent of CLI, MCPServer).
+
+aegis:AgentToolShape a sh:NodeShape ;
+    sh:targetClass aegis:AgentTool ;
+    sh:property [
+        sh:path aegis:sourceRepo ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:version ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:providesCommand ;
+        sh:datatype xsd:string ;
+    ] .
 
 # ── Rig ─────────��──────────────────────────��─────────────────────
 #
@@ -312,6 +376,31 @@ aegis:FamilyMemberShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] .
 
+# ── Overseer ─────────────────────────────────────────────────────
+#
+# Stiwi — the human operator.
+
+aegis:OverseerShape a sh:NodeShape ;
+    sh:targetClass aegis:Overseer ;
+    sh:property [
+        sh:path aegis:pronouns ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── GoogleAccount ────────────────────────────────────────────────
+#
+# A Google account linked to a person.
+
+aegis:GoogleAccountShape a sh:NodeShape ;
+    sh:targetClass aegis:GoogleAccount ;
+    sh:property [
+        sh:path aegis:email ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
 # ══════════��═════════════════════════════��══════════════════════════
 # Knowledge
 # ═════════════════════════════════════════════════════════════���═════
@@ -380,6 +469,29 @@ aegis:DesignDocShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:author ;
         sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Probe ────────────────────────────────────────────────────────
+#
+# An investigation probe document.
+
+aegis:ProbeShape a sh:NodeShape ;
+    sh:targetClass aegis:Probe ;
+    sh:property [
+        sh:path aegis:title ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:domain ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:date ;
+        sh:datatype xsd:date ;
         sh:maxCount 1 ;
     ] .
 
@@ -561,12 +673,108 @@ aegis:BeadShape a sh:NodeShape ;
 # ── MediaLibrary ─────────────────────────────────────────────────
 
 aegis:MediaLibraryShape a sh:NodeShape ;
-    sh:targetClass aegis:MediaLibrary .
+    sh:targetClass aegis:MediaLibrary ;
+    sh:property [
+        sh:path aegis:platform ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Movie ────────────────────────────────────────────────────────
+#
+# A movie in a media library.
+
+aegis:MovieShape a sh:NodeShape ;
+    sh:targetClass aegis:Movie ;
+    sh:property [
+        sh:path aegis:title ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:year ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:plexId ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── TVSeries ─────────────────────────────────────────────────────
+#
+# A TV series in a media library.
+
+aegis:TVSeriesShape a sh:NodeShape ;
+    sh:targetClass aegis:TVSeries ;
+    sh:property [
+        sh:path aegis:title ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:plexId ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Watchlist ────────────────────────────────────────────────────
+#
+# A curated watchlist.
+
+aegis:WatchlistShape a sh:NodeShape ;
+    sh:targetClass aegis:Watchlist ;
+    sh:property [
+        sh:path aegis:owner ;
+        sh:maxCount 1 ;
+    ] .
 
 # ── ThemePark ────────────────────────────────────────────────────
 
 aegis:ThemeParkShape a sh:NodeShape ;
-    sh:targetClass aegis:ThemePark .
+    sh:targetClass aegis:ThemePark ;
+    sh:property [
+        sh:path aegis:name ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── ThemeParkVisit ───────────────────────────────────────────────
+#
+# A visit to a theme park.
+
+aegis:ThemeParkVisitShape a sh:NodeShape ;
+    sh:targetClass aegis:ThemeParkVisit ;
+    sh:property [
+        sh:path aegis:visitDate ;
+        sh:datatype xsd:date ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:park ;
+        sh:class aegis:ThemePark ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Attraction ───────────────────────────────────────────────────
+#
+# A theme park attraction.
+
+aegis:AttractionShape a sh:NodeShape ;
+    sh:targetClass aegis:Attraction ;
+    sh:property [
+        sh:path aegis:name ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:park ;
+        sh:class aegis:ThemePark ;
+        sh:maxCount 1 ;
+    ] .
 
 # ═════���══════════════════════════════════════��══════════════════════
 # Relationship Constraints
