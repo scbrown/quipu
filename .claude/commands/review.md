@@ -45,23 +45,27 @@ If the diff is empty, report "No changes to review" and stop.
 Review the diff systematically. For each issue found, classify by severity:
 
 **CRITICAL** - Must fix before merge:
+
 - Security vulnerabilities (injection, auth bypass, secrets in code)
 - Data loss risks (missing transactions, unsafe deletes)
 - Correctness bugs (race conditions, nil dereference, logic errors)
 
 **MAJOR** - Should fix before merge:
+
 - Logic errors that may not crash but produce wrong results
 - Missing error handling on external calls
 - API contract violations
 - Missing tests for critical paths
 
 **MINOR** - Nice to fix:
+
 - Style inconsistencies with surrounding code
 - Naming issues (unclear or misleading names)
 - Missing comments on non-obvious logic
 - Minor code smells
 
 For each issue, note:
+
 - File and line number
 - Severity (CRITICAL, MAJOR, MINOR)
 - Description of the issue
@@ -83,7 +87,7 @@ Grade is determined by the highest severity issue found:
 
 Output the review in this exact format:
 
-```
+```text
 Grade: <A|B|C|D|F>
 
 CRITICAL (<count> issues)
@@ -105,7 +109,8 @@ Verdict: <PASS|FAIL|SKIP>
 Omit empty severity sections (e.g., if no CRITICAL issues, don't print the CRITICAL section).
 
 If Grade is A, output:
-```
+
+```text
 Grade: A
 
 No issues found.

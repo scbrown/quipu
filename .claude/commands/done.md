@@ -20,6 +20,7 @@ git log --oneline origin/main..HEAD # Must have at least 1 commit
 ```
 
 If there are uncommitted changes, commit them first:
+
 ```bash
 git add <files>
 git commit -m "<type>: <description>"
@@ -34,12 +35,14 @@ gt done $ARGUMENTS
 ```
 
 **Common usage:**
+
 - `gt done` — Submit completed work (default: --status COMPLETED)
 - `gt done --pre-verified` — Submit with pre-verification (you ran gates after rebase)
 - `gt done --status ESCALATED` — Signal blocker, skip MR
 - `gt done --status DEFERRED` — Pause work, skip MR
 
 **If the bead has nothing to implement** (already fixed, can't reproduce):
+
 ```bash
 bd close <issue-id> --reason="no-changes: <brief explanation>"
 gt done

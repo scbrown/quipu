@@ -30,7 +30,7 @@ is wrong for three reasons:
 
 ## The Right Separation
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                    User's Browser                    │
 │                                                     │
@@ -77,6 +77,7 @@ Quipu is a Rust library. Its UI should be too:
 ### Framework: Leptos
 
 Leptos over Dioxus because:
+
 - Fine-grained reactivity (signals, not virtual DOM diffing)
 - First-class SSR for the standalone app (progressive enhancement)
 - Mature ecosystem, stable API
@@ -133,6 +134,7 @@ Quipu serves its own web UI at its REST API port. Five core views, each a
 Leptos component that can also be embedded as an island.
 
 Every view is built on the semantic web patterns from the previous section:
+
 - **Every entity URL supports content negotiation** — the standalone UI serves
   the HTML representation; the same URL serves JSON-LD or Turtle for machines.
   The UI IS the linked data browser.
@@ -154,6 +156,7 @@ The primary view. A force-directed graph of entities and relationships.
 **Layout**: Full-viewport graph with a collapsible sidebar.
 
 **Interactions**:
+
 - **Search to focus**: Type a name or IRI → graph centers on that node,
   highlights its neighborhood
 - **Click node**: Sidebar shows entity detail as **statement groups** (Wikidata
@@ -172,6 +175,7 @@ The primary view. A force-directed graph of entities and relationships.
   run aggregation query)
 
 **Filtering**:
+
 - Entity type checkboxes (color-coded)
 - Predicate type checkboxes (show/hide edge types)
 - Date range slider (valid-time filter — bitemporal!)
@@ -193,9 +197,10 @@ is for browsing, not querying.
 Split-pane: editor on top, results on bottom.
 
 **Editor**:
+
 - Monaco editor (via `monaco-wasm` or CDN) with SPARQL syntax highlighting
 - **Schema-aware autocomplete**: Quipu knows its loaded SHACL shapes. When you
-  type `?x a `, suggest entity types from the shapes. When you type `?x aegis:`,
+  type `?x a`, suggest entity types from the shapes. When you type `?x aegis:`,
   suggest predicates. This is the killer feature — no other SPARQL workbench
   does schema-driven completion from SHACL.
 - **Inline validation**: Parse SPARQL client-side using Quipu's own `spargebra`
@@ -205,6 +210,7 @@ Split-pane: editor on top, results on bottom.
 - **Natural language bar** (future): "What depends on koror?" → generates SPARQL.
 
 **Results**:
+
 - **Table view**: Default. Sortable columns, clickable IRIs that navigate to
   entity detail.
 - **Graph view**: If the result contains triples (CONSTRUCT or projected
@@ -221,7 +227,8 @@ query URLs (query encoded in URL hash).
 The bitemporal differentiator. No other tool does this.
 
 **Dual-axis time control**:
-```
+
+```text
 Transaction Time (what did we know when?)
   ◄━━━━━━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━►
   2026-01        2026-03       NOW
@@ -236,7 +243,8 @@ Scrubbing either slider re-queries Quipu with `AS OF` (transaction time) or
 
 **Entity History Panel**:
 For a selected entity, show every assertion and retraction:
-```
+
+```text
 koror (ProxmoxNode)
 ──────────────────────────────────────────────────
  2026-03-27  ✗ status: "online" retracted
@@ -254,6 +262,7 @@ are shown (when was this true? when did we learn it?).
 
 **Graph Diff**:
 Pick two time points → see what changed:
+
 - Green nodes/edges: Added
 - Red nodes/edges: Removed
 - Yellow nodes: Properties changed (expandable to see what changed)
@@ -266,7 +275,8 @@ This is invaluable for incident review: "What changed in the graph between
 Visual browser for loaded SHACL shapes and the entity type hierarchy.
 
 **Tree View** (Protege-inspired):
-```
+
+```text
 aegis:Thing
 ├── aegis:InfrastructureEntity
 │   ├── aegis:ProxmoxNode (3 instances)
@@ -283,7 +293,8 @@ aegis:Thing
 ```
 
 Click a type → see its SHACL shape as a card:
-```
+
+```text
 ┌─ aegis:LXCContainer ───────────────────────────┐
 │                                                 │
 │  Properties:                                    │
@@ -305,7 +316,8 @@ ontology structure. Not the instance data — the schema itself.
 
 **Validation Report**:
 Run SHACL validation across all entities. Results grouped by shape, severity:
-```
+
+```text
 aegis:LXCContainer — 12 instances — 2 warnings
   ⚠ ct-205 missing ipAddress (optional but recommended)
   ⚠ ct-310 runsService links to non-existent entity
@@ -320,7 +332,7 @@ Click any violation → navigate to the entity in the graph explorer.
 
 Chronological view of ingested episodes — the "how did we learn this?" view.
 
-```
+```text
 2026-04-04
   ┣━ 14:30  Incident: koror NFS timeout cascade
   ┃         extracted: 3 entities, 5 edges
@@ -339,6 +351,7 @@ Chronological view of ingested episodes — the "how did we learn this?" view.
 ```
 
 Click an episode → expand to see:
+
 - Raw episode text (the input)
 - Extracted entities and edges (the output)
 - Mini-graph of what was added to the knowledge graph
@@ -354,7 +367,8 @@ from simplest to richest:
 ### Level 1: Links (zero effort)
 
 Bobbin search results that match knowledge entities get a badge:
-```
+
+```text
 search_result.rs:42  — HybridSearch trait definition
   📊 koror (ProxmoxNode)  →  http://quipu.svc:3030/entity/aegis:koror
 ```
@@ -371,7 +385,7 @@ dependency. Generating a link is trivial.
 Bobbin's UI includes a "Knowledge" panel that loads Quipu's UI in an iframe
 or web component. Quipu renders itself — Bobbin just provides the viewport.
 
-```
+```text
 ┌─ Bobbin ──────────────────────────────────────┐
 │ Search: "dns"                                 │
 │                                               │
@@ -432,6 +446,7 @@ contributed" and renders it with a Quipu widget.
 - Does NOT own the graph visualization library choice
 
 Bobbin's knowledge integration is:
+
 1. **Data**: `quipu::Store` crate API for context assembly (already exists)
 2. **UI**: `<quipu-*>` web components or iframe for visual embedding
 3. **Navigation**: Hyperlinks from code results to Quipu's standalone UI
@@ -464,7 +479,9 @@ Bobbin's knowledge integration is:
 Quipu exports these web components (each self-contained WASM + JS):
 
 ### `<quipu-graph>`
+
 Interactive graph explorer. Attributes:
+
 - `endpoint` — Quipu REST API URL
 - `query` — SPARQL query to populate initial graph (optional)
 - `focus` — IRI to center on (optional)
@@ -473,26 +490,34 @@ Interactive graph explorer. Attributes:
 - `types` — Comma-separated entity types to show (filter)
 
 ### `<quipu-entity>`
+
 Entity detail card with edges and history. Attributes:
+
 - `endpoint` — Quipu REST API URL
 - `iri` — Entity IRI to display
 - `show-edges` — Show edge list (default: true)
 - `show-history` — Show temporal history (default: false)
 
 ### `<quipu-sparql>`
+
 SPARQL workbench. Attributes:
+
 - `endpoint` — Quipu REST API URL
 - `query` — Pre-filled query (optional)
 - `height` — Widget height
 
 ### `<quipu-timeline>`
+
 Episode timeline. Attributes:
+
 - `endpoint` — Quipu REST API URL
 - `from` / `to` — Date range filter
 - `source-type` — Filter by episode source type
 
 ### `<quipu-schema>`
+
 Schema browser showing loaded SHACL shapes. Attributes:
+
 - `endpoint` — Quipu REST API URL
 - `shape` — Focus on a specific shape (optional)
 
@@ -549,7 +574,7 @@ architecture change.
 Every knowledge entity in Quipu gets its own dereferenceable URL. The same
 URL returns different formats based on the `Accept` header:
 
-```
+```text
 GET /entity/koror
 Accept: text/html           → Quipu's standalone UI page for koror
 Accept: application/ld+json → JSON-LD document
@@ -557,7 +582,8 @@ Accept: text/turtle         → Turtle RDF
 ```
 
 With suffix-based fallback for debugging:
-```
+
+```text
 /entity/koror.html
 /entity/koror.json
 /entity/koror.ttl
@@ -580,7 +606,7 @@ a table of triples, every URI hyperlinked to its own page. Browsable graph.
 
 A Quipu API endpoint that takes unstructured text and returns matched entities:
 
-```
+```text
 POST /quipu/spotlight
 {"text": "koror NFS mount timeout cascaded to dolt-server", "confidence": 0.5}
 
@@ -600,6 +626,7 @@ hyperlinks to Quipu entity pages. The knowledge graph surfaces contextually
 without Bobbin understanding the ontology.
 
 **OpenRefine's reconciliation API** adds batch matching and autocomplete:
+
 - Reconcile: batch of strings → candidate entity matches with scores
 - Preview: HTML card for an entity (embeddable in any host)
 - Suggest: typeahead autocomplete for entity names
@@ -612,18 +639,18 @@ text, Quipu returns annotations, Bobbin renders them as links.
 When knowledge appears in Bobbin, group it by relationship type — not as a
 flat property table:
 
-```
+```text
 parseConfig
   Dependencies ─────────────────────
     yamlParser (Go Module)
     configSchema (SHACL Shape)
-  
+
   Owned By ─────────────────────────
     team-platform (CrewMember)
-  
+
   Runs On ──────────────────────────
     config-service → kota (ProxmoxNode)
-  
+
   Recent Episodes ──────────────────
     2026-04-03: "config parser refactored for YAML 1.2"
 ```
@@ -637,7 +664,7 @@ ever rendering a force-directed layout. This is how Wikidata presents Q42
 Instead of Bobbin proxying SPARQL queries to Quipu, Quipu exposes a minimal
 Triple Pattern Fragments endpoint:
 
-```
+```text
 GET /fragments?predicate=aegis:dependsOn&object=aegis:koror
 → All triples where something depends on koror
   + total count
@@ -666,7 +693,7 @@ quipu_type = "aegis:SoftwareComponent"
 match_by = "name"  # How to reconcile Bobbin symbols with Quipu entities
 
 [mappings.code_module]
-bobbin_type = "CodeModule" 
+bobbin_type = "CodeModule"
 quipu_type = "aegis:CodeRepository"
 match_by = "path"
 
@@ -733,7 +760,7 @@ mod tests {
     fn sparql_editor_validates_query() {
         let result = validate_sparql("SELECT ?s WHERE { ?s ?p ?o }");
         assert!(result.is_ok());
-        
+
         let result = validate_sparql("SLECT ?s WHERE");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("expected SELECT"));
@@ -769,10 +796,10 @@ async fn graph_explorer_loads_entities() {
     // Mount the Leptos app in a test container
     let container = document().create_element("div").unwrap();
     mount_to(container.clone(), || view! { <GraphExplorer /> });
-    
+
     // Wait for data fetch
     sleep(Duration::from_millis(500)).await;
-    
+
     // Verify Sigma.js graph was created
     let canvas = container.query_selector("canvas").unwrap();
     assert!(canvas.is_some(), "Sigma.js canvas should be rendered");
@@ -784,9 +811,9 @@ async fn web_component_responds_to_attributes() {
     el.set_attribute("iri", "aegis:koror").unwrap();
     el.set_attribute("endpoint", "http://localhost:3030").unwrap();
     document().body().unwrap().append_child(&el).unwrap();
-    
+
     sleep(Duration::from_millis(500)).await;
-    
+
     let shadow = el.shadow_root().unwrap();
     let label = shadow.query_selector(".entity-label").unwrap();
     assert!(label.is_some());
@@ -810,10 +837,10 @@ import { test, expect } from '@playwright/test';
 
 test('graph explorer shows entities from SPARQL query', async ({ page }) => {
   await page.goto('http://localhost:3030/');
-  
+
   // Wait for graph to render
   await page.waitForSelector('canvas', { timeout: 5000 });
-  
+
   // Verify entity count in sidebar
   const count = await page.textContent('.entity-count');
   expect(parseInt(count!)).toBeGreaterThan(0);
@@ -821,7 +848,7 @@ test('graph explorer shows entities from SPARQL query', async ({ page }) => {
 
 test('clicking entity opens detail panel', async ({ page }) => {
   await page.goto('http://localhost:3030/entity/aegis:koror');
-  
+
   await expect(page.locator('.entity-label')).toContainText('koror');
   await expect(page.locator('.entity-type')).toContainText('ProxmoxNode');
   await expect(page.locator('.edge-list')).toBeVisible();
@@ -829,11 +856,11 @@ test('clicking entity opens detail panel', async ({ page }) => {
 
 test('SPARQL workbench executes query and shows results', async ({ page }) => {
   await page.goto('http://localhost:3030/sparql');
-  
+
   // Type a query
   await page.fill('.cm-content', 'SELECT ?s WHERE { ?s a aegis:ProxmoxNode }');
   await page.click('button.run-query');
-  
+
   // Wait for results
   await page.waitForSelector('.results-table');
   const rows = await page.locator('.results-table tbody tr').count();
@@ -842,14 +869,14 @@ test('SPARQL workbench executes query and shows results', async ({ page }) => {
 
 test('temporal slider filters graph by valid-time', async ({ page }) => {
   await page.goto('http://localhost:3030/');
-  
+
   // Get initial entity count
   const before = await page.textContent('.entity-count');
-  
+
   // Drag valid-time slider to a past date
   await page.locator('.valid-time-slider').fill('2026-01-01');
   await page.waitForTimeout(500); // Wait for re-query
-  
+
   // Entity count should change (some entities didn't exist in January)
   const after = await page.textContent('.entity-count');
   expect(after).not.toEqual(before);
@@ -858,11 +885,11 @@ test('temporal slider filters graph by valid-time', async ({ page }) => {
 test('web component embedded in external page', async ({ page }) => {
   // Serve a minimal HTML page that embeds <quipu-graph>
   await page.goto('http://localhost:8080/test-embed.html');
-  
+
   // The web component should render its shadow DOM
   const component = page.locator('quipu-graph');
   await expect(component).toBeVisible();
-  
+
   // Sigma.js canvas should appear inside the shadow root
   const canvas = component.locator('canvas');
   await expect(canvas).toBeVisible();
@@ -885,7 +912,7 @@ test('graph explorer visual regression', async ({ page }) => {
   await page.goto('http://localhost:3030/?seed=42'); // Deterministic layout
   await page.waitForSelector('canvas');
   await page.waitForTimeout(1000); // Wait for force layout to settle
-  
+
   await expect(page).toHaveScreenshot('graph-explorer-default.png', {
     maxDiffPixelRatio: 0.05, // Allow 5% pixel difference
   });
@@ -909,10 +936,10 @@ async fn entity_endpoint_returns_json_ld() {
     let resp = client.get("http://localhost:3030/entity/aegis:koror")
         .header("Accept", "application/ld+json")
         .send().await.unwrap();
-    
+
     assert_eq!(resp.status(), 200);
     assert_eq!(resp.headers()["content-type"], "application/ld+json");
-    
+
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["@type"], "aegis:ProxmoxNode");
     assert!(body["@id"].as_str().unwrap().contains("koror"));
@@ -921,14 +948,14 @@ async fn entity_endpoint_returns_json_ld() {
 #[tokio::test]
 async fn content_negotiation_html_vs_json() {
     let client = reqwest::Client::new();
-    
+
     // HTML request
     let html = client.get("http://localhost:3030/entity/aegis:koror")
         .header("Accept", "text/html")
         .send().await.unwrap();
     assert!(html.headers()["content-type"].to_str().unwrap()
         .contains("text/html"));
-    
+
     // JSON-LD request
     let json = client.get("http://localhost:3030/entity/aegis:koror")
         .header("Accept", "application/ld+json")
@@ -946,7 +973,7 @@ async fn spotlight_endpoint_annotates_text() {
             "confidence": 0.5
         }))
         .send().await.unwrap();
-    
+
     let body: serde_json::Value = resp.json().await.unwrap();
     let annotations = body["annotations"].as_array().unwrap();
     assert!(!annotations.is_empty());
@@ -961,7 +988,7 @@ server. Polecats can spin up a test server, run the suite, tear it down.
 
 Polecats can't look at a screen, but they can test everything that matters:
 
-```
+```text
 1. cargo test                      # Layer 1: Rust unit tests
 2. wasm-pack test --headless       # Layer 2: WASM integration
 3. trunk serve &                   # Start the UI server
@@ -970,6 +997,7 @@ Polecats can't look at a screen, but they can test everything that matters:
 ```
 
 **Test fixtures**: Ship a `test-fixtures/` directory with:
+
 - `test-store.db` — A pre-populated Quipu SQLite database with known entities
 - `test-shapes.ttl` — SHACL shapes for the test ontology
 - `test-episodes.json` — Sample episodes for timeline testing
@@ -1005,14 +1033,17 @@ jobs:
 ## Open Questions
 
 ### 1. WASM Bundle Size
+
 Leptos + spargebra + SHACL types compiled to WASM could be 2-5MB. Acceptable
 for a standalone app, but heavy for a web component embedded in Bobbin's UI.
 Mitigation options:
+
 - Lazy-load the WASM module (show skeleton UI immediately)
 - Split into core (graph rendering, ~500KB) and full (SPARQL workbench, ~3MB)
 - Use Leptos islands to hydrate only the active component
 
 ### 2. Monaco vs CodeMirror for SPARQL Editor
+
 Monaco is VS Code's editor — excellent but heavy (~2MB). CodeMirror 6 is
 lighter (~200KB) and has a SPARQL mode. For the standalone app, Monaco is
 fine. For embedded widgets, CodeMirror is more appropriate.
@@ -1021,10 +1052,12 @@ Recommendation: CodeMirror 6 with a custom SPARQL language package that uses
 Quipu's own parser for validation.
 
 ### 3. Sigma.js Version
+
 Sigma.js v3 (current) is TypeScript-first with a clean API. The WASM interop
 boundary should target v3. Pin the version to avoid API drift.
 
 ### 4. Standalone vs Embedded: Same WASM or Separate Builds?
+
 Option A: One WASM module, used by both standalone app and web components.
 Option B: Standalone app is full Leptos SSR, web components are minimal WASM.
 
@@ -1033,7 +1066,9 @@ load speed, works without JS for basic browsing). Web components are
 client-side only by nature. Different build profiles for different contexts.
 
 ### 5. How Does This Affect bobbin-fal?
+
 The existing bobbin-fal bead and micro-ui.md design should be revised:
+
 - Remove the `KnowledgeViewSet` trait and all rendering logic
 - Replace with web component embedding (`<quipu-*>` elements)
 - Bobbin's "knowledge tab" becomes an iframe or web component host
@@ -1043,6 +1078,7 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 ## Phased Implementation
 
 ### Phase 1: Leptos Scaffold + Graph Explorer
+
 - Set up Trunk build, Leptos app, basic routing
 - Sigma.js + Graphology integration via wasm-bindgen
 - Graph explorer with entity type filtering
@@ -1050,6 +1086,7 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 - Dark theme
 
 ### Phase 2: SPARQL Workbench + Schema Browser
+
 - CodeMirror integration with SPARQL syntax highlighting
 - Schema-aware autocomplete from loaded SHACL shapes (WASM-side)
 - Client-side query validation (spargebra in WASM)
@@ -1058,18 +1095,21 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 - SHACL shape cards
 
 ### Phase 3: Temporal Navigator
+
 - Dual-axis time controls (valid-time + transaction-time)
 - Graph diff view between time points
 - Entity history panel
 - Episode timeline view
 
 ### Phase 4: Web Component Export
+
 - Extract graph explorer, entity card, SPARQL workbench as `<quipu-*>` elements
 - Minimal WASM builds for each component
 - postMessage protocol for host communication
 - Documentation for embedding in Bobbin or any other host
 
 ### Phase 5: Bobbin Embedding
+
 - Bobbin adds `<quipu-graph>` to search results (knowledge panel)
 - Bobbin adds entity link badges to code search results
 - Bobbin's context preview uses `<quipu-context>` to show knowledge contribution
@@ -1093,36 +1133,41 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 ## References
 
 ### Graph Visualization
-- Sigma.js: https://www.sigmajs.org
-- Graphology: https://graphology.github.io
-- Gephi Lite (Sigma.js reference app): https://github.com/gephi/gephi-lite
-- WebVOWL notation: http://vowl.visualdataweb.org/v2/
-- SemSpect exploration tree: https://www.semspect.de
-- Reagraph radial menus: https://reagraph.dev
+
+- Sigma.js: <https://www.sigmajs.org>
+- Graphology: <https://graphology.github.io>
+- Gephi Lite (Sigma.js reference app): <https://github.com/gephi/gephi-lite>
+- WebVOWL notation: <http://vowl.visualdataweb.org/v2/>
+- SemSpect exploration tree: <https://www.semspect.de>
+- Reagraph radial menus: <https://reagraph.dev>
 
 ### Frameworks & Build
-- Leptos: https://leptos.dev
-- Trunk: https://trunkrs.dev
-- wasm-bindgen: https://rustwasm.github.io/wasm-bindgen/
-- wasm-pack: https://rustwasm.github.io/wasm-pack/
+
+- Leptos: <https://leptos.dev>
+- Trunk: <https://trunkrs.dev>
+- wasm-bindgen: <https://rustwasm.github.io/wasm-bindgen/>
+- wasm-pack: <https://rustwasm.github.io/wasm-pack/>
 
 ### SPARQL & Query
-- YASGUI: https://yasgui.org
-- Sparklis guided queries: https://github.com/sebferre/sparklis
-- Comunica (client-side query engine): https://comunica.dev
+
+- YASGUI: <https://yasgui.org>
+- Sparklis guided queries: <https://github.com/sebferre/sparklis>
+- Comunica (client-side query engine): <https://comunica.dev>
 
 ### Semantic Web Patterns
-- JSON-LD spec: https://www.w3.org/TR/json-ld11/
-- Linked Data Platform (LDP): https://www.w3.org/TR/ldp/
-- Content negotiation: https://www.w3.org/TR/cooluris/
-- Triple Pattern Fragments: https://linkeddatafragments.org/
-- DBpedia Spotlight: https://www.dbpedia-spotlight.org/
-- OpenRefine Reconciliation API: https://reconciliation-api.github.io/specs/
-- Schema.org: https://schema.org/SoftwareSourceCode
-- Wikidata Query Service: https://query.wikidata.org
-- SOLID: https://solidproject.org
-- Drupal RDF module: https://www.drupal.org/docs/core-modules-and-themes/core-modules/rdf-module
+
+- JSON-LD spec: <https://www.w3.org/TR/json-ld11/>
+- Linked Data Platform (LDP): <https://www.w3.org/TR/ldp/>
+- Content negotiation: <https://www.w3.org/TR/cooluris/>
+- Triple Pattern Fragments: <https://linkeddatafragments.org/>
+- DBpedia Spotlight: <https://www.dbpedia-spotlight.org/>
+- OpenRefine Reconciliation API: <https://reconciliation-api.github.io/specs/>
+- Schema.org: <https://schema.org/SoftwareSourceCode>
+- Wikidata Query Service: <https://query.wikidata.org>
+- SOLID: <https://solidproject.org>
+- Drupal RDF module: <https://www.drupal.org/docs/core-modules-and-themes/core-modules/rdf-module>
 
 ### Testing
-- Playwright: https://playwright.dev
-- wasm-bindgen-test: https://rustwasm.github.io/wasm-bindgen/wasm-bindgen-test/
+
+- Playwright: <https://playwright.dev>
+- wasm-bindgen-test: <https://rustwasm.github.io/wasm-bindgen/wasm-bindgen-test/>
