@@ -250,6 +250,82 @@ pub fn cmd_unravel(args: &[String], db_path: &str) {
     }
 }
 
+/// `quipu impact` — walk the store outward from an entity and list what it reaches.
+///
+/// Phase 1 of the reasoner rollout: no rule engine, just a bounded BFS over
+/// entity→entity edges. Answers "what is downstream of this entity?" on
+/// current data and surfaces ontology gaps where an expected edge is missing.
+pub fn cmd_impact(args: &[String], db_path: &str) {
+    let entity_iri = match args.get(2) {
+        Some(iri) if !iri.starts_with("--") => iri.as_str(),
+        _ => {
+            eprintln!(
+                "usage: quipu impact <entity-IRI> [--hops N] [--predicate <IRI>]... [--db <path>]"
+            );
+            std::process::exit(1);
+        }
+    };
+
+    let hops: usize = args
+        .windows(2)
+        .find(|w| w[0] == "--hops")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(quipu::DEFAULT_HOPS);
+
+    // Collect all --predicate values (flag is repeatable).
+    let predicates: Vec<String> = args
+        .windows(2)
+        .filter(|w| w[0] == "--predicate")
+        .map(|w| w[1].clone())
+        .collect();
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let opts = quipu::ImpactOptions { hops, predicates };
+    let report = match quipu::impact(&store, entity_iri, &opts) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    // Text output. Root, then one line per reached entity grouped by depth.
+    println!("root: {}", report.root);
+    println!(
+        "hops: {}  reached: {}  edges: {}",
+        report.hops,
+        report.reached.len().saturating_sub(1),
+        report.edges_traversed
+    );
+    println!();
+
+    if report.reached.len() == 1 {
+        println!("(no reachable entities within {} hops)", report.hops);
+        return;
+    }
+
+    // Header + one row per non-root node.
+    println!("depth  via                                    entity");
+    println!("{}", "-".repeat(80));
+    for node in report.reached.iter().skip(1) {
+        let via = node.via_predicate.as_deref().unwrap_or("?");
+        // Truncate predicate to keep the table readable.
+        let via_trunc = if via.len() > 38 {
+            format!("…{}", &via[via.len() - 37..])
+        } else {
+            via.to_string()
+        };
+        println!("{:>5}  {:<38}  {}", node.depth, via_trunc, node.iri);
+    }
+}
+
 pub fn format_value(store: &quipu::Store, val: &quipu::Value) -> String {
     match val {
         quipu::Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),

@@ -5,6 +5,7 @@
 //!   quipu read "<sparql>" [--db <path>]   Run a SPARQL query
 //!   quipu cord [--type <IRI>] [--limit N] [--db <path>]  List entities
 //!   quipu unravel [--tx N] [--valid-at <date>] [--db <path>]  Time-travel query
+//!   quipu impact <entity-IRI> [--hops N] [--predicate <IRI>]...  Downstream walk
 //!   quipu validate --shapes <shapes.ttl> --data <data.ttl>  Validate without writing
 //!   quipu episode <file.json> [--db <path>]  Ingest a structured episode
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
@@ -41,6 +42,7 @@ fn main() {
         "read" | "query" => cli::cmd_query(&args, db_path),
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
+        "impact" => cli::cmd_impact(&args, db_path),
         "episode" => cli_commands::cmd_episode(&args, db_path),
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
@@ -87,6 +89,7 @@ COMMANDS:
     quipu read \"<sparql>\" [--db <path>]
     quipu cord [--type <IRI>] [--limit N] [--db <path>]
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
+    quipu impact <entity-IRI> [--hops N] [--predicate <IRI>]... [--db <path>]
     quipu episode <file.json> [--db <path>]
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
     quipu shapes load|list|remove [--db <path>]
