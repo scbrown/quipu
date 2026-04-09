@@ -1388,6 +1388,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
+name = "datafrog"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0afaad2b26fa326569eb264b1363e8ae3357618c43982b3f285f0774ce76b69"
+
+[[package]]
 name = "datafusion"
 version = "52.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5148,6 +5154,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "axum",
+ "datafrog",
  "futures",
  "lancedb",
  "ndarray 0.16.1",

@@ -18,6 +18,7 @@ pub mod namespace;
 pub mod onnx_embedder;
 pub mod provider;
 pub mod rdf;
+pub mod reasoner;
 pub mod reconcile;
 pub mod schema;
 #[cfg(feature = "shacl")]
