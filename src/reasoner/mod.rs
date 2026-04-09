@@ -26,10 +26,13 @@
 //! open for larger workloads without redesign.
 
 pub mod ast;
+mod compile;
 pub mod evaluate;
 pub mod parse;
 pub mod stratify;
 
+#[cfg(test)]
+mod evaluate_tests;
 #[cfg(test)]
 mod parse_tests;
 #[cfg(test)]
