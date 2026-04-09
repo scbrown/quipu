@@ -32,6 +32,8 @@ pub mod stratify;
 
 #[cfg(test)]
 mod parse_tests;
+#[cfg(test)]
+mod stratify_tests;
 
 pub use ast::{Atom, BodyAtom, Rule, Term};
 pub use evaluate::{EvalReport, evaluate};
