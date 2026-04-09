@@ -326,6 +326,73 @@ pub fn cmd_impact(args: &[String], db_path: &str) {
     }
 }
 
+/// `quipu reason` — load a Turtle ruleset and run the reasoner to a fixed point.
+///
+/// Phase 2 of the reasoner rollout: loads rules from a Turtle file (default
+/// `shapes/aegis-rules.ttl`), stratifies them, runs every stratum against the
+/// current EAVT snapshot, and writes derived facts back through the store
+/// with `source = reasoner:<rule-id>`. Each call is a full re-derivation —
+/// tuples that were derived last run but no longer hold are retracted.
+pub fn cmd_reason(args: &[String], db_path: &str) {
+    let rules_path = args
+        .windows(2)
+        .find(|w| w[0] == "--rules")
+        .map_or("shapes/aegis-rules.ttl", |w| w[1].as_str());
+
+    let ttl = match std::fs::read_to_string(rules_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error reading rules file {rules_path}: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let ruleset = match quipu::reasoner::parse_rules(&ttl, None) {
+        Ok(rs) => rs,
+        Err(e) => {
+            eprintln!("error parsing rules: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    if ruleset.is_empty() {
+        println!("no rules found in {rules_path}");
+        return;
+    }
+
+    let mut store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let now = chrono_now();
+    let report = match quipu::reasoner::evaluate(&mut store, &ruleset, &now) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("reasoner error: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    println!(
+        "reasoner: {} rules across {} strata — asserted {}, retracted {}",
+        ruleset.len(),
+        report.strata_run,
+        report.asserted,
+        report.retracted
+    );
+    if !report.per_rule.is_empty() {
+        println!();
+        println!("per-rule contributions:");
+        for (rule_id, count) in &report.per_rule {
+            println!("  {rule_id:<20}  {count}");
+        }
+    }
+}
+
 pub fn format_value(store: &quipu::Store, val: &quipu::Value) -> String {
     match val {
         quipu::Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),

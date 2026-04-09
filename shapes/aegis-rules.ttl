@@ -1,0 +1,46 @@
+# Aegis homelab reasoner rules.
+#
+# Datalog rules materialised on top of the ontology edges defined in
+# `shapes/aegis-ontology.shapes.ttl`. Derived facts are written back to
+# the EAVT store with `source = reasoner:<rule-id>`.
+#
+# Run with:
+#   quipu reason --rules shapes/aegis-rules.ttl
+#
+# Loading:
+#   Rules can also be stored in the `shapes` table alongside SHACL shapes
+#   via the `quipu shapes load` command — both vocabularies share the
+#   subject graph, and the reasoner only looks at `a rule:Rule` triples.
+
+@prefix rule:  <http://quipu.local/rule#> .
+@prefix ex:    <http://aegis.gastown.local/rules/> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+# Default prefix for unqualified predicate names in rule bodies/heads.
+# Every rule below can write `depends_on(?a, ?b)` and the parser expands
+# it to `<http://aegis.gastown.local/ontology/depends_on>`.
+ex:aegis a rule:RuleSet ;
+    rule:defaultPrefix "http://aegis.gastown.local/ontology/" .
+
+# ── Transitive dependency closure ─────────────────────────────────────
+#
+# `depends_on` is declared transitive at the reasoning layer: if A depends
+# on B and B depends on C, then A depends on C. Classic positive-recursive
+# rule — the stratifier keeps it inside one stratum and the evaluator
+# converges via semi-naive iteration over the shared join variable.
+ex:depends_on_transitive a rule:Rule ;
+    rule:id "depends_on_transitive" ;
+    rule:head "depends_on(?a, ?c)" ;
+    rule:body "depends_on(?a, ?b), depends_on(?b, ?c)" .
+
+# ── Host-level `runs_on` closure ──────────────────────────────────────
+#
+# If a service runs on a container, and that container runs on a host,
+# the service transitively runs on the host. This materialises the chain
+# needed to answer "which services live on host H?" without walking the
+# graph at query time — critical for impact analysis when a host goes
+# down.
+ex:runs_on_transitive a rule:Rule ;
+    rule:id "runs_on_transitive" ;
+    rule:head "runs_on(?svc, ?host)" ;
+    rule:body "runs_on(?svc, ?container), runs_on(?container, ?host)" .
