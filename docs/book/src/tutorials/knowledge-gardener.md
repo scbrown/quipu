@@ -254,8 +254,84 @@ all applicable shapes.
 | Most connected | `SELECT ?x (COUNT(?rel) AS ?n) GROUP BY ?x ORDER BY DESC(?n)` |
 | Recent additions | Time-travel with `--tx` to compare states |
 
+## Step 8: Derived Relationships as Garden Health
+
+The reasoner doesn't just derive facts for operators — it's a gardening
+tool. Materialised transitive closures reveal structural properties of your
+graph that are hard to see from raw facts alone.
+
+### Completeness Checks via Derived Facts
+
+Define a rule that derives "this service is reachable from at least one
+host" by closing the `runsOn` chain:
+
+```turtle
+@prefix rule: <http://quipu.local/rule#> .
+@prefix ex:   <http://aegis.gastown.local/rules/> .
+
+ex:garden a rule:RuleSet ;
+    rule:defaultPrefix "http://aegis.gastown.local/ontology/" .
+
+ex:runs_on_transitive a rule:Rule ;
+    rule:id "runs_on_transitive" ;
+    rule:head "runsOn(?svc, ?host)" ;
+    rule:body "runsOn(?svc, ?mid), runsOn(?mid, ?host)" .
+```
+
+After running the reasoner, query for services that *don't* transitively
+reach any host:
+
+```sparql
+PREFIX ont: <http://aegis.gastown.local/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?svc ?label
+WHERE {
+  ?svc a ont:Service .
+  ?svc rdfs:label ?label .
+  FILTER NOT EXISTS {
+    ?svc ont:runsOn ?host .
+    ?host a ont:Host .
+  }
+}
+```
+
+These are services with incomplete `runsOn` chains — either they reference
+a container that doesn't exist, or the chain breaks somewhere. This is a
+data quality signal: the garden needs tending.
+
+### Reactive Gardening
+
+With reactive evaluation enabled, derived facts update as agents write
+new data. You can run validation checks after the reasoner fires to catch
+problems immediately:
+
+1. Agent writes a new service with `runsOn` pointing to a container
+2. Reactive reasoner fires, tries to derive the transitive `runsOn` to a host
+3. If the container doesn't have its own `runsOn` edge, no transitive fact
+   is derived
+4. Your gardening query finds the gap
+
+This turns the reasoner into an early warning system: gaps in the
+transitive closure signal incomplete data at the source.
+
+### Monitoring Derived Fact Counts
+
+Track the health of your derived facts over time. After each reasoner run,
+the `EvalReport` tells you how many facts were asserted and retracted. A
+sudden spike in retractions might mean an agent is writing bad data that
+broke a dependency chain. A plateau in assertions might mean your rules
+have converged and the ontology is stable.
+
+```bash
+quipu reason --rules garden-rules.ttl --db knowledge.db
+# reasoner: 3 rules across 2 strata — asserted 0, retracted 0
+# ^ All derived facts are up to date — the garden is healthy
+```
+
 ## What's Next
 
+- [The Rule Builder](rule-builder.md) — write custom rules step by step
 - [SHACL Validation](../concepts/shacl-validation.md) — constraint reference
 - [SPARQL from Zero](sparql.md) — query patterns
 - [Knowledge Ingestion Recipe](../recipes/knowledge-ingestion.md) — bulk loading

@@ -138,6 +138,44 @@ for m in &matches {
 }
 ```
 
+## Reasoner (`quipu::reasoner`)
+
+Stratified Datalog engine that derives facts from rules over the EAVT log.
+
+```rust
+use quipu::reasoner::{parse_rules, evaluate, EvalReport, RuleSet};
+use quipu::store::Store;
+
+// Parse rules from Turtle
+let turtle = std::fs::read_to_string("rules.ttl")?;
+let ruleset: RuleSet = parse_rules(&turtle, None)?;
+
+// Evaluate (full re-derivation)
+let mut store = Store::open("quipu.db")?;
+let report: EvalReport = evaluate(&mut store, &ruleset, "2026-04-04T12:00:00Z")?;
+println!("{} asserted, {} retracted", report.asserted, report.retracted);
+
+// Reactive evaluation (auto-derive on every transact)
+#[cfg(feature = "reactive-reasoner")]
+{
+    use quipu::reasoner::reactive::ReactiveReasoner;
+    use std::sync::Arc;
+
+    let observer = Arc::new(ReactiveReasoner::new(ruleset));
+    store.add_observer(observer.clone());
+    // Derived facts now update automatically on every commit.
+}
+
+// Counterfactual queries
+let result = store.speculate(&hypothetical_datums, timestamp, |s| {
+    evaluate(s, &ruleset, timestamp)
+})?;
+// Store is unchanged — hypothetical was rolled back.
+```
+
+See [Reasoner Reference](reasoner.md) for rule syntax, error catalogue,
+and supported rule shapes.
+
 ## SHACL Validation (`quipu::shacl`)
 
 Schema enforcement at write time (requires `shacl` feature).

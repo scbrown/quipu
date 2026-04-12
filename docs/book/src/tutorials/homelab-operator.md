@@ -279,8 +279,86 @@ WHERE {
 }
 ```
 
+## Step 7: Materialise Dependencies with the Reasoner
+
+The property path queries above (`dependsOn+`, `runsOn+`) re-derive
+transitive chains every time you run them. For a graph you query often,
+the reasoner can materialise those chains once and keep them fresh.
+
+Create `infra-rules.ttl`:
+
+```turtle
+@prefix rule: <http://quipu.local/rule#> .
+@prefix ex:   <http://example.org/rules/> .
+
+ex:homelab a rule:RuleSet ;
+    rule:defaultPrefix "http://example.org/homelab/" .
+
+ex:depends_on_transitive a rule:Rule ;
+    rule:id "depends_on_transitive" ;
+    rule:head "dependsOn(?a, ?c)" ;
+    rule:body "dependsOn(?a, ?b), dependsOn(?b, ?c)" .
+
+ex:runs_on_transitive a rule:Rule ;
+    rule:id "runs_on_transitive" ;
+    rule:head "runsOn(?svc, ?host)" ;
+    rule:body "runsOn(?svc, ?mid), runsOn(?mid, ?host)" .
+```
+
+Run it:
+
+```bash
+quipu reason --rules infra-rules.ttl --db homelab.db
+```
+
+Now the "what breaks if koror goes down?" query simplifies — no property
+paths needed:
+
+```sparql
+PREFIX hw: <http://example.org/homelab/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT DISTINCT ?svc ?label
+WHERE {
+  ?svc hw:runsOn hw:koror .
+  ?svc rdfs:label ?label .
+}
+```
+
+This returns both directly-hosted services AND services that transitively
+run on koror via containers, because the reasoner already computed the
+transitive closure.
+
+### Stay Fresh with Reactive Evaluation
+
+Enable reactive mode so derived facts update whenever you add or remove
+infrastructure:
+
+```bash
+quipu reason --reactive --rules infra-rules.ttl --db homelab.db
+```
+
+Now when a monitoring agent reports a new container on koror, the
+transitive `runsOn` edges update automatically in the same transaction.
+
+### "What If?" Before You Change
+
+Before decommissioning a host, ask the reasoner what would break:
+
+```rust
+// Hypothetical: retract all runsOn edges to koror
+let report = store.speculate(&koror_retractions, timestamp, |s| {
+    evaluate(s, &ruleset, timestamp)
+})?;
+println!("Decommissioning koror would retract {} derived facts", report.retracted);
+```
+
+The store remains unchanged — you see the impact without making the change.
+See [The Rule Builder](rule-builder.md) for a complete walkthrough.
+
 ## What's Next
 
+- [The Rule Builder](rule-builder.md) — write custom rules step by step
 - [Impact Analysis Recipe](../recipes/impact-analysis.md) — more impact patterns
 - [SPARQL from Zero](sparql.md) — full SPARQL reference tutorial
 - [Knowledge Gardener](knowledge-gardener.md) — maintain ontology quality

@@ -212,8 +212,76 @@ ADRs (Architecture Decision Records) stored as entities with `influences`
 edges to code. When someone asks "why did we do it this way?", the graph
 has the answer — queryable by code symbol, by date, or by topic.
 
+## Step 7: Derive Influence Chains with the Reasoner
+
+You've recorded `influences` edges between decisions and code symbols. But
+influence is transitive — if decision A influences module M, and module M
+is used by module N, then decision A indirectly influences module N. The
+reasoner can materialise these chains.
+
+Create `archaeology-rules.ttl`:
+
+```turtle
+@prefix rule: <http://quipu.local/rule#> .
+@prefix ex:   <http://aegis.gastown.local/rules/> .
+
+ex:archaeology a rule:RuleSet ;
+    rule:defaultPrefix "http://aegis.gastown.local/ontology/" .
+
+# Transitive influence: if A influences B and B is usedBy C, A influences C
+ex:influence_through_usage a rule:Rule ;
+    rule:id "influence_through_usage" ;
+    rule:head "influences(?decision, ?downstream)" ;
+    rule:body "influences(?decision, ?code), usedBy(?code, ?downstream)" .
+
+# Transitive partOf: if A is partOf B and B is partOf C, A is partOf C
+ex:part_of_transitive a rule:Rule ;
+    rule:id "part_of_transitive" ;
+    rule:head "partOf(?a, ?c)" ;
+    rule:body "partOf(?a, ?b), partOf(?b, ?c)" .
+```
+
+Run it:
+
+```bash
+quipu reason --rules archaeology-rules.ttl --db knowledge.db
+```
+
+Now you can answer "which decisions influenced this module?" across any
+depth of the dependency graph, with a flat query:
+
+```sparql
+PREFIX ont: <http://aegis.gastown.local/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?decision ?description
+WHERE {
+  ?decision ont:influences <http://aegis.gastown.local/ontology/sparql-engine> .
+  ?decision a ont:Decision .
+  ?decision rdfs:comment ?description .
+}
+```
+
+### Blast Radius for Code Changes
+
+Before refactoring a module, use `speculate()` to see what derived
+relationships would break:
+
+```rust
+// Hypothetical: remove the usedBy edge from store-transact to sparql-engine
+let report = store.speculate(&retractions, timestamp, |s| {
+    evaluate(s, &ruleset, timestamp)
+})?;
+println!("Decoupling these modules would affect {} derived influence chains",
+    report.retracted);
+```
+
+This tells you which architectural decisions and incident correlations
+would lose their path to downstream code — before you make the change.
+
 ## What's Next
 
+- [The Rule Builder](rule-builder.md) — write custom rules step by step
 - [Incident Correlation Recipe](../recipes/incident-correlation.md) — more patterns
 - [SPARQL from Zero](sparql.md) — learn query patterns
 - [Graph Projection](../reference/api.md) — API details

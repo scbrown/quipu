@@ -123,6 +123,99 @@ The projection returns nodes and edges suitable for:
 
 Services with the highest in-degree are your most critical dependencies.
 
+## Materialised Impact via the Reasoner
+
+The SPARQL property path approach above re-derives transitive chains at
+query time. For graphs that change infrequently but are queried often,
+you can **materialise** the transitive closure using the reasoner — derived
+facts sit in the store alongside raw facts and are queryable without
+property paths.
+
+### Set Up Rules
+
+Create `impact-rules.ttl`:
+
+```turtle
+@prefix rule:  <http://quipu.local/rule#> .
+@prefix ex:    <http://aegis.gastown.local/rules/> .
+
+ex:impact a rule:RuleSet ;
+    rule:defaultPrefix "http://aegis.gastown.local/ontology/" .
+
+ex:depends_on_transitive a rule:Rule ;
+    rule:id "depends_on_transitive" ;
+    rule:head "dependsOn(?a, ?c)" ;
+    rule:body "dependsOn(?a, ?b), dependsOn(?b, ?c)" .
+
+ex:runs_on_transitive a rule:Rule ;
+    rule:id "runs_on_transitive" ;
+    rule:head "runsOn(?svc, ?host)" ;
+    rule:body "runsOn(?svc, ?container), runsOn(?container, ?host)" .
+```
+
+### Run the Reasoner
+
+```bash
+quipu reason --rules impact-rules.ttl --db homelab.db
+```
+
+Now transitive edges are first-class facts. The blast radius query
+simplifies to a flat lookup:
+
+```sparql
+PREFIX ont: <http://aegis.gastown.local/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT DISTINCT ?affected ?label
+WHERE {
+  ?affected ont:dependsOn <http://aegis.gastown.local/ontology/postgres> .
+  ?affected rdfs:label ?label .
+}
+```
+
+No `+` operator, no property paths — the reasoner has already closed the
+chain. This is faster for repeated queries and simpler for agents to
+consume (they don't need to understand property path syntax).
+
+### Keep It Fresh
+
+Enable reactive evaluation so derived facts update automatically when
+base facts change:
+
+```bash
+quipu reason --reactive --rules impact-rules.ttl --db homelab.db
+```
+
+Now every `transact()` that touches `dependsOn` or `runsOn` triggers
+re-derivation of the affected transitive edges.
+
+### Property Paths vs Reasoner: When to Use Which
+
+| Approach | Best for |
+|----------|----------|
+| **Property paths** (`dependsOn+`) | Ad-hoc exploration, one-off queries, small graphs |
+| **Reasoner rules** | Repeated queries, agent consumption, cross-predicate joins, counterfactual analysis |
+
+The two approaches are complementary. Property paths work on any graph
+without setup. The reasoner requires writing rules up front but pays back
+on every subsequent query.
+
+### Counterfactual Impact
+
+The reasoner's `speculate()` API lets you test hypothetical changes
+without committing them:
+
+```rust
+// "What if postgres goes down?"
+let report = store.speculate(&retractions, timestamp, |s| {
+    evaluate(s, &ruleset, timestamp)
+})?;
+println!("{} derived facts would be retracted", report.retracted);
+```
+
+See [The Rule Builder tutorial](../tutorials/rule-builder.md) for a
+complete worked example.
+
 ## Temporal Impact: What Changed?
 
 Compare the dependency graph before and after a change:

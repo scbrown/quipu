@@ -131,6 +131,27 @@ quipu stats --db my.db
 
 Output: fact count, entity count, predicate count.
 
+### `quipu reason`
+
+Run the Datalog reasoner to derive facts from rules.
+
+```bash
+quipu reason --db my.db
+quipu reason --rules custom-rules.ttl --db my.db
+quipu reason --reactive --db my.db
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--rules <file>` | `shapes/aegis-rules.ttl` | Turtle file containing rules |
+| `--reactive` | off | Register reactive observer after evaluation |
+
+Output shows asserted/retracted counts per rule. Derived facts are written
+with `source = "reasoner:<rule-id>"` provenance.
+
+See [Reasoner Reference](reasoner.md) for full details on rule syntax and
+the evaluation model.
+
 ### `quipu repl`
 
 Interactive SPARQL prompt.

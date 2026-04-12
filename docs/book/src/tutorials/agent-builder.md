@@ -232,8 +232,88 @@ WHERE {
 }
 ```
 
+## Step 6: Derived Knowledge with the Reasoner
+
+Agents write raw facts — "traefik runs on webproxy", "webproxy runs on
+koror". But other agents need to query *derived* facts — "traefik runs
+on koror" (transitively). Instead of making every consuming agent write
+property path queries, use the reasoner to materialise derived facts that
+every agent can query directly.
+
+### Rules as Shared Infrastructure
+
+Define rules once, and every agent benefits:
+
+```turtle
+@prefix rule: <http://quipu.local/rule#> .
+@prefix ex:   <http://aegis.gastown.local/rules/> .
+
+ex:agent_rules a rule:RuleSet ;
+    rule:defaultPrefix "http://aegis.gastown.local/ontology/" .
+
+# If A depends on B and B depends on C, then A depends on C
+ex:depends_on_transitive a rule:Rule ;
+    rule:id "depends_on_transitive" ;
+    rule:head "dependsOn(?a, ?c)" ;
+    rule:body "dependsOn(?a, ?b), dependsOn(?b, ?c)" .
+```
+
+### Reactive: Derive on Write
+
+With reactive evaluation enabled, derived facts update every time an agent
+writes an episode:
+
+```bash
+quipu reason --reactive --rules agent-rules.ttl --db knowledge.db
+```
+
+Now when the deploy agent writes a new `dependsOn` edge, the transitive
+closure updates in the same transaction. The Q&A agent's next query sees
+the full dependency chain without any property paths.
+
+### Pre-Flight Checks with Speculate
+
+Before a deploy agent pushes a change, it can ask "what would this break?"
+without actually modifying the graph:
+
+```rust
+// Hypothetical: remove the old service version
+let report = store.speculate(&removal_datums, timestamp, |s| {
+    evaluate(s, &ruleset, timestamp)
+})?;
+
+if report.retracted > 0 {
+    println!("WARNING: removing old version would retract {} derived facts", report.retracted);
+    // Agent can decide to proceed or alert a human
+}
+// Store is unchanged — safe to inspect before committing
+```
+
+This is especially powerful in multi-agent systems: one agent proposes a
+change, the reasoner evaluates the impact, and a separate agent decides
+whether to approve it.
+
+### Provenance for Derived Facts
+
+Derived facts carry source tags like `reasoner:depends_on_transitive`.
+Agents can distinguish raw observations from derived knowledge:
+
+```sparql
+PREFIX ont: <http://aegis.gastown.local/ontology/>
+
+SELECT ?a ?b
+WHERE {
+  ?a ont:dependsOn ?b .
+  # This returns BOTH direct and transitively-derived dependencies
+}
+```
+
+The provenance is in the fact metadata — agents that need to distinguish
+can filter on the `source` field.
+
 ## What's Next
 
+- [The Rule Builder](rule-builder.md) — write custom rules step by step
 - [MCP Tools Reference](../reference/mcp-tools.md) — full tool docs
 - [Knowledge Ingestion Recipe](../recipes/knowledge-ingestion.md) — batch patterns
 - [REST API Reference](../reference/rest-api.md) — all HTTP endpoints
