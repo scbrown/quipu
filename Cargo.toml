@@ -41,6 +41,11 @@ name = "quipu-server"
 path = "src/server.rs"
 required-features = ["shacl", "onnx"]
 
+[[bin]]
+name = "seed-fixtures"
+path = "src/bin/seed_fixtures.rs"
+required-features = ["shacl"]
+
 [dependencies]
 rusqlite = { version = "0.33", features = ["bundled"] }
 thiserror = "2"

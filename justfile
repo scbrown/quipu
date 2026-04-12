@@ -42,6 +42,16 @@ fmt:
     cargo fmt
 
 
+# === Fixtures ===
+
+# Generate test-fixtures/test-store.db from static assets
+seed:
+    cargo run --bin seed-fixtures --features shacl
+
+# Serve the test fixture database on localhost:3030
+serve-fixtures:
+    cargo run --bin quipu-server --features shacl,onnx -- --db test-fixtures/test-store.db
+
 # === Documentation ===
 
 # Documentation management: just docs <cmd>

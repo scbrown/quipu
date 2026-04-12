@@ -1,0 +1,75 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# ── Directives ───────────────────────────────────────────────
+
+aegis:hla-001 a aegis:Directive ;
+    rdfs:label "hla-001" ;
+    rdfs:comment "All infrastructure changes must be tracked in the knowledge graph" ;
+    aegis:authority "hla" ;
+    aegis:issuedBy "stiwi" ;
+    aegis:applies_to aegis:quipu-server .
+
+aegis:hla-002 a aegis:Directive ;
+    rdfs:label "hla-002" ;
+    rdfs:comment "Crew agents must hand off cleanly with context preserved in beads" ;
+    aegis:authority "hla" ;
+    aegis:issuedBy "stiwi" .
+
+aegis:hla-003 a aegis:Directive ;
+    rdfs:label "hla-003" ;
+    rdfs:comment "Observability data flows through prometheus and is queryable via SPARQL" ;
+    aegis:authority "hla" ;
+    aegis:issuedBy "stiwi" ;
+    aegis:applies_to aegis:prometheus .
+
+aegis:ops-001 a aegis:Directive ;
+    rdfs:label "ops-001" ;
+    rdfs:comment "Backup verification runs daily via restic check" ;
+    aegis:authority "ops" ;
+    aegis:issuedBy "stiwi" ;
+    aegis:applies_to aegis:restic .
+
+aegis:ops-002 a aegis:Directive ;
+    rdfs:label "ops-002" ;
+    rdfs:comment "Service health scores must be updated within 5 minutes of status change" ;
+    aegis:authority "ops" ;
+    aegis:issuedBy "stiwi" ;
+    aegis:applies_to aegis:prometheus .
+
+# ── Design Docs ──────────────────────────────────────────────
+
+aegis:design-quipu-ui a aegis:DesignDoc ;
+    rdfs:label "design-quipu-ui" ;
+    rdfs:comment "Quipu UI design — web components for knowledge graph exploration" ;
+    aegis:status "accepted" ;
+    aegis:author "owen" .
+
+aegis:design-reasoner a aegis:DesignDoc ;
+    rdfs:label "design-reasoner" ;
+    rdfs:comment "Reasoner design — datafrog-based incremental reasoning engine" ;
+    aegis:status "accepted" ;
+    aegis:author "owen" .
+
+aegis:design-federation a aegis:DesignDoc ;
+    rdfs:label "design-federation" ;
+    rdfs:comment "Federation design — multi-store SPARQL federation" ;
+    aegis:status "draft" ;
+    aegis:author "owen" .
+
+# ── Probes ───────────────────────────────────────────────────
+
+aegis:probe-koror-downtime a aegis:Probe ;
+    rdfs:label "probe-koror-downtime" ;
+    aegis:title "Koror Downtime Investigation" ;
+    aegis:domain "infrastructure" ;
+    aegis:date "2026-03-27"^^xsd:date ;
+    aegis:applies_to aegis:koror .
+
+aegis:probe-dolt-performance a aegis:Probe ;
+    rdfs:label "probe-dolt-performance" ;
+    aegis:title "Dolt Performance Analysis" ;
+    aegis:domain "database" ;
+    aegis:date "2026-04-01"^^xsd:date ;
+    aegis:applies_to aegis:dolt .

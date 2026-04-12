@@ -1,0 +1,97 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ── Rigs ─────────────────────────────────────────────────────
+
+aegis:aegis a aegis:Rig ;
+    rdfs:label "aegis" ;
+    aegis:prefix "aegis" ;
+    aegis:purpose "infrastructure" .
+
+aegis:quipu a aegis:Rig ;
+    rdfs:label "quipu" ;
+    aegis:prefix "quipu" ;
+    aegis:purpose "knowledge-graph" .
+
+aegis:bobbin a aegis:Rig ;
+    rdfs:label "bobbin" ;
+    aegis:prefix "bobbin" ;
+    aegis:purpose "knowledge-module" .
+
+# ── Crew Members ─────────────────────────────────────────────
+
+aegis:malcolm a aegis:CrewMember ;
+    rdfs:label "malcolm" ;
+    aegis:role "mayor" ;
+    aegis:tier "mayor" ;
+    aegis:domain "gastown" ;
+    aegis:member_of aegis:aegis .
+
+aegis:goldblum a aegis:CrewMember ;
+    rdfs:label "goldblum" ;
+    aegis:role "crew" ;
+    aegis:tier "crew" ;
+    aegis:domain "aegis" ;
+    aegis:member_of aegis:aegis .
+
+aegis:ellie a aegis:CrewMember ;
+    rdfs:label "ellie" ;
+    aegis:role "crew" ;
+    aegis:tier "crew" ;
+    aegis:domain "aegis" ;
+    aegis:member_of aegis:aegis .
+
+aegis:owen a aegis:CrewMember ;
+    rdfs:label "owen" ;
+    aegis:role "crew" ;
+    aegis:tier "crew" ;
+    aegis:domain "quipu" ;
+    aegis:member_of aegis:quipu .
+
+aegis:alan a aegis:CrewMember ;
+    rdfs:label "alan" ;
+    aegis:role "crew" ;
+    aegis:tier "crew" ;
+    aegis:domain "bobbin" ;
+    aegis:member_of aegis:bobbin .
+
+aegis:muldoon a aegis:CrewMember ;
+    rdfs:label "muldoon" ;
+    aegis:role "crew" ;
+    aegis:tier "crew" ;
+    aegis:domain "aegis" ;
+    aegis:member_of aegis:aegis .
+
+# ── CLIs ─────────────────────────────────────────────────────
+
+aegis:gt a aegis:CLI ;
+    rdfs:label "gt" ;
+    aegis:binary "gt" .
+
+aegis:bd a aegis:CLI ;
+    rdfs:label "bd" ;
+    aegis:binary "bd" .
+
+aegis:bobbin-cli a aegis:CLI ;
+    rdfs:label "bobbin" ;
+    aegis:binary "bobbin" .
+
+aegis:quipu-cli a aegis:CLI ;
+    rdfs:label "quipu" ;
+    aegis:binary "quipu" .
+
+aegis:marshal a aegis:CLI ;
+    rdfs:label "marshal" ;
+    aegis:binary "marshal" .
+
+# ── Overseer ─────────────────────────────────────────────────
+
+aegis:stiwi a aegis:Overseer ;
+    rdfs:label "stiwi" ;
+    aegis:pronouns "he/him" .
+
+# ── Ownership edges ──────────────────────────────────────────
+
+aegis:koror aegis:managed_by aegis:stiwi .
+aegis:kota aegis:managed_by aegis:stiwi .
+aegis:niue aegis:managed_by aegis:stiwi .

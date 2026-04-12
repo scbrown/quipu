@@ -1,0 +1,215 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+# ── Proxmox Nodes ────────────────────────────────────────────
+
+aegis:koror a aegis:ProxmoxNode ;
+    rdfs:label "koror" ;
+    aegis:nodeId "koror" ;
+    aegis:role "compute" ;
+    aegis:status "online" .
+
+aegis:kota a aegis:ProxmoxNode ;
+    rdfs:label "kota" ;
+    aegis:nodeId "kota" ;
+    aegis:role "storage" .
+
+aegis:niue a aegis:ProxmoxNode ;
+    rdfs:label "niue" ;
+    aegis:nodeId "niue" ;
+    aegis:role "backup" .
+
+# ── LXC Containers: koror ────────────────────────────────────
+
+aegis:ct-100 a aegis:LXCContainer ;
+    rdfs:label "ct-100" ;
+    aegis:ctId "100"^^xsd:integer ;
+    aegis:hostname "ct-100" ;
+    aegis:ipAddress "10.0.0.100" ;
+    aegis:runs_on aegis:koror .
+
+aegis:ct-101 a aegis:LXCContainer ;
+    rdfs:label "ct-101" ;
+    aegis:ctId "101"^^xsd:integer ;
+    aegis:hostname "ct-101" ;
+    aegis:ipAddress "10.0.0.101" ;
+    aegis:runs_on aegis:koror .
+
+aegis:ct-102 a aegis:LXCContainer ;
+    rdfs:label "ct-102" ;
+    aegis:ctId "102"^^xsd:integer ;
+    aegis:hostname "ct-102" ;
+    aegis:ipAddress "10.0.0.102" ;
+    aegis:runs_on aegis:koror .
+
+aegis:ct-103 a aegis:LXCContainer ;
+    rdfs:label "ct-103" ;
+    aegis:ctId "103"^^xsd:integer ;
+    aegis:hostname "ct-103" ;
+    aegis:ipAddress "10.0.0.103" ;
+    aegis:runs_on aegis:koror .
+
+# ── LXC Containers: kota ─────────────────────────────────────
+
+aegis:ct-200 a aegis:LXCContainer ;
+    rdfs:label "ct-200" ;
+    aegis:ctId "200"^^xsd:integer ;
+    aegis:hostname "ct-200" ;
+    aegis:ipAddress "10.0.0.200" ;
+    aegis:runs_on aegis:kota .
+
+aegis:ct-201 a aegis:LXCContainer ;
+    rdfs:label "ct-201" ;
+    aegis:ctId "201"^^xsd:integer ;
+    aegis:hostname "ct-201" ;
+    aegis:ipAddress "10.0.0.201" ;
+    aegis:runs_on aegis:kota .
+
+aegis:ct-202 a aegis:LXCContainer ;
+    rdfs:label "ct-202" ;
+    aegis:ctId "202"^^xsd:integer ;
+    aegis:hostname "ct-202" ;
+    aegis:ipAddress "10.0.0.202" ;
+    aegis:runs_on aegis:kota .
+
+aegis:ct-203 a aegis:LXCContainer ;
+    rdfs:label "ct-203" ;
+    aegis:ctId "203"^^xsd:integer ;
+    aegis:hostname "ct-203" ;
+    aegis:ipAddress "10.0.0.203" ;
+    aegis:runs_on aegis:kota .
+
+# ── LXC Containers: niue ─────────────────────────────────────
+
+aegis:ct-300 a aegis:LXCContainer ;
+    rdfs:label "ct-300" ;
+    aegis:ctId "300"^^xsd:integer ;
+    aegis:hostname "ct-300" ;
+    aegis:ipAddress "10.0.0.30" ;
+    aegis:runs_on aegis:niue .
+
+aegis:ct-301 a aegis:LXCContainer ;
+    rdfs:label "ct-301" ;
+    aegis:ctId "301"^^xsd:integer ;
+    aegis:hostname "ct-301" ;
+    aegis:ipAddress "10.0.0.31" ;
+    aegis:runs_on aegis:niue .
+
+aegis:ct-302 a aegis:LXCContainer ;
+    rdfs:label "ct-302" ;
+    aegis:ctId "302"^^xsd:integer ;
+    aegis:hostname "ct-302" ;
+    aegis:ipAddress "10.0.0.32" ;
+    aegis:runs_on aegis:niue .
+
+aegis:ct-303 a aegis:LXCContainer ;
+    rdfs:label "ct-303" ;
+    aegis:ctId "303"^^xsd:integer ;
+    aegis:hostname "ct-303" ;
+    aegis:ipAddress "10.0.0.33" ;
+    aegis:runs_on aegis:niue .
+
+# ── Systemd Services ─────────────────────────────────────────
+
+aegis:traefik a aegis:SystemdService ;
+    rdfs:label "traefik" ;
+    aegis:port "443"^^xsd:integer ;
+    aegis:healthEndpoint "/api/health" ;
+    aegis:status "healthy" ;
+    aegis:runs_on aegis:ct-100 ;
+    aegis:routes_to aegis:ct-101 ;
+    aegis:routes_to aegis:ct-102 ;
+    aegis:routes_to aegis:ct-103 .
+
+aegis:grafana a aegis:SystemdService ;
+    rdfs:label "grafana" ;
+    aegis:port "3000"^^xsd:integer ;
+    aegis:healthEndpoint "/api/health" ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-101 ;
+    aegis:depends_on aegis:prometheus .
+
+aegis:prometheus a aegis:SystemdService ;
+    rdfs:label "prometheus" ;
+    aegis:port "9090"^^xsd:integer ;
+    aegis:healthEndpoint "/-/healthy" ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-101 ;
+    aegis:monitors aegis:koror ;
+    aegis:monitors aegis:kota ;
+    aegis:monitors aegis:niue .
+
+aegis:quipu-server a aegis:SystemdService ;
+    rdfs:label "quipu-server" ;
+    aegis:port "3030"^^xsd:integer ;
+    aegis:healthEndpoint "/health" ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-102 ;
+    aegis:depends_on aegis:falkordb .
+
+aegis:forgejo a aegis:SystemdService ;
+    rdfs:label "forgejo" ;
+    aegis:port "3000"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-103 .
+
+aegis:postgresql a aegis:SystemdService ;
+    rdfs:label "postgresql" ;
+    aegis:port "5432"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-200 .
+
+aegis:dolt a aegis:SystemdService ;
+    rdfs:label "dolt" ;
+    aegis:port "3306"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-201 .
+
+aegis:falkordb a aegis:SystemdService ;
+    rdfs:label "falkordb" ;
+    aegis:port "6379"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-102 .
+
+aegis:plex a aegis:SystemdService ;
+    rdfs:label "plex" ;
+    aegis:port "32400"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-203 .
+
+aegis:pihole a aegis:SystemdService ;
+    rdfs:label "pihole" ;
+    aegis:port "53"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-301 .
+
+aegis:restic a aegis:SystemdService ;
+    rdfs:label "restic" ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-300 .
+
+aegis:minio a aegis:SystemdService ;
+    rdfs:label "minio" ;
+    aegis:port "9000"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-202 .
+
+aegis:node-exporter a aegis:SystemdService ;
+    rdfs:label "node-exporter" ;
+    aegis:port "9100"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:koror .
+
+aegis:alertmanager a aegis:SystemdService ;
+    rdfs:label "alertmanager" ;
+    aegis:port "9093"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-303 ;
+    aegis:depends_on aegis:prometheus .
+
+aegis:caddy a aegis:SystemdService ;
+    rdfs:label "caddy" ;
+    aegis:port "80"^^xsd:integer ;
+    aegis:status "running" ;
+    aegis:runs_on aegis:ct-302 .
