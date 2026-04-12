@@ -160,6 +160,20 @@ fn run_stratum(
     Ok(())
 }
 
+/// Compute the set of tuples a rule derives from the current world state.
+///
+/// Used by the reactive reasoner to re-derive a single rule's output
+/// without running the full datafrog iteration.
+#[cfg(feature = "reactive-reasoner")]
+pub(crate) fn project_rule_from_world(
+    rule: &super::ast::Rule,
+    world: &World,
+) -> BTreeSet<(i64, i64)> {
+    let mut out = BTreeSet::new();
+    project_rule_body(rule, world, &mut out);
+    out
+}
+
 /// Project a rule's body against the world and add the resulting head
 /// tuples to `out`. This runs one final time after fixpoint to attribute
 /// each derived tuple back to the rule that produced it.
@@ -262,18 +276,18 @@ fn bind_atom_with_check<'a>(
 
 // ── World: term-id cache + per-predicate tuples ───────────────
 
-struct World {
+pub(crate) struct World {
     /// Predicate IRI → set of `(entity, value_ref)` tuples currently known
     /// to hold (base facts + derivations from lower strata).
-    tuples: BTreeMap<String, BTreeSet<(i64, i64)>>,
+    pub(crate) tuples: BTreeMap<String, BTreeSet<(i64, i64)>>,
     /// Predicate IRI → attribute term id. Populated lazily on first use.
-    attr_ids: BTreeMap<String, i64>,
+    pub(crate) attr_ids: BTreeMap<String, i64>,
     /// IRI → term id for constants referenced in rule heads.
-    const_ids: BTreeMap<String, i64>,
+    pub(crate) const_ids: BTreeMap<String, i64>,
 }
 
 impl World {
-    fn load(store: &Store, ruleset: &RuleSet) -> Result<Self> {
+    pub(crate) fn load(store: &Store, ruleset: &RuleSet) -> Result<Self> {
         let mut preds: BTreeSet<String> = BTreeSet::new();
         for rule in &ruleset.rules {
             preds.insert(rule.head.predicate.clone());
@@ -399,7 +413,7 @@ fn write_rule_delta(
 /// `reasoner:<rule-id>`). Only reference-valued facts on the rule's head
 /// attribute are considered — other shapes cannot be produced by Phase 2
 /// and must not exist under this source.
-fn load_existing_derivations(
+pub(crate) fn load_existing_derivations(
     store: &Store,
     attr_id: i64,
     source: &str,

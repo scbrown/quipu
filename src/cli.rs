@@ -328,16 +328,24 @@ pub fn cmd_impact(args: &[String], db_path: &str) {
 
 /// `quipu reason` — load a Turtle ruleset and run the reasoner to a fixed point.
 ///
-/// Phase 2 of the reasoner rollout: loads rules from a Turtle file (default
-/// `shapes/aegis-rules.ttl`), stratifies them, runs every stratum against the
-/// current EAVT snapshot, and writes derived facts back through the store
-/// with `source = reasoner:<rule-id>`. Each call is a full re-derivation —
-/// tuples that were derived last run but no longer hold are retracted.
+/// Phases 2–3 of the reasoner rollout: loads rules from a Turtle file
+/// (default `shapes/aegis-rules.ttl`), stratifies them, runs every stratum
+/// against the current EAVT snapshot, and writes derived facts back through
+/// the store with `source = reasoner:<rule-id>`. Each call is a full
+/// re-derivation — tuples that were derived last run but no longer hold are
+/// retracted.
+///
+/// With `--reactive` (requires the `reactive-reasoner` feature), registers
+/// a [`TransactObserver`] so derived facts stay fresh automatically on
+/// subsequent `transact()` calls within this session.
 pub fn cmd_reason(args: &[String], db_path: &str) {
     let rules_path = args
         .windows(2)
         .find(|w| w[0] == "--rules")
         .map_or("shapes/aegis-rules.ttl", |w| w[1].as_str());
+
+    #[cfg(feature = "reactive-reasoner")]
+    let reactive = args.iter().any(|a| a == "--reactive");
 
     let ttl = match std::fs::read_to_string(rules_path) {
         Ok(s) => s,
@@ -390,6 +398,13 @@ pub fn cmd_reason(args: &[String], db_path: &str) {
         for (rule_id, count) in &report.per_rule {
             println!("  {rule_id:<20}  {count}");
         }
+    }
+
+    #[cfg(feature = "reactive-reasoner")]
+    if reactive {
+        let observer = std::sync::Arc::new(quipu::ReactiveReasoner::new(ruleset));
+        store.add_observer(observer);
+        println!("\nreactive observer registered — derived facts will auto-update on transact");
     }
 }
 

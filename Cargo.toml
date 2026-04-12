@@ -69,6 +69,7 @@ default = ["shacl"]
 shacl = ["dep:rudof_lib"]
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
 onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
+reactive-reasoner = []
 
 [lints.rust]
 unsafe_code = "deny"

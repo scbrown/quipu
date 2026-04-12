@@ -73,6 +73,36 @@ impl Store {
             )?;
         }
 
+        // Notify registered observers. Observers may call store.transact()
+        // directly for per-rule provenance. Cloning the Arc vec first
+        // avoids a borrow conflict with &mut self.
+        #[cfg(feature = "reactive-reasoner")]
+        {
+            use super::Delta;
+
+            if !self.observers.is_empty() {
+                let mut asserts = Vec::new();
+                let mut retracts = Vec::new();
+                for d in datums {
+                    match d.op {
+                        Op::Assert => asserts.push(d.clone()),
+                        Op::Retract => retracts.push(d.clone()),
+                    }
+                }
+                let delta = Delta {
+                    tx: tx_id,
+                    asserts,
+                    retracts,
+                    source: source.map(String::from),
+                };
+
+                let observers: Vec<_> = self.observers.clone();
+                for obs in &observers {
+                    obs.after_commit(self, &delta)?;
+                }
+            }
+        }
+
         Ok(tx_id)
     }
 

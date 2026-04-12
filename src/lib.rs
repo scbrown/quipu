@@ -57,6 +57,8 @@ pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
 pub use onnx_embedder::OnnxEmbeddingProvider;
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use rdf::{export_rdf, ingest_rdf};
+#[cfg(feature = "reactive-reasoner")]
+pub use reasoner::reactive::ReactiveReasoner;
 pub use reconcile::{
     GoResolver, ImportResolver, PythonResolver, ReconcileReport, RustResolver, default_resolvers,
     reconcile,
@@ -68,6 +70,8 @@ pub use sparql::{
     query_temporal as sparql_query_temporal,
 };
 pub use store::Store;
+#[cfg(feature = "reactive-reasoner")]
+pub use store::{Delta, TransactObserver};
 pub use types::{Fact, Op, Term, Transaction, Value};
 pub use vector::{KnowledgeVectorStore, VectorMatch};
 pub use vector_delegate::VectorSearchDelegate;

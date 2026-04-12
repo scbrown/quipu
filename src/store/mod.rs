@@ -28,9 +28,53 @@ pub struct Store {
     /// built-in `SQLite` vectors table. Unlike `vector_delegate`, this is a
     /// full read+write backend and auto-embedding still works.
     pub(crate) local_vector_backend: Option<Box<dyn KnowledgeVectorStore + Send + Sync>>,
+    /// Registered transaction observers. Called after each successful
+    /// `transact()`. Feature-gated behind `reactive-reasoner`.
+    #[cfg(feature = "reactive-reasoner")]
+    pub(crate) observers: Vec<Arc<dyn TransactObserver>>,
+}
+
+/// A summary of what changed in a committed transaction.
+///
+/// Built by [`Store::transact`] after the SQLite commit succeeds and
+/// delivered to every registered [`TransactObserver`]. Observers can
+/// inspect which facts were asserted or retracted and decide whether to
+/// react (e.g. re-derive affected rules).
+#[cfg(feature = "reactive-reasoner")]
+#[derive(Debug, Clone)]
+pub struct Delta {
+    /// The transaction id that produced this delta.
+    pub tx: i64,
+    /// Facts that were asserted in this transaction.
+    pub asserts: Vec<Datum>,
+    /// Facts that were retracted in this transaction.
+    pub retracts: Vec<Datum>,
+    /// The `source` tag on the transaction (e.g. `"reasoner:R1"`).
+    /// Observers use this to avoid re-triggering on their own output.
+    pub source: Option<String>,
+}
+
+/// Trait for components that want to react to committed transactions.
+///
+/// Register an observer via [`Store::add_observer`]. After every
+/// successful [`Store::transact`] call, the store builds a [`Delta`]
+/// and calls [`after_commit`](TransactObserver::after_commit) on each
+/// registered observer in registration order.
+///
+/// **Recursion safety:** observers must check `delta.source` and skip
+/// transactions they produced — otherwise they will recurse infinitely.
+/// The observer dispatch clones the observer vec before calling, so
+/// calling `store.transact()` inside `after_commit` is safe.
+#[cfg(feature = "reactive-reasoner")]
+pub trait TransactObserver: Send + Sync {
+    /// Called after a transaction commits. May call `store.transact()`
+    /// to persist derived facts. Must skip its own output via
+    /// `delta.source` to avoid infinite recursion.
+    fn after_commit(&self, store: &mut Store, delta: &Delta) -> crate::error::Result<()>;
 }
 
 /// A write-side assertion or retraction within a transaction.
+#[derive(Debug, Clone)]
 pub struct Datum {
     pub entity: i64,
     pub attribute: i64,
@@ -71,6 +115,8 @@ impl Store {
             embedding_config: EmbeddingConfig::default(),
             vector_delegate: None,
             local_vector_backend: None,
+            #[cfg(feature = "reactive-reasoner")]
+            observers: Vec::new(),
         })
     }
 
@@ -117,6 +163,13 @@ impl Store {
     /// Returns `true` if a local vector backend is configured.
     pub fn has_local_vector_backend(&self) -> bool {
         self.local_vector_backend.is_some()
+    }
+
+    /// Register a [`TransactObserver`] that will be called after every
+    /// successful [`transact`](Store::transact) call.
+    #[cfg(feature = "reactive-reasoner")]
+    pub fn add_observer(&mut self, observer: Arc<dyn TransactObserver>) {
+        self.observers.push(observer);
     }
 
     /// Returns `true` if an embedding provider is attached.

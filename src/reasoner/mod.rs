@@ -29,12 +29,16 @@ pub mod ast;
 mod compile;
 pub mod evaluate;
 pub mod parse;
+#[cfg(feature = "reactive-reasoner")]
+pub mod reactive;
 pub mod stratify;
 
 #[cfg(test)]
 mod evaluate_tests;
 #[cfg(test)]
 mod parse_tests;
+#[cfg(all(test, feature = "reactive-reasoner"))]
+mod reactive_tests;
 #[cfg(test)]
 mod stratify_tests;
 
