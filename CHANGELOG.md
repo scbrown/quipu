@@ -2,6 +2,69 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-04-12
+
+### Reasoner
+
+- **Impact analysis CLI** — `quipu impact <entity-IRI>` walks entity edges via
+  BFS with configurable hop depth and predicate filters
+  ([c49ee8e](https://github.com/scbrown/quipu/commit/c49ee8e))
+- **Datalog rule engine** — rule AST, Turtle DSL parser, stratified
+  negation-as-failure with cycle detection, semi-naive evaluation via `datafrog`
+  with full provenance tracking; `quipu reason` CLI command
+  ([1f71b44](https://github.com/scbrown/quipu/commit/1f71b44),
+  [8710ea8](https://github.com/scbrown/quipu/commit/8710ea8),
+  [2473eb4](https://github.com/scbrown/quipu/commit/2473eb4),
+  [37c192e](https://github.com/scbrown/quipu/commit/37c192e))
+- **Reactive evaluation** — `TransactObserver` keeps derived facts fresh as base
+  facts change; delta-aware re-evaluation triggered only by affected predicates
+  ([aab6d30](https://github.com/scbrown/quipu/commit/aab6d30))
+- **Counterfactual queries** — `Store::speculate()` forks a hypothetical view via
+  SQLite SAVEPOINT; `quipu impact --remove` flag, REST `POST /impact` endpoint,
+  and `quipu_impact` MCP tool
+  ([563e6c2](https://github.com/scbrown/quipu/commit/563e6c2))
+
+### Web UI
+
+- **SPARQL Workbench** — syntax-highlighted CodeMirror editor with tabular/JSON
+  output, query examples library, and time-travel parameter support
+  ([65b5967](https://github.com/scbrown/quipu/commit/65b5967))
+- **Temporal Navigator** — episode timeline with chronological view, extracted
+  entities, and metadata display
+  ([fc0e0ab](https://github.com/scbrown/quipu/commit/fc0e0ab))
+- **Web component export** — embeddable `<quipu-graph>`, `<quipu-sparql>`,
+  `<quipu-entity>`, `<quipu-timeline>`, `<quipu-schema>` custom elements for
+  embedding Quipu panels in any page
+  ([2153019](https://github.com/scbrown/quipu/commit/2153019))
+- **Semantic Web APIs** — Spotlight entity recognition (`POST /spotlight`),
+  Triple Pattern Fragments (`GET /fragments`), OpenRefine reconciliation
+  (`POST /reconcile`), and content negotiation on `/entity/{iri}`
+  ([2153019](https://github.com/scbrown/quipu/commit/2153019))
+
+### Server
+
+- **Entity format sub-path routes** — `GET /entity/{iri}/json` and
+  `/entity/{iri}/ttl` replace suffix-based routes for axum 0.8+ compatibility
+  ([583de29](https://github.com/scbrown/quipu/commit/583de29),
+  [4d80832](https://github.com/scbrown/quipu/commit/4d80832))
+
+### Test Fixtures
+
+- **Seed binary and justfile recipes** — `just fixtures seed` and
+  `just fixtures load` for populating test databases with realistic data
+  ([cf0518a](https://github.com/scbrown/quipu/commit/cf0518a),
+  [564436e](https://github.com/scbrown/quipu/commit/564436e))
+
+### Documentation
+
+- Comprehensive mdbook chapters for the reasoner — concepts, rule-builder
+  tutorial, and CLI reference
+  ([860dec3](https://github.com/scbrown/quipu/commit/860dec3))
+- Reasoner design document
+  ([340a55d](https://github.com/scbrown/quipu/commit/340a55d))
+- Test fixtures design document
+  ([3638c16](https://github.com/scbrown/quipu/commit/3638c16))
+
 ## [0.1.0] - 2026-04-05
 
 Initial public release.

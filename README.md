@@ -60,14 +60,16 @@ Facts: 853 | Entities: 127 | Predicates: 34
 | Strict schema (SHACL)       | ✅ | ❌ | ✅ |
 | Bitemporal time-travel      | ❌ | ❌ | ✅ |
 | SPARQL 1.1                  | ✅ | ❌ | ✅ |
+| Datalog reasoner            | ❌ | ❌ | ✅ |
+| Counterfactual queries      | ❌ | ❌ | ✅ |
 | Vector similarity search    | ❌ | ✅ | ✅ |
 | LanceDB ANN + pushdown      | ❌ | ❌ | ✅ |
 | Agent-friendly feedback     | ❌ | ❌ | ✅ |
 | Episode provenance          | ❌ | ✅ | ✅ |
 | Graph algorithms            | ❌ | ❌ | ✅ |
+| Built-in web UI             | ❌ | ❌ | ✅ |
 | Embeddable (no server)      | ❌ | ❌ | ✅ |
 | SQLite-backed               | ❌ | ❌ | ✅ |
-| Automated releases          | ❌ | ❌ | ✅ |
 | Rust / zero dependencies    | ❌ | ❌ | ✅ |
 
 Traditional RDF stores demand too much ceremony. AI-native stores have no structure.
@@ -90,11 +92,18 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 - **Context pipeline** — unified knowledge context shaped for agent consumption. Text search + link expansion with configurable depth and budget.
 - **Agent-friendly feedback** — validation errors include what failed, where, why, and what the valid alternatives are.
 
+**🧠 Reasoning Engine**
+
+- **Datalog over EAVT** — forward-chaining rules in Turtle DSL, evaluated by `datafrog` with semi-naive fixpoint. Stratified negation-as-failure. Derived facts are first-class triples with provenance.
+- **Reactive evaluation** — `TransactObserver` re-runs affected rules on every write. Delta-aware: only changed predicates trigger re-evaluation.
+- **Counterfactual queries** — `Store::speculate()` forks a hypothetical view via SQLite SAVEPOINT. Answer "what if we remove X?" without mutation.
+- **Impact analysis** — BFS walk over entity edges with configurable depth and predicate filters. CLI (`quipu impact`), REST (`POST /impact`), and MCP tool.
+
 **⚙️ Infrastructure**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — `GraphProvider` trait for multi-source queries. Query local and remote Quipu instances in a single operation.
-- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI. Plus 11 MCP tools for agent integration.
+- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 11 MCP tools for agent integration.
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. CI runs fmt, clippy, tests, and markdown lint on every push.
 
@@ -160,6 +169,40 @@ The built-in web UI provides:
 - **Episode Timeline** — chronological view of ingested episodes with extracted entities
 - **Schema Inspector** — type distribution, SHACL shape browser, and validation runner
 
+Embeddable web components (`<quipu-graph>`, `<quipu-sparql>`, `<quipu-entity>`, `<quipu-timeline>`, `<quipu-schema>`) let you drop Quipu panels into any page:
+
+```html
+<script src="http://localhost:3030/quipu-components.js"></script>
+<quipu-graph endpoint="http://localhost:3030"></quipu-graph>
+```
+
+Semantic Web APIs for interoperability:
+
+- **Spotlight** — entity recognition/disambiguation (`POST /spotlight`)
+- **Triple Pattern Fragments** — LDF-compatible pagination (`GET /fragments`)
+- **OpenRefine Reconciliation** — data cleaning integration (`POST /reconcile`)
+- **Content Negotiation** — `GET /entity/{iri}` returns JSON-LD, Turtle, or HTML based on Accept header
+
+### 🧠 Reasoner
+
+```bash
+# Impact analysis — what depends on this entity?
+quipu impact http://aegis.local/traefik --db ops.db
+
+# Counterfactual — what breaks if we remove it?
+quipu impact http://aegis.local/traefik --remove --db ops.db
+
+# Run Datalog rules over the fact log
+quipu reason --rules rules.ttl --db ops.db
+```
+
+The reasoner adds forward-chaining inference over the EAVT fact log:
+
+- **Datalog rule engine** — rules written in Turtle DSL, evaluated with semi-naive `datafrog`. Stratified negation-as-failure. Derived facts written back via `Store::transact()` with full provenance.
+- **Reactive evaluation** — `TransactObserver` keeps derived facts fresh as base facts change. Delta-aware: only affected rules re-run.
+- **Counterfactual queries** — `Store::speculate()` forks a view (SQLite SAVEPOINT) to answer "what if?" without mutation.
+- **Impact analysis** — BFS walk over entity edges with configurable hop depth and predicate filters. Available as CLI, REST endpoint (`POST /impact`), and MCP tool.
+
 ## 🏗️ Architecture
 
 ```text
@@ -171,27 +214,27 @@ The built-in web UI provides:
               │                │                │
         ┌─────┴─────┐   ┌─────┴─────┐   ┌──────┴──────┐
         │ MCP Tools  │   │ REST API  │   │  Rust API   │
-        │ (11 tools) │   │  (axum)   │   │  (crate)    │
+        │ (11 tools) │   │ + Web UI  │   │  (crate)    │
         └─────┬─────┘   └─────┬─────┘   └──────┬──────┘
               └────────────────┼────────────────┘
                                │
-        ┌──────────────────────┼──────────────────────┐
-        │                      │                      │
-  ┌─────┴─────┐         ┌─────┴─────┐    ┌───────────┴───────────┐
-  │  SPARQL   │         │   SHACL   │    │  KnowledgeVectorStore │
-  │  Engine   │         │ Validator │    │       (trait)         │
-  └─────┬─────┘         └─────┬─────┘    └─────┬─────────┬──────┘
-        │                      │                │         │
-        └──────────┬───────────┘         ┌──────┴───┐ ┌───┴──────┐
-                   │                     │  SQLite  │ │ LanceDB  │
-                   │                     │ (default)│ │(optional)│
-        ┌──────────┴───────────┐         └──────────┘ └──────────┘
-        │   EAVT Fact Log      │
-        │   (SQLite)           │
-        │                      │
-        │  facts + terms +     │
-        │  shapes              │
-        └──────────────────────┘
+     ┌─────────────────────────┼─────────────────────────┐
+     │                         │                         │
+┌────┴────┐  ┌────┴─────┐  ┌──┴───────┐  ┌──────────────┴──────────────┐
+│ SPARQL  │  │  SHACL   │  │ Reasoner │  │   KnowledgeVectorStore      │
+│ Engine  │  │ Validator│  │ (Datalog)│  │         (trait)             │
+└────┬────┘  └────┬─────┘  └──┬───────┘  └──────┬─────────┬───────────┘
+     │             │           │                 │         │
+     └─────┬───────┴───────────┘          ┌──────┴───┐ ┌───┴──────┐
+           │                              │  SQLite  │ │ LanceDB  │
+           │                              │ (default)│ │(optional)│
+     ┌─────┴──────────────┐               └──────────┘ └──────────┘
+     │   EAVT Fact Log    │
+     │   (SQLite)         │
+     │                    │
+     │  facts + terms +   │
+     │  shapes + rules    │
+     └────────────────────┘
 ```
 
 ## 🧵 Bobbin Integration
@@ -281,11 +324,19 @@ See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of conten
 | Auto-embed on write | ✅ | Knot/episode hooks |
 | ONNX embedding pipeline | ✅ | Shared with Bobbin |
 | Context pipeline | ✅ | Text search + link expansion |
+| **Reasoner** | | |
+| Impact analysis (BFS) | ✅ | CLI, REST, MCP tool |
+| Datalog rule engine (datafrog) | ✅ | Turtle DSL, stratified negation |
+| Reactive evaluation | ✅ | TransactObserver, delta-aware |
+| Counterfactual queries | ✅ | `speculate()` via SQLite SAVEPOINT |
+| Incremental truth maintenance | 🔜 | Planned (Phase 5) |
 | **Interfaces** | | |
 | Rust crate (embed) | ✅ | |
-| CLI (`quipu`) | ✅ | knot, read, repl, episode, etc. |
+| CLI (`quipu`) | ✅ | knot, read, repl, episode, impact, reason |
 | REST API (`quipu-server`) | ✅ | Axum-based |
-| Web UI | ✅ | Graph explorer, SPARQL workbench |
+| Web UI | ✅ | Explorer, workbench, timeline, schema |
+| Web components | ✅ | Embeddable `<quipu-*>` elements |
+| Semantic Web APIs | ✅ | Spotlight, TPF, OpenRefine reconciliation |
 | MCP tools (11) | ✅ | Agent integration |
 | Python bindings | 🔜 | Planned |
 | **Infrastructure** | | |
