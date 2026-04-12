@@ -581,12 +581,12 @@ Accept: application/ld+json → JSON-LD document
 Accept: text/turtle         → Turtle RDF
 ```
 
-With suffix-based fallback for debugging:
+With format-specific sub-paths for debugging:
 
 ```text
-/entity/koror.html
-/entity/koror.json
-/entity/koror.ttl
+/entity/koror/html
+/entity/koror/json
+/entity/koror/ttl
 ```
 
 **Why this matters**: Bobbin links to `quipu.svc/entity/koror`. Browsers get a
