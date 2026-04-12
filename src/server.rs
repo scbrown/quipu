@@ -14,6 +14,7 @@
 //!   POST /`search_facts` — Search relationships/edges by natural language
 //!   POST /search/nodes — Graphiti-compatible semantic entity search
 //!   POST /episodes/complete — Graphiti-compatible flat episode ingestion
+//!   POST /impact     — Impact analysis (with optional counterfactual removal)
 //!   POST /retract    — Retract entity facts
 //!   POST /shapes     — Manage persistent SHACL shapes
 //!   GET  /health     — Health check
@@ -126,6 +127,7 @@ async fn main() {
         .route("/search_facts", post(search_facts))
         .route("/search/nodes", post(graphiti_search_nodes))
         .route("/episodes/complete", post(episodes_complete))
+        .route("/impact", post(impact_analysis))
         .route("/retract", post(retract))
         .route("/shapes", post(shapes))
         .route("/project", post(project_graph))
@@ -291,6 +293,15 @@ async fn episodes_complete(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let mut store = store.lock().unwrap();
     let result = quipu::tool_episodes_complete(&mut store, &input)?;
+    Ok(axum::Json(result))
+}
+
+async fn impact_analysis(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let mut store = store.lock().unwrap();
+    let result = quipu::tool_impact(&mut store, &input)?;
     Ok(axum::Json(result))
 }
 

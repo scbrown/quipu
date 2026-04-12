@@ -252,15 +252,17 @@ pub fn cmd_unravel(args: &[String], db_path: &str) {
 
 /// `quipu impact` — walk the store outward from an entity and list what it reaches.
 ///
-/// Phase 1 of the reasoner rollout: no rule engine, just a bounded BFS over
-/// entity→entity edges. Answers "what is downstream of this entity?" on
-/// current data and surfaces ontology gaps where an expected edge is missing.
+/// Phases 1+4 of the reasoner rollout. Without `--remove`, performs a bounded
+/// BFS over entity→entity edges ("what is downstream?"). With `--remove`,
+/// speculatively retracts all facts for the entity, runs the reasoner inside
+/// the speculative fork, and then walks the graph — answering "what would
+/// break if I removed this?".
 pub fn cmd_impact(args: &[String], db_path: &str) {
     let entity_iri = match args.get(2) {
         Some(iri) if !iri.starts_with("--") => iri.as_str(),
         _ => {
             eprintln!(
-                "usage: quipu impact <entity-IRI> [--hops N] [--predicate <IRI>]... [--db <path>]"
+                "usage: quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]"
             );
             std::process::exit(1);
         }
@@ -272,6 +274,8 @@ pub fn cmd_impact(args: &[String], db_path: &str) {
         .and_then(|w| w[1].parse().ok())
         .unwrap_or(quipu::DEFAULT_HOPS);
 
+    let remove = args.iter().any(|a| a == "--remove");
+
     // Collect all --predicate values (flag is repeatable).
     let predicates: Vec<String> = args
         .windows(2)
@@ -279,7 +283,7 @@ pub fn cmd_impact(args: &[String], db_path: &str) {
         .map(|w| w[1].clone())
         .collect();
 
-    let store = match quipu::Store::open(db_path) {
+    let mut store = match quipu::Store::open(db_path) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error opening store: {e}");
@@ -288,15 +292,32 @@ pub fn cmd_impact(args: &[String], db_path: &str) {
     };
 
     let opts = quipu::ImpactOptions { hops, predicates };
-    let report = match quipu::impact(&store, entity_iri, &opts) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("error: {e}");
-            std::process::exit(1);
+
+    let report = if remove {
+        let now = chrono_now();
+        match quipu::speculate_remove(&mut store, entity_iri, &now, |s| {
+            quipu::impact(s, entity_iri, &opts)
+        }) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        match quipu::impact(&store, entity_iri, &opts) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
         }
     };
 
     // Text output. Root, then one line per reached entity grouped by depth.
+    if remove {
+        println!("counterfactual: removing {entity_iri}");
+    }
     println!("root: {}", report.root);
     println!(
         "hops: {}  reached: {}  edges: {}",

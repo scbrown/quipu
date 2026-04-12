@@ -152,6 +152,46 @@ pub fn impact(store: &Store, entity_iri: &str, opts: &ImpactOptions) -> Result<I
     })
 }
 
+/// Build retraction datums for every current fact of `entity_iri`, then run
+/// `f` inside a speculative fork where the entity has been removed. The store
+/// is untouched after return.
+///
+/// This is the convenience entry-point for the `--remove` CLI flag and the
+/// `quipu_impact` MCP tool with `remove: true`.
+pub fn speculate_remove<F, R>(
+    store: &mut Store,
+    entity_iri: &str,
+    timestamp: &str,
+    f: F,
+) -> Result<R>
+where
+    F: FnOnce(&Store) -> Result<R>,
+{
+    let entity_id = store
+        .lookup(entity_iri)?
+        .ok_or_else(|| Error::InvalidValue(format!("entity not found: {entity_iri}")))?;
+
+    let facts = store.entity_facts(entity_id)?;
+    if facts.is_empty() {
+        // Nothing to retract — run the closure on the current store.
+        return f(store);
+    }
+
+    let datums: Vec<super::store::Datum> = facts
+        .iter()
+        .map(|f| super::store::Datum {
+            entity: f.entity,
+            attribute: f.attribute,
+            value: f.value.clone(),
+            valid_from: f.valid_from.clone(),
+            valid_to: None,
+            op: crate::types::Op::Retract,
+        })
+        .collect();
+
+    store.speculate(&datums, timestamp, f)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,6 +403,45 @@ mod tests {
             1,
             "only the root should appear when no predicates match"
         );
+    }
+
+    #[test]
+    fn speculate_remove_hides_entity_edges() {
+        let mut store = open_store();
+        // pkg → ct → svc
+        assert_edge(
+            &mut store,
+            "http://ex/pkg",
+            "http://ex/installedIn",
+            "http://ex/ct",
+        );
+        assert_edge(
+            &mut store,
+            "http://ex/ct",
+            "http://ex/runsService",
+            "http://ex/svc",
+        );
+
+        // Before removal: pkg reaches ct and svc.
+        let before = impact(&store, "http://ex/pkg", &ImpactOptions::default()).unwrap();
+        assert_eq!(before.reached.len(), 3);
+
+        // Speculatively remove ct: pkg can no longer reach svc.
+        let speculative =
+            super::speculate_remove(&mut store, "http://ex/ct", "2026-05-01T00:00:00Z", |s| {
+                impact(s, "http://ex/pkg", &ImpactOptions::default())
+            })
+            .unwrap();
+        // ct's edges are retracted, so pkg→ct edge still exists (it's on pkg)
+        // but ct→svc is gone. pkg reaches ct (via its own edge) but not svc.
+        assert!(
+            speculative.reached.len() < before.reached.len(),
+            "speculative removal should reduce reachable entities"
+        );
+
+        // After: store is untouched.
+        let after = impact(&store, "http://ex/pkg", &ImpactOptions::default()).unwrap();
+        assert_eq!(after.reached.len(), 3);
     }
 
     #[test]

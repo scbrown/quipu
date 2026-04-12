@@ -255,6 +255,120 @@ fn value_round_trip() {
 }
 
 #[test]
+fn speculate_rolls_back() {
+    let mut store = test_store();
+    let e = store.intern("http://ex/a").unwrap();
+    let a = store.intern("http://ex/p").unwrap();
+    let o = store.intern("http://ex/b").unwrap();
+
+    // Assert an edge a→b.
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Ref(o),
+                valid_from: "2026-01-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(store.current_facts().unwrap().len(), 1);
+
+    // Speculatively retract the edge.
+    let retract = Datum {
+        entity: e,
+        attribute: a,
+        value: Value::Ref(o),
+        valid_from: "2026-01-01".into(),
+        valid_to: None,
+        op: Op::Retract,
+    };
+
+    let inside_count = store
+        .speculate(&[retract], "2026-02-01T00:00:00Z", |s| {
+            // Inside: the edge should be retracted.
+            let facts = s.current_facts()?;
+            Ok(facts.len())
+        })
+        .unwrap();
+
+    assert_eq!(inside_count, 0, "edge should be gone inside speculate");
+
+    // After: the edge is back.
+    assert_eq!(
+        store.current_facts().unwrap().len(),
+        1,
+        "edge should be restored after speculate"
+    );
+}
+
+#[test]
+fn speculate_hypothetical_visible_inside() {
+    let mut store = test_store();
+    let e = store.intern("http://ex/x").unwrap();
+    let a = store.intern("http://ex/label").unwrap();
+
+    // Start empty. Speculatively assert a fact.
+    let assert_datum = Datum {
+        entity: e,
+        attribute: a,
+        value: Value::Str("speculative".into()),
+        valid_from: "2026-01-01".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+
+    let inside_count = store
+        .speculate(&[assert_datum], "2026-01-01T00:00:00Z", |s| {
+            Ok(s.current_facts()?.len())
+        })
+        .unwrap();
+
+    assert_eq!(inside_count, 1, "speculative fact should be visible inside");
+    assert_eq!(
+        store.current_facts().unwrap().len(),
+        0,
+        "speculative fact must not persist"
+    );
+}
+
+#[test]
+fn speculate_error_still_rolls_back() {
+    let mut store = test_store();
+    let e = store.intern("http://ex/y").unwrap();
+    let a = store.intern("http://ex/tag").unwrap();
+
+    let datum = Datum {
+        entity: e,
+        attribute: a,
+        value: Value::Str("temp".into()),
+        valid_from: "2026-01-01".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+
+    let result: crate::error::Result<()> =
+        store.speculate(&[datum], "2026-01-01T00:00:00Z", |_s| {
+            Err(crate::error::Error::InvalidValue(
+                "intentional test error".into(),
+            ))
+        });
+
+    assert!(result.is_err());
+    assert_eq!(
+        store.current_facts().unwrap().len(),
+        0,
+        "speculative state must be rolled back even on error"
+    );
+}
+
+#[test]
 fn retract_hides_from_current() {
     let mut store = test_store();
 

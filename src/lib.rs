@@ -43,8 +43,9 @@ pub use embedding::{EmbeddingProvider, build_entity_text};
 pub use episode::{Episode, episode_provenance, ingest_batch, ingest_episode};
 pub use error::{Error, Result};
 pub use graph::{ProjectedGraph, tool_project};
-pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact};
+pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
 pub use mcp::graphiti::tool_episodes_complete;
+pub use mcp::impact::tool_impact;
 pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
     tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_search, tool_shapes,
@@ -69,7 +70,7 @@ pub use sparql::{
     QueryResult, TemporalContext, Triple, query as sparql_query,
     query_temporal as sparql_query_temporal,
 };
-pub use store::Store;
+pub use store::{Datum, Store};
 #[cfg(feature = "reactive-reasoner")]
 pub use store::{Delta, TransactObserver};
 pub use types::{Fact, Op, Term, Transaction, Value};

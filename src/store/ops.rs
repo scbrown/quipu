@@ -20,19 +20,21 @@ impl Store {
         actor: Option<&str>,
         source: Option<&str>,
     ) -> Result<i64> {
-        let tx = self.conn.transaction()?;
-        tx.execute(
+        // Use savepoint (not transaction) so transact() can nest inside
+        // speculate()'s outer savepoint.
+        let sp = self.conn.savepoint()?;
+        sp.execute(
             "INSERT INTO transactions (timestamp, actor, source) VALUES (?1, ?2, ?3)",
             params![timestamp, actor, source],
         )?;
-        let tx_id = tx.last_insert_rowid();
+        let tx_id = sp.last_insert_rowid();
 
         {
-            let mut insert = tx.prepare(
+            let mut insert = sp.prepare(
                 "INSERT INTO facts (e, a, v, tx, valid_from, valid_to, op) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?;
-            let mut close_assertion = tx.prepare(
+            let mut close_assertion = sp.prepare(
                 "UPDATE facts SET valid_to = ?1 \
                  WHERE e = ?2 AND a = ?3 AND v = ?4 AND op = 1 AND valid_to IS NULL",
             )?;
@@ -53,7 +55,7 @@ impl Store {
             }
         }
 
-        tx.commit()?;
+        sp.commit()?;
 
         // Post-transact hook: auto-embed touched entities.
         // Skipped when a vector search delegate is set — embeddings belong in
@@ -104,6 +106,43 @@ impl Store {
         }
 
         Ok(tx_id)
+    }
+
+    /// Execute `f` against a speculative fork of the store with `hypothetical`
+    /// datums applied. The fork is discarded after `f` returns — the underlying
+    /// store is never mutated. Useful for counterfactual impact analysis
+    /// ("what would break if I removed this?").
+    ///
+    /// Implementation: wraps the hypothetical write and query in a `SQLite`
+    /// `SAVEPOINT` that is always rolled back. Because [`transact`](Store::transact)
+    /// uses nested savepoints, observers (including the reactive reasoner) fire
+    /// normally inside the speculative fork, so derived facts are recomputed.
+    pub fn speculate<F, R>(&mut self, hypothetical: &[Datum], timestamp: &str, f: F) -> Result<R>
+    where
+        F: FnOnce(&Store) -> Result<R>,
+    {
+        self.conn.execute_batch("SAVEPOINT speculate")?;
+
+        let result = self
+            .transact(
+                hypothetical,
+                timestamp,
+                Some("speculate"),
+                Some("speculate"),
+            )
+            .and_then(|_| f(self));
+
+        // Always rollback: speculative state must not persist.
+        match self
+            .conn
+            .execute_batch("ROLLBACK TO speculate; RELEASE speculate")
+        {
+            Ok(()) => result,
+            Err(rollback_err) => match result {
+                Err(e) => Err(e),
+                Ok(_) => Err(rollback_err.into()),
+            },
+        }
     }
 
     /// Retract all current facts for an entity (or just those matching a predicate).

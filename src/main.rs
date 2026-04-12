@@ -5,7 +5,7 @@
 //!   quipu read "<sparql>" [--db <path>]   Run a SPARQL query
 //!   quipu cord [--type <IRI>] [--limit N] [--db <path>]  List entities
 //!   quipu unravel [--tx N] [--valid-at <date>] [--db <path>]  Time-travel query
-//!   quipu impact <entity-IRI> [--hops N] [--predicate <IRI>]...  Downstream walk
+//!   quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]...  Impact walk
 //!   quipu reason [--rules <file.ttl>] [--db <path>]  Run the Datalog reasoner
 //!   quipu validate --shapes <shapes.ttl> --data <data.ttl>  Validate without writing
 //!   quipu episode <file.json> [--db <path>]  Ingest a structured episode
@@ -91,7 +91,7 @@ COMMANDS:
     quipu read \"<sparql>\" [--db <path>]
     quipu cord [--type <IRI>] [--limit N] [--db <path>]
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
-    quipu impact <entity-IRI> [--hops N] [--predicate <IRI>]... [--db <path>]
+    quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]
     quipu reason [--rules <file.ttl>] [--db <path>]
     quipu episode <file.json> [--db <path>]
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]

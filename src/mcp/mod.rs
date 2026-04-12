@@ -5,6 +5,7 @@
 //! delegates knowledge graph operations to these handlers.
 
 pub mod graphiti;
+pub mod impact;
 pub mod search;
 #[cfg(test)]
 mod tests;
@@ -329,6 +330,21 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the assertion" }
                 },
                 "required": ["name"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_impact",
+            "description": "Impact analysis: walk downstream from an entity. With remove=true, speculatively retracts the entity first (counterfactual: 'what would break if I removed this?'). The store is never mutated.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "entity": { "type": "string", "description": "IRI of the entity to analyse" },
+                    "remove": { "type": "boolean", "description": "If true, speculatively retract the entity before walking (counterfactual mode). Default: false." },
+                    "hops": { "type": "integer", "description": "Maximum edge hops to follow (default: 5)" },
+                    "predicates": { "type": "array", "items": { "type": "string" }, "description": "Restrict walk to these predicate IRIs. Empty = all edges." },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the speculative retraction (used only when remove=true)" }
+                },
+                "required": ["entity"]
             }
         }),
         serde_json::json!({
