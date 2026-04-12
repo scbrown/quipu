@@ -35,4 +35,21 @@ CREATE TABLE IF NOT EXISTS shapes (
     turtle    TEXT NOT NULL,
     loaded_at TEXT NOT NULL
 );
+
+-- Schema evolution proposals for agent-driven ontology changes.
+CREATE TABLE IF NOT EXISTS proposals (
+    id            INTEGER PRIMARY KEY,
+    kind          TEXT NOT NULL,
+    target        TEXT NOT NULL,
+    diff          TEXT NOT NULL,
+    rationale     TEXT,
+    proposer      TEXT NOT NULL,
+    trigger_ref   TEXT,
+    status        TEXT NOT NULL DEFAULT 'pending',
+    decided_by    TEXT,
+    decided_at    TEXT,
+    decision_note TEXT,
+    created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status, created_at);
 "#;

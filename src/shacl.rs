@@ -168,7 +168,9 @@ impl Validator {
                     )
                 },
             );
-            Err(Error::InvalidValue(msg))
+            Err(Error::InvalidValue(format!(
+                "{msg}. Hint: propose a schema change via quipu_propose_schema_change"
+            )))
         }
     }
 }

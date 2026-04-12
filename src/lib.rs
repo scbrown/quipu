@@ -16,6 +16,7 @@ pub mod migration;
 pub mod namespace;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+pub mod proposal;
 pub mod provider;
 pub mod rdf;
 pub mod reasoner;
@@ -47,6 +48,9 @@ pub use graph::{ProjectedGraph, tool_project};
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;
+pub use mcp::proposal::{
+    tool_accept_proposal, tool_list_proposals, tool_propose_schema_change, tool_reject_proposal,
+};
 pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
     tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_search, tool_shapes,
@@ -57,6 +61,7 @@ pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
 #[cfg(feature = "onnx")]
 pub use onnx_embedder::OnnxEmbeddingProvider;
+pub use proposal::{NewProposal, Proposal, ProposalKind, ProposalStatus};
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use rdf::{export_rdf, ingest_rdf};
 #[cfg(feature = "reactive-reasoner")]

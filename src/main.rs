@@ -17,6 +17,7 @@
 
 mod cli;
 mod cli_commands;
+mod cli_propose;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -48,6 +49,7 @@ fn main() {
         "episode" => cli_commands::cmd_episode(&args, db_path),
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
+        "propose" => cli_propose::cmd_propose(&args, db_path),
         "validate" => cli_commands::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_commands::cmd_export(&args, db_path),
@@ -96,6 +98,7 @@ COMMANDS:
     quipu episode <file.json> [--db <path>]
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
     quipu shapes load|list|remove [--db <path>]
+    quipu propose list|submit|accept|reject [--status pending] [--db <path>]
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
     quipu repl [--db <path>]
     quipu export [--format ntriples|turtle] [--db <path>]

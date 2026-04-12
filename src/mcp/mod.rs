@@ -6,6 +6,7 @@
 
 pub mod graphiti;
 pub mod impact;
+pub mod proposal;
 pub mod search;
 #[cfg(test)]
 mod tests;
@@ -131,7 +132,8 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 "conforms": false,
                 "violations": feedback.violations,
                 "warnings": feedback.warnings,
-                "issues": issues
+                "issues": issues,
+                "hint": "propose a schema change via quipu_propose_schema_change"
             }));
         }
     }
@@ -360,6 +362,61 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "max_facts_per_entity": { "type": "integer", "description": "Maximum facts per entity (default: 10)" }
                 },
                 "required": ["query"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_propose_schema_change",
+            "description": "Submit a schema evolution proposal (new shape, class, property, or ontology change). Proposals require explicit acceptance before taking effect.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "kind": { "type": "string", "enum": ["shape", "ontology", "class", "property"], "description": "Kind of schema change" },
+                    "target": { "type": "string", "description": "Shape name, class IRI, or property IRI being changed" },
+                    "diff": { "type": "string", "description": "Turtle fragment or JSON patch describing the change" },
+                    "rationale": { "type": "string", "description": "Why this change is needed" },
+                    "proposer": { "type": "string", "description": "Identity of the proposing agent" },
+                    "trigger_ref": { "type": "string", "description": "Validation failure ref or bead id that triggered this proposal" },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
+                },
+                "required": ["kind", "target", "diff", "proposer"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_list_proposals",
+            "description": "List schema evolution proposals, optionally filtered by status (pending, accepted, rejected)",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "status": { "type": "string", "enum": ["pending", "accepted", "rejected"], "description": "Filter by proposal status (default: all)" }
+                }
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_accept_proposal",
+            "description": "Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer", "description": "Proposal ID to accept" },
+                    "decided_by": { "type": "string", "description": "Identity of the approver (default: aegis/crew/braino)" },
+                    "note": { "type": "string", "description": "Optional acceptance note" },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
+                },
+                "required": ["id"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_reject_proposal",
+            "description": "Reject a pending schema proposal with a reason",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer", "description": "Proposal ID to reject" },
+                    "decided_by": { "type": "string", "description": "Identity of the rejector (default: aegis/crew/braino)" },
+                    "note": { "type": "string", "description": "Reason for rejection" },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
+                },
+                "required": ["id", "note"]
             }
         }),
     ]

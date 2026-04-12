@@ -13,6 +13,7 @@
 - [Triples and the Knowledge Graph](concepts/triples.md)
 - [The Temporal Model](concepts/temporal-model.md)
 - [SHACL Validation](concepts/shacl-validation.md)
+- [Schema Evolution](concepts/schema-evolution.md)
 - [The Reasoner](concepts/reasoning.md)
 
 # Tutorials
