@@ -274,6 +274,34 @@ impl Store {
         Ok(pairs)
     }
 
+    /// Return the full history of an entity: all facts (asserts + retracts) ordered by tx.
+    pub fn entity_history(&self, entity: i64) -> Result<Vec<Fact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
+             WHERE e = ?1 \
+             ORDER BY tx, a",
+        )?;
+        Self::collect_facts(&mut stmt, params![entity])
+    }
+
+    /// List all transactions ordered by id.
+    pub fn list_transactions(&self) -> Result<Vec<crate::types::Transaction>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, timestamp, actor, source FROM transactions ORDER BY id")?;
+        let mut txns = Vec::new();
+        let mut rows = stmt.query(params![])?;
+        while let Some(row) = rows.next()? {
+            txns.push(crate::types::Transaction {
+                id: row.get(0)?,
+                timestamp: row.get(1)?,
+                actor: row.get(2)?,
+                source: row.get(3)?,
+            });
+        }
+        Ok(txns)
+    }
+
     /// Return the full history of a specific entity+attribute pair.
     pub fn attribute_history(&self, entity: i64, attribute: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(

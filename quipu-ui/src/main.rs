@@ -17,6 +17,7 @@ use leptos_router::path;
 use wasm_bindgen_futures::spawn_local;
 
 use components::entity_sidebar::EntityPage;
+use components::episode_timeline::EpisodeTimeline;
 use components::graph_explorer::GraphExplorer;
 use components::schema_browser::SchemaBrowser;
 use components::sparql_workbench::SparqlWorkbench;
@@ -85,21 +86,10 @@ fn App() -> impl IntoView {
                         <Route path=path!("/entity/:iri") view=EntityPage />
                         <Route path=path!("/sparql") view=SparqlWorkbench />
                         <Route path=path!("/schema") view=SchemaBrowser />
-                        <Route path=path!("/timeline") view=TimelineView />
+                        <Route path=path!("/timeline") view=EpisodeTimeline />
                     </Routes>
                 </main>
             </div>
         </Router>
-    }
-}
-
-
-/// Timeline view — placeholder for Phase 3.
-#[component]
-fn TimelineView() -> impl IntoView {
-    view! {
-        <div class="placeholder-view">
-            "Temporal navigator — coming in Phase 3"
-        </div>
     }
 }

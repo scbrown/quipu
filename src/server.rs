@@ -1,29 +1,5 @@
 //! Quipu REST API server — HTTP interface to the knowledge graph.
-//!
-//! Endpoints mirror the MCP tool surface:
-//!   POST /query      — SPARQL SELECT
-//!   POST /knot       — Assert facts (Turtle, optional SHACL)
-//!   POST /cord       — List entities
-//!   POST /unravel    — Time-travel query
-//!   POST /validate   — SHACL validation (dry run)
-//!   POST /episode    — Structured episode ingestion
-//!   POST /search     — Vector similarity search
-//!   POST /`hybrid_search` — Combined SPARQL + vector search
-//!   POST /`unified_search` — Unified search for Bobbin integration (code + knowledge)
-//!   POST /`search_nodes` — Search entities by natural language query
-//!   POST /`search_facts` — Search relationships/edges by natural language
-//!   POST /search/nodes — Graphiti-compatible semantic entity search
-//!   POST /episodes/complete — Graphiti-compatible flat episode ingestion
-//!   POST /impact     — Impact analysis (with optional counterfactual removal)
-//!   POST /retract    — Retract entity facts
-//!   POST /shapes     — Manage persistent SHACL shapes
-//!   GET  /health     — Health check
-//!   GET  /stats      — Store statistics
-//!   GET  /entity/:iri — Content-negotiated entity (HTML or JSON-LD)
-//!
-//! Usage:
-//!   quipu-server [--db <path>] [--bind <addr>]
-//!   Defaults: db=quipu.db, bind=0.0.0.0:3030
+//! Endpoints mirror the MCP tool surface. Usage: `quipu-server [--db <path>] [--bind <addr>]`
 
 use std::sync::{Arc, Mutex};
 
@@ -134,6 +110,8 @@ async fn main() {
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
         .route("/entity/{iri}", get(entity_conneg))
+        .route("/entity_history", post(entity_history))
+        .route("/transactions", get(transactions))
         .with_state(state);
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
@@ -198,147 +176,55 @@ async fn knot(
     Ok(axum::Json(result))
 }
 
-async fn cord(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_cord(&store, &input)?;
-    Ok(axum::Json(result))
+// Read-only tool handlers (shared store, JSON in/out)
+macro_rules! ro_handler {
+    ($name:ident, $tool:path) => {
+        async fn $name(
+            State(s): State<SharedStore>,
+            axum::Json(i): axum::Json<JsonValue>,
+        ) -> Result<axum::Json<JsonValue>, AppError> {
+            Ok(axum::Json($tool(&s.lock().unwrap(), &i)?))
+        }
+    };
 }
 
-async fn unravel(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_unravel(&store, &input)?;
-    Ok(axum::Json(result))
+// Mutable tool handlers
+macro_rules! rw_handler {
+    ($name:ident, $tool:path) => {
+        async fn $name(
+            State(s): State<SharedStore>,
+            axum::Json(i): axum::Json<JsonValue>,
+        ) -> Result<axum::Json<JsonValue>, AppError> {
+            Ok(axum::Json($tool(&mut s.lock().unwrap(), &i)?))
+        }
+    };
 }
+
+ro_handler!(cord, quipu::tool_cord);
+ro_handler!(unravel, quipu::tool_unravel);
+ro_handler!(search, quipu::tool_search);
+ro_handler!(hybrid_search, quipu::tool_hybrid_search);
+ro_handler!(unified_search, quipu::tool_unified_search);
+ro_handler!(search_nodes, quipu::tool_search_nodes);
+ro_handler!(search_facts, quipu::tool_search_facts);
+ro_handler!(
+    graphiti_search_nodes,
+    quipu::mcp::graphiti::tool_search_nodes
+);
+ro_handler!(shapes, quipu::tool_shapes);
+ro_handler!(project_graph, quipu::tool_project);
+ro_handler!(context, quipu::tool_context);
+
+rw_handler!(episode, quipu::tool_episode);
+rw_handler!(episodes_complete, quipu::tool_episodes_complete);
+rw_handler!(impact_analysis, quipu::tool_impact);
+rw_handler!(retract, quipu::tool_retract);
 
 async fn validate(
     State(_store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let result = quipu::tool_validate(&input)?;
-    Ok(axum::Json(result))
-}
-
-async fn episode(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let mut store = store.lock().unwrap();
-    let result = quipu::tool_episode(&mut store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn search(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_search(&store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn hybrid_search(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_hybrid_search(&store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn unified_search(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_unified_search(&store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn search_nodes(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_search_nodes(&store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn search_facts(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_search_facts(&store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn graphiti_search_nodes(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::mcp::graphiti::tool_search_nodes(&store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn episodes_complete(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let mut store = store.lock().unwrap();
-    let result = quipu::tool_episodes_complete(&mut store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn impact_analysis(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let mut store = store.lock().unwrap();
-    let result = quipu::tool_impact(&mut store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn retract(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let mut store = store.lock().unwrap();
-    let result = quipu::tool_retract(&mut store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn shapes(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_shapes(&store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn project_graph(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_project(&store, &input)?;
-    Ok(axum::Json(result))
-}
-
-async fn context(
-    State(store): State<SharedStore>,
-    axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::tool_context(&store, &input)?;
-    Ok(axum::Json(result))
+    Ok(axum::Json(quipu::tool_validate(&input)?))
 }
 
 // ── Embedding backfill ────────────────────────────────────────────
@@ -352,24 +238,19 @@ fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Result<usize, S
     let entity_ids: Vec<i64> = result
         .rows()
         .iter()
-        .filter_map(|row| {
-            if let Some(quipu::Value::Ref(id)) = row.get("s") {
-                Some(*id)
-            } else {
-                None
-            }
+        .filter_map(|row| match row.get("s") {
+            Some(quipu::Value::Ref(id)) => Some(*id),
+            _ => None,
         })
         .collect();
     if entity_ids.is_empty() {
         return Ok(0);
     }
-    let ts = format!(
-        "{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-    );
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .to_string();
     let mut embedded = 0;
     for chunk in entity_ids.chunks(32) {
         let pairs: Vec<(i64, String)> = chunk
@@ -406,6 +287,45 @@ async fn embed_backfill(
     }
 }
 
+// ── Entity history + transaction listing ──────────────────────────
+
+async fn entity_history(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let iri = input
+        .get("iri")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| quipu::Error::InvalidValue("missing 'iri' parameter".into()))?;
+    let store = store.lock().unwrap();
+    let eid = store
+        .lookup(iri)?
+        .ok_or_else(|| quipu::Error::InvalidValue(format!("entity not found: {iri}")))?;
+    let entries: Vec<JsonValue> = store
+        .entity_history(eid)?
+        .iter()
+        .map(|f| {
+            let pred = store.resolve(f.attribute).unwrap_or_default();
+            json!({ "op": if f.op == quipu::Op::Assert { "assert" } else { "retract" },
+                "predicate": pred, "value": quipu::value_to_json(&store, &f.value),
+                "valid_from": f.valid_from, "valid_to": f.valid_to, "tx": f.tx })
+        })
+        .collect();
+    Ok(axum::Json(
+        json!({ "iri": iri, "history": entries, "count": entries.len() }),
+    ))
+}
+
+async fn transactions(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
+    let store = store.lock().unwrap();
+    let entries: Vec<JsonValue> = store.list_transactions()?.iter().map(|t| {
+        json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor, "source": t.source })
+    }).collect();
+    Ok(axum::Json(
+        json!({ "transactions": entries, "count": entries.len() }),
+    ))
+}
+
 // ── Content negotiation for entity URLs ───────────────────────────
 
 async fn entity_conneg(
@@ -435,8 +355,8 @@ async fn entity_conneg(
                 let short_p = short_name_server(&p_name);
                 let json_val = match val {
                     quipu::Value::Ref(id) => {
-                        let name = store.resolve(*id).unwrap_or_else(|_| format!("{id}"));
-                        json!({"@id": name})
+                        let n = store.resolve(*id).unwrap_or_else(|_| format!("{id}"));
+                        json!({"@id": n})
                     }
                     quipu::Value::Str(s) => json!(s),
                     quipu::Value::Int(i) => json!(i),
@@ -444,16 +364,15 @@ async fn entity_conneg(
                     quipu::Value::Bool(b) => json!(b),
                     quipu::Value::Bytes(_) => json!("[binary]"),
                 };
-
-                if let Some(existing) = props.get_mut(&short_p) {
-                    if let serde_json::Value::Array(arr) = existing {
-                        arr.push(json_val);
-                    } else {
+                match props.get_mut(&short_p) {
+                    Some(serde_json::Value::Array(arr)) => arr.push(json_val),
+                    Some(existing) => {
                         let prev = existing.clone();
                         *existing = json!(vec![prev, json_val]);
                     }
-                } else {
-                    props.insert(short_p, json_val);
+                    None => {
+                        props.insert(short_p, json_val);
+                    }
                 }
             }
         }
