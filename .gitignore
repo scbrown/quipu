@@ -26,6 +26,9 @@ docs/book/book/
 quipu-ui/dist/
 quipu-ui/target/
 
+# Test fixtures (generated)
+test-fixtures/test-store.db
+
 # Gas Town (added by gt)
 .runtime/
 .claude/

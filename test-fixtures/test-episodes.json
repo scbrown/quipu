@@ -1,0 +1,485 @@
+[
+  {
+    "name": "infra-discovery-2026-01",
+    "episode_body": "Initial infrastructure discovery — catalogued all Proxmox nodes, containers, and core services across the homelab.",
+    "source": "crew/mayor",
+    "group_id": "infrastructure",
+    "nodes": [
+      {
+        "name": "koror",
+        "type": "ProxmoxNode",
+        "description": "Primary compute node — runs most workloads",
+        "properties": { "nodeId": "koror", "role": "compute" }
+      },
+      {
+        "name": "kota",
+        "type": "ProxmoxNode",
+        "description": "Storage-focused node — ZFS pools, Dolt, backups",
+        "properties": { "nodeId": "kota", "role": "storage" }
+      },
+      {
+        "name": "niue",
+        "type": "ProxmoxNode",
+        "description": "Backup and auxiliary services",
+        "properties": { "nodeId": "niue", "role": "backup" }
+      },
+      {
+        "name": "ct-100",
+        "type": "LXCContainer",
+        "description": "Traefik reverse proxy",
+        "properties": { "ctId": 100, "hostname": "ct-100", "ipAddress": "10.0.0.100" }
+      },
+      {
+        "name": "ct-101",
+        "type": "LXCContainer",
+        "description": "Grafana + Prometheus monitoring",
+        "properties": { "ctId": 101, "hostname": "ct-101", "ipAddress": "10.0.0.101" }
+      },
+      {
+        "name": "ct-102",
+        "type": "LXCContainer",
+        "description": "Quipu server + FalkorDB",
+        "properties": { "ctId": 102, "hostname": "ct-102", "ipAddress": "10.0.0.102" }
+      },
+      {
+        "name": "ct-103",
+        "type": "LXCContainer",
+        "description": "Forgejo git hosting",
+        "properties": { "ctId": 103, "hostname": "ct-103", "ipAddress": "10.0.0.103" }
+      },
+      {
+        "name": "ct-200",
+        "type": "LXCContainer",
+        "description": "PostgreSQL database",
+        "properties": { "ctId": 200, "hostname": "ct-200", "ipAddress": "10.0.0.200" }
+      },
+      {
+        "name": "ct-201",
+        "type": "LXCContainer",
+        "description": "Dolt version-controlled database",
+        "properties": { "ctId": 201, "hostname": "ct-201", "ipAddress": "10.0.0.201" }
+      },
+      {
+        "name": "ct-202",
+        "type": "LXCContainer",
+        "description": "Minio object storage",
+        "properties": { "ctId": 202, "hostname": "ct-202", "ipAddress": "10.0.0.202" }
+      },
+      {
+        "name": "ct-203",
+        "type": "LXCContainer",
+        "description": "Plex media server",
+        "properties": { "ctId": 203, "hostname": "ct-203", "ipAddress": "10.0.0.203" }
+      },
+      {
+        "name": "ct-300",
+        "type": "LXCContainer",
+        "description": "Restic backup runner",
+        "properties": { "ctId": 300, "hostname": "ct-300", "ipAddress": "10.0.0.30" }
+      },
+      {
+        "name": "ct-301",
+        "type": "LXCContainer",
+        "description": "Pi-hole DNS",
+        "properties": { "ctId": 301, "hostname": "ct-301", "ipAddress": "10.0.0.31" }
+      },
+      {
+        "name": "ct-302",
+        "type": "LXCContainer",
+        "description": "Caddy web server",
+        "properties": { "ctId": 302, "hostname": "ct-302", "ipAddress": "10.0.0.32" }
+      },
+      {
+        "name": "ct-303",
+        "type": "LXCContainer",
+        "description": "Alertmanager",
+        "properties": { "ctId": 303, "hostname": "ct-303", "ipAddress": "10.0.0.33" }
+      },
+      {
+        "name": "traefik",
+        "type": "SystemdService",
+        "description": "Reverse proxy and TLS termination",
+        "properties": { "port": 443, "healthEndpoint": "/api/health", "status": "healthy" }
+      },
+      {
+        "name": "grafana",
+        "type": "SystemdService",
+        "description": "Monitoring dashboards",
+        "properties": { "port": 3000, "healthEndpoint": "/api/health", "status": "running" }
+      },
+      {
+        "name": "prometheus",
+        "type": "SystemdService",
+        "description": "Metrics collection and alerting",
+        "properties": { "port": 9090, "healthEndpoint": "/-/healthy", "status": "running" }
+      },
+      {
+        "name": "quipu-server",
+        "type": "SystemdService",
+        "description": "Knowledge graph server",
+        "properties": { "port": 3030, "healthEndpoint": "/health", "status": "running" }
+      },
+      {
+        "name": "forgejo",
+        "type": "SystemdService",
+        "description": "Self-hosted git forge",
+        "properties": { "port": 3000, "status": "running" }
+      },
+      {
+        "name": "postgresql",
+        "type": "SystemdService",
+        "description": "Relational database",
+        "properties": { "port": 5432, "status": "running" }
+      },
+      {
+        "name": "dolt",
+        "type": "SystemdService",
+        "description": "Version-controlled SQL database",
+        "properties": { "port": 3306, "status": "running" }
+      },
+      {
+        "name": "falkordb",
+        "type": "SystemdService",
+        "description": "Graph database for FalkorDB",
+        "properties": { "port": 6379, "status": "running" }
+      },
+      {
+        "name": "plex",
+        "type": "SystemdService",
+        "description": "Media server",
+        "properties": { "port": 32400, "status": "running" }
+      },
+      {
+        "name": "pihole",
+        "type": "SystemdService",
+        "description": "DNS ad-blocking",
+        "properties": { "port": 53, "status": "running" }
+      },
+      {
+        "name": "restic",
+        "type": "SystemdService",
+        "description": "Backup runner",
+        "properties": { "status": "running" }
+      },
+      {
+        "name": "minio",
+        "type": "SystemdService",
+        "description": "S3-compatible object storage",
+        "properties": { "port": 9000, "status": "running" }
+      },
+      {
+        "name": "node-exporter",
+        "type": "SystemdService",
+        "description": "Host metrics exporter",
+        "properties": { "port": 9100, "status": "running" }
+      },
+      {
+        "name": "alertmanager",
+        "type": "SystemdService",
+        "description": "Alert routing and deduplication",
+        "properties": { "port": 9093, "status": "running" }
+      },
+      {
+        "name": "caddy",
+        "type": "SystemdService",
+        "description": "Static site server",
+        "properties": { "port": 80, "status": "running" }
+      }
+    ],
+    "edges": [
+      { "source": "ct-100", "target": "koror", "relation": "runs_on" },
+      { "source": "ct-101", "target": "koror", "relation": "runs_on" },
+      { "source": "ct-102", "target": "koror", "relation": "runs_on" },
+      { "source": "ct-103", "target": "koror", "relation": "runs_on" },
+      { "source": "ct-200", "target": "kota", "relation": "runs_on" },
+      { "source": "ct-201", "target": "kota", "relation": "runs_on" },
+      { "source": "ct-202", "target": "kota", "relation": "runs_on" },
+      { "source": "ct-203", "target": "kota", "relation": "runs_on" },
+      { "source": "ct-300", "target": "niue", "relation": "runs_on" },
+      { "source": "ct-301", "target": "niue", "relation": "runs_on" },
+      { "source": "ct-302", "target": "niue", "relation": "runs_on" },
+      { "source": "ct-303", "target": "niue", "relation": "runs_on" },
+      { "source": "traefik", "target": "ct-100", "relation": "runs_on" },
+      { "source": "grafana", "target": "ct-101", "relation": "runs_on" },
+      { "source": "prometheus", "target": "ct-101", "relation": "runs_on" },
+      { "source": "quipu-server", "target": "ct-102", "relation": "runs_on" },
+      { "source": "falkordb", "target": "ct-102", "relation": "runs_on" },
+      { "source": "forgejo", "target": "ct-103", "relation": "runs_on" },
+      { "source": "postgresql", "target": "ct-200", "relation": "runs_on" },
+      { "source": "dolt", "target": "ct-201", "relation": "runs_on" },
+      { "source": "minio", "target": "ct-202", "relation": "runs_on" },
+      { "source": "plex", "target": "ct-203", "relation": "runs_on" },
+      { "source": "restic", "target": "ct-300", "relation": "runs_on" },
+      { "source": "pihole", "target": "ct-301", "relation": "runs_on" },
+      { "source": "caddy", "target": "ct-302", "relation": "runs_on" },
+      { "source": "alertmanager", "target": "ct-303", "relation": "runs_on" },
+      { "source": "node-exporter", "target": "koror", "relation": "runs_on" },
+      { "source": "prometheus", "target": "koror", "relation": "monitors" },
+      { "source": "prometheus", "target": "kota", "relation": "monitors" },
+      { "source": "prometheus", "target": "niue", "relation": "monitors" },
+      { "source": "grafana", "target": "prometheus", "relation": "depends_on" },
+      { "source": "traefik", "target": "ct-101", "relation": "routes_to" },
+      { "source": "traefik", "target": "ct-102", "relation": "routes_to" },
+      { "source": "traefik", "target": "ct-103", "relation": "routes_to" },
+      { "source": "alertmanager", "target": "prometheus", "relation": "depends_on" },
+      { "source": "quipu-server", "target": "falkordb", "relation": "depends_on" }
+    ]
+  },
+  {
+    "name": "koror-incident-2026-03-27",
+    "episode_body": "Koror node went down at 09:00 UTC. Multiple services affected including traefik (degraded) and postgresql (crashed). Alertmanager triggered incident response.",
+    "source": "monitoring/alertmanager",
+    "group_id": "incidents",
+    "nodes": [
+      {
+        "name": "koror",
+        "type": "ProxmoxNode",
+        "properties": { "status": "down" }
+      },
+      {
+        "name": "traefik",
+        "type": "SystemdService",
+        "properties": { "status": "degraded" }
+      },
+      {
+        "name": "postgresql",
+        "type": "SystemdService",
+        "properties": { "status": "crashed" }
+      }
+    ],
+    "edges": []
+  },
+  {
+    "name": "koror-recovery-2026-03-29",
+    "episode_body": "Koror recovered after hardware diagnostics and service restart. All services confirmed healthy by goldblum's automated recovery playbook.",
+    "source": "crew/goldblum",
+    "group_id": "incidents",
+    "nodes": [
+      {
+        "name": "koror",
+        "type": "ProxmoxNode",
+        "properties": { "status": "online" }
+      },
+      {
+        "name": "traefik",
+        "type": "SystemdService",
+        "properties": { "status": "healthy" }
+      },
+      {
+        "name": "postgresql",
+        "type": "SystemdService",
+        "properties": { "status": "running" }
+      }
+    ],
+    "edges": []
+  },
+  {
+    "name": "directive-broadcast-2026-02",
+    "episode_body": "Stiwi broadcast three high-level architecture directives and two operational directives to all crew members.",
+    "source": "hla/stiwi",
+    "group_id": "directives",
+    "nodes": [
+      {
+        "name": "hla-001",
+        "type": "Directive",
+        "description": "All infrastructure changes must be tracked in the knowledge graph",
+        "properties": { "authority": "hla", "issuedBy": "stiwi" }
+      },
+      {
+        "name": "hla-002",
+        "type": "Directive",
+        "description": "Crew agents must hand off cleanly with context preserved in beads",
+        "properties": { "authority": "hla", "issuedBy": "stiwi" }
+      },
+      {
+        "name": "hla-003",
+        "type": "Directive",
+        "description": "Observability data flows through prometheus and is queryable via SPARQL",
+        "properties": { "authority": "hla", "issuedBy": "stiwi" }
+      },
+      {
+        "name": "ops-001",
+        "type": "Directive",
+        "description": "Backup verification runs daily via restic check",
+        "properties": { "authority": "ops", "issuedBy": "stiwi" }
+      },
+      {
+        "name": "ops-002",
+        "type": "Directive",
+        "description": "Service health scores must be updated within 5 minutes of status change",
+        "properties": { "authority": "ops", "issuedBy": "stiwi" }
+      },
+      {
+        "name": "stiwi",
+        "type": "Overseer",
+        "description": "The human operator — oversees all Gas Town operations",
+        "properties": { "pronouns": "he/him" }
+      }
+    ],
+    "edges": [
+      { "source": "hla-001", "target": "quipu-server", "relation": "applies_to" },
+      { "source": "hla-003", "target": "prometheus", "relation": "applies_to" },
+      { "source": "ops-001", "target": "restic", "relation": "applies_to" },
+      { "source": "ops-002", "target": "prometheus", "relation": "applies_to" }
+    ]
+  },
+  {
+    "name": "agent-observation-dolt",
+    "episode_body": "Muldoon observed elevated query latency on Dolt server. Investigation revealed lock contention during concurrent branch operations. Recommended connection pooling.",
+    "source": "crew/muldoon",
+    "group_id": "observations",
+    "nodes": [
+      {
+        "name": "dolt",
+        "type": "SystemdService",
+        "properties": { "healthScore": 72 }
+      }
+    ],
+    "edges": []
+  },
+  {
+    "name": "handoff-owen-to-ellie",
+    "episode_body": "Owen handed off quipu UI development to ellie for CSS polish and accessibility audit. Phase 2 SPARQL workbench is complete, phase 3 temporal navigator in progress.",
+    "source": "crew/owen",
+    "group_id": "handoffs",
+    "nodes": [
+      {
+        "name": "owen",
+        "type": "CrewMember",
+        "description": "Quipu crew — UI and knowledge graph development",
+        "properties": { "role": "crew", "tier": "crew", "domain": "quipu" }
+      },
+      {
+        "name": "ellie",
+        "type": "CrewMember",
+        "description": "Aegis crew — infrastructure and operations",
+        "properties": { "role": "crew", "tier": "crew", "domain": "aegis" }
+      },
+      {
+        "name": "design-quipu-ui",
+        "type": "DesignDoc",
+        "description": "Quipu UI design document — web components for knowledge graph exploration",
+        "properties": { "status": "accepted", "author": "owen" }
+      }
+    ],
+    "edges": [
+      { "source": "owen", "target": "quipu", "relation": "member_of" },
+      { "source": "ellie", "target": "aegis", "relation": "member_of" }
+    ]
+  },
+  {
+    "name": "new-service-deployed",
+    "episode_body": "Goldblum deployed quipu-server v0.4.0 to ct-102 on koror. Includes new SPARQL endpoint and web component serving. Verified via health check.",
+    "source": "crew/goldblum",
+    "group_id": "deployments",
+    "nodes": [
+      {
+        "name": "goldblum",
+        "type": "CrewMember",
+        "description": "Aegis crew — infrastructure automation and deployment",
+        "properties": { "role": "crew", "tier": "crew", "domain": "aegis" }
+      },
+      {
+        "name": "aegis",
+        "type": "Rig",
+        "description": "Infrastructure management rig",
+        "properties": { "prefix": "aegis", "purpose": "infrastructure" }
+      },
+      {
+        "name": "quipu",
+        "type": "Rig",
+        "description": "Knowledge graph rig",
+        "properties": { "prefix": "quipu", "purpose": "knowledge-graph" }
+      },
+      {
+        "name": "bobbin",
+        "type": "Rig",
+        "description": "Knowledge module rig",
+        "properties": { "prefix": "bobbin", "purpose": "knowledge-module" }
+      },
+      {
+        "name": "malcolm",
+        "type": "CrewMember",
+        "description": "Mayor of Gas Town — orchestration and oversight",
+        "properties": { "role": "mayor", "tier": "mayor", "domain": "gastown" }
+      },
+      {
+        "name": "alan",
+        "type": "CrewMember",
+        "description": "Bobbin crew — documentation and knowledge curation",
+        "properties": { "role": "crew", "tier": "crew", "domain": "bobbin" }
+      },
+      {
+        "name": "muldoon",
+        "type": "CrewMember",
+        "description": "Aegis crew — monitoring, security, and game warden",
+        "properties": { "role": "crew", "tier": "crew", "domain": "aegis" }
+      },
+      {
+        "name": "gt",
+        "type": "CLI",
+        "description": "Gas Town CLI — agent orchestration and bead management",
+        "properties": { "binary": "gt" }
+      },
+      {
+        "name": "bd",
+        "type": "CLI",
+        "description": "Bead CLI — work item tracking",
+        "properties": { "binary": "bd" }
+      },
+      {
+        "name": "bobbin-cli",
+        "type": "CLI",
+        "description": "Bobbin CLI — knowledge module interface",
+        "properties": { "binary": "bobbin" }
+      },
+      {
+        "name": "quipu-cli",
+        "type": "CLI",
+        "description": "Quipu CLI — knowledge graph operations",
+        "properties": { "binary": "quipu" }
+      },
+      {
+        "name": "marshal",
+        "type": "CLI",
+        "description": "Marshal CLI — deployment orchestration",
+        "properties": { "binary": "marshal" }
+      },
+      {
+        "name": "design-reasoner",
+        "type": "DesignDoc",
+        "description": "Reasoner design — datafrog-based incremental reasoning engine",
+        "properties": { "status": "accepted", "author": "owen" }
+      },
+      {
+        "name": "design-federation",
+        "type": "DesignDoc",
+        "description": "Federation design — multi-store SPARQL federation",
+        "properties": { "status": "draft", "author": "owen" }
+      },
+      {
+        "name": "probe-koror-downtime",
+        "type": "Probe",
+        "description": "Investigation into koror downtime on 2026-03-27",
+        "properties": { "title": "Koror Downtime Investigation", "domain": "infrastructure", "date": "2026-03-27" }
+      },
+      {
+        "name": "probe-dolt-performance",
+        "type": "Probe",
+        "description": "Investigation into Dolt query performance under concurrent branch operations",
+        "properties": { "title": "Dolt Performance Analysis", "domain": "database", "date": "2026-04-01" }
+      }
+    ],
+    "edges": [
+      { "source": "goldblum", "target": "aegis", "relation": "member_of" },
+      { "source": "malcolm", "target": "aegis", "relation": "member_of" },
+      { "source": "alan", "target": "bobbin", "relation": "member_of" },
+      { "source": "muldoon", "target": "aegis", "relation": "member_of" },
+      { "source": "koror", "target": "stiwi", "relation": "managed_by" },
+      { "source": "kota", "target": "stiwi", "relation": "managed_by" },
+      { "source": "niue", "target": "stiwi", "relation": "managed_by" },
+      { "source": "probe-koror-downtime", "target": "koror", "relation": "applies_to" },
+      { "source": "probe-dolt-performance", "target": "dolt", "relation": "applies_to" }
+    ]
+  }
+]

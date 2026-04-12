@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quipu Test Fixtures — Embedded Components</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f0f23;
+      color: #e0e0e0;
+      padding: 1rem;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+      color: #7ec8e3;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 1.5rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto;
+      gap: 1rem;
+    }
+    .full-width { grid-column: 1 / -1; }
+    quipu-graph,
+    quipu-entity,
+    quipu-sparql,
+    quipu-timeline,
+    quipu-schema {
+      min-height: 300px;
+    }
+    quipu-graph { min-height: 500px; }
+  </style>
+</head>
+<body>
+  <h1>Quipu Test Fixtures</h1>
+  <p class="subtitle">
+    All 5 web components loaded against <code>localhost:3030</code>.
+    Run <code>just seed &amp;&amp; just serve-fixtures</code> to populate and start the server.
+  </p>
+
+  <div class="grid">
+    <!-- Graph explorer — full width, tall -->
+    <quipu-graph class="full-width"
+      endpoint="http://localhost:3030"
+      title="Infrastructure Graph">
+    </quipu-graph>
+
+    <!-- Entity detail — left column -->
+    <quipu-entity
+      endpoint="http://localhost:3030"
+      iri="http://aegis.gastown.local/ontology/koror">
+    </quipu-entity>
+
+    <!-- Schema browser — right column -->
+    <quipu-schema
+      endpoint="http://localhost:3030">
+    </quipu-schema>
+
+    <!-- SPARQL workbench — full width -->
+    <quipu-sparql class="full-width"
+      endpoint="http://localhost:3030"
+      query="SELECT ?s ?label ?type WHERE { ?s a ?type ; rdfs:label ?label } LIMIT 25">
+    </quipu-sparql>
+
+    <!-- Episode timeline — full width -->
+    <quipu-timeline class="full-width"
+      endpoint="http://localhost:3030">
+    </quipu-timeline>
+  </div>
+
+  <script src="http://localhost:3030/quipu-components.js"></script>
+</body>
+</html>

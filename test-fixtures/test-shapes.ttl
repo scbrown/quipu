@@ -1,0 +1,218 @@
+# SHACL shapes subset for test fixtures.
+#
+# Extracted from shapes/aegis-ontology.shapes.ttl — covers the 10 entity
+# types used by the seed binary: ProxmoxNode, LXCContainer, SystemdService,
+# Rig, CrewMember, CLI, Overseer, Directive, DesignDoc, Probe.
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis:  <http://aegis.gastown.local/ontology/> .
+
+# ===================================================================
+# Global Constraints
+# ===================================================================
+
+aegis:LabelRequiredShape a sh:NodeShape ;
+    sh:targetSubjectsOf aegis:runs_on, aegis:depends_on, aegis:managed_by,
+        aegis:member_of, aegis:owns, aegis:monitors, aegis:routes_to,
+        aegis:connects_to, aegis:deployed_on ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+# ===================================================================
+# Infrastructure
+# ===================================================================
+
+aegis:ProxmoxNodeShape a sh:NodeShape ;
+    sh:targetClass aegis:ProxmoxNode ;
+    sh:property [
+        sh:path aegis:nodeId ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:role ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+aegis:LXCContainerShape a sh:NodeShape ;
+    sh:targetClass aegis:LXCContainer ;
+    sh:property [
+        sh:path aegis:ctId ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:ipAddress ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:hostname ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+aegis:SystemdServiceShape a sh:NodeShape ;
+    sh:targetClass aegis:SystemdService ;
+    sh:property [
+        sh:path aegis:port ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:healthEndpoint ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:healthScore ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 100 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ===================================================================
+# Agent Platform
+# ===================================================================
+
+aegis:RigShape a sh:NodeShape ;
+    sh:targetClass aegis:Rig ;
+    sh:property [
+        sh:path aegis:prefix ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:purpose ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+aegis:CrewMemberShape a sh:NodeShape ;
+    sh:targetClass aegis:CrewMember ;
+    sh:property [
+        sh:path aegis:role ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:tier ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:domain ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+aegis:CLIShape a sh:NodeShape ;
+    sh:targetClass aegis:CLI ;
+    sh:property [
+        sh:path aegis:binary ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:version ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+aegis:OverseerShape a sh:NodeShape ;
+    sh:targetClass aegis:Overseer ;
+    sh:property [
+        sh:path aegis:pronouns ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ===================================================================
+# Knowledge
+# ===================================================================
+
+aegis:DirectiveShape a sh:NodeShape ;
+    sh:targetClass aegis:Directive ;
+    sh:property [
+        sh:path aegis:authority ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:issuedBy ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+aegis:DesignDocShape a sh:NodeShape ;
+    sh:targetClass aegis:DesignDoc ;
+    sh:property [
+        sh:path aegis:status ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:author ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+aegis:ProbeShape a sh:NodeShape ;
+    sh:targetClass aegis:Probe ;
+    sh:property [
+        sh:path aegis:title ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:domain ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:date ;
+        sh:datatype xsd:date ;
+        sh:maxCount 1 ;
+    ] .
+
+# ===================================================================
+# Relationship Constraints
+# ===================================================================
+
+aegis:RunsOnShape a sh:PropertyShape ;
+    sh:path aegis:runs_on ;
+    sh:or (
+        [ sh:class aegis:ProxmoxNode ]
+        [ sh:class aegis:LXCContainer ]
+    ) .
+
+aegis:DependsOnShape a sh:PropertyShape ;
+    sh:path aegis:depends_on .
+
+aegis:ManagedByShape a sh:PropertyShape ;
+    sh:path aegis:managed_by ;
+    sh:or (
+        [ sh:class aegis:CrewMember ]
+        [ sh:class aegis:Overseer ]
+    ) .
+
+aegis:MemberOfShape a sh:PropertyShape ;
+    sh:path aegis:member_of ;
+    sh:class aegis:Rig .
+
+aegis:MonitorsShape a sh:PropertyShape ;
+    sh:path aegis:monitors .
+
+aegis:RoutesToShape a sh:PropertyShape ;
+    sh:path aegis:routes_to .
+
+aegis:AppliesToShape a sh:PropertyShape ;
+    sh:path aegis:applies_to .
