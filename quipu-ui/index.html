@@ -11,6 +11,22 @@
 <script src="https://cdn.jsdelivr.net/npm/sigma@3.0.0/build/sigma.min.js"></script>
 <!-- Force layout -->
 <script src="https://cdn.jsdelivr.net/npm/graphology-layout-forceatlas2@0.10.1/dist/graphology-layout-forceatlas2.min.js"></script>
+<!-- CodeMirror 6 (editor core + SPARQL-ish highlighting) -->
+<script type="module">
+import {EditorView, basicSetup} from "https://cdn.jsdelivr.net/npm/codemirror@6.65.7/+esm";
+import {EditorState, Compartment} from "https://cdn.jsdelivr.net/npm/@codemirror/state@6/+esm";
+import {keymap} from "https://cdn.jsdelivr.net/npm/@codemirror/view@6/+esm";
+import {sql} from "https://cdn.jsdelivr.net/npm/@codemirror/lang-sql@6/+esm";
+import {autocompletion} from "https://cdn.jsdelivr.net/npm/@codemirror/autocomplete@6/+esm";
+import {linter, lintGutter} from "https://cdn.jsdelivr.net/npm/@codemirror/lint@6/+esm";
+import {oneDark} from "https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6/+esm";
+
+// Expose CodeMirror factories to window for WASM interop
+window.__cm = {
+    EditorView, basicSetup, EditorState, Compartment,
+    keymap, sql, autocompletion, linter, lintGutter, oneDark,
+};
+</script>
 <link data-trunk rel="rust" data-wasm-opt="z">
 </head>
 <body>
@@ -190,6 +206,245 @@ window.__quipu = {
             nodes: this.graph.order,
             edges: this.graph.size
         });
+    },
+};
+
+// ── CodeMirror SPARQL editor bridge ──────────────────────────────
+window.__quipu_editor = {
+    instance: null,
+    completionData: { types: [], predicates: [] },
+    onRun: null, // Rust callback for Ctrl+Enter
+
+    init: function(containerId, initialValue, onRunCallback) {
+        var self = this;
+        self.onRun = onRunCallback;
+
+        // Wait for CM modules to load (they're ESM, may be async)
+        function tryInit() {
+            if (!window.__cm || !window.__cm.EditorView) {
+                setTimeout(tryInit, 50);
+                return;
+            }
+            var cm = window.__cm;
+
+            // SPARQL keyword completions
+            var sparqlKeywords = [
+                "SELECT", "CONSTRUCT", "DESCRIBE", "ASK", "WHERE", "FILTER",
+                "OPTIONAL", "UNION", "BIND", "AS", "GROUP", "BY", "ORDER",
+                "HAVING", "LIMIT", "OFFSET", "DISTINCT", "REDUCED", "FROM",
+                "NAMED", "PREFIX", "BASE", "VALUES", "MINUS", "SERVICE",
+                "EXISTS", "NOT", "IN", "COUNT", "SUM", "AVG", "MIN", "MAX",
+                "SAMPLE", "GROUP_CONCAT", "SEPARATOR", "ASC", "DESC",
+                "GRAPH", "INSERT", "DELETE", "DATA", "LOAD", "CLEAR",
+                "DROP", "CREATE", "COPY", "MOVE", "ADD", "WITH", "USING",
+                "a", "true", "false", "BOUND", "IF", "COALESCE", "STR",
+                "LANG", "DATATYPE", "IRI", "URI", "BNODE", "RAND", "ABS",
+                "CEIL", "FLOOR", "ROUND", "CONCAT", "STRLEN", "UCASE",
+                "LCASE", "ENCODE_FOR_URI", "CONTAINS", "STRSTARTS",
+                "STRENDS", "STRBEFORE", "STRAFTER", "YEAR", "MONTH",
+                "DAY", "HOURS", "MINUTES", "SECONDS", "TIMEZONE", "TZ",
+                "NOW", "UUID", "STRUUID", "MD5", "SHA1", "SHA256",
+                "SHA384", "SHA512", "isIRI", "isURI", "isBlank",
+                "isLiteral", "isNumeric", "REGEX", "REPLACE", "SUBSTR",
+            ];
+
+            // Schema-aware completion source
+            function sparqlCompletion(context) {
+                var word = context.matchBefore(/[\w:<>]+/);
+                if (!word) return null;
+                var options = [];
+                var text = word.text.toLowerCase();
+
+                // Keywords
+                sparqlKeywords.forEach(function(kw) {
+                    if (kw.toLowerCase().startsWith(text)) {
+                        options.push({ label: kw, type: "keyword", boost: 1 });
+                    }
+                });
+
+                // Entity types from schema
+                self.completionData.types.forEach(function(t) {
+                    var short = t.split(/[#/]/).pop();
+                    if (short.toLowerCase().startsWith(text) || t.toLowerCase().includes(text)) {
+                        options.push({ label: "<" + t + ">", displayLabel: short, type: "type", detail: "entity type", boost: 2 });
+                    }
+                });
+
+                // Predicates from schema
+                self.completionData.predicates.forEach(function(p) {
+                    var short = p.split(/[#/]/).pop();
+                    if (short.toLowerCase().startsWith(text) || p.toLowerCase().includes(text)) {
+                        options.push({ label: "<" + p + ">", displayLabel: short, type: "property", detail: "predicate", boost: 2 });
+                    }
+                });
+
+                if (options.length === 0) return null;
+                return { from: word.from, options: options, filter: false };
+            }
+
+            var runKeymap = cm.keymap.of([{
+                key: "Ctrl-Enter",
+                run: function() { if (self.onRun) self.onRun(); return true; },
+            }, {
+                key: "Cmd-Enter",
+                run: function() { if (self.onRun) self.onRun(); return true; },
+            }]);
+
+            var container = document.getElementById(containerId);
+            if (!container) { console.error("Editor container not found:", containerId); return; }
+
+            var state = cm.EditorState.create({
+                doc: initialValue || "",
+                extensions: [
+                    cm.basicSetup,
+                    cm.oneDark,
+                    cm.sql(),
+                    cm.autocompletion({ override: [sparqlCompletion] }),
+                    cm.lintGutter(),
+                    runKeymap,
+                    cm.EditorView.theme({
+                        "&": { fontSize: "13px", fontFamily: "'SF Mono', 'Cascadia Code', 'Fira Code', monospace" },
+                        ".cm-content": { padding: "8px 0" },
+                        ".cm-gutters": { background: "#16213e", borderRight: "1px solid #2a2a4a" },
+                        ".cm-activeLineGutter": { background: "#0f3460" },
+                        ".cm-activeLine": { background: "rgba(15, 52, 96, 0.3)" },
+                    }),
+                    cm.EditorView.updateListener.of(function(update) {
+                        // no-op, Rust reads value on demand
+                    }),
+                ],
+            });
+
+            self.instance = new cm.EditorView({ state: state, parent: container });
+        }
+
+        tryInit();
+    },
+
+    getValue: function() {
+        if (!this.instance) return "";
+        return this.instance.state.doc.toString();
+    },
+
+    setValue: function(text) {
+        if (!this.instance) return;
+        this.instance.dispatch({
+            changes: { from: 0, to: this.instance.state.doc.length, insert: text }
+        });
+    },
+
+    setCompletionData: function(typesJson, predicatesJson) {
+        try {
+            this.completionData.types = JSON.parse(typesJson);
+            this.completionData.predicates = JSON.parse(predicatesJson);
+        } catch(e) { console.error("setCompletionData parse error:", e); }
+    },
+
+    setDiagnostics: function(diagnosticsJson) {
+        // Future: push lint diagnostics from spargebra validation
+        // For now, a stub
+    },
+
+    focus: function() {
+        if (this.instance) this.instance.focus();
+    },
+};
+
+// ── Schema graph bridge (separate Sigma.js instance for ontology view) ──
+window.__quipu_schema = {
+    graph: null,
+    renderer: null,
+
+    initGraph: function(containerId) {
+        var container = document.getElementById(containerId);
+        if (!container) return false;
+
+        this.graph = new graphology.Graph();
+        this.renderer = new Sigma(this.graph, container, {
+            renderLabels: true,
+            labelFont: "'SF Mono', 'Cascadia Code', 'Fira Code', monospace",
+            labelSize: 12,
+            labelColor: { color: "#e0e0e0" },
+            defaultNodeColor: "#8892a4",
+            defaultEdgeColor: "#2a2a4a",
+            defaultEdgeType: "arrow",
+            labelRenderedSizeThreshold: 4,
+            minCameraRatio: 0.1,
+            maxCameraRatio: 5,
+        });
+
+        this.renderer.on("clickNode", function(event) {
+            if (window.__quipu_schema_on_node_click) {
+                window.__quipu_schema_on_node_click(event.node);
+            }
+        });
+
+        return true;
+    },
+
+    addClassNode: function(id, label, instanceCount) {
+        if (!this.graph || this.graph.hasNode(id)) return;
+        var size = Math.max(10, Math.min(30, 10 + Math.sqrt(instanceCount) * 3));
+        this.graph.addNode(id, {
+            label: label + " (" + instanceCount + ")",
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+            size: size,
+            color: "#4cc9f0",
+            type: "class",
+        });
+    },
+
+    addDatatypeNode: function(id, label) {
+        if (!this.graph || this.graph.hasNode(id)) return;
+        this.graph.addNode(id, {
+            label: label,
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+            size: 8,
+            color: "#fca311",
+            type: "datatype",
+        });
+    },
+
+    addPropertyEdge: function(source, target, label) {
+        if (!this.graph) return;
+        var key = source + "->" + target + ":" + label;
+        if (this.graph.hasEdge(key)) return;
+        try {
+            this.graph.addEdgeWithKey(key, source, target, {
+                label: label,
+                size: 1.5,
+                color: "#4ecca3",
+            });
+        } catch(e) {}
+    },
+
+    addSubclassEdge: function(child, parent) {
+        if (!this.graph) return;
+        var key = child + "->subClassOf->" + parent;
+        if (this.graph.hasEdge(key)) return;
+        try {
+            this.graph.addEdgeWithKey(key, child, parent, {
+                label: "subClassOf",
+                size: 2,
+                color: "#e94560",
+            });
+        } catch(e) {}
+    },
+
+    runLayout: function() {
+        if (!this.graph) return;
+        forceAtlas2.assign(this.graph, {
+            iterations: 150,
+            settings: { gravity: 2, scalingRatio: 3, strongGravityMode: true, barnesHutOptimize: true }
+        });
+        if (this.renderer) this.renderer.refresh();
+    },
+
+    clear: function() {
+        if (this.graph) this.graph.clear();
+        if (this.renderer) this.renderer.refresh();
     },
 };
 </script>

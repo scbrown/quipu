@@ -5,6 +5,14 @@ use serde_json::{Value, json};
 
 use crate::components::graph_explorer::{EntityNode, Fact};
 
+/// Entity type with instance count.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct TypeCount {
+    pub iri: String,
+    pub label: String,
+    pub count: u64,
+}
+
 /// Base URL for the API. In dev, Trunk proxies to the backend.
 fn base_url() -> String {
     let window = web_sys::window().unwrap();
@@ -133,6 +141,105 @@ pub async fn fetch_stats() -> Result<Value, String> {
         .map_err(|e| format!("JSON parse error: {e}"))
 }
 
+/// List loaded SHACL shapes.
+pub async fn fetch_shapes() -> Result<Value, String> {
+    let url = format!("{}/shapes", base_url());
+    let resp = Request::post(&url)
+        .json(&json!({ "action": "list" }))
+        .map_err(|e| format!("Request build error: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !resp.ok() {
+        return Err(format!("API error: {}", resp.status()));
+    }
+
+    resp.json()
+        .await
+        .map_err(|e| format!("JSON parse error: {e}"))
+}
+
+/// Fetch entity type counts via SPARQL.
+pub async fn fetch_type_counts() -> Result<Vec<TypeCount>, String> {
+    let query = r#"SELECT ?type (COUNT(?s) AS ?count) WHERE { ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type } GROUP BY ?type ORDER BY DESC(?count)"#;
+    let result = sparql_query(query).await?;
+
+    let rows = result
+        .get("rows")
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    Ok(rows
+        .iter()
+        .filter_map(|row| {
+            let type_iri = extract_value(row, "type")?;
+            let count = extract_value(row, "count")?
+                .parse::<u64>()
+                .unwrap_or(0);
+            Some(TypeCount {
+                iri: type_iri.clone(),
+                label: short_name(&type_iri),
+                count,
+            })
+        })
+        .collect())
+}
+
+/// Run SHACL validation (dry-run) and return structured results.
+pub async fn run_validation(shapes_turtle: &str) -> Result<Value, String> {
+    let url = format!("{}/validate", base_url());
+    let resp = Request::post(&url)
+        .json(&json!({ "shapes": shapes_turtle }))
+        .map_err(|e| format!("Request build error: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !resp.ok() {
+        return Err(format!("API error: {}", resp.status()));
+    }
+
+    resp.json()
+        .await
+        .map_err(|e| format!("JSON parse error: {e}"))
+}
+
+/// Fetch all predicates used in the store (for autocomplete).
+pub async fn fetch_predicates() -> Result<Vec<String>, String> {
+    let query = "SELECT DISTINCT ?p WHERE { ?s ?p ?o } ORDER BY ?p";
+    let result = sparql_query(query).await?;
+
+    let rows = result
+        .get("rows")
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    Ok(rows
+        .iter()
+        .filter_map(|row| extract_value(row, "p"))
+        .collect())
+}
+
+/// Fetch all entity types (IRIs) for autocomplete.
+pub async fn fetch_entity_types() -> Result<Vec<String>, String> {
+    let query = "SELECT DISTINCT ?type WHERE { ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type } ORDER BY ?type";
+    let result = sparql_query(query).await?;
+
+    let rows = result
+        .get("rows")
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    Ok(rows
+        .iter()
+        .filter_map(|row| extract_value(row, "type"))
+        .collect())
+}
+
 // ── Response parsing ──────────────────────────────────────────────────
 
 /// Parse SPARQL query results into nodes and edges for the graph.
@@ -235,7 +342,7 @@ fn extract_value(row: &Value, key: &str) -> Option<String> {
 }
 
 /// Check if a value looks like an IRI.
-fn is_iri(val: &str) -> bool {
+pub fn is_iri(val: &str) -> bool {
     val.starts_with("http://")
         || val.starts_with("https://")
         || val.starts_with("urn:")
@@ -243,7 +350,7 @@ fn is_iri(val: &str) -> bool {
 }
 
 /// Extract the local name from an IRI.
-fn short_name(iri: &str) -> String {
+pub fn short_name(iri: &str) -> String {
     let iri = iri.trim_start_matches('<').trim_end_matches('>');
     if let Some(pos) = iri.rfind('#') {
         return iri[pos + 1..].to_string();
