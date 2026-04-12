@@ -14,9 +14,92 @@ use crate::error::Error;
 use crate::error::Result;
 use crate::namespace;
 use crate::rdf::ingest_rdf;
+use crate::resolution::{self, EntityCandidate};
 #[cfg(feature = "shacl")]
 use crate::shacl;
 use crate::store::Store;
+
+/// Options controlling entity resolution during episode ingest.
+#[derive(Debug, Clone)]
+pub struct IngestResolutionOpts {
+    /// Whether resolution is enabled.
+    pub enabled: bool,
+    /// Similarity threshold for candidate matches.
+    pub threshold: f64,
+    /// Maximum candidates per entity.
+    pub top_k: usize,
+    /// When true, reject writes with near-duplicate candidates.
+    pub strict_mode: bool,
+}
+
+/// Result of episode ingestion, including resolution hints.
+#[derive(Debug)]
+pub struct IngestResult {
+    /// Transaction ID.
+    pub tx_id: i64,
+    /// Number of triples written.
+    pub count: usize,
+    /// Per-node resolution candidates (node name → candidates).
+    /// Only populated when resolution is enabled and matches were found.
+    pub resolution_hints: Vec<(String, Vec<EntityCandidate>)>,
+}
+
+/// Ingest an episode into the store with optional entity resolution.
+///
+/// When `resolution_opts` is provided and enabled, each node is checked
+/// against existing entities before writing. In strict mode, the write is
+/// rejected if near-duplicates are found.
+pub fn ingest_episode_with_resolution(
+    store: &mut Store,
+    episode: &Episode,
+    timestamp: &str,
+    base_ns: &str,
+    resolution_opts: Option<&IngestResolutionOpts>,
+) -> Result<IngestResult> {
+    let mut resolution_hints = Vec::new();
+
+    // Run entity resolution for each node if enabled.
+    if let Some(opts) = resolution_opts
+        && opts.enabled
+    {
+        for node in &episode.nodes {
+            let properties: Vec<(String, String)> = node
+                .description
+                .as_ref()
+                .map(|d| vec![("description".to_string(), d.clone())])
+                .unwrap_or_default();
+
+            let result = resolution::resolve_entity(
+                store,
+                &node.name,
+                &properties,
+                opts.threshold,
+                opts.top_k,
+            )?;
+
+            if result.has_matches {
+                if opts.strict_mode {
+                    let top = &result.candidates[0];
+                    return Err(crate::error::Error::InvalidValue(format!(
+                        "entity resolution: '{}' matches existing entity '{}' \
+                             (score: {:.2}, matched by: {}). Use an existing IRI or \
+                             assert quipu:distinctFrom to override.",
+                        node.name, top.iri, top.score, top.matched_on,
+                    )));
+                }
+                resolution_hints.push((node.name.clone(), result.candidates));
+            }
+        }
+    }
+
+    let (tx_id, count) = ingest_episode(store, episode, timestamp, base_ns)?;
+
+    Ok(IngestResult {
+        tx_id,
+        count,
+        resolution_hints,
+    })
+}
 
 /// An episode — a unit of knowledge to ingest.
 #[derive(Debug, Deserialize)]

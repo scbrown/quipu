@@ -6,6 +6,7 @@
 
 pub mod graphiti;
 pub mod impact;
+pub mod resolution;
 pub mod search;
 #[cfg(test)]
 mod tests;
@@ -360,6 +361,20 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "max_facts_per_entity": { "type": "integer", "description": "Maximum facts per entity (default: 10)" }
                 },
                 "required": ["query"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_resolve_entity",
+            "description": "Check for existing near-duplicate entities before writing. Uses vector similarity (embedding) and canonical name matching (Jaro-Winkler) to find entities that may be duplicates. Returns candidates with similarity scores and match explanations.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Canonical name of the proposed entity" },
+                    "properties": { "type": "object", "description": "Optional key-value properties of the entity (used for embedding context)" },
+                    "top_k": { "type": "integer", "description": "Maximum number of candidates to return (default: 3)" },
+                    "threshold": { "type": "number", "description": "Similarity threshold 0.0-1.0 (default: 0.85)" }
+                },
+                "required": ["name"]
             }
         }),
     ]

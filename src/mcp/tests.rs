@@ -256,7 +256,7 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 fn test_tool_definitions() {
     let defs = tool_definitions();
-    assert_eq!(defs.len(), 15);
+    assert_eq!(defs.len(), 16);
     let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"quipu_query"));
     assert!(names.contains(&"quipu_knot"));
@@ -267,6 +267,7 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_search"));
     assert!(names.contains(&"quipu_hybrid_search"));
     assert!(names.contains(&"quipu_unified_search"));
+    assert!(names.contains(&"quipu_resolve_entity"));
     assert!(names.contains(&"quipu_episode"));
     assert!(names.contains(&"quipu_retract"));
     assert!(names.contains(&"quipu_shapes"));

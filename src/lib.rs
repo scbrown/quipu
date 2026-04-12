@@ -20,6 +20,7 @@ pub mod provider;
 pub mod rdf;
 pub mod reasoner;
 pub mod reconcile;
+pub mod resolution;
 pub mod schema;
 pub mod semweb;
 #[cfg(feature = "shacl")]
@@ -33,20 +34,24 @@ pub mod vector_delegate;
 pub mod vector_lance;
 
 pub use config::{
-    EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ServerConfig, VectorBackend,
-    VectorConfig,
+    EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, ServerConfig,
+    VectorBackend, VectorConfig,
 };
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
     KnowledgeRelevance, tool_context, tool_unified_search,
 };
 pub use embedding::{EmbeddingProvider, build_entity_text};
-pub use episode::{Episode, episode_provenance, ingest_batch, ingest_episode};
+pub use episode::{
+    Episode, IngestResolutionOpts, IngestResult, episode_provenance, ingest_batch, ingest_episode,
+    ingest_episode_with_resolution,
+};
 pub use error::{Error, Result};
 pub use graph::{ProjectedGraph, tool_project};
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;
+pub use mcp::resolution::tool_resolve_entity;
 pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
     tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_search, tool_shapes,
@@ -65,6 +70,7 @@ pub use reconcile::{
     GoResolver, ImportResolver, PythonResolver, ReconcileReport, RustResolver, default_resolvers,
     reconcile,
 };
+pub use resolution::{EntityCandidate, ResolutionResult, resolve_entity};
 #[cfg(feature = "shacl")]
 pub use shacl::{ValidationFeedback, Validator, validate_shapes};
 pub use sparql::{

@@ -24,6 +24,35 @@ pub enum VectorBackend {
     Lancedb,
 }
 
+/// Entity resolution configuration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct ResolutionConfig {
+    /// Whether entity resolution is enabled (default: false).
+    pub enabled: bool,
+
+    /// Similarity threshold (0.0 to 1.0) for candidate matches (default: 0.85).
+    pub threshold: f64,
+
+    /// Maximum number of candidates to return (default: 3).
+    pub top_k: usize,
+
+    /// When true, reject writes with near-duplicate candidates unless the
+    /// entity is explicitly marked with `quipu:distinctFrom` (default: false).
+    pub strict_mode: bool,
+}
+
+impl Default for ResolutionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            threshold: 0.85,
+            top_k: 3,
+            strict_mode: false,
+        }
+    }
+}
+
 /// Vector storage backend configuration.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -75,6 +104,9 @@ pub struct QuipuConfig {
 
     /// Vector storage backend configuration.
     pub vector: VectorConfig,
+
+    /// Entity resolution configuration.
+    pub resolution: ResolutionConfig,
 }
 
 impl Default for QuipuConfig {
@@ -87,6 +119,7 @@ impl Default for QuipuConfig {
             federation: FederationConfig::default(),
             embedding: EmbeddingConfig::default(),
             vector: VectorConfig::default(),
+            resolution: ResolutionConfig::default(),
         }
     }
 }
