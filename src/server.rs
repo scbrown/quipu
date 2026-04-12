@@ -112,9 +112,6 @@ async fn main() {
         .route("/embed_backfill", post(embed_backfill))
         // Entity + history
         .route("/entity/{iri}", get(entity_conneg))
-        .route("/entity/{iri}.json", get(entity_json))
-        .route("/entity/{iri}.ttl", get(entity_turtle_suffix))
-        .route("/entity/{iri}.html", get(entity_html))
         .route("/entity_history", post(entity_history))
         .route("/transactions", get(transactions))
         // Semantic web APIs (Phase 4)
@@ -358,26 +355,6 @@ async fn entity_conneg(
     } else {
         Ok(Html(UI_HTML).into_response())
     }
-}
-
-async fn entity_json(
-    State(store): State<SharedStore>,
-    Path(iri): Path<String>,
-) -> Result<axum::response::Response, AppError> {
-    let j = semweb::entity_json_ld(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
-    Ok(json_ld_response(j))
-}
-
-async fn entity_turtle_suffix(
-    State(store): State<SharedStore>,
-    Path(iri): Path<String>,
-) -> Result<axum::response::Response, AppError> {
-    let t = semweb::entity_turtle(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
-    Ok(turtle_response(t))
-}
-
-async fn entity_html(State(_s): State<SharedStore>, Path(_i): Path<String>) -> Html<&'static str> {
-    Html(UI_HTML)
 }
 
 fn json_ld_response(j: JsonValue) -> axum::response::Response {
