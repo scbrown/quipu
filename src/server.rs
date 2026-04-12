@@ -1,21 +1,22 @@
 //! Quipu REST API server — HTTP interface to the knowledge graph.
-//! Endpoints mirror the MCP tool surface. Usage: `quipu-server [--db <path>] [--bind <addr>]`
+//! Usage: `quipu-server [--db <path>] [--bind <addr>]`
 
 use std::sync::{Arc, Mutex};
 
 use axum::{
     Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
 };
-use quipu::EmbeddingProvider;
+use quipu::{EmbeddingProvider, semweb};
 use serde_json::{Value as JsonValue, json};
 
 type SharedStore = Arc<Mutex<quipu::Store>>;
 
 const UI_HTML: &str = include_str!("../ui/index.html");
+const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
 
 #[tokio::main]
 async fn main() {
@@ -31,7 +32,6 @@ async fn main() {
         .find(|w| w[0] == "--bind")
         .map(|w| w[1].as_str());
 
-    // Load config from .bobbin/config.toml, then apply CLI overrides.
     let config = quipu::QuipuConfig::load(std::path::Path::new("."))
         .with_db_override(db_flag)
         .with_bind_override(bind_flag);
@@ -44,7 +44,6 @@ async fn main() {
         std::process::exit(1);
     });
 
-    // Initialize ONNX embedding provider if configured.
     if let (Some(model_path), Some(tokenizer_path)) = (
         &config.embedding.model_path,
         &config.embedding.tokenizer_path,
@@ -75,7 +74,6 @@ async fn main() {
 
     let state: SharedStore = Arc::new(Mutex::new(store));
 
-    // Run one-shot embedding backfill if requested (before serving).
     if args.iter().any(|a| a == "--embed-backfill") {
         eprintln!("Running embedding backfill for all entities...");
         let mut s = state.lock().unwrap();
@@ -86,8 +84,11 @@ async fn main() {
     }
 
     let app = Router::new()
+        // UI
         .route("/", get(ui))
         .route("/ui", get(ui))
+        .route("/quipu-components.js", get(components_js))
+        // Core API
         .route("/health", get(health))
         .route("/stats", get(stats))
         .route("/query", post(query))
@@ -109,9 +110,18 @@ async fn main() {
         .route("/project", post(project_graph))
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
+        // Entity + history
         .route("/entity/{iri}", get(entity_conneg))
+        .route("/entity/{iri}.json", get(entity_json))
+        .route("/entity/{iri}.ttl", get(entity_turtle_suffix))
+        .route("/entity/{iri}.html", get(entity_html))
         .route("/entity_history", post(entity_history))
         .route("/transactions", get(transactions))
+        // Semantic web APIs (Phase 4)
+        .route("/spotlight", post(spotlight_handler))
+        .route("/fragments", get(fragments_handler))
+        .route("/reconcile", post(reconcile_handler))
+        .route("/preview/{iri}", get(preview_handler))
         .with_state(state);
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
@@ -126,10 +136,15 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// ── Handlers ───────────────────────────────────────────────────────────
-
 async fn ui() -> Html<&'static str> {
     Html(UI_HTML)
+}
+
+async fn components_js() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/javascript")],
+        COMPONENTS_JS,
+    )
 }
 
 async fn health() -> impl IntoResponse {
@@ -176,7 +191,6 @@ async fn knot(
     Ok(axum::Json(result))
 }
 
-// Read-only tool handlers (shared store, JSON in/out)
 macro_rules! ro_handler {
     ($name:ident, $tool:path) => {
         async fn $name(
@@ -188,7 +202,6 @@ macro_rules! ro_handler {
     };
 }
 
-// Mutable tool handlers
 macro_rules! rw_handler {
     ($name:ident, $tool:path) => {
         async fn $name(
@@ -226,8 +239,6 @@ async fn validate(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     Ok(axum::Json(quipu::tool_validate(&input)?))
 }
-
-// ── Embedding backfill ────────────────────────────────────────────
 
 fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Result<usize, String> {
     let provider = store
@@ -287,8 +298,6 @@ async fn embed_backfill(
     }
 }
 
-// ── Entity history + transaction listing ──────────────────────────
-
 async fn entity_history(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
@@ -318,15 +327,17 @@ async fn entity_history(
 
 async fn transactions(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
     let store = store.lock().unwrap();
-    let entries: Vec<JsonValue> = store.list_transactions()?.iter().map(|t| {
-        json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor, "source": t.source })
-    }).collect();
+    let entries: Vec<JsonValue> = store
+        .list_transactions()?
+        .iter()
+        .map(|t| {
+            json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor, "source": t.source })
+        })
+        .collect();
     Ok(axum::Json(
         json!({ "transactions": entries, "count": entries.len() }),
     ))
 }
-
-// ── Content negotiation for entity URLs ───────────────────────────
 
 async fn entity_conneg(
     State(store): State<SharedStore>,
@@ -337,69 +348,131 @@ async fn entity_conneg(
         .get("accept")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("text/html");
-
+    let decoded = semweb::decode_iri(&iri);
     if accept.contains("application/ld+json") || accept.contains("application/json") {
-        // Return JSON-LD
-        let store = store.lock().unwrap();
-        let decoded_iri = iri.replace("%23", "#").replace("%20", " ");
-        let sparql = format!("SELECT ?p ?o WHERE {{ <{decoded_iri}> ?p ?o }}",);
-        let result = quipu::sparql_query(&store, &sparql)?;
-
-        let mut props = serde_json::Map::new();
-        props.insert("@context".to_string(), json!("https://schema.org"));
-        props.insert("@id".to_string(), json!(decoded_iri));
-
-        for row in result.rows() {
-            if let (Some(quipu::Value::Ref(p_id)), Some(val)) = (row.get("p"), row.get("o")) {
-                let p_name = store.resolve(*p_id).unwrap_or_else(|_| format!("{p_id}"));
-                let short_p = short_name_server(&p_name);
-                let json_val = match val {
-                    quipu::Value::Ref(id) => {
-                        let n = store.resolve(*id).unwrap_or_else(|_| format!("{id}"));
-                        json!({"@id": n})
-                    }
-                    quipu::Value::Str(s) => json!(s),
-                    quipu::Value::Int(i) => json!(i),
-                    quipu::Value::Float(f) => json!(f),
-                    quipu::Value::Bool(b) => json!(b),
-                    quipu::Value::Bytes(_) => json!("[binary]"),
-                };
-                match props.get_mut(&short_p) {
-                    Some(serde_json::Value::Array(arr)) => arr.push(json_val),
-                    Some(existing) => {
-                        let prev = existing.clone();
-                        *existing = json!(vec![prev, json_val]);
-                    }
-                    None => {
-                        props.insert(short_p, json_val);
-                    }
-                }
-            }
-        }
-
-        Ok((
-            [(axum::http::header::CONTENT_TYPE, "application/ld+json")],
-            axum::Json(serde_json::Value::Object(props)),
-        )
-            .into_response())
+        let j = semweb::entity_json_ld(&store.lock().unwrap(), &decoded)?;
+        Ok(json_ld_response(j))
+    } else if accept.contains("text/turtle") || accept.contains("application/x-turtle") {
+        let t = semweb::entity_turtle(&store.lock().unwrap(), &decoded)?;
+        Ok(turtle_response(t))
     } else {
-        // Return HTML (the SPA handles client-side routing)
         Ok(Html(UI_HTML).into_response())
     }
 }
 
-fn short_name_server(iri: &str) -> String {
-    let iri = iri.trim_start_matches('<').trim_end_matches('>');
-    if let Some(pos) = iri.rfind('#') {
-        return iri[pos + 1..].to_string();
-    }
-    if let Some(pos) = iri.rfind('/') {
-        return iri[pos + 1..].to_string();
-    }
-    iri.to_string()
+async fn entity_json(
+    State(store): State<SharedStore>,
+    Path(iri): Path<String>,
+) -> Result<axum::response::Response, AppError> {
+    let j = semweb::entity_json_ld(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+    Ok(json_ld_response(j))
 }
 
-// ── Error handling ─────────────────────────────────────────────────
+async fn entity_turtle_suffix(
+    State(store): State<SharedStore>,
+    Path(iri): Path<String>,
+) -> Result<axum::response::Response, AppError> {
+    let t = semweb::entity_turtle(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+    Ok(turtle_response(t))
+}
+
+async fn entity_html(State(_s): State<SharedStore>, Path(_i): Path<String>) -> Html<&'static str> {
+    Html(UI_HTML)
+}
+
+fn json_ld_response(j: JsonValue) -> axum::response::Response {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/ld+json")],
+        axum::Json(j),
+    )
+        .into_response()
+}
+
+fn turtle_response(t: Vec<u8>) -> axum::response::Response {
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/turtle; charset=utf-8",
+        )],
+        t,
+    )
+        .into_response()
+}
+
+async fn spotlight_handler(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let text = input
+        .get("text")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| quipu::Error::InvalidValue("missing 'text' parameter".into()))?;
+    let confidence = input
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.5);
+    let store = store.lock().unwrap();
+    Ok(axum::Json(semweb::spotlight(&store, text, confidence)?))
+}
+
+#[derive(serde::Deserialize)]
+struct FragmentParams {
+    subject: Option<String>,
+    predicate: Option<String>,
+    object: Option<String>,
+    page: Option<usize>,
+    #[serde(rename = "pageSize")]
+    page_size: Option<usize>,
+}
+
+async fn fragments_handler(
+    State(store): State<SharedStore>,
+    Query(p): Query<FragmentParams>,
+) -> Result<axum::response::Response, AppError> {
+    let q = semweb::FragmentQuery {
+        subject: p.subject,
+        predicate: p.predicate,
+        object: p.object,
+        page: p.page.unwrap_or(1).max(1),
+        page_size: p.page_size.unwrap_or(100).min(1000),
+    };
+    let result = semweb::fragments(&store.lock().unwrap(), &q)?;
+    Ok((
+        [
+            (axum::http::header::CONTENT_TYPE, "application/json"),
+            (axum::http::header::CACHE_CONTROL, "public, max-age=60"),
+        ],
+        axum::Json(result),
+    )
+        .into_response())
+}
+
+async fn reconcile_handler(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    if input.get("queries").is_none() {
+        return Ok(axum::Json(semweb::reconcile_manifest()));
+    }
+    let queries = input
+        .get("queries")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| quipu::Error::InvalidValue("'queries' must be an object".into()))?;
+    let store = store.lock().unwrap();
+    Ok(axum::Json(semweb::reconcile(&store, queries)?))
+}
+
+async fn preview_handler(
+    State(store): State<SharedStore>,
+    Path(iri): Path<String>,
+) -> Result<axum::response::Response, AppError> {
+    let html = semweb::preview_card(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        html,
+    )
+        .into_response())
+}
 
 struct AppError(quipu::Error);
 
@@ -411,9 +484,7 @@ impl From<quipu::Error> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        let body = json!({
-            "error": self.0.to_string()
-        });
+        let body = json!({ "error": self.0.to_string() });
         (StatusCode::BAD_REQUEST, axum::Json(body)).into_response()
     }
 }

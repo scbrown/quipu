@@ -21,6 +21,7 @@ pub mod rdf;
 pub mod reasoner;
 pub mod reconcile;
 pub mod schema;
+pub mod semweb;
 #[cfg(feature = "shacl")]
 pub mod shacl;
 pub mod sparql;

@@ -10,6 +10,7 @@
 mod api;
 mod components;
 mod interop;
+mod web_components;
 
 use leptos::prelude::*;
 use leptos_router::components::{Route, Router, Routes};
