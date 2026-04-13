@@ -132,7 +132,9 @@ fn eval_construct(
                     _ => continue,
                 },
                 TermPattern::BlankNode(b) => format!("_:{}", b.as_str()),
-                _ => continue,
+                TermPattern::Literal(_) => continue,
+                #[cfg(feature = "shacl")]
+                TermPattern::Triple(_) => continue,
             };
 
             let predicate = match &tp.predicate {

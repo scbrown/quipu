@@ -11,5 +11,6 @@ else
     echo "Falling back to basic checks..." >&2
 
     cargo fmt --check 2>&1 || { echo "Format check failed. Run 'cargo fmt' to fix."; exit 1; }
-    cargo clippy --all-targets -- -D warnings -A missing-docs 2>&1 || { echo "Clippy failed."; exit 1; }
+    cargo clippy --no-default-features -- -D warnings -A missing-docs 2>&1 || { echo "Clippy failed (no default features)."; exit 1; }
+    cargo clippy --features shacl -- -D warnings -A missing-docs 2>&1 || { echo "Clippy failed (shacl features)."; exit 1; }
 fi

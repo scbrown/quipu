@@ -17,7 +17,13 @@ just fmt             # Format code
 
 1. Install [just](https://github.com/casey/just)
 2. Install [pre-commit](https://pre-commit.com/)
-3. Run `just setup` to install git hooks
+3. Install doc tooling: `cargo install mdbook mdbook-mermaid`
+4. Run `just setup` to install git hooks
+
+**Canonical hook installation:** `just setup` runs `pre-commit install`, which
+writes `.git/hooks/pre-commit`. This is the supported path. The `.githooks/`
+directory exists only as a fallback for environments without the `pre-commit`
+binary — do not use `git config core.hooksPath .githooks` as a primary method.
 
 ## Pre-Commit Hooks
 

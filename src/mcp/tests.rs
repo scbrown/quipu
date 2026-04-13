@@ -58,6 +58,7 @@ fn test_tool_knot() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
 fn test_tool_knot_with_validation_failure() {
     let mut store = Store::open_in_memory().unwrap();
     let shapes = r#"
@@ -127,6 +128,7 @@ fn test_tool_unravel() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
 fn test_tool_validate() {
     let input = serde_json::json!({
         "shapes": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\nex:S a sh:NodeShape ; sh:targetClass ex:T ; sh:property [ sh:path ex:name ; sh:minCount 1 ] .",
@@ -216,6 +218,7 @@ fn test_tool_retract_predicate() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
 fn test_tool_shapes_load_and_enforce() {
     let mut store = Store::open_in_memory().unwrap();
 
@@ -321,6 +324,7 @@ fn test_propose_and_list_roundtrip() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
 fn test_accept_proposal_roundtrip() {
     let store = Store::open_in_memory().unwrap();
 
@@ -394,6 +398,7 @@ fn test_reject_proposal_roundtrip() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
 fn test_accept_invalid_turtle_stays_pending() {
     let store = Store::open_in_memory().unwrap();
 
@@ -461,6 +466,7 @@ fn test_propose_missing_required_fields_errors() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
 fn test_knot_validation_failure_includes_proposal_hint() {
     let mut store = Store::open_in_memory().unwrap();
     let shapes = r#"

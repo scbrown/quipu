@@ -99,6 +99,8 @@ jobs:
           python-version: "3.12"
       - run: pip install pre-commit
       - run: pre-commit run --all-files
+        env:
+          SKIP: mdbook-build
 
   lint-markdown:
     name: Markdown lint

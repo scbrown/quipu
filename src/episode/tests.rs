@@ -171,6 +171,7 @@ fn minimal_episode_with_body_only() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
 fn shacl_validation_rejects_invalid_episode() {
     let mut store = Store::open_in_memory().unwrap();
 
@@ -302,6 +303,7 @@ fn provenance_query() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
 fn batch_stops_on_validation_failure() {
     let mut store = Store::open_in_memory().unwrap();
 
