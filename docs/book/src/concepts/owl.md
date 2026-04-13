@@ -48,7 +48,7 @@ Materialized facts are written with `source = "owl:materialize"` so they can
 be identified in the transaction log. When an ontology changes, derived facts
 can be re-materialized.
 
-```
+```turtle
 ex:fido a ex:Dog .
 ex:Dog rdfs:subClassOf ex:Mammal .
 ex:Mammal rdfs:subClassOf ex:Animal .
