@@ -107,6 +107,10 @@ async fn main() {
         .route("/impact", post(impact_analysis))
         .route("/retract", post(retract))
         .route("/shapes", post(shapes))
+        .route("/propose", post(propose_schema_change))
+        .route("/proposals", post(list_proposals))
+        .route("/proposal/accept", post(accept_proposal))
+        .route("/proposal/reject", post(reject_proposal))
         .route("/project", post(project_graph))
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
@@ -227,6 +231,11 @@ ro_handler!(
 ro_handler!(shapes, quipu::tool_shapes);
 ro_handler!(project_graph, quipu::tool_project);
 ro_handler!(context, quipu::tool_context);
+
+ro_handler!(propose_schema_change, quipu::tool_propose_schema_change);
+ro_handler!(list_proposals, quipu::tool_list_proposals);
+ro_handler!(accept_proposal, quipu::tool_accept_proposal);
+ro_handler!(reject_proposal, quipu::tool_reject_proposal);
 
 rw_handler!(episode, quipu::tool_episode);
 rw_handler!(episodes_complete, quipu::tool_episodes_complete);

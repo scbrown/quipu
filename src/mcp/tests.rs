@@ -273,6 +273,213 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_search_nodes"));
     assert!(names.contains(&"quipu_search_facts"));
     assert!(names.contains(&"quipu_episodes_complete"));
+    assert!(names.contains(&"quipu_propose_schema_change"));
+    assert!(names.contains(&"quipu_list_proposals"));
+    assert!(names.contains(&"quipu_accept_proposal"));
+    assert!(names.contains(&"quipu_reject_proposal"));
+}
+
+// ── Schema evolution proposal tool tests ────────────────────────────
+
+#[test]
+fn test_propose_and_list_roundtrip() {
+    let store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "kind": "shape",
+        "target": "PersonShape",
+        "diff": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\nex:PersonShape a sh:NodeShape .",
+        "rationale": "Need to add email property",
+        "proposer": "agent/test",
+        "trigger_ref": "val-fail-1",
+        "timestamp": "2026-04-13T00:00:00Z"
+    });
+    let result = super::proposal::tool_propose_schema_change(&store, &input).unwrap();
+    assert_eq!(result["status"], "pending");
+    let id = result["proposal_id"].as_i64().unwrap();
+    assert!(id > 0);
+
+    // List all proposals — should find exactly one.
+    let list_result = super::proposal::tool_list_proposals(&store, &serde_json::json!({})).unwrap();
+    assert_eq!(list_result["count"], 1);
+    assert_eq!(list_result["proposals"][0]["id"], id);
+    assert_eq!(list_result["proposals"][0]["kind"], "shape");
+    assert_eq!(list_result["proposals"][0]["target"], "PersonShape");
+    assert_eq!(list_result["proposals"][0]["proposer"], "agent/test");
+    assert_eq!(list_result["proposals"][0]["status"], "pending");
+
+    // Filter by status.
+    let pending =
+        super::proposal::tool_list_proposals(&store, &serde_json::json!({ "status": "pending" }))
+            .unwrap();
+    assert_eq!(pending["count"], 1);
+
+    let accepted =
+        super::proposal::tool_list_proposals(&store, &serde_json::json!({ "status": "accepted" }))
+            .unwrap();
+    assert_eq!(accepted["count"], 0);
+}
+
+#[test]
+fn test_accept_proposal_roundtrip() {
+    let store = Store::open_in_memory().unwrap();
+
+    // Create a valid shape proposal.
+    let shape_turtle = r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ex:PersonShape a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [
+        sh:path ex:name ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+    ] .
+"#;
+    let propose = serde_json::json!({
+        "kind": "shape",
+        "target": "PersonShape",
+        "diff": shape_turtle,
+        "proposer": "agent/test",
+        "timestamp": "2026-04-13T00:00:00Z"
+    });
+    let result = super::proposal::tool_propose_schema_change(&store, &propose).unwrap();
+    let id = result["proposal_id"].as_i64().unwrap();
+
+    // Accept it.
+    let accept = serde_json::json!({
+        "id": id,
+        "decided_by": "aegis/crew/braino",
+        "note": "Approved — looks correct",
+        "timestamp": "2026-04-13T01:00:00Z"
+    });
+    let accept_result = super::proposal::tool_accept_proposal(&store, &accept).unwrap();
+    assert_eq!(accept_result["status"], "accepted");
+    assert_eq!(accept_result["proposal_id"], id);
+
+    // Verify the shape was loaded.
+    let shapes = store.list_shapes().unwrap();
+    assert!(shapes.iter().any(|(name, _, _)| name == "PersonShape"));
+}
+
+#[test]
+fn test_reject_proposal_roundtrip() {
+    let store = Store::open_in_memory().unwrap();
+
+    let propose = serde_json::json!({
+        "kind": "property",
+        "target": "ex:dangerousField",
+        "diff": "ex:dangerousField rdfs:range xsd:string .",
+        "proposer": "agent/test",
+        "timestamp": "2026-04-13T00:00:00Z"
+    });
+    let result = super::proposal::tool_propose_schema_change(&store, &propose).unwrap();
+    let id = result["proposal_id"].as_i64().unwrap();
+
+    // Reject it.
+    let reject = serde_json::json!({
+        "id": id,
+        "note": "Too permissive — needs cardinality constraints",
+        "timestamp": "2026-04-13T01:00:00Z"
+    });
+    let reject_result = super::proposal::tool_reject_proposal(&store, &reject).unwrap();
+    assert_eq!(reject_result["status"], "rejected");
+    assert_eq!(reject_result["proposal_id"], id);
+
+    // Verify it shows as rejected in listing.
+    let list =
+        super::proposal::tool_list_proposals(&store, &serde_json::json!({ "status": "rejected" }))
+            .unwrap();
+    assert_eq!(list["count"], 1);
+}
+
+#[test]
+fn test_accept_invalid_turtle_stays_pending() {
+    let store = Store::open_in_memory().unwrap();
+
+    // Create a shape proposal with invalid Turtle.
+    let propose = serde_json::json!({
+        "kind": "shape",
+        "target": "BadShape",
+        "diff": "this is not valid turtle {{{{",
+        "proposer": "agent/test",
+        "timestamp": "2026-04-13T00:00:00Z"
+    });
+    let result = super::proposal::tool_propose_schema_change(&store, &propose).unwrap();
+    let id = result["proposal_id"].as_i64().unwrap();
+
+    // Accepting should fail — invalid Turtle.
+    let accept = serde_json::json!({
+        "id": id,
+        "timestamp": "2026-04-13T01:00:00Z"
+    });
+    let err = super::proposal::tool_accept_proposal(&store, &accept).unwrap_err();
+    assert!(err.to_string().contains("invalid"));
+
+    // Proposal should still be pending.
+    let list =
+        super::proposal::tool_list_proposals(&store, &serde_json::json!({ "status": "pending" }))
+            .unwrap();
+    assert_eq!(list["count"], 1);
+}
+
+#[test]
+fn test_reject_missing_note_errors() {
+    let store = Store::open_in_memory().unwrap();
+
+    let propose = serde_json::json!({
+        "kind": "class",
+        "target": "ex:NewClass",
+        "diff": "ex:NewClass a rdfs:Class .",
+        "proposer": "agent/test",
+        "timestamp": "2026-04-13T00:00:00Z"
+    });
+    let result = super::proposal::tool_propose_schema_change(&store, &propose).unwrap();
+    let id = result["proposal_id"].as_i64().unwrap();
+
+    // Reject without note should error.
+    let reject = serde_json::json!({ "id": id, "timestamp": "2026-04-13T01:00:00Z" });
+    let err = super::proposal::tool_reject_proposal(&store, &reject).unwrap_err();
+    assert!(err.to_string().contains("note"));
+}
+
+#[test]
+fn test_propose_missing_required_fields_errors() {
+    let store = Store::open_in_memory().unwrap();
+
+    // Missing 'kind'.
+    let input = serde_json::json!({
+        "target": "X", "diff": "x", "proposer": "test"
+    });
+    assert!(super::proposal::tool_propose_schema_change(&store, &input).is_err());
+
+    // Missing 'proposer'.
+    let input = serde_json::json!({
+        "kind": "shape", "target": "X", "diff": "x"
+    });
+    assert!(super::proposal::tool_propose_schema_change(&store, &input).is_err());
+}
+
+#[test]
+fn test_knot_validation_failure_includes_proposal_hint() {
+    let mut store = Store::open_in_memory().unwrap();
+    let shapes = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+ex:PersonShape a sh:NodeShape ;
+    sh:targetClass ex:Person ;
+    sh:property [ sh:path ex:name ; sh:minCount 1 ] .
+"#;
+    let input = serde_json::json!({
+        "turtle": "@prefix ex: <http://example.org/> .\nex:bad a ex:Person .",
+        "shapes": shapes,
+        "timestamp": "2026-04-13T00:00:00Z"
+    });
+    let result = tool_knot(&mut store, &input).unwrap();
+    assert_eq!(result["conforms"], false);
+    assert_eq!(
+        result["hint"],
+        "propose a schema change via quipu_propose_schema_change"
+    );
 }
 
 #[test]
