@@ -16,8 +16,8 @@ Thumbs.db
 # mdbook output
 docs/book/book/
 
-
-
+# Runtime artifacts (agent locks, session state)
+.runtime/
 
 # Rust
 /target/

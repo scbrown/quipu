@@ -25,9 +25,16 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: cargo-clippy
-        name: cargo clippy
-        entry: cargo clippy --all-targets -- -D warnings -A missing-docs
+      - id: cargo-clippy-no-default
+        name: cargo clippy (no default features)
+        entry: cargo clippy --no-default-features -- -D warnings -A missing-docs
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy-shacl
+        name: cargo clippy (shacl)
+        entry: cargo clippy --features shacl -- -D warnings -A missing-docs
         language: system
         types: [rust]
         pass_filenames: false
@@ -41,7 +48,7 @@ repos:
 
       - id: mdbook-build
         name: mdbook build
-        entry: mdbook build docs/book
-        language: system
+        entry: scripts/precommit-mdbook.sh
+        language: script
         files: ^docs/book/
         pass_filenames: false
