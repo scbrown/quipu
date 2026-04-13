@@ -424,6 +424,47 @@ ex:bob a ex:Person ;
     }
 
     #[test]
+    fn ingest_same_rdf_twice_no_duplicates() {
+        let mut store = Store::open_in_memory().unwrap();
+
+        let (_, count1) = ingest_rdf(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("first"),
+            Some("test-1"),
+        )
+        .unwrap();
+        assert_eq!(count1, 8);
+        assert_eq!(store.current_facts().unwrap().len(), 8);
+
+        // Second ingestion of the same data — assertions are idempotent,
+        // so no new facts should be created.
+        let (_, count2) = ingest_rdf(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T01:00:00Z",
+            Some("second"),
+            Some("test-2"),
+        )
+        .unwrap();
+
+        // count2 is the number of triples parsed from the input, not written.
+        assert_eq!(count2, 8);
+
+        // But the store should still have only 8 active facts.
+        assert_eq!(
+            store.current_facts().unwrap().len(),
+            8,
+            "re-ingesting the same RDF should not create duplicates"
+        );
+    }
+
+    #[test]
     fn blank_node_round_trip() {
         let ntriples = r#"
 _:node1 <http://example.org/label> "test" .

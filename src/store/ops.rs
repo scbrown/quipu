@@ -29,6 +29,10 @@ impl Store {
         )?;
         let tx_id = sp.last_insert_rowid();
 
+        // Track which datums were actually written (for observer notification).
+        #[cfg(feature = "reactive-reasoner")]
+        let mut written_datums: Vec<&Datum> = Vec::with_capacity(datums.len());
+
         {
             let mut insert = sp.prepare(
                 "INSERT INTO facts (e, a, v, tx, valid_from, valid_to, op) \
@@ -38,10 +42,26 @@ impl Store {
                 "UPDATE facts SET valid_to = ?1 \
                  WHERE e = ?2 AND a = ?3 AND v = ?4 AND op = 1 AND valid_to IS NULL",
             )?;
+            // Idempotent assertions: skip if an active fact with the same
+            // (e, a, v) already exists. This prevents duplicate rows when
+            // the same triple is asserted across different transactions.
+            let mut check_exists = sp.prepare(
+                "SELECT 1 FROM facts \
+                 WHERE e = ?1 AND a = ?2 AND v = ?3 AND op = 1 AND valid_to IS NULL \
+                 LIMIT 1",
+            )?;
             for d in datums {
                 let v_bytes = d.value.to_bytes();
                 if d.op == Op::Retract {
                     close_assertion.execute(params![timestamp, d.entity, d.attribute, v_bytes,])?;
+                } else {
+                    // Skip assertion if an identical active fact already exists.
+                    let exists: bool = check_exists
+                        .query_row(params![d.entity, d.attribute, v_bytes], |_| Ok(true))
+                        .unwrap_or(false);
+                    if exists {
+                        continue;
+                    }
                 }
                 insert.execute(params![
                     d.entity,
@@ -52,6 +72,8 @@ impl Store {
                     d.valid_to,
                     d.op as i32,
                 ])?;
+                #[cfg(feature = "reactive-reasoner")]
+                written_datums.push(d);
             }
         }
 
@@ -85,7 +107,8 @@ impl Store {
             if !self.observers.is_empty() {
                 let mut asserts = Vec::new();
                 let mut retracts = Vec::new();
-                for d in datums {
+                // Only notify observers about datums that were actually written.
+                for d in &written_datums {
                     match d.op {
                         Op::Assert => asserts.push(d.clone()),
                         Op::Retract => retracts.push(d.clone()),

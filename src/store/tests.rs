@@ -439,3 +439,171 @@ fn retract_hides_from_current() {
         .unwrap();
     assert_eq!(after_retract.len(), 0);
 }
+
+#[test]
+fn duplicate_assert_across_transactions_is_idempotent() {
+    let mut store = test_store();
+
+    let e = store.intern("http://example.org/ct-244").unwrap();
+    let a = store
+        .intern("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        .unwrap();
+    let v = Value::Str("LXCContainer".into());
+
+    // First assertion — should write.
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: v.clone(),
+                valid_from: "2026-01-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            Some("ep1"),
+            Some("episode:scan-1"),
+        )
+        .unwrap();
+
+    assert_eq!(store.current_facts().unwrap().len(), 1);
+
+    // Second assertion of same (e, a, v) in a different transaction — should be skipped.
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: v.clone(),
+                valid_from: "2026-02-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-02-01T00:00:00Z",
+            Some("ep2"),
+            Some("episode:scan-2"),
+        )
+        .unwrap();
+
+    let facts = store.current_facts().unwrap();
+    assert_eq!(
+        facts.len(),
+        1,
+        "duplicate assertion should not create a second row"
+    );
+
+    // The original fact should remain unchanged.
+    assert_eq!(facts[0].valid_from, "2026-01-01");
+}
+
+#[test]
+fn retract_then_reassert_creates_new_fact() {
+    let mut store = test_store();
+
+    let e = store.intern("http://example.org/svc").unwrap();
+    let a = store.intern("http://example.org/status").unwrap();
+    let v = Value::Str("active".into());
+
+    // Assert.
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: v.clone(),
+                valid_from: "2026-01-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(store.current_facts().unwrap().len(), 1);
+
+    // Retract.
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: v.clone(),
+                valid_from: "2026-01-01".into(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            "2026-02-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(store.current_facts().unwrap().len(), 0);
+
+    // Re-assert same (e, a, v) — should succeed since the old one was retracted.
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: v.clone(),
+                valid_from: "2026-03-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-03-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    let facts = store.current_facts().unwrap();
+    assert_eq!(
+        facts.len(),
+        1,
+        "re-assertion after retract should create a new fact"
+    );
+    assert_eq!(facts[0].valid_from, "2026-03-01");
+}
+
+#[test]
+fn within_transaction_dedup() {
+    let mut store = test_store();
+
+    let e = store.intern("http://example.org/node").unwrap();
+    let a = store.intern("http://example.org/label").unwrap();
+    let v = Value::Str("test".into());
+
+    // Two identical datums in the same transaction — second should hit PK conflict.
+    // The first is written; the second is a duplicate within the same tx so the PK
+    // constraint handles it. We just need to make sure it doesn't panic.
+    let result = store.transact(
+        &[
+            Datum {
+                entity: e,
+                attribute: a,
+                value: v.clone(),
+                valid_from: "2026-01-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            },
+            Datum {
+                entity: e,
+                attribute: a,
+                value: v.clone(),
+                valid_from: "2026-01-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            },
+        ],
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    );
+
+    // The first datum writes fine. The second is skipped by the exists check
+    // (the first one is now visible within the savepoint).
+    assert!(result.is_ok());
+    assert_eq!(store.current_facts().unwrap().len(), 1);
+}
