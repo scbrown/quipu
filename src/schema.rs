@@ -52,4 +52,11 @@ CREATE TABLE IF NOT EXISTS proposals (
     created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status, created_at);
+
+-- Persistent OWL ontology storage for class hierarchy and reasoning.
+CREATE TABLE IF NOT EXISTS ontologies (
+    name      TEXT PRIMARY KEY,
+    turtle    TEXT NOT NULL,
+    loaded_at TEXT NOT NULL
+);
 "#;

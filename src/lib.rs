@@ -16,6 +16,8 @@ pub mod migration;
 pub mod namespace;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+#[cfg(feature = "owl")]
+pub mod owl;
 pub mod proposal;
 pub mod provider;
 pub mod rdf;
@@ -52,6 +54,8 @@ pub use graph::{ProjectedGraph, tool_project};
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;
+#[cfg(feature = "owl")]
+pub use mcp::owl::tool_load_ontology;
 pub use mcp::proposal::{
     tool_accept_proposal, tool_list_proposals, tool_propose_schema_change, tool_reject_proposal,
 };
@@ -66,6 +70,8 @@ pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
 #[cfg(feature = "onnx")]
 pub use onnx_embedder::OnnxEmbeddingProvider;
+#[cfg(feature = "owl")]
+pub use owl::{MaterializeReport, Ontology, OwlViolation};
 pub use proposal::{NewProposal, Proposal, ProposalKind, ProposalStatus};
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
 pub use rdf::{export_rdf, ingest_rdf};

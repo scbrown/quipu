@@ -292,6 +292,52 @@ impl Store {
         Ok(Some(combined))
     }
 
+    // -- Ontology storage --
+
+    /// Store a named OWL ontology.
+    pub fn load_ontology(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO ontologies (name, turtle, loaded_at) VALUES (?1, ?2, ?3)",
+            params![name, turtle, timestamp],
+        )?;
+        Ok(())
+    }
+
+    /// Remove a stored ontology by name.
+    pub fn remove_ontology(&self, name: &str) -> Result<bool> {
+        let affected = self
+            .conn
+            .execute("DELETE FROM ontologies WHERE name = ?1", params![name])?;
+        Ok(affected > 0)
+    }
+
+    /// Get all stored ontologies as a list of (name, turtle, `loaded_at`).
+    pub fn list_ontologies(&self) -> Result<Vec<(String, String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT name, turtle, loaded_at FROM ontologies ORDER BY name")?;
+        let mut ontologies = Vec::new();
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            ontologies.push((row.get(0)?, row.get(1)?, row.get(2)?));
+        }
+        Ok(ontologies)
+    }
+
+    /// Get all stored ontologies concatenated as a single Turtle string.
+    pub fn get_combined_ontologies(&self) -> Result<Option<String>> {
+        let ontologies = self.list_ontologies()?;
+        if ontologies.is_empty() {
+            return Ok(None);
+        }
+        let combined = ontologies
+            .iter()
+            .map(|(_, turtle, _)| turtle.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        Ok(Some(combined))
+    }
+
     // -- SQL access (for SPARQL evaluator) --
 
     /// Prepare a SQL statement against the underlying connection.

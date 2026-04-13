@@ -50,6 +50,7 @@ fn main() {
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
         "propose" => cli_propose::cmd_propose(&args, db_path),
+        "ontology" => cmd_ontology(&args, db_path),
         "validate" => cli_commands::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_commands::cmd_export(&args, db_path),
@@ -62,6 +63,105 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+fn cmd_ontology(args: &[String], db_path: &str) {
+    #[cfg(feature = "owl")]
+    {
+        let sub = args.get(2).map_or("list", String::as_str);
+        let mut store = quipu::Store::open(db_path).unwrap_or_else(|e| {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        });
+        match sub {
+            "load" => {
+                let name = args.get(3).unwrap_or_else(|| {
+                    eprintln!("usage: quipu ontology load <name> <file.ttl>");
+                    std::process::exit(1);
+                });
+                let file = args.get(4).unwrap_or_else(|| {
+                    eprintln!("usage: quipu ontology load <name> <file.ttl>");
+                    std::process::exit(1);
+                });
+                let turtle = std::fs::read_to_string(file).unwrap_or_else(|e| {
+                    eprintln!("error reading {file}: {e}");
+                    std::process::exit(1);
+                });
+                let ts = chrono_now();
+                let ont = quipu::Ontology::from_turtle(&turtle).unwrap_or_else(|e| {
+                    eprintln!("error parsing ontology: {e}");
+                    std::process::exit(1);
+                });
+                store.load_ontology(name, &turtle, &ts).unwrap_or_else(|e| {
+                    eprintln!("error storing ontology: {e}");
+                    std::process::exit(1);
+                });
+                let report = ont.materialize(&mut store, &ts).unwrap_or_else(|e| {
+                    eprintln!("error materializing: {e}");
+                    std::process::exit(1);
+                });
+                println!("Loaded ontology '{name}'");
+                println!(
+                    "  Axioms: {}",
+                    serde_json::to_string_pretty(&ont.axiom_summary()).unwrap()
+                );
+                println!(
+                    "  Materialized: {} facts ({} subclass, {} inverse, {} symmetric, {} domain/range, {} equiv-class)",
+                    report.total,
+                    report.subclass_inferences,
+                    report.inverse_inferences,
+                    report.symmetric_inferences,
+                    report.domain_range_inferences,
+                    report.equivalent_class_inferences
+                );
+            }
+            "list" => {
+                let list = store.list_ontologies().unwrap_or_else(|e| {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                });
+                if list.is_empty() {
+                    println!("No ontologies loaded.");
+                } else {
+                    for (name, _, loaded_at) in &list {
+                        println!("{name}  (loaded {loaded_at})");
+                    }
+                }
+            }
+            "remove" => {
+                let name = args.get(3).unwrap_or_else(|| {
+                    eprintln!("usage: quipu ontology remove <name>");
+                    std::process::exit(1);
+                });
+                if store.remove_ontology(name).unwrap() {
+                    println!("Removed ontology '{name}'");
+                } else {
+                    println!("Ontology '{name}' not found");
+                }
+            }
+            _ => {
+                eprintln!("usage: quipu ontology load|list|remove");
+                std::process::exit(1);
+            }
+        }
+    }
+    #[cfg(not(feature = "owl"))]
+    {
+        let _ = (args, db_path);
+        eprintln!("error: ontology command requires the 'owl' feature");
+        eprintln!("  rebuild with: cargo build --features owl");
+        std::process::exit(1);
+    }
+}
+
+#[cfg(feature = "owl")]
+fn chrono_now() -> String {
+    // Simple ISO-8601 timestamp without chrono dependency.
+    use std::time::SystemTime;
+    let d = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    format!("{}Z", d.as_secs())
 }
 
 fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
@@ -99,6 +199,7 @@ COMMANDS:
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
     quipu shapes load|list|remove [--db <path>]
     quipu propose list|submit|accept|reject [--status pending] [--db <path>]
+    quipu ontology load|list|remove [--db <path>]
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
     quipu repl [--db <path>]
     quipu export [--format ntriples|turtle] [--db <path>]

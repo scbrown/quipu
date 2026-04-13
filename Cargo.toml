@@ -73,6 +73,7 @@ ndarray = { version = "0.16", optional = true }
 [features]
 default = ["shacl"]
 shacl = ["dep:rudof_lib"]
+owl = []
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
 onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
 reactive-reasoner = []

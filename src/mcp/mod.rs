@@ -6,6 +6,8 @@
 
 pub mod graphiti;
 pub mod impact;
+#[cfg(feature = "owl")]
+pub mod owl;
 pub mod proposal;
 pub mod resolution;
 pub mod search;
@@ -432,6 +434,19 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "threshold": { "type": "number", "description": "Similarity threshold 0.0-1.0 (default: 0.85)" }
                 },
                 "required": ["name"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_load_ontology",
+            "description": "Manage OWL ontologies: load (parse + materialize entailments), list, or remove. Loaded ontologies enforce class hierarchy, disjoint-class constraints, and property characteristics (inverse, symmetric, functional).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": { "type": "string", "enum": ["load", "list", "remove"], "description": "Action to perform (default: list)" },
+                    "name": { "type": "string", "description": "Ontology name (required for load/remove)" },
+                    "turtle": { "type": "string", "description": "OWL ontology in Turtle format (required for load)" },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
+                }
             }
         }),
     ]

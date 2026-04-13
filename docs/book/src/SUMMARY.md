@@ -14,6 +14,7 @@
 - [The Temporal Model](concepts/temporal-model.md)
 - [SHACL Validation](concepts/shacl-validation.md)
 - [Schema Evolution](concepts/schema-evolution.md)
+- [OWL Ontology Layer](concepts/owl.md)
 - [The Reasoner](concepts/reasoning.md)
 
 # Tutorials
