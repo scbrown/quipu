@@ -282,7 +282,7 @@ impl Store {
     }
 }
 
-/// Validate that a string is syntactically valid Turtle.
+#[cfg(feature = "shacl")]
 fn validate_turtle_syntax(turtle: &str) -> Result<()> {
     let parser = oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::Turtle);
     for quad_result in parser.for_reader(turtle.as_bytes()) {

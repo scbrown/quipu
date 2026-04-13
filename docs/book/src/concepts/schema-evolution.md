@@ -57,6 +57,7 @@ Tool: `quipu_list_proposals`
 Tool: `quipu_accept_proposal`
 
 When a **shape** proposal is accepted, Quipu:
+
 1. Validates the Turtle diff is syntactically correct
 2. Verifies it parses as valid SHACL
 3. Writes the shape to the `shapes` table
