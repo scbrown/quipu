@@ -10,10 +10,13 @@ use rudof_lib::{
     RDFFormat, ReaderMode, Rudof, RudofConfig, ShaclFormat, ShaclValidationMode, ShapesGraphSource,
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::{Error, Result};
+use crate::resolution::EntityCandidate;
 
 /// Structured feedback from SHACL validation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationFeedback {
     /// Whether the data conforms to the shapes.
     pub conforms: bool,
@@ -23,10 +26,14 @@ pub struct ValidationFeedback {
     pub warnings: usize,
     /// Individual violation/warning details.
     pub results: Vec<ValidationIssue>,
+    /// Entity resolution candidates — present when resolution is enabled and
+    /// near-duplicate entities were detected during write.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolution_candidates: Option<Vec<EntityCandidate>>,
 }
 
 /// A single validation issue.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationIssue {
     /// Severity: "violation", "warning", or "info".
     pub severity: String,
@@ -143,6 +150,7 @@ impl Validator {
             violations: report.count_violations(),
             warnings: report.count_warnings(),
             results: issues,
+            resolution_candidates: None,
         })
     }
 

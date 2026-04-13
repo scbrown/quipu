@@ -5168,6 +5168,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spargebra",
+ "strsim",
  "tempfile",
  "thiserror 2.0.18",
  "tokenizers",
