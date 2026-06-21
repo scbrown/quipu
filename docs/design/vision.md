@@ -169,6 +169,11 @@ Materialize subgraphs into contiguous CSR structures for graph algorithms
 (PageRank, community detection, shortest path, link prediction) without
 a graph database server. Results write back as triples.
 
+PageRank / Personalized PageRank is specified in
+[`pagerank.md`](./pagerank.md). Today only `in_degree()` ships; the spec
+closes that gap and adds episode-driven, bitemporal, and counterfactual
+importance.
+
 ### 10. Virtual Graph Federation
 
 Query external data sources (databases, APIs, other stores) as virtual
