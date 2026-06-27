@@ -96,7 +96,7 @@ Ingest structured agent knowledge as an episode.
 | `name` | Yes | Episode identifier |
 | `episode_body` | No | Natural language description |
 | `source` | No | Source agent/system |
-| `group_id` | No | Knowledge graph group |
+| `group_id` | No | Provenance label for the episode (not an isolation boundary — see [Episodes](../architecture/episodes.md)) |
 | `nodes` | No | Array of `{name, type, description, properties}` |
 | `edges` | No | Array of `{source, target, relation}` |
 
@@ -160,7 +160,7 @@ and values). Replaces Graphiti's `search_nodes`.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `query` | Yes | Natural-language search query |
-| `group_ids` | No | Filter to entities from these knowledge graph groups |
+| `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label; `/knot` facts are ungrouped) |
 | `max_results` | No | Max results (default: 10) |
 | `entity_type_filter` | No | Filter by rdf:type IRI |
 
@@ -172,7 +172,7 @@ value). Replaces Graphiti's `search_memory_facts`.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `query` | Yes | Natural-language search query |
-| `group_ids` | No | Filter to facts from these knowledge graph groups |
+| `group_ids` | No | Best-effort filter to facts from these provenance groups (episode-scoped label; `/knot` facts are ungrouped) |
 | `max_results` | No | Max results (default: 10) |
 
 ### `quipu_episodes_complete`
@@ -184,7 +184,7 @@ source, then converts to a Quipu episode and ingests.
 |-----------|----------|-------------|
 | `name` | Yes | Episode name/identifier |
 | `episode_body` | No | Natural-language body of the episode |
-| `group_id` | No | Knowledge graph group |
+| `group_id` | No | Provenance label for the episode (not an isolation boundary — see [Episodes](../architecture/episodes.md)) |
 | `source_description` | No | Who/what produced this episode |
 | `timestamp` | No | ISO-8601 timestamp |
 

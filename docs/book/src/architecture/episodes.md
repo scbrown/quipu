@@ -42,10 +42,18 @@ change -- it packages that knowledge as an episode with typed nodes and edges.
 | `name` | Yes | Episode identifier (becomes IRI) |
 | `episode_body` | No | Natural language description |
 | `source` | No | Agent or system that produced this |
-| `group_id` | No | Knowledge graph partition |
+| `group_id` | No | Provenance label for the episode (see note below) |
 | `nodes` | No | Entities to create |
 | `edges` | No | Relationships between entities |
 | `shapes` | No | SHACL Turtle for validation gate |
+
+> **`group_id` is a label, not a partition.** It is recorded as a single
+> `aegis:groupId` literal on the episode's `prov:Activity`; nodes inherit it
+> transitively via `prov:wasGeneratedBy`. All groups share one graph — there is
+> no isolation boundary, and the `group_ids` filter on search is best-effort.
+> Facts asserted directly via `/knot` (raw Turtle, not through an episode) carry
+> no group at all and are invisible to `group_ids` filtering. Use `group_id` for
+> provenance/organization, not as a multi-tenant security boundary.
 
 ### Node Fields
 
