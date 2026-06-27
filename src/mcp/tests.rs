@@ -259,7 +259,6 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 fn test_tool_definitions() {
     let defs = tool_definitions();
-    assert_eq!(defs.len(), 23);
     let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"quipu_query"));
     assert!(names.contains(&"quipu_knot"));
@@ -284,6 +283,19 @@ fn test_tool_definitions() {
     // Previously documented but missing from the manifest (hq-6v4).
     assert!(names.contains(&"quipu_project"));
     assert!(names.contains(&"quipu_context"));
+
+    // quipu_load_ontology is only advertised when the `owl` feature compiles in
+    // its handler (hq-8wd) — otherwise the call would always fail.
+    #[cfg(feature = "owl")]
+    {
+        assert_eq!(defs.len(), 23);
+        assert!(names.contains(&"quipu_load_ontology"));
+    }
+    #[cfg(not(feature = "owl"))]
+    {
+        assert_eq!(defs.len(), 22);
+        assert!(!names.contains(&"quipu_load_ontology"));
+    }
 }
 
 // ── Schema evolution proposal tool tests ────────────────────────────

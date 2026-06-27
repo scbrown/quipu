@@ -160,7 +160,8 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
 
 /// MCP tool definitions as JSON schemas for registration with Bobbin.
 pub fn tool_definitions() -> Vec<JsonValue> {
-    vec![
+    #[allow(unused_mut)]
+    let mut defs = vec![
         serde_json::json!({
             "name": "quipu_query",
             "description": "Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx)",
@@ -437,19 +438,6 @@ pub fn tool_definitions() -> Vec<JsonValue> {
             }
         }),
         serde_json::json!({
-            "name": "quipu_load_ontology",
-            "description": "Manage OWL ontologies: load (parse + materialize entailments), list, or remove. Loaded ontologies enforce class hierarchy, disjoint-class constraints, and property characteristics (inverse, symmetric, functional).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "action": { "type": "string", "enum": ["load", "list", "remove"], "description": "Action to perform (default: list)" },
-                    "name": { "type": "string", "description": "Ontology name (required for load/remove)" },
-                    "turtle": { "type": "string", "description": "OWL ontology in Turtle format (required for load)" },
-                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
-                }
-            }
-        }),
-        serde_json::json!({
             "name": "quipu_project",
             "description": "Project the knowledge graph and run a graph algorithm over it: stats (node/edge counts), in_degree (most-referenced entities), or pagerank/ppr (global or personalized PageRank from seed entities). Optionally restrict the projection to a node type or predicate.",
             "inputSchema": {
@@ -479,7 +467,27 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                 "required": ["query"]
             }
         }),
-    ]
+    ];
+
+    // OWL reasoning is gated behind the (non-default) `owl` feature; only
+    // advertise the tool when its handler is actually compiled in, otherwise
+    // agents see a tool whose call always fails (hq-8wd).
+    #[cfg(feature = "owl")]
+    defs.push(serde_json::json!({
+        "name": "quipu_load_ontology",
+        "description": "Manage OWL ontologies: load (parse + materialize entailments), list, or remove. Loaded ontologies enforce class hierarchy, disjoint-class constraints, and property characteristics (inverse, symmetric, functional).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": ["load", "list", "remove"], "description": "Action to perform (default: list)" },
+                "name": { "type": "string", "description": "Ontology name (required for load/remove)" },
+                "turtle": { "type": "string", "description": "OWL ontology in Turtle format (required for load)" },
+                "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
+            }
+        }
+    }));
+
+    defs
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

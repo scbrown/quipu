@@ -314,7 +314,7 @@ See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of conten
 | Persistent shape storage | ✅ | |
 | Aegis ontology shapes | ✅ | Infrastructure entities |
 | Code entity shapes | ✅ | CodeModule, CodeSymbol, etc. |
-| OWL reasoning | 🔜 | Planned |
+| OWL reasoning | ✅ | Optional `owl` feature |
 | **AI-Native** | | |
 | Episode ingestion (Graphiti-compatible) | ✅ | Typed nodes, edges, provenance |
 | SQLite vector search (cosine) | ✅ | Default backend |
