@@ -126,6 +126,19 @@ async fn main() {
         .route("/fragments", get(fragments_handler))
         .route("/reconcile", post(reconcile_handler))
         .route("/preview/{iri}", get(preview_handler))
+        // CORS: allow the Bobbin Knowledge tab (and other browser origins) to
+        // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
+        // preflight (GH#5).
+        .layer(
+            tower_http::cors::CorsLayer::new()
+                .allow_origin(tower_http::cors::Any)
+                .allow_methods([
+                    axum::http::Method::GET,
+                    axum::http::Method::POST,
+                    axum::http::Method::OPTIONS,
+                ])
+                .allow_headers([axum::http::header::CONTENT_TYPE]),
+        )
         .with_state(state);
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
