@@ -1004,6 +1004,12 @@ function navigate() {
 
   if (hash === 'explorer' && !state.entities.length) loadEntities();
   if (hash === 'shapes') loadShapes();
+  // CodeMirror renders blank when initialized in a hidden container; (re)init
+  // and refresh once the workbench tab is actually visible (GH#9).
+  if (hash === 'workbench') {
+    if (!state.editor) initEditor();
+    if (state.editor) state.editor.refresh();
+  }
 }
 
 window.addEventListener('hashchange', navigate);
@@ -1250,10 +1256,13 @@ function renderGraph() {
       },
     ],
     layout: {
-      name: nodes.length > 100 ? 'grid' : 'cose',
+      // Force-directed (cose) reveals structure; fall back to a hierarchical
+      // layout only for very large graphs — never the unreadable grid (GH#6).
+      name: nodes.length > 600 ? 'breadthfirst' : 'cose',
       animate: false,
-      nodeRepulsion: function() { return 8000; },
-      idealEdgeLength: function() { return 120; },
+      // Spread nodes further apart as the graph grows so large views stay legible.
+      nodeRepulsion: function() { return nodes.length > 200 ? 16000 : 8000; },
+      idealEdgeLength: function() { return nodes.length > 200 ? 160 : 120; },
       nodeDimensionsIncludeLabels: true,
     },
     minZoom: 0.1,
@@ -1273,6 +1282,9 @@ document.getElementById('entity-search').addEventListener('input', () => {
 
 // ── Workbench ──
 function initEditor() {
+  // Idempotent; if CodeMirror failed to load (e.g. no CDN), leave the plain
+  // textarea as the editor (monospace fallback) — GH#9.
+  if (state.editor || typeof CodeMirror === 'undefined') return;
   state.editor = CodeMirror.fromTextArea(document.getElementById('sparql-editor'), {
     mode: 'sparql',
     theme: 'material-darker',
@@ -1289,8 +1301,18 @@ function initEditor() {
   });
 }
 
+function editorValue() {
+  return state.editor
+    ? state.editor.getValue()
+    : (document.getElementById('sparql-editor')?.value || '');
+}
+function setEditorValue(v) {
+  if (state.editor) state.editor.setValue(v);
+  else { const ta = document.getElementById('sparql-editor'); if (ta) ta.value = v; }
+}
+
 async function runQuery() {
-  const sparql = state.editor.getValue().trim();
+  const sparql = editorValue().trim();
   if (!sparql) return;
 
   const btn = document.getElementById('run-query');
@@ -1382,8 +1404,8 @@ document.querySelectorAll('.results-format-btn').forEach(btn => {
 // Example queries
 document.getElementById('query-examples').addEventListener('click', (e) => {
   const ex = e.target.closest('.example-query');
-  if (ex && state.editor) {
-    state.editor.setValue(ex.dataset.query);
+  if (ex) {
+    setEditorValue(ex.dataset.query);
     runQuery();
   }
 });
@@ -1409,8 +1431,20 @@ async function loadEpisodes() {
   OPTIONAL { ?ep <http://aegis.gastown.local/ontology/episodeBody> ?body }
   OPTIONAL { ?ep <http://aegis.gastown.local/ontology/source> ?source }
   OPTIONAL { ?ep <http://aegis.gastown.local/ontology/groupId> ?time }
-} LIMIT 200`
+  FILTER(!CONTAINS(STR(?ep), "graphiti-fact"))
+} ORDER BY DESC(?time) LIMIT 200`
     });
+
+    // Per-episode entity counts (one grouped query, mapped by episode IRI) — GH#8.
+    let countByEp = {};
+    try {
+      const counts = await api('/query', {
+        query: `SELECT ?ep (COUNT(?s) AS ?n) WHERE {
+  ?s <http://www.w3.org/ns/prov#wasGeneratedBy> ?ep
+} GROUP BY ?ep`
+      });
+      for (const r of (counts.rows || [])) { if (r.ep) countByEp[r.ep] = r.n; }
+    } catch (_) { /* counts are best-effort */ }
 
     const meta = document.getElementById('timeline-meta');
     meta.textContent = `${data.count || 0} episodes`;
@@ -1432,13 +1466,19 @@ async function loadEpisodes() {
       const body = row.body || '';
       const source = row.source || '';
       const time = row.time || '';
+      const summary = body ? body.split('\n')[0].slice(0, 160) : '';
+      const n = countByEp[epIri];
+      const countChip = (n !== undefined)
+        ? `<span class="entry-count" title="entities extracted">${escapeHtml(String(n))} entities</span>`
+        : '';
 
       entry.innerHTML = `
         <div class="entry-header">
           <span class="entry-name">${escapeHtml(shortIri(name))}</span>
-          <span class="entry-time">${escapeHtml(time)}</span>
+          <span class="entry-meta">${countChip}<span class="entry-time" title="${escapeHtml(time)}">${escapeHtml(time)}</span></span>
         </div>
-        <div class="entry-source">${source ? 'Source: ' + escapeHtml(source) : ''}</div>
+        ${source ? `<div class="entry-source">Source: ${escapeHtml(source)}</div>` : ''}
+        ${summary ? `<div class="entry-summary">${escapeHtml(summary)}</div>` : ''}
         <div class="entry-body">${body ? escapeHtml(body) : '<em>No body text</em>'}</div>
       `;
 
