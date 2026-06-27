@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-06-27
+
+Graph-algorithm ranking, cross-origin API access, and a Web UI overhaul.
+
+### Added
+
+- **PageRank & Personalized PageRank** over the projected graph —
+  `page_rank()` + `PageRankConfig`, exposed via `tool_project`
+  (`"algorithm": "pagerank"` / `"ppr"`, with `seeds`/`damping`/`max_iters`),
+  the `quipu project` CLI, REST `POST /project`, and MCP. Closes the
+  long-standing "centrality" gap (only `in_degree` shipped before). Consumed by
+  Bobbin's PPR retrieval ranking signal.
+- **CORS** on the HTTP API (`/query`, `/search`, `/episode`, …) incl. OPTIONS
+  preflight, so browser clients like Bobbin's Knowledge tab can call quipu
+  cross-origin (#5).
+
+### Fixed (Web UI)
+
+- **Graph Explorer** uses a force-directed (cose) / hierarchical layout instead
+  of the unreadable grid at large entity counts (#6).
+- **Timeline** orders newest-first, hides decommissioned `graphiti-fact-*`
+  episodes, and shows a summary line + per-episode entity-count chips (#8;
+  partial #7).
+- **Workbench SPARQL editor** renders on first view (was blank when initialized
+  in a hidden container) with a plain-textarea fallback (#9).
+
+### Known issues (fast-follow, 0.3.1)
+
+- #7 (remove `graphiti-fact-*` episode data) and #10 (merge duplicate
+  `aegis:WebApplication` entities) are deploy-gated live-data migrations; the UI
+  symptom for #7 is already mitigated above.
+
 ## [0.2.0] - 2026-04-12
 
 ### Reasoner
