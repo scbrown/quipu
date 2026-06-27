@@ -449,6 +449,36 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                 }
             }
         }),
+        serde_json::json!({
+            "name": "quipu_project",
+            "description": "Project the knowledge graph and run a graph algorithm over it: stats (node/edge counts), in_degree (most-referenced entities), or pagerank/ppr (global or personalized PageRank from seed entities). Optionally restrict the projection to a node type or predicate.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "algorithm": { "type": "string", "enum": ["stats", "in_degree", "pagerank", "ppr"], "description": "Algorithm to run (default: stats)" },
+                    "type": { "type": "string", "description": "Restrict the projection to nodes of this rdf:type IRI" },
+                    "predicate": { "type": "string", "description": "Restrict the projection to edges with this predicate IRI" },
+                    "limit": { "type": "integer", "description": "Max results for in_degree/pagerank (default: 20)" },
+                    "seeds": { "type": "array", "items": { "type": "string" }, "description": "Seed entity IRIs (or raw term IDs) for personalized PageRank; non-empty switches pagerank to PPR" },
+                    "damping": { "type": "number", "description": "PageRank damping factor (default: 0.85)" },
+                    "max_iters": { "type": "integer", "description": "PageRank max iterations (default: 100)" },
+                    "tolerance": { "type": "number", "description": "PageRank convergence tolerance (default: 1e-6)" }
+                }
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_context",
+            "description": "Query the knowledge graph for context around a natural-language query: returns relevant entities and their facts, ready to prime an agent. Optionally expand to linked entities.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Natural language query to find relevant knowledge context" },
+                    "max_entities": { "type": "integer", "description": "Maximum entities to return (default from pipeline config)" },
+                    "expand_links": { "type": "boolean", "description": "Whether to expand to entities linked from the matches" }
+                },
+                "required": ["query"]
+            }
+        }),
     ]
 }
 

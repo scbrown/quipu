@@ -259,7 +259,7 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 fn test_tool_definitions() {
     let defs = tool_definitions();
-    assert_eq!(defs.len(), 21);
+    assert_eq!(defs.len(), 23);
     let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"quipu_query"));
     assert!(names.contains(&"quipu_knot"));
@@ -281,6 +281,9 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_list_proposals"));
     assert!(names.contains(&"quipu_accept_proposal"));
     assert!(names.contains(&"quipu_reject_proposal"));
+    // Previously documented but missing from the manifest (hq-6v4).
+    assert!(names.contains(&"quipu_project"));
+    assert!(names.contains(&"quipu_context"));
 }
 
 // ── Schema evolution proposal tool tests ────────────────────────────
