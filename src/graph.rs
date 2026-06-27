@@ -148,6 +148,137 @@ pub fn in_degree(pg: &ProjectedGraph) -> Vec<(i64, usize)> {
     degrees
 }
 
+/// Configuration for (personalized) PageRank.
+#[derive(Debug, Clone)]
+pub struct PageRankConfig {
+    /// Damping / restart probability (typically 0.85).
+    pub damping: f32,
+    /// Seed distribution for personalization (entity term IDs). Empty = uniform
+    /// restart = global PageRank.
+    pub seeds: Vec<i64>,
+    /// Maximum power-iteration steps.
+    pub max_iters: u32,
+    /// L1 convergence tolerance.
+    pub tolerance: f32,
+}
+
+impl Default for PageRankConfig {
+    fn default() -> Self {
+        Self {
+            damping: 0.85,
+            seeds: Vec::new(),
+            max_iters: 100,
+            tolerance: 1e-6,
+        }
+    }
+}
+
+/// Power-iteration PageRank / Personalized PageRank over a projected graph.
+///
+/// Returns `(entity_id, normalized_score)` pairs, descending by score. With an
+/// empty `seeds` set this is global PageRank (uniform restart); with seeds it is
+/// Personalized PageRank, with restart mass concentrated on the seed entities.
+///
+/// Dangling nodes (no out-edges) redistribute their mass to the restart vector,
+/// which keeps total rank mass conserved at 1.0. Parallel edges are respected
+/// (a node that links a target N times sends it N/out_degree of its rank).
+pub fn page_rank(pg: &ProjectedGraph, cfg: &PageRankConfig) -> Result<Vec<(i64, f32)>> {
+    let n = pg.graph.node_count();
+    if n == 0 {
+        return Ok(Vec::new());
+    }
+
+    // project() only ever adds nodes, so NodeIndex values are contiguous 0..n
+    // and `idx.index()` is a valid array position.
+    let mut out_targets: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for idx in pg.graph.node_indices() {
+        let i = idx.index();
+        for edge in pg.graph.edges_directed(idx, petgraph::Direction::Outgoing) {
+            out_targets[i].push(petgraph::visit::EdgeRef::target(&edge).index());
+        }
+    }
+
+    // Build the restart (personalization) vector, summing to 1.0.
+    let mut restart = vec![0.0f32; n];
+    let seed_positions: Vec<usize> = cfg
+        .seeds
+        .iter()
+        .filter_map(|sid| pg.entity_to_node.get(sid).map(|idx| idx.index()))
+        .collect();
+    if seed_positions.is_empty() {
+        // Uniform (global PageRank), or seeds given but none present in graph.
+        let p = 1.0 / n as f32;
+        for r in restart.iter_mut() {
+            *r = p;
+        }
+    } else {
+        let p = 1.0 / seed_positions.len() as f32;
+        for &pos in &seed_positions {
+            restart[pos] += p;
+        }
+    }
+
+    let d = cfg.damping;
+    let mut rank = restart.clone();
+    let mut next = vec![0.0f32; n];
+
+    for _ in 0..cfg.max_iters.max(1) {
+        // Base: teleport term.
+        for i in 0..n {
+            next[i] = (1.0 - d) * restart[i];
+        }
+        // Dangling mass redistributed to the restart vector.
+        let mut dangling_mass = 0.0f32;
+        for i in 0..n {
+            if out_targets[i].is_empty() {
+                dangling_mass += rank[i];
+            }
+        }
+        if dangling_mass > 0.0 {
+            for i in 0..n {
+                next[i] += d * dangling_mass * restart[i];
+            }
+        }
+        // Push rank along out-edges.
+        for i in 0..n {
+            let deg = out_targets[i].len();
+            if deg == 0 {
+                continue;
+            }
+            let share = d * rank[i] / deg as f32;
+            for &j in &out_targets[i] {
+                next[j] += share;
+            }
+        }
+
+        // L1 convergence check.
+        let mut diff = 0.0f32;
+        for i in 0..n {
+            diff += (next[i] - rank[i]).abs();
+        }
+        std::mem::swap(&mut rank, &mut next);
+        if diff < cfg.tolerance {
+            break;
+        }
+    }
+
+    // Normalize defensively (mass is conserved, but guard against drift).
+    let sum: f32 = rank.iter().sum();
+    if sum > 0.0 {
+        for r in rank.iter_mut() {
+            *r /= sum;
+        }
+    }
+
+    let mut results: Vec<(i64, f32)> = pg
+        .graph
+        .node_indices()
+        .map(|idx| (pg.node_to_entity[&idx], rank[idx.index()]))
+        .collect();
+    results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    Ok(results)
+}
+
 /// Find connected components (weakly connected, ignoring direction).
 pub fn connected_components(pg: &ProjectedGraph) -> Vec<Vec<i64>> {
     let components = algo::kosaraju_scc(&pg.graph);
@@ -245,6 +376,65 @@ pub fn tool_project(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "count": results.len()
             }))
         }
+        "pagerank" | "ppr" => {
+            let damping = input
+                .get("damping")
+                .and_then(serde_json::Value::as_f64)
+                .map(|v| v as f32)
+                .unwrap_or(0.85);
+            let max_iters = input
+                .get("max_iters")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(100) as u32;
+            let tolerance = input
+                .get("tolerance")
+                .and_then(serde_json::Value::as_f64)
+                .map(|v| v as f32)
+                .unwrap_or(1e-6);
+            let limit = input
+                .get("limit")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(20) as usize;
+
+            // Seeds accepted as IRIs (resolved to term IDs) or raw integer IDs.
+            let mut seeds: Vec<i64> = Vec::new();
+            if let Some(arr) = input.get("seeds").and_then(|v| v.as_array()) {
+                for s in arr {
+                    if let Some(iri) = s.as_str() {
+                        if let Some(id) = store.lookup(iri)? {
+                            seeds.push(id);
+                        }
+                    } else if let Some(id) = s.as_i64() {
+                        seeds.push(id);
+                    }
+                }
+            }
+
+            let personalized = !seeds.is_empty();
+            let cfg = PageRankConfig {
+                damping,
+                seeds,
+                max_iters,
+                tolerance,
+            };
+            let ranked = page_rank(&pg, &cfg)?;
+            let results: Vec<JsonValue> = ranked
+                .into_iter()
+                .take(limit)
+                .map(|(entity_id, score)| {
+                    let iri = store
+                        .resolve(entity_id)
+                        .unwrap_or_else(|_| format!("ref:{entity_id}"));
+                    serde_json::json!({"entity": iri, "score": score})
+                })
+                .collect();
+            Ok(serde_json::json!({
+                "algorithm": "pagerank",
+                "personalized": personalized,
+                "results": results,
+                "count": results.len()
+            }))
+        }
         "components" => {
             let components = connected_components(&pg);
             let results: Vec<JsonValue> = components
@@ -280,7 +470,7 @@ pub fn tool_project(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             }))
         }
         other => Err(crate::Error::InvalidValue(format!(
-            "unknown algorithm: {other} (try: stats, in_degree, components, shortest_path)"
+            "unknown algorithm: {other} (try: stats, in_degree, pagerank, components, shortest_path)"
         ))),
     }
 }
@@ -365,6 +555,85 @@ ex:app1 a ex:App ; ex:uses ex:server1 .
         assert!(path.len() <= 4); // at most alice->bob->carol->dave
         assert_eq!(path.first().unwrap(), "http://example.org/alice");
         assert_eq!(path.last().unwrap(), "http://example.org/dave");
+    }
+
+    #[test]
+    fn test_pagerank_converges_and_sums_to_one() {
+        let store = test_graph_store();
+        let pg = project(&store, None, Some("http://example.org/knows")).unwrap();
+        let ranks = page_rank(&pg, &PageRankConfig::default()).unwrap();
+        assert!(!ranks.is_empty());
+        let sum: f32 = ranks.iter().map(|(_, s)| s).sum();
+        assert!((sum - 1.0).abs() < 1e-3, "ranks should sum to ~1, got {sum}");
+    }
+
+    #[test]
+    fn test_pagerank_ranks_hub_highest() {
+        let store = test_graph_store();
+        let pg = project(&store, None, Some("http://example.org/knows")).unwrap();
+        let ranks = page_rank(&pg, &PageRankConfig::default()).unwrap();
+        // dave is a sink reached via carol (alice/bob/carol all flow toward it);
+        // carol is referenced by both alice and bob. Top-ranked should be carol
+        // or dave, never alice (which has no incoming knows edges).
+        let alice = store.lookup("http://example.org/alice").unwrap().unwrap();
+        let top = ranks[0].0;
+        assert_ne!(top, alice, "alice has no in-edges and must not rank first");
+        let carol = store.lookup("http://example.org/carol").unwrap().unwrap();
+        let dave = store.lookup("http://example.org/dave").unwrap().unwrap();
+        assert!(top == carol || top == dave, "expected carol or dave on top");
+    }
+
+    #[test]
+    fn test_personalized_pagerank_favors_seed_neighborhood() {
+        let store = test_graph_store();
+        let pg = project(&store, None, Some("http://example.org/knows")).unwrap();
+        let alice = store.lookup("http://example.org/alice").unwrap().unwrap();
+        let cfg = PageRankConfig {
+            seeds: vec![alice],
+            ..Default::default()
+        };
+        let ranks = page_rank(&pg, &cfg).unwrap();
+        // Personalized at alice: alice itself should carry significant rank
+        // (restart mass) — far more than under global PageRank where it has 0
+        // in-edges.
+        let alice_score = ranks.iter().find(|(id, _)| *id == alice).unwrap().1;
+        assert!(alice_score > 0.1, "seed should retain restart mass, got {alice_score}");
+    }
+
+    #[test]
+    fn test_pagerank_empty_graph() {
+        let store = Store::open_in_memory().unwrap();
+        let pg = project(&store, None, None).unwrap();
+        let ranks = page_rank(&pg, &PageRankConfig::default()).unwrap();
+        assert!(ranks.is_empty());
+    }
+
+    #[test]
+    fn test_tool_project_pagerank() {
+        let store = test_graph_store();
+        let input = serde_json::json!({
+            "algorithm": "pagerank",
+            "predicate": "http://example.org/knows",
+            "limit": 5
+        });
+        let result = tool_project(&store, &input).unwrap();
+        assert_eq!(result["algorithm"], "pagerank");
+        assert_eq!(result["personalized"], false);
+        assert!(result["count"].as_u64().unwrap() > 0);
+        assert!(result["results"][0]["score"].as_f64().unwrap() > 0.0);
+    }
+
+    #[test]
+    fn test_tool_project_ppr_with_seeds() {
+        let store = test_graph_store();
+        let input = serde_json::json!({
+            "algorithm": "ppr",
+            "predicate": "http://example.org/knows",
+            "seeds": ["http://example.org/alice"]
+        });
+        let result = tool_project(&store, &input).unwrap();
+        assert_eq!(result["algorithm"], "pagerank");
+        assert_eq!(result["personalized"], true);
     }
 
     #[test]
