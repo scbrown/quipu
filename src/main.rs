@@ -45,6 +45,7 @@ fn main() {
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
         "impact" => cli::cmd_impact(&args, db_path),
+        "project" => cli::cmd_project(&args, db_path),
         "reason" => cli::cmd_reason(&args, db_path),
         "episode" => cli_commands::cmd_episode(&args, db_path),
         "retract" => cli_commands::cmd_retract(&args, db_path),
@@ -194,6 +195,7 @@ COMMANDS:
     quipu cord [--type <IRI>] [--limit N] [--db <path>]
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
     quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]
+    quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85] [--predicate <IRI>] [--db <path>]
     quipu reason [--rules <file.ttl>] [--db <path>]
     quipu episode <file.json> [--db <path>]
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]

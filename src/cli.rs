@@ -257,6 +257,72 @@ pub fn cmd_unravel(args: &[String], db_path: &str) {
 /// speculatively retracts all facts for the entity, runs the reasoner inside
 /// the speculative fork, and then walks the graph — answering "what would
 /// break if I removed this?".
+/// `quipu project` — run graph algorithms (stats, in_degree, pagerank,
+/// components, shortest_path) over the projected knowledge graph.
+///
+/// Usage:
+///   quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85]
+///                 [--max-iters 100] [--tolerance 1e-6] [--type <IRI>]
+///                 [--predicate <IRI>] [--limit 20] [--from <IRI>] [--to <IRI>]
+pub fn cmd_project(args: &[String], db_path: &str) {
+    let get_val = |flag: &str| -> Option<String> {
+        args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
+    };
+
+    let algorithm = get_val("--algorithm").unwrap_or_else(|| "stats".to_string());
+
+    let mut input = serde_json::json!({ "algorithm": algorithm });
+    if let Some(t) = get_val("--type") {
+        input["type"] = serde_json::Value::String(t);
+    }
+    if let Some(p) = get_val("--predicate") {
+        input["predicate"] = serde_json::Value::String(p);
+    }
+    if let Some(l) = get_val("--limit").and_then(|v| v.parse::<u64>().ok()) {
+        input["limit"] = serde_json::json!(l);
+    }
+    if let Some(d) = get_val("--damping").and_then(|v| v.parse::<f64>().ok()) {
+        input["damping"] = serde_json::json!(d);
+    }
+    if let Some(m) = get_val("--max-iters").and_then(|v| v.parse::<u64>().ok()) {
+        input["max_iters"] = serde_json::json!(m);
+    }
+    if let Some(t) = get_val("--tolerance").and_then(|v| v.parse::<f64>().ok()) {
+        input["tolerance"] = serde_json::json!(t);
+    }
+    if let Some(f) = get_val("--from") {
+        input["from"] = serde_json::Value::String(f);
+    }
+    if let Some(t) = get_val("--to") {
+        input["to"] = serde_json::Value::String(t);
+    }
+    // --seed is repeatable (personalized PageRank seeds, as IRIs).
+    let seeds: Vec<serde_json::Value> = args
+        .windows(2)
+        .filter(|w| w[0] == "--seed")
+        .map(|w| serde_json::Value::String(w[1].clone()))
+        .collect();
+    if !seeds.is_empty() {
+        input["seeds"] = serde_json::Value::Array(seeds);
+    }
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match quipu::tool_project(&store, &input) {
+        Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 pub fn cmd_impact(args: &[String], db_path: &str) {
     let entity_iri = match args.get(2) {
         Some(iri) if !iri.starts_with("--") => iri.as_str(),
