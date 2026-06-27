@@ -3,6 +3,7 @@
 use oxrdf::Literal;
 use spargebra::algebra::Expression;
 
+use crate::error::{Error, Result};
 use crate::namespace;
 use crate::store::Store;
 use crate::types::Value;
@@ -10,58 +11,88 @@ use crate::types::Value;
 use super::Bindings;
 
 /// Evaluate a FILTER expression against a binding row.
-pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> bool {
+///
+/// Returns an error rather than a value for genuinely unsupported constructs.
+/// Silently passing unknown expressions/builtins (the old `_ => true`) produced
+/// wrong results with no signal — a SPARQL `FILTER` is meant to constrain, so a
+/// construct we cannot evaluate must fail loudly, never match everything (hq-9hs).
+pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> Result<bool> {
     match expr {
-        Expression::Equal(left, right) => {
+        Expression::Equal(left, right) => Ok(
             match (eval_expr(store, left, row), eval_expr(store, right, row)) {
                 (Some(l), Some(r)) => l == r,
                 _ => false,
-            }
-        }
-        Expression::Greater(left, right) => compare_values(store, left, right, row, |o| {
+            },
+        ),
+        Expression::Greater(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Greater
-        }),
-        Expression::GreaterOrEqual(left, right) => compare_values(store, left, right, row, |o| {
+        })),
+        Expression::GreaterOrEqual(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Greater || o == std::cmp::Ordering::Equal
-        }),
-        Expression::Less(left, right) => {
-            compare_values(store, left, right, row, |o| o == std::cmp::Ordering::Less)
-        }
-        Expression::LessOrEqual(left, right) => compare_values(store, left, right, row, |o| {
+        })),
+        Expression::Less(left, right) => Ok(compare_values(store, left, right, row, |o| {
+            o == std::cmp::Ordering::Less
+        })),
+        Expression::LessOrEqual(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Less || o == std::cmp::Ordering::Equal
-        }),
+        })),
         Expression::And(left, right) => {
-            eval_filter(store, left, row) && eval_filter(store, right, row)
+            Ok(eval_filter(store, left, row)? && eval_filter(store, right, row)?)
         }
         Expression::Or(left, right) => {
-            eval_filter(store, left, row) || eval_filter(store, right, row)
+            Ok(eval_filter(store, left, row)? || eval_filter(store, right, row)?)
         }
-        Expression::Not(inner) => !eval_filter(store, inner, row),
-        Expression::Bound(var) => row.contains_key(var.as_str()),
+        Expression::Not(inner) => Ok(!eval_filter(store, inner, row)?),
+        Expression::Bound(var) => Ok(row.contains_key(var.as_str())),
         Expression::FunctionCall(func, args) => eval_bool_function(store, func, args, row),
-        _ => true, // Unknown expressions pass through.
+        // A bare variable/literal used directly as a FILTER takes its effective
+        // boolean value, e.g. `FILTER(?flag)` or `FILTER("x")`.
+        Expression::Variable(_) | Expression::Literal(_) => {
+            match eval_expr(store, expr, row)
+                .as_ref()
+                .and_then(effective_boolean_value)
+            {
+                Some(b) => Ok(b),
+                None => Err(Error::InvalidValue(format!(
+                    "FILTER expression has no effective boolean value: {expr:?}"
+                ))),
+            }
+        }
+        other => Err(Error::InvalidValue(format!(
+            "unsupported FILTER expression: {other:?}"
+        ))),
     }
 }
 
-/// Evaluate a boolean-returning FILTER builtin (CONTAINS, isIRI, …).
+/// SPARQL effective boolean value for a bound value used directly as a FILTER.
+fn effective_boolean_value(v: &Value) -> Option<bool> {
+    match v {
+        Value::Bool(b) => Some(*b),
+        Value::Str(s) => Some(!s.is_empty()),
+        Value::Int(i) => Some(*i != 0),
+        Value::Float(f) => Some(*f != 0.0),
+        Value::Ref(_) | Value::Bytes(_) => None,
+    }
+}
+
+/// Evaluate a boolean-returning FILTER builtin (CONTAINS, REGEX, isIRI, …).
 ///
-/// Previously every FunctionCall except Regex fell through to `true`, so
-/// `FILTER(CONTAINS(...))`, `FILTER(isIRI(?o))`, etc. were silent no-ops
-/// (GH#12). Implemented builtins now filter correctly; genuinely unsupported
-/// functions still pass through (lenient — no regression for those).
+/// Implemented builtins filter correctly; a genuinely unsupported function now
+/// returns an error instead of passing through to `true`. Silently matching
+/// every row for an unrecognised predicate corrupts results invisibly (hq-9hs).
 fn eval_bool_function(
     store: &Store,
     func: &spargebra::algebra::Function,
     args: &[Expression],
     row: &Bindings,
-) -> bool {
+) -> Result<bool> {
     use spargebra::algebra::Function;
     let str_arg = |i: usize| -> Option<String> {
         args.get(i)
             .and_then(|e| eval_expr(store, e, row))
             .map(|v| value_to_string(store, &v))
     };
-    match func {
+    Ok(match func {
         Function::Contains => match (str_arg(0), str_arg(1)) {
             (Some(h), Some(n)) => h.contains(&n),
             _ => false,
@@ -74,11 +105,7 @@ fn eval_bool_function(
             (Some(h), Some(n)) => h.ends_with(&n),
             _ => false,
         },
-        Function::Regex => match (str_arg(0), str_arg(1)) {
-            // Best-effort: substring match (full regex not yet wired).
-            (Some(text), Some(pat)) => text.contains(&pat),
-            _ => false,
-        },
+        Function::Regex => return eval_regex(store, args, row),
         Function::IsIri | Function::IsBlank => {
             matches!(args.first().and_then(|e| eval_expr(store, e, row)), Some(Value::Ref(_)))
         }
@@ -90,8 +117,55 @@ fn eval_bool_function(
             args.first().and_then(|e| eval_expr(store, e, row)),
             Some(Value::Int(_) | Value::Float(_))
         ),
-        _ => true, // Genuinely unsupported function — pass through (no regression).
+        other => {
+            return Err(Error::InvalidValue(format!(
+                "unsupported FILTER function: {other:?}"
+            )))
+        }
+    })
+}
+
+/// Evaluate `REGEX(text, pattern [, flags])` with a real regex engine.
+///
+/// Replaces the old substring-only stub. An invalid pattern or unsupported flag
+/// is an error (fail loud), never a silent partial match. SPARQL flags i/s/m/x
+/// map to the corresponding inline regex flags.
+fn eval_regex(store: &Store, args: &[Expression], row: &Bindings) -> Result<bool> {
+    let arg_str = |i: usize| -> Option<String> {
+        args.get(i)
+            .and_then(|e| eval_expr(store, e, row))
+            .map(|v| value_to_string(store, &v))
+    };
+    // Unbound text or pattern → no match (cannot evaluate, but not an error).
+    let (text, pattern) = match (arg_str(0), arg_str(1)) {
+        (Some(t), Some(p)) => (t, p),
+        _ => return Ok(false),
+    };
+    let flags = arg_str(2).unwrap_or_default();
+    let re = build_regex(&pattern, &flags)?;
+    Ok(re.is_match(&text))
+}
+
+/// Compile a SPARQL REGEX pattern + flag string into a `regex::Regex`.
+fn build_regex(pattern: &str, flags: &str) -> Result<regex::Regex> {
+    let mut inline = String::new();
+    for f in flags.chars() {
+        match f {
+            'i' | 's' | 'm' | 'x' => inline.push(f),
+            other => {
+                return Err(Error::InvalidValue(format!(
+                    "unsupported REGEX flag: {other:?}"
+                )))
+            }
+        }
     }
+    let full = if inline.is_empty() {
+        pattern.to_string()
+    } else {
+        format!("(?{inline}){pattern}")
+    };
+    regex::Regex::new(&full)
+        .map_err(|e| Error::InvalidValue(format!("invalid REGEX pattern {pattern:?}: {e}")))
 }
 
 /// Render a Value as a string for string builtins (STR/CONTAINS/LCASE/…).

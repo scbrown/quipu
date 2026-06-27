@@ -42,10 +42,12 @@ pub fn eval_pattern(
 
         GraphPattern::Filter { expr, inner } => {
             let (rows, vars) = eval_pattern(store, inner, ctx)?;
-            let filtered = rows
-                .into_iter()
-                .filter(|row| eval_filter(store, expr, row))
-                .collect();
+            let mut filtered = Vec::with_capacity(rows.len());
+            for row in rows {
+                if eval_filter(store, expr, &row)? {
+                    filtered.push(row);
+                }
+            }
             Ok((filtered, vars))
         }
 
@@ -107,9 +109,10 @@ pub fn eval_pattern(
                 let mut matched = false;
                 for r in &right_rows {
                     if let Some(merged) = merge_bindings(l, r) {
-                        let passes = expression
-                            .as_ref()
-                            .is_none_or(|e| eval_filter(store, e, &merged));
+                        let passes = match expression.as_ref() {
+                            Some(e) => eval_filter(store, e, &merged)?,
+                            None => true,
+                        };
                         if passes {
                             results.push(merged);
                             matched = true;

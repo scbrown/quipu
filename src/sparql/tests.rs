@@ -964,3 +964,53 @@ fn value_to_iri(store: &Store, val: &Value) -> String {
         other => format!("{other:?}"),
     }
 }
+
+// --- FILTER REGEX + fail-loud on unsupported builtins (hq-9hs) ---
+
+#[test]
+fn filter_regex_is_anchored_not_substring() {
+    let store = test_store_with_data();
+    // "^A" is a real anchored pattern: matches only names starting with A (Alice).
+    // The old substring stub checked `name.contains("^A")`, which matched nothing.
+    let result = query(
+        &store,
+        r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(REGEX(?name, "^A")) }"#,
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 1, "only Alice starts with A");
+}
+
+#[test]
+fn filter_regex_case_insensitive_flag() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(REGEX(?name, "^a", "i")) }"#,
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 1, "case-insensitive flag matches Alice");
+}
+
+#[test]
+fn filter_unknown_builtin_errors() {
+    let store = test_store_with_data();
+    // An unsupported FILTER builtin must fail loudly, never silently match all rows.
+    let result = query(
+        &store,
+        r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(MD5(?name)) }"#,
+    );
+    assert!(
+        result.is_err(),
+        "unsupported FILTER builtin must error, got: {result:?}"
+    );
+}
+
+#[test]
+fn filter_invalid_regex_flag_errors() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(REGEX(?name, "A", "z")) }"#,
+    );
+    assert!(result.is_err(), "invalid REGEX flag must error");
+}
