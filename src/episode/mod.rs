@@ -32,6 +32,19 @@ pub struct IngestResolutionOpts {
     pub strict_mode: bool,
 }
 
+impl IngestResolutionOpts {
+    /// Build ingest options from the store's `[quipu.resolution]` config so the
+    /// episode write paths honour the configured dedup policy (hq-uye).
+    pub fn from_config(cfg: &crate::config::ResolutionConfig) -> Self {
+        Self {
+            enabled: cfg.enabled,
+            threshold: cfg.threshold,
+            top_k: cfg.top_k,
+            strict_mode: cfg.strict_mode,
+        }
+    }
+}
+
 /// Result of episode ingestion, including resolution hints.
 #[derive(Debug)]
 pub struct IngestResult {

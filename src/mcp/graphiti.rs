@@ -169,17 +169,22 @@ pub fn tool_episodes_complete(store: &mut Store, input: &JsonValue) -> Result<Js
         .and_then(|v| v.as_str())
         .unwrap_or(&now);
 
-    let (tx_id, count) = episode::ingest_episode(
+    // Honour the configured entity-resolution policy on this write path too
+    // (hq-uye). Opts are cloned out before the &mut store borrow.
+    let opts = episode::IngestResolutionOpts::from_config(store.resolution_config());
+    let result = episode::ingest_episode_with_resolution(
         store,
         &episode,
         timestamp,
         crate::namespace::DEFAULT_BASE_NS,
+        Some(&opts),
     )?;
 
     Ok(serde_json::json!({
-        "tx_id": tx_id,
-        "count": count,
-        "episode": name
+        "tx_id": result.tx_id,
+        "count": result.count,
+        "episode": name,
+        "resolution_hints": super::resolution_hints_json(&result.resolution_hints)
     }))
 }
 
