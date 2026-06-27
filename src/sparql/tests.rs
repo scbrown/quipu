@@ -105,6 +105,54 @@ fn select_with_filter_comparison() {
 }
 
 #[test]
+fn filter_contains_matches() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(CONTAINS(?name, "Bob")) }"#,
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 1);
+    assert_eq!(result.rows()[0].get("name"), Some(&Value::Str("Bob".into())));
+}
+
+#[test]
+fn filter_contains_no_match_returns_empty() {
+    // Regression for GH#12: FILTER(CONTAINS(...)) was a no-op returning ALL rows.
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(CONTAINS(?name, "zzznope")) }"#,
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 0, "match-nothing CONTAINS must return 0 rows");
+}
+
+#[test]
+fn filter_contains_with_lcase_nesting() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(CONTAINS(LCASE(?name), "bob")) }"#,
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 1);
+    assert_eq!(result.rows()[0].get("name"), Some(&Value::Str("Bob".into())));
+}
+
+#[test]
+fn filter_isiri_excludes_literals() {
+    // alice has 4 objects: ex:Person (IRI), "Alice"/30 (literals), ex:bob (IRI).
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"SELECT ?o WHERE { <http://example.org/alice> ?p ?o . FILTER(isIRI(?o)) }"#,
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 2, "isIRI must keep only the 2 IRI objects");
+}
+
+#[test]
 fn select_with_join() {
     let store = test_store_with_data();
     let result = query(

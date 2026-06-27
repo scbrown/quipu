@@ -38,31 +38,96 @@ pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> bool {
         }
         Expression::Not(inner) => !eval_filter(store, inner, row),
         Expression::Bound(var) => row.contains_key(var.as_str()),
-        Expression::FunctionCall(spargebra::algebra::Function::Regex, args) => {
-            if args.len() >= 2 {
-                if let (Some(Value::Str(text)), Some(Value::Str(pattern))) = (
-                    eval_expr(store, &args[0], row),
-                    eval_expr(store, &args[1], row),
-                ) {
-                    // Simple regex: just check contains for now.
-                    text.contains(&pattern)
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        }
+        Expression::FunctionCall(func, args) => eval_bool_function(store, func, args, row),
         _ => true, // Unknown expressions pass through.
+    }
+}
+
+/// Evaluate a boolean-returning FILTER builtin (CONTAINS, isIRI, …).
+///
+/// Previously every FunctionCall except Regex fell through to `true`, so
+/// `FILTER(CONTAINS(...))`, `FILTER(isIRI(?o))`, etc. were silent no-ops
+/// (GH#12). Implemented builtins now filter correctly; genuinely unsupported
+/// functions still pass through (lenient — no regression for those).
+fn eval_bool_function(
+    store: &Store,
+    func: &spargebra::algebra::Function,
+    args: &[Expression],
+    row: &Bindings,
+) -> bool {
+    use spargebra::algebra::Function;
+    let str_arg = |i: usize| -> Option<String> {
+        args.get(i)
+            .and_then(|e| eval_expr(store, e, row))
+            .map(|v| value_to_string(store, &v))
+    };
+    match func {
+        Function::Contains => match (str_arg(0), str_arg(1)) {
+            (Some(h), Some(n)) => h.contains(&n),
+            _ => false,
+        },
+        Function::StrStarts => match (str_arg(0), str_arg(1)) {
+            (Some(h), Some(n)) => h.starts_with(&n),
+            _ => false,
+        },
+        Function::StrEnds => match (str_arg(0), str_arg(1)) {
+            (Some(h), Some(n)) => h.ends_with(&n),
+            _ => false,
+        },
+        Function::Regex => match (str_arg(0), str_arg(1)) {
+            // Best-effort: substring match (full regex not yet wired).
+            (Some(text), Some(pat)) => text.contains(&pat),
+            _ => false,
+        },
+        Function::IsIri | Function::IsBlank => {
+            matches!(args.first().and_then(|e| eval_expr(store, e, row)), Some(Value::Ref(_)))
+        }
+        Function::IsLiteral => matches!(
+            args.first().and_then(|e| eval_expr(store, e, row)),
+            Some(Value::Str(_) | Value::Int(_) | Value::Float(_) | Value::Bool(_) | Value::Bytes(_))
+        ),
+        Function::IsNumeric => matches!(
+            args.first().and_then(|e| eval_expr(store, e, row)),
+            Some(Value::Int(_) | Value::Float(_))
+        ),
+        _ => true, // Genuinely unsupported function — pass through (no regression).
+    }
+}
+
+/// Render a Value as a string for string builtins (STR/CONTAINS/LCASE/…).
+/// Refs resolve to their IRI string.
+fn value_to_string(store: &Store, v: &Value) -> String {
+    match v {
+        Value::Str(s) => s.clone(),
+        Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
+        Value::Int(i) => i.to_string(),
+        Value::Float(f) => f.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
     }
 }
 
 /// Evaluate an expression to a Value.
 pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Value> {
+    use spargebra::algebra::Function;
     match expr {
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
         Expression::NamedNode(n) => store.lookup(n.as_str()).ok().flatten().map(Value::Ref),
         Expression::Literal(lit) => Some(literal_to_value(lit)),
+        // String-valued builtins so nested calls like CONTAINS(LCASE(STR(?s)), ..)
+        // resolve correctly (GH#12).
+        Expression::FunctionCall(Function::Str, args) => args
+            .first()
+            .and_then(|e| eval_expr(store, e, row))
+            .map(|v| Value::Str(value_to_string(store, &v))),
+        Expression::FunctionCall(Function::LCase, args) => args
+            .first()
+            .and_then(|e| eval_expr(store, e, row))
+            .map(|v| Value::Str(value_to_string(store, &v).to_lowercase())),
+        Expression::FunctionCall(Function::UCase, args) => args
+            .first()
+            .and_then(|e| eval_expr(store, e, row))
+            .map(|v| Value::Str(value_to_string(store, &v).to_uppercase())),
         _ => None,
     }
 }
