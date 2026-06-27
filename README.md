@@ -103,7 +103,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — `GraphProvider` trait for multi-source queries. Query local and remote Quipu instances in a single operation.
-- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 11 MCP tools for agent integration.
+- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 22 MCP tools for agent integration (23 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. CI runs fmt, clippy, tests, and markdown lint on every push.
 
@@ -214,7 +214,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
               │                │                │
         ┌─────┴─────┐   ┌─────┴─────┐   ┌──────┴──────┐
         │ MCP Tools  │   │ REST API  │   │  Rust API   │
-        │ (11 tools) │   │ + Web UI  │   │  (crate)    │
+        │ (22 tools) │   │ + Web UI  │   │  (crate)    │
         └─────┬─────┘   └─────┬─────┘   └──────┬──────┘
               └────────────────┼────────────────┘
                                │
@@ -242,7 +242,8 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
 Quipu is designed as a [Bobbin](https://github.com/scbrown/bobbin) subsystem.
 Bobbin holds the thread (code context); Quipu ties knots of structured meaning into it.
 
-When running as a Bobbin subsystem, agents get 11 MCP tools. The two most
+When running as a Bobbin subsystem, agents get 22 MCP tools (23 with the
+`owl` feature). The two most
 commonly used for knowledge-aware context:
 
 **`quipu_context`** — unified knowledge discovery. Bobbin merges the result
@@ -337,7 +338,7 @@ See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of conten
 | Web UI | ✅ | Explorer, workbench, timeline, schema |
 | Web components | ✅ | Embeddable `<quipu-*>` elements |
 | Semantic Web APIs | ✅ | Spotlight, TPF, OpenRefine reconciliation |
-| MCP tools (11) | ✅ | Agent integration |
+| MCP tools (22; 23 with `owl`) | ✅ | Agent integration |
 | Python bindings | 🔜 | Planned |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |

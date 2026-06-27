@@ -183,3 +183,70 @@ curl -s localhost:3030/context -X POST \
   -H "Content-Type: application/json" \
   -d '{"query": "traefik", "max_entities": 10}'
 ```
+
+### `POST /unified_search`
+
+Unified knowledge search (text + optional vector); results tagged
+`source="knowledge"` with normalized 0–1 scores. Body: `query`, optional
+`embedding`, `limit`, `expand_links`, `max_facts_per_entity`.
+
+### `POST /search_nodes`
+
+Search entities by natural-language query (text matching). Body: `query`,
+optional `group_ids`, `max_results`, `entity_type_filter`.
+
+### `POST /search_facts`
+
+Search relationships/edges by natural-language query. Body: `query`, optional
+`group_ids`, `max_results`.
+
+### `POST /search/nodes`
+
+Graphiti-compatible node search (mirrors Graphiti's `search_nodes` shape).
+
+### `POST /episodes/complete`
+
+Graphiti-compatible flat episode ingestion. Body: `name`, optional
+`episode_body`, `group_id`, `source_description`, `timestamp`.
+
+### `POST /impact`
+
+Impact analysis: walk downstream from an entity, optionally counterfactual.
+Body: `entity`, optional `remove`, `hops`, `predicates`, `timestamp`.
+
+### `POST /propose`
+
+Submit a schema-evolution proposal. Body: `kind`, `target`, `diff`, `proposer`,
+optional `rationale`, `trigger_ref`, `timestamp`.
+
+### `POST /proposals`
+
+List schema-evolution proposals. Body: optional `status`
+(`pending`/`accepted`/`rejected`).
+
+### `POST /proposal/accept`
+
+Accept a pending proposal. Body: `id`, optional `decided_by`, `note`,
+`timestamp`.
+
+### `POST /proposal/reject`
+
+Reject a pending proposal. Body: `id`, `note`, optional `decided_by`,
+`timestamp`.
+
+### `POST /entity_history`
+
+Return the full fact history (across transactions) for an entity. Body: entity
+IRI.
+
+### `GET /transactions`
+
+List transactions in the store.
+
+### `POST /embed_backfill`
+
+Backfill embeddings for entities that lack them.
+
+### `GET /preview/{iri}`
+
+Return a preview rendering of an entity by IRI.

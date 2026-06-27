@@ -4,6 +4,9 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
+The registry (`tool_definitions()`) exposes **22 tools** in a default build, or
+**23** when built with the `owl` feature (which adds `quipu_load_ontology`).
+
 ## Tool Reference
 
 ### `quipu_query`
@@ -99,22 +102,28 @@ Ingest structured agent knowledge as an episode.
 
 ### `quipu_search`
 
-Semantic vector search over entity embeddings.
+Semantic vector search over entity embeddings. Supply either a natural-language
+`query` (auto-embedded when an `EmbeddingProvider` is attached) or a pre-computed
+`embedding` vector. At least one is required.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `embedding` | Yes | Float array (query vector) |
+| `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
+| `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
 | `valid_at` | No | Temporal filter |
 
 ### `quipu_hybrid_search`
 
-Combined SPARQL filtering + vector ranking.
+Combined SPARQL filtering + vector ranking. Supply either a natural-language
+`query` (auto-embedded) or a pre-computed `embedding`; the `sparql` pre-filter is
+optional.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `embedding` | Yes | Float array (query vector) |
-| `sparql` | Yes | SPARQL pre-filter query |
+| `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
+| `embedding` | No | Float array (query vector); takes precedence over `query` |
+| `sparql` | No | SPARQL pre-filter query (enables predicate pushdown) |
 | `limit` | No | Max results (default: 10) |
 | `valid_at` | No | Temporal filter |
 
@@ -124,12 +133,14 @@ Graph projection and algorithms.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `algorithm` | No | `stats`, `in_degree`, `components`, or `shortest_path` |
-| `type` | No | Type filter for projection |
-| `predicate` | No | Predicate filter for projection |
-| `from` | For shortest_path | Source entity IRI |
-| `to` | For shortest_path | Target entity IRI |
-| `limit` | No | Max results for in_degree (default: 20) |
+| `algorithm` | No | `stats`, `in_degree`, `pagerank`, or `ppr` (default: `stats`) |
+| `type` | No | Restrict projection to this rdf:type IRI |
+| `predicate` | No | Restrict projection to edges with this predicate IRI |
+| `limit` | No | Max results for in_degree/pagerank (default: 20) |
+| `seeds` | No | Seed entity IRIs for personalized PageRank (non-empty switches pagerank to PPR) |
+| `damping` | No | PageRank damping factor (default: 0.85) |
+| `max_iters` | No | PageRank max iterations (default: 100) |
+| `tolerance` | No | PageRank convergence tolerance (default: 1e-6) |
 
 ### `quipu_context`
 
@@ -138,5 +149,139 @@ Unified knowledge context pipeline.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `query` | Yes | Search query string |
-| `max_entities` | No | Max entities (default: 20) |
-| `expand_links` | No | Follow relationships (default: true) |
+| `max_entities` | No | Max entities (default from pipeline config) |
+| `expand_links` | No | Follow relationships to linked entities |
+
+### `quipu_search_nodes`
+
+Search for entities by natural-language query (text matching on names, labels,
+and values). Replaces Graphiti's `search_nodes`.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `query` | Yes | Natural-language search query |
+| `group_ids` | No | Filter to entities from these knowledge graph groups |
+| `max_results` | No | Max results (default: 10) |
+| `entity_type_filter` | No | Filter by rdf:type IRI |
+
+### `quipu_search_facts`
+
+Search for relationships/edges by natural-language query (matches predicate or
+value). Replaces Graphiti's `search_memory_facts`.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `query` | Yes | Natural-language search query |
+| `group_ids` | No | Filter to facts from these knowledge graph groups |
+| `max_results` | No | Max results (default: 10) |
+
+### `quipu_episodes_complete`
+
+Graphiti-compatible flat episode ingestion: accepts name, body text, group, and
+source, then converts to a Quipu episode and ingests.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `name` | Yes | Episode name/identifier |
+| `episode_body` | No | Natural-language body of the episode |
+| `group_id` | No | Knowledge graph group |
+| `source_description` | No | Who/what produced this episode |
+| `timestamp` | No | ISO-8601 timestamp |
+
+### `quipu_impact`
+
+Impact analysis: walk downstream from an entity. With `remove=true`,
+speculatively retracts the entity first (counterfactual). The store is never
+mutated.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `entity` | Yes | Entity IRI to analyse |
+| `remove` | No | Speculatively retract before walking (default: false) |
+| `hops` | No | Max edge hops to follow (default: 5) |
+| `predicates` | No | Restrict walk to these predicate IRIs (empty = all) |
+| `timestamp` | No | Timestamp for the speculative retraction (used when `remove=true`) |
+
+### `quipu_unified_search`
+
+Unified knowledge search for Bobbin integration: combines text and optional
+vector search, returning results tagged `source="knowledge"` with normalized
+0–1 scores.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `query` | Yes | Natural-language search query |
+| `embedding` | No | Pre-computed query embedding (else auto-embedded when provider attached) |
+| `limit` | No | Max results (default: 10) |
+| `expand_links` | No | Expand results via graph links (default: true) |
+| `max_facts_per_entity` | No | Max facts per entity (default: 10) |
+
+### `quipu_propose_schema_change`
+
+Submit a schema-evolution proposal (shape, class, property, or ontology change).
+Proposals require explicit acceptance before taking effect.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `kind` | Yes | `shape`, `ontology`, `class`, or `property` |
+| `target` | Yes | Shape name, class IRI, or property IRI being changed |
+| `diff` | Yes | Turtle fragment or JSON patch describing the change |
+| `proposer` | Yes | Identity of the proposing agent |
+| `rationale` | No | Why this change is needed |
+| `trigger_ref` | No | Validation-failure ref or bead id that triggered this |
+| `timestamp` | No | ISO-8601 timestamp |
+
+### `quipu_list_proposals`
+
+List schema-evolution proposals, optionally filtered by status.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `status` | No | `pending`, `accepted`, or `rejected` (default: all) |
+
+### `quipu_accept_proposal`
+
+Accept a pending schema proposal. Shape proposals are validated before writing.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `id` | Yes | Proposal ID to accept |
+| `decided_by` | No | Identity of the approver |
+| `note` | No | Optional acceptance note |
+| `timestamp` | No | ISO-8601 timestamp |
+
+### `quipu_reject_proposal`
+
+Reject a pending schema proposal with a reason.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `id` | Yes | Proposal ID to reject |
+| `note` | Yes | Reason for rejection |
+| `decided_by` | No | Identity of the rejector |
+| `timestamp` | No | ISO-8601 timestamp |
+
+### `quipu_resolve_entity`
+
+Check for existing near-duplicate entities before writing, using vector
+similarity and canonical-name matching (Jaro-Winkler). Returns candidates with
+similarity scores and match explanations.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `name` | Yes | Canonical name of the proposed entity |
+| `properties` | No | Key-value properties (used for embedding context) |
+| `top_k` | No | Max candidates to return (default: 3) |
+| `threshold` | No | Similarity threshold 0.0–1.0 (default: 0.85) |
+
+### `quipu_load_ontology` (requires `owl` feature)
+
+Manage OWL ontologies: `load` (parse + materialize entailments), `list`, or
+`remove`. Only registered when Quipu is built with the `owl` feature.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `action` | No | `load`, `list`, or `remove` (default: list) |
+| `name` | For load/remove | Ontology name |
+| `turtle` | For load | OWL ontology in Turtle format |
+| `timestamp` | No | ISO-8601 timestamp |

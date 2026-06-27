@@ -80,10 +80,11 @@ Structured write path for agent-extracted knowledge.
 use quipu::episode::{Episode, ingest_episode, ingest_batch, episode_provenance};
 
 let episode: Episode = serde_json::from_str(json_str)?;
-let (tx_id, count) = ingest_episode(&mut store, &episode, "2026-04-04")?;
+// The trailing `base_ns` is the base namespace used to mint entity IRIs.
+let (tx_id, count) = ingest_episode(&mut store, &episode, "2026-04-04", "http://example.org/")?;
 
-// Query provenance
-let entities = episode_provenance(&store, "my-episode")?;
+// Query provenance (same base_ns used at ingest time)
+let entities = episode_provenance(&store, "my-episode", "http://example.org/")?;
 ```
 
 ## Context Pipeline (`quipu::context`)
