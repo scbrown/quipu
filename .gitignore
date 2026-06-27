@@ -37,3 +37,6 @@ __pycache__/
 state.json
 CLAUDE.md
 CLAUDE.local.md
+
+# host-local beads store redirect (path differs per machine; do not track)
+.beads/redirect
