@@ -2,22 +2,11 @@
 
 use oxrdfio::RdfFormat;
 
-/// Simple ISO-8601 timestamp without pulling in chrono.
+/// Correct ISO-8601 UTC timestamp (no chrono dependency). Delegates to the
+/// shared proleptic-Gregorian formatter so the CLI write path matches the
+/// server's valid-time stamps instead of drifting (hq-tb4).
 pub fn chrono_now() -> String {
-    let epoch = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let days = epoch / 86400;
-    let years = 1970 + days / 365;
-    let remaining_days = days % 365;
-    let months = remaining_days / 30 + 1;
-    let day = remaining_days % 30 + 1;
-    let secs_today = epoch % 86400;
-    let hours = secs_today / 3600;
-    let mins = (secs_today % 3600) / 60;
-    let secs = secs_today % 60;
-    format!("{years:04}-{months:02}-{day:02}T{hours:02}:{mins:02}:{secs:02}Z")
+    quipu::time::now_iso()
 }
 
 pub fn cmd_knot(args: &[String], db_path: &str) {

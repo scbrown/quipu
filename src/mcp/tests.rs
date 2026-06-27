@@ -58,6 +58,37 @@ fn test_tool_knot() {
 }
 
 #[test]
+fn omitted_timestamp_defaults_to_now_not_epoch() {
+    // hq-tb4: a write with no explicit timestamp must be stamped with the real
+    // clock, not 1970 — defaulting to epoch silently corrupts the bitemporal
+    // log and breaks time-travel queries (quipu's flagship feature).
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "turtle": "@prefix ex: <http://example.org/> .\nex:dave a ex:Person ; ex:name \"Dave\" .",
+    });
+    let res = tool_knot(&mut store, &input).unwrap();
+    assert!(
+        res["tx_id"].as_i64().unwrap() > 0,
+        "knot should commit a tx"
+    );
+
+    let facts = tool_unravel(&store, &serde_json::json!({})).unwrap();
+    let list = facts["facts"].as_array().unwrap();
+    assert!(!list.is_empty(), "expected facts after knot");
+    for f in list {
+        let vf = f["valid_from"].as_str().unwrap_or("");
+        assert!(
+            !vf.starts_with("1970"),
+            "valid_from defaulted to epoch: {vf}"
+        );
+        assert!(
+            vf.starts_with("20"),
+            "expected a current-era valid_from, got {vf}"
+        );
+    }
+}
+
+#[test]
 #[cfg(feature = "shacl")]
 fn test_tool_knot_with_validation_failure() {
     let mut store = Store::open_in_memory().unwrap();
@@ -399,6 +430,7 @@ fn test_reject_proposal_roundtrip() {
     let reject = serde_json::json!({
         "id": id,
         "note": "Too permissive — needs cardinality constraints",
+        "decided_by": "agent/reviewer",
         "timestamp": "2026-04-13T01:00:00Z"
     });
     let reject_result = super::proposal::tool_reject_proposal(&store, &reject).unwrap();
@@ -431,6 +463,7 @@ fn test_accept_invalid_turtle_stays_pending() {
     // Accepting should fail — invalid Turtle.
     let accept = serde_json::json!({
         "id": id,
+        "decided_by": "agent/reviewer",
         "timestamp": "2026-04-13T01:00:00Z"
     });
     let err = super::proposal::tool_accept_proposal(&store, &accept).unwrap_err();
@@ -458,7 +491,11 @@ fn test_reject_missing_note_errors() {
     let id = result["proposal_id"].as_i64().unwrap();
 
     // Reject without note should error.
-    let reject = serde_json::json!({ "id": id, "timestamp": "2026-04-13T01:00:00Z" });
+    let reject = serde_json::json!({
+        "id": id,
+        "decided_by": "agent/reviewer",
+        "timestamp": "2026-04-13T01:00:00Z"
+    });
     let err = super::proposal::tool_reject_proposal(&store, &reject).unwrap_err();
     assert!(err.to_string().contains("note"));
 }

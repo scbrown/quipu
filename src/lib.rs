@@ -30,6 +30,7 @@ pub mod semweb;
 pub mod shacl;
 pub mod sparql;
 pub mod store;
+pub mod time;
 pub mod types;
 pub mod vector;
 pub mod vector_delegate;

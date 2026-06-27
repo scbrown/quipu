@@ -157,12 +157,7 @@ fn cmd_ontology(args: &[String], db_path: &str) {
 
 #[cfg(feature = "owl")]
 fn chrono_now() -> String {
-    // Simple ISO-8601 timestamp without chrono dependency.
-    use std::time::SystemTime;
-    let d = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    format!("{}Z", d.as_secs())
+    quipu::time::now_iso()
 }
 
 fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
