@@ -303,7 +303,8 @@ fn query_pairs(
     conds: &[String],
     params: &[Box<dyn rusqlite::types::ToSql>],
 ) -> Result<Vec<(i64, i64)>> {
-    let sql = format!("SELECT e, v FROM facts WHERE {}", conds.join(" AND "));
+    // DISTINCT: dedup re-asserted duplicate current rows (GH#13).
+    let sql = format!("SELECT DISTINCT e, v FROM facts WHERE {}", conds.join(" AND "));
     let mut stmt = store.prepare(&sql)?;
     let refs: Vec<&dyn rusqlite::types::ToSql> =
         params.iter().map(std::convert::AsRef::as_ref).collect();

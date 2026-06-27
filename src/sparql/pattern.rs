@@ -371,7 +371,11 @@ pub fn eval_triple_pattern(
         format!(" WHERE {}", conditions.join(" AND "))
     };
 
-    let sql = format!("SELECT e, a, v FROM facts{where_clause}");
+    // DISTINCT: a (e,a,v) triple re-asserted across transactions leaves multiple
+    // current (op=1, valid_to NULL) rows; without DISTINCT the BGP yields one
+    // binding per duplicate, which multiplies under joins/OPTIONAL and inflates
+    // COUNT (GH#13). DISTINCT collapses them to one solution per current triple.
+    let sql = format!("SELECT DISTINCT e, a, v FROM facts{where_clause}");
     let mut stmt = store.prepare(&sql)?;
 
     let param_refs: Vec<&dyn rusqlite::types::ToSql> =

@@ -105,6 +105,37 @@ fn select_with_filter_comparison() {
 }
 
 #[test]
+fn bgp_dedups_reasserted_facts() {
+    // GH#13: a triple asserted across multiple transactions leaves multiple
+    // current (op=1, valid_to NULL) rows; BGP must yield ONE solution, and joins
+    // must not cartesian-explode / inflate COUNT.
+    let mut store = Store::open_in_memory().unwrap();
+    let ttl = "@prefix ex: <http://example.org/> .\nex:x a ex:Thing ; ex:label \"X\" .\n";
+    for _ in 0..3 {
+        ingest_rdf(
+            &mut store,
+            ttl.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    }
+    // Plain type match: 1 solution, not 3.
+    let r = query(&store, "SELECT ?s WHERE { ?s a <http://example.org/Thing> }").unwrap();
+    assert_eq!(r.rows().len(), 1, "re-asserted triple must yield 1 binding");
+    // OPTIONAL join must not multiply (the 23174-for-11 cartesian case).
+    let r2 = query(
+        &store,
+        "SELECT ?s ?l WHERE { ?s a <http://example.org/Thing> OPTIONAL { ?s <http://example.org/label> ?l } }",
+    )
+    .unwrap();
+    assert_eq!(r2.rows().len(), 1, "OPTIONAL must not cartesian-explode on dup facts");
+}
+
+#[test]
 fn filter_contains_matches() {
     let store = test_store_with_data();
     let result = query(
