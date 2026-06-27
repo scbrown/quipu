@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-06-27
+
+Critical SPARQL query-engine correctness fixes.
+
+### Fixed
+
+- **FILTER builtins were no-ops (#12)** — `FILTER(CONTAINS(...))`, `isIRI`,
+  `STRSTARTS/STRENDS`, and nested `CONTAINS(LCASE(STR(?x)), ..)` returned ALL
+  rows regardless of the predicate (only `Regex` was handled; everything else
+  passed through). Implemented CONTAINS/STRSTARTS/STRENDS/isIRI/isBlank/
+  isLiteral/isNumeric (bool) + STR/LCASE/UCASE (value). This restores text
+  search in `tool_context`/`unified_search` (and Bobbin's `knowledge_context`,
+  which wraps it) and entity-linking filters.
+- **COUNT / OPTIONAL inflation (#13)** — a triple re-asserted across
+  transactions left multiple current rows for the same `(e,a,v)`; BGP queries
+  lacked `DISTINCT`, so duplicates multiplied under OPTIONAL/joins (e.g. 23174
+  rows for 11 entities) and inflated `COUNT` (the bogus Shapes-Distribution
+  counts). Added `DISTINCT` to the current-fact selects (BGP, rdf:type/subclass,
+  property paths) — one solution per current triple.
+
 ## [0.3.0] - 2026-06-27
 
 Graph-algorithm ranking, cross-origin API access, and a Web UI overhaul.
