@@ -124,7 +124,11 @@ fn bgp_dedups_reasserted_facts() {
         .unwrap();
     }
     // Plain type match: 1 solution, not 3.
-    let r = query(&store, "SELECT ?s WHERE { ?s a <http://example.org/Thing> }").unwrap();
+    let r = query(
+        &store,
+        "SELECT ?s WHERE { ?s a <http://example.org/Thing> }",
+    )
+    .unwrap();
     assert_eq!(r.rows().len(), 1, "re-asserted triple must yield 1 binding");
     // OPTIONAL join must not multiply (the 23174-for-11 cartesian case).
     let r2 = query(
@@ -132,7 +136,11 @@ fn bgp_dedups_reasserted_facts() {
         "SELECT ?s ?l WHERE { ?s a <http://example.org/Thing> OPTIONAL { ?s <http://example.org/label> ?l } }",
     )
     .unwrap();
-    assert_eq!(r2.rows().len(), 1, "OPTIONAL must not cartesian-explode on dup facts");
+    assert_eq!(
+        r2.rows().len(),
+        1,
+        "OPTIONAL must not cartesian-explode on dup facts"
+    );
 }
 
 #[test]
@@ -144,7 +152,10 @@ fn filter_contains_matches() {
     )
     .unwrap();
     assert_eq!(result.rows().len(), 1);
-    assert_eq!(result.rows()[0].get("name"), Some(&Value::Str("Bob".into())));
+    assert_eq!(
+        result.rows()[0].get("name"),
+        Some(&Value::Str("Bob".into()))
+    );
 }
 
 #[test]
@@ -156,7 +167,11 @@ fn filter_contains_no_match_returns_empty() {
         r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(CONTAINS(?name, "zzznope")) }"#,
     )
     .unwrap();
-    assert_eq!(result.rows().len(), 0, "match-nothing CONTAINS must return 0 rows");
+    assert_eq!(
+        result.rows().len(),
+        0,
+        "match-nothing CONTAINS must return 0 rows"
+    );
 }
 
 #[test]
@@ -168,7 +183,10 @@ fn filter_contains_with_lcase_nesting() {
     )
     .unwrap();
     assert_eq!(result.rows().len(), 1);
-    assert_eq!(result.rows()[0].get("name"), Some(&Value::Str("Bob".into())));
+    assert_eq!(
+        result.rows()[0].get("name"),
+        Some(&Value::Str("Bob".into()))
+    );
 }
 
 #[test]
@@ -180,7 +198,11 @@ fn filter_isiri_excludes_literals() {
         r#"SELECT ?o WHERE { <http://example.org/alice> ?p ?o . FILTER(isIRI(?o)) }"#,
     )
     .unwrap();
-    assert_eq!(result.rows().len(), 2, "isIRI must keep only the 2 IRI objects");
+    assert_eq!(
+        result.rows().len(),
+        2,
+        "isIRI must keep only the 2 IRI objects"
+    );
 }
 
 #[test]
@@ -988,7 +1010,11 @@ fn filter_regex_case_insensitive_flag() {
         r#"SELECT ?name WHERE { ?s <http://example.org/name> ?name . FILTER(REGEX(?name, "^a", "i")) }"#,
     )
     .unwrap();
-    assert_eq!(result.rows().len(), 1, "case-insensitive flag matches Alice");
+    assert_eq!(
+        result.rows().len(),
+        1,
+        "case-insensitive flag matches Alice"
+    );
 }
 
 #[test]

@@ -199,8 +199,9 @@ pub fn ingest_batch(
     base_ns: &str,
 ) -> Result<Vec<(i64, usize)>> {
     let mut results = Vec::with_capacity(episodes.len());
+    let now = crate::time::now_iso();
     for (i, episode) in episodes.iter().enumerate() {
-        let ts = timestamps.get(i).copied().unwrap_or("1970-01-01T00:00:00Z");
+        let ts = timestamps.get(i).copied().unwrap_or(now.as_str());
         results.push(ingest_episode(store, episode, ts, base_ns)?);
     }
     Ok(results)

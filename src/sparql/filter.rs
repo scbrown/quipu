@@ -27,9 +27,11 @@ pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> Result<b
         Expression::Greater(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Greater
         })),
-        Expression::GreaterOrEqual(left, right) => Ok(compare_values(store, left, right, row, |o| {
-            o == std::cmp::Ordering::Greater || o == std::cmp::Ordering::Equal
-        })),
+        Expression::GreaterOrEqual(left, right) => {
+            Ok(compare_values(store, left, right, row, |o| {
+                o == std::cmp::Ordering::Greater || o == std::cmp::Ordering::Equal
+            }))
+        }
         Expression::Less(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Less
         })),
@@ -107,11 +109,16 @@ fn eval_bool_function(
         },
         Function::Regex => return eval_regex(store, args, row),
         Function::IsIri | Function::IsBlank => {
-            matches!(args.first().and_then(|e| eval_expr(store, e, row)), Some(Value::Ref(_)))
+            matches!(
+                args.first().and_then(|e| eval_expr(store, e, row)),
+                Some(Value::Ref(_))
+            )
         }
         Function::IsLiteral => matches!(
             args.first().and_then(|e| eval_expr(store, e, row)),
-            Some(Value::Str(_) | Value::Int(_) | Value::Float(_) | Value::Bool(_) | Value::Bytes(_))
+            Some(
+                Value::Str(_) | Value::Int(_) | Value::Float(_) | Value::Bool(_) | Value::Bytes(_)
+            )
         ),
         Function::IsNumeric => matches!(
             args.first().and_then(|e| eval_expr(store, e, row)),
@@ -120,7 +127,7 @@ fn eval_bool_function(
         other => {
             return Err(Error::InvalidValue(format!(
                 "unsupported FILTER function: {other:?}"
-            )))
+            )));
         }
     })
 }
@@ -137,9 +144,8 @@ fn eval_regex(store: &Store, args: &[Expression], row: &Bindings) -> Result<bool
             .map(|v| value_to_string(store, &v))
     };
     // Unbound text or pattern → no match (cannot evaluate, but not an error).
-    let (text, pattern) = match (arg_str(0), arg_str(1)) {
-        (Some(t), Some(p)) => (t, p),
-        _ => return Ok(false),
+    let (Some(text), Some(pattern)) = (arg_str(0), arg_str(1)) else {
+        return Ok(false);
     };
     let flags = arg_str(2).unwrap_or_default();
     let re = build_regex(&pattern, &flags)?;
@@ -155,7 +161,7 @@ fn build_regex(pattern: &str, flags: &str) -> Result<regex::Regex> {
             other => {
                 return Err(Error::InvalidValue(format!(
                     "unsupported REGEX flag: {other:?}"
-                )))
+                )));
             }
         }
     }

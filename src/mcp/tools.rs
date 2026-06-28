@@ -229,10 +229,11 @@ pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 .get("turtle")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| Error::InvalidValue("missing 'turtle' for shape".into()))?;
+            let now = crate::time::now_iso();
             let timestamp = input
                 .get("timestamp")
                 .and_then(|v| v.as_str())
-                .unwrap_or("1970-01-01T00:00:00Z");
+                .unwrap_or(&now);
 
             // Validate the shapes parse correctly (requires shacl feature).
             #[cfg(feature = "shacl")]
@@ -296,10 +297,11 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         None
     };
 
+    let now = crate::time::now_iso();
     let timestamp = input
         .get("timestamp")
         .and_then(|v| v.as_str())
-        .unwrap_or("1970-01-01T00:00:00Z");
+        .unwrap_or(&now);
 
     let actor = input.get("actor").and_then(|v| v.as_str());
 
@@ -317,10 +319,11 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let ep: Episode = serde_json::from_value(input.clone())
         .map_err(|e| Error::InvalidValue(format!("invalid episode JSON: {e}")))?;
 
+    let now = crate::time::now_iso();
     let timestamp = input
         .get("timestamp")
         .and_then(|v| v.as_str())
-        .unwrap_or("1970-01-01T00:00:00Z");
+        .unwrap_or(&now);
 
     let (tx_id, count) =
         episode::ingest_episode(store, &ep, timestamp, crate::namespace::DEFAULT_BASE_NS)?;
@@ -462,8 +465,7 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
             .filter(|m| {
                 store
                     .resolve(m.entity_id)
-                    .map(|iri| candidates.contains(&iri))
-                    .unwrap_or(false)
+                    .is_ok_and(|iri| candidates.contains(&iri))
             })
             .take(limit)
             .collect()

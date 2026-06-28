@@ -92,10 +92,11 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::InvalidValue("missing 'turtle' parameter".into()))?;
 
+    let now = crate::time::now_iso();
     let timestamp = input
         .get("timestamp")
         .and_then(|v| v.as_str())
-        .unwrap_or("1970-01-01T00:00:00Z");
+        .unwrap_or(&now);
 
     let actor = input.get("actor").and_then(|v| v.as_str());
     let source = input.get("source").and_then(|v| v.as_str());

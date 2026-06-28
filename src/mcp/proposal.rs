@@ -26,10 +26,11 @@ pub fn tool_propose_schema_change(store: &Store, input: &JsonValue) -> Result<Js
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::InvalidValue("missing 'proposer' parameter".into()))?;
     let trigger_ref = input.get("trigger_ref").and_then(|v| v.as_str());
+    let now = crate::time::now_iso();
     let timestamp = input
         .get("timestamp")
         .and_then(|v| v.as_str())
-        .unwrap_or("1970-01-01T00:00:00Z");
+        .unwrap_or(&now);
 
     let id = store.insert_proposal(&crate::proposal::NewProposal {
         kind: &kind,
@@ -91,11 +92,12 @@ pub fn tool_accept_proposal(store: &Store, input: &JsonValue) -> Result<JsonValu
     let decided_by = input
         .get("decided_by")
         .and_then(|v| v.as_str())
-        .unwrap_or("aegis/crew/braino");
+        .ok_or_else(|| Error::InvalidValue("missing 'decided_by' parameter".into()))?;
+    let now = crate::time::now_iso();
     let timestamp = input
         .get("timestamp")
         .and_then(|v| v.as_str())
-        .unwrap_or("1970-01-01T00:00:00Z");
+        .unwrap_or(&now);
     let note = input.get("note").and_then(|v| v.as_str());
 
     let proposal = store.accept_proposal(id, decided_by, timestamp, note)?;
@@ -117,11 +119,12 @@ pub fn tool_reject_proposal(store: &Store, input: &JsonValue) -> Result<JsonValu
     let decided_by = input
         .get("decided_by")
         .and_then(|v| v.as_str())
-        .unwrap_or("aegis/crew/braino");
+        .ok_or_else(|| Error::InvalidValue("missing 'decided_by' parameter".into()))?;
+    let now = crate::time::now_iso();
     let timestamp = input
         .get("timestamp")
         .and_then(|v| v.as_str())
-        .unwrap_or("1970-01-01T00:00:00Z");
+        .unwrap_or(&now);
     let note = input
         .get("note")
         .and_then(|v| v.as_str())
