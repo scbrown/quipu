@@ -168,6 +168,20 @@ impl KnowledgeVectorStore for Store {
             let valid_to: Option<String> = row.get(4)?;
 
             let stored = bytes_to_f32_slice(&blob);
+            // Fail loud on a dimension mismatch instead of silently scoring 0.0
+            // (hq-7v0): a stored vector whose dim ≠ the query/provider dim means
+            // the embedding model or dimension changed without a re-embed, and
+            // every cosine would be a meaningless 0.0.
+            if !stored.is_empty() && stored.len() != query_embedding.len() {
+                return Err(crate::Error::Store(format!(
+                    "embedding dimension mismatch: query has {} dims but the stored \
+                     vector for entity {} has {} — re-embed after changing the \
+                     embedding model/dimension",
+                    query_embedding.len(),
+                    entity_id,
+                    stored.len()
+                )));
+            }
             let score = cosine_similarity(query_embedding, &stored);
 
             matches.push(VectorMatch {
@@ -287,6 +301,33 @@ mod tests {
         assert_eq!(results[1].entity_id, e2); // Bob = similar
         assert!(results[0].score > results[1].score);
         assert!(results[1].score > results[2].score);
+    }
+
+    #[test]
+    fn dimension_mismatch_fails_loud() {
+        // hq-7v0: searching with a query whose dim differs from the stored
+        // vectors must error, not silently score every candidate 0.0.
+        let store = Store::open_in_memory().unwrap();
+        let e1 = store.intern("http://example.org/alice").unwrap();
+        store
+            .embed_entity(e1, "Alice", &make_embedding(1.0, 8), "2026-01-01")
+            .unwrap();
+
+        // 4-dim query vs 8-dim stored → loud error mentioning the dimensions.
+        let err = store
+            .vector_search(&make_embedding(1.0, 4), 3, None)
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("dimension mismatch"), "got: {msg}");
+
+        // Matching dimension still works.
+        assert_eq!(
+            store
+                .vector_search(&make_embedding(1.0, 8), 3, None)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
