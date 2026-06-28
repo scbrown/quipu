@@ -186,7 +186,42 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 
     let valid_at = input.get("valid_at").and_then(|v| v.as_str());
 
-    let matches = store.vector_search(&embedding, limit, valid_at)?;
+    // Tenant isolation (hq-93d): a plain vector search returns matches from every
+    // group/type, leaking cross-rig results. When the caller scopes the search
+    // with `group_ids` and/or `entity_type`, restrict to entities in that scope.
+    let entity_type = input.get("entity_type").and_then(|v| v.as_str());
+    let group_ids: Option<Vec<&str>> = input
+        .get("group_ids")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect());
+
+    let scope = scoped_entity_iris(
+        store,
+        entity_type,
+        group_ids.as_deref(),
+        store.search_config().oversample(limit),
+    )?;
+
+    let matches = if let Some(ref allowed) = scope {
+        // Oversample, then keep only in-scope entities (works for both the
+        // SQLite backend and as a safety net over LanceDB pushdown). entity_type
+        // is also pushed down to LanceDB for efficiency.
+        let pushdown = entity_type.map(|t| format!("entity_type = '{t}'"));
+        let oversampled = store.search_config().oversample(limit);
+        store
+            .vector_store()
+            .vector_search_filtered(&embedding, oversampled, pushdown.as_deref(), valid_at)?
+            .into_iter()
+            .filter(|m| {
+                store
+                    .resolve(m.entity_id)
+                    .is_ok_and(|iri| allowed.contains(&iri))
+            })
+            .take(limit)
+            .collect::<Vec<_>>()
+    } else {
+        store.vector_search(&embedding, limit, valid_at)?
+    };
 
     let results: Vec<JsonValue> = matches
         .iter()
@@ -207,8 +242,58 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 
     Ok(serde_json::json!({
         "results": results,
-        "count": results.len()
+        "count": results.len(),
+        "scoped": scope.is_some()
     }))
+}
+
+/// Resolve the set of entity IRIs permitted by an optional `entity_type` and/or
+/// `group_ids` scope, used to enforce tenant isolation on vector search
+/// (hq-93d). Returns `Ok(None)` when no scope is requested (caller wants the
+/// full graph). Group membership is resolved via
+/// `prov:wasGeneratedBy → episode → groupId`, matching the `search_nodes` path.
+fn scoped_entity_iris(
+    store: &Store,
+    entity_type: Option<&str>,
+    group_ids: Option<&[&str]>,
+    limit: usize,
+) -> Result<Option<std::collections::HashSet<String>>> {
+    let has_group = group_ids.is_some_and(|g| !g.is_empty());
+    if entity_type.is_none() && !has_group {
+        return Ok(None);
+    }
+
+    let mut patterns = String::new();
+    if let Some(type_iri) = entity_type {
+        let safe_type = type_iri.replace('>', "\\>");
+        patterns.push_str(&format!("?s a <{safe_type}> . "));
+    }
+    if has_group {
+        patterns.push_str(
+            "?s <http://www.w3.org/ns/prov#wasGeneratedBy> ?_episode . \
+             ?_episode <http://aegis.gastown.local/ontology/groupId> ?_gid . ",
+        );
+        let gid_filters: Vec<String> = group_ids
+            .unwrap()
+            .iter()
+            .map(|g| {
+                let safe = g.replace('\\', "\\\\").replace('\'', "\\'");
+                format!("?_gid = '{safe}'")
+            })
+            .collect();
+        patterns.push_str(&format!("FILTER({}) ", gid_filters.join(" || ")));
+    }
+
+    let sparql = format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o . {patterns}}} LIMIT {limit}");
+    let result = sparql::query(store, &sparql)?;
+
+    let mut iris = std::collections::HashSet::new();
+    for row in result.rows() {
+        if let Some(Value::Ref(id)) = row.get("s") {
+            iris.insert(store.resolve(*id)?);
+        }
+    }
+    Ok(Some(iris))
 }
 
 /// MCP tool: `quipu_shapes` -- Manage persistent SHACL shapes.
