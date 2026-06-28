@@ -1,7 +1,11 @@
 # Design: Group Isolation / Multi-Tenant Partitioning
 
-**Status:** Proposed — decision pending (hq-2u3). **Recommendation: do not build
-yet.** Gate on a concrete multi-tenant requirement.
+**Status:** **Decided — deferred (YAGNI)** by keeper gate (hq-2u3, ian,
+2026-06-27). Do **not** build true group isolation now; this doc is the
+retained blueprint for if/when the gate flips. Quipu is today a single shared
+crew ontology (one `aegis-ontology` group) with no second tenant requiring
+mutual invisibility, no compliance boundary, and no access-control layer needing
+a data-scoping primitive.
 
 **Related:** hq-ct3 (analysis: `group_id` is a flat label, not a partition),
 hq-fhc (episode idempotency), the `group_ids` parameter on `quipu_search_nodes`
@@ -93,21 +97,38 @@ for other reasons.
 - Provide a dry-run report (counts per derived group, count landing in
   `__shared__`) before committing.
 
-## Recommendation
+## Build gate (binding)
 
-1. **Do not build now.** Record this doc as the decision and close hq-2u3 as
-   "design captured; gated on requirement."
-2. Keep the docs honest: `group_id` is **provenance**, and `group_ids` filtering
-   is **best-effort** (already noted in `mcp-tools.md`). Resist any caller
-   treating it as isolation.
-3. If/when a real tenant boundary appears, reopen with the **per-fact `group`
-   column** as the starting design, and require (a)–(d) to ship together — a
-   half-enforced boundary is a security footgun.
+**If group isolation is ever built, (a)–(d) land together or not at all.** A
+subset is a *leaky* boundary — worse than none, because it looks enforced while
+silently returning ungrouped or cross-group facts. There is no incremental,
+half-isolated milestone that is safe to ship. This is the gate, not a guideline.
 
-## Open questions (for keeper review)
+## Usage guardrail (applies now)
 
-- Is there any near-term multi-tenant requirement, or is Quipu single-trust-domain
-  for the foreseeable future?
-- Should authentication (hq-azs) eventually carry a principal identity that a
-  group scope could bind to? That would make per-fact grouping enforceable
-  without a separate access layer.
+Until isolation is built, **do not store group-sensitive facts in Quipu on the
+assumption that `group_ids` hides them from other groups.** It does not:
+`group_ids` filtering is best-effort and **silently returns ungrouped facts**.
+Treat everything in Quipu as visible across the shared trust domain.
+
+**This is also the signal that flips the gate:** the moment a real need arises
+to keep some knowledge cross-invisible — per-rig private knowledge, sensitive
+topology that must not leak between groups, a compliance boundary — that
+requirement triggers the (a)–(d) build. Keep the "best-effort, **not** an
+isolation boundary" hedge loud in `mcp-tools.md` and the search-tool responses.
+
+## Decision & actions
+
+1. **Do not build isolation now** (keeper gate, hq-2u3) — this doc is the
+   retained blueprint; hq-2u3 closes as decided-deferred.
+2. **Keep the docs honest:** `group_id` is **provenance**; `group_ids` filtering
+   is **best-effort**, not isolation. Already hedged in `mcp-tools.md` — keep it
+   loud.
+3. **Build the identity carrier early, not the enforcement.** Spec `hq-azs` auth
+   to carry a **principal identity** now as a forward-compatible hook, *without*
+   building group-scoping on it. Including it now is cheap; retrofitting it when
+   isolation is wanted is expensive (same lesson as building a fail-closed
+   carrier ahead of its enforcement). When the gate flips, per-fact grouping can
+   bind to that principal without a separate access layer.
+4. **If/when the gate flips:** start from the **per-fact `group` column**, and
+   ship (a)–(d) together per the build gate above.
