@@ -444,10 +444,10 @@ pub fn eval_triple_pattern(
                     continue;
                 }
             }
-            TermPattern::BlankNode(b) => {
-                if !bind_var(&mut new_bindings, b.as_str(), v, &mut compatible) {
-                    continue;
-                }
+            TermPattern::BlankNode(b)
+                if !bind_var(&mut new_bindings, b.as_str(), v, &mut compatible) =>
+            {
+                continue;
             }
             _ => {}
         }

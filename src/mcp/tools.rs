@@ -465,8 +465,7 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
             .filter(|m| {
                 store
                     .resolve(m.entity_id)
-                    .map(|iri| candidates.contains(&iri))
-                    .unwrap_or(false)
+                    .is_ok_and(|iri| candidates.contains(&iri))
             })
             .take(limit)
             .collect()

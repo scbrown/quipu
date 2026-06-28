@@ -13,8 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub fn now_iso() -> String {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .map_or(0, |d| d.as_secs());
     format_iso(secs)
 }
 
@@ -30,7 +29,7 @@ fn format_iso(secs: u64) -> String {
 /// Convert a count of days since the Unix epoch to a `(year, month, day)` civil
 /// date. Howard Hinnant's `civil_from_days`, valid for the full proleptic
 /// Gregorian range (leap years and century rules handled exactly).
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
+fn civil_from_days(z: i64) -> (i64, i64, i64) {
     let z = z + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let doe = z - era * 146_097; // [0, 146096]
@@ -38,8 +37,8 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
     let mp = (5 * doy + 2) / 153; // [0, 11]
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32; // [1, 31]
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32; // [1, 12]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 

@@ -117,7 +117,10 @@ pub fn eval_type_pattern_with_subclasses(
 
         // DISTINCT: dedup duplicate current (e,v) rows from re-asserted facts so
         // `?x a Class` type matches don't multiply under joins/COUNT (GH#13).
-        let sql = format!("SELECT DISTINCT e, v FROM facts WHERE {}", conditions.join(" AND "));
+        let sql = format!(
+            "SELECT DISTINCT e, v FROM facts WHERE {}",
+            conditions.join(" AND ")
+        );
         let mut stmt = store.prepare(&sql)?;
         let param_refs: Vec<&dyn rusqlite::types::ToSql> =
             params_vec.iter().map(std::convert::AsRef::as_ref).collect();

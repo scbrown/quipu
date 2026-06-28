@@ -144,17 +144,17 @@ pub fn in_degree(pg: &ProjectedGraph) -> Vec<(i64, usize)> {
             (entity_id, deg)
         })
         .collect();
-    degrees.sort_by(|a, b| b.1.cmp(&a.1));
+    degrees.sort_by_key(|&(_, deg)| std::cmp::Reverse(deg));
     degrees
 }
 
-/// Configuration for (personalized) PageRank.
+/// Configuration for (personalized) `PageRank`.
 #[derive(Debug, Clone)]
 pub struct PageRankConfig {
     /// Damping / restart probability (typically 0.85).
     pub damping: f32,
     /// Seed distribution for personalization (entity term IDs). Empty = uniform
-    /// restart = global PageRank.
+    /// restart = global `PageRank`.
     pub seeds: Vec<i64>,
     /// Maximum power-iteration steps.
     pub max_iters: u32,
@@ -173,15 +173,15 @@ impl Default for PageRankConfig {
     }
 }
 
-/// Power-iteration PageRank / Personalized PageRank over a projected graph.
+/// Power-iteration `PageRank` / Personalized `PageRank` over a projected graph.
 ///
 /// Returns `(entity_id, normalized_score)` pairs, descending by score. With an
-/// empty `seeds` set this is global PageRank (uniform restart); with seeds it is
-/// Personalized PageRank, with restart mass concentrated on the seed entities.
+/// empty `seeds` set this is global `PageRank` (uniform restart); with seeds it is
+/// Personalized `PageRank`, with restart mass concentrated on the seed entities.
 ///
 /// Dangling nodes (no out-edges) redistribute their mass to the restart vector,
 /// which keeps total rank mass conserved at 1.0. Parallel edges are respected
-/// (a node that links a target N times sends it N/out_degree of its rank).
+/// (a node that links a target N times sends it `N/out_degree` of its rank).
 pub fn page_rank(pg: &ProjectedGraph, cfg: &PageRankConfig) -> Result<Vec<(i64, f32)>> {
     let n = pg.graph.node_count();
     if n == 0 {
@@ -208,9 +208,7 @@ pub fn page_rank(pg: &ProjectedGraph, cfg: &PageRankConfig) -> Result<Vec<(i64, 
     if seed_positions.is_empty() {
         // Uniform (global PageRank), or seeds given but none present in graph.
         let p = 1.0 / n as f32;
-        for r in restart.iter_mut() {
-            *r = p;
-        }
+        restart.fill(p);
     } else {
         let p = 1.0 / seed_positions.len() as f32;
         for &pos in &seed_positions {
@@ -265,7 +263,7 @@ pub fn page_rank(pg: &ProjectedGraph, cfg: &PageRankConfig) -> Result<Vec<(i64, 
     // Normalize defensively (mass is conserved, but guard against drift).
     let sum: f32 = rank.iter().sum();
     if sum > 0.0 {
-        for r in rank.iter_mut() {
+        for r in &mut rank {
             *r /= sum;
         }
     }
@@ -380,8 +378,7 @@ pub fn tool_project(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             let damping = input
                 .get("damping")
                 .and_then(serde_json::Value::as_f64)
-                .map(|v| v as f32)
-                .unwrap_or(0.85);
+                .map_or(0.85, |v| v as f32);
             let max_iters = input
                 .get("max_iters")
                 .and_then(serde_json::Value::as_u64)
@@ -389,8 +386,7 @@ pub fn tool_project(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             let tolerance = input
                 .get("tolerance")
                 .and_then(serde_json::Value::as_f64)
-                .map(|v| v as f32)
-                .unwrap_or(1e-6);
+                .map_or(1e-6, |v| v as f32);
             let limit = input
                 .get("limit")
                 .and_then(serde_json::Value::as_u64)
@@ -564,7 +560,10 @@ ex:app1 a ex:App ; ex:uses ex:server1 .
         let ranks = page_rank(&pg, &PageRankConfig::default()).unwrap();
         assert!(!ranks.is_empty());
         let sum: f32 = ranks.iter().map(|(_, s)| s).sum();
-        assert!((sum - 1.0).abs() < 1e-3, "ranks should sum to ~1, got {sum}");
+        assert!(
+            (sum - 1.0).abs() < 1e-3,
+            "ranks should sum to ~1, got {sum}"
+        );
     }
 
     #[test]
@@ -597,7 +596,10 @@ ex:app1 a ex:App ; ex:uses ex:server1 .
         // (restart mass) — far more than under global PageRank where it has 0
         // in-edges.
         let alice_score = ranks.iter().find(|(id, _)| *id == alice).unwrap().1;
-        assert!(alice_score > 0.1, "seed should retain restart mass, got {alice_score}");
+        assert!(
+            alice_score > 0.1,
+            "seed should retain restart mass, got {alice_score}"
+        );
     }
 
     #[test]

@@ -246,8 +246,8 @@ pub fn cmd_unravel(args: &[String], db_path: &str) {
 /// speculatively retracts all facts for the entity, runs the reasoner inside
 /// the speculative fork, and then walks the graph — answering "what would
 /// break if I removed this?".
-/// `quipu project` — run graph algorithms (stats, in_degree, pagerank,
-/// components, shortest_path) over the projected knowledge graph.
+/// `quipu project` — run graph algorithms (stats, `in_degree`, pagerank,
+/// components, `shortest_path`) over the projected knowledge graph.
 ///
 /// Usage:
 ///   quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85]
