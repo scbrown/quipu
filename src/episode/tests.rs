@@ -64,6 +64,40 @@ fn episode_to_turtle_generates_valid_rdf() {
 }
 
 #[test]
+#[cfg(feature = "shacl")]
+fn write_validation_enforces_loaded_shapes() {
+    // hq-c6s: persistently-loaded shapes must gate episode writes when
+    // validate_on_write is set — not just episode-inline shapes.
+    let mut store = Store::open_in_memory().unwrap();
+    let shape = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:ServerShape a sh:NodeShape ;
+    sh:targetClass aegis:Server ;
+    sh:property [ sh:path aegis:hostname ; sh:minCount 1 ] .
+"#;
+    store
+        .load_shapes("server-shape", shape, "2026-01-01")
+        .unwrap();
+
+    // A Server node with no aegis:hostname → violates the loaded shape.
+    let ep = parse_episode(
+        r#"{ "name": "ep", "nodes": [{"name": "Server1", "type": "Server"}], "edges": [] }"#,
+    );
+
+    // Toggle OFF: the violating write is accepted — the pre-fix gap.
+    ingest_episode(&mut store, &ep, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    // Toggle ON: the same write is now rejected against the loaded shape.
+    store.shacl_config_mut().validate_on_write = true;
+    let err = ingest_episode(&mut store, &ep, "2026-01-03T00:00:00Z", TEST_BASE_NS).unwrap_err();
+    assert!(
+        matches!(err, crate::error::Error::ValidationFailed { .. }),
+        "expected ValidationFailed, got: {err:?}"
+    );
+}
+
+#[test]
 fn resolution_fires_on_duplicate_node() {
     // hq-uye: with resolution enabled, ingesting an episode whose node matches
     // an existing entity (by rdfs:label) must surface a dedup hint — the engine

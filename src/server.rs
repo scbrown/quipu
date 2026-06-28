@@ -58,6 +58,13 @@ async fn main() {
     // sets or scan the whole fact log (hq-gkd).
     store.search_config_mut().clone_from(&config.search);
 
+    // Apply the SHACL validation policy so episode writes can be gated against
+    // persistently-loaded shapes, not just episode-inline shapes (hq-c6s).
+    store.shacl_config_mut().clone_from(&config.shacl);
+    if config.shacl.validate_on_write {
+        eprintln!("SHACL write-validation enabled (loaded shapes enforced on every write)");
+    }
+
     if let (Some(model_path), Some(tokenizer_path)) = (
         &config.embedding.model_path,
         &config.embedding.tokenizer_path,

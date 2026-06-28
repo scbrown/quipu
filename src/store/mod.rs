@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use rusqlite::{Connection, params};
 
-use crate::config::{EmbeddingConfig, ResolutionConfig, SearchConfig};
+use crate::config::{EmbeddingConfig, ResolutionConfig, SearchConfig, ShaclConfig};
 use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
 use crate::schema::INIT_SQL;
@@ -29,6 +29,9 @@ pub struct Store {
     /// these from `[quipu.search]` at startup so callers can't request
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
+    /// SHACL validation policy. When `validate_on_write` is set, episode
+    /// ingest is validated against the persistently-loaded shapes (hq-c6s).
+    pub(crate) shacl_config: ShaclConfig,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
     pub(crate) vector_delegate: Option<DelegatingVectorStore>,
@@ -123,6 +126,7 @@ impl Store {
             embedding_config: EmbeddingConfig::default(),
             resolution_config: ResolutionConfig::default(),
             search_config: SearchConfig::default(),
+            shacl_config: ShaclConfig::default(),
             vector_delegate: None,
             local_vector_backend: None,
             #[cfg(feature = "reactive-reasoner")]
@@ -163,6 +167,16 @@ impl Store {
     /// Get a reference to the search/limit config.
     pub fn search_config(&self) -> &SearchConfig {
         &self.search_config
+    }
+
+    /// Get a mutable reference to the SHACL validation config.
+    pub fn shacl_config_mut(&mut self) -> &mut ShaclConfig {
+        &mut self.shacl_config
+    }
+
+    /// Get a reference to the SHACL validation config.
+    pub fn shacl_config(&self) -> &ShaclConfig {
+        &self.shacl_config
     }
 
     /// Set an external vector search delegate.

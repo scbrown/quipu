@@ -63,6 +63,16 @@ impl SearchConfig {
     }
 }
 
+/// SHACL validation policy (hq-c6s).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ShaclConfig {
+    /// Validate every write against the persistently-loaded shapes (those
+    /// stored via `quipu_shapes`), not just shapes carried inline on an
+    /// episode. Default false — opt in to enforce "start strict" on all writes.
+    pub validate_on_write: bool,
+}
+
 /// Vector storage backend selection.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -161,6 +171,9 @@ pub struct QuipuConfig {
 
     /// Search/limit guardrails.
     pub search: SearchConfig,
+
+    /// SHACL validation policy.
+    pub shacl: ShaclConfig,
 }
 
 impl Default for QuipuConfig {
@@ -175,6 +188,7 @@ impl Default for QuipuConfig {
             vector: VectorConfig::default(),
             resolution: ResolutionConfig::default(),
             search: SearchConfig::default(),
+            shacl: ShaclConfig::default(),
         }
     }
 }

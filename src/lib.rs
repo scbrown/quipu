@@ -39,7 +39,7 @@ pub mod vector_lance;
 
 pub use config::{
     EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, SearchConfig,
-    ServerConfig, VectorBackend, VectorConfig,
+    ServerConfig, ShaclConfig, VectorBackend, VectorConfig,
 };
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
