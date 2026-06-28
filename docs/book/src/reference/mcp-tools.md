@@ -216,6 +216,37 @@ vector search, returning results tagged `source="knowledge"` with normalized
 | `expand_links` | No | Expand results via graph links (default: true) |
 | `max_facts_per_entity` | No | Max facts per entity (default: 10) |
 
+### `quipu_ask`
+
+Run a curated, parameterized **named query** by name instead of hand-writing
+SPARQL. The catalog is self-describing: call with no `name` (or `name="list"`)
+to list every query, its parameters, and their types.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `name` | No | Named query to run; omit (or `"list"`) to list the catalog |
+| `params` | No | Parameter map for the named query (names/types from the catalog) |
+
+**Catalog:**
+
+| Query | Parameters | Returns |
+|-------|------------|---------|
+| `entity_facts` | `entity` (iri), `limit` (int, 100) | All facts asserted about an entity |
+| `service_deps` | `entity` (iri), `limit` (int, 50) | Outgoing entity references (dependencies / links) |
+| `references_to` | `entity` (iri), `limit` (int, 50) | Entities that reference the given entity (incoming) |
+| `entities_of_type` | `type` (iri), `limit` (int, 100) | All entities of a given `rdf:type` |
+| `labeled_like` | `text` (text), `limit` (int, 50) | Entities whose `rdfs:label` contains `text` (case-insensitive) |
+
+Parameters are validated and escaped by type before substitution, so values are
+safe against SPARQL injection. The response includes the resolved `sparql`, the
+result `columns`, and `rows`.
+
+**Example** — service dependencies of an entity:
+
+```json
+{ "name": "service_deps", "params": { "entity": "http://example.org/traefik" } }
+```
+
 ### `quipu_propose_schema_change`
 
 Submit a schema-evolution proposal (shape, class, property, or ontology change).

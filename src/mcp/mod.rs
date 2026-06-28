@@ -6,6 +6,7 @@
 
 pub mod graphiti;
 pub mod impact;
+pub mod named_query;
 #[cfg(feature = "owl")]
 pub mod owl;
 pub mod proposal;
@@ -408,6 +409,17 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "max_facts_per_entity": { "type": "integer", "description": "Maximum facts per entity (default: 10)" }
                 },
                 "required": ["query"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_ask",
+            "description": "Run a curated, parameterized named query by name instead of hand-writing SPARQL. Call with no 'name' (or name='list') to discover the self-describing catalog of available queries and their parameters (e.g. service_deps, references_to, entity_facts, entities_of_type, labeled_like).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Named query to run; omit (or 'list') to list the catalog." },
+                    "params": { "type": "object", "description": "Parameter map for the named query (see catalog for names/types)." }
+                }
             }
         }),
         serde_json::json!({
