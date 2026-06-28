@@ -193,6 +193,38 @@ fn test_tool_episode() {
 }
 
 #[test]
+fn test_tool_query_enforces_max_sparql_rows() {
+    // hq-gkd: a LIMIT-less SELECT must not dump the whole fact log — the server
+    // ceiling truncates the result and flags it.
+    let mut store = test_store_with_data(); // 2 Person entities, each w/ name + age
+    store.search_config_mut().max_sparql_rows = 1;
+
+    let result = tool_query(
+        &store,
+        &serde_json::json!({ "query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o }" }),
+    )
+    .unwrap();
+
+    assert_eq!(
+        result["count"], 1,
+        "rows should be capped at max_sparql_rows"
+    );
+    assert_eq!(result["truncated"], true, "truncation must be surfaced");
+}
+
+#[test]
+fn test_tool_query_not_truncated_when_under_ceiling() {
+    let store = test_store_with_data();
+    let result = tool_query(
+        &store,
+        &serde_json::json!({ "query": "SELECT ?name WHERE { ?s <http://example.org/name> ?name }" }),
+    )
+    .unwrap();
+    assert_eq!(result["count"], 2);
+    assert_eq!(result["truncated"], false);
+}
+
+#[test]
 fn test_tool_episode_surfaces_resolution_hints() {
     // hq-uye: the episode handler must read the store's resolution policy and
     // surface dedup hints in its response (the engine was previously inert).

@@ -54,6 +54,10 @@ async fn main() {
         );
     }
 
+    // Apply search/limit guardrails so callers can't request unbounded result
+    // sets or scan the whole fact log (hq-gkd).
+    store.search_config_mut().clone_from(&config.search);
+
     if let (Some(model_path), Some(tokenizer_path)) = (
         &config.embedding.model_path,
         &config.embedding.tokenizer_path,

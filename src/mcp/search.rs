@@ -26,10 +26,9 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::InvalidValue("missing 'query' parameter".into()))?;
 
-    let max_results = input
-        .get("max_results")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(10) as usize;
+    let max_results = store
+        .search_config()
+        .clamp_limit(input.get("max_results").and_then(serde_json::Value::as_u64));
 
     let entity_type_filter = input.get("entity_type_filter").and_then(|v| v.as_str());
 
@@ -40,7 +39,7 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
 
     // Build SPARQL to fetch candidate entities with optional type/group filters.
     // Oversample to allow for post-filter text matching reducing the set.
-    let oversample = max_results * 10;
+    let oversample = store.search_config().oversample(max_results);
     let mut patterns = String::new();
     if let Some(type_iri) = entity_type_filter {
         let safe_type = type_iri.replace('>', "\\>");
@@ -101,17 +100,16 @@ pub fn tool_search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::InvalidValue("missing 'query' parameter".into()))?;
 
-    let max_results = input
-        .get("max_results")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(10) as usize;
+    let max_results = store
+        .search_config()
+        .clamp_limit(input.get("max_results").and_then(serde_json::Value::as_u64));
 
     let group_ids: Option<Vec<&str>> = input
         .get("group_ids")
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect());
 
-    let oversample = max_results * 10;
+    let oversample = store.search_config().oversample(max_results);
     let mut patterns = String::new();
     if let Some(ref gids) = group_ids {
         patterns.push_str(

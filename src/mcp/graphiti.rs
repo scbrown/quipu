@@ -24,10 +24,9 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::InvalidValue("missing 'query' parameter".into()))?;
 
-    let max_results = input
-        .get("max_results")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(10) as usize;
+    let max_results = store
+        .search_config()
+        .clamp_limit(input.get("max_results").and_then(serde_json::Value::as_u64));
 
     let entity_type_filter = input.get("entity_type_filter").and_then(|v| v.as_str());
     let group_ids: Option<Vec<&str>> = input.get("group_ids").and_then(|v| {
@@ -42,7 +41,9 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         .flatten()
         .and_then(|emb| {
             // Oversample to leave room for post-filtering.
-            store.vector_search(&emb, max_results * 3, None).ok()
+            store
+                .vector_search(&emb, store.search_config().oversample(max_results), None)
+                .ok()
         });
 
     let mut seen_entities = std::collections::HashSet::new();
@@ -76,7 +77,7 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
     // CONTAINS/LCASE aren't supported in Quipu's SPARQL, so we fetch all
     // labelled entities and filter in Rust.
     if nodes.len() < max_results {
-        let oversample = max_results * 5;
+        let oversample = store.search_config().oversample(max_results);
 
         let sparql = format!(
             "SELECT DISTINCT ?s ?label WHERE {{ \

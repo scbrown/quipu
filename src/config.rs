@@ -12,6 +12,57 @@ use serde::Deserialize;
 
 use crate::namespace;
 
+/// The single source of truth for how aggressively search layers oversample
+/// candidates before post-filtering. Previously scattered as inline `*10`,
+/// `*5`, `*3` literals across the search/graphiti/vector paths (hq-gkd).
+pub const DEFAULT_OVERSAMPLE_FACTOR: usize = 10;
+
+/// Search/limit guardrails (hq-gkd). Without these, callers could pass
+/// `limit: 1_000_000` and unbounded SPARQL could scan the whole fact log.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct SearchConfig {
+    /// Result count used when a caller omits a limit (default: 10).
+    pub default_limit: usize,
+
+    /// Hard ceiling a caller-supplied limit is clamped to (default: 1000).
+    pub max_limit: usize,
+
+    /// Multiplier for how many candidates to fetch before post-filtering
+    /// (default: `DEFAULT_OVERSAMPLE_FACTOR`).
+    pub oversample_factor: usize,
+
+    /// Server-side ceiling on rows returned by a SPARQL query, bounding
+    /// unbounded (LIMIT-less) scans (default: 10000).
+    pub max_sparql_rows: usize,
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            default_limit: 10,
+            max_limit: 1000,
+            oversample_factor: DEFAULT_OVERSAMPLE_FACTOR,
+            max_sparql_rows: 10_000,
+        }
+    }
+}
+
+impl SearchConfig {
+    /// Resolve a caller-supplied limit: fall back to `default_limit` when
+    /// absent, clamp to `max_limit`, and never return 0.
+    pub fn clamp_limit(&self, requested: Option<u64>) -> usize {
+        let v = requested.map_or(self.default_limit, |v| v as usize);
+        v.min(self.max_limit).max(1)
+    }
+
+    /// Number of candidates to fetch before post-filtering for a target result
+    /// count, using the unified oversample factor (saturating).
+    pub fn oversample(&self, limit: usize) -> usize {
+        limit.saturating_mul(self.oversample_factor).max(limit)
+    }
+}
+
 /// Vector storage backend selection.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -107,6 +158,9 @@ pub struct QuipuConfig {
 
     /// Entity resolution configuration.
     pub resolution: ResolutionConfig,
+
+    /// Search/limit guardrails.
+    pub search: SearchConfig,
 }
 
 impl Default for QuipuConfig {
@@ -120,6 +174,7 @@ impl Default for QuipuConfig {
             embedding: EmbeddingConfig::default(),
             vector: VectorConfig::default(),
             resolution: ResolutionConfig::default(),
+            search: SearchConfig::default(),
         }
     }
 }
@@ -244,6 +299,36 @@ impl QuipuConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_clamp_limit() {
+        let cfg = SearchConfig::default(); // default_limit=10, max_limit=1000
+        // Absent → default.
+        assert_eq!(cfg.clamp_limit(None), 10);
+        // In range → unchanged.
+        assert_eq!(cfg.clamp_limit(Some(50)), 50);
+        // Over the ceiling → clamped (the 1_000_000 attack).
+        assert_eq!(cfg.clamp_limit(Some(1_000_000)), 1000);
+        // Zero → never returns an empty page.
+        assert_eq!(cfg.clamp_limit(Some(0)), 1);
+    }
+
+    #[test]
+    fn search_oversample_uses_unified_factor() {
+        let cfg = SearchConfig::default(); // factor = DEFAULT_OVERSAMPLE_FACTOR (10)
+        assert_eq!(cfg.oversample(10), 10 * DEFAULT_OVERSAMPLE_FACTOR);
+        // Saturating + never below the input.
+        assert_eq!(cfg.oversample(usize::MAX), usize::MAX);
+    }
+
+    #[test]
+    fn search_defaults() {
+        let cfg = SearchConfig::default();
+        assert_eq!(cfg.default_limit, 10);
+        assert_eq!(cfg.max_limit, 1000);
+        assert_eq!(cfg.oversample_factor, DEFAULT_OVERSAMPLE_FACTOR);
+        assert_eq!(cfg.max_sparql_rows, 10_000);
+    }
 
     #[test]
     fn defaults() {

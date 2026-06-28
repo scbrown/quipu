@@ -65,8 +65,20 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 
     let result = sparql::query_temporal(store, query_str, &ctx)?;
 
+    // Server-side ceiling on rows returned, so a LIMIT-less query can't dump the
+    // whole fact log to the caller (hq-gkd). We surface `truncated` rather than
+    // silently dropping rows.
+    let max_rows = store.search_config().max_sparql_rows;
+
     match result {
-        QueryResult::Select { variables, rows } => {
+        QueryResult::Select {
+            variables,
+            mut rows,
+        } => {
+            let truncated = rows.len() > max_rows;
+            if truncated {
+                rows.truncate(max_rows);
+            }
             let json_rows: Vec<JsonValue> = rows
                 .iter()
                 .map(|row| {
@@ -81,11 +93,16 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             Ok(serde_json::json!({
                 "variables": variables,
                 "rows": json_rows,
-                "count": json_rows.len()
+                "count": json_rows.len(),
+                "truncated": truncated
             }))
         }
         QueryResult::Ask(result) => Ok(serde_json::json!({ "result": result })),
-        QueryResult::Graph(triples) => {
+        QueryResult::Graph(mut triples) => {
+            let truncated = triples.len() > max_rows;
+            if truncated {
+                triples.truncate(max_rows);
+            }
             let json_triples: Vec<JsonValue> = triples
                 .iter()
                 .map(|t| {
@@ -98,7 +115,8 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 .collect();
             Ok(serde_json::json!({
                 "triples": json_triples,
-                "count": json_triples.len()
+                "count": json_triples.len(),
+                "truncated": truncated
             }))
         }
     }

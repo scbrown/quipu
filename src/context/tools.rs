@@ -53,10 +53,9 @@ pub fn tool_unified_search(store: &Store, input: &serde_json::Value) -> Result<s
         .and_then(|v| v.as_str())
         .ok_or_else(|| crate::error::Error::InvalidValue("missing 'query' parameter".into()))?;
 
-    let limit = input
-        .get("limit")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(10) as usize;
+    let limit = store
+        .search_config()
+        .clamp_limit(input.get("limit").and_then(serde_json::Value::as_u64));
 
     let expand_links = input
         .get("expand_links")
