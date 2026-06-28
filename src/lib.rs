@@ -56,6 +56,7 @@ pub use graph::{PageRankConfig, ProjectedGraph, page_rank, tool_project};
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;
+pub use mcp::named_query::tool_ask;
 #[cfg(feature = "owl")]
 pub use mcp::owl::tool_load_ontology;
 pub use mcp::proposal::{

@@ -155,6 +155,7 @@ async fn main() {
         .route("/search", post(search))
         .route("/hybrid_search", post(hybrid_search))
         .route("/unified_search", post(unified_search))
+        .route("/ask", post(ask))
         .route("/search_nodes", post(search_nodes))
         .route("/search_facts", post(search_facts))
         .route("/search/nodes", post(graphiti_search_nodes))
@@ -311,6 +312,7 @@ ro_handler!(unravel, quipu::tool_unravel);
 ro_handler!(search, quipu::tool_search);
 ro_handler!(hybrid_search, quipu::tool_hybrid_search);
 ro_handler!(unified_search, quipu::tool_unified_search);
+ro_handler!(ask, quipu::tool_ask);
 ro_handler!(search_nodes, quipu::tool_search_nodes);
 ro_handler!(search_facts, quipu::tool_search_facts);
 ro_handler!(

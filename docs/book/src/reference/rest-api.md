@@ -190,6 +190,18 @@ Unified knowledge search (text + optional vector); results tagged
 `source="knowledge"` with normalized 0–1 scores. Body: `query`, optional
 `embedding`, `limit`, `expand_links`, `max_facts_per_entity`.
 
+### `POST /ask`
+
+Run a curated, parameterized named query by name (see `quipu_ask` in the
+[MCP tools reference](./mcp-tools.md)). Body: `name` (omit or `"list"` to list
+the catalog), optional `params` map. Parameters are validated and escaped by
+type. Response: `query`, resolved `sparql`, `columns`, `rows`, `count`.
+
+```bash
+curl -s localhost:3030/ask -X POST \
+  -d '{"name":"service_deps","params":{"entity":"http://example.org/traefik"}}'
+```
+
 ### `POST /search_nodes`
 
 Search entities by natural-language query (text matching). Body: `query`,
