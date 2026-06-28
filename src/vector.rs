@@ -75,7 +75,13 @@ pub trait KnowledgeVectorStore {
         valid_at: Option<&str>,
     ) -> Result<Vec<VectorMatch>> {
         // Default: ignore filter, oversample to give callers room to post-filter.
-        let oversample = if filter.is_some() { limit * 5 } else { limit };
+        // Uses the shared oversample factor (hq-gkd) so this matches the
+        // search-layer config default instead of a divergent inline literal.
+        let oversample = if filter.is_some() {
+            limit.saturating_mul(crate::config::DEFAULT_OVERSAMPLE_FACTOR)
+        } else {
+            limit
+        };
         self.vector_search(query, oversample, valid_at)
     }
 

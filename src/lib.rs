@@ -38,8 +38,8 @@ pub mod vector_delegate;
 pub mod vector_lance;
 
 pub use config::{
-    EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, ServerConfig,
-    VectorBackend, VectorConfig,
+    EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, SearchConfig,
+    ServerConfig, VectorBackend, VectorConfig,
 };
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,

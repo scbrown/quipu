@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use rusqlite::{Connection, params};
 
-use crate::config::{EmbeddingConfig, ResolutionConfig};
+use crate::config::{EmbeddingConfig, ResolutionConfig, SearchConfig};
 use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
 use crate::schema::INIT_SQL;
@@ -25,6 +25,10 @@ pub struct Store {
     /// disabled; the server sets it from `[quipu.resolution]` at startup so
     /// dedup actually fires on ingest (hq-uye).
     pub(crate) resolution_config: ResolutionConfig,
+    /// Search/limit guardrails. Defaults are conservative; the server sets
+    /// these from `[quipu.search]` at startup so callers can't request
+    /// unbounded result sets (hq-gkd).
+    pub(crate) search_config: SearchConfig,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
     pub(crate) vector_delegate: Option<DelegatingVectorStore>,
@@ -118,6 +122,7 @@ impl Store {
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
             resolution_config: ResolutionConfig::default(),
+            search_config: SearchConfig::default(),
             vector_delegate: None,
             local_vector_backend: None,
             #[cfg(feature = "reactive-reasoner")]
@@ -148,6 +153,16 @@ impl Store {
     /// Get a reference to the entity-resolution config.
     pub fn resolution_config(&self) -> &ResolutionConfig {
         &self.resolution_config
+    }
+
+    /// Get a mutable reference to the search/limit config.
+    pub fn search_config_mut(&mut self) -> &mut SearchConfig {
+        &mut self.search_config
+    }
+
+    /// Get a reference to the search/limit config.
+    pub fn search_config(&self) -> &SearchConfig {
+        &self.search_config
     }
 
     /// Set an external vector search delegate.
