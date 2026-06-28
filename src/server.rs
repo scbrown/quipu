@@ -66,6 +66,7 @@ async fn main() {
             model_path,
             tokenizer_path,
             config.embedding.dimension,
+            config.embedding.max_sequence_length,
         ) {
             Ok(provider) => {
                 let dim = provider.dimension();
@@ -445,7 +446,7 @@ async fn spotlight_handler(
         .ok_or_else(|| quipu::Error::InvalidValue("missing 'text' parameter".into()))?;
     let confidence = input
         .get("confidence")
-        .and_then(|v| v.as_f64())
+        .and_then(serde_json::Value::as_f64)
         .unwrap_or(0.5);
     let store = store.lock().unwrap();
     Ok(axum::Json(semweb::spotlight(&store, text, confidence)?))

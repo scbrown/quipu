@@ -19,6 +19,8 @@ pub struct OnnxEmbeddingProvider {
     session: Mutex<Session>,
     tokenizer: Tokenizer,
     dim: usize,
+    /// Hard cap on input tokens; longer inputs are truncated (hq-7v0).
+    max_seq_len: usize,
 }
 
 impl OnnxEmbeddingProvider {
@@ -28,19 +30,39 @@ impl OnnxEmbeddingProvider {
     /// * `model_path` — Path to the ONNX model file (model.onnx)
     /// * `tokenizer_path` — Path to the tokenizer.json file
     /// * `dim` — Expected embedding dimension (e.g. 384)
-    pub fn load(model_path: &Path, tokenizer_path: &Path, dim: usize) -> Result<Self> {
+    /// * `max_seq_len` — Hard cap on input tokens; longer inputs are truncated
+    ///   to bound the tensor size (hq-7v0). Falls back to 256 if zero.
+    pub fn load(
+        model_path: &Path,
+        tokenizer_path: &Path,
+        dim: usize,
+        max_seq_len: usize,
+    ) -> Result<Self> {
         let session = Session::builder()
             .and_then(|b| b.with_intra_threads(1))
             .and_then(|b| b.commit_from_file(model_path))
             .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))?;
 
-        let tokenizer = Tokenizer::from_file(tokenizer_path)
+        let mut tokenizer = Tokenizer::from_file(tokenizer_path)
             .map_err(|e| crate::Error::Store(format!("Tokenizer load failed: {e}")))?;
+
+        let max_seq_len = if max_seq_len == 0 { 256 } else { max_seq_len };
+
+        // Truncate at the tokenizer so encodings never exceed the model's
+        // sequence limit (hq-7v0). Without this, a long episode_body produces an
+        // oversized tensor (runtime error / degraded, quadratic-cost embeddings).
+        tokenizer
+            .with_truncation(Some(tokenizers::TruncationParams {
+                max_length: max_seq_len,
+                ..Default::default()
+            }))
+            .map_err(|e| crate::Error::Store(format!("Tokenizer truncation config failed: {e}")))?;
 
         Ok(Self {
             session: Mutex::new(session),
             tokenizer,
             dim,
+            max_seq_len,
         })
     }
 
@@ -56,11 +78,16 @@ impl OnnxEmbeddingProvider {
             .map_err(|e| crate::Error::Store(format!("Tokenization failed: {e}")))?;
 
         let batch_size = encodings.len();
+        // Clamp to the configured limit defensively: tokenizer truncation should
+        // already cap encodings, but bounding `max_len` (and every inner loop
+        // with `.take(max_len)`) guarantees no out-of-bounds write even if a
+        // tokenizer without truncation is ever wired in (hq-7v0).
         let max_len = encodings
             .iter()
             .map(|e| e.get_ids().len())
             .max()
-            .unwrap_or(0);
+            .unwrap_or(0)
+            .min(self.max_seq_len);
 
         // Build padded input tensors.
         let mut input_ids = vec![0i64; batch_size * max_len];
@@ -68,11 +95,11 @@ impl OnnxEmbeddingProvider {
         let mut token_type_ids = vec![0i64; batch_size * max_len];
 
         for (i, enc) in encodings.iter().enumerate() {
-            for (j, &id) in enc.get_ids().iter().enumerate() {
+            for (j, &id) in enc.get_ids().iter().take(max_len).enumerate() {
                 input_ids[i * max_len + j] = i64::from(id);
                 attention_mask[i * max_len + j] = 1;
             }
-            for (j, &tt) in enc.get_type_ids().iter().enumerate() {
+            for (j, &tt) in enc.get_type_ids().iter().take(max_len).enumerate() {
                 token_type_ids[i * max_len + j] = i64::from(tt);
             }
         }

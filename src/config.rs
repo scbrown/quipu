@@ -225,6 +225,11 @@ pub struct EmbeddingConfig {
 
     /// Embedding dimension (default: 384 for all-MiniLM-L6-v2).
     pub dimension: usize,
+
+    /// Maximum input tokens fed to the model; longer inputs are truncated
+    /// (default: 256). Caps the tensor size so an oversized `episode_body`
+    /// can't blow up the sequence length or degrade embeddings (hq-7v0).
+    pub max_sequence_length: usize,
 }
 
 impl Default for EmbeddingConfig {
@@ -235,6 +240,7 @@ impl Default for EmbeddingConfig {
             model_path: None,
             tokenizer_path: None,
             dimension: 384,
+            max_sequence_length: 256,
         }
     }
 }
