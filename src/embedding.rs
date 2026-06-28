@@ -51,8 +51,15 @@ pub fn build_entity_text(store: &Store, entity_id: i64) -> Result<String> {
         return Ok(String::new());
     }
 
-    let mut label = None;
-    let mut comment = None;
+    // Track (tx, value) for the single-valued fields so the most recent
+    // assertion wins. entity_facts orders only by attribute, so when a label or
+    // comment has been updated by a plain assert that left the prior value
+    // active, choosing among them by row order would be nondeterministic and
+    // could embed stale text — the embedding would drift from current facts
+    // (hq-xqc). Selecting the highest tx keeps the embedding tracking the
+    // current value regardless of row order.
+    let mut label: Option<(i64, String)> = None;
+    let mut comment: Option<(i64, String)> = None;
     let mut types = Vec::new();
     let mut literals = Vec::new();
 
@@ -62,12 +69,16 @@ pub fn build_entity_text(store: &Store, entity_id: i64) -> Result<String> {
 
     for fact in &facts {
         if Some(fact.attribute) == rdfs_label {
-            if let Value::Str(s) = &fact.value {
-                label = Some(s.clone());
+            if let Value::Str(s) = &fact.value
+                && label.as_ref().is_none_or(|(t, _)| fact.tx >= *t)
+            {
+                label = Some((fact.tx, s.clone()));
             }
         } else if Some(fact.attribute) == rdfs_comment {
-            if let Value::Str(s) = &fact.value {
-                comment = Some(s.clone());
+            if let Value::Str(s) = &fact.value
+                && comment.as_ref().is_none_or(|(t, _)| fact.tx >= *t)
+            {
+                comment = Some((fact.tx, s.clone()));
             }
         } else if Some(fact.attribute) == rdf_type {
             if let Value::Ref(type_id) = &fact.value
@@ -92,10 +103,10 @@ pub fn build_entity_text(store: &Store, entity_id: i64) -> Result<String> {
     }
 
     let mut parts = Vec::new();
-    if let Some(l) = label {
+    if let Some((_, l)) = label {
         parts.push(l);
     }
-    if let Some(c) = comment {
+    if let Some((_, c)) = comment {
         parts.push(c);
     }
     if !types.is_empty() {
@@ -492,5 +503,86 @@ ex:alice rdfs:label "Alice" .
         ];
         let ids = touched_entity_ids(&datums);
         assert_eq!(ids, vec![1, 2]);
+    }
+
+    /// hq-xqc: updating an entity's label via a plain assert (no explicit
+    /// retract) must re-embed it with the new text, and exactly one current
+    /// embedding should remain.
+    #[test]
+    fn plain_label_update_reembeds() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.set_embedding_provider(Arc::new(DummyProvider));
+        store.embedding_config_mut().auto_embed = true;
+
+        let assert_label = |store: &mut Store, label: &str, ts: &str| {
+            let ttl = format!(
+                "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+                 @prefix ex: <http://example.org/> .\n\
+                 ex:alice rdfs:label \"{label}\" .\n"
+            );
+            ingest_rdf(
+                store,
+                ttl.as_bytes(),
+                oxrdfio::RdfFormat::Turtle,
+                None,
+                ts,
+                None,
+                None,
+            )
+            .unwrap();
+        };
+
+        assert_label(&mut store, "Alice", "2026-01-01");
+        // Plain assert of a new label value — the old value is not retracted.
+        assert_label(&mut store, "Alicia", "2026-02-01");
+
+        let results = store.vector_search(&[0.0f32; 8], 10, None).unwrap();
+        assert_eq!(results.len(), 1, "exactly one current embedding");
+        assert_eq!(results[0].text, "Alicia", "embedding tracks the new label");
+    }
+
+    /// hq-xqc: the same for rdfs:comment, and verified at the text-builder level
+    /// so it does not depend on row order among multiple active values.
+    #[test]
+    fn plain_comment_update_reembeds() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.set_embedding_provider(Arc::new(DummyProvider));
+        store.embedding_config_mut().auto_embed = true;
+
+        let assert_comment = |store: &mut Store, comment: &str, ts: &str| {
+            let ttl = format!(
+                "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+                 @prefix ex: <http://example.org/> .\n\
+                 ex:bob rdfs:label \"Bob\" ;\n    rdfs:comment \"{comment}\" .\n"
+            );
+            ingest_rdf(
+                store,
+                ttl.as_bytes(),
+                oxrdfio::RdfFormat::Turtle,
+                None,
+                ts,
+                None,
+                None,
+            )
+            .unwrap();
+        };
+
+        assert_comment(&mut store, "first note", "2026-01-01");
+        assert_comment(&mut store, "second note", "2026-02-01");
+
+        let bob = store.lookup("http://example.org/bob").unwrap().unwrap();
+        let text = build_entity_text(&store, bob).unwrap();
+        assert!(
+            text.contains("second note"),
+            "embedding text should include the newest comment, got: {text}"
+        );
+        assert!(
+            !text.contains("first note"),
+            "stale comment must not appear, got: {text}"
+        );
+
+        let results = store.vector_search(&[0.0f32; 8], 10, None).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].text, text);
     }
 }
