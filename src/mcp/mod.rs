@@ -18,9 +18,32 @@ pub mod tools;
 use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
+use crate::resolution::EntityCandidate;
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::Store;
 use crate::types::Value;
+
+/// Render episode-ingest resolution hints (node name → near-duplicate
+/// candidates) as JSON for the `resolution_hints` response field (hq-uye).
+/// Empty when resolution is disabled or no matches were found.
+pub(crate) fn resolution_hints_json(hints: &[(String, Vec<EntityCandidate>)]) -> Vec<JsonValue> {
+    hints
+        .iter()
+        .map(|(node, candidates)| {
+            let cands: Vec<JsonValue> = candidates
+                .iter()
+                .map(|c| {
+                    serde_json::json!({
+                        "iri": c.iri,
+                        "score": c.score,
+                        "matched_on": c.matched_on
+                    })
+                })
+                .collect();
+            serde_json::json!({ "node": node, "candidates": cands })
+        })
+        .collect()
+}
 
 /// MCP tool: `quipu_query` -- Execute a SPARQL query.
 ///

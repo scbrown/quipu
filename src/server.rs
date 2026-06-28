@@ -44,6 +44,16 @@ async fn main() {
         std::process::exit(1);
     });
 
+    // Apply the entity-resolution policy so episode ingest actually dedups
+    // (hq-uye) — without this, `[quipu.resolution] enabled = true` is inert.
+    store.resolution_config_mut().clone_from(&config.resolution);
+    if config.resolution.enabled {
+        eprintln!(
+            "entity resolution enabled (threshold={}, top_k={}, strict={})",
+            config.resolution.threshold, config.resolution.top_k, config.resolution.strict_mode
+        );
+    }
+
     if let (Some(model_path), Some(tokenizer_path)) = (
         &config.embedding.model_path,
         &config.embedding.tokenizer_path,

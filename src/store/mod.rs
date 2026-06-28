@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use rusqlite::{Connection, params};
 
-use crate::config::EmbeddingConfig;
+use crate::config::{EmbeddingConfig, ResolutionConfig};
 use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
 use crate::schema::INIT_SQL;
@@ -21,6 +21,10 @@ pub struct Store {
     pub(crate) conn: Connection,
     pub(crate) embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     pub(crate) embedding_config: EmbeddingConfig,
+    /// Entity-resolution policy applied on the episode write paths. Defaults to
+    /// disabled; the server sets it from `[quipu.resolution]` at startup so
+    /// dedup actually fires on ingest (hq-uye).
+    pub(crate) resolution_config: ResolutionConfig,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
     pub(crate) vector_delegate: Option<DelegatingVectorStore>,
@@ -113,6 +117,7 @@ impl Store {
             conn,
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
+            resolution_config: ResolutionConfig::default(),
             vector_delegate: None,
             local_vector_backend: None,
             #[cfg(feature = "reactive-reasoner")]
@@ -133,6 +138,16 @@ impl Store {
     /// Get a reference to the embedding config.
     pub fn embedding_config(&self) -> &EmbeddingConfig {
         &self.embedding_config
+    }
+
+    /// Get a mutable reference to the entity-resolution config.
+    pub fn resolution_config_mut(&mut self) -> &mut ResolutionConfig {
+        &mut self.resolution_config
+    }
+
+    /// Get a reference to the entity-resolution config.
+    pub fn resolution_config(&self) -> &ResolutionConfig {
+        &self.resolution_config
     }
 
     /// Set an external vector search delegate.

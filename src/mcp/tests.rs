@@ -193,6 +193,41 @@ fn test_tool_episode() {
 }
 
 #[test]
+fn test_tool_episode_surfaces_resolution_hints() {
+    // hq-uye: the episode handler must read the store's resolution policy and
+    // surface dedup hints in its response (the engine was previously inert).
+    let mut store = Store::open_in_memory().unwrap();
+    *store.resolution_config_mut() = crate::config::ResolutionConfig {
+        enabled: true,
+        threshold: 0.85,
+        top_k: 3,
+        strict_mode: false,
+    };
+
+    let ep = serde_json::json!({
+        "name": "ep-1",
+        "nodes": [{"name": "Grafana", "type": "WebApplication"}],
+        "edges": [],
+        "timestamp": "2026-04-04T12:00:00Z"
+    });
+    let first = tool_episode(&mut store, &ep).unwrap();
+    // First sighting: nothing to dedup against yet.
+    assert_eq!(first["resolution_hints"].as_array().unwrap().len(), 0);
+
+    let ep2 = serde_json::json!({
+        "name": "ep-2",
+        "nodes": [{"name": "Grafana", "type": "WebApplication"}],
+        "edges": [],
+        "timestamp": "2026-04-05T12:00:00Z"
+    });
+    let second = tool_episode(&mut store, &ep2).unwrap();
+    let hints = second["resolution_hints"].as_array().unwrap();
+    assert_eq!(hints.len(), 1, "duplicate node should produce a hint");
+    assert_eq!(hints[0]["node"], "Grafana");
+    assert!(!hints[0]["candidates"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn test_tool_retract_entity() {
     let mut store = Store::open_in_memory().unwrap();
     let turtle = "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .";

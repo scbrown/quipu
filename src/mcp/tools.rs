@@ -325,13 +325,22 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         .and_then(|v| v.as_str())
         .unwrap_or(&now);
 
-    let (tx_id, count) =
-        episode::ingest_episode(store, &ep, timestamp, crate::namespace::DEFAULT_BASE_NS)?;
+    // Apply the configured entity-resolution policy so dedup fires on ingest
+    // (hq-uye). Opts are cloned out of the store before the &mut borrow.
+    let opts = episode::IngestResolutionOpts::from_config(store.resolution_config());
+    let result = episode::ingest_episode_with_resolution(
+        store,
+        &ep,
+        timestamp,
+        crate::namespace::DEFAULT_BASE_NS,
+        Some(&opts),
+    )?;
 
     Ok(serde_json::json!({
-        "tx_id": tx_id,
-        "count": count,
-        "episode": ep.name
+        "tx_id": result.tx_id,
+        "count": result.count,
+        "episode": ep.name,
+        "resolution_hints": super::resolution_hints_json(&result.resolution_hints)
     }))
 }
 

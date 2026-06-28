@@ -28,15 +28,18 @@ pub fn tool_resolve_entity(store: &Store, input: &JsonValue) -> Result<JsonValue
         })
         .unwrap_or_default();
 
+    // Defaults come from `[quipu.resolution]` config, not inline literals
+    // (hq-uye), so the explicit-resolve tool and the ingest path agree.
+    let cfg = store.resolution_config();
     let top_k = input
         .get("top_k")
         .and_then(serde_json::Value::as_u64)
-        .unwrap_or(3) as usize;
+        .map_or(cfg.top_k, |k| k as usize);
 
     let threshold = input
         .get("threshold")
         .and_then(serde_json::Value::as_f64)
-        .unwrap_or(0.85);
+        .unwrap_or(cfg.threshold);
 
     let result = crate::resolution::resolve_entity(store, name, &properties, threshold, top_k)?;
 

@@ -64,6 +64,82 @@ fn episode_to_turtle_generates_valid_rdf() {
 }
 
 #[test]
+fn resolution_fires_on_duplicate_node() {
+    // hq-uye: with resolution enabled, ingesting an episode whose node matches
+    // an existing entity (by rdfs:label) must surface a dedup hint — the engine
+    // was previously dead code because nothing threaded the config through.
+    let mut store = Store::open_in_memory().unwrap();
+
+    let first = parse_episode(
+        r#"{ "name": "ep-1", "nodes": [
+            {"name": "Tapestry", "type": "WebApplication", "description": "Web UI"}
+        ], "edges": [] }"#,
+    );
+    ingest_episode(&mut store, &first, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
+
+    let dup = parse_episode(
+        r#"{ "name": "ep-2", "nodes": [
+            {"name": "Tapestry", "type": "WebApplication", "description": "Web UI"}
+        ], "edges": [] }"#,
+    );
+
+    // Resolution enabled → hint for the duplicate node.
+    let enabled = IngestResolutionOpts {
+        enabled: true,
+        threshold: 0.85,
+        top_k: 3,
+        strict_mode: false,
+    };
+    let result = ingest_episode_with_resolution(
+        &mut store,
+        &dup,
+        "2026-04-05T12:00:00Z",
+        TEST_BASE_NS,
+        Some(&enabled),
+    )
+    .unwrap();
+    assert!(
+        !result.resolution_hints.is_empty(),
+        "expected a dedup hint for the duplicate 'Tapestry' node"
+    );
+    assert_eq!(result.resolution_hints[0].0, "Tapestry");
+
+    // Control: resolution disabled → no hints (the pre-fix behaviour).
+    let disabled = IngestResolutionOpts {
+        enabled: false,
+        ..enabled.clone()
+    };
+    let plain = ingest_episode_with_resolution(
+        &mut store,
+        &dup,
+        "2026-04-06T12:00:00Z",
+        TEST_BASE_NS,
+        Some(&disabled),
+    )
+    .unwrap();
+    assert!(
+        plain.resolution_hints.is_empty(),
+        "disabled resolution must not emit hints"
+    );
+}
+
+#[test]
+fn resolution_opts_from_config_round_trip() {
+    // The config→opts bridge that the handlers use must carry every field.
+    let cfg = crate::config::ResolutionConfig {
+        enabled: true,
+        threshold: 0.7,
+        top_k: 5,
+        strict_mode: true,
+    };
+    let opts = IngestResolutionOpts::from_config(&cfg);
+    assert!(opts.enabled);
+    assert_eq!(opts.threshold, 0.7);
+    assert_eq!(opts.top_k, 5);
+    assert!(opts.strict_mode);
+}
+
+#[test]
 fn ingest_episode_writes_to_store() {
     let mut store = Store::open_in_memory().unwrap();
 
