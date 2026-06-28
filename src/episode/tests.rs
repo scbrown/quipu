@@ -47,7 +47,7 @@ fn episode_to_turtle_generates_valid_rdf() {
     }"#,
     );
 
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS);
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
 
     // Should contain prefixes.
     assert!(ttl.contains("@prefix aegis:"));
@@ -57,6 +57,8 @@ fn episode_to_turtle_generates_valid_rdf() {
     assert!(ttl.contains("aegis:episode_test-episode a prov:Activity"));
     assert!(ttl.contains("rdfs:label \"test-episode\""));
     assert!(ttl.contains("rdfs:comment \"Test body\""));
+    // Should carry the idempotency key (hq-fhc).
+    assert!(ttl.contains("aegis:contentHash"));
 
     // Should contain node.
     assert!(ttl.contains("aegis:alpha a aegis:ServiceType"));
@@ -276,8 +278,8 @@ fn minimal_episode_with_body_only() {
     let (tx_id, count) =
         ingest_episode(&mut store, &ep, "2026-04-04T14:00:00Z", TEST_BASE_NS).unwrap();
     assert!(tx_id > 0);
-    // Just the episode entity: type + label + comment = 3
-    assert_eq!(count, 3);
+    // Just the episode entity: type + label + comment + contentHash = 4
+    assert_eq!(count, 4);
 }
 
 #[test]
@@ -466,4 +468,105 @@ fn batch_stops_on_validation_failure() {
     // First episode should have been ingested before failure.
     let prov = episode_provenance(&store, "ok-ep", TEST_BASE_NS).unwrap();
     assert_eq!(prov.len(), 1);
+}
+
+// ── Idempotent ingest (hq-fhc) ──────────────────────────────────────
+
+/// Count the active object values of `subject pred ?v` in current state.
+fn active_values(store: &Store, subject_iri: &str, pred_iri: &str) -> Vec<String> {
+    let q = format!("SELECT ?v WHERE {{ <{subject_iri}> <{pred_iri}> ?v }}");
+    crate::sparql::query(store, &q)
+        .unwrap()
+        .rows()
+        .iter()
+        .filter_map(|r| match r.get("v") {
+            Some(crate::types::Value::Str(s)) => Some(s.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn reingest_identical_episode_is_noop() {
+    let mut store = Store::open_in_memory().unwrap();
+    let ep = parse_episode(
+        r#"{
+        "name": "dedup-test",
+        "episode_body": "first body",
+        "source": "crew/mayor",
+        "nodes": [{"name": "alpha", "type": "Service", "description": "Alpha"}],
+        "edges": []
+    }"#,
+    );
+
+    let (tx1, count1) =
+        ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
+    assert!(tx1 > 0, "first ingest writes a real transaction");
+    assert!(count1 > 0, "first ingest asserts triples");
+
+    // Re-ingesting byte-identical content is a no-op.
+    let (tx2, count2) =
+        ingest_episode(&mut store, &ep, "2026-04-04T13:00:00Z", TEST_BASE_NS).unwrap();
+    assert_eq!(
+        tx2, NOOP_TX,
+        "identical re-ingest returns the no-op sentinel"
+    );
+    assert_eq!(count2, 0, "identical re-ingest writes nothing");
+
+    // The activity still has exactly one active label and one content hash —
+    // no duplicate provenance accumulated.
+    let ep_iri = format!("{TEST_BASE_NS}episode_dedup-test");
+    let label = format!("{}label", namespace::RDFS);
+    let chash = format!("{TEST_BASE_NS}contentHash");
+    assert_eq!(active_values(&store, &ep_iri, &label).len(), 1);
+    assert_eq!(active_values(&store, &ep_iri, &chash).len(), 1);
+}
+
+#[test]
+fn reingest_changed_episode_updates_without_duplicating() {
+    let mut store = Store::open_in_memory().unwrap();
+    let v1 = parse_episode(
+        r#"{
+        "name": "dedup-test",
+        "episode_body": "first body",
+        "source": "crew/mayor",
+        "nodes": [],
+        "edges": []
+    }"#,
+    );
+    ingest_episode(&mut store, &v1, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
+
+    let v2 = parse_episode(
+        r#"{
+        "name": "dedup-test",
+        "episode_body": "second body",
+        "source": "crew/mayor",
+        "nodes": [],
+        "edges": []
+    }"#,
+    );
+    let (tx2, count2) =
+        ingest_episode(&mut store, &v2, "2026-04-04T13:00:00Z", TEST_BASE_NS).unwrap();
+    assert!(tx2 > 0, "changed content writes a real transaction");
+    assert!(count2 > 0);
+
+    // Exactly one active comment, and it is the updated value — the stale
+    // "first body" was retracted, not left alongside the new one.
+    let ep_iri = format!("{TEST_BASE_NS}episode_dedup-test");
+    let comment = format!("{}comment", namespace::RDFS);
+    let comments = active_values(&store, &ep_iri, &comment);
+    assert_eq!(comments, vec!["second body".to_string()]);
+
+    // And exactly one active content hash.
+    let chash = format!("{TEST_BASE_NS}contentHash");
+    assert_eq!(active_values(&store, &ep_iri, &chash).len(), 1);
+}
+
+#[test]
+fn content_hash_is_order_independent_for_nodes() {
+    let a =
+        parse_episode(r#"{ "name": "h", "nodes": [{"name": "x"}, {"name": "y"}], "edges": [] }"#);
+    let b =
+        parse_episode(r#"{ "name": "h", "nodes": [{"name": "y"}, {"name": "x"}], "edges": [] }"#);
+    assert_eq!(episode_content_hash(&a), episode_content_hash(&b));
 }
