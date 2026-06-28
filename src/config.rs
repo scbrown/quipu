@@ -202,6 +202,19 @@ pub struct ServerConfig {
 
     /// Bind address (default: `127.0.0.1:3030`).
     pub bind: String,
+
+    /// Bearer token required on write endpoints (hq-azs). When set, a write
+    /// must present `Authorization: Bearer <token>`. None (default) = open
+    /// writes, preserving today's LAN-trusted behaviour.
+    pub auth_token: Option<String>,
+
+    /// Reject all write endpoints with 403 (hq-azs). Reads stay available.
+    pub read_only: bool,
+
+    /// CORS origin allowlist (hq-azs). Empty (default) = allow any origin,
+    /// preserving the existing browser-tab behaviour; non-empty restricts
+    /// cross-origin requests to these exact origins.
+    pub cors_allowed_origins: Vec<String>,
 }
 
 impl Default for ServerConfig {
@@ -209,6 +222,9 @@ impl Default for ServerConfig {
         Self {
             enabled: false,
             bind: "127.0.0.1:3030".to_string(),
+            auth_token: None,
+            read_only: false,
+            cors_allowed_origins: Vec::new(),
         }
     }
 }
