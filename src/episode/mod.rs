@@ -163,9 +163,19 @@ pub fn ingest_episode(
     timestamp: &str,
     base_ns: &str,
 ) -> Result<(i64, usize)> {
-    let turtle = episode_to_turtle(episode, base_ns);
+    // Idempotency key (hq-fhc). The episode activity IRI is derived purely from
+    // the episode name, so re-ingesting the same name targets the same node. We
+    // stamp the activity with a content hash: identical re-ingests are no-ops,
+    // and a changed episode retracts the activity's stale provenance facts
+    // before re-asserting, instead of accumulating duplicate activity nodes.
+    let new_hash = episode_content_hash(episode);
+    let ep_local = sanitize_iri_local(&episode.name);
+    let ep_iri = format!("{base_ns}episode_{ep_local}");
+    let turtle = episode_to_turtle(episode, base_ns, &new_hash);
 
-    // SHACL validation gates, run before any write.
+    // SHACL validation gates, run before any write — and before the idempotency
+    // short-circuit, so a no-op re-ingest is still validated (e.g. if
+    // validate_on_write was toggled on since the last ingest).
     #[cfg(feature = "shacl")]
     {
         // Shapes carried inline on the episode (existing behaviour).
@@ -182,7 +192,26 @@ pub fn ingest_episode(
         }
     }
 
+    let existing_hash = current_content_hash(store, &ep_iri, base_ns)?;
+
+    // Idempotency fast path: same content already recorded → skip the write.
+    if existing_hash.as_deref() == Some(new_hash.as_str()) {
+        return Ok((NOOP_TX, 0));
+    }
+
     let actor = episode.source.as_deref();
+
+    // Existing episode whose content changed: retract the activity's prior
+    // facts (label/comment/source/groupId/contentHash) so the update replaces
+    // them rather than leaving stale active values. Only the activity node is
+    // retracted; its generated entities are reconciled by fact-level dedup.
+    // SHACL has already passed above, so this never half-mutates on rejection.
+    if existing_hash.is_some()
+        && let Some(ep_id) = store.lookup(&ep_iri)?
+    {
+        store.retract_entity(ep_id, None, timestamp, actor)?;
+    }
+
     let source_str = format!("episode:{}", episode.name);
 
     ingest_rdf(
@@ -194,6 +223,81 @@ pub fn ingest_episode(
         actor,
         Some(&source_str),
     )
+}
+
+/// Transaction id returned when an episode ingest is a no-op (the identical
+/// content was already recorded). Distinguishable from a real tx, which is
+/// always positive.
+pub const NOOP_TX: i64 = 0;
+
+/// Read the content hash currently stamped on an episode activity, if any.
+fn current_content_hash(store: &Store, ep_iri: &str, base_ns: &str) -> Result<Option<String>> {
+    let query = format!("SELECT ?h WHERE {{ <{ep_iri}> <{base_ns}contentHash> ?h }} LIMIT 1");
+    let result = crate::sparql::query(store, &query)?;
+    Ok(result.rows().first().and_then(|row| match row.get("h") {
+        Some(crate::types::Value::Str(s)) => Some(s.clone()),
+        _ => None,
+    }))
+}
+
+/// A stable content hash of an episode's asserted data (name, body, source,
+/// group, and its nodes/edges). Node and edge ordering is normalised so that
+/// reordering alone does not defeat idempotency. SHACL `shapes` are excluded —
+/// they gate validation but are not part of the asserted graph.
+///
+/// Uses FNV-1a so the digest is deterministic across processes and Rust
+/// versions (unlike `DefaultHasher`), which matters because the value is
+/// persisted and compared on later runs.
+fn episode_content_hash(episode: &Episode) -> String {
+    let mut parts: Vec<String> = vec![
+        format!("name={}", episode.name),
+        format!("body={}", episode.episode_body.as_deref().unwrap_or("")),
+        format!("source={}", episode.source.as_deref().unwrap_or("")),
+        format!("group={}", episode.group_id.as_deref().unwrap_or("")),
+    ];
+
+    let mut nodes: Vec<String> = episode
+        .nodes
+        .iter()
+        .map(|n| {
+            let mut props: Vec<String> = n
+                .properties
+                .as_ref()
+                .map(|m| m.iter().map(|(k, v)| format!("{k}={v}")).collect())
+                .unwrap_or_default();
+            props.sort();
+            format!(
+                "node:{}|{}|{}|{}",
+                n.name,
+                n.node_type.as_deref().unwrap_or(""),
+                n.description.as_deref().unwrap_or(""),
+                props.join(",")
+            )
+        })
+        .collect();
+    nodes.sort();
+
+    let mut edges: Vec<String> = episode
+        .edges
+        .iter()
+        .map(|e| format!("edge:{}|{}|{}", e.source, e.relation, e.target))
+        .collect();
+    edges.sort();
+
+    parts.extend(nodes);
+    parts.extend(edges);
+
+    format!("{:016x}", fnv1a_64(parts.join("\n").as_bytes()))
+}
+
+/// FNV-1a 64-bit hash — small, dependency-free, and deterministic across runs.
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
 
 /// Validate `data_turtle` against `shapes_turtle`, returning a `ValidationFailed`
@@ -267,7 +371,7 @@ pub fn episode_provenance(
 
 // ── Turtle generation ──────────────────────────────────────────
 
-fn episode_to_turtle(episode: &Episode, base_ns: &str) -> String {
+fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> String {
     let mut ttl = String::new();
 
     // Prefixes.
@@ -297,6 +401,8 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str) -> String {
     if let Some(gid) = &episode.group_id {
         ttl.push_str(&format!(" ;\n    aegis:groupId \"{}\"", escape_turtle(gid)));
     }
+    // Idempotency key for re-ingest detection (hq-fhc).
+    ttl.push_str(&format!(" ;\n    aegis:contentHash \"{content_hash}\""));
     ttl.push_str(" .\n\n");
 
     // Nodes.
