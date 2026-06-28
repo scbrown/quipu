@@ -9,6 +9,7 @@ pub mod embedding;
 pub mod episode;
 pub mod error;
 pub mod graph;
+pub mod http_auth;
 pub mod impact;
 pub mod mcp;
 #[cfg(feature = "lancedb")]

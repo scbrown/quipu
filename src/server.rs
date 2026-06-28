@@ -96,6 +96,39 @@ async fn main() {
 
     let state: SharedStore = Arc::new(Mutex::new(store));
 
+    // Access-control policy for write endpoints (hq-azs). Decision logic lives
+    // in quipu::http_auth (unit-tested); this only wires it into axum.
+    let auth_token = config.server.auth_token.clone();
+    let read_only = config.server.read_only;
+    if read_only {
+        eprintln!("server is READ-ONLY — write endpoints will return 403");
+    }
+    if auth_token.is_some() {
+        eprintln!("write endpoints require a bearer token");
+    }
+
+    // CORS: an allowlist restricts cross-origin requests when configured; an
+    // empty list preserves the prior allow-any behaviour. AUTHORIZATION is
+    // allowed so a browser can present the bearer token cross-origin.
+    let cors_origins = config.server.cors_allowed_origins.clone();
+    let cors_base = if cors_origins.is_empty() {
+        tower_http::cors::CorsLayer::new().allow_origin(tower_http::cors::Any)
+    } else {
+        let origins: Vec<axum::http::HeaderValue> =
+            cors_origins.iter().filter_map(|o| o.parse().ok()).collect();
+        tower_http::cors::CorsLayer::new().allow_origin(origins)
+    };
+    let cors = cors_base
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::OPTIONS,
+        ])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ]);
+
     if args.iter().any(|a| a == "--embed-backfill") {
         eprintln!("Running embedding backfill for all entities...");
         let mut s = state.lock().unwrap();
@@ -148,19 +181,40 @@ async fn main() {
         .route("/fragments", get(fragments_handler))
         .route("/reconcile", post(reconcile_handler))
         .route("/preview/{iri}", get(preview_handler))
+        // Auth / read-only guard on write endpoints (hq-azs). Added before the
+        // CORS layer so CORS stays outermost and answers OPTIONS preflight
+        // before the guard runs.
+        .layer(axum::middleware::from_fn(
+            move |req: axum::extract::Request, next: axum::middleware::Next| {
+                let auth_token = auth_token.clone();
+                async move {
+                    let is_write = quipu::http_auth::is_write_endpoint(req.uri().path());
+                    let auth_header = req
+                        .headers()
+                        .get(axum::http::header::AUTHORIZATION)
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string);
+                    match quipu::http_auth::authorize(
+                        is_write,
+                        read_only,
+                        auth_token.as_deref(),
+                        auth_header.as_deref(),
+                    ) {
+                        quipu::http_auth::AccessDecision::Allow => next.run(req).await,
+                        quipu::http_auth::AccessDecision::Unauthorized => {
+                            StatusCode::UNAUTHORIZED.into_response()
+                        }
+                        quipu::http_auth::AccessDecision::ReadOnly => {
+                            StatusCode::FORBIDDEN.into_response()
+                        }
+                    }
+                }
+            },
+        ))
         // CORS: allow the Bobbin Knowledge tab (and other browser origins) to
         // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
-        // preflight (GH#5).
-        .layer(
-            tower_http::cors::CorsLayer::new()
-                .allow_origin(tower_http::cors::Any)
-                .allow_methods([
-                    axum::http::Method::GET,
-                    axum::http::Method::POST,
-                    axum::http::Method::OPTIONS,
-                ])
-                .allow_headers([axum::http::header::CONTENT_TYPE]),
-        )
+        // preflight (GH#5). Built above from the configured allowlist.
+        .layer(cors)
         .with_state(state);
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
