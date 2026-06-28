@@ -762,6 +762,88 @@ fn test_search_results_include_source_field() {
     assert_eq!(result["results"][0]["source"], "knowledge");
 }
 
+/// Set up two entities in different tenant groups (via episode provenance),
+/// each carrying the SAME embedding so an unfiltered vector search returns both.
+/// Returns the shared embedding. (hq-93d test fixture)
+fn two_tenant_store() -> (Store, Vec<f32>) {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-a", "group_id": "rig-a",
+            "nodes": [{"name": "AlphaSvc", "type": "WebApplication"}], "edges": [],
+            "timestamp": "2026-04-04T00:00:00Z"
+        }),
+    )
+    .unwrap();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-b", "group_id": "rig-b",
+            "nodes": [{"name": "BetaSvc", "type": "Database"}], "edges": [],
+            "timestamp": "2026-04-04T00:00:00Z"
+        }),
+    )
+    .unwrap();
+
+    let ns = crate::namespace::DEFAULT_BASE_NS;
+    let emb: Vec<f32> = (0..8).map(|i| (1.0 + i as f32 * 0.1).sin()).collect();
+    for name in ["AlphaSvc", "BetaSvc"] {
+        let id = store.intern(&format!("{ns}{name}")).unwrap();
+        store
+            .embed_entity(id, name, &emb, "2026-04-04T00:00:00Z")
+            .unwrap();
+    }
+    (store, emb)
+}
+
+#[test]
+fn test_tool_search_honors_group_ids() {
+    // hq-93d: an unscoped vector search leaks both tenants; scoping by group_ids
+    // must restrict results to that tenant.
+    let (store, emb) = two_tenant_store();
+
+    // Unscoped → both tenants visible (the leak this bead fixes).
+    let all = tool_search(
+        &store,
+        &serde_json::json!({ "embedding": emb, "limit": 10 }),
+    )
+    .unwrap();
+    assert_eq!(all["scoped"], false);
+    assert_eq!(all["count"], 2, "unscoped search sees every group");
+
+    // Scoped to rig-a → only AlphaSvc.
+    let scoped = tool_search(
+        &store,
+        &serde_json::json!({ "embedding": emb, "limit": 10, "group_ids": ["rig-a"] }),
+    )
+    .unwrap();
+    assert_eq!(scoped["scoped"], true);
+    let results = scoped["results"].as_array().unwrap();
+    assert_eq!(results.len(), 1, "must not leak the rig-b entity");
+    assert!(results[0]["entity"].as_str().unwrap().contains("AlphaSvc"));
+}
+
+#[test]
+fn test_tool_search_honors_entity_type() {
+    // hq-93d: scoping by entity_type restricts to that class.
+    let (store, emb) = two_tenant_store();
+    let ns = crate::namespace::DEFAULT_BASE_NS;
+
+    let scoped = tool_search(
+        &store,
+        &serde_json::json!({
+            "embedding": emb, "limit": 10,
+            "entity_type": format!("{ns}Database")
+        }),
+    )
+    .unwrap();
+    assert_eq!(scoped["scoped"], true);
+    let results = scoped["results"].as_array().unwrap();
+    assert_eq!(results.len(), 1, "only the Database-typed entity");
+    assert!(results[0]["entity"].as_str().unwrap().contains("BetaSvc"));
+}
+
 /// Deterministic embedding provider for testing query-text auto-embedding.
 struct TestProvider;
 
