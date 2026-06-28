@@ -277,32 +277,65 @@ impl<'a> ContextPipeline<'a> {
         self.text_search_sparql(query)
     }
 
-    /// SPARQL-based text search fallback (substring match, no ranking).
+    /// SPARQL-based text search fallback (substring match, lexical ranking).
     fn text_search_sparql(&self, query: &str) -> Result<Vec<KnowledgeEntity>> {
         // Escape single quotes for SPARQL injection safety.
         let safe_query = query.replace('\\', "\\\\").replace('\'', "\\'");
 
-        // Find entities that have any literal value containing the query string.
+        // A direct hit means the entity is itself *about* the query term: the
+        // term appears in its own IRI or in one of its literal values. Object
+        // IRI references are deliberately excluded — an entity that merely
+        // points at the query term (e.g. `ex:kota ex:manages ex:traefik` for
+        // the query "traefik") is a *linked* result, surfaced by link
+        // expansion, not a direct hit. Counting those as direct hits caused
+        // ranking drift where a referencing node could outrank the entity the
+        // query actually names (hq-5gi).
         let sparql = format!(
             "SELECT DISTINCT ?s WHERE {{ \
                 ?s ?p ?o . \
                 FILTER(CONTAINS(LCASE(STR(?s)), LCASE('{safe_query}')) || \
-                       CONTAINS(LCASE(STR(?o)), LCASE('{safe_query}'))) \
+                       (isLiteral(?o) && CONTAINS(LCASE(STR(?o)), LCASE('{safe_query}')))) \
             }} LIMIT {}",
             self.config.max_entities
         );
 
         let result = sparql::query(self.store, &sparql)?;
 
+        let lc_query = query.to_lowercase();
         let mut entities = Vec::new();
         for row in result.rows() {
             if let Some(Value::Ref(id)) = row.get("s") {
                 let iri = self.store.resolve(*id)?;
-                if let Ok(entity) = self.build_entity(&iri, KnowledgeRelevance::Direct, 1.0) {
+                // Provisional score; refined below once the label is known.
+                let iri_match = iri.to_lowercase().contains(&lc_query);
+                if let Ok(mut entity) = self.build_entity(&iri, KnowledgeRelevance::Direct, 1.0) {
+                    // Rank by where the match lands: an entity named by the
+                    // query (IRI or label) outranks one matched only via an
+                    // incidental literal value.
+                    let label_match = entity
+                        .label
+                        .as_deref()
+                        .is_some_and(|l| l.to_lowercase().contains(&lc_query));
+                    entity.score = if iri_match {
+                        1.0
+                    } else if label_match {
+                        0.9
+                    } else {
+                        0.7
+                    };
                     entities.push(entity);
                 }
             }
         }
+
+        // Deterministic ordering: score desc, then IRI asc as a stable
+        // tiebreaker so results don't depend on SPARQL row order.
+        entities.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.iri.cmp(&b.iri))
+        });
 
         Ok(entities)
     }
