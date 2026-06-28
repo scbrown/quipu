@@ -165,27 +165,20 @@ pub fn ingest_episode(
 ) -> Result<(i64, usize)> {
     let turtle = episode_to_turtle(episode, base_ns);
 
-    // SHACL validation gate: if shapes provided, validate before writing.
+    // SHACL validation gates, run before any write.
     #[cfg(feature = "shacl")]
-    if let Some(shapes) = &episode.shapes {
-        let feedback = shacl::validate_shapes(shapes, &turtle)?;
-        if !feedback.conforms {
-            let messages: Vec<String> = feedback
-                .results
-                .iter()
-                .map(|r| {
-                    format!(
-                        "{}: {} ({})",
-                        r.severity,
-                        r.message.as_deref().unwrap_or("no message"),
-                        r.focus_node
-                    )
-                })
-                .collect();
-            return Err(Error::ValidationFailed {
-                violations: feedback.violations,
-                messages,
-            });
+    {
+        // Shapes carried inline on the episode (existing behaviour).
+        if let Some(shapes) = &episode.shapes {
+            shacl_validate_or_reject(shapes, &turtle)?;
+        }
+        // Persistently-loaded shapes, when write-validation is enabled (hq-c6s).
+        // Without this, stored shapes only gate the `knot` path and episode
+        // writes go unvalidated — undermining quipu's "start strict" thesis.
+        if store.shacl_config().validate_on_write
+            && let Some(stored) = store.get_combined_shapes()?
+        {
+            shacl_validate_or_reject(&stored, &turtle)?;
         }
     }
 
@@ -201,6 +194,33 @@ pub fn ingest_episode(
         actor,
         Some(&source_str),
     )
+}
+
+/// Validate `data_turtle` against `shapes_turtle`, returning a `ValidationFailed`
+/// error that lists the violations when it does not conform (hq-c6s). Shared by
+/// the inline-shapes and persistent-shapes gates in `ingest_episode`.
+#[cfg(feature = "shacl")]
+fn shacl_validate_or_reject(shapes_turtle: &str, data_turtle: &str) -> Result<()> {
+    let feedback = shacl::validate_shapes(shapes_turtle, data_turtle)?;
+    if feedback.conforms {
+        return Ok(());
+    }
+    let messages: Vec<String> = feedback
+        .results
+        .iter()
+        .map(|r| {
+            format!(
+                "{}: {} ({})",
+                r.severity,
+                r.message.as_deref().unwrap_or("no message"),
+                r.focus_node
+            )
+        })
+        .collect();
+    Err(Error::ValidationFailed {
+        violations: feedback.violations,
+        messages,
+    })
 }
 
 /// Ingest multiple episodes in sequence, each as its own transaction.
