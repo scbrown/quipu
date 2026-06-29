@@ -570,3 +570,107 @@ fn content_hash_is_order_independent_for_nodes() {
         parse_episode(r#"{ "name": "h", "nodes": [{"name": "y"}, {"name": "x"}], "edges": [] }"#);
     assert_eq!(episode_content_hash(&a), episode_content_hash(&b));
 }
+
+// ── Edge confidence qualifier (hq-cug6, aegis-1p0 Gap 5) ──────────────────
+
+/// An edge without a confidence field stays a bare triple — no reification,
+/// fully back-compatible with pre-hq-cug6 episodes.
+#[test]
+fn edge_without_confidence_is_a_bare_triple() {
+    let ep = parse_episode(
+        r#"{ "name": "ep", "edges": [{"source": "a", "target": "b", "relation": "knows"}] }"#,
+    );
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    assert!(ttl.contains("aegis:a aegis:knows aegis:b ."));
+    assert!(
+        !ttl.contains("rdf:Statement"),
+        "no reification without a confidence field"
+    );
+    assert!(!ttl.contains("quipu:confidence"));
+}
+
+/// A confidence enum grade reifies the statement and the qualifier is queryable
+/// via SPARQL (the AC). The bare triple is still asserted alongside it.
+#[test]
+fn edge_confidence_enum_persists_and_is_sparql_queryable() {
+    let mut store = Store::open_in_memory().unwrap();
+    let ep = parse_episode(
+        r#"{
+        "name": "conf-test",
+        "edges": [
+            {"source": "svcA", "target": "svcB", "relation": "dependsOn", "confidence": "INFERRED"}
+        ]
+    }"#,
+    );
+    ingest_episode(&mut store, &ep, "2026-06-29T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    // Find the confidence grade by matching the reified statement on its triple.
+    let q = format!(
+        "SELECT ?c WHERE {{ \
+           ?s <{rdf}subject> <{ns}svcA> ; \
+              <{rdf}predicate> <{ns}dependsOn> ; \
+              <{rdf}object> <{ns}svcB> ; \
+              <{quipu}confidence> ?c }}",
+        rdf = namespace::RDF,
+        ns = TEST_BASE_NS,
+        quipu = namespace::QUIPU,
+    );
+    let rows = crate::sparql::query(&store, &q).unwrap();
+    let vals: Vec<String> = rows
+        .rows()
+        .iter()
+        .filter_map(|r| match r.get("c") {
+            Some(crate::types::Value::Str(s)) => Some(s.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        vals,
+        vec!["INFERRED".to_string()],
+        "confidence is queryable"
+    );
+
+    // The plain triple still exists (the qualifier is additive, not a
+    // replacement). The reification uses rdf:subject/predicate/object, so only
+    // the bare assertion matches `svcA dependsOn ?o`.
+    let bare = crate::sparql::query(
+        &store,
+        &format!(
+            "SELECT ?o WHERE {{ <{ns}svcA> <{ns}dependsOn> ?o }}",
+            ns = TEST_BASE_NS
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        bare.rows().len(),
+        1,
+        "bare triple asserted alongside the reified qualifier"
+    );
+}
+
+/// A numeric 0–1 confidence is emitted as an xsd:decimal literal.
+#[test]
+fn edge_confidence_numeric_emits_decimal() {
+    let ep = parse_episode(
+        r#"{ "name": "n", "edges": [{"source": "a", "target": "b", "relation": "rel", "confidence": 0.75}] }"#,
+    );
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    assert!(ttl.contains("a rdf:Statement"));
+    assert!(
+        ttl.contains("quipu:confidence \"0.75\"^^xsd:decimal"),
+        "numeric confidence becomes a typed decimal literal; got:\n{ttl}"
+    );
+}
+
+/// Changing only an edge's confidence changes the content hash, so a re-ingest
+/// is not mistaken for a no-op.
+#[test]
+fn confidence_participates_in_content_hash() {
+    let a = parse_episode(
+        r#"{ "name": "h", "edges": [{"source": "a", "target": "b", "relation": "r", "confidence": "EXTRACTED"}] }"#,
+    );
+    let b = parse_episode(
+        r#"{ "name": "h", "edges": [{"source": "a", "target": "b", "relation": "r", "confidence": "AMBIGUOUS"}] }"#,
+    );
+    assert_ne!(episode_content_hash(&a), episode_content_hash(&b));
+}

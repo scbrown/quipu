@@ -71,6 +71,24 @@ change -- it packages that knowledge as an episode with typed nodes and edges.
 | `source` | Yes | Source entity name |
 | `target` | Yes | Target entity name |
 | `relation` | Yes | Relationship name (becomes predicate) |
+| `confidence` | No | Confidence qualifier for the generated triple (see below) |
+
+> **Edge confidence.** Supply `confidence` to grade how trustworthy an
+> AUTO-extracted edge is — either an enum (`"EXTRACTED"`, `"INFERRED"`,
+> `"AMBIGUOUS"`) or a `0`–`1` number. The bare triple is always asserted; when a
+> confidence is present the statement is *additionally* reified
+> (`rdf:Statement` with `rdf:subject`/`rdf:predicate`/`rdf:object`) and qualified
+> with `quipu:confidence`, so agents can filter or flag uncertain facts via
+> SPARQL. Omitting it (the common case) leaves an unqualified triple — fully
+> back-compatible.
+>
+> ```sparql
+> # All edges an agent flagged as merely inferred
+> SELECT ?s ?p ?o WHERE {
+>   ?stmt rdf:subject ?s ; rdf:predicate ?p ; rdf:object ?o ;
+>         quipu:confidence "INFERRED" .
+> }
+> ```
 
 ## How Ingestion Works
 

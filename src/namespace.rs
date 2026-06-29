@@ -21,6 +21,13 @@ pub const SHACL: &str = "http://www.w3.org/ns/shacl#";
 
 pub const BOBBIN: &str = "https://bobbin.dev/ontology#";
 
+// ── Quipu namespace ───────────────────────────────────────────
+// Quipu's own ontology terms (graph-analysis qualifiers it mints itself, as
+// opposed to the `aegis:` domain ontology). Matches the schemaSpace advertised
+// by the reconciliation endpoint (semweb::reconcile_manifest).
+
+pub const QUIPU: &str = "https://quipu.dev/ontology/";
+
 // ── Commonly-used IRIs ─────────────────────────────────────────
 
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
