@@ -407,6 +407,7 @@ ex:alice rdfs:label "Alice the Great" .
                 source: "Foo".into(),
                 target: "Bar".into(),
                 relation: "dependsOn".into(),
+                confidence: None,
             }],
             shapes: None,
         };

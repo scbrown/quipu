@@ -151,6 +151,13 @@ pub struct Edge {
     pub source: String,
     pub target: String,
     pub relation: String,
+    /// Optional confidence qualifier for the generated triple (hq-cug6, aegis-1p0
+    /// Gap 5). Lets agents flag uncertain AUTO-extracted facts for review. Accepts
+    /// an enum grade (`"EXTRACTED"`/`"INFERRED"`/`"AMBIGUOUS"`) or a 0–1 number;
+    /// when present the triple is reified and qualified with `quipu:confidence`.
+    /// Absent (the common case) = unqualified bare triple, fully back-compatible.
+    #[serde(default)]
+    pub confidence: Option<serde_json::Value>,
 }
 
 /// Ingest an episode into the store.
@@ -280,7 +287,15 @@ fn episode_content_hash(episode: &Episode) -> String {
     let mut edges: Vec<String> = episode
         .edges
         .iter()
-        .map(|e| format!("edge:{}|{}|{}", e.source, e.relation, e.target))
+        .map(|e| {
+            format!(
+                "edge:{}|{}|{}|{}",
+                e.source,
+                e.relation,
+                e.target,
+                e.confidence.as_ref().map(ToString::to_string).unwrap_or_default()
+            )
+        })
         .collect();
     edges.sort();
 
@@ -379,6 +394,7 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
     ttl.push_str(&format!("@prefix rdf: <{}> .\n", namespace::RDF));
     ttl.push_str(&format!("@prefix rdfs: <{}> .\n", namespace::RDFS));
     ttl.push_str(&format!("@prefix prov: <{}> .\n", namespace::PROV));
+    ttl.push_str(&format!("@prefix quipu: <{}> .\n", namespace::QUIPU));
     ttl.push_str(&format!("@prefix xsd: <{}> .\n\n", namespace::XSD));
 
     let ep_local = sanitize_iri_local(&episode.name);
@@ -461,9 +477,38 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
         let tgt = sanitize_iri_local(&edge.target);
         let rel = sanitize_iri_local(&edge.relation);
         ttl.push_str(&format!("aegis:{src} aegis:{rel} aegis:{tgt} .\n"));
+
+        // Optional confidence qualifier (hq-cug6). The bare triple above is always
+        // asserted (back-compat); when a confidence is supplied we additionally
+        // reify the statement so it can carry the qualifier and stay SPARQL-
+        // queryable. The reification IRI is derived deterministically from the
+        // triple so re-ingest dedups at fact level rather than accumulating.
+        if let Some(conf) = &edge.confidence
+            && let Some(literal) = confidence_literal(conf)
+        {
+            let stmt_hash = format!("{:016x}", fnv1a_64(format!("{src}|{rel}|{tgt}").as_bytes()));
+            ttl.push_str(&format!("aegis:stmt_{stmt_hash} a rdf:Statement ;\n"));
+            ttl.push_str(&format!("    rdf:subject aegis:{src} ;\n"));
+            ttl.push_str(&format!("    rdf:predicate aegis:{rel} ;\n"));
+            ttl.push_str(&format!("    rdf:object aegis:{tgt} ;\n"));
+            ttl.push_str(&format!("    quipu:confidence {literal} .\n"));
+        }
     }
 
     ttl
+}
+
+/// Render a confidence value as a Turtle literal, or `None` to skip it.
+///
+/// A string (e.g. `"EXTRACTED"`) becomes a plain quoted literal; a number (0–1)
+/// becomes an `xsd:decimal`. Other JSON shapes (bool/array/object/null) are
+/// ignored so a malformed field never corrupts the graph.
+fn confidence_literal(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(s) => Some(format!("\"{}\"", escape_turtle(s))),
+        serde_json::Value::Number(n) => n.as_f64().map(|f| format!("\"{f}\"^^xsd:decimal")),
+        _ => None,
+    }
 }
 
 /// Sanitize a name into a valid IRI local name.
