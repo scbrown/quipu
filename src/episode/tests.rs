@@ -624,7 +624,11 @@ fn edge_confidence_enum_persists_and_is_sparql_queryable() {
             _ => None,
         })
         .collect();
-    assert_eq!(vals, vec!["INFERRED".to_string()], "confidence is queryable");
+    assert_eq!(
+        vals,
+        vec!["INFERRED".to_string()],
+        "confidence is queryable"
+    );
 
     // The plain triple still exists (the qualifier is additive, not a
     // replacement). The reification uses rdf:subject/predicate/object, so only

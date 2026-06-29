@@ -293,7 +293,10 @@ fn episode_content_hash(episode: &Episode) -> String {
                 e.source,
                 e.relation,
                 e.target,
-                e.confidence.as_ref().map(ToString::to_string).unwrap_or_default()
+                e.confidence
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default()
             )
         })
         .collect();
