@@ -312,6 +312,47 @@ pub fn cmd_project(args: &[String], db_path: &str) {
     }
 }
 
+/// `quipu report` — god-nodes + surprising connections + suggested questions
+/// for the current graph (hq-ct27).
+pub fn cmd_report(args: &[String], db_path: &str) {
+    let get_val = |flag: &str| -> Option<String> {
+        args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
+    };
+
+    let mut input = serde_json::json!({});
+    if let Some(t) = get_val("--type") {
+        input["type"] = serde_json::Value::String(t);
+    }
+    if let Some(p) = get_val("--predicate") {
+        input["predicate"] = serde_json::Value::String(p);
+    }
+    if let Some(h) = get_val("--hubs").and_then(|v| v.parse::<u64>().ok()) {
+        input["hubs"] = serde_json::json!(h);
+    }
+    if let Some(s) = get_val("--surprises").and_then(|v| v.parse::<u64>().ok()) {
+        input["surprises"] = serde_json::json!(s);
+    }
+    if let Some(q) = get_val("--questions").and_then(|v| v.parse::<u64>().ok()) {
+        input["questions"] = serde_json::json!(q);
+    }
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match quipu::tool_report(&store, &input) {
+        Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 pub fn cmd_impact(args: &[String], db_path: &str) {
     let entity_iri = match args.get(2) {
         Some(iri) if !iri.starts_with("--") => iri.as_str(),

@@ -168,6 +168,7 @@ async fn main() {
         .route("/proposal/accept", post(accept_proposal))
         .route("/proposal/reject", post(reject_proposal))
         .route("/project", post(project_graph))
+        .route("/report", get(report_get).post(report))
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
         // Entity + history
@@ -323,6 +324,16 @@ ro_handler!(shapes, quipu::tool_shapes);
 // `tool_project` is read-only by default but the `louvain` algorithm can write
 // `quipu:memberOfCommunity` facts when `persist:true`, so it needs a mutable store.
 rw_handler!(project_graph, quipu::tool_project);
+// `/report` is read-only (god-nodes + surprising connections + suggested
+// questions; hq-ct27). POST takes a JSON body of options; GET returns the
+// report with defaults so a browser/skill can fetch it with no payload.
+ro_handler!(report, quipu::tool_report);
+async fn report_get(State(s): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
+    Ok(axum::Json(quipu::tool_report(
+        &s.lock().unwrap(),
+        &serde_json::json!({}),
+    )?))
+}
 ro_handler!(context, quipu::tool_context);
 
 ro_handler!(propose_schema_change, quipu::tool_propose_schema_change);

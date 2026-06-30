@@ -174,6 +174,21 @@ curl -s localhost:3030/project -X POST \
   -d '{"algorithm": "in_degree", "limit": 10}'
 ```
 
+### `GET|POST /report`
+
+Live graph report: top hubs (god-nodes), surprising cross-community connections,
+and auto-suggested questions (see `quipu_report` in the
+[MCP tools reference](./mcp-tools.md)). Read-only. `GET` returns the report with
+defaults; `POST` accepts an options body (`type`, `predicate`, `hubs`,
+`surprises`, `questions`).
+
+```bash
+curl -s localhost:3030/report
+curl -s localhost:3030/report -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"hubs": 5, "surprises": 5, "questions": 6}'
+```
+
 ### `POST /context`
 
 Knowledge context pipeline.
