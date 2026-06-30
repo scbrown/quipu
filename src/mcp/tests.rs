@@ -383,17 +383,19 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_context"));
     // Named-query catalog tool (hq-h75).
     assert!(names.contains(&"quipu_ask"));
+    // Graph report tool (hq-ct27).
+    assert!(names.contains(&"quipu_report"));
 
     // quipu_load_ontology is only advertised when the `owl` feature compiles in
     // its handler (hq-8wd) — otherwise the call would always fail.
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 24);
+        assert_eq!(defs.len(), 25);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 23);
+        assert_eq!(defs.len(), 24);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 }

@@ -24,6 +24,7 @@ pub mod provider;
 pub mod rdf;
 pub mod reasoner;
 pub mod reconcile;
+pub mod report;
 pub mod resolution;
 pub mod schema;
 pub mod semweb;
@@ -87,6 +88,7 @@ pub use reconcile::{
     GoResolver, ImportResolver, PythonResolver, ReconcileReport, RustResolver, default_resolvers,
     reconcile,
 };
+pub use report::tool_report;
 pub use resolution::{EntityCandidate, ResolutionResult, resolve_entity};
 #[cfg(feature = "shacl")]
 pub use shacl::{ValidationFeedback, Validator, validate_shapes};

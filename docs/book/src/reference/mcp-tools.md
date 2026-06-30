@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **23 tools** in a default build, or
-**24** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **24 tools** in a default build, or
+**25** when built with the `owl` feature (which adds `quipu_load_ontology`).
 
 ## Tool Reference
 
@@ -157,6 +157,34 @@ Unified knowledge context pipeline.
 | `query` | Yes | Search query string |
 | `max_entities` | No | Max entities (default from pipeline config) |
 | `expand_links` | No | Follow relationships to linked entities |
+
+### `quipu_report`
+
+Live graph report — graphify's `GRAPH_REPORT.md` equivalent, but queryable.
+Read-only.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `type` | No | Restrict the projection to this rdf:type IRI |
+| `predicate` | No | Restrict the projection to edges with this predicate IRI |
+| `hubs` | No | Number of top hubs to return (default: 10) |
+| `surprises` | No | Number of surprising connections to return (default: 10) |
+| `questions` | No | Number of suggested questions to return (default: 8) |
+
+Returns three sections:
+
+- `hubs` — "god-nodes": the most central entities by PageRank, each with its
+  `in_degree` as a secondary signal.
+- `surprising_connections` — low-prior edges that bridge two otherwise-separate
+  Louvain communities. Rarer bridges (fewer edges crossing between the same two
+  communities — `bridge_rarity`) rank first; ties break toward bridges touching
+  higher-PageRank endpoints.
+- `suggested_questions` — deterministic, template-generated prompts seeded by the
+  hubs and bridges above.
+
+Plus a `graph` summary (`nodes`, `edges`, `communities`, `modularity`).
+Communities here are emergent clustering for surfacing, **not** an access
+boundary.
 
 ### `quipu_search_nodes`
 

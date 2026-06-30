@@ -524,6 +524,20 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                 "required": ["query"]
             }
         }),
+        serde_json::json!({
+            "name": "quipu_report",
+            "description": "Generate a live graph report (graphify's GRAPH_REPORT.md equivalent, but queryable): top hubs / 'god-nodes' (by PageRank with in-degree as a secondary signal), surprising connections (low-prior edges that bridge two otherwise-separate Louvain communities — rarer bridges rank first), and auto-suggested questions seeded by those hubs and bridges. Read-only; derived from current graph structure. Communities here are emergent clustering for surfacing, NOT an access boundary.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "type": { "type": "string", "description": "Restrict the projection to nodes of this rdf:type IRI" },
+                    "predicate": { "type": "string", "description": "Restrict the projection to edges with this predicate IRI" },
+                    "hubs": { "type": "integer", "description": "Number of top hubs to return (default: 10)" },
+                    "surprises": { "type": "integer", "description": "Number of surprising connections to return (default: 10)" },
+                    "questions": { "type": "integer", "description": "Number of suggested questions to return (default: 8)" }
+                }
+            }
+        }),
     ];
 
     // OWL reasoning is gated behind the (non-default) `owl` feature; only
