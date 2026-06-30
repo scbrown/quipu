@@ -398,6 +398,67 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
+/// MCP tool: `quipu_retract_episode` -- Episode-scoped logical retraction (aegis-hxb).
+///
+/// Retracts every currently-active fact contributed by an episode's ingest,
+/// using the existing bitemporal `Op::Retract`/`valid_to` close path. Logical,
+/// not physical: time-travel queries still show the retracted facts. Entities
+/// and facts from other episodes are untouched (see [`Store::retract_episode`]).
+///
+/// Input: `{ "episode": "<name>", "timestamp"?: "...", "actor"?: "..." }`.
+/// `episode_id` and `name` are accepted as aliases for `episode`.
+/// Output: `{ "tx_id", "retracted": <count>, "episode": "<name>",
+///            "statements": [{ "entity", "predicate", "value" }, ...] }`.
+///
+/// Idempotent: retracting an already-retracted (or unknown) episode returns
+/// `retracted: 0` and changes nothing.
+///
+/// **Auth (hq-azs / hq-otm).** Retraction is a write, and a *more* sensitive one
+/// than assertion — it removes facts from current views. The HTTP route
+/// (`/episode/retract`) is registered in `http_auth::WRITE_ENDPOINTS`, so today
+/// it honours read-only mode and the bearer token exactly like other writes.
+/// When per-principal scopes (hq-azs) and crew identity (hq-otm) land,
+/// retraction should require an elevated/authorized principal rather than the
+/// same token that gates assertion.
+pub fn tool_retract_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    let episode_name = input
+        .get("episode")
+        .or_else(|| input.get("episode_id"))
+        .or_else(|| input.get("name"))
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            Error::InvalidValue("missing 'episode' (or 'episode_id') parameter".into())
+        })?;
+
+    let now = crate::time::now_iso();
+    let timestamp = input
+        .get("timestamp")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&now);
+
+    let actor = input.get("actor").and_then(|v| v.as_str());
+
+    let (tx_id, facts) = store.retract_episode(episode_name, timestamp, actor)?;
+
+    let statements: Vec<JsonValue> = facts
+        .iter()
+        .map(|f| {
+            serde_json::json!({
+                "entity": store.resolve(f.entity).unwrap_or_default(),
+                "predicate": store.resolve(f.attribute).unwrap_or_default(),
+                "value": value_to_json(store, &f.value),
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "tx_id": tx_id,
+        "retracted": facts.len(),
+        "episode": episode_name,
+        "statements": statements
+    }))
+}
+
 /// MCP tool: `quipu_episode` -- Ingest structured knowledge from an agent episode.
 pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let ep: Episode = serde_json::from_value(input.clone())

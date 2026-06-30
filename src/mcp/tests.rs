@@ -192,6 +192,135 @@ fn test_tool_episode() {
     assert!(result["count"].as_i64().unwrap() >= 10);
 }
 
+// -- Episode-scoped logical retraction (aegis-hxb) --
+
+const NS: &str = "http://aegis.gastown.local/ontology/";
+const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+
+fn ask(store: &Store, pattern: &str) -> bool {
+    let r = tool_query(
+        store,
+        &serde_json::json!({ "query": format!("ASK {{ {pattern} }}") }),
+    )
+    .unwrap();
+    r["result"].as_bool().unwrap()
+}
+
+/// Ingest a "real graph" episode and a "goldblum test" episode that share a real
+/// entity (quipu-server), then retract only the test episode. Its contributions
+/// must vanish from current queries while the shared entity and the real
+/// episode's facts survive — the core shared-IRI guarantee of aegis-hxb.
+#[test]
+fn test_retract_episode_scoped_isolation() {
+    let mut store = Store::open_in_memory().unwrap();
+
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "real-graph",
+            "timestamp": "2026-04-01T00:00:00Z",
+            "nodes": [
+                {"name": "quipu-server", "type": "WebApplication"},
+                {"name": "kota", "type": "LXCContainer"}
+            ],
+            "edges": [{"source": "quipu-server", "target": "kota", "relation": "runs_on"}]
+        }),
+    )
+    .unwrap();
+
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "goldblum-deploy-verify-032",
+            "timestamp": "2026-04-02T00:00:00Z",
+            "nodes": [
+                {"name": "quipu-server", "type": "WebApplication"},
+                {"name": "v032", "type": "Version"}
+            ],
+            "edges": [{"source": "quipu-server", "target": "v032", "relation": "running_version_on"}]
+        }),
+    )
+    .unwrap();
+
+    // Pre-condition: both episodes' facts are live.
+    assert!(ask(
+        &store,
+        &format!("<{NS}quipu-server> <{NS}running_version_on> <{NS}v032>")
+    ));
+    assert!(ask(
+        &store,
+        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kota>")
+    ));
+
+    let out = tool_retract_episode(
+        &mut store,
+        &serde_json::json!({ "episode": "goldblum-deploy-verify-032", "actor": "tester" }),
+    )
+    .unwrap();
+    assert_eq!(out["episode"], "goldblum-deploy-verify-032");
+    assert!(out["retracted"].as_i64().unwrap() > 0);
+    assert!(!out["statements"].as_array().unwrap().is_empty());
+
+    // The test episode's edge and generated entity are gone from current views…
+    assert!(!ask(
+        &store,
+        &format!("<{NS}quipu-server> <{NS}running_version_on> <{NS}v032>")
+    ));
+    let v032 = tool_query(
+        &store,
+        &serde_json::json!({ "query": format!("SELECT ?p ?o WHERE {{ <{NS}v032> ?p ?o }}") }),
+    )
+    .unwrap();
+    assert_eq!(v032["count"], 0, "generated entity v032 fully retracted");
+
+    // …but the shared entity and the real episode's facts are intact.
+    assert!(ask(
+        &store,
+        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kota>")
+    ));
+    assert!(ask(
+        &store,
+        &format!("<{NS}quipu-server> <{RDFS_LABEL}> \"quipu-server\"")
+    ));
+}
+
+#[test]
+fn test_retract_episode_idempotent_and_unknown() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-x",
+            "timestamp": "2026-04-01T00:00:00Z",
+            "nodes": [{"name": "thing", "type": "Widget"}],
+            "edges": []
+        }),
+    )
+    .unwrap();
+
+    let first =
+        tool_retract_episode(&mut store, &serde_json::json!({ "episode": "ep-x" })).unwrap();
+    assert!(first["retracted"].as_i64().unwrap() > 0);
+
+    // Re-retracting is a no-op.
+    let second =
+        tool_retract_episode(&mut store, &serde_json::json!({ "episode": "ep-x" })).unwrap();
+    assert_eq!(second["retracted"], 0);
+    assert_eq!(second["tx_id"], crate::episode::NOOP_TX);
+
+    // Unknown episode is also a clean no-op.
+    let unknown =
+        tool_retract_episode(&mut store, &serde_json::json!({ "episode": "nope" })).unwrap();
+    assert_eq!(unknown["retracted"], 0);
+
+    // `episode_id` alias is accepted.
+    let aliased = tool_retract_episode(&mut store, &serde_json::json!({ "episode_id": "nope" }));
+    assert!(aliased.is_ok());
+
+    // Missing identifier is an error.
+    assert!(tool_retract_episode(&mut store, &serde_json::json!({})).is_err());
+}
+
 #[test]
 fn test_tool_query_enforces_max_sparql_rows() {
     // hq-gkd: a LIMIT-less SELECT must not dump the whole fact log — the server
@@ -370,6 +499,7 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_resolve_entity"));
     assert!(names.contains(&"quipu_episode"));
     assert!(names.contains(&"quipu_retract"));
+    assert!(names.contains(&"quipu_retract_episode"));
     assert!(names.contains(&"quipu_shapes"));
     assert!(names.contains(&"quipu_search_nodes"));
     assert!(names.contains(&"quipu_search_facts"));
@@ -390,12 +520,12 @@ fn test_tool_definitions() {
     // its handler (hq-8wd) — otherwise the call would always fail.
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 25);
+        assert_eq!(defs.len(), 26);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 24);
+        assert_eq!(defs.len(), 25);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 }

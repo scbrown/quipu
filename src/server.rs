@@ -162,6 +162,7 @@ async fn main() {
         .route("/episodes/complete", post(episodes_complete))
         .route("/impact", post(impact_analysis))
         .route("/retract", post(retract))
+        .route("/episode/retract", post(retract_episode))
         .route("/shapes", post(shapes))
         .route("/propose", post(propose_schema_change))
         .route("/proposals", post(list_proposals))
@@ -345,6 +346,7 @@ rw_handler!(episode, quipu::tool_episode);
 rw_handler!(episodes_complete, quipu::tool_episodes_complete);
 rw_handler!(impact_analysis, quipu::tool_impact);
 rw_handler!(retract, quipu::tool_retract);
+rw_handler!(retract_episode, quipu::tool_retract_episode);
 
 async fn validate(
     State(_store): State<SharedStore>,

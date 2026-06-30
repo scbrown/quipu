@@ -296,6 +296,19 @@ pub fn tool_definitions() -> Vec<JsonValue> {
             }
         }),
         serde_json::json!({
+            "name": "quipu_retract_episode",
+            "description": "Episode-scoped logical retraction: retract all currently-active facts an episode's ingest contributed (activity node, entities, edges, reified statements), via the bitemporal valid_to close path. Logical, not physical — time-travel history is preserved. Entities and other episodes' facts are untouched. Idempotent.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "episode": { "type": "string", "description": "Episode name/identifier to retract (aliases: episode_id, name)" },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the retraction" },
+                    "actor": { "type": "string", "description": "Who is performing the retraction" }
+                },
+                "required": ["episode"]
+            }
+        }),
+        serde_json::json!({
             "name": "quipu_episode",
             "description": "Ingest structured knowledge from an agent episode (nodes + edges)",
             "inputSchema": {

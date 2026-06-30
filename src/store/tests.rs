@@ -607,3 +607,111 @@ fn within_transaction_dedup() {
     assert!(result.is_ok());
     assert_eq!(store.current_facts().unwrap().len(), 1);
 }
+
+// -- Episode-scoped logical retraction (aegis-hxb) --
+
+/// Write one (e, a, v) fact under a transaction tagged `source="episode:{name}"`,
+/// mirroring how `episode::ingest_episode` stamps its writes.
+fn assert_episode_fact(store: &mut Store, name: &str, e: i64, a: i64, v: Value) {
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: v,
+                valid_from: "2026-01-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            Some(&format!("episode:{name}")),
+        )
+        .unwrap();
+}
+
+#[test]
+fn retract_episode_removes_only_that_episodes_facts() {
+    let mut store = test_store();
+    let alice = store.intern("http://example.org/alice").unwrap();
+    let bob = store.intern("http://example.org/bob").unwrap();
+    let name = store.intern("http://example.org/name").unwrap();
+
+    assert_episode_fact(&mut store, "ep-a", alice, name, Value::Str("Alice".into()));
+    assert_episode_fact(&mut store, "ep-b", bob, name, Value::Str("Bob".into()));
+    assert_eq!(store.current_facts().unwrap().len(), 2);
+
+    let (tx_id, retracted) = store
+        .retract_episode("ep-a", "2026-02-01T00:00:00Z", Some("tester"))
+        .unwrap();
+    assert!(tx_id > 0);
+    assert_eq!(retracted.len(), 1);
+    assert_eq!(retracted[0].entity, alice);
+
+    // ep-a's fact left the current view; ep-b's survived untouched.
+    let current = store.current_facts().unwrap();
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0].entity, bob);
+}
+
+#[test]
+fn retract_episode_preserves_history() {
+    let mut store = test_store();
+    let alice = store.intern("http://example.org/alice").unwrap();
+    let name = store.intern("http://example.org/name").unwrap();
+    assert_episode_fact(&mut store, "ep-a", alice, name, Value::Str("Alice".into()));
+
+    store
+        .retract_episode("ep-a", "2026-02-01T00:00:00Z", None)
+        .unwrap();
+
+    // Logical, not physical: the original assertion row still exists (now closed)
+    // alongside the new retract row, so time-travel history is intact.
+    let history = store.entity_history(alice).unwrap();
+    assert_eq!(history.len(), 2, "assert + retract rows both retained");
+    assert!(
+        history
+            .iter()
+            .any(|f| f.op == Op::Assert && f.valid_to.is_some())
+    );
+    assert!(history.iter().any(|f| f.op == Op::Retract));
+
+    // The fact as it was before the retraction is still visible via time-travel.
+    let before = store
+        .facts_as_of(&AsOf {
+            tx: None,
+            valid_at: Some("2026-01-15T00:00:00Z".into()),
+        })
+        .unwrap();
+    assert!(before.iter().any(|f| f.entity == alice));
+}
+
+#[test]
+fn retract_episode_is_idempotent() {
+    let mut store = test_store();
+    let alice = store.intern("http://example.org/alice").unwrap();
+    let name = store.intern("http://example.org/name").unwrap();
+    assert_episode_fact(&mut store, "ep-a", alice, name, Value::Str("Alice".into()));
+
+    let (_, first) = store
+        .retract_episode("ep-a", "2026-02-01T00:00:00Z", None)
+        .unwrap();
+    assert_eq!(first.len(), 1);
+
+    // Second retraction finds nothing active: no-op.
+    let (tx_id, second) = store
+        .retract_episode("ep-a", "2026-03-01T00:00:00Z", None)
+        .unwrap();
+    assert_eq!(tx_id, crate::episode::NOOP_TX);
+    assert!(second.is_empty());
+}
+
+#[test]
+fn retract_episode_unknown_is_noop() {
+    let mut store = test_store();
+    let (tx_id, retracted) = store
+        .retract_episode("never-ingested", "2026-02-01T00:00:00Z", None)
+        .unwrap();
+    assert_eq!(tx_id, crate::episode::NOOP_TX);
+    assert!(retracted.is_empty());
+}

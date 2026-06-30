@@ -119,6 +119,39 @@ curl -s localhost:3030/retract -X POST \
 
 Optional: `predicate` (only retract matching), `timestamp`, `actor`.
 
+### `POST /episode/retract`
+
+Episode-scoped **logical** retraction. Retracts every currently-active fact an
+episode's ingest contributed — its activity node, generated entities, the bare
+relationship triples (edges), and any reified confidence statements — by closing
+their `valid_to` via the bitemporal retract path. Facts are never physically
+deleted, so time-travel queries (`/cord`, `/unravel`) still show them.
+
+The retraction unit is the episode's ingest transaction(s), identified by their
+`source = "episode:{name}"` tag. Because identical assertions are deduplicated to
+a single owning transaction, retracting an episode only removes the facts *that
+episode actually wrote* — entities and facts contributed by other episodes (even
+about the same shared IRIs) survive untouched. This is the safe way to undo a
+specific episode's contributions without SQL surgery on shared entities.
+
+```bash
+curl -s localhost:3030/episode/retract -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"episode": "goldblum-deploy-verify-032"}'
+```
+
+Aliases for `episode`: `episode_id`, `name`. Optional: `timestamp`, `actor`.
+**Idempotent** — retracting an already-retracted or unknown episode returns
+`{"retracted": 0}` and changes nothing. Response includes `tx_id`, `retracted`
+(count), and `statements` (the retracted facts).
+
+> **Auth (hq-azs / hq-otm).** Retraction is a write — and a *more* sensitive one
+> than assertion, since it removes facts from current views. The endpoint is in
+> `http_auth::WRITE_ENDPOINTS`, so it already honours read-only mode and the
+> bearer token like every other write. When per-principal scopes (hq-azs) and
+> crew identity (hq-otm) land, retraction should be gated to an authorized
+> principal, not merely the same token that permits assertion.
+
 ### `POST /shapes`
 
 Manage persistent SHACL shapes.

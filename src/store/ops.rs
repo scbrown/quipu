@@ -207,6 +207,83 @@ impl Store {
         Ok((tx_id, count))
     }
 
+    /// Episode-scoped logical retraction (aegis-hxb).
+    ///
+    /// Retract every currently-active asserted fact whose owning transaction was
+    /// the ingest of the named episode. This is a *logical* retraction via the
+    /// existing bitemporal [`Op::Retract`]/`valid_to` close path — facts are
+    /// never physically deleted, so time-travel queries (`/cord`, `facts_as_of`,
+    /// `entity_history`) still show them, now closed.
+    ///
+    /// **Provenance unit = the episode's transaction(s).** Every episode write
+    /// goes through one [`transact`](Store::transact) stamped
+    /// `source = "episode:{name}"` (see `episode::ingest_episode` →
+    /// `rdf::ingest_rdf`). Selecting active facts by that transaction source is
+    /// *complete* — it covers the episode activity node, its generated entities,
+    /// the bare relationship triples (edges), and any reified confidence
+    /// statements — whereas `prov:wasGeneratedBy` only links entity nodes.
+    ///
+    /// **Shared-IRI safety.** Idempotent assertion (see `transact`) means each
+    /// active `(e, a, v)` belongs to exactly one owning transaction. Retracting
+    /// episode X therefore closes only the facts X's transaction actually wrote;
+    /// facts about shared entities (e.g. `quipu-server`, `kota`) asserted by
+    /// other episodes or write paths stay active. Re-ingests of the same episode
+    /// produce multiple transactions that all share the source tag, so every one
+    /// of the episode's currently-active contributions is caught.
+    ///
+    /// **Idempotent.** Retracting an episode with no active facts (already
+    /// retracted, or never ingested) is a no-op: returns `(NOOP_TX, [])`.
+    ///
+    /// Returns `(tx_id, retracted_facts)`. `tx_id` is the retraction
+    /// transaction, or [`crate::episode::NOOP_TX`] when nothing was retracted.
+    pub fn retract_episode(
+        &mut self,
+        episode_name: &str,
+        timestamp: &str,
+        actor: Option<&str>,
+    ) -> Result<(i64, Vec<Fact>)> {
+        let source_tag = format!("episode:{episode_name}");
+
+        // Currently-active asserted facts written by this episode's
+        // transaction(s). Join keeps it precise: a fact is in scope only if its
+        // own owning tx carried the episode source tag.
+        let facts = {
+            let mut stmt = self.conn.prepare(
+                "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
+                 FROM facts f JOIN transactions t ON f.tx = t.id \
+                 WHERE t.source = ?1 AND f.op = 1 AND f.valid_to IS NULL \
+                 ORDER BY f.e, f.a",
+            )?;
+            Self::collect_facts(&mut stmt, params![source_tag])?
+        };
+
+        if facts.is_empty() {
+            return Ok((crate::episode::NOOP_TX, Vec::new()));
+        }
+
+        let datums: Vec<Datum> = facts
+            .iter()
+            .map(|f| Datum {
+                entity: f.entity,
+                attribute: f.attribute,
+                value: f.value.clone(),
+                valid_from: f.valid_from.clone(),
+                valid_to: None,
+                op: Op::Retract,
+            })
+            .collect();
+
+        // Stamp the retraction tx with a distinct source so it is traceable and
+        // never re-selected as one of the episode's own assertions.
+        let tx_id = self.transact(
+            &datums,
+            timestamp,
+            actor,
+            Some(&format!("retract-episode:{episode_name}")),
+        )?;
+        Ok((tx_id, facts))
+    }
+
     // -- Read path --
 
     /// Return the current state: all asserted facts not yet retracted.

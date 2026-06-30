@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **24 tools** in a default build, or
-**25** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **25 tools** in a default build, or
+**26** when built with the `owl` feature (which adds `quipu_load_ontology`).
 
 ## Tool Reference
 
@@ -86,6 +86,24 @@ Retract facts for an entity.
 | `predicate` | No | Only retract this predicate |
 | `timestamp` | No | Retraction timestamp |
 | `actor` | No | Who is retracting |
+
+### `quipu_retract_episode`
+
+Episode-scoped **logical** retraction (`POST /episode/retract`). Retracts every
+currently-active fact an episode's ingest contributed (activity node, entities,
+edges, reified statements) by closing `valid_to` — logical, not physical, so
+time-travel history is preserved. Entities and other episodes' facts (even about
+shared IRIs) are untouched. Idempotent.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `episode` | Yes | Episode name to retract (aliases: `episode_id`, `name`) |
+| `timestamp` | No | Retraction timestamp |
+| `actor` | No | Who is retracting |
+
+Retraction is a more sensitive write than assertion. The endpoint honours
+read-only mode and bearer auth today; when per-principal scopes (hq-azs) and
+crew identity (hq-otm) land it should require an authorized principal.
 
 ### `quipu_episode`
 
