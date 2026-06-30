@@ -493,18 +493,21 @@ pub fn tool_definitions() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_project",
-            "description": "Project the knowledge graph and run a graph algorithm over it: stats (node/edge counts), in_degree (most-referenced entities), or pagerank/ppr (global or personalized PageRank from seed entities). Optionally restrict the projection to a node type or predicate.",
+            "description": "Project the knowledge graph and run a graph algorithm over it: stats (node/edge counts), in_degree (most-referenced entities), pagerank/ppr (global or personalized PageRank from seed entities), components (weakly-connected components), louvain (modularity community detection), or shortest_path. Optionally restrict the projection to a node type or predicate. Read-only by default; louvain with persist:true writes quipu:memberOfCommunity facts (superseding any prior derivation).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "algorithm": { "type": "string", "enum": ["stats", "in_degree", "pagerank", "ppr"], "description": "Algorithm to run (default: stats)" },
+                    "algorithm": { "type": "string", "enum": ["stats", "in_degree", "pagerank", "ppr", "components", "louvain", "shortest_path"], "description": "Algorithm to run (default: stats)" },
                     "type": { "type": "string", "description": "Restrict the projection to nodes of this rdf:type IRI" },
                     "predicate": { "type": "string", "description": "Restrict the projection to edges with this predicate IRI" },
                     "limit": { "type": "integer", "description": "Max results for in_degree/pagerank (default: 20)" },
                     "seeds": { "type": "array", "items": { "type": "string" }, "description": "Seed entity IRIs (or raw term IDs) for personalized PageRank; non-empty switches pagerank to PPR" },
                     "damping": { "type": "number", "description": "PageRank damping factor (default: 0.85)" },
                     "max_iters": { "type": "integer", "description": "PageRank max iterations (default: 100)" },
-                    "tolerance": { "type": "number", "description": "PageRank convergence tolerance (default: 1e-6)" }
+                    "tolerance": { "type": "number", "description": "PageRank convergence tolerance (default: 1e-6)" },
+                    "from": { "type": "string", "description": "Source entity IRI for shortest_path" },
+                    "to": { "type": "string", "description": "Target entity IRI for shortest_path" },
+                    "persist": { "type": "boolean", "description": "louvain only: persist quipu:memberOfCommunity facts (emergent clustering, NOT an access boundary), bitemporally superseding any prior derivation (default: false)" }
                 }
             }
         }),

@@ -133,7 +133,7 @@ Graph projection and algorithms.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `algorithm` | No | `stats`, `in_degree`, `pagerank`, or `ppr` (default: `stats`) |
+| `algorithm` | No | `stats`, `in_degree`, `pagerank`/`ppr`, `components`, `louvain`, or `shortest_path` (default: `stats`) |
 | `type` | No | Restrict projection to this rdf:type IRI |
 | `predicate` | No | Restrict projection to edges with this predicate IRI |
 | `limit` | No | Max results for in_degree/pagerank (default: 20) |
@@ -141,6 +141,12 @@ Graph projection and algorithms.
 | `damping` | No | PageRank damping factor (default: 0.85) |
 | `max_iters` | No | PageRank max iterations (default: 100) |
 | `tolerance` | No | PageRank convergence tolerance (default: 1e-6) |
+| `from` / `to` | No | Source/target entity IRIs for `shortest_path` |
+| `persist` | No | `louvain` only: persist `quipu:memberOfCommunity` facts, superseding any prior derivation (default: `false`). Emergent clustering, **not** an access boundary. |
+
+The `louvain` algorithm runs deterministic modularity-based community detection
+and returns `{ communities: [{ community, entities, size }], modularity }`.
+Read-only unless `persist: true`.
 
 ### `quipu_context`
 

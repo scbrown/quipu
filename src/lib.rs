@@ -52,7 +52,10 @@ pub use episode::{
     ingest_episode_with_resolution,
 };
 pub use error::{Error, Result};
-pub use graph::{PageRankConfig, ProjectedGraph, page_rank, tool_project};
+pub use graph::{
+    Communities, PageRankConfig, ProjectedGraph, louvain, page_rank, persist_communities,
+    tool_project,
+};
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;

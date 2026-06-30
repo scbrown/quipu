@@ -295,7 +295,7 @@ pub fn cmd_project(args: &[String], db_path: &str) {
         input["seeds"] = serde_json::Value::Array(seeds);
     }
 
-    let store = match quipu::Store::open(db_path) {
+    let mut store = match quipu::Store::open(db_path) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("error opening store: {e}");
@@ -303,7 +303,7 @@ pub fn cmd_project(args: &[String], db_path: &str) {
         }
     };
 
-    match quipu::tool_project(&store, &input) {
+    match quipu::tool_project(&mut store, &input) {
         Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
         Err(e) => {
             eprintln!("error: {e}");
