@@ -50,9 +50,39 @@ This spec does not invent a feature — it builds one already on the books:
 
 ## Non-goals (v1)
 
-- Louvain / community detection (future; same Projection API).
+- ~~Louvain / community detection (future; same Projection API).~~ **Delivered
+  (hq-zlph) — see [Community detection](#community-detection-louvain) below.**
 - Approximate / streaming PageRank at write time.
 - Distributed computation (single-process, "SQLite energy").
+
+## Community detection (Louvain)
+
+Delivered on the same Projection API as PageRank (hq-zlph, aegis-1p0 Gap 3).
+`graph::louvain` runs Louvain's modularity local-moving phase over the projected
+graph and returns a partition plus its Newman–Girvan modularity. Exposed as
+`tool_project` `algorithm: "louvain"` (alias `"community"`).
+
+- **Undirected weighting.** The projected directed multigraph is read undirected:
+  parallel edges sum into one weight, self-loops dropped, direction ignored — the
+  standard input shape for modularity-based clustering.
+- **Determinism is a hard requirement.** Nodes are visited in ascending entity-id
+  order, candidate communities evaluated in ascending-label order, and ties in
+  modularity gain broken toward the lowest label. The same graph always yields the
+  same partition, independent of hash iteration order. (Hand-rolled, pure-Rust, no
+  C-backed clustering dependency.)
+- **Opt-in persistence.** Read-only by default. With `persist: true`, each
+  entity's community is written as a `quipu:memberOfCommunity` fact through the
+  store (provenance `source = "algo:louvain"`), so clusters become queryable,
+  time-travelable knowledge — exactly like persisted PageRank scores.
+- **Supersede on re-run.** Membership is *derived* and goes stale when the graph
+  changes, so a re-run bitemporally supersedes the prior derivation: changed
+  memberships are retracted (`valid_to` closed) and new ones asserted, reconciled
+  by `(entity, community-term)`. A default current-facts query returns only the
+  latest partition — stale clusters never accumulate.
+- **Not an access boundary.** Community membership is *emergent clustering*, not a
+  tenancy or authorization primitive. Like `group_id` (hq-2u3: provenance, not
+  isolation), it must never gate access; consumers must not build access control
+  on `quipu:memberOfCommunity`.
 
 ## API design
 

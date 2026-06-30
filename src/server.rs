@@ -320,7 +320,9 @@ ro_handler!(
     quipu::mcp::graphiti::tool_search_nodes
 );
 ro_handler!(shapes, quipu::tool_shapes);
-ro_handler!(project_graph, quipu::tool_project);
+// `tool_project` is read-only by default but the `louvain` algorithm can write
+// `quipu:memberOfCommunity` facts when `persist:true`, so it needs a mutable store.
+rw_handler!(project_graph, quipu::tool_project);
 ro_handler!(context, quipu::tool_context);
 
 ro_handler!(propose_schema_change, quipu::tool_propose_schema_change);
