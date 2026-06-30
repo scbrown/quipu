@@ -14,6 +14,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/episode",
     "/episodes/complete",
     "/retract",
+    "/episode/retract",
     "/shapes",
     "/impact",
     "/propose",
