@@ -95,9 +95,16 @@ impl OnnxEmbeddingProvider {
         let mut token_type_ids = vec![0i64; batch_size * max_len];
 
         for (i, enc) in encodings.iter().enumerate() {
+            // Use the tokenizer's REAL attention mask, not a hardcoded 1. This
+            // tokenizer pads every sequence to a fixed 128 (padding.strategy =
+            // Fixed(128)); marking pad tokens as attended made mean-pooling average
+            // over ~120 [PAD] embeddings per short text -> every entity collapsed to
+            // a near-identical vector (dc5i gate-fail: same node #1 for all queries).
+            // Matches bobbin's working embedder (uses encoding.get_attention_mask()).
+            let real_mask = enc.get_attention_mask();
             for (j, &id) in enc.get_ids().iter().take(max_len).enumerate() {
                 input_ids[i * max_len + j] = i64::from(id);
-                attention_mask[i * max_len + j] = 1;
+                attention_mask[i * max_len + j] = i64::from(real_mask[j]);
             }
             for (j, &tt) in enc.get_type_ids().iter().take(max_len).enumerate() {
                 token_type_ids[i * max_len + j] = i64::from(tt);
