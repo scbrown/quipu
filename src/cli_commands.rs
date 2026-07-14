@@ -4,17 +4,22 @@ use std::io::{self, BufRead, Read, Write};
 
 use oxrdfio::RdfFormat;
 
-use crate::cli::{chrono_now, format_value};
+use crate::cli::{chrono_now, flag_value, format_value, resolve_timestamp};
 
 pub fn cmd_episode(args: &[String], db_path: &str) {
     let file_arg = match args.get(2) {
         Some(p) if !p.starts_with("--") => p.as_str(),
         _ => {
-            eprintln!("usage: quipu episode <file.json> [--db <path>]");
+            eprintln!("usage: quipu episode <file.json> [--base-ns <IRI>] [--timestamp <ISO-8601>] [--db <path>]");
             eprintln!("  use - to read from stdin");
             std::process::exit(1);
         }
     };
+
+    // Override the namespace IRIs are minted in (quipu #28). Defaults to the
+    // built-in aegis namespace, letting non-aegis deployments use the episode
+    // abstraction instead of routing around it via verbatim-Turtle knot.
+    let base_ns = flag_value(args, "--base-ns").unwrap_or(quipu::namespace::DEFAULT_BASE_NS);
 
     let json_str = if file_arg == "-" {
         let mut buf = String::new();
@@ -52,13 +57,8 @@ pub fn cmd_episode(args: &[String], db_path: &str) {
         }
     };
 
-    let now = chrono_now();
-    match quipu::ingest_episode(
-        &mut store,
-        &episode,
-        &now,
-        quipu::namespace::DEFAULT_BASE_NS,
-    ) {
+    let now = resolve_timestamp(args);
+    match quipu::ingest_episode(&mut store, &episode, &now, base_ns) {
         Ok((tx_id, count)) => {
             println!(
                 "ingested episode \"{}\" -- {count} facts (tx {tx_id})",
@@ -76,15 +76,12 @@ pub fn cmd_retract(args: &[String], db_path: &str) {
     let entity_iri = match args.get(2) {
         Some(iri) if !iri.starts_with("--") => iri.as_str(),
         _ => {
-            eprintln!("usage: quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]");
+            eprintln!("usage: quipu retract <entity-IRI> [--predicate <IRI>] [--timestamp <ISO-8601>] [--db <path>]");
             std::process::exit(1);
         }
     };
 
-    let predicate_iri = args
-        .windows(2)
-        .find(|w| w[0] == "--predicate")
-        .map(|w| w[1].as_str());
+    let predicate_iri = flag_value(args, "--predicate");
 
     let mut store = match quipu::Store::open(db_path) {
         Ok(s) => s,
@@ -96,7 +93,7 @@ pub fn cmd_retract(args: &[String], db_path: &str) {
 
     let mut input = serde_json::json!({
         "entity": entity_iri,
-        "timestamp": chrono_now(),
+        "timestamp": resolve_timestamp(args),
     });
     if let Some(pred) = predicate_iri {
         input["predicate"] = serde_json::json!(pred);
