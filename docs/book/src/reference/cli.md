@@ -17,11 +17,13 @@ Load RDF facts from a Turtle file.
 ```bash
 quipu knot data.ttl --db my.db
 quipu knot data.ttl --shapes schema.ttl --db my.db  # With SHACL validation
+quipu knot data.ttl --timestamp 2026-03-15T00:00:00Z --db my.db  # Source-true valid-time
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--shapes <file>` | SHACL shapes file for write-time validation |
+| `--timestamp <ISO-8601>` | `valid_from` for the facts (default: now). Supply the source event time when ingesting history |
 
 Alias: `load`
 
@@ -73,7 +75,14 @@ Ingest a structured episode from a JSON file.
 ```bash
 quipu episode deploy.json --db my.db
 echo '{"name": "test", "nodes": []}' | quipu episode - --db my.db  # stdin
+quipu episode deploy.json --base-ns "https://quarterdeck.internal/ontology#" --db my.db
+quipu episode deploy.json --timestamp 2026-03-15T00:00:00Z --db my.db
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--base-ns <IRI>` | Namespace to mint entity IRIs in (default: the built-in aegis namespace). Lets non-aegis deployments use the episode abstraction |
+| `--timestamp <ISO-8601>` | `valid_from` for the facts (default: now) |
 
 ### `quipu retract <entity-IRI>`
 
@@ -87,6 +96,7 @@ quipu retract "http://example.org/alice" --predicate "http://example.org/email" 
 | Flag | Description |
 |------|-------------|
 | `--predicate <IRI>` | Only retract facts with this predicate |
+| `--timestamp <ISO-8601>` | Transaction valid-time for the retraction (default: now) |
 
 ### `quipu shapes`
 

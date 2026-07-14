@@ -9,19 +9,61 @@ pub fn chrono_now() -> String {
     quipu::time::now_iso()
 }
 
+/// Extract the value following a `--flag` in the hand-rolled arg list, matching
+/// the existing `--shapes` / `--predicate` idiom.
+pub fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    args.windows(2)
+        .find(|w| w[0] == name)
+        .map(|w| w[1].as_str())
+}
+
+/// Resolve a caller-supplied `--timestamp`, falling back to now (quipu #27).
+///
+/// Rejects an obviously malformed value early rather than writing a corrupt
+/// `valid_from` into the bitemporal store. We keep the check lightweight (the
+/// CLI intentionally carries no chrono dependency): an ISO-8601 instant starts
+/// with a `YYYY-MM-DD` date. Full parsing is the store's responsibility.
+pub fn resolve_timestamp(args: &[String]) -> String {
+    match flag_value(args, "--timestamp") {
+        Some(ts) => {
+            if !looks_like_iso8601(ts) {
+                eprintln!(
+                    "error: --timestamp must be ISO-8601 (e.g. 2026-07-13T12:00:00Z), got: {ts}"
+                );
+                std::process::exit(1);
+            }
+            ts.to_string()
+        }
+        None => chrono_now(),
+    }
+}
+
+/// Lightweight ISO-8601 shape check: a leading `YYYY-MM-DD` date. Deliberately
+/// not a full parse (the CLI carries no chrono dependency) — it only rejects
+/// obviously wrong values before they reach the store's `valid_from`.
+fn looks_like_iso8601(ts: &str) -> bool {
+    ts.len() >= 10
+        && ts.as_bytes()[..10].iter().enumerate().all(|(i, b)| {
+            if i == 4 || i == 7 {
+                *b == b'-'
+            } else {
+                b.is_ascii_digit()
+            }
+        })
+}
+
 pub fn cmd_knot(args: &[String], db_path: &str) {
     let file_path = match args.get(2) {
         Some(p) if !p.starts_with("--") => p.as_str(),
         _ => {
-            eprintln!("usage: quipu knot <file.ttl> [--shapes <shapes.ttl>] [--db <path>]");
+            eprintln!(
+                "usage: quipu knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]"
+            );
             std::process::exit(1);
         }
     };
 
-    let shapes_path = args
-        .windows(2)
-        .find(|w| w[0] == "--shapes")
-        .map(|w| w[1].as_str());
+    let shapes_path = flag_value(args, "--shapes");
 
     let mut store = match quipu::Store::open(db_path) {
         Ok(s) => s,
@@ -79,7 +121,7 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
         RdfFormat::Turtle
     };
 
-    let now = chrono_now();
+    let now = resolve_timestamp(args);
     match quipu::ingest_rdf(
         &mut store,
         data.as_bytes(),
@@ -568,5 +610,58 @@ fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalC
         Err(e) => {
             eprintln!("query error: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn test_flag_value_found_and_missing() {
+        let a = args(&["quipu", "knot", "f.ttl", "--shapes", "s.ttl", "--db", "x"]);
+        assert_eq!(flag_value(&a, "--shapes"), Some("s.ttl"));
+        assert_eq!(flag_value(&a, "--db"), Some("x"));
+        assert_eq!(flag_value(&a, "--timestamp"), None);
+    }
+
+    #[test]
+    fn test_flag_value_trailing_flag_has_no_value() {
+        // A flag in the final position has no following value.
+        let a = args(&["quipu", "retract", "iri", "--predicate"]);
+        assert_eq!(flag_value(&a, "--predicate"), None);
+    }
+
+    #[test]
+    fn test_resolve_timestamp_defaults_to_now() {
+        // Absent --timestamp falls back to a generated ISO instant.
+        let a = args(&["quipu", "knot", "f.ttl"]);
+        assert!(looks_like_iso8601(&resolve_timestamp(&a)));
+    }
+
+    #[test]
+    fn test_resolve_timestamp_passes_through_supplied() {
+        let a = args(&[
+            "quipu",
+            "knot",
+            "f.ttl",
+            "--timestamp",
+            "2026-07-13T12:00:00Z",
+        ]);
+        assert_eq!(resolve_timestamp(&a), "2026-07-13T12:00:00Z");
+    }
+
+    #[test]
+    fn test_looks_like_iso8601() {
+        assert!(looks_like_iso8601("2026-07-13"));
+        assert!(looks_like_iso8601("2026-07-13T12:00:00Z"));
+        assert!(!looks_like_iso8601("2026/07/13")); // wrong separators
+        assert!(!looks_like_iso8601("13-07-2026")); // digits where dashes expected
+        assert!(!looks_like_iso8601("2026-07")); // too short
+        assert!(!looks_like_iso8601("not-a-date"));
     }
 }
