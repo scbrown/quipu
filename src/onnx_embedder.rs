@@ -114,8 +114,18 @@ impl OnnxEmbeddingProvider {
             .map_err(|e| crate::Error::Store(format!("Tensor creation failed: {e}")))?;
 
         let mut session = self.session.lock().unwrap();
+        // Bind inputs BY NAME, not positionally. The all-MiniLM-L6-v2 ONNX model's
+        // input order is [input_ids, token_type_ids, attention_mask]; positional
+        // binding (ids, mask, type) fed attention_mask into the token_type_ids slot
+        // and all-zeros into attention_mask -> the model attended to nothing ->
+        // every text collapsed to a near-identical vector (dc5i gate-fail). Matches
+        // bobbin's working embedder (src/index/embedder.rs). (aegis-dc5i)
         let outputs = session
-            .run(ort::inputs![ids_tensor, mask_tensor, type_tensor])
+            .run(ort::inputs![
+                "input_ids" => ids_tensor,
+                "attention_mask" => mask_tensor,
+                "token_type_ids" => type_tensor,
+            ])
             .map_err(|e| crate::Error::Store(format!("ONNX inference failed: {e}")))?;
 
         // Extract the last_hidden_state output (shape: [batch, seq_len, dim]).
