@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2026-07-14
+
+### Added
+
+- *(graph)* Deterministic Louvain community detection (hq-zlph) ([#31](https://github.com/scbrown/quipu/pull/31))([62fe4fa](https://github.com/scbrown/quipu/commit/62fe4fa24d95cffbeeb99bc85c26b8132f4c3487))
+- *(report)* Live graph report endpoint + quipu_report MCP tool (hq-ct27) ([#32](https://github.com/scbrown/quipu/pull/32))([746dc06](https://github.com/scbrown/quipu/commit/746dc06fa52092a0259fd3b881e9ebdaecda0293))
+- *(episode)* Episode-scoped logical retraction endpoint (aegis-hxb) ([#33](https://github.com/scbrown/quipu/pull/33))([804b750](https://github.com/scbrown/quipu/commit/804b750db56f1b19336223a1137656dffc3dccd1))
+- *(cli)* --base-ns and --timestamp flags on knot/episode/retract (#28, #27) ([#34](https://github.com/scbrown/quipu/pull/34))([3230d4f](https://github.com/scbrown/quipu/commit/3230d4f5238d6ccd5bf7049549c04545772c0a14))
+
 ## [0.3.1] - 2026-06-27
 
 Critical SPARQL query-engine correctness fixes.
