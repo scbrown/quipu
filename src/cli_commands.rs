@@ -10,7 +10,9 @@ pub fn cmd_episode(args: &[String], db_path: &str) {
     let file_arg = match args.get(2) {
         Some(p) if !p.starts_with("--") => p.as_str(),
         _ => {
-            eprintln!("usage: quipu episode <file.json> [--base-ns <IRI>] [--timestamp <ISO-8601>] [--db <path>]");
+            eprintln!(
+                "usage: quipu episode <file.json> [--base-ns <IRI>] [--timestamp <ISO-8601>] [--db <path>]"
+            );
             eprintln!("  use - to read from stdin");
             std::process::exit(1);
         }
@@ -76,7 +78,9 @@ pub fn cmd_retract(args: &[String], db_path: &str) {
     let entity_iri = match args.get(2) {
         Some(iri) if !iri.starts_with("--") => iri.as_str(),
         _ => {
-            eprintln!("usage: quipu retract <entity-IRI> [--predicate <IRI>] [--timestamp <ISO-8601>] [--db <path>]");
+            eprintln!(
+                "usage: quipu retract <entity-IRI> [--predicate <IRI>] [--timestamp <ISO-8601>] [--db <path>]"
+            );
             std::process::exit(1);
         }
     };

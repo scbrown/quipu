@@ -27,7 +27,9 @@ pub fn resolve_timestamp(args: &[String]) -> String {
     match flag_value(args, "--timestamp") {
         Some(ts) => {
             if !looks_like_iso8601(ts) {
-                eprintln!("error: --timestamp must be ISO-8601 (e.g. 2026-07-13T12:00:00Z), got: {ts}");
+                eprintln!(
+                    "error: --timestamp must be ISO-8601 (e.g. 2026-07-13T12:00:00Z), got: {ts}"
+                );
                 std::process::exit(1);
             }
             ts.to_string()
@@ -41,17 +43,22 @@ pub fn resolve_timestamp(args: &[String]) -> String {
 /// obviously wrong values before they reach the store's `valid_from`.
 fn looks_like_iso8601(ts: &str) -> bool {
     ts.len() >= 10
-        && ts.as_bytes()[..10]
-            .iter()
-            .enumerate()
-            .all(|(i, b)| if i == 4 || i == 7 { *b == b'-' } else { b.is_ascii_digit() })
+        && ts.as_bytes()[..10].iter().enumerate().all(|(i, b)| {
+            if i == 4 || i == 7 {
+                *b == b'-'
+            } else {
+                b.is_ascii_digit()
+            }
+        })
 }
 
 pub fn cmd_knot(args: &[String], db_path: &str) {
     let file_path = match args.get(2) {
         Some(p) if !p.starts_with("--") => p.as_str(),
         _ => {
-            eprintln!("usage: quipu knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]");
+            eprintln!(
+                "usage: quipu knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]"
+            );
             std::process::exit(1);
         }
     };
@@ -638,7 +645,13 @@ mod tests {
 
     #[test]
     fn test_resolve_timestamp_passes_through_supplied() {
-        let a = args(&["quipu", "knot", "f.ttl", "--timestamp", "2026-07-13T12:00:00Z"]);
+        let a = args(&[
+            "quipu",
+            "knot",
+            "f.ttl",
+            "--timestamp",
+            "2026-07-13T12:00:00Z",
+        ]);
         assert_eq!(resolve_timestamp(&a), "2026-07-13T12:00:00Z");
     }
 
