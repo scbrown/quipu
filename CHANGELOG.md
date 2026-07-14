@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2026-07-14
+
+### Miscellaneous
+
+- Update Cargo.toml dependencies([0000000](https://github.com/scbrown/quipu/commit/0000000))
+
 ## [0.3.3] - 2026-07-13
 
 Graph analytics, a live report endpoint, episode-scoped retraction, and
