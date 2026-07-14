@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2026-07-13
+
+Graph analytics, a live report endpoint, episode-scoped retraction, and
+caller-controlled CLI ingest.
+
+### Added
+
+- **Deterministic Louvain community detection (hq-zlph, #31)** — community
+  structure over the entity graph with stable, reproducible assignments.
+- **Live graph report endpoint + `quipu_report` MCP tool (hq-ct27, #32)** —
+  on-demand orientation over the graph (size, central entities, activity)
+  exposed via HTTP and MCP.
+- **Episode-scoped logical retraction endpoint (aegis-hxb, #33)** — retract the
+  facts asserted by a named episode without disturbing others.
+- **`--base-ns` on `episode` (#28)** — override the namespace IRIs are minted in
+  (defaults to the built-in aegis namespace), so non-aegis deployments can use
+  the validation-carrying episode abstraction instead of routing around it.
+- **`--timestamp` on `knot` / `episode` / `retract` (#27)** — supply the
+  source-true `valid_from` (e.g. an upstream event time) instead of the exporter
+  wall-clock, so bitemporal history imports keep their original valid-time. A
+  lightweight ISO-8601 shape check rejects malformed values.
+
 ## [0.3.1] - 2026-06-27
 
 Critical SPARQL query-engine correctness fixes.
