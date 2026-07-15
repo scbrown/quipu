@@ -41,7 +41,6 @@ aegis:LXCContainerShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:ctId ;
         sh:datatype xsd:integer ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
@@ -53,6 +52,10 @@ aegis:LXCContainerShape a sh:NodeShape ;
         sh:path aegis:hostname ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── ProxmoxNode ────────��────────────────────────────────────��────
@@ -70,6 +73,10 @@ aegis:ProxmoxNodeShape a sh:NodeShape ;
         sh:path aegis:role ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── BareMetalHost ─────────────────────────────────────────��──────
@@ -87,6 +94,10 @@ aegis:BareMetalHostShape a sh:NodeShape ;
         sh:path aegis:hostname ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── SystemdService ───────���───────────────────────────────────���───
@@ -111,6 +122,10 @@ aegis:SystemdServiceShape a sh:NodeShape ;
         sh:minInclusive 0 ;
         sh:maxInclusive 100 ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── WebApplication ───────���───────────────────────────────────────
@@ -123,6 +138,10 @@ aegis:WebApplicationShape a sh:NodeShape ;
         sh:path aegis:externalUrl ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── DatabaseService ──��───────────────────────────────────────���───
@@ -140,6 +159,10 @@ aegis:DatabaseServiceShape a sh:NodeShape ;
         sh:path aegis:storageBackend ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── ZFSDataset ─────────────────────────────────────���─────────────
@@ -151,13 +174,16 @@ aegis:ZFSDatasetShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:pool ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
         sh:path aegis:mountpoint ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── ReverseProxyRoute ─────��────────────────────────────────────��─
@@ -169,14 +195,16 @@ aegis:ReverseProxyRouteShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:hostname ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
         sh:path aegis:backend ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── NetworkSegment ───────────────────────────────────────────────
@@ -199,6 +227,10 @@ aegis:NetworkSegmentShape a sh:NodeShape ;
         sh:path aegis:purpose ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ════════════════════════════════════════��══════════════════════════
@@ -224,6 +256,10 @@ aegis:AgentToolShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:providesCommand ;
         sh:datatype xsd:string ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Rig ─────────��──────────────────────────��─────────────────────
@@ -241,6 +277,10 @@ aegis:RigShape a sh:NodeShape ;
         sh:path aegis:purpose ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── CrewMember ───────────────────────────────────────────────────
@@ -263,6 +303,10 @@ aegis:CrewMemberShape a sh:NodeShape ;
         sh:path aegis:domain ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Polecat ──────────────���───────────────────────────────────────
@@ -280,6 +324,10 @@ aegis:PolecatShape a sh:NodeShape ;
         sh:path aegis:status ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── CLI ─────────��───────────────────────────���────────────────────
@@ -297,6 +345,10 @@ aegis:CLIShape a sh:NodeShape ;
         sh:path aegis:version ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── MCPServer ────────────────���─────────────────────────────��─────
@@ -313,6 +365,10 @@ aegis:MCPServerShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:tools ;
         sh:datatype xsd:string ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Plugin ─────────��──────────────────────────��──────────────────
@@ -329,6 +385,10 @@ aegis:PluginShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:triggers ;
         sh:datatype xsd:string ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Skill ──────────────��──────────────────────────────────��──────
@@ -340,8 +400,11 @@ aegis:SkillShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:skillName ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Formula ────��─────────────────────────────────────────────────
@@ -353,8 +416,11 @@ aegis:FormulaShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:formulaName ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ════════════════════════════════════════════���══════════════════════
@@ -364,7 +430,11 @@ aegis:FormulaShape a sh:NodeShape ;
 # ── Person ────────────��──────────────────────────────────────────
 
 aegis:PersonShape a sh:NodeShape ;
-    sh:targetClass aegis:Person .
+    sh:targetClass aegis:Person ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
 
 # ── FamilyMember ─────────────────────────────────────────────────
 
@@ -374,6 +444,10 @@ aegis:FamilyMemberShape a sh:NodeShape ;
         sh:path aegis:relationship ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Overseer ─────────────────────────────────────────────────────
@@ -386,6 +460,10 @@ aegis:OverseerShape a sh:NodeShape ;
         sh:path aegis:pronouns ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── GoogleAccount ────────────────────────────────────────────────
@@ -397,8 +475,11 @@ aegis:GoogleAccountShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:email ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ══════════��═════════════════════════════��══════════════════════════
@@ -420,6 +501,10 @@ aegis:DirectiveShape a sh:NodeShape ;
         sh:path aegis:issuedBy ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Observation ─────���────────────────────────────────────────────
@@ -437,6 +522,10 @@ aegis:ObservationShape a sh:NodeShape ;
         sh:path aegis:confidence ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── DecisionRecord ──────────���────────────────────────────────��───
@@ -453,6 +542,10 @@ aegis:DecisionRecordShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:alternatives ;
         sh:datatype xsd:string ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── DesignDoc ──────────────────────────────────────��─────────────
@@ -470,6 +563,10 @@ aegis:DesignDocShape a sh:NodeShape ;
         sh:path aegis:author ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Probe ────────────────────────────────────────────────────────
@@ -481,7 +578,6 @@ aegis:ProbeShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:title ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
@@ -493,6 +589,10 @@ aegis:ProbeShape a sh:NodeShape ;
         sh:path aegis:date ;
         sh:datatype xsd:date ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ════════��═════════════════════════════════════���════════════════════
@@ -508,7 +608,6 @@ aegis:GitCommitShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:hash ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
@@ -525,6 +624,10 @@ aegis:GitCommitShape a sh:NodeShape ;
         sh:path aegis:date ;
         sh:datatype xsd:dateTime ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── GitRepo ────────���─────────────────────────────��───────────────
@@ -542,6 +645,10 @@ aegis:GitRepoShape a sh:NodeShape ;
         sh:path aegis:host ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── ConfigFile ─────────────────────────────────────────���─────────
@@ -553,13 +660,16 @@ aegis:ConfigFileShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:path ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
         sh:path aegis:service ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Script ───────���───────────────────────────────────────────────
@@ -571,7 +681,6 @@ aegis:ScriptShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:path ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
@@ -583,6 +692,10 @@ aegis:ScriptShape a sh:NodeShape ;
         sh:path aegis:schedule ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── CronJob ─────��───────────────────────────────────────��────────
@@ -594,7 +707,6 @@ aegis:CronJobShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:schedule ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
@@ -606,6 +718,10 @@ aegis:CronJobShape a sh:NodeShape ;
         sh:path aegis:host ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── AnsibleRole ────────��───────────────────────────────��─────────
@@ -617,13 +733,16 @@ aegis:AnsibleRoleShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:roleName ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
         sh:path aegis:target ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── DockerImage ──────��───────────────────────────────────────────
@@ -641,6 +760,10 @@ aegis:DockerImageShape a sh:NodeShape ;
         sh:path aegis:tag ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Bead ────��─────────────────────────────────��──────────────────
@@ -652,7 +775,6 @@ aegis:BeadShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:beadId ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
@@ -664,6 +786,10 @@ aegis:BeadShape a sh:NodeShape ;
         sh:path aegis:status ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ══════��════════════════════════════════════════════════════════════
@@ -678,6 +804,10 @@ aegis:MediaLibraryShape a sh:NodeShape ;
         sh:path aegis:platform ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Movie ────────────────────────────────────────────────────────
@@ -689,7 +819,6 @@ aegis:MovieShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:title ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
@@ -701,6 +830,10 @@ aegis:MovieShape a sh:NodeShape ;
         sh:path aegis:plexId ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── TVSeries ─────────────────────────────────────────────────────
@@ -712,13 +845,16 @@ aegis:TVSeriesShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:title ;
         sh:datatype xsd:string ;
-        sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
         sh:path aegis:plexId ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Watchlist ────────────────────────────────────────────────────
@@ -730,6 +866,10 @@ aegis:WatchlistShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:owner ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── ThemePark ────────────────────────────────────────────────────
@@ -740,6 +880,10 @@ aegis:ThemeParkShape a sh:NodeShape ;
         sh:path aegis:name ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── ThemeParkVisit ───────────────────────────────────────────────
@@ -757,6 +901,10 @@ aegis:ThemeParkVisitShape a sh:NodeShape ;
         sh:path aegis:park ;
         sh:class aegis:ThemePark ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ── Attraction ───────────────────────────────────────────────────
@@ -774,6 +922,10 @@ aegis:AttractionShape a sh:NodeShape ;
         sh:path aegis:park ;
         sh:class aegis:ThemePark ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
     ] .
 
 # ═════���══════════════════════════════════════��══════════════════════
@@ -782,6 +934,12 @@ aegis:AttractionShape a sh:NodeShape ;
 #
 # These PropertyShapes constrain relationship edges to valid
 # domain/range combinations.
+#
+# ⚠ INERT BY CONSTRUCTION — these PropertyShapes have no target and are
+# referenced by no NodeShape, so SHACL never evaluates them. They are
+# documentation, not rules. Wiring them up requires reconciling their
+# ranges against live data first (aegis-1y3q follow-up). Do not assume
+# any relationship/range constraint below is enforced.
 
 # runs_on: service/container → infrastructure host
 aegis:RunsOnShape a sh:PropertyShape ;
