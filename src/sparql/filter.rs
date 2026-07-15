@@ -108,12 +108,18 @@ fn eval_bool_function(
             _ => false,
         },
         Function::Regex => return eval_regex(store, args, row),
-        Function::IsIri | Function::IsBlank => {
+        Function::IsIri => {
             matches!(
                 args.first().and_then(|e| eval_expr(store, e, row)),
                 Some(Value::Ref(_))
             )
         }
+        // `Value` (types.rs:26) is Ref|Str|Int|Float|Bool|Bytes, and Ref is an
+        // IRI reference — the store has no blank-node representation, so this is
+        // false for every possible value rather than merely unimplemented. It was
+        // previously aliased to IsIri through a shared match arm, which made
+        // FILTER(isBlank(?s)) match every IRI in the store (aegis-t2jh).
+        Function::IsBlank => false,
         Function::IsLiteral => matches!(
             args.first().and_then(|e| eval_expr(store, e, row)),
             Some(

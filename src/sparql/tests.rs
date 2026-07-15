@@ -1040,3 +1040,24 @@ fn filter_invalid_regex_flag_errors() {
     );
     assert!(result.is_err(), "invalid REGEX flag must error");
 }
+
+#[test]
+fn is_blank_never_matches_and_is_not_is_iri() {
+    let store = test_store_with_data();
+
+    // `Value` (types.rs) is Ref|Str|Int|Float|Bool|Bytes — the store has no
+    // blank-node representation, so isBlank() is false for every term rather
+    // than merely unimplemented.
+    let blank = query(
+        &store,
+        "SELECT ?s WHERE { ?s ?p ?o . FILTER(isBlank(?s)) }",
+    )
+    .unwrap();
+    assert_eq!(blank.rows().len(), 0, "isBlank must never match");
+
+    // Discriminates against aegis-t2jh, where IsBlank shared a match arm with
+    // IsIri and so returned every IRI subject: without the split these two
+    // assertions cannot both hold.
+    let iri = query(&store, "SELECT ?s WHERE { ?s ?p ?o . FILTER(isIRI(?s)) }").unwrap();
+    assert_eq!(iri.rows().len(), 11, "isIRI must still match every subject");
+}
