@@ -53,8 +53,15 @@ pub use episode::{
     ingest_episode_with_resolution,
 };
 pub use error::{Error, Result};
+// `project` is the only way to BUILD a ProjectedGraph, so exporting page_rank +
+// ProjectedGraph without it left the typed graph API unusable from outside the
+// crate — consumers had to reach through `quipu::graph::` or fall back to the
+// `tool_project` JSON adapter. Bobbin chose the adapter (bobbin-jdlkh), which is
+// how it ended up needing `&mut Store` for a read-only PageRank: tool_project
+// takes `&mut` solely for its community-persist branch. Exporting it closes the
+// gap (aegis-nwuf / bobbin-kue26).
 pub use graph::{
-    Communities, PageRankConfig, ProjectedGraph, louvain, page_rank, persist_communities,
+    Communities, PageRankConfig, ProjectedGraph, louvain, page_rank, persist_communities, project,
     tool_project,
 };
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
