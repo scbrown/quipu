@@ -178,6 +178,30 @@ pub fn ingest_episode(
     let new_hash = episode_content_hash(episode);
     let ep_local = sanitize_iri_local(&episode.name);
     let ep_iri = format!("{base_ns}episode_{ep_local}");
+
+    // Every node must carry a non-empty type. An untyped node emits malformed
+    // Turtle — `aegis:foo ;\n rdfs:label …`, a ';' with no predicate before it —
+    // which fails to parse and 400s the WHOLE episode with a cryptic error,
+    // silently discarding every well-formed node beside it (aegis-uqd8). During a
+    // batch drain that loses entire episodes with no clue why. Fail loud and
+    // specific instead: name the offending node so the caller can fix and re-POST.
+    for node in &episode.nodes {
+        if node
+            .node_type
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty()
+        {
+            return Err(crate::error::Error::InvalidValue(format!(
+                "node '{}' has no type — every node requires a non-empty type. An \
+                 untyped node produces malformed Turtle that discards the whole \
+                 episode (aegis-uqd8).",
+                node.name
+            )));
+        }
+    }
+
     let turtle = episode_to_turtle(episode, base_ns, &new_hash);
 
     // SHACL validation gates, run before any write — and before the idempotency

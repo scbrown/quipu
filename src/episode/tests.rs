@@ -674,3 +674,29 @@ fn confidence_participates_in_content_hash() {
     );
     assert_ne!(episode_content_hash(&a), episode_content_hash(&b));
 }
+
+#[test]
+fn untyped_node_is_rejected_with_a_clear_error_not_a_turtle_400() {
+    // aegis-uqd8: an untyped node used to emit malformed Turtle ("aegis:foo ;
+    // rdfs:label …") and 400 the WHOLE episode with a cryptic parse error,
+    // discarding every well-formed node beside it. It must now fail loud and
+    // specific, naming the offending node — and NOT ingest anything.
+    let mut store = Store::open_in_memory().unwrap();
+    let ep = parse_episode(
+        r#"{
+        "name": "uqd8-untyped",
+        "source": "test",
+        "nodes": [
+            {"name": "well-typed-node", "type": "DatabaseService"},
+            {"name": "the-untyped-one"}
+        ]
+    }"#,
+    );
+    let err = ingest_episode(&mut store, &ep, "2026-01-02T00:00:00Z", TEST_BASE_NS)
+        .expect_err("an untyped node must be rejected");
+    let msg = err.to_string();
+    // Diagnosable: names the node and the cause, not a raw Turtle parse error.
+    assert!(msg.contains("the-untyped-one"), "error must name the untyped node: {msg}");
+    assert!(msg.contains("type"), "error must explain it is a type problem: {msg}");
+    assert!(!msg.to_lowercase().contains("parse"), "must NOT be a cryptic Turtle parse error: {msg}");
+}
