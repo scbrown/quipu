@@ -715,3 +715,52 @@ fn retract_episode_unknown_is_noop() {
     assert_eq!(tx_id, crate::episode::NOOP_TX);
     assert!(retracted.is_empty());
 }
+
+#[test]
+fn named_graph_migration_is_additive_and_defaults_existing_facts_to_root() {
+    // aegis-g1al / #36. A store created before the `g` column must migrate
+    // additively: existing facts land in g=0 (ROOT, source of truth), un-mutated,
+    // and a fresh store has the column from the start. No table rebuild.
+    use rusqlite::Connection;
+
+    // Simulate an OLD store: facts table WITHOUT the g column, with a fact in it.
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE terms (id INTEGER PRIMARY KEY, iri TEXT NOT NULL UNIQUE);
+         CREATE TABLE transactions (id INTEGER PRIMARY KEY, ts TEXT);
+         CREATE TABLE facts (e INTEGER NOT NULL, a INTEGER NOT NULL, v BLOB NOT NULL,
+             tx INTEGER NOT NULL, valid_from TEXT NOT NULL, valid_to TEXT,
+             op INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (e,a,v,tx));
+         INSERT INTO transactions (id, ts) VALUES (1, '2026-01-01T00:00:00Z');
+         INSERT INTO facts (e,a,v,tx,valid_from) VALUES (10, 20, X'30', 1, '2026-01-01T00:00:00Z');",
+    )
+    .unwrap();
+
+    // Pre-migration: no g column.
+    let has_g_before: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('facts') WHERE name='g'")
+        .unwrap()
+        .exists([])
+        .unwrap();
+    assert!(!has_g_before, "precondition: old store has no g column");
+
+    Store::migrate_named_graphs(&conn).unwrap();
+
+    // Post-migration: g exists, the existing fact survived, and it's in ROOT (0).
+    let has_g_after: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('facts') WHERE name='g'")
+        .unwrap()
+        .exists([])
+        .unwrap();
+    assert!(has_g_after, "migration must add the g column");
+    let (cnt, g): (i64, i64) = conn
+        .query_row("SELECT COUNT(*), MIN(g) FROM facts WHERE e=10 AND a=20", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(cnt, 1, "existing fact must survive the migration (no data loss)");
+    assert_eq!(g, 0, "existing facts must default to ROOT (g=0), un-mutated");
+
+    // Idempotent: running it again is a no-op, not an error.
+    Store::migrate_named_graphs(&conn).unwrap();
+}

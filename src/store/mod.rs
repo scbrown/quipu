@@ -120,6 +120,7 @@ impl Store {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(INIT_SQL)?;
         conn.execute_batch(VECTORS_SQL)?;
+        Self::migrate_named_graphs(&conn)?;
         Ok(Self {
             conn,
             embedding_provider: None,
@@ -241,6 +242,26 @@ impl Store {
     // -- Term dictionary --
 
     /// Intern an IRI, returning its integer id.
+    /// Additive migration for named-graph support (aegis-g1al / #36). A store
+    /// created before the `g` column existed has a `facts` table without it;
+    /// `CREATE TABLE IF NOT EXISTS` is a no-op there, so add the column here.
+    /// Idempotent: it checks `PRAGMA table_info` and only ALTERs if `g` is
+    /// absent. Existing rows default to g=0 (ROOT), so all prior data lands in
+    /// the source-of-truth graph un-mutated and a no-dataset query still sees
+    /// exactly what it saw before — the migration changes no query's meaning.
+    fn migrate_named_graphs(conn: &Connection) -> Result<()> {
+        let has_g: bool = conn
+            .prepare("SELECT 1 FROM pragma_table_info('facts') WHERE name = 'g'")?
+            .exists([])?;
+        if !has_g {
+            conn.execute_batch(
+                "ALTER TABLE facts ADD COLUMN g INTEGER NOT NULL DEFAULT 0;
+                 CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);",
+            )?;
+        }
+        Ok(())
+    }
+
     pub fn intern(&self, iri: &str) -> Result<i64> {
         self.conn.execute(
             "INSERT OR IGNORE INTO terms (iri) VALUES (?1)",

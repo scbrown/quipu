@@ -16,6 +16,14 @@ CREATE TABLE IF NOT EXISTS facts (
     e         INTEGER NOT NULL,
     a         INTEGER NOT NULL,
     v         BLOB    NOT NULL,
+    -- Named graph (aegis-g1al / quipu #36). g=0 is the reserved ROOT / default
+    -- graph (the source of truth, per Stiwi's sign-off); a named-graph OVERLAY
+    -- uses the term id of its graph IRI (term ids are rowids, always >= 1, so 0
+    -- never collides). g is NOT in the PK: each graph-write is its own tx, so a
+    -- base fact and an overlay fact for the same (e,a,v) already coexist as
+    -- separate rows keyed by tx — g just denormalizes tx->graph for query-time
+    -- dataset filtering. No table rebuild needed; the column is purely additive.
+    g         INTEGER NOT NULL DEFAULT 0,
     tx        INTEGER NOT NULL REFERENCES transactions(id),
     valid_from TEXT   NOT NULL,
     valid_to   TEXT,
@@ -28,6 +36,8 @@ CREATE INDEX IF NOT EXISTS idx_eavt ON facts(e, a, v, valid_from);
 CREATE INDEX IF NOT EXISTS idx_aevt ON facts(a, e, v, valid_from);
 CREATE INDEX IF NOT EXISTS idx_vaet ON facts(v, a, e, valid_from);
 CREATE INDEX IF NOT EXISTS idx_tx   ON facts(tx);
+-- Graph-scoped scans: a dataset-filtered query reads only the chosen graphs.
+CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);
 
 -- Persistent SHACL shape storage for auto-validation on writes.
 CREATE TABLE IF NOT EXISTS shapes (
