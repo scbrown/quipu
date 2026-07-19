@@ -249,16 +249,22 @@ impl Store {
     /// absent. Existing rows default to g=0 (ROOT), so all prior data lands in
     /// the source-of-truth graph un-mutated and a no-dataset query still sees
     /// exactly what it saw before — the migration changes no query's meaning.
+    ///
+    /// It also owns the `idx_geav` graph index (NOT `schema::INIT_SQL`), and
+    /// creates it unconditionally for both fresh and just-migrated stores.
+    /// INIT_SQL runs first and against pre-quad stores too, so a
+    /// `CREATE INDEX ... ON facts(g, ...)` there hard-fails with
+    /// `no such column: g` before this ALTER can add the column (aegis-akb8:
+    /// caught by a scratch-copy smoke test before a blind swap would have
+    /// crash-looped the live graph on open).
     fn migrate_named_graphs(conn: &Connection) -> Result<()> {
         let has_g: bool = conn
             .prepare("SELECT 1 FROM pragma_table_info('facts') WHERE name = 'g'")?
             .exists([])?;
         if !has_g {
-            conn.execute_batch(
-                "ALTER TABLE facts ADD COLUMN g INTEGER NOT NULL DEFAULT 0;
-                 CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);",
-            )?;
+            conn.execute_batch("ALTER TABLE facts ADD COLUMN g INTEGER NOT NULL DEFAULT 0;")?;
         }
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);")?;
         Ok(())
     }
 

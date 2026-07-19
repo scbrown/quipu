@@ -766,6 +766,60 @@ fn named_graph_migration_is_additive_and_defaults_existing_facts_to_root() {
 }
 
 #[test]
+fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
+    // Regression for aegis-akb8. The test above calls migrate_named_graphs()
+    // DIRECTLY, so it never runs schema::INIT_SQL first — and INIT_SQL is where
+    // the real bug lived: its `CREATE INDEX ... ON facts(g, ...)` executed
+    // against a pre-quad `facts` table (CREATE TABLE IF NOT EXISTS is a no-op)
+    // and hard-failed with `no such column: g` BEFORE the migration's ALTER
+    // could add the column. Store::open crash-looped on the live db; the direct
+    // test stayed green. This exercises the actual open() sequence on disk.
+    use rusqlite::Connection;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("prequad.db");
+    let path_str = path.to_str().unwrap();
+
+    // A store as it existed before #36: facts table WITHOUT g, holding a fact.
+    {
+        let conn = Connection::open(path_str).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE terms (id INTEGER PRIMARY KEY, iri TEXT NOT NULL UNIQUE);
+             CREATE TABLE transactions (id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL, actor TEXT, source TEXT);
+             CREATE TABLE facts (e INTEGER NOT NULL, a INTEGER NOT NULL, v BLOB NOT NULL,
+                 tx INTEGER NOT NULL REFERENCES transactions(id), valid_from TEXT NOT NULL,
+                 valid_to TEXT, op INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (e,a,v,tx));
+             INSERT INTO transactions (id, timestamp) VALUES (1, '2026-01-01T00:00:00Z');
+             INSERT INTO facts (e,a,v,tx,valid_from) VALUES (10, 20, X'30', 1, '2026-01-01T00:00:00Z');",
+        )
+        .unwrap();
+    }
+
+    // THE regression: this used to return `no such column: g` and abort open.
+    let store =
+        Store::open(path_str).expect("open() must migrate a pre-quad store, not crash on idx_geav");
+
+    // g column present, idx_geav present, and the pre-existing fact survived in ROOT.
+    let has_idx: bool = store
+        .conn
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_geav'")
+        .unwrap()
+        .exists([])
+        .unwrap();
+    assert!(has_idx, "idx_geav must be created when open() migrates a pre-quad store");
+    let (cnt, g): (i64, i64) = store
+        .conn
+        .query_row("SELECT COUNT(*), MIN(g) FROM facts WHERE e=10 AND a=20", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(cnt, 1, "existing fact must survive the migration (no data loss)");
+    assert_eq!(g, 0, "existing fact must land in ROOT (g=0), un-mutated");
+
+    // Idempotent through the real path: re-opening the migrated store is clean.
+    Store::open(path_str).expect("re-open of an already-migrated store must be a no-op");
+}
+
+#[test]
 fn overlay_writes_do_not_touch_root() {
     // aegis-g1al / #36, Stiwi's core requirement: an overlay extends the base
     // WITHOUT mutating it. Writing the same (e,a,v) to ROOT and to an overlay

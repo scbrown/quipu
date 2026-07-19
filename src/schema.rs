@@ -36,8 +36,11 @@ CREATE INDEX IF NOT EXISTS idx_eavt ON facts(e, a, v, valid_from);
 CREATE INDEX IF NOT EXISTS idx_aevt ON facts(a, e, v, valid_from);
 CREATE INDEX IF NOT EXISTS idx_vaet ON facts(v, a, e, valid_from);
 CREATE INDEX IF NOT EXISTS idx_tx   ON facts(tx);
--- Graph-scoped scans: a dataset-filtered query reads only the chosen graphs.
-CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);
+-- NOTE: the graph-scoped index idx_geav ON facts(g, ...) is created in
+-- Store::migrate_named_graphs, NOT here. INIT_SQL runs against pre-quad stores
+-- too (CREATE TABLE IF NOT EXISTS is a no-op there), and a CREATE INDEX on the
+-- not-yet-added `g` column would hard-fail with `no such column: g` before the
+-- migration's ALTER could add it. The migration owns both the ALTER and the index.
 
 -- Persistent SHACL shape storage for auto-validation on writes.
 CREATE TABLE IF NOT EXISTS shapes (
