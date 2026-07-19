@@ -122,6 +122,165 @@ fn json_to_value(store: &Store, v: &JsonValue) -> Result<crate::types::Value> {
     ))
 }
 
+/// FNV-1a, deterministic across processes and Rust versions (unlike
+/// `DefaultHasher`) — the evidence hash is persisted/compared, so it must be
+/// stable. Same construction as `episode::fnv1a_64`.
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// Reject an IRI that could break out of an inlined `<...>` and inject SPARQL.
+fn guard_iri(iri: &str) -> Result<()> {
+    if iri
+        .chars()
+        .any(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '{' | '}' | '\\'))
+    {
+        return Err(Error::InvalidValue(
+            "IRI must be bare (no whitespace or < > \" { } \\)".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Run a SPARQL ASK over the committed graph at `ctx`, returning its boolean.
+fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
+    match sparql::query_temporal(store, ask, ctx)? {
+        QueryResult::Ask(b) => Ok(b),
+        _ => Err(Error::InvalidValue(
+            "claim/probe must be a SPARQL ASK query".into(),
+        )),
+    }
+}
+
+/// Fetch a single string-literal value of `<subject> <predicate> ?o` from the
+/// committed graph (used to read a Policy's stored claim / evidence probe).
+fn fetch_scalar(store: &Store, subject: &str, predicate: &str) -> Result<Option<String>> {
+    guard_iri(subject)?;
+    guard_iri(predicate)?;
+    let q = format!("SELECT ?o WHERE {{ <{subject}> <{predicate}> ?o }} LIMIT 1");
+    match sparql::query_temporal(store, &q, &TemporalContext::default())? {
+        QueryResult::Select { rows, .. } => Ok(rows
+            .first()
+            .and_then(|r| r.get("o"))
+            .and_then(|v| match v {
+                crate::types::Value::Str(s) => Some(s.clone()),
+                _ => None,
+            })),
+        _ => Ok(None),
+    }
+}
+
+/// MCP tool: `quipu_policy_check` -- committed-tier evaluation of a governance
+/// Policy over the graph of record (the loom's Phase-1 runtime).
+///
+/// Given a Policy (its `aegis:claim` = a SPARQL ASK, optionally with a `$target`
+/// placeholder) and a target IRI, evaluates the claim over the committed graph
+/// and returns a **Verdict**: `outcome` ∈ {satisfied | unsatisfied | unknown},
+/// bound to a reproducible `evidence_hash` of (predicate, target, valid_at,
+/// bound claim).
+///
+/// This is the deterministic, reproducible half: any verifier re-runs the same
+/// ASK over the same committed evidence and MUST get the same verdict — checked,
+/// not trusted. `unknown` (no evidence yet, distinct from unsatisfied) is
+/// returned when the policy carries an `aegis:evidenceProbe` (an ASK for "does
+/// the evidence exist?") that is false. **Signing + persistence as a stored,
+/// bitemporal Verdict fact is Phase 0** (verifier registry + keys); this returns
+/// the evaluated verdict UNSIGNED (`"signed": false`).
+///
+/// Input: `{ "policy": "<iri>", "target": "<iri>", "valid_at"?: "..." }` or inline
+/// `{ "claim": "<ASK>", "target": "<iri>", "predicate_id"?: "...",
+///    "evidence_probe"?: "<ASK>" }`.
+pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let target = input
+        .get("target")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'target' parameter".into()))?;
+    guard_iri(target)?;
+
+    let (claim, predicate_id, evidence_probe) =
+        if let Some(claim) = input.get("claim").and_then(JsonValue::as_str) {
+            (
+                claim.to_string(),
+                input
+                    .get("predicate_id")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or("inline")
+                    .to_string(),
+                input
+                    .get("evidence_probe")
+                    .and_then(JsonValue::as_str)
+                    .map(std::string::ToString::to_string),
+            )
+        } else if let Some(policy) = input.get("policy").and_then(JsonValue::as_str) {
+            let claim = fetch_scalar(store, policy, "http://aegis.gastown.local/ontology/claim")?
+                .ok_or_else(|| {
+                    Error::InvalidValue(format!("policy '{policy}' has no aegis:claim"))
+                })?;
+            let probe =
+                fetch_scalar(store, policy, "http://aegis.gastown.local/ontology/evidenceProbe")?;
+            (claim, policy.to_string(), probe)
+        } else {
+            return Err(Error::InvalidValue(
+                "provide either 'policy' or inline 'claim'".into(),
+            ));
+        };
+
+    let ctx = TemporalContext {
+        valid_at: input
+            .get("valid_at")
+            .and_then(JsonValue::as_str)
+            .map(std::string::ToString::to_string),
+        as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+    };
+
+    let bound_claim = claim.replace("$target", &format!("<{target}>"));
+    let outcome = match &evidence_probe {
+        Some(probe) => {
+            let bound_probe = probe.replace("$target", &format!("<{target}>"));
+            if !run_ask(store, &bound_probe, &ctx)? {
+                "unknown"
+            } else if run_ask(store, &bound_claim, &ctx)? {
+                "satisfied"
+            } else {
+                "unsatisfied"
+            }
+        }
+        None => {
+            if run_ask(store, &bound_claim, &ctx)? {
+                "satisfied"
+            } else {
+                "unsatisfied"
+            }
+        }
+    };
+
+    let evidence_hash = format!(
+        "fnv1a:{:016x}",
+        fnv1a_64(
+            format!(
+                "{predicate_id}|{target}|{}|{bound_claim}",
+                ctx.valid_at.as_deref().unwrap_or("")
+            )
+            .as_bytes()
+        )
+    );
+
+    Ok(serde_json::json!({
+        "predicate_id": predicate_id,
+        "target_ref": target,
+        "outcome": outcome,
+        "evidence_hash": evidence_hash,
+        "tier": "committed",
+        "verifier": "quipu",
+        "signed": false
+    }))
+}
+
 /// MCP tool: `quipu_cooccurrence` -- deterministic, auditable work-item
 /// co-occurrence (quipu#37). Given a work-item (`Bead`) IRI, returns the other
 /// work-items that share at least one touched code entity, via the provenance

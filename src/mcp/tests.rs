@@ -1494,3 +1494,49 @@ fn test_cooccurrence_deterministic_set_overlap() {
     let bad = serde_json::json!({ "work_item": "x> } INSERT {" });
     assert!(super::tool_cooccurrence(&store, &bad).is_err());
 }
+
+#[test]
+fn test_policy_check_committed_tier_evaluation() {
+    // The loom's committed-tier eval: a Policy claim (ASK) over the graph of
+    // record yields a Verdict {satisfied|unsatisfied|unknown}, reproducibly.
+    let mut store = Store::open_in_memory().unwrap();
+    let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
+        a:sym1 a a:CodeSymbol ; a:hasTest a:test1 .\n\
+        a:sym2 a a:CodeSymbol .\n";
+    crate::rdf::ingest_rdf(&mut store, ttl.as_bytes(), oxrdfio::RdfFormat::Turtle,
+        None, "2026-01-01T00:00:00Z", None, None).unwrap();
+
+    let claim = "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a:hasTest ?t }";
+    // sym1 has a test -> satisfied
+    let r1 = super::tool_policy_check(&store, &serde_json::json!({
+        "claim": claim, "target": "http://aegis.gastown.local/ontology/sym1", "predicate_id": "has-test"
+    })).unwrap();
+    assert_eq!(r1["outcome"], "satisfied", "{r1:#?}");
+    assert_eq!(r1["signed"], false);
+    assert!(r1["evidence_hash"].as_str().unwrap().starts_with("fnv1a:"));
+
+    // sym2 has no test -> unsatisfied
+    let r2 = super::tool_policy_check(&store, &serde_json::json!({
+        "claim": claim, "target": "http://aegis.gastown.local/ontology/sym2", "predicate_id": "has-test"
+    })).unwrap();
+    assert_eq!(r2["outcome"], "unsatisfied", "{r2:#?}");
+
+    // unknown: an evidence probe that's false (target isn't even a CodeSymbol -> no evidence)
+    let probe = "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a a:CodeSymbol }";
+    let r3 = super::tool_policy_check(&store, &serde_json::json!({
+        "claim": claim, "evidence_probe": probe,
+        "target": "http://aegis.gastown.local/ontology/nothere", "predicate_id": "has-test"
+    })).unwrap();
+    assert_eq!(r3["outcome"], "unknown", "no-evidence must be unknown, not unsatisfied: {r3:#?}");
+
+    // reproducible: same inputs -> same evidence hash
+    let r1b = super::tool_policy_check(&store, &serde_json::json!({
+        "claim": claim, "target": "http://aegis.gastown.local/ontology/sym1", "predicate_id": "has-test"
+    })).unwrap();
+    assert_eq!(r1["evidence_hash"], r1b["evidence_hash"], "verdict must be reproducible");
+
+    // injection guard on target
+    assert!(super::tool_policy_check(&store, &serde_json::json!({
+        "claim": claim, "target": "x> } INSERT {"
+    })).is_err());
+}
