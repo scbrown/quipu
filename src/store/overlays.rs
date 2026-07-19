@@ -184,20 +184,25 @@ impl Store {
     pub fn compose_view(&self, overlay_g: i64) -> Result<Vec<Fact>> {
         let root_g = self.overlay_parent(overlay_g)?;
         // (1) every live overlay assertion (shadows root); UNION (2) live root
-        // assertions the overlay neither tombstones nor re-asserts.
+        // assertions the overlay neither tombstones nor re-asserts. The outer
+        // GROUP BY e,a,v collapses a triple that was re-asserted across several
+        // transactions (multiple current op=1 rows) to ONE composed triple —
+        // the same dedup the SPARQL BGP path applies (GH#13). Without it the
+        // composed view repeats every re-asserted base fact once per assertion.
         let mut stmt = self.conn.prepare(
-            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
-             WHERE g = ?1 AND op = 1 AND valid_to IS NULL \
-             UNION ALL \
-             SELECT r.e, r.a, r.v, r.tx, r.valid_from, r.valid_to, r.op FROM facts r \
-             WHERE r.g = ?2 AND r.op = 1 AND r.valid_to IS NULL \
-               AND NOT EXISTS ( \
-                 SELECT 1 FROM facts t WHERE t.g = ?1 AND t.op = 2 AND t.valid_to IS NULL \
-                   AND t.e = r.e AND t.a = r.a AND t.v = r.v) \
-               AND NOT EXISTS ( \
-                 SELECT 1 FROM facts o WHERE o.g = ?1 AND o.op = 1 AND o.valid_to IS NULL \
-                   AND o.e = r.e AND o.a = r.a AND o.v = r.v) \
-             ORDER BY e, a",
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM ( \
+               SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
+               WHERE g = ?1 AND op = 1 AND valid_to IS NULL \
+               UNION ALL \
+               SELECT r.e, r.a, r.v, r.tx, r.valid_from, r.valid_to, r.op FROM facts r \
+               WHERE r.g = ?2 AND r.op = 1 AND r.valid_to IS NULL \
+                 AND NOT EXISTS ( \
+                   SELECT 1 FROM facts t WHERE t.g = ?1 AND t.op = 2 AND t.valid_to IS NULL \
+                     AND t.e = r.e AND t.a = r.a AND t.v = r.v) \
+                 AND NOT EXISTS ( \
+                   SELECT 1 FROM facts o WHERE o.g = ?1 AND o.op = 1 AND o.valid_to IS NULL \
+                     AND o.e = r.e AND o.a = r.a AND o.v = r.v) \
+             ) GROUP BY e, a, v ORDER BY e, a",
         )?;
         Self::collect_facts(&mut stmt, params![overlay_g, root_g])
     }

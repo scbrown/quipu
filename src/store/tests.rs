@@ -960,3 +960,38 @@ fn overlay_writes_do_not_touch_root() {
     assert_eq!(root_after, 1, "overlay retract must NOT close the ROOT fact (base un-mutated)");
     assert_eq!(ov_after, 0, "overlay retract closes only its own graph's assertion");
 }
+
+#[test]
+fn compose_view_dedupes_reasserted_root_facts() {
+    // Regression (found in the 69co live deploy): a base fact re-asserted across
+    // transactions leaves multiple current op=1 rows; compose_view must return
+    // the composed triple ONCE, not once per assertion.
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://ex/s").unwrap();
+    let a = store.intern("http://ex/p").unwrap();
+    store
+        .transact(
+            &[Datum { entity: e, attribute: a, value: Value::Str("K".into()),
+                valid_from: "2026-01-01T00:00:00Z".into(), valid_to: None, op: Op::Assert }],
+            "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    // Force a DUPLICATE current row in ROOT (as ingest/history produce in the
+    // live db), bypassing transact's idempotency.
+    let vb = Value::Str("K".into()).to_bytes();
+    store.conn.execute(
+        "INSERT INTO transactions (timestamp) VALUES ('2026-01-02T00:00:00Z')", []).unwrap();
+    let tx2 = store.conn.last_insert_rowid();
+    store.conn.execute(
+        "INSERT INTO facts (e,a,v,g,tx,valid_from,valid_to,op) VALUES (?1,?2,?3,0,?4,'2026-01-02T00:00:00Z',NULL,1)",
+        rusqlite::params![e, a, vb, tx2]).unwrap();
+    let dup_count: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL",
+        [e, a], |r| r.get(0)).unwrap();
+    assert_eq!(dup_count, 2, "precondition: two current rows for the same triple");
+
+    let ov = store.overlay_create("http://ex/g/t", 0).unwrap();
+    let view = store.compose_view(ov).unwrap();
+    let matches = view.iter().filter(|f| f.entity == e && f.attribute == a).count();
+    assert_eq!(matches, 1, "compose must dedupe the re-asserted base fact to one triple");
+}
