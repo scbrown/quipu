@@ -92,6 +92,124 @@ pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bo
     })
 }
 
+/// Parse a JSON object-position value into a stored `Value`. Accepts a bare
+/// string (treated as a plain literal) or a tagged object
+/// `{iri|str|int|float|bool: ...}`. IRIs are interned to a `Value::Ref`.
+fn json_to_value(store: &Store, v: &JsonValue) -> Result<crate::types::Value> {
+    use crate::types::Value;
+    if let Some(s) = v.as_str() {
+        return Ok(Value::Str(s.to_string()));
+    }
+    if let Some(o) = v.as_object() {
+        if let Some(iri) = o.get("iri").and_then(JsonValue::as_str) {
+            return Ok(Value::Ref(store.intern(iri)?));
+        }
+        if let Some(s) = o.get("str").and_then(JsonValue::as_str) {
+            return Ok(Value::Str(s.to_string()));
+        }
+        if let Some(n) = o.get("int").and_then(JsonValue::as_i64) {
+            return Ok(Value::Int(n));
+        }
+        if let Some(f) = o.get("float").and_then(JsonValue::as_f64) {
+            return Ok(Value::Float(f));
+        }
+        if let Some(b) = o.get("bool").and_then(JsonValue::as_bool) {
+            return Ok(Value::Bool(b));
+        }
+    }
+    Err(Error::InvalidValue(
+        "object must be a string literal or a tagged {iri|str|int|float|bool: ...}".into(),
+    ))
+}
+
+/// MCP tool: `quipu_overlay_create` -- register an overlay-class named graph
+/// bound (bind-once) to a committed parent branch (aegis-g1al / #36).
+///
+/// Input: `{ "overlay": "<iri>", "parent_branch": "<iri>" | null }` (null/absent
+/// → ROOT). Output: `{ "g": N, "parent_branch": M }`.
+pub fn tool_overlay_create(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let overlay = input
+        .get("overlay")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'overlay' parameter".into()))?;
+    let parent_branch = match input.get("parent_branch").and_then(JsonValue::as_str) {
+        Some(iri) => store.intern(iri)?,
+        None => 0,
+    };
+    let g = store.overlay_create(overlay, parent_branch)?;
+    Ok(serde_json::json!({ "g": g, "parent_branch": parent_branch }))
+}
+
+/// MCP tool: `quipu_overlay_write` -- write one overlay primitive.
+///
+/// Input: `{ "overlay": "<iri>", "op": "assert"|"retract"|"tombstone",
+///           "subject": "<iri>", "predicate": "<iri>", "object": <value> }`.
+/// Output: `{ "tx_id": N }`.
+pub fn tool_overlay_write(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    use crate::types::Op;
+    let overlay_iri = input
+        .get("overlay")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'overlay' parameter".into()))?;
+    let op = match input.get("op").and_then(JsonValue::as_str) {
+        Some("assert") => Op::Assert,
+        Some("retract") => Op::Retract,
+        Some("tombstone") => Op::Tombstone,
+        _ => {
+            return Err(Error::InvalidValue(
+                "'op' must be one of: assert | retract | tombstone".into(),
+            ))
+        }
+    };
+    let subject = input
+        .get("subject")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'subject' parameter".into()))?;
+    let predicate = input
+        .get("predicate")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'predicate' parameter".into()))?;
+    let object = input
+        .get("object")
+        .ok_or_else(|| Error::InvalidValue("missing 'object' parameter".into()))?;
+
+    let overlay_g = store.intern(overlay_iri)?;
+    let e = store.intern(subject)?;
+    let a = store.intern(predicate)?;
+    let value = json_to_value(store, object)?;
+    let now = crate::time::now_iso();
+    let ts = input.get("timestamp").and_then(JsonValue::as_str).unwrap_or(&now);
+    let tx_id = store.overlay_write(overlay_g, op, e, a, value, ts)?;
+    Ok(serde_json::json!({ "tx_id": tx_id }))
+}
+
+/// MCP tool: `quipu_overlay_compose` -- resolve an overlay's composed view over
+/// `[overlay > parent-branch-root]` (asserted-and-not-tombstoned, nearest wins).
+///
+/// Input: `{ "overlay": "<iri>" }`. Output:
+/// `{ "triples": [{subject, predicate, object}], "count": N }`.
+pub fn tool_overlay_compose(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let overlay_iri = input
+        .get("overlay")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'overlay' parameter".into()))?;
+    let overlay_g = store
+        .lookup(overlay_iri)?
+        .ok_or_else(|| Error::InvalidValue(format!("overlay '{overlay_iri}' is not interned")))?;
+    let facts = store.compose_view(overlay_g)?;
+    let triples: Vec<JsonValue> = facts
+        .iter()
+        .map(|f| {
+            serde_json::json!({
+                "subject": store.resolve(f.entity).unwrap_or_else(|_| format!("ref:{}", f.entity)),
+                "predicate": store.resolve(f.attribute).unwrap_or_else(|_| format!("ref:{}", f.attribute)),
+                "object": value_to_json(store, &f.value),
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({ "count": triples.len(), "triples": triples }))
+}
+
 /// MCP tool: `quipu_query` -- Execute a SPARQL query.
 ///
 /// Input: `{ "query": "SELECT/ASK/CONSTRUCT/DESCRIBE ...", "valid_at": "...", "tx": N }`

@@ -42,6 +42,23 @@ CREATE INDEX IF NOT EXISTS idx_tx   ON facts(tx);
 -- not-yet-added `g` column would hard-fail with `no such column: g` before the
 -- migration's ALTER could add it. The migration owns both the ALTER and the index.
 
+-- Named-graph registry (aegis-g1al / quipu #36). One row per graph, keyed by
+-- the graph's term id (g). g=0 is the reserved ROOT / default committed graph.
+-- `class` is the enforced committed|overlay invariant: overlay-class graphs are
+-- transient, compose-only, and excluded from bitemporal/SHACL/promotion.
+-- `parent_branch` binds an overlay to its committed parent branch AT CREATE
+-- (bind-once) — compose resolves an overlay against exactly this root, never a
+-- blanket union; NULL for committed graphs.
+CREATE TABLE IF NOT EXISTS graphs (
+    g             INTEGER PRIMARY KEY,
+    class         TEXT    NOT NULL CHECK (class IN ('committed','overlay')),
+    parent_branch INTEGER REFERENCES graphs(g),
+    created_at    TEXT    NOT NULL
+);
+-- Seed the ROOT graph (g=0, committed, self-rooted). Idempotent.
+INSERT OR IGNORE INTO graphs (g, class, parent_branch, created_at)
+    VALUES (0, 'committed', NULL, '1970-01-01T00:00:00Z');
+
 -- Persistent SHACL shape storage for auto-validation on writes.
 CREATE TABLE IF NOT EXISTS shapes (
     name      TEXT PRIMARY KEY,

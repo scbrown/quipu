@@ -138,6 +138,9 @@ impl Store {
                     match d.op {
                         Op::Assert => asserts.push(d.clone()),
                         Op::Retract => retracts.push(d.clone()),
+                        // Overlay view-markers are transient/overlay-class and
+                        // are excluded from the committed reactive stream (#36).
+                        Op::Tombstone => {}
                     }
                 }
                 let delta = Delta {
@@ -440,7 +443,7 @@ impl Store {
 
     // -- Internal --
 
-    fn collect_facts(
+    pub(crate) fn collect_facts(
         stmt: &mut rusqlite::Statement<'_>,
         params: impl rusqlite::Params,
     ) -> Result<Vec<Fact>> {

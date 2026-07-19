@@ -120,7 +120,7 @@ fn eval_single_edge(
     let Some(pred_id) = store.lookup(pred_iri)? else {
         return Ok(vec![]);
     };
-    let mut conds = vec!["a = ?1".to_string(), "op = 1".to_string()];
+    let mut conds = vec!["a = ?1".to_string(), "op = 1".to_string(), "g = 0".to_string()];
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(pred_id)];
     if let Some(s) = fixed_subj {
         conds.push(format!("e = ?{}", params.len() + 1));
@@ -271,7 +271,7 @@ fn eval_negated_set(
         .iter()
         .filter_map(|n| store.lookup(n.as_str()).ok().flatten())
         .collect();
-    let mut conds = vec!["op = 1".to_string()];
+    let mut conds = vec!["op = 1".to_string(), "g = 0".to_string()];
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     if let Some(s) = fixed_subj {
         conds.push(format!("e = ?{}", params.len() + 1));
@@ -324,7 +324,7 @@ fn query_pairs(
 }
 
 fn all_entity_ids(store: &Store, ctx: &TemporalContext) -> Result<Vec<i64>> {
-    let mut conds = vec!["op = 1".to_string()];
+    let mut conds = vec!["op = 1".to_string(), "g = 0".to_string()];
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     add_temporal_conditions(&mut conds, &mut params, ctx);
     let sql = format!("SELECT DISTINCT e FROM facts WHERE {}", conds.join(" AND "));

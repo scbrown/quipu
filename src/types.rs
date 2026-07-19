@@ -6,6 +6,14 @@ pub enum Op {
     Retract = 0,
     /// Assert a new fact.
     Assert = 1,
+    /// Tombstone: mark a specific `(e,a,v)` triple ABSENT in an overlay's
+    /// composed view (aegis-g1al / quipu #36). Unlike Retract — which closes an
+    /// assertion in the same graph — a Tombstone hides a triple that lives in a
+    /// LOWER layer (the parent-branch root) without mutating it. Meaningful only
+    /// inside an overlay graph; the composed view excludes any root triple the
+    /// overlay tombstones. Overlay-class, so it never reaches the committed
+    /// bitemporal/reactive paths.
+    Tombstone = 2,
 }
 
 impl Op {
@@ -13,6 +21,7 @@ impl Op {
         match v {
             0 => Some(Self::Retract),
             1 => Some(Self::Assert),
+            2 => Some(Self::Tombstone),
             _ => None,
         }
     }

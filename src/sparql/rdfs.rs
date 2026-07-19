@@ -43,7 +43,7 @@ pub fn collect_class_and_subclasses(store: &Store, class_iri: &str) -> Result<Ve
             // Find all X where X rdfs:subClassOf super_id (as a Ref value)
             let target_bytes = Value::Ref(*super_id).to_bytes();
             let mut stmt = store.prepare(
-                "SELECT e FROM facts WHERE a = ?1 AND v = ?2 AND op = 1 AND valid_to IS NULL",
+                "SELECT e FROM facts WHERE a = ?1 AND v = ?2 AND op = 1 AND g = 0 AND valid_to IS NULL",
             )?;
             let mut rows = stmt.query(rusqlite::params![subclass_pred, target_bytes])?;
             while let Some(row) = rows.next()? {
@@ -100,6 +100,7 @@ pub fn eval_type_pattern_with_subclasses(
             params_vec.push(Box::new(sid));
         }
         conditions.push("op = 1".to_string());
+        conditions.push("g = 0".to_string()); // committed reads are ROOT-scoped (#36)
         if let Some(vt) = &ctx.valid_at {
             conditions.push(format!("valid_from <= ?{}", params_vec.len() + 1));
             params_vec.push(Box::new(vt.clone()));

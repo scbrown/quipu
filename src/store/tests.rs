@@ -820,6 +820,110 @@ fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
 }
 
 #[test]
+fn overlay_create_binds_once_and_rejects_rebind() {
+    let store = Store::open_in_memory().unwrap();
+    let a = store.intern("http://ex/graph/a").unwrap();
+    // create over ROOT (g=0) is fine; idempotent on identical parent.
+    let g1 = store.overlay_create("http://ex/graph/a", 0).unwrap();
+    let g2 = store.overlay_create("http://ex/graph/a", 0).unwrap();
+    assert_eq!(g1, a);
+    assert_eq!(g1, g2, "re-create with same parent is idempotent");
+    assert_eq!(store.graph_class(g1).unwrap().as_deref(), Some("overlay"));
+    assert_eq!(store.overlay_parent(g1).unwrap(), 0);
+    // a committed branch to rebind against
+    let branch = store.intern("http://ex/graph/branch").unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO graphs (g, class, parent_branch, created_at) VALUES (?1,'committed',NULL,'t')",
+            [branch],
+        )
+        .unwrap();
+    // rebind to a different parent must error (bind-once).
+    assert!(store.overlay_create("http://ex/graph/a", branch).is_err());
+    // overlay cannot extend a non-committed (overlay) parent.
+    assert!(store.overlay_create("http://ex/graph/b", g1).is_err());
+    // unregistered graph is not an overlay.
+    assert!(store.overlay_parent(branch).is_err());
+}
+
+#[test]
+fn compose_view_resolves_assert_tombstone_fallthrough_without_touching_root() {
+    // The uniform rule: present iff asserted AND not tombstoned, nearest-overlay-wins.
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://ex/svc").unwrap();
+    let keep = store.intern("http://ex/keep").unwrap(); // root attr the overlay leaves alone
+    let hide = store.intern("http://ex/hide").unwrap(); // root attr the overlay tombstones
+    let add = store.intern("http://ex/add").unwrap(); // attr the overlay asserts fresh
+    let d = |a: i64, v: &str, op| Datum {
+        entity: e,
+        attribute: a,
+        value: Value::Str(v.to_string()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op,
+    };
+    // ROOT holds two triples.
+    store
+        .transact(
+            &[d(keep, "K", Op::Assert), d(hide, "H", Op::Assert)],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    let ov = store.overlay_create("http://ex/graph/tenant-1", 0).unwrap();
+    // overlay: assert a new triple, and TOMBSTONE the root's (e,hide,"H").
+    store
+        .overlay_write(ov, Op::Assert, e, add, Value::Str("A".into()), "2026-01-02T00:00:00Z")
+        .unwrap();
+    store
+        .overlay_write(ov, Op::Tombstone, e, hide, Value::Str("H".into()), "2026-01-02T00:00:00Z")
+        .unwrap();
+
+    // Composed view = { (e,keep,K) fell through, (e,add,A) overlay assert }. hide is gone.
+    let view = store.compose_view(ov).unwrap();
+    let attrs: std::collections::BTreeSet<i64> = view.iter().map(|f| f.attribute).collect();
+    assert!(attrs.contains(&keep), "root triple the overlay ignores falls through");
+    assert!(attrs.contains(&add), "overlay assertion is present");
+    assert!(!attrs.contains(&hide), "root triple the overlay tombstones is hidden");
+    assert_eq!(view.len(), 2, "exactly keep + add, no duplicates");
+
+    // ROOT is un-mutated: a plain read of g=0 still sees both original triples,
+    // including the tombstoned one — the tombstone is view-only.
+    let root_hide: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL",
+            [e, hide],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(root_hide, 1, "tombstone must NOT touch the root fact (base un-mutated)");
+
+    // Tombstone is idempotent (second one is a no-op, no error).
+    store
+        .overlay_write(ov, Op::Tombstone, e, hide, Value::Str("H".into()), "2026-01-03T00:00:00Z")
+        .unwrap();
+    let tomb_count: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=?3 AND op=2 AND valid_to IS NULL",
+            [e, hide, ov],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(tomb_count, 1, "tombstone is idempotent");
+
+    // overlay_write rejects a non-overlay target graph.
+    assert!(store
+        .overlay_write(0, Op::Assert, e, add, Value::Str("x".into()), "t")
+        .is_err());
+}
+
+#[test]
 fn overlay_writes_do_not_touch_root() {
     // aegis-g1al / #36, Stiwi's core requirement: an overlay extends the base
     // WITHOUT mutating it. Writing the same (e,a,v) to ROOT and to an overlay

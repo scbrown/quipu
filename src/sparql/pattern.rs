@@ -353,6 +353,10 @@ pub fn eval_triple_pattern(
 
     // Temporal filtering.
     conditions.push("op = 1".to_string());
+    // Committed reads are ROOT-scoped (g=0); overlay graphs are read via
+    // compose_view, never the committed SPARQL surface (aegis-g1al / #36,
+    // Decision 4 — committed default scoping is ROOT-only, not an all-graph union).
+    conditions.push("g = 0".to_string());
     if let Some(vt) = &ctx.valid_at {
         conditions.push(format!("valid_from <= ?{}", sql_params.len() + 1));
         sql_params.push(Box::new(vt.clone()));

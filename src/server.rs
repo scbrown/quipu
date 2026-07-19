@@ -168,6 +168,9 @@ async fn main() {
         .route("/proposals", post(list_proposals))
         .route("/proposal/accept", post(accept_proposal))
         .route("/proposal/reject", post(reject_proposal))
+        .route("/overlay/create", post(overlay_create))
+        .route("/overlay/write", post(overlay_write))
+        .route("/overlay/compose", post(overlay_compose))
         .route("/project", post(project_graph))
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
@@ -345,6 +348,20 @@ ro_handler!(
     quipu::mcp::graphiti::tool_search_nodes
 );
 ro_handler!(shapes, quipu::tool_shapes);
+// Named-graph overlays (aegis-g1al / #36). create + compose take an immutable
+// store lock (overlay_create writes the graphs registry under the mutex; compose
+// is a pure read); write needs &mut and is defined below like `knot`.
+ro_handler!(overlay_create, quipu::tool_overlay_create);
+ro_handler!(overlay_compose, quipu::tool_overlay_compose);
+
+async fn overlay_write(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let mut store = store.lock().unwrap();
+    let result = quipu::tool_overlay_write(&mut store, &input)?;
+    Ok(axum::Json(result))
+}
 // `tool_project` is read-only by default but the `louvain` algorithm can write
 // `quipu:memberOfCommunity` facts when `persist:true`, so it needs a mutable store.
 rw_handler!(project_graph, quipu::tool_project);

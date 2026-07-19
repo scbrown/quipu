@@ -1,6 +1,7 @@
 //! The core fact log store backed by `SQLite`.
 
 pub mod ops;
+pub mod overlays;
 #[cfg(test)]
 mod tests;
 
