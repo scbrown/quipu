@@ -13,7 +13,7 @@ use serde::Deserialize;
 use crate::error::Error;
 use crate::error::Result;
 use crate::namespace;
-use crate::rdf::ingest_rdf;
+use crate::rdf::ingest_rdf_to_graph;
 use crate::resolution::{self, EntityCandidate};
 #[cfg(feature = "shacl")]
 use crate::shacl;
@@ -128,6 +128,11 @@ pub struct Episode {
     pub nodes: Vec<Node>,
     #[serde(default)]
     pub edges: Vec<Edge>,
+    /// Optional named graph to write into (aegis-g1al / #36). Absent = ROOT (the
+    /// source of truth). A tenant/agent overlay passes its graph IRI here; those
+    /// facts land in that graph and extend ROOT without mutating it.
+    #[serde(default)]
+    pub graph: Option<String>,
     /// Optional SHACL shapes (Turtle) to validate generated triples against.
     #[serde(default)]
     pub shapes: Option<String>,
@@ -245,7 +250,15 @@ pub fn ingest_episode(
 
     let source_str = format!("episode:{}", episode.name);
 
-    ingest_rdf(
+    // Named graph (aegis-g1al / #36): intern the graph IRI to its term id and
+    // write there. Absent = ROOT (g=0). The graph is itself an entity (its term
+    // id), which is where #37 provenance (owner/tenant) attaches.
+    let graph = match &episode.graph {
+        Some(iri) if !iri.trim().is_empty() => store.intern(iri)?,
+        _ => 0,
+    };
+
+    ingest_rdf_to_graph(
         store,
         turtle.as_bytes(),
         oxrdfio::RdfFormat::Turtle,
@@ -253,6 +266,7 @@ pub fn ingest_episode(
         timestamp,
         actor,
         Some(&source_str),
+        graph,
     )
 }
 

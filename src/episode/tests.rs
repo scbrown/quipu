@@ -307,6 +307,7 @@ fn shacl_validation_rejects_invalid_episode() {
             properties: None,
         }],
         edges: vec![],
+        graph: None,
         shapes: Some(shapes.into()),
     };
 
@@ -353,6 +354,7 @@ fn shacl_validation_passes_valid_episode() {
             properties: Some(props),
         }],
         edges: vec![],
+        graph: None,
         shapes: Some(shapes.into()),
     };
 
@@ -443,6 +445,7 @@ fn batch_stops_on_validation_failure() {
                 properties: Some(good_props),
             }],
             edges: vec![],
+            graph: None,
             shapes: Some(shapes.into()),
         },
         Episode {
@@ -457,6 +460,7 @@ fn batch_stops_on_validation_failure() {
                 properties: None,
             }],
             edges: vec![],
+            graph: None,
             shapes: Some(shapes.into()),
         },
     ];
@@ -699,4 +703,44 @@ fn untyped_node_is_rejected_with_a_clear_error_not_a_turtle_400() {
     assert!(msg.contains("the-untyped-one"), "error must name the untyped node: {msg}");
     assert!(msg.contains("type"), "error must explain it is a type problem: {msg}");
     assert!(!msg.to_lowercase().contains("parse"), "must NOT be a cryptic Turtle parse error: {msg}");
+}
+
+#[test]
+fn episode_graph_field_writes_to_named_graph_not_root() {
+    // aegis-g1al / #36 write API: an episode with a `graph` field lands its
+    // facts in that named graph (g = the graph IRI's term id); an episode
+    // without one writes ROOT (g=0). Verified by reading the g column back.
+    use crate::store::Store;
+    let mut store = Store::open_in_memory().unwrap();
+
+    // Episode into an overlay graph.
+    let ov = parse_episode(
+        r#"{ "name": "ov-ep", "source": "t",
+             "graph": "http://example.org/graph/tenant-1",
+             "nodes": [{"name": "svc-x", "type": "DatabaseService"}] }"#,
+    );
+    ingest_episode(&mut store, &ov, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    // Episode into ROOT (no graph field).
+    let root = parse_episode(
+        r#"{ "name": "root-ep", "source": "t",
+             "nodes": [{"name": "svc-y", "type": "DatabaseService"}] }"#,
+    );
+    ingest_episode(&mut store, &root, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    let overlay_g = store.intern("http://example.org/graph/tenant-1").unwrap();
+    // svc-x's facts must be in the overlay graph, none in ROOT.
+    let svc_x = store.intern(&format!("{TEST_BASE_NS}svc-x")).unwrap();
+    let in_overlay: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=?2", [svc_x, overlay_g], |r| r.get(0)).unwrap();
+    let in_root: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=0", [svc_x], |r| r.get(0)).unwrap();
+    assert!(in_overlay > 0, "overlay episode's facts must land in the named graph");
+    assert_eq!(in_root, 0, "overlay episode must write NOTHING to ROOT (base un-mutated)");
+
+    // svc-y (no graph field) must be in ROOT.
+    let svc_y = store.intern(&format!("{TEST_BASE_NS}svc-y")).unwrap();
+    let y_in_root: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=0", [svc_y], |r| r.get(0)).unwrap();
+    assert!(y_in_root > 0, "a no-graph episode must write ROOT (g=0)");
 }

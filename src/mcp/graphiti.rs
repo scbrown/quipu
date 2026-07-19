@@ -161,6 +161,7 @@ pub fn tool_episodes_complete(store: &mut Store, input: &JsonValue) -> Result<Js
             .map(String::from),
         nodes: Vec::new(),
         edges: Vec::new(),
+        graph: None,
         shapes: None,
     };
 

@@ -409,6 +409,7 @@ ex:alice rdfs:label "Alice the Great" .
                 relation: "dependsOn".into(),
                 confidence: None,
             }],
+            graph: None,
             shapes: None,
         };
 

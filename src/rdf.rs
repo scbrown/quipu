@@ -171,6 +171,24 @@ pub fn ingest_rdf(
     actor: Option<&str>,
     source: Option<&str>,
 ) -> Result<(i64, usize)> {
+    // Default target is ROOT (g=0). Named-graph writes use the _to_graph form.
+    ingest_rdf_to_graph(store, reader, format, base_iri, timestamp, actor, source, 0)
+}
+
+/// Ingest RDF into a specific named graph `g` (aegis-g1al / #36). g=0 is ROOT.
+/// All facts from this parse land in `graph`, via transact_to_graph, so an
+/// overlay ingest extends ROOT without mutating it.
+#[allow(clippy::too_many_arguments)]
+pub fn ingest_rdf_to_graph(
+    store: &mut Store,
+    reader: impl Read,
+    format: RdfFormat,
+    base_iri: Option<&str>,
+    timestamp: &str,
+    actor: Option<&str>,
+    source: Option<&str>,
+    graph: i64,
+) -> Result<(i64, usize)> {
     let mut parser = RdfParser::from_format(format);
     if let Some(base) = base_iri {
         parser = parser
@@ -199,10 +217,10 @@ pub fn ingest_rdf(
 
     let count = datums.len();
     if count == 0 {
-        let tx_id = store.transact(&[], timestamp, actor, source)?;
+        let tx_id = store.transact_to_graph(&[], timestamp, actor, source, graph)?;
         return Ok((tx_id, 0));
     }
-    let tx_id = store.transact(&datums, timestamp, actor, source)?;
+    let tx_id = store.transact_to_graph(&datums, timestamp, actor, source, graph)?;
     Ok((tx_id, count))
 }
 
