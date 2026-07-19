@@ -27,6 +27,13 @@ fn main() {
         return;
     }
 
+    // Asking the binary who it is is a pure read of a compiled-in constant --
+    // it must not load config or open a store (aegis-j0nq).
+    if args[1] == "--version" || args[1] == "-V" || args[1] == "version" {
+        println!("quipu {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
     // Parse --db flag from anywhere in args (overrides config file).
     let db_flag = args
         .windows(2)
@@ -206,7 +213,9 @@ COMMANDS:
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
 OPTIONS:
-    --db <path>    Store file (default: quipu.db)
+    --db <path>       Store file (default: quipu.db)
+    -V, --version     Print version and exit
+    -h, --help        Print this help and exit
 
 ALIASES:
     load = knot, query = read"

@@ -22,6 +22,17 @@ const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
 
+    // Asking the binary who it is must NOT touch disk (aegis-j0nq). These are
+    // pure reads of compiled-in constants and must stay above Store::open.
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("quipu-server {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print_usage();
+        return;
+    }
+
     let db_flag = args
         .windows(2)
         .find(|w| w[0] == "--db")
@@ -254,6 +265,24 @@ async fn main() {
         });
 
     axum::serve(listener, app).await.unwrap();
+}
+
+/// Pure read of compiled-in text — must never touch the store (aegis-j0nq).
+fn print_usage() {
+    println!(
+        "quipu-server {} -- REST API for the Quipu knowledge graph
+
+USAGE:
+    quipu-server [--db <path>] [--bind <addr>] [--embed-backfill]
+
+OPTIONS:
+    --db <path>       Store file (default: from .bobbin/config.toml)
+    --bind <addr>     Listen address (default: from .bobbin/config.toml)
+    --embed-backfill  Backfill embeddings for all entities on startup
+    -V, --version     Print version and exit
+    -h, --help        Print this help and exit",
+        env!("CARGO_PKG_VERSION")
+    );
 }
 
 async fn ui() -> Html<&'static str> {
