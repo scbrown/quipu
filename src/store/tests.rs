@@ -764,3 +764,41 @@ fn named_graph_migration_is_additive_and_defaults_existing_facts_to_root() {
     // Idempotent: running it again is a no-op, not an error.
     Store::migrate_named_graphs(&conn).unwrap();
 }
+
+#[test]
+fn overlay_writes_do_not_touch_root() {
+    // aegis-g1al / #36, Stiwi's core requirement: an overlay extends the base
+    // WITHOUT mutating it. Writing the same (e,a,v) to ROOT and to an overlay
+    // must yield two independent facts; an overlay's retract must NOT close the
+    // ROOT fact. Enforced by graph-scoped idempotency + retract in transact.
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://example.org/svc").unwrap();
+    let a = store.intern("http://example.org/status").unwrap();
+    let overlay = store.intern("http://example.org/graph/tenant-1").unwrap();
+    let d = |v: &str, op| Datum {
+        entity: e, attribute: a, value: Value::Str(v.to_string()),
+        valid_from: "2026-01-01T00:00:00Z".into(), valid_to: None, op,
+    };
+
+    // 1. Assert (e,a,"up") into ROOT.
+    store.transact(&[d("up", Op::Assert)], "2026-01-01T00:00:00Z", None, None).unwrap();
+    // 2. Assert the SAME (e,a,"up") into an overlay — must NOT be skipped as a dup.
+    store.transact_to_graph(&[d("up", Op::Assert)], "2026-01-02T00:00:00Z", None, None, overlay).unwrap();
+
+    let root_up: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL", [e,a], |r| r.get(0)).unwrap();
+    let ov_up: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=?3 AND op=1 AND valid_to IS NULL", [e,a,overlay], |r| r.get(0)).unwrap();
+    assert_eq!(root_up, 1, "ROOT keeps its fact");
+    assert_eq!(ov_up, 1, "overlay gets its OWN fact — not skipped as a dup of ROOT");
+
+    // 3. Retract in the OVERLAY. Must close only the overlay row; ROOT untouched.
+    store.transact_to_graph(&[d("up", Op::Retract)], "2026-01-03T00:00:00Z", None, None, overlay).unwrap();
+    let root_after: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL", [e,a], |r| r.get(0)).unwrap();
+    let ov_after: i64 = store.conn.query_row(
+        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=?3 AND op=1 AND valid_to IS NULL", [e,a,overlay], |r| r.get(0)).unwrap();
+    assert_eq!(root_after, 1, "overlay retract must NOT close the ROOT fact (base un-mutated)");
+    assert_eq!(ov_after, 0, "overlay retract closes only its own graph's assertion");
+}

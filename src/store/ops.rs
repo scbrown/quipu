@@ -20,6 +20,27 @@ impl Store {
         actor: Option<&str>,
         source: Option<&str>,
     ) -> Result<i64> {
+        // Default write target is the ROOT graph (g=0) — the source of truth.
+        // Named-graph overlays use transact_to_graph (aegis-g1al / quipu #36).
+        self.transact_to_graph(datums, timestamp, actor, source, 0)
+    }
+
+    /// Write a batch to a specific named graph. g=0 is ROOT. Idempotency and
+    /// retraction are SCOPED to `graph`: writing to an overlay never skips a
+    /// triple because ROOT has it, and never closes a ROOT fact's valid_to. The
+    /// same (e,a,v) coexists across graphs, and an overlay's retract closes only
+    /// its OWN assertions — the base stays un-mutated (Stiwi's #36 requirement,
+    /// enforced in SQL, not convention). Cross-graph SHADOWING (an overlay
+    /// hiding a ROOT fact in the composed view) is a read-time resolution over
+    /// the ordered dataset stack, handled by the query path — not a base write.
+    pub fn transact_to_graph(
+        &mut self,
+        datums: &[Datum],
+        timestamp: &str,
+        actor: Option<&str>,
+        source: Option<&str>,
+        graph: i64,
+    ) -> Result<i64> {
         // Use savepoint (not transaction) so transact() can nest inside
         // speculate()'s outer savepoint.
         let sp = self.conn.savepoint()?;
@@ -35,29 +56,33 @@ impl Store {
 
         {
             let mut insert = sp.prepare(
-                "INSERT INTO facts (e, a, v, tx, valid_from, valid_to, op) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             )?;
+            // Retraction is SCOPED to `graph`: an overlay closing an assertion
+            // touches only its own graph, never ROOT (base un-mutated, #36).
             let mut close_assertion = sp.prepare(
                 "UPDATE facts SET valid_to = ?1 \
-                 WHERE e = ?2 AND a = ?3 AND v = ?4 AND op = 1 AND valid_to IS NULL",
+                 WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
             )?;
             // Idempotent assertions: skip if an active fact with the same
-            // (e, a, v) already exists. This prevents duplicate rows when
-            // the same triple is asserted across different transactions.
+            // (e, a, v) already exists IN THIS GRAPH. Scoped to `graph` so the
+            // same triple can be asserted independently into ROOT and overlays.
             let mut check_exists = sp.prepare(
                 "SELECT 1 FROM facts \
-                 WHERE e = ?1 AND a = ?2 AND v = ?3 AND op = 1 AND valid_to IS NULL \
+                 WHERE e = ?1 AND a = ?2 AND v = ?3 AND g = ?4 AND op = 1 AND valid_to IS NULL \
                  LIMIT 1",
             )?;
             for d in datums {
                 let v_bytes = d.value.to_bytes();
                 if d.op == Op::Retract {
-                    close_assertion.execute(params![timestamp, d.entity, d.attribute, v_bytes,])?;
+                    close_assertion
+                        .execute(params![timestamp, d.entity, d.attribute, v_bytes, graph])?;
                 } else {
-                    // Skip assertion if an identical active fact already exists.
+                    // Skip assertion if an identical active fact already exists
+                    // IN THIS GRAPH.
                     let exists: bool = check_exists
-                        .query_row(params![d.entity, d.attribute, v_bytes], |_| Ok(true))
+                        .query_row(params![d.entity, d.attribute, v_bytes, graph], |_| Ok(true))
                         .unwrap_or(false);
                     if exists {
                         continue;
@@ -67,6 +92,7 @@ impl Store {
                     d.entity,
                     d.attribute,
                     v_bytes,
+                    graph,
                     tx_id,
                     d.valid_from,
                     d.valid_to,
