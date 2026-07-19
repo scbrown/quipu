@@ -25,6 +25,9 @@ pub enum Error {
 
     #[error("store error: {0}")]
     Store(String),
+
+    #[error("serialization error: {0}")]
+    Serialization(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

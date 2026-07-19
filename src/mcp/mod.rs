@@ -46,11 +46,14 @@ pub(crate) fn resolution_hints_json(hints: &[(String, Vec<EntityCandidate>)]) ->
         .collect()
 }
 
-/// MCP tool: `quipu_query` -- Execute a SPARQL query.
+/// Execute a `/query` request and apply the server-side row ceiling.
 ///
-/// Input: `{ "query": "SELECT/ASK/CONSTRUCT/DESCRIBE ...", "valid_at": "...", "tx": N }`
-/// Output depends on query form.
-pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+/// Returns the (possibly truncated) [`QueryResult`] and whether truncation
+/// occurred. Shared by the default bespoke-JSON path ([`tool_query`]) and the
+/// content-negotiated W3C path ([`crate::w3c`]) so both honor the same
+/// `max_sparql_rows` ceiling (hq-gkd) from one place — a LIMIT-less query cannot
+/// dump the whole fact log to either serializer.
+pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bool)> {
     let query_str = input
         .get("query")
         .and_then(|v| v.as_str())
@@ -65,13 +68,9 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     };
 
     let result = sparql::query_temporal(store, query_str, &ctx)?;
-
-    // Server-side ceiling on rows returned, so a LIMIT-less query can't dump the
-    // whole fact log to the caller (hq-gkd). We surface `truncated` rather than
-    // silently dropping rows.
     let max_rows = store.search_config().max_sparql_rows;
 
-    match result {
+    Ok(match result {
         QueryResult::Select {
             variables,
             mut rows,
@@ -80,6 +79,28 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             if truncated {
                 rows.truncate(max_rows);
             }
+            (QueryResult::Select { variables, rows }, truncated)
+        }
+        QueryResult::Graph(mut triples) => {
+            let truncated = triples.len() > max_rows;
+            if truncated {
+                triples.truncate(max_rows);
+            }
+            (QueryResult::Graph(triples), truncated)
+        }
+        QueryResult::Ask(value) => (QueryResult::Ask(value), false),
+    })
+}
+
+/// MCP tool: `quipu_query` -- Execute a SPARQL query.
+///
+/// Input: `{ "query": "SELECT/ASK/CONSTRUCT/DESCRIBE ...", "valid_at": "...", "tx": N }`
+/// Output depends on query form.
+pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let (result, truncated) = query_result(store, input)?;
+
+    match result {
+        QueryResult::Select { variables, rows } => {
             let json_rows: Vec<JsonValue> = rows
                 .iter()
                 .map(|row| {
@@ -99,11 +120,7 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             }))
         }
         QueryResult::Ask(result) => Ok(serde_json::json!({ "result": result })),
-        QueryResult::Graph(mut triples) => {
-            let truncated = triples.len() > max_rows;
-            if truncated {
-                triples.truncate(max_rows);
-            }
+        QueryResult::Graph(triples) => {
             let json_triples: Vec<JsonValue> = triples
                 .iter()
                 .map(|t| {

@@ -52,6 +52,7 @@ thiserror = "2"
 oxrdf = "0.3"
 oxttl = "0.2"
 oxrdfio = "0.2"
+sparesults = "0.3"
 spargebra = "0.4"
 regex = "1"
 rudof_lib = { version = "0.2.8", optional = true }

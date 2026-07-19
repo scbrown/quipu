@@ -271,11 +271,34 @@ async fn stats(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>
 
 async fn query(
     State(store): State<SharedStore>,
+    headers: HeaderMap,
     axum::Json(input): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
+) -> Result<axum::response::Response, AppError> {
     let store = store.lock().unwrap();
+
+    // Content negotiation (aegis-u7ag): an explicit standard Accept header opts
+    // into the W3C SPARQL 1.1 results/RDF shape; absent / */* / application/json
+    // keeps the default bespoke rows shape byte-for-byte, so existing callers are
+    // unaffected.
+    let accept = headers
+        .get(axum::http::header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if let Some(fmt) = quipu::w3c::negotiate(accept) {
+        let (result, _truncated) = quipu::query_result(&store, &input)?;
+        if let Some((content_type, body)) = quipu::w3c::serialize(&store, &result, fmt)? {
+            return Ok((
+                [(axum::http::header::CONTENT_TYPE, content_type)],
+                body,
+            )
+                .into_response());
+        }
+        // Format did not fit the result variant (e.g. text/turtle for a SELECT);
+        // fall through to the default shape rather than erroring.
+    }
+
     let result = quipu::tool_query(&store, &input)?;
-    Ok(axum::Json(result))
+    Ok(axum::Json(result).into_response())
 }
 
 async fn knot(

@@ -38,6 +38,7 @@ pub mod vector;
 pub mod vector_delegate;
 #[cfg(feature = "lancedb")]
 pub mod vector_lance;
+pub mod w3c;
 
 pub use config::{
     EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, SearchConfig,
@@ -79,7 +80,7 @@ pub use mcp::tools::{
     tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_retract_episode, tool_search,
     tool_shapes, tool_unravel, tool_validate,
 };
-pub use mcp::{tool_definitions, tool_knot, tool_query, value_to_json};
+pub use mcp::{query_result, tool_definitions, tool_knot, tool_query, value_to_json};
 #[cfg(feature = "lancedb")]
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
 #[cfg(feature = "onnx")]
