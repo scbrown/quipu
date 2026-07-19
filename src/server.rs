@@ -173,6 +173,7 @@ async fn main() {
         .route("/overlay/compose", post(overlay_compose))
         .route("/cooccurrence", post(cooccurrence))
         .route("/policy/check", post(policy_check))
+        .route("/verifier/authorized", post(verifier_authorized))
         .route("/project", post(project_graph))
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
@@ -357,6 +358,7 @@ ro_handler!(overlay_create, quipu::tool_overlay_create);
 ro_handler!(overlay_compose, quipu::tool_overlay_compose);
 ro_handler!(cooccurrence, quipu::tool_cooccurrence);
 ro_handler!(policy_check, quipu::tool_policy_check);
+ro_handler!(verifier_authorized, quipu::tool_verifier_authorized);
 
 async fn overlay_write(
     State(store): State<SharedStore>,

@@ -175,6 +175,47 @@ fn fetch_scalar(store: &Store, subject: &str, predicate: &str) -> Result<Option<
     }
 }
 
+/// Escape a value for safe inlining as a SPARQL string literal (reject the
+/// characters that could break out of the quotes or inject).
+fn sparql_string_literal(value: &str) -> Result<String> {
+    if value.contains(['"', '\n', '\r', '\\']) {
+        return Err(Error::InvalidValue(
+            "value must not contain a quote, backslash, or newline".into(),
+        ));
+    }
+    Ok(format!("\"{value}\""))
+}
+
+/// Is `verifier` registered (Phase-0 root of trust) to attest `predicate_id`?
+/// True iff an `aegis:VerifierRegistration` names both. A governed authority
+/// check — independent of (and prior to) cryptographic signing.
+fn is_registered_verifier(store: &Store, verifier: &str, predicate_id: &str) -> Result<bool> {
+    let v = sparql_string_literal(verifier)?;
+    let p = sparql_string_literal(predicate_id)?;
+    let ask = format!(
+        "PREFIX a: <http://aegis.gastown.local/ontology/> \
+         ASK {{ ?r a a:VerifierRegistration ; a:verifier {v} ; a:attests {p} }}"
+    );
+    run_ask(store, &ask, &TemporalContext::default())
+}
+
+/// MCP tool: `quipu_verifier_authorized` -- check the Phase-0 verifier registry:
+/// may `verifier` attest `predicate`? Input: `{ "verifier": "...",
+/// "predicate": "..." }`. Output: `{ "authorized": bool }`.
+pub fn tool_verifier_authorized(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let verifier = input
+        .get("verifier")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'verifier' parameter".into()))?;
+    let predicate = input
+        .get("predicate")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'predicate' parameter".into()))?;
+    Ok(serde_json::json!({
+        "authorized": is_registered_verifier(store, verifier, predicate)?
+    }))
+}
+
 /// MCP tool: `quipu_policy_check` -- committed-tier evaluation of a governance
 /// Policy over the graph of record (the loom's Phase-1 runtime).
 ///
@@ -270,13 +311,21 @@ pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         )
     );
 
+    // Phase-0 authority: is this verifier registered to attest this predicate?
+    // The registry (aegis:VerifierRegistration) is the governed root of trust;
+    // until it is populated + verdicts are signed, this is an advisory flag, not
+    // a hard gate — but it makes the trust boundary explicit rather than implicit.
+    let verifier = "quipu";
+    let verifier_authorized = is_registered_verifier(store, verifier, &predicate_id)?;
+
     Ok(serde_json::json!({
         "predicate_id": predicate_id,
         "target_ref": target,
         "outcome": outcome,
         "evidence_hash": evidence_hash,
         "tier": "committed",
-        "verifier": "quipu",
+        "verifier": verifier,
+        "verifier_authorized": verifier_authorized,
         "signed": false
     }))
 }

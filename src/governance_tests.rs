@@ -101,3 +101,13 @@ fn transition_requires_on_and_to() {
     let fb = validate_shapes(SHAPES, &data).unwrap();
     assert!(!fb.conforms, "a transition without a target Step must be rejected");
 }
+
+#[test]
+fn verifier_registration_shape() {
+    let ok = format!(
+        "{NS}\naegis:r a aegis:VerifierRegistration ; aegis:verifier \"hank\" ; aegis:attests \"has-test\" .\n"
+    );
+    assert!(validate_shapes(SHAPES, &ok).unwrap().conforms, "valid registration should conform");
+    let bad = format!("{NS}\naegis:r a aegis:VerifierRegistration ; aegis:verifier \"hank\" .\n");
+    assert!(!validate_shapes(SHAPES, &bad).unwrap().conforms, "registration without an attested predicate must be rejected");
+}

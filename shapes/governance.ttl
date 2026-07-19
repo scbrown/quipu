@@ -298,6 +298,35 @@ aegis:VerdictShape a sh:NodeShape ;
     ] .
 
 # ═══════════════════════════════════════════════════════════════════
+# VerifierRegistration — the root of trust (Phase 0). A governed, human-
+# authored record of WHICH verifier identity may attest WHICH predicate. Quipu
+# accepts a verdict only if its verifier is registered for that predicate — this
+# concentrates trust into a small, human-owned surface. `publicKey` is optional
+# until signing lands; the registration is meaningful as an authority record
+# even before verdicts are cryptographically signed.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:VerifierRegistrationShape a sh:NodeShape ;
+    sh:targetClass aegis:VerifierRegistration ;
+    sh:property [
+        sh:path aegis:verifier ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # The predicate-id(s) this identity is authorized to attest. Repeatable.
+        sh:path aegis:attests ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:publicKey ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
 # Decision — a human approve / reject / request-changes, a signed
 # attested-evidence source (an aegis:DecisionRecord by subclass). Content-
 # bound to what it approved, so an edit after signing goes stale.

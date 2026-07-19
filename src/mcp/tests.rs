@@ -1540,3 +1540,27 @@ fn test_policy_check_committed_tier_evaluation() {
         "claim": claim, "target": "x> } INSERT {"
     })).is_err());
 }
+
+#[test]
+fn test_verifier_registry_authority() {
+    let mut store = Store::open_in_memory().unwrap();
+    let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
+        a:reg1 a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" .\n\
+        a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n";
+    crate::rdf::ingest_rdf(&mut store, ttl.as_bytes(), oxrdfio::RdfFormat::Turtle,
+        None, "2026-01-01T00:00:00Z", None, None).unwrap();
+
+    // quipu IS registered for has-test; NOT for something-else.
+    let a = super::tool_verifier_authorized(&store, &serde_json::json!({"verifier":"quipu","predicate":"has-test"})).unwrap();
+    assert_eq!(a["authorized"], true, "{a:#?}");
+    let b = super::tool_verifier_authorized(&store, &serde_json::json!({"verifier":"quipu","predicate":"other"})).unwrap();
+    assert_eq!(b["authorized"], false);
+
+    // policy_check surfaces the authority flag: predicate_id has-test -> authorized.
+    let claim = "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a:hasTest ?t }";
+    let v = super::tool_policy_check(&store, &serde_json::json!({
+        "claim": claim, "target": "http://aegis.gastown.local/ontology/sym1", "predicate_id": "has-test"
+    })).unwrap();
+    assert_eq!(v["outcome"], "satisfied");
+    assert_eq!(v["verifier_authorized"], true, "quipu is registered for has-test: {v:#?}");
+}
