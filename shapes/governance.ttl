@@ -1,0 +1,331 @@
+# SHACL shapes for the Governance Plane ("the loom") — policy, workflows &
+# verification, layered on the Hank x Quipu x Bobbin stack.
+#
+# Implements the "Entities in Quipu" contract from the governance-plane design
+# (hank docs/book/src/design/governance-plane.md, Phase 1). The primitives are
+# RDF classes in Quipu's governed ontology, so **definition-time verification is
+# just SHACL over them** — a workflow/policy/step definition that violates its
+# shape is rejected at write. The governance classes EXTEND the code-entities
+# ontology (CodeModule, CodeSymbol, Document, Section, Bundle) in the SAME
+# namespace, so governance facts and code facts live in one graph and answer a
+# single SPARQL query.
+#
+# Reuse over invention (per the design's table): Policy extends Directive;
+# Verdict is an Observation; Decision is a DecisionRecord. These already exist in
+# aegis-ontology.shapes.ttl — here we subclass them (RDFS) and add the
+# governance-specific constraints.
+#
+# Load via POST /shapes:
+#   curl -s localhost:3030/shapes -X POST -H "Content-Type: application/json" \
+#     -d '{"action":"load","name":"governance","turtle":"<contents>"}'
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis:  <http://aegis.gastown.local/ontology/> .
+
+# ═══════════════════════════════════════════════════════════════════
+# Class hierarchy — reuse the existing governance types (RDFS subclass,
+# so the parent's shape ALSO applies to the child via inference).
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:Policy   rdfs:subClassOf aegis:Directive .       # governed rule / intent
+aegis:Verdict  rdfs:subClassOf aegis:Observation .     # signed, content-bound result
+aegis:Decision rdfs:subClassOf aegis:DecisionRecord .  # human approve / reject / changes
+
+# ═══════════════════════════════════════════════════════════════════
+# Composition types — the workflow graph.
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Workflow ───────────────────────────────────────────────────────
+# A directed graph of Steps + guarded Transitions. Must be named and hold
+# at least one Step (the entry). Acyclicity/coverage are checked by the
+# creation-is-verified pass, not expressible in core SHACL.
+
+aegis:WorkflowShape a sh:NodeShape ;
+    sh:targetClass aegis:Workflow ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:hasStep ;
+        sh:class aegis:Step ;
+        sh:minCount 1 ;
+    ] .
+
+# ── Step ───────────────────────────────────────────────────────────
+# One unit of work: { produces: [Artifact], requires: [Artifact],
+# gatedBy: [Policy], actor: Role }. produces/requires reference Artifacts;
+# gatedBy references Policies; actor names a Role.
+
+aegis:StepShape a sh:NodeShape ;
+    sh:targetClass aegis:Step ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:produces ;
+        sh:class aegis:Artifact ;
+    ] ;
+    sh:property [
+        sh:path aegis:requires ;
+        sh:class aegis:Artifact ;
+    ] ;
+    sh:property [
+        sh:path aegis:gatedBy ;
+        sh:class aegis:Policy ;
+    ] ;
+    sh:property [
+        sh:path aegis:actor ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Transition ─────────────────────────────────────────────────────
+# A guarded edge from a Step: { on: <outcome>, to: <Step> }. Branches and
+# loops are just multiple Transitions; the guard predicate is evaluated by
+# the same machinery. `on` is the triggering outcome, `to` the target Step.
+
+aegis:TransitionShape a sh:NodeShape ;
+    sh:targetClass aegis:Transition ;
+    sh:property [
+        sh:path aegis:on ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:to ;
+        sh:class aegis:Step ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── Artifact ───────────────────────────────────────────────────────
+# An entity standing for a thing produced or required (design doc, test
+# result, ADR, commit, review). Carries a Reference to a concrete target
+# and a Claim it must satisfy. Verified at the leaf.
+
+aegis:ArtifactShape a sh:NodeShape ;
+    sh:targetClass aegis:Artifact ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:reference ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:claim ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ── PlanStep ───────────────────────────────────────────────────────
+# The intent map's atom: references a CodeSymbol (the edit target) and
+# belongs to the running Step. Only Hank binds intent→structure live.
+
+aegis:PlanStepShape a sh:NodeShape ;
+    sh:targetClass aegis:PlanStep ;
+    sh:property [
+        sh:path aegis:references ;
+        sh:class aegis:CodeSymbol ;
+        sh:minCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:inStep ;
+        sh:class aegis:Step ;
+        sh:maxCount 1 ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Policy — the verifier. targets an entity TYPE (as a SHACL shape targets
+# a class); carries the composed claim. External: one policy governs all
+# entities of its target type. (Also an aegis:Directive by subclass, so the
+# Directive shape's authority/issuedBy/label apply.)
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:PolicyShape a sh:NodeShape ;
+    sh:targetClass aegis:Policy ;
+    sh:property [
+        sh:path aegis:targets ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:claim ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Where the gate binds: an action boundary (pre-edit) or a step
+        # transition. The effect may be computed from risk x confidence.
+        sh:path aegis:boundary ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "action" "transition" ) ;
+    ] ;
+    sh:property [
+        sh:path aegis:effect ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "allow" "warn" "require-approval" "deny" "escalate" "record" ) ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Catalog leaves — the composable atoms policies are built from. A
+# Selector yields a set (evidence → set); a Predicate tests an element.
+# Both are evidence-grounded and tier-tagged.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:SelectorShape a sh:NodeShape ;
+    sh:targetClass aegis:Selector ;
+    sh:property [
+        sh:path aegis:name ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:evidenceSource ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:tier ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "live" "lsp" "tree-sitter" "committed" "attested" ) ;
+    ] .
+
+aegis:PredicateShape a sh:NodeShape ;
+    sh:targetClass aegis:Predicate ;
+    sh:property [
+        sh:path aegis:name ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:evidenceSource ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:tier ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "live" "lsp" "tree-sitter" "committed" "attested" ) ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Verdict — a stored, signed, content-bound attestation (NOT a bare claim).
+# An aegis:Observation by subclass. `outcome` distinguishes unknown (no
+# evidence) from unsatisfied (evidence says no). Binding to the evidence
+# content hash makes tamper/replay self-staling; predicateId lets any
+# independent verifier re-derive it (checked, not trusted).
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:VerdictShape a sh:NodeShape ;
+    sh:targetClass aegis:Verdict ;
+    sh:property [
+        sh:path aegis:predicateId ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:targetRef ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:outcome ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( "satisfied" "unsatisfied" "unknown" ) ;
+    ] ;
+    sh:property [
+        sh:path aegis:evidenceHash ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:verifier ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:signature ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:tier ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "live" "lsp" "tree-sitter" "committed" "attested" ) ;
+    ] ;
+    sh:property [
+        sh:path aegis:freshness ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "fresh" "stale" ) ;
+    ] ;
+    sh:property [
+        sh:path aegis:confidence ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Decision — a human approve / reject / request-changes, a signed
+# attested-evidence source (an aegis:DecisionRecord by subclass). Content-
+# bound to what it approved, so an edit after signing goes stale.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:DecisionShape a sh:NodeShape ;
+    sh:targetClass aegis:Decision ;
+    sh:property [
+        sh:path aegis:outcome ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( "approve" "reject" "changes" ) ;
+    ] ;
+    sh:property [
+        sh:path aegis:by ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:gate ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:evidenceHash ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .

@@ -341,3 +341,7 @@ ex:alice a ex:Person .
 #[cfg(test)]
 #[path = "code_entity_tests.rs"]
 mod code_entity_tests;
+
+#[cfg(test)]
+#[path = "governance_tests.rs"]
+mod governance_tests;
