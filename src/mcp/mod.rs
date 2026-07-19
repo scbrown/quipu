@@ -122,6 +122,66 @@ fn json_to_value(store: &Store, v: &JsonValue) -> Result<crate::types::Value> {
     ))
 }
 
+/// MCP tool: `quipu_cooccurrence` -- deterministic, auditable work-item
+/// co-occurrence (quipu#37). Given a work-item (`Bead`) IRI, returns the other
+/// work-items that share at least one touched code entity, via the provenance
+/// chain `Bead <-implements- GitCommit -modifies-> entity`. This is a **graph
+/// query, not a statistical mine** — set-overlap over typed provenance edges
+/// (Hank promotes the raw `commit -> touched` edge per #18; Quipu aggregates).
+///
+/// Bitemporal: pass `valid_at` for "which work co-occurred as of `<date>`, and
+/// via which commit/actor". Input: `{ "work_item": "<iri>", "valid_at"?: "...",
+/// "tx"?: N }`. Output: `{ "work_item": iri, "cooccurring":
+/// [{ "work_item": iri, "shared_entities": N }] }` ordered by overlap strength.
+pub fn tool_cooccurrence(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let item = input
+        .get("work_item")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'work_item' parameter".into()))?;
+    // The IRI is inlined into the query, so reject anything that could break out
+    // of the `<...>` and inject SPARQL. A real IRI contains none of these.
+    if item.chars().any(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '{' | '}' | '\\')) {
+        return Err(Error::InvalidValue(
+            "'work_item' must be a bare IRI (no whitespace or < > \" { } \\)".into(),
+        ));
+    }
+
+    let query = format!(
+        "PREFIX a: <http://aegis.gastown.local/ontology/> \
+         SELECT ?other (COUNT(DISTINCT ?e) AS ?shared) WHERE {{ \
+           ?cA a:implements <{item}> . ?cA a:modifies ?e . \
+           ?cB a:modifies ?e . ?cB a:implements ?other FILTER(?other != <{item}>) \
+         }} GROUP BY ?other ORDER BY DESC(?shared)"
+    );
+
+    let ctx = TemporalContext {
+        valid_at: input
+            .get("valid_at")
+            .and_then(JsonValue::as_str)
+            .map(std::string::ToString::to_string),
+        as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+    };
+    let result = sparql::query_temporal(store, &query, &ctx)?;
+
+    let cooccurring: Vec<JsonValue> = match result {
+        QueryResult::Select { rows, .. } => rows
+            .iter()
+            .filter_map(|row| {
+                let other = row.get("other").map(|v| value_to_json(store, v))?;
+                let shared = row.get("shared").map(|v| value_to_json(store, v))?;
+                Some(serde_json::json!({ "work_item": other, "shared_entities": shared }))
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+
+    Ok(serde_json::json!({
+        "work_item": item,
+        "count": cooccurring.len(),
+        "cooccurring": cooccurring
+    }))
+}
+
 /// MCP tool: `quipu_overlay_create` -- register an overlay-class named graph
 /// bound (bind-once) to a committed parent branch (aegis-g1al / #36).
 ///

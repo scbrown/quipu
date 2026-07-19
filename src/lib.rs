@@ -81,8 +81,8 @@ pub use mcp::tools::{
     tool_shapes, tool_unravel, tool_validate,
 };
 pub use mcp::{
-    query_result, tool_definitions, tool_knot, tool_overlay_compose, tool_overlay_create,
-    tool_overlay_write, tool_query, value_to_json,
+    query_result, tool_cooccurrence, tool_definitions, tool_knot, tool_overlay_compose,
+    tool_overlay_create, tool_overlay_write, tool_query, value_to_json,
 };
 #[cfg(feature = "lancedb")]
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};

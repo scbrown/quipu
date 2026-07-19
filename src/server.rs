@@ -171,6 +171,7 @@ async fn main() {
         .route("/overlay/create", post(overlay_create))
         .route("/overlay/write", post(overlay_write))
         .route("/overlay/compose", post(overlay_compose))
+        .route("/cooccurrence", post(cooccurrence))
         .route("/project", post(project_graph))
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
@@ -353,6 +354,7 @@ ro_handler!(shapes, quipu::tool_shapes);
 // is a pure read); write needs &mut and is defined below like `knot`.
 ro_handler!(overlay_create, quipu::tool_overlay_create);
 ro_handler!(overlay_compose, quipu::tool_overlay_compose);
+ro_handler!(cooccurrence, quipu::tool_cooccurrence);
 
 async fn overlay_write(
     State(store): State<SharedStore>,

@@ -1460,3 +1460,37 @@ fn test_episodes_complete_provenance_queryable() {
     assert_eq!(result["count"], 1);
     assert_eq!(result["rows"][0]["label"], "deploy-v2");
 }
+
+#[test]
+fn test_cooccurrence_deterministic_set_overlap() {
+    // quipu#37: two work-items co-occur iff they share a touched entity, via
+    // Bead <-implements- GitCommit -modifies-> entity. Deterministic, not mined.
+    let mut store = Store::open_in_memory().unwrap();
+    let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
+        a:c1 a a:GitCommit ; a:implements a:beadT ; a:modifies a:E1, a:E2 .\n\
+        a:c2 a a:GitCommit ; a:implements a:beadX ; a:modifies a:E1 .\n\
+        a:c3 a a:GitCommit ; a:implements a:beadY ; a:modifies a:E9 .\n";
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let input = serde_json::json!({ "work_item": "http://aegis.gastown.local/ontology/beadT" });
+    let result = super::tool_cooccurrence(&store, &input).unwrap();
+
+    // beadX shares E1 with beadT; beadY (E9) shares nothing.
+    assert_eq!(result["count"], 1, "exactly one co-occurring work-item: {result:#?}");
+    let co = result["cooccurring"].as_array().unwrap();
+    assert_eq!(co[0]["work_item"], "http://aegis.gastown.local/ontology/beadX");
+    assert_eq!(co[0]["shared_entities"], 1);
+
+    // Injection guard: a work_item that could break out of <...> is rejected.
+    let bad = serde_json::json!({ "work_item": "x> } INSERT {" });
+    assert!(super::tool_cooccurrence(&store, &bad).is_err());
+}
