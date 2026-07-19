@@ -20,6 +20,11 @@ use crate::vector_delegate::{DelegatingVectorStore, VectorSearchDelegate};
 /// The core fact log store backed by `SQLite`.
 pub struct Store {
     pub(crate) conn: Connection,
+    /// v1 verdict-signing identity (ed25519, host-file key). When set, the
+    /// governance committed-tier evaluator signs verdicts (aegis-g1al / the
+    /// loom, Phase 0). The server loads it at startup; None → verdicts are
+    /// evaluated but unsigned.
+    pub(crate) signing: Option<Arc<crate::signing::SigningIdentity>>,
     pub(crate) embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     pub(crate) embedding_config: EmbeddingConfig,
     /// Entity-resolution policy applied on the episode write paths. Defaults to
@@ -124,6 +129,7 @@ impl Store {
         Self::migrate_named_graphs(&conn)?;
         Ok(Self {
             conn,
+            signing: None,
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
             resolution_config: ResolutionConfig::default(),
@@ -221,6 +227,17 @@ impl Store {
     /// Returns `true` if an embedding provider is attached.
     pub fn has_embedding_provider(&self) -> bool {
         self.embedding_provider.is_some()
+    }
+
+    /// Attach a verdict-signing identity (v1 root of trust, Phase 0). When set,
+    /// the committed-tier evaluator signs the verdicts it produces.
+    pub fn set_signing_identity(&mut self, identity: Arc<crate::signing::SigningIdentity>) {
+        self.signing = Some(identity);
+    }
+
+    /// The attached signing identity, if any.
+    pub fn signing_identity(&self) -> Option<Arc<crate::signing::SigningIdentity>> {
+        self.signing.clone()
     }
 
     /// Returns a clone of the embedding provider, if one is attached.

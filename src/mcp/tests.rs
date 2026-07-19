@@ -1564,3 +1564,45 @@ fn test_verifier_registry_authority() {
     assert_eq!(v["outcome"], "satisfied");
     assert_eq!(v["verifier_authorized"], true, "quipu is registered for has-test: {v:#?}");
 }
+
+#[test]
+fn test_signed_verdict_end_to_end_root_of_trust() {
+    use std::sync::Arc;
+    let mut store = Store::open_in_memory().unwrap();
+    // v1 signing identity (host-file key in a temp dir).
+    let dir = tempfile::tempdir().unwrap();
+    let id = crate::signing::SigningIdentity::load(&dir.path().join("k.pk8"), "quipu").unwrap();
+    let pubkey = id.public_key_hex();
+    store.set_signing_identity(Arc::new(id));
+
+    // Register quipu's pubkey for has-test (the human trust root), + evidence.
+    let ttl = format!(
+        "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
+         a:reg a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" ; a:publicKey \"{pubkey}\" .\n\
+         a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n"
+    );
+    crate::rdf::ingest_rdf(&mut store, ttl.as_bytes(), oxrdfio::RdfFormat::Turtle,
+        None, "2026-01-01T00:00:00Z", None, None).unwrap();
+
+    // Evaluate -> SIGNED verdict.
+    let claim = "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a:hasTest ?t }";
+    let v = super::tool_policy_check(&store, &serde_json::json!({
+        "claim": claim, "target": "http://aegis.gastown.local/ontology/sym1", "predicate_id": "has-test"
+    })).unwrap();
+    assert_eq!(v["outcome"], "satisfied");
+    assert_eq!(v["signed"], true, "a signing identity is set -> verdict must be signed: {v:#?}");
+    assert!(v["signature"].as_str().unwrap().len() >= 64);
+
+    // Verify against the registered key -> trusted.
+    let ok = super::tool_verdict_verify(&store, &v).unwrap();
+    assert_eq!(ok["signature_valid"], true, "{ok:#?}");
+    assert_eq!(ok["verifier_authorized"], true);
+    assert_eq!(ok["trusted"], true, "signed by the registered key + authorized: {ok:#?}");
+
+    // Tamper the outcome -> signature no longer valid, not trusted.
+    let mut forged = v.clone();
+    forged["outcome"] = serde_json::json!("unsatisfied");
+    let bad = super::tool_verdict_verify(&store, &forged).unwrap();
+    assert_eq!(bad["signature_valid"], false, "flipping outcome must break the sig");
+    assert_eq!(bad["trusted"], false);
+}

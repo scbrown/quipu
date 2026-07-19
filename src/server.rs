@@ -94,6 +94,23 @@ async fn main() {
         }
     }
 
+    // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
+    // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
+    let signing_key_path = std::env::var("QUIPU_SIGNING_KEY")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::Path::new(".quipu").join("verifier.pk8"));
+    match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
+        Ok(id) => {
+            eprintln!(
+                "verdict signing enabled (verifier=quipu, key={})",
+                signing_key_path.display()
+            );
+            eprintln!("  register this public key to trust its verdicts: {}", id.public_key_hex());
+            store.set_signing_identity(Arc::new(id));
+        }
+        Err(e) => eprintln!("warning: verdict signing disabled -- {e}"),
+    }
+
     let state: SharedStore = Arc::new(Mutex::new(store));
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
@@ -174,6 +191,7 @@ async fn main() {
         .route("/cooccurrence", post(cooccurrence))
         .route("/policy/check", post(policy_check))
         .route("/verifier/authorized", post(verifier_authorized))
+        .route("/verdict/verify", post(verdict_verify))
         .route("/project", post(project_graph))
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
@@ -359,6 +377,7 @@ ro_handler!(overlay_compose, quipu::tool_overlay_compose);
 ro_handler!(cooccurrence, quipu::tool_cooccurrence);
 ro_handler!(policy_check, quipu::tool_policy_check);
 ro_handler!(verifier_authorized, quipu::tool_verifier_authorized);
+ro_handler!(verdict_verify, quipu::tool_verdict_verify);
 
 async fn overlay_write(
     State(store): State<SharedStore>,

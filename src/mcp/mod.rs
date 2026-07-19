@@ -199,6 +199,75 @@ fn is_registered_verifier(store: &Store, verifier: &str, predicate_id: &str) -> 
     run_ask(store, &ask, &TemporalContext::default())
 }
 
+/// The hex public key a verifier is registered with (Phase-0 root of trust), or
+/// `None` if it has no `aegis:VerifierRegistration` carrying a key.
+fn registered_public_key(store: &Store, verifier: &str) -> Result<Option<String>> {
+    let v = sparql_string_literal(verifier)?;
+    let q = format!(
+        "PREFIX a: <http://aegis.gastown.local/ontology/> \
+         SELECT ?k WHERE {{ ?r a a:VerifierRegistration ; a:verifier {v} ; a:publicKey ?k }} LIMIT 1"
+    );
+    match sparql::query_temporal(store, &q, &TemporalContext::default())? {
+        QueryResult::Select { rows, .. } => Ok(rows.first().and_then(|r| r.get("k")).and_then(|v| {
+            match v {
+                crate::types::Value::Str(s) => Some(s.clone()),
+                _ => None,
+            }
+        })),
+        _ => Ok(None),
+    }
+}
+
+/// MCP tool: `quipu_verdict_verify` -- verify a signed Verdict against the
+/// Phase-0 root of trust: the signature must be valid under the verifier's
+/// REGISTERED public key, AND the verifier must be authorized to attest the
+/// predicate. `trusted` is the conjunction — the property a consumer should gate
+/// on (checked, not trusted-by-assertion).
+///
+/// Input: the verdict fields `{ predicate_id, target_ref, outcome, evidence_hash,
+/// tier?, verifier, signature }`. Output: `{ signature_valid, verifier_registered,
+/// verifier_authorized, trusted }`.
+pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let field = |k: &str| -> Result<String> {
+        input
+            .get(k)
+            .and_then(JsonValue::as_str)
+            .map(std::string::ToString::to_string)
+            .ok_or_else(|| Error::InvalidValue(format!("missing '{k}' parameter")))
+    };
+    let predicate_id = field("predicate_id")?;
+    let target_ref = field("target_ref")?;
+    let outcome = field("outcome")?;
+    let evidence_hash = field("evidence_hash")?;
+    let verifier = field("verifier")?;
+    let signature = field("signature")?;
+    let tier = input
+        .get("tier")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("committed");
+
+    let message = crate::signing::verdict_message(
+        &predicate_id,
+        &target_ref,
+        &outcome,
+        &evidence_hash,
+        tier,
+        &verifier,
+    );
+    let pubkey = registered_public_key(store, &verifier)?;
+    let signature_valid = pubkey
+        .as_deref()
+        .is_some_and(|pk| crate::signing::verify_hex(pk, &message, &signature));
+    let verifier_authorized = is_registered_verifier(store, &verifier, &predicate_id)?;
+
+    Ok(serde_json::json!({
+        "signature_valid": signature_valid,
+        "verifier_registered": pubkey.is_some(),
+        "verifier_authorized": verifier_authorized,
+        "trusted": signature_valid && verifier_authorized
+    }))
+}
+
 /// MCP tool: `quipu_verifier_authorized` -- check the Phase-0 verifier registry:
 /// may `verifier` attest `predicate`? Input: `{ "verifier": "...",
 /// "predicate": "..." }`. Output: `{ "authorized": bool }`.
@@ -311,22 +380,39 @@ pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         )
     );
 
+    // Sign the verdict if a signing identity is attached (Phase 0 v1). The
+    // signature authenticates the attestation; without a key, the verdict is
+    // evaluated but unsigned (honestly `signed: false`).
+    let tier = "committed";
+    let (verifier, signed, signature, verifier_public_key) = match store.signing_identity() {
+        Some(id) => {
+            let sig = id.sign_verdict(&predicate_id, target, outcome, &evidence_hash, tier);
+            (
+                id.verifier.clone(),
+                true,
+                Some(sig),
+                Some(id.public_key_hex()),
+            )
+        }
+        None => ("quipu".to_string(), false, None, None),
+    };
+
     // Phase-0 authority: is this verifier registered to attest this predicate?
-    // The registry (aegis:VerifierRegistration) is the governed root of trust;
-    // until it is populated + verdicts are signed, this is an advisory flag, not
-    // a hard gate — but it makes the trust boundary explicit rather than implicit.
-    let verifier = "quipu";
-    let verifier_authorized = is_registered_verifier(store, verifier, &predicate_id)?;
+    // The registry (aegis:VerifierRegistration) is the governed root of trust —
+    // a signature is only TRUSTED once a human registers the verifier's key.
+    let verifier_authorized = is_registered_verifier(store, &verifier, &predicate_id)?;
 
     Ok(serde_json::json!({
         "predicate_id": predicate_id,
         "target_ref": target,
         "outcome": outcome,
         "evidence_hash": evidence_hash,
-        "tier": "committed",
+        "tier": tier,
         "verifier": verifier,
         "verifier_authorized": verifier_authorized,
-        "signed": false
+        "signed": signed,
+        "signature": signature,
+        "verifier_public_key": verifier_public_key
     }))
 }
 

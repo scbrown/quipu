@@ -28,6 +28,7 @@ pub mod report;
 pub mod resolution;
 pub mod schema;
 pub mod semweb;
+pub mod signing;
 #[cfg(feature = "shacl")]
 pub mod shacl;
 pub mod sparql;
@@ -83,7 +84,7 @@ pub use mcp::tools::{
 pub use mcp::{
     query_result, tool_cooccurrence, tool_definitions, tool_knot, tool_overlay_compose,
     tool_overlay_create, tool_overlay_write, tool_policy_check, tool_query,
-    tool_verifier_authorized, value_to_json,
+    tool_verdict_verify, tool_verifier_authorized, value_to_json,
 };
 #[cfg(feature = "lancedb")]
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
