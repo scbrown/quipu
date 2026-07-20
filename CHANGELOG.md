@@ -2,6 +2,58 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2026-07-20
+
+### Added
+
+- *(graph)* Export project() — the typed graph API was unusable from outside([1143b7b](https://github.com/scbrown/quipu/commit/1143b7be703b15d19b843abb4204115b3c5f1903))
+- *(store)* Named-graph column on facts — additive ROOT-default foundation (quipu #36)([b57bfab](https://github.com/scbrown/quipu/commit/b57bfab30eb779d2778889b3635dc2949ada6766))
+- *(store)* Graph-scoped writes — overlays extend ROOT without mutating it (quipu #36)([aca75f3](https://github.com/scbrown/quipu/commit/aca75f3c74febf580acfd4a30a93bcc9c254cf53))
+- *(episode)* /episode `graph` field — write knowledge into a named overlay (quipu #36)([8196a08](https://github.com/scbrown/quipu/commit/8196a084b21608028ef72437c9d78fbcb640cf33))
+- *(query)* Content-negotiated W3C SPARQL 1.1 results — fix lossy shape([8e5ea77](https://github.com/scbrown/quipu/commit/8e5ea77d48589f1633467534cc441bb658c96ea5))
+- *(store)* Named-graph overlay primitives — create / write / tombstone / compose (#36/#37)([bf1ecd1](https://github.com/scbrown/quipu/commit/bf1ecd13e0e409754c772a81f8ab22b85f1e70f3))
+- *(shapes)* Governance-plane ("the loom") ontology + SHACL shapes (Phase 1)([325630c](https://github.com/scbrown/quipu/commit/325630c1ea1b3aabd05feaaaac4b13f6cbebb0b7))
+- *(mcp)* Provenance-based work-item co-occurrence — /cooccurrence (quipu#37)([edc845d](https://github.com/scbrown/quipu/commit/edc845de025ca98887fb36b0336e53076d636a29))
+- *(mcp)* Committed-tier policy evaluation — /policy/check (the loom, Phase 1 runtime)([02eff07](https://github.com/scbrown/quipu/commit/02eff07ee413d5f3ae3fc21c577303224be996d3))
+- *(mcp)* Verifier registry — the Phase-0 authority layer (the loom)([c41ddcb](https://github.com/scbrown/quipu/commit/c41ddcb2b439b23bef91592774fd5beb9d23d84d))
+- *(signing)* V1 verdict signing — the loom's Phase-0 root of trust([2336fc7](https://github.com/scbrown/quipu/commit/2336fc7031be230d3e0927cf5851c0ec130ea64d))
+- *(retract)* Triple-level retraction — entity + predicate + value([758cf51](https://github.com/scbrown/quipu/commit/758cf5171482cde144466c561685ffb7c9196c88))
+- *(shapes)* AnsibleGroup + TerraformResource node shapes([184aef4](https://github.com/scbrown/quipu/commit/184aef4197156d02e34e335e9c23094ea631dcb8))
+- *(shapes)* Declare Incident, FailurePattern, SoftwareVersion, StoragePool([25e47a7](https://github.com/scbrown/quipu/commit/25e47a7e2b19274ea1b1c6cb4d0750c1c621d7ac))
+- *(shapes)* Declare ClaudeCodeHook; aegis:Guard deliberately NOT declared([b7b31ad](https://github.com/scbrown/quipu/commit/b7b31ad449f5f60cebd7385fe670bb41a0715df7))
+- *(server)* GET /version — the git SHA of the running build([6ee8412](https://github.com/scbrown/quipu/commit/6ee84129e2d72ca7d6f2763ea67e3a84e20a1ca8))
+
+### Documentation
+
+- The documented build must produce quipu-server — name --features onnx([1da8a09](https://github.com/scbrown/quipu/commit/1da8a090a21a60ae7811b7ba3a696476feffed0e))
+
+### Fixed
+
+- *(onnx)* Bind embedder inputs by name, not positionally([cafb2f7](https://github.com/scbrown/quipu/commit/cafb2f75375e5dffcd424d7f55f0389d6f532217))
+- *(onnx)* Use real attention mask — pad tokens collapsed embeddings([cb7e620](https://github.com/scbrown/quipu/commit/cb7e62080bc6feabeb09c08053da25eb867f8112))
+- *(shapes)* Reconcile SHACL shapes to what /episode actually emits([3d2cad3](https://github.com/scbrown/quipu/commit/3d2cad3dc0d0348a516db004075920391c50bd23))
+- *(sparql)* IsBlank() was aliased to isIRI() — it matched the whole store([f0c70b7](https://github.com/scbrown/quipu/commit/f0c70b7fbf5b2cef674fbfe3e8488cb437c92cd3))
+- *(episode)* Reject untyped nodes with a clear error, not a whole-episode Turtle 400([3769fa9](https://github.com/scbrown/quipu/commit/3769fa987cbc548d4b8205a42243ba4f84cff0b6))
+- *(store)* Create idx_geav in the named-graph migration, not INIT_SQL([ae75e80](https://github.com/scbrown/quipu/commit/ae75e80e50fc9068d3cef89788895648e59f3d10))
+- *(overlay)* Dedupe compose_view over re-asserted base facts (found in 69co live deploy)([e1288fe](https://github.com/scbrown/quipu/commit/e1288fe376c7b323cbeb9118a196530eebf7518f))
+- *(cli)* --version/--help are pure reads, never open a store([a87ce9f](https://github.com/scbrown/quipu/commit/a87ce9f09a13fde6137150038a5e452bbab78c82))
+- *(search)* Dedupe /search results by entity, keep best-scoring row([4f1c506](https://github.com/scbrown/quipu/commit/4f1c50677fa3fafae322a88c78cda7ccb95f3798))
+- *(retract)* Episode retraction no longer orphans node identity([bfe7948](https://github.com/scbrown/quipu/commit/bfe7948d087affdd9448d026138ed5a3bb72e637))
+- *(rdf)* Preserve language tags and datatypes in the Value model([f4d49df](https://github.com/scbrown/quipu/commit/f4d49dffa3e11ab4cc350bdef4c6ebd5bf447fad))
+- *(shapes)* Add `get` (content read-back) and reject unknown actions([eb319be](https://github.com/scbrown/quipu/commit/eb319be56129be7677b77e02e0783b56f691ed87))
+- *(retract)* One retraction datum per triple, not per backing row([26bd04b](https://github.com/scbrown/quipu/commit/26bd04bec37ff5af025d445d3f28c0aea2b4663a))
+- *(retract)* Two-type coverage + refuse orphaning an entity's last rdf:type([0bae616](https://github.com/scbrown/quipu/commit/0bae6168f585e91187f957194f01d653693633ed))
+- Scrub internal identifiers to zero, untrack the runtime store, add the RATCHET([258c6d7](https://github.com/scbrown/quipu/commit/258c6d7744cc5da2b585790a252b496666233473))
+- *(auth)* Close 3 write routes that bypassed read-only + bearer auth, and enforce the list([7604448](https://github.com/scbrown/quipu/commit/7604448232809e8e7ea3b5379269c1bbfc2269b0))
+- *(config)* Actually mint IRIs under the configured base_ns([7d54b10](https://github.com/scbrown/quipu/commit/7d54b105723324fbacef259519be6c29574f6739))
+- *(group_ids)* Make code, doc, test and schema agree — provenance, not isolation([3b1762a](https://github.com/scbrown/quipu/commit/3b1762a453f5b46530639b08d109d0403a8638e8))
+- *(server)* Re-tier 5 writing ro_handler! routes as rw, and enforce tier==classification([51a1436](https://github.com/scbrown/quipu/commit/51a1436bcd814bd75774cccc5ec9549338c01df1))
+
+### Testing
+
+- *(shapes)* Guard the SHACL shape invariants against drift([038c2f3](https://github.com/scbrown/quipu/commit/038c2f314024ca10f8f0309e63a5795fe0521ac9))
+- *(retract)* Lang/typed literals stay precisely retractable([0579895](https://github.com/scbrown/quipu/commit/057989520b78893191aa4d7145d34821cb0f8c49))
+
 ## [0.3.3] - 2026-07-13
 
 Graph analytics, a live report endpoint, episode-scoped retraction, and
@@ -9,12 +61,12 @@ caller-controlled CLI ingest.
 
 ### Added
 
-- **Deterministic Louvain community detection (hq-zlph, #31)** — community
+- **Deterministic Louvain community detection (#31)** — community
   structure over the entity graph with stable, reproducible assignments.
-- **Live graph report endpoint + `quipu_report` MCP tool (hq-ct27, #32)** —
+- **Live graph report endpoint + `quipu_report` MCP tool (#32)** —
   on-demand orientation over the graph (size, central entities, activity)
   exposed via HTTP and MCP.
-- **Episode-scoped logical retraction endpoint (aegis-hxb, #33)** — retract the
+- **Episode-scoped logical retraction endpoint (#33)** — retract the
   facts asserted by a named episode without disturbing others.
 - **`--base-ns` on `episode` (#28)** — override the namespace IRIs are minted in
   (defaults to the built-in aegis namespace), so non-aegis deployments can use
