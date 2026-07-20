@@ -8,7 +8,33 @@
 /// The set of write endpoints. A request to one of these mutates the fact log
 /// (or schema), so it is subject to read-only mode and bearer auth. Everything
 /// else (query, search, entity reads, UI, health) is treated as read-only and
-/// stays open. Kept in sync with the `rw_handler!` routes in `server.rs`.
+/// stays open.
+///
+/// WHY THIS IS A HAND-KEPT LIST AND NOT DERIVED FROM A MACRO (aegis-2f4n).
+/// The obvious idea — "the write set is the `rw_handler!` routes in server.rs" —
+/// is WRONG here, and wrong in the dangerous direction. Write-ness in this crate
+/// is not visible in the handler's type or its registration macro, because
+/// `Store` writes through an `&self` method (interior mutability over the
+/// `SQLite` connection). So a route can be `ro_handler!`, take `&Store`, and
+/// still commit a transaction. Measured 2026-07-20, five such routes do exactly
+/// that: `/shapes` (`load_shapes`), `/propose` (`insert_proposal`),
+/// `/proposal/accept` (`accept_proposal`), `/proposal/reject` (`reject_proposal`),
+/// and `/overlay/create` (`overlay_create` writes the graphs registry). Deriving
+/// the set from `rw_handler!` would drop all five from protection while looking
+/// principled.
+///
+/// The only sound invariant is therefore COMPLETENESS, not derivation: every
+/// route the server registers must be classified as exactly one of write / read,
+/// and `write_endpoints_cover_every_route` (below) fails the build if any route
+/// is left unclassified. That test parses the router source directly, so it runs
+/// in the default matrix even though `server.rs` is a separate `onnx`-gated bin
+/// that the matrix never compiles — which is the gap that let this drift: the
+/// list had a "kept in sync" comment and nothing enforcing it, and it had drifted
+/// to omit `/project`, `/overlay/write` and `/overlay/create` (all writing).
+///
+/// Adding a route to `server.rs`? You must classify it here or in `READ_ENDPOINTS`,
+/// or the test fails. That forced decision is the whole point — write-ness cannot
+/// be inferred for you.
 pub const WRITE_ENDPOINTS: &[&str] = &[
     "/knot",
     "/episode",
@@ -21,6 +47,54 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/proposal/accept",
     "/proposal/reject",
     "/embed_backfill",
+    // aegis-2f4n: registered write routes that WRITE_ENDPOINTS had silently
+    // omitted, so read-only mode and bearer auth did not cover them.
+    "/project",         // rw_handler; louvain persists quipu:memberOfCommunity when persist:true
+    "/overlay/write",   // &mut handler -> store.overlay_write, returns a tx_id
+    "/overlay/create",  // ro_handler by signature, but writes the graphs registry
+];
+
+/// The set of read endpoints: every registered route that does NOT mutate state.
+/// Explicit, not "everything not in `WRITE_ENDPOINTS`", so that a NEW route is
+/// unclassified until a human puts it in one list or the other — see the
+/// completeness test. Parameterized paths keep their axum `{param}` form so they
+/// match the router source verbatim.
+pub const READ_ENDPOINTS: &[&str] = &[
+    "/",
+    "/ui",
+    "/quipu-components.js",
+    "/health",
+    "/version",
+    "/stats",
+    "/query",
+    "/cord",
+    "/unravel",
+    "/validate",
+    "/search",
+    "/hybrid_search",
+    "/unified_search",
+    "/ask",
+    "/search_nodes",
+    "/search_facts",
+    "/search/nodes",
+    "/proposals",
+    "/overlay/compose",
+    "/cooccurrence",
+    "/policy/check",
+    "/verifier/authorized",
+    "/verdict/verify",
+    "/report",
+    "/context",
+    "/entity/{iri}",
+    "/entity/{iri}/json",
+    "/entity/{iri}/ttl",
+    "/entity/{iri}/html",
+    "/entity_history",
+    "/transactions",
+    "/spotlight",
+    "/fragments",
+    "/reconcile",
+    "/preview/{iri}",
 ];
 
 /// Whether `path` is a write endpoint subject to auth / read-only policy.
@@ -153,6 +227,17 @@ mod tests {
         assert!(is_write_endpoint("/episode"));
         assert!(is_write_endpoint("/retract"));
         assert!(is_write_endpoint("/proposal/accept"));
+        // aegis-2f4n: the three routes that were open under read-only mode and
+        // bearer auth because WRITE_ENDPOINTS omitted them. Named so a regression
+        // that drops any of them is a loud, specific failure.
+        assert!(is_write_endpoint("/project"), "/project persists communities on persist:true");
+        assert!(is_write_endpoint("/overlay/write"), "/overlay/write commits a tx");
+        assert!(is_write_endpoint("/overlay/create"), "/overlay/create writes the graphs registry");
+        // ro_handler routes that nonetheless write via &Store interior mutability —
+        // must stay writes; removing them (they "look" like reads) reopens them.
+        assert!(is_write_endpoint("/shapes"));
+        assert!(is_write_endpoint("/propose"));
+        assert!(is_write_endpoint("/proposal/reject"));
         // Reads / unknown paths are not writes.
         assert!(!is_write_endpoint("/query"));
         assert!(!is_write_endpoint("/search"));
@@ -164,5 +249,95 @@ mod tests {
         assert!(constant_time_eq(b"abc", b"abc"));
         assert!(!constant_time_eq(b"abc", b"abd"));
         assert!(!constant_time_eq(b"abc", b"ab"));
+    }
+
+    #[test]
+    fn write_and_read_sets_are_disjoint() {
+        for w in WRITE_ENDPOINTS {
+            assert!(
+                !READ_ENDPOINTS.contains(w),
+                "{w} is in BOTH WRITE_ENDPOINTS and READ_ENDPOINTS — a route is one or the other"
+            );
+        }
+    }
+
+    /// Extract every path passed to `.route("<path>", ...)` in the router source.
+    ///
+    /// This reads `server.rs` via `include_str!`, so it embeds the router text at
+    /// COMPILE TIME and runs in the default `cargo test` matrix — even though the
+    /// server itself is a separate `onnx`-gated binary the matrix never builds.
+    /// That is deliberate: the wiring being outside default CI is exactly how the
+    /// endpoint list drifted (aegis-2f4n), so the enforcer must not need the
+    /// wiring to be compiled.
+    fn routes_in_server_source() -> Vec<String> {
+        let src = include_str!("server.rs");
+        let mut paths = Vec::new();
+        for line in src.lines() {
+            // Match `.route("<path>"` — tolerant of leading whitespace and the
+            // rest of the call. One route per line in this file; assert that
+            // assumption cheaply by scanning each line once.
+            if let Some(idx) = line.find(".route(\"") {
+                let rest = &line[idx + ".route(\"".len()..];
+                if let Some(end) = rest.find('"') {
+                    paths.push(rest[..end].to_string());
+                }
+            }
+        }
+        paths
+    }
+
+    #[test]
+    fn write_endpoints_cover_every_route() {
+        // THE ENFORCER (aegis-2f4n). Every route the server registers must be
+        // classified as exactly one of write / read. A new route that is neither
+        // fails this test, forcing a human to decide — because write-ness is not
+        // inferable from the handler type in this crate (interior mutability).
+        let routes = routes_in_server_source();
+        assert!(
+            routes.len() >= 40,
+            "only found {} routes in server.rs — the .route() parse likely broke; \
+             refusing to pass on a scan that found almost nothing",
+            routes.len()
+        );
+
+        let mut unclassified = Vec::new();
+        for r in &routes {
+            let is_w = WRITE_ENDPOINTS.contains(&r.as_str());
+            let is_r = READ_ENDPOINTS.contains(&r.as_str());
+            if is_w && is_r {
+                panic!("{r} is classified as BOTH write and read");
+            }
+            if !is_w && !is_r {
+                unclassified.push(r.clone());
+            }
+        }
+        assert!(
+            unclassified.is_empty(),
+            "these routes are registered in server.rs but classified in NEITHER \
+             WRITE_ENDPOINTS nor READ_ENDPOINTS: {unclassified:?}. Classify each one. \
+             If it mutates the store — including via an &Store method (interior \
+             mutability) — it is a WRITE. When unsure, it is a write: that is fail-safe."
+        );
+    }
+
+    #[test]
+    fn no_stale_classification_entries() {
+        // The other drift direction: a listed endpoint that is no longer a route.
+        // Harmless for security, but it is how the original "kept in sync" comment
+        // rotted — four ro_handler paths were listed as writes and nobody noticed,
+        // which proved nothing was checking. Keep the lists honest.
+        let routes = routes_in_server_source();
+        let known: std::collections::HashSet<&str> = routes.iter().map(String::as_str).collect();
+        let mut stale = Vec::new();
+        for e in WRITE_ENDPOINTS.iter().chain(READ_ENDPOINTS.iter()) {
+            if !known.contains(e) {
+                stale.push(*e);
+            }
+        }
+        assert!(
+            stale.is_empty(),
+            "these paths are classified but no longer registered as routes in \
+             server.rs: {stale:?}. Remove them, or restore the route."
+        );
     }
 }
