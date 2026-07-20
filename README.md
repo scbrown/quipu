@@ -151,6 +151,10 @@ quipu repl --db my.db
 ### 🌐 REST API & Web UI
 
 ```bash
+# The server needs the onnx feature (embedding runtime); it is not on by default,
+# so a plain `cargo build --release` builds only the CLI and skips quipu-server.
+cargo build --release --features shacl,onnx
+
 quipu-server --db my.db --bind 0.0.0.0:3030
 
 # Open the interactive graph explorer in your browser

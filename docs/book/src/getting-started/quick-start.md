@@ -77,6 +77,10 @@ quipu repl --db my.db
 ## REST API Server
 
 ```bash
+# Build the server: it needs the `onnx` feature (embedding runtime), which is not
+# on by default — a plain `cargo build --release` builds only the `quipu` CLI.
+cargo build --release --features shacl,onnx
+
 # Start
 quipu-server --db my.db --bind 0.0.0.0:3030
 
