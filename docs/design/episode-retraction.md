@@ -1,7 +1,7 @@
 # Episode-Scoped Logical Retraction
 
 > Created: 2026-06-29
-> Status: IMPLEMENTED (aegis-hxb)
+> Status: IMPLEMENTED (aegis-hxb); identity-preservation contract added 2026-07-19 (aegis-arup)
 > Related: [vision.md](./vision.md), [../book/src/architecture/episodes.md](../book/src/architecture/episodes.md)
 
 ## One-Line
@@ -59,12 +59,85 @@ original assertions and records retract rows — it never deletes anything. So:
 Idempotent: a second retraction finds no active facts and is a no-op
 (`tx_id == NOOP_TX`, `retracted == 0`). Unknown episodes are likewise no-ops.
 
+## Identity Is Not Collateral: Ghost Nodes (aegis-arup)
+
+Shared-IRI safety above is about *whose facts* survive. It says nothing about
+*what kind* of fact — and that gap had teeth.
+
+Episode scope is **not attribute-aware**: `rdfs:label` and `rdf:type` are
+ordinary facts. So if episode A declared a node's identity and episode B later
+added an inbound edge to it, retracting A closed the label and the type while B's
+edge stayed live. The result is a **GHOST**: a node that
+
+- still exists, is still reachable by IRI, still answers `?s <pred> ?o`, still
+  counts in `/stats` — and
+- is invisible to a `rdfs:label` regex scan and to `SELECT ?s WHERE { ?s a T }`,
+  which is exactly the discovery path the read path and the agent-facing skills
+  tell every caller to use.
+
+Present and unfindable at the same time: every count right, every list wrong.
+Measured on the live graph by maldoon 2026-07-15 — his own node came out of a
+retraction holding `rdfs:comment`, `prov:wasGeneratedBy` and `applies_to`, with
+no name and no type. It also made his verification query lie to him: a
+label-joined check reported "0 edges" when the edges were fine, and nearly had
+him report destroyed data that was never destroyed.
+
+The deeper problem was the silence. `{"retracted": N}` was returned identically
+whether you re-posted the identity afterwards or walked away — **the API could
+not tell a cleanup from a mutilation**, and neither could the caller. "Remember
+to re-post" is prose, not a control.
+
+### The contract
+
+`on_orphan` decides what happens when a retraction would strip the identity of a
+node that OTHER writes still reference:
+
+| `on_orphan` | Behaviour |
+|---|---|
+| `preserve` (**default**) | The node's `rdfs:label` / `rdf:type` stay **active**. A node that survives the retraction keeps its name and type. |
+| `refuse` | The whole retraction is rejected (HTTP 400, nothing written), naming the nodes at risk. |
+| `allow` | Legacy strict scope — identity goes too, ghosts are created. Still **reported**. |
+
+Two boundary conditions keep `preserve` from over-reaching:
+
+- A node **nothing else references** is not at risk — it leaves the graph whole,
+  identity included. Preserving its label would leave a stub, which is its own
+  debris.
+- If **another episode independently asserts** a label or type, ours is not the
+  node's only identity, so retracting ours orphans nothing and it goes.
+
+Idempotency is unchanged: a second retraction re-selects the preserved identity
+facts and preserves them again — `tx_id == NOOP_TX`, `retracted == 0`.
+
+Whatever the policy, the response **always** reports `identity_orphans` and
+`identity_orphan_entities`. Silence was the bug; the count is the control.
+
+### Detecting existing ghosts
+
+For a whole-graph sweep, note that on this engine `FILTER NOT EXISTS` silently
+returns zero rows (aegis-cclm) — the obvious detector passes its own founding
+specimen. The idiom that actually works is `OPTIONAL` + `!bound`:
+
+```sparql
+SELECT DISTINCT ?s WHERE {
+  ?s ?p ?o .
+  FILTER(strstarts(str(?s), "http://aegis.gastown.local/ontology/"))
+  OPTIONAL { ?s <http://www.w3.org/2000/01/rdf-schema#label> ?l } FILTER(!bound(?l))
+}
+```
+
+Exclude `stmt_*` reification nodes and the `aegis` root — those are unlabelled
+by design.
+
 ## Surface
 
-- Store: `Store::retract_episode(name, timestamp, actor) -> (tx_id, Vec<Fact>)`.
+- Store: `Store::retract_episode(name, timestamp, actor) -> (tx_id, Vec<Fact>)`
+  (applies the default `preserve` policy), and
+  `Store::retract_episode_with_policy(name, timestamp, actor, policy) ->
+  RetractEpisodeOutcome` for an explicit policy plus the identity report.
 - Tool: `quipu_retract_episode` (`tool_retract_episode`).
 - HTTP: `POST /episode/retract` — body `{ "episode": "<name>" }` (aliases
-  `episode_id`, `name`; optional `timestamp`, `actor`).
+  `episode_id`, `name`; optional `timestamp`, `actor`, `on_orphan`).
 
 ## Authorization (hq-azs / hq-otm)
 
@@ -118,6 +191,16 @@ curl -s http://quipu.svc/query -X POST -H 'Content-Type: application/json' \
 # 4. Confirm real entities survive (expect the real facts intact).
 curl -s http://quipu.svc/query -X POST -H 'Content-Type: application/json' \
   -d '{"query":"SELECT ?p ?o WHERE { <http://aegis.gastown.local/ontology/quipu-server> ?p ?o }"}'
+
+# 5. IDENTITY POST-CHECK (aegis-arup). "Facts gone, shared entities intact" reads
+#    GREEN over a ghost — step 4 cannot catch this, because a ghost still answers
+#    ?p ?o. Check each retraction's own report, and then that the survivors are
+#    still FINDABLE by name and by type:
+#      - every response above must show "identity_orphans": 0, or (under the
+#        default preserve policy) a matching "identity_preserved" count;
+#      - and the label scan must still return them:
+curl -s http://quipu.svc/query -X POST -H 'Content-Type: application/json' \
+  -d '{"query":"ASK { <http://aegis.gastown.local/ontology/quipu-server> <http://www.w3.org/2000/01/rdf-schema#label> ?l }"}'
 ```
 
 History is preserved: the retracted test facts remain visible via `/cord`

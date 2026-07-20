@@ -716,6 +716,181 @@ fn retract_episode_unknown_is_noop() {
     assert!(retracted.is_empty());
 }
 
+// -- Ghost nodes: identity survival across episode retraction (aegis-arup) --
+
+use crate::store::ops::OrphanPolicy;
+
+/// maldoon's measured specimen, reduced: a node whose identity (`rdfs:label` +
+/// `rdf:type`) was declared in episode A, with an inbound edge from episode B.
+/// Returns `(store, node, label_pred, type_pred, comment_pred, edge_pred, other)`.
+#[allow(clippy::type_complexity)]
+fn ghost_fixture() -> (Store, i64, i64, i64, i64, i64, i64) {
+    let mut store = test_store();
+    let node = store.intern("http://example.org/ty4h").unwrap();
+    let other = store.intern("http://example.org/lnmc").unwrap();
+    let bead = store.intern("http://example.org/Bead").unwrap();
+    let label = store.intern(crate::namespace::RDFS_LABEL).unwrap();
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    let comment = store
+        .intern("http://www.w3.org/2000/01/rdf-schema#comment")
+        .unwrap();
+    let applies_to = store.intern("http://example.org/applies_to").unwrap();
+
+    // Episode A declares the node's identity plus an ordinary fact.
+    assert_episode_fact(&mut store, "ep-a", node, label, Value::Str("ty4h".into()));
+    assert_episode_fact(&mut store, "ep-a", node, rdf_type, Value::Ref(bead));
+    assert_episode_fact(&mut store, "ep-a", node, comment, Value::Str("notes".into()));
+    // Episode B adds an inbound edge — this is what keeps the node in the graph.
+    assert_episode_fact(&mut store, "ep-b", other, applies_to, Value::Ref(node));
+
+    (store, node, label, rdf_type, comment, applies_to, other)
+}
+
+fn has_active(store: &Store, e: i64, a: i64) -> bool {
+    store
+        .entity_facts(e)
+        .unwrap()
+        .iter()
+        .any(|f| f.attribute == a)
+}
+
+#[test]
+fn retract_episode_preserves_identity_of_still_referenced_nodes() {
+    let (mut store, node, label, rdf_type, comment, applies_to, other) = ghost_fixture();
+
+    let outcome = store
+        .retract_episode_with_policy("ep-a", "2026-02-01T00:00:00Z", None, OrphanPolicy::Preserve)
+        .unwrap();
+
+    // The node keeps its NAME and TYPE: it is still findable by a label scan and
+    // by `?s a ex:Bead`, which is the whole point (aegis-arup).
+    assert!(has_active(&store, node, label), "rdfs:label must survive");
+    assert!(has_active(&store, node, rdf_type), "rdf:type must survive");
+    // Non-identity facts from the retracted episode are still gone...
+    assert!(!has_active(&store, node, comment));
+    // ...and the other episode's edge is untouched.
+    assert!(has_active(&store, other, applies_to));
+
+    assert_eq!(outcome.retracted.len(), 1, "only the comment was retracted");
+    assert_eq!(outcome.preserved_identity.len(), 2);
+    assert_eq!(outcome.orphans.len(), 1);
+    assert_eq!(outcome.orphans[0].entity, node);
+    assert!(outcome.orphans[0].lost_label && outcome.orphans[0].lost_type);
+}
+
+#[test]
+fn retract_episode_allow_still_creates_the_ghost_positive_control() {
+    // DISCRIMINATION (ellie's z0xi standard): the assertions above must FAIL
+    // against the old behaviour, or they prove nothing. `OrphanPolicy::Allow` IS
+    // the old behaviour — strict episode scope, not attribute-aware — so this
+    // test pins the bug that `preserve` fixes. If a future change made identity
+    // survive unconditionally, this test breaks and the guard above becomes
+    // vacuous without anyone noticing.
+    let (mut store, node, label, rdf_type, _comment, applies_to, other) = ghost_fixture();
+
+    let outcome = store
+        .retract_episode_with_policy("ep-a", "2026-02-01T00:00:00Z", None, OrphanPolicy::Allow)
+        .unwrap();
+
+    assert!(!has_active(&store, node, label), "the ghost has no name");
+    assert!(!has_active(&store, node, rdf_type), "and no type");
+    assert!(
+        has_active(&store, other, applies_to),
+        "yet it is still reachable by edge — present AND unfindable"
+    );
+    assert_eq!(outcome.retracted.len(), 3);
+    assert!(outcome.preserved_identity.is_empty());
+    // Even when it ghosts, the API no longer stays silent about it.
+    assert_eq!(outcome.orphans.len(), 1);
+    assert_eq!(outcome.orphans[0].entity, node);
+}
+
+#[test]
+fn retract_episode_refuse_rejects_the_whole_retraction() {
+    let (mut store, node, label, rdf_type, comment, _applies_to, _other) = ghost_fixture();
+    let before = store.current_facts().unwrap().len();
+
+    let err = store
+        .retract_episode_with_policy("ep-a", "2026-02-01T00:00:00Z", None, OrphanPolicy::Refuse)
+        .unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("ty4h"), "names the node at risk: {msg}");
+
+    // Nothing was written: refuse means refuse, not partially applied.
+    assert_eq!(store.current_facts().unwrap().len(), before);
+    assert!(has_active(&store, node, label));
+    assert!(has_active(&store, node, rdf_type));
+    assert!(has_active(&store, node, comment));
+}
+
+#[test]
+fn retract_episode_removes_unreferenced_nodes_whole_identity_included() {
+    // A node NOBODY else references is not a ghost risk — it leaves the graph
+    // entirely. Preserving its label would leave a stub, which is its own kind
+    // of debris.
+    let mut store = test_store();
+    let node = store.intern("http://example.org/solo").unwrap();
+    let cls = store.intern("http://example.org/Thing").unwrap();
+    let label = store.intern(crate::namespace::RDFS_LABEL).unwrap();
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    assert_episode_fact(&mut store, "ep-a", node, label, Value::Str("solo".into()));
+    assert_episode_fact(&mut store, "ep-a", node, rdf_type, Value::Ref(cls));
+
+    let outcome = store
+        .retract_episode_with_policy("ep-a", "2026-02-01T00:00:00Z", None, OrphanPolicy::Preserve)
+        .unwrap();
+
+    assert_eq!(outcome.retracted.len(), 2);
+    assert!(outcome.preserved_identity.is_empty());
+    assert!(outcome.orphans.is_empty());
+    assert!(store.entity_facts(node).unwrap().is_empty());
+}
+
+#[test]
+fn retract_episode_does_not_preserve_identity_another_episode_also_asserts() {
+    // If episode B independently gives the node a label, ours is not its only
+    // name — retracting ours orphans nothing, so it goes.
+    let mut store = test_store();
+    let node = store.intern("http://example.org/dual").unwrap();
+    let label = store.intern(crate::namespace::RDFS_LABEL).unwrap();
+    assert_episode_fact(&mut store, "ep-a", node, label, Value::Str("from-a".into()));
+    assert_episode_fact(&mut store, "ep-b", node, label, Value::Str("from-b".into()));
+
+    let outcome = store
+        .retract_episode_with_policy("ep-a", "2026-02-01T00:00:00Z", None, OrphanPolicy::Preserve)
+        .unwrap();
+
+    assert!(outcome.orphans.is_empty());
+    assert!(outcome.preserved_identity.is_empty());
+    assert_eq!(outcome.retracted.len(), 1);
+    let labels: Vec<_> = store
+        .entity_facts(node)
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == label)
+        .collect();
+    assert_eq!(labels.len(), 1);
+    assert_eq!(labels[0].value, Value::Str("from-b".into()));
+}
+
+#[test]
+fn retract_episode_preserving_is_still_idempotent() {
+    let (mut store, node, label, ..) = ghost_fixture();
+
+    store
+        .retract_episode("ep-a", "2026-02-01T00:00:00Z", None)
+        .unwrap();
+    // The preserved identity facts are still tagged to ep-a, so a second
+    // retraction re-selects them — and preserves them again rather than
+    // finishing the job the first call declined to do.
+    let (tx_id, retracted) = store
+        .retract_episode("ep-a", "2026-03-01T00:00:00Z", None)
+        .unwrap();
+    assert_eq!(tx_id, crate::episode::NOOP_TX);
+    assert!(retracted.is_empty());
+    assert!(has_active(&store, node, label));
+}
+
 #[test]
 fn named_graph_migration_is_additive_and_defaults_existing_facts_to_root() {
     // aegis-g1al / #36. A store created before the `g` column must migrate

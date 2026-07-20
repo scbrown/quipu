@@ -786,13 +786,14 @@ pub fn tool_definitions() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_retract_episode",
-            "description": "Episode-scoped logical retraction: retract all currently-active facts an episode's ingest contributed (activity node, entities, edges, reified statements), via the bitemporal valid_to close path. Logical, not physical — time-travel history is preserved. Entities and other episodes' facts are untouched. Idempotent.",
+            "description": "Episode-scoped logical retraction: retract all currently-active facts an episode's ingest contributed (activity node, entities, edges, reified statements), via the bitemporal valid_to close path. Logical, not physical — time-travel history is preserved. Entities and other episodes' facts are untouched. Idempotent. Node IDENTITY is protected: by default (on_orphan=preserve) rdfs:label/rdf:type survive for any node that other episodes still reference, so retraction never leaves an unlabelled, untyped ghost. The response always reports identity_orphans.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "episode": { "type": "string", "description": "Episode name/identifier to retract (aliases: episode_id, name)" },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the retraction" },
-                    "actor": { "type": "string", "description": "Who is performing the retraction" }
+                    "actor": { "type": "string", "description": "Who is performing the retraction" },
+                    "on_orphan": { "type": "string", "enum": ["preserve", "refuse", "allow"], "description": "What to do when retraction would strip rdfs:label/rdf:type from a node other episodes still reference. preserve (default): keep its identity alive. refuse: reject the whole retraction. allow: legacy strict scope — creates ghosts, reported in identity_orphans." }
                 },
                 "required": ["episode"]
             }

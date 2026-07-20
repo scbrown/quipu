@@ -321,6 +321,124 @@ fn test_retract_episode_idempotent_and_unknown() {
     assert!(tool_retract_episode(&mut store, &serde_json::json!({})).is_err());
 }
 
+// -- Ghost nodes at the API boundary (aegis-arup) --
+
+/// maldoon's specimen, through the real ingest path: episode A declares a node's
+/// identity, episode B only adds an inbound edge (the re-asserted identical
+/// label is skipped as already-active, so episode A still OWNS the identity).
+fn ghost_store() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-a",
+            "timestamp": "2026-04-01T00:00:00Z",
+            "nodes": [{"name": "ty4h", "type": "Bead"}],
+            "edges": []
+        }),
+    )
+    .unwrap();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-b",
+            "timestamp": "2026-04-02T00:00:00Z",
+            "nodes": [{"name": "lnmc", "type": "Bead"}],
+            "edges": [{"source": "lnmc", "target": "ty4h", "relation": "applies_to"}]
+        }),
+    )
+    .unwrap();
+    store
+}
+
+#[test]
+fn test_retract_episode_keeps_identity_of_edge_reachable_node() {
+    let mut store = ghost_store();
+    assert!(ask(
+        &store,
+        &format!("<{NS}ty4h> <{RDFS_LABEL}> \"ty4h\"")
+    ));
+
+    let out =
+        tool_retract_episode(&mut store, &serde_json::json!({ "episode": "ep-a" })).unwrap();
+
+    assert_eq!(out["on_orphan"], "preserve");
+    assert_eq!(out["identity_orphans"], 1);
+    assert_eq!(out["identity_orphan_entities"][0]["entity"], format!("{NS}ty4h"));
+    assert!(out["identity_preserved"].as_i64().unwrap() >= 2);
+
+    // Still findable by the two discovery paths every agent-facing read uses.
+    assert!(
+        ask(&store, &format!("<{NS}ty4h> <{RDFS_LABEL}> \"ty4h\"")),
+        "label scan must still find it"
+    );
+    assert!(
+        ask(&store, &format!("<{NS}ty4h> a <{NS}Bead>")),
+        "rdf:type query must still find it"
+    );
+    // …and episode B's edge is untouched.
+    assert!(ask(
+        &store,
+        &format!("<{NS}lnmc> <{NS}applies_to> <{NS}ty4h>")
+    ));
+}
+
+#[test]
+fn test_retract_episode_allow_ghosts_and_says_so() {
+    // POSITIVE CONTROL: the assertions above must fail against the pre-fix
+    // behaviour, which `allow` still is. What changed even here is silence —
+    // the response now names the node it just made invisible.
+    let mut store = ghost_store();
+
+    let out = tool_retract_episode(
+        &mut store,
+        &serde_json::json!({ "episode": "ep-a", "on_orphan": "allow" }),
+    )
+    .unwrap();
+
+    assert_eq!(out["on_orphan"], "allow");
+    assert_eq!(out["identity_preserved"], 0);
+    assert_eq!(out["identity_orphans"], 1);
+    assert!(
+        !ask(&store, &format!("<{NS}ty4h> <{RDFS_LABEL}> \"ty4h\"")),
+        "the ghost has no name"
+    );
+    assert!(
+        !ask(&store, &format!("<{NS}ty4h> a <{NS}Bead>")),
+        "and no type"
+    );
+    assert!(
+        ask(&store, &format!("<{NS}lnmc> <{NS}applies_to> <{NS}ty4h>")),
+        "yet it is still there, holding an edge"
+    );
+}
+
+#[test]
+fn test_retract_episode_refuse_names_the_node_and_writes_nothing() {
+    let mut store = ghost_store();
+
+    let err = tool_retract_episode(
+        &mut store,
+        &serde_json::json!({ "episode": "ep-a", "on_orphan": "refuse" }),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("ty4h"), "must name the node: {err}");
+
+    // Refused means nothing moved.
+    assert!(ask(&store, &format!("<{NS}ty4h> <{RDFS_LABEL}> \"ty4h\"")));
+    assert!(ask(&store, &format!("<{NS}ty4h> a <{NS}Bead>")));
+
+    // An unknown policy is rejected rather than silently treated as the default.
+    assert!(
+        tool_retract_episode(
+            &mut store,
+            &serde_json::json!({ "episode": "ep-a", "on_orphan": "ignore" })
+        )
+        .is_err()
+    );
+}
+
 #[test]
 fn test_tool_query_enforces_max_sparql_rows() {
     // hq-gkd: a LIMIT-less SELECT must not dump the whole fact log — the server

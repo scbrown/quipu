@@ -5,8 +5,9 @@ use serde_json::Value as JsonValue;
 use crate::episode::{self, Episode};
 use crate::error::{Error, Result};
 use crate::sparql;
+use crate::store::ops::OrphanPolicy;
 use crate::store::{AsOf, Store};
-use crate::types::Value;
+use crate::types::{Fact, Value};
 use crate::vector::KnowledgeVectorStore;
 
 use super::value_to_json;
@@ -417,10 +418,26 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
 /// not physical: time-travel queries still show the retracted facts. Entities
 /// and facts from other episodes are untouched (see [`Store::retract_episode`]).
 ///
-/// Input: `{ "episode": "<name>", "timestamp"?: "...", "actor"?: "..." }`.
-/// `episode_id` and `name` are accepted as aliases for `episode`.
+/// Input: `{ "episode": "<name>", "timestamp"?: "...", "actor"?: "...",
+///            "on_orphan"?: "preserve" | "refuse" | "allow" }`.
+/// `episode_id` and `name` are accepted as aliases for `episode`;
+/// `orphan_policy` for `on_orphan`.
 /// Output: `{ "tx_id", "retracted": <count>, "episode": "<name>",
-///            "statements": [{ "entity", "predicate", "value" }, ...] }`.
+///            "statements": [{ "entity", "predicate", "value" }, ...],
+///            "on_orphan", "identity_preserved": <count>,
+///            "identity_preserved_statements": [...],
+///            "identity_orphans": <count>,
+///            "identity_orphan_entities": [{ "entity", "lost_label",
+///                                           "lost_type" }, ...] }`.
+///
+/// **Ghost nodes (aegis-arup).** Identity triples are ordinary facts, so
+/// scope-only retraction strips `rdfs:label` / `rdf:type` from any node this
+/// episode named while edges from other episodes keep it alive — a node that
+/// answers predicate queries and is invisible to every label scan and type
+/// query. `on_orphan` decides the contract; it defaults to `preserve`, which
+/// keeps identity alive for nodes that retain surviving references. Whatever
+/// the policy, `identity_orphans` names the affected nodes: a caller can now
+/// tell a cleanup from a mutilation, which a bare `{"retracted": N}` could not.
 ///
 /// Idempotent: retracting an already-retracted (or unknown) episode returns
 /// `retracted: 0` and changes nothing.
@@ -450,24 +467,64 @@ pub fn tool_retract_episode(store: &mut Store, input: &JsonValue) -> Result<Json
 
     let actor = input.get("actor").and_then(|v| v.as_str());
 
-    let (tx_id, facts) = store.retract_episode(episode_name, timestamp, actor)?;
+    let policy = match input
+        .get("on_orphan")
+        .or_else(|| input.get("orphan_policy"))
+        .and_then(|v| v.as_str())
+    {
+        Some(s) => OrphanPolicy::parse(s).ok_or_else(|| {
+            Error::InvalidValue(format!(
+                "invalid 'on_orphan': {s:?} (expected preserve | refuse | allow)"
+            ))
+        })?,
+        None => OrphanPolicy::default(),
+    };
 
-    let statements: Vec<JsonValue> = facts
+    let outcome = store.retract_episode_with_policy(episode_name, timestamp, actor, policy)?;
+
+    fn to_statement(store: &Store, f: &Fact) -> JsonValue {
+        serde_json::json!({
+            "entity": store.resolve(f.entity).unwrap_or_default(),
+            "predicate": store.resolve(f.attribute).unwrap_or_default(),
+            "value": value_to_json(store, &f.value),
+        })
+    }
+
+    let statements: Vec<JsonValue> = outcome
+        .retracted
         .iter()
-        .map(|f| {
+        .map(|f| to_statement(store, f))
+        .collect();
+    let preserved: Vec<JsonValue> = outcome
+        .preserved_identity
+        .iter()
+        .map(|f| to_statement(store, f))
+        .collect();
+    let orphans: Vec<JsonValue> = outcome
+        .orphans
+        .iter()
+        .map(|o| {
             serde_json::json!({
-                "entity": store.resolve(f.entity).unwrap_or_default(),
-                "predicate": store.resolve(f.attribute).unwrap_or_default(),
-                "value": value_to_json(store, &f.value),
+                "entity": store.resolve(o.entity).unwrap_or_default(),
+                "lost_label": o.lost_label,
+                "lost_type": o.lost_type,
             })
         })
         .collect();
 
     Ok(serde_json::json!({
-        "tx_id": tx_id,
-        "retracted": facts.len(),
+        "tx_id": outcome.tx_id,
+        "retracted": outcome.retracted.len(),
         "episode": episode_name,
-        "statements": statements
+        "statements": statements,
+        // aegis-arup: the caller must be able to tell a cleanup from a
+        // mutilation. Under `preserve` these nodes kept their identity; under
+        // `allow` they are now ghosts and need an identity re-post.
+        "on_orphan": outcome.policy.as_str(),
+        "identity_preserved": preserved.len(),
+        "identity_preserved_statements": preserved,
+        "identity_orphans": orphans.len(),
+        "identity_orphan_entities": orphans
     }))
 }
 

@@ -8,6 +8,85 @@ use crate::types::{Fact, Op, Value};
 
 use super::{AsOf, Datum, Store};
 
+/// What episode-scoped retraction does when removing an episode's facts would
+/// strip a node's IDENTITY (`rdfs:label` / `rdf:type`) while leaving it
+/// referenced by facts from other episodes — a GHOST NODE (aegis-arup).
+///
+/// A ghost is present (answers predicate queries, holds edges, inflates counts)
+/// and absent (unnameable, untypeable) at the same time: it is invisible to the
+/// label scan and `rdf:type` query that the read path and every agent-facing
+/// skill use for discovery. Before this policy existed, retraction was purely
+/// tx-source-scoped and identity triples were ordinary facts, so
+/// `{"retracted": N}` looked identical for a clean cleanup and a mutilation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OrphanPolicy {
+    /// DEFAULT. Keep the episode's `rdfs:label` / `rdf:type` facts alive for any
+    /// entity that still has surviving references after the retraction. A node
+    /// that survives keeps its name and type; a node with nothing left is
+    /// removed whole, identity included. Reported in
+    /// [`RetractEpisodeOutcome::preserved_identity`].
+    #[default]
+    Preserve,
+    /// Refuse the whole retraction (no writes) if it would orphan any identity.
+    /// For callers that want retract-then-repost to be an explicit decision.
+    Refuse,
+    /// Legacy strict episode-scope: retract identity triples too, creating the
+    /// ghosts. Still reported in [`RetractEpisodeOutcome::orphans`] so the
+    /// caller can repost — the API can no longer stay silent about it.
+    Allow,
+}
+
+impl OrphanPolicy {
+    /// Parse a policy name (`preserve` | `refuse` | `allow`). Case-insensitive.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "preserve" => Some(Self::Preserve),
+            "refuse" => Some(Self::Refuse),
+            "allow" => Some(Self::Allow),
+            _ => None,
+        }
+    }
+
+    /// The policy's canonical name, as accepted by [`OrphanPolicy::parse`].
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Preserve => "preserve",
+            Self::Refuse => "refuse",
+            Self::Allow => "allow",
+        }
+    }
+}
+
+/// An entity whose identity the retraction would strip while leaving it
+/// referenced elsewhere in the graph (aegis-arup).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdentityOrphan {
+    /// The entity term id.
+    pub entity: i64,
+    /// The episode declared this entity's only `rdfs:label`.
+    pub lost_label: bool,
+    /// The episode declared this entity's only `rdf:type`.
+    pub lost_type: bool,
+}
+
+/// Result of an episode-scoped retraction.
+#[derive(Debug, Clone)]
+pub struct RetractEpisodeOutcome {
+    /// The retraction transaction, or [`crate::episode::NOOP_TX`] when nothing
+    /// was written.
+    pub tx_id: i64,
+    /// Facts actually closed by this retraction.
+    pub retracted: Vec<Fact>,
+    /// Identity facts deliberately left ACTIVE under
+    /// [`OrphanPolicy::Preserve`], so their entities stay findable.
+    pub preserved_identity: Vec<Fact>,
+    /// Entities whose identity was at risk. Under `Preserve` these were saved
+    /// (see `preserved_identity`); under `Allow` they are now real ghosts.
+    pub orphans: Vec<IdentityOrphan>,
+    /// The policy that was applied.
+    pub policy: OrphanPolicy,
+}
+
 impl Store {
     // -- Write path --
 
@@ -260,8 +339,24 @@ impl Store {
     /// produce multiple transactions that all share the source tag, so every one
     /// of the episode's currently-active contributions is caught.
     ///
+    /// **Identity is not collateral (aegis-arup).** Episode scope is not
+    /// attribute-aware — `rdfs:label` and `rdf:type` are ordinary facts — so a
+    /// naive scope-only retraction strips the name and type off any node whose
+    /// identity this episode declared, while edges from other episodes keep it
+    /// alive: a GHOST, present to predicate queries and invisible to every label
+    /// scan and type query. This path therefore applies
+    /// [`OrphanPolicy::Preserve`] by default: identity facts are kept ACTIVE for
+    /// entities that retain surviving references, and removed with the rest for
+    /// entities that leave the graph entirely. Use
+    /// [`retract_episode_with_policy`](Store::retract_episode_with_policy) to
+    /// pick `Refuse` or the legacy `Allow`, and to see which entities were
+    /// affected.
+    ///
     /// **Idempotent.** Retracting an episode with no active facts (already
-    /// retracted, or never ingested) is a no-op: returns `(NOOP_TX, [])`.
+    /// retracted, or never ingested) is a no-op: returns `(NOOP_TX, [])`. A
+    /// second retraction after a preserving one is also a no-op — the only facts
+    /// left in scope are the preserved identity triples, which are preserved
+    /// again.
     ///
     /// Returns `(tx_id, retracted_facts)`. `tx_id` is the retraction
     /// transaction, or [`crate::episode::NOOP_TX`] when nothing was retracted.
@@ -271,6 +366,36 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<(i64, Vec<Fact>)> {
+        let outcome = self.retract_episode_with_policy(
+            episode_name,
+            timestamp,
+            actor,
+            OrphanPolicy::default(),
+        )?;
+        Ok((outcome.tx_id, outcome.retracted))
+    }
+
+    /// [`retract_episode`](Store::retract_episode) with an explicit ghost-node
+    /// policy and a full report of what the retraction did to node identity
+    /// (aegis-arup).
+    ///
+    /// Episode scope alone is *not* attribute-aware: `rdfs:label` and `rdf:type`
+    /// are ordinary facts, so retracting the episode that declared a node's
+    /// identity strips its name and type while edges asserted by OTHER episodes
+    /// survive — leaving a node that answers predicate queries but is invisible
+    /// to every label scan and type query the read path uses. See
+    /// [`OrphanPolicy`] for the three contracts and which one is the default.
+    ///
+    /// Whatever the policy, the outcome names the affected entities: the API can
+    /// no longer return an identical `{"retracted": N}` for a clean cleanup and
+    /// a mutilation.
+    pub fn retract_episode_with_policy(
+        &mut self,
+        episode_name: &str,
+        timestamp: &str,
+        actor: Option<&str>,
+        policy: OrphanPolicy,
+    ) -> Result<RetractEpisodeOutcome> {
         let source_tag = format!("episode:{episode_name}");
 
         // Currently-active asserted facts written by this episode's
@@ -287,10 +412,84 @@ impl Store {
         };
 
         if facts.is_empty() {
-            return Ok((crate::episode::NOOP_TX, Vec::new()));
+            return Ok(RetractEpisodeOutcome {
+                tx_id: crate::episode::NOOP_TX,
+                retracted: Vec::new(),
+                preserved_identity: Vec::new(),
+                orphans: Vec::new(),
+                policy,
+            });
         }
 
-        let datums: Vec<Datum> = facts
+        let orphans = self.identity_orphans(&facts, &source_tag)?;
+
+        if policy == OrphanPolicy::Refuse && !orphans.is_empty() {
+            let mut names: Vec<String> = orphans
+                .iter()
+                .map(|o| {
+                    let iri = self
+                        .resolve(o.entity)
+                        .unwrap_or_else(|_| o.entity.to_string());
+                    let missing = match (o.lost_label, o.lost_type) {
+                        (true, true) => "rdfs:label + rdf:type",
+                        (true, false) => "rdfs:label",
+                        _ => "rdf:type",
+                    };
+                    format!("{iri} (loses {missing})")
+                })
+                .collect();
+            names.sort();
+            return Err(crate::error::Error::InvalidValue(format!(
+                "retracting episode '{episode_name}' would orphan the identity of {} node(s) that \
+                 keep surviving references — they would become unlabelled/untyped ghosts, \
+                 invisible to label scans and rdf:type queries: {}. Re-run with \
+                 on_orphan=preserve to keep their identity, or on_orphan=allow to accept the \
+                 ghosts (and re-post identity yourself).",
+                orphans.len(),
+                names.join(", ")
+            )));
+        }
+
+        // Under Preserve, identity facts for at-risk entities stay ACTIVE: a node
+        // that survives the retraction keeps its name and type. A node with no
+        // surviving references is not at risk and is removed whole.
+        let preserved_identity: Vec<Fact> = if policy == OrphanPolicy::Preserve {
+            let (label_id, type_id) = self.identity_predicate_ids()?;
+            facts
+                .iter()
+                .filter(|f| {
+                    orphans.iter().any(|o| {
+                        o.entity == f.entity
+                            && ((o.lost_label && Some(f.attribute) == label_id)
+                                || (o.lost_type && Some(f.attribute) == type_id))
+                    })
+                })
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let retracted: Vec<Fact> = facts
+            .into_iter()
+            .filter(|f| {
+                !preserved_identity.iter().any(|p| {
+                    p.entity == f.entity && p.attribute == f.attribute && p.value == f.value
+                })
+            })
+            .collect();
+
+        if retracted.is_empty() {
+            return Ok(RetractEpisodeOutcome {
+                tx_id: crate::episode::NOOP_TX,
+                retracted,
+                preserved_identity,
+                orphans,
+                policy,
+            });
+        }
+
+        let datums: Vec<Datum> = retracted
             .iter()
             .map(|f| Datum {
                 entity: f.entity,
@@ -310,7 +509,105 @@ impl Store {
             actor,
             Some(&format!("retract-episode:{episode_name}")),
         )?;
-        Ok((tx_id, facts))
+        Ok(RetractEpisodeOutcome {
+            tx_id,
+            retracted,
+            preserved_identity,
+            orphans,
+            policy,
+        })
+    }
+
+    /// Term ids for `rdfs:label` and `rdf:type`, or `None` if never interned
+    /// (in which case no fact can carry that predicate).
+    fn identity_predicate_ids(&self) -> Result<(Option<i64>, Option<i64>)> {
+        Ok((
+            self.lookup(crate::namespace::RDFS_LABEL)?,
+            self.lookup(crate::namespace::RDF_TYPE)?,
+        ))
+    }
+
+    /// Entities that `in_scope` (an episode's active facts) would leave without
+    /// a label and/or a type, while OTHER writes still reference them.
+    ///
+    /// "Still referenced" is deliberately broad — subject or object of any
+    /// surviving fact. A node reachable by any edge must stay findable by name.
+    fn identity_orphans(&self, in_scope: &[Fact], source_tag: &str) -> Result<Vec<IdentityOrphan>> {
+        let (label_id, type_id) = self.identity_predicate_ids()?;
+        if label_id.is_none() && type_id.is_none() {
+            return Ok(Vec::new());
+        }
+
+        let mut entities: Vec<i64> = in_scope
+            .iter()
+            .filter(|f| Some(f.attribute) == label_id || Some(f.attribute) == type_id)
+            .map(|f| f.entity)
+            .collect();
+        entities.sort_unstable();
+        entities.dedup();
+
+        let mut orphans = Vec::new();
+        for entity in entities {
+            // Would the entity still be referenced at all once this episode's
+            // facts are gone? If not, it leaves the graph whole — not a ghost.
+            if !self.has_surviving_reference(entity, source_tag)? {
+                continue;
+            }
+            let declared_label = in_scope
+                .iter()
+                .any(|f| f.entity == entity && Some(f.attribute) == label_id);
+            let declared_type = in_scope
+                .iter()
+                .any(|f| f.entity == entity && Some(f.attribute) == type_id);
+            // Another episode may independently assert a label/type; then ours
+            // is not the node's only identity and losing it orphans nothing.
+            let lost_label =
+                declared_label && !self.has_surviving_predicate(entity, label_id, source_tag)?;
+            let lost_type =
+                declared_type && !self.has_surviving_predicate(entity, type_id, source_tag)?;
+            if lost_label || lost_type {
+                orphans.push(IdentityOrphan {
+                    entity,
+                    lost_label,
+                    lost_type,
+                });
+            }
+        }
+        Ok(orphans)
+    }
+
+    /// Is `entity` the subject or object of any active fact NOT written by
+    /// `source_tag`'s transaction(s)?
+    fn has_surviving_reference(&self, entity: i64, source_tag: &str) -> Result<bool> {
+        let as_object = Value::Ref(entity).to_bytes();
+        let mut stmt = self.conn.prepare(
+            "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
+             WHERE f.op = 1 AND f.valid_to IS NULL \
+               AND (f.e = ?1 OR f.v = ?2) \
+               AND (t.source IS NULL OR t.source <> ?3) \
+             LIMIT 1",
+        )?;
+        Ok(stmt.exists(params![entity, as_object, source_tag])?)
+    }
+
+    /// Does `entity` carry an active `predicate` fact from outside `source_tag`?
+    fn has_surviving_predicate(
+        &self,
+        entity: i64,
+        predicate: Option<i64>,
+        source_tag: &str,
+    ) -> Result<bool> {
+        let Some(predicate) = predicate else {
+            return Ok(false);
+        };
+        let mut stmt = self.conn.prepare(
+            "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
+             WHERE f.op = 1 AND f.valid_to IS NULL \
+               AND f.e = ?1 AND f.a = ?2 \
+               AND (t.source IS NULL OR t.source <> ?3) \
+             LIMIT 1",
+        )?;
+        Ok(stmt.exists(params![entity, predicate, source_tag])?)
     }
 
     // -- Read path --
