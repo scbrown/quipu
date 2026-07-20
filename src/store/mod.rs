@@ -38,6 +38,15 @@ pub struct Store {
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,
+    /// Base namespace new IRIs are minted under on the episode write paths.
+    /// Defaults to the built-in aegis namespace; the server sets it from
+    /// `[quipu].base_ns` at startup so a non-aegis deployment does not silently
+    /// mint aegis IRIs (aegis-4h3x). An IRI namespace is data identity, not a
+    /// setting — it cannot be changed after the first write without orphaning
+    /// every fact already stored, so the configured value MUST reach the ingest
+    /// path. Before this field, `config.base_ns` was read by nothing and every
+    /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
+    pub(crate) base_ns: String,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
     pub(crate) vector_delegate: Option<DelegatingVectorStore>,
@@ -135,6 +144,7 @@ impl Store {
             resolution_config: ResolutionConfig::default(),
             search_config: SearchConfig::default(),
             shacl_config: ShaclConfig::default(),
+            base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
             vector_delegate: None,
             local_vector_backend: None,
             #[cfg(feature = "reactive-reasoner")]
@@ -165,6 +175,18 @@ impl Store {
     /// Get a reference to the entity-resolution config.
     pub fn resolution_config(&self) -> &ResolutionConfig {
         &self.resolution_config
+    }
+
+    /// The base namespace new IRIs are minted under on the episode write paths
+    /// (aegis-4h3x). The server sets this from `[quipu].base_ns` at startup.
+    pub fn base_ns(&self) -> &str {
+        &self.base_ns
+    }
+
+    /// Set the base namespace for minted IRIs. Called once at startup from
+    /// config; a per-call `--base-ns` still overrides at the ingest call site.
+    pub fn set_base_ns(&mut self, base_ns: impl Into<String>) {
+        self.base_ns = base_ns.into();
     }
 
     /// Get a mutable reference to the search/limit config.

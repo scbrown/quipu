@@ -55,7 +55,7 @@ fn main() {
         "project" => cli::cmd_project(&args, db_path),
         "report" => cli::cmd_report(&args, db_path),
         "reason" => cli::cmd_reason(&args, db_path),
-        "episode" => cli_commands::cmd_episode(&args, db_path),
+        "episode" => cli_commands::cmd_episode(&args, db_path, &config.base_ns),
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
         "propose" => cli_propose::cmd_propose(&args, db_path),

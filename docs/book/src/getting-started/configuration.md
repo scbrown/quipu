@@ -10,8 +10,11 @@ or `~/.config/bobbin/config.toml` for global defaults.
 # Path to the SQLite triple store
 store_path = ".bobbin/quipu/quipu.db"
 
-# Directory containing OWL/SHACL schema files (optional)
-schema_path = "schemas/"
+# Base namespace new IRIs are minted under (optional; default is the aegis
+# ontology namespace). A non-aegis deployment MUST set this before its first
+# write — an IRI namespace is data identity and cannot be changed afterwards
+# without re-ingesting every episode.
+base_ns = "http://example.org/kb/"
 
 [quipu.server]
 # Enable the REST API server
@@ -30,7 +33,7 @@ url = "http://quipu.example:3030"
 | Field | Default | Description |
 |-------|---------|-------------|
 | `store_path` | `.bobbin/quipu/quipu.db` | SQLite database path |
-| `schema_path` | None | Directory for schema files |
+| `base_ns` | aegis ontology NS | Base namespace for minted IRIs (set before first write; `--base-ns` overrides per CLI call) |
 | `server.enabled` | `false` | Enable REST API server |
 | `server.bind` | `127.0.0.1:3030` | Server bind address |
 | `federation.remotes` | `[]` | Remote Quipu endpoints |

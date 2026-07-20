@@ -170,6 +170,46 @@ fn test_tool_validate() {
 }
 
 #[test]
+fn tool_episode_mints_under_configured_base_ns() {
+    // aegis-4h3x: the REST/MCP ingest path must mint IRIs under the store's
+    // configured base_ns, not the hardcoded aegis default. Verified by INGESTING
+    // and querying the entity back under the configured base — not by reading
+    // config — because a wrong namespace fragments the graph silently.
+    let custom = "http://example.org/kb/";
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_base_ns(custom);
+
+    let input = serde_json::json!({
+        "name": "ns-check",
+        "episode_body": "widget lives here",
+        "source": "test",
+        "group_id": "test",
+        "timestamp": "2026-04-04T12:00:00Z",
+        "nodes": [{"name": "widget", "type": "Thing"}],
+        "edges": []
+    });
+    tool_episode(&mut store, &input).unwrap();
+
+    // The entity exists under the CONFIGURED namespace ...
+    assert!(
+        ask(&store, &format!("<{custom}widget> ?p ?o")),
+        "entity was not minted under the configured base_ns {custom}"
+    );
+    // ... and NOT under the aegis default it used to hardcode.
+    assert!(
+        !ask(&store, "<http://aegis.gastool.local/ontology/widget> ?p ?o"),
+        "sanity: bogus-namespace probe should never match"
+    );
+    assert!(
+        !ask(
+            &store,
+            &format!("<{}widget> ?p ?o", crate::namespace::DEFAULT_BASE_NS)
+        ),
+        "entity leaked into the hardcoded aegis namespace — base_ns was ignored (the aegis-4h3x bug)"
+    );
+}
+
+#[test]
 fn test_tool_episode() {
     let mut store = Store::open_in_memory().unwrap();
     let input = serde_json::json!({

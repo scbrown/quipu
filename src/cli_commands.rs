@@ -6,7 +6,7 @@ use oxrdfio::RdfFormat;
 
 use crate::cli::{chrono_now, flag_value, format_value, resolve_timestamp};
 
-pub fn cmd_episode(args: &[String], db_path: &str) {
+pub fn cmd_episode(args: &[String], db_path: &str, config_base_ns: &str) {
     let file_arg = match args.get(2) {
         Some(p) if !p.starts_with("--") => p.as_str(),
         _ => {
@@ -18,10 +18,13 @@ pub fn cmd_episode(args: &[String], db_path: &str) {
         }
     };
 
-    // Override the namespace IRIs are minted in (quipu #28). Defaults to the
-    // built-in aegis namespace, letting non-aegis deployments use the episode
-    // abstraction instead of routing around it via verbatim-Turtle knot.
-    let base_ns = flag_value(args, "--base-ns").unwrap_or(quipu::namespace::DEFAULT_BASE_NS);
+    // Namespace IRIs are minted in (quipu #28). Precedence: --base-ns flag >
+    // configured [quipu].base_ns > built-in aegis default. Before aegis-4h3x the
+    // fallback was DEFAULT_BASE_NS directly, so the CLI ignored config just like
+    // the REST/MCP paths did; the config value (which itself defaults to
+    // DEFAULT_BASE_NS) is now the fallback, so a non-aegis deployment's config is
+    // honoured while the flag still wins.
+    let base_ns = flag_value(args, "--base-ns").unwrap_or(config_base_ns);
 
     let json_str = if file_arg == "-" {
         let mut buf = String::new();

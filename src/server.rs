@@ -55,6 +55,16 @@ async fn main() {
         std::process::exit(1);
     });
 
+    // Mint IRIs under the CONFIGURED base namespace, not the hardcoded aegis
+    // default (aegis-4h3x) — without this, `[quipu] base_ns = "..."` was inert
+    // and every REST/MCP ingest silently minted aegis IRIs. Data identity, so
+    // it must be set before the first write; announce it when it is non-default
+    // so a non-aegis deployment can see the namespace it is actually writing.
+    store.set_base_ns(config.base_ns.clone());
+    if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
+        eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
+    }
+
     // Apply the entity-resolution policy so episode ingest actually dedups
     // (hq-uye) — without this, `[quipu.resolution] enabled = true` is inert.
     store.resolution_config_mut().clone_from(&config.resolution);

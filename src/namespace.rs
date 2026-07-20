@@ -5,8 +5,11 @@
 
 // ── Project namespace ──────────────────────────────────────────
 
-/// Default base namespace for the Aegis ontology.
-/// Override via `QuipuConfig::base_ns`.
+/// Default base namespace for the Aegis ontology. The fallback when no
+/// namespace is configured; a deployment overrides it via `[quipu].base_ns`,
+/// which the server applies with `Store::set_base_ns` at startup so the episode
+/// write paths mint IRIs under it (aegis-4h3x). The CLI honours the same config
+/// value and lets `--base-ns` override per invocation.
 pub const DEFAULT_BASE_NS: &str = "http://aegis.gastown.local/ontology/";
 
 // ── W3C standard namespaces ────────────────────────────────────

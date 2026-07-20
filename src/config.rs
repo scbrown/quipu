@@ -148,8 +148,12 @@ pub struct QuipuConfig {
     /// Path to the triple store database (default: `.bobbin/quipu/quipu.db`).
     pub store_path: PathBuf,
 
-    /// Path to directory containing OWL/SHACL schema files.
-    pub schema_path: Option<PathBuf>,
+    // aegis-4h3x: `schema_path` was removed here. It was a documented config key
+    // with NO reader anywhere in the tree — accepted, defaulted, and inert, the
+    // same false-affordance as `base_ns` was on the ingest path. Deleting is
+    // parse-safe (this struct is `#[serde(default)]`, no `deny_unknown_fields`,
+    // so an old config carrying `schema_path` is simply ignored). If a schema
+    // directory is wanted later, add it back WITH the code that reads it.
 
     /// Base namespace URI for ontology entities (default: `DEFAULT_BASE_NS`).
     pub base_ns: String,
@@ -180,7 +184,6 @@ impl Default for QuipuConfig {
     fn default() -> Self {
         Self {
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
-            schema_path: None,
             base_ns: namespace::DEFAULT_BASE_NS.to_string(),
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
@@ -387,7 +390,6 @@ mod tests {
         let toml_str = r#"
 [quipu]
 store_path = "/data/quipu.db"
-schema_path = "/schemas"
 
 [quipu.server]
 enabled = true
@@ -404,7 +406,6 @@ embed_batch_size = 64
         let file: ConfigFile = toml::from_str(toml_str).unwrap();
         let cfg = file.quipu;
         assert_eq!(cfg.store_path, PathBuf::from("/data/quipu.db"));
-        assert_eq!(cfg.schema_path, Some(PathBuf::from("/schemas")));
         assert!(cfg.server.enabled);
         assert_eq!(cfg.server.bind, "0.0.0.0:8080");
         assert_eq!(cfg.federation.remotes.len(), 1);

@@ -174,11 +174,14 @@ pub fn tool_episodes_complete(store: &mut Store, input: &JsonValue) -> Result<Js
     // Honour the configured entity-resolution policy on this write path too
     // (hq-uye). Opts are cloned out before the &mut store borrow.
     let opts = episode::IngestResolutionOpts::from_config(store.resolution_config());
+    // Mint IRIs under the CONFIGURED namespace, not the hardcoded aegis default
+    // (aegis-4h3x). Read before the &mut borrow, same as opts.
+    let base_ns = store.base_ns().to_string();
     let result = episode::ingest_episode_with_resolution(
         store,
         &episode,
         timestamp,
-        crate::namespace::DEFAULT_BASE_NS,
+        &base_ns,
         Some(&opts),
     )?;
 
