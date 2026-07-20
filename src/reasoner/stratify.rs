@@ -188,14 +188,6 @@ fn cycle_error(graph: &DiGraph<String, EdgeKind>, scc: &[NodeIndex]) -> Reasoner
     }
 }
 
-/// Convenience: return the number of rules allocated to each stratum.
-///
-/// Useful for CLI progress reporting.
-#[must_use]
-pub fn rules_per_stratum(strata: &Strata) -> Vec<usize> {
-    strata.levels.iter().map(Vec::len).collect()
-}
-
 /// Free-standing helper for testing `Strata` without plumbing through the
 /// rest of the module.
 #[cfg(test)]

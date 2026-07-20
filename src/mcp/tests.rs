@@ -894,6 +894,71 @@ fn test_tool_definitions() {
     );
 }
 
+#[test]
+#[cfg(not(feature = "owl"))]
+fn readme_mcp_tool_counts_match_the_manifest() {
+    // The README stated the MCP tool count four times and two of them had drifted
+    // (22 vs the real 25) — the number an integrator uses to check their client
+    // loaded the full manifest. Pin EVERY count mention to tool_definitions() so
+    // they cannot disagree again. Runs on the default (no-owl) build, where the
+    // primary count is 25 and the parenthetical is "(N with owl)" = 26.
+    let base = tool_definitions().len();
+    let with_owl = base + 1; // quipu_load_ontology is the only owl-gated tool.
+    let readme = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"),
+    )
+    .unwrap();
+
+    // "(<N> tools)" — the architecture diagram.
+    for cap in counts_before(&readme, " tools)") {
+        assert_eq!(cap, base, "README '({cap} tools)' disagrees with the {base}-tool manifest");
+    }
+    // "<N> MCP tools" — prose mentions.
+    for cap in counts_before(&readme, " MCP tools") {
+        assert_eq!(cap, base, "README '{cap} MCP tools' disagrees with the {base}-tool manifest");
+    }
+    // "MCP tools (<N>; <M> with `owl`)" — the feature matrix row. Identified by
+    // the `(N;` form, which the prose "MCP tools (M with owl)" mentions do not have.
+    let mut matrix_primary = None;
+    for (idx, _) in readme.match_indices("MCP tools (") {
+        let after = &readme[idx + "MCP tools (".len()..];
+        let digits: String = after.chars().take_while(char::is_ascii_digit).collect();
+        if after[digits.len()..].starts_with(';') {
+            matrix_primary = digits.parse::<usize>().ok();
+            assert!(
+                after.contains(&format!("{with_owl} with")),
+                "feature-matrix owl count must be {with_owl}"
+            );
+        }
+    }
+    assert_eq!(
+        matrix_primary,
+        Some(base),
+        "feature-matrix 'MCP tools (N; ...)' primary count must be {base}"
+    );
+}
+
+/// Every integer that appears immediately before each occurrence of `marker`.
+/// Avoids a regex dep — the tool-count mentions are always `<digits><marker>`.
+#[cfg(not(feature = "owl"))]
+fn counts_before(hay: &str, marker: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    for (idx, _) in hay.match_indices(marker) {
+        let digits: String = hay[..idx]
+            .chars()
+            .rev()
+            .take_while(char::is_ascii_digit)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        if let Ok(n) = digits.parse() {
+            out.push(n);
+        }
+    }
+    out
+}
+
 // ── Schema evolution proposal tool tests ────────────────────────────
 
 #[test]

@@ -93,15 +93,6 @@ pub fn is_numeric_datatype(dt: &str) -> bool {
     )
 }
 
-/// Whether an XSD datatype maps to `Value::Int`/`Value::Float` on parse.
-///
-/// Only the two canonical datatypes take the fast path; every other numeric
-/// datatype becomes `Value::Typed` so its IRI round-trips (`xsd:decimal` is
-/// exact, `xsd:double` is not — collapsing them is a silent semantic change).
-pub fn is_fast_path_numeric(dt: &str) -> bool {
-    matches!(dt, XSD_INTEGER | XSD_DOUBLE)
-}
-
 // ── Bobbin IRI constructors ───────────────────────────────────
 
 /// Build a `bobbin:code/{repo}/{path}` IRI (`CodeModule`).

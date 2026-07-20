@@ -1,6 +1,6 @@
 # PageRank & Personalized PageRank — Specification
 
-> Status: **Specified, unbuilt** · Origin: agent (strider), prompted by Stiwi ·
+> Status: **Delivered (Phases 1–2: in_degree, PageRank/PPR, Louvain); Phase 3 write-back unbuilt** · Origin: agent (strider), prompted by Stiwi ·
 > Date: 2026-06-21
 >
 > Fulfils the graph-algorithm intent in [`vision.md`](./vision.md) §9 and the

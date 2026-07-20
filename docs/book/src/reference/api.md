@@ -190,8 +190,9 @@ let feedback = validator.validate(data_turtle)?;
 if feedback.conforms {
     // Safe to write
 } else {
-    for issue in &feedback.issues {
-        println!("{}: {} at {}", issue.severity, issue.message, issue.focus_node);
+    for issue in &feedback.results {
+        let message = issue.message.as_deref().unwrap_or("(no message)");
+        println!("{}: {} at {}", issue.severity, message, issue.focus_node);
     }
 }
 ```

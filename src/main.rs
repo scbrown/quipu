@@ -218,7 +218,7 @@ COMMANDS:
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
 OPTIONS:
-    --db <path>       Store file (default: quipu.db)
+    --db <path>       Store file (default: .bobbin/quipu/quipu.db)
     -V, --version     Print version and exit
     -h, --help        Print this help and exit
 

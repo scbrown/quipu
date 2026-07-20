@@ -92,10 +92,6 @@ impl<'a> FederatedProvider<'a> {
         self.providers.push(provider);
     }
 
-    pub fn provider_count(&self) -> usize {
-        self.providers.len()
-    }
-
     /// Query all providers and merge results.
     /// Rows are tagged with a `_provider` field to identify the source.
     pub fn query_all(&self, sparql: &str) -> Result<QueryResult> {

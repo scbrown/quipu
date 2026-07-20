@@ -11,7 +11,7 @@ quipu-server --db my.db --bind 0.0.0.0:3030
 | Flag | Description |
 |------|-------------|
 | `--db <path>` | Store database path (default: `.bobbin/quipu/quipu.db`) |
-| `--bind <addr>` | Bind address (default: `0.0.0.0:3030`) |
+| `--bind <addr>` | Bind address (default: `127.0.0.1:3030`) |
 
 ## Endpoints
 
