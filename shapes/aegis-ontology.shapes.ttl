@@ -1061,6 +1061,32 @@ aegis:StoragePoolShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── ClaudeCodeHook ───────────────────────────────────────────────
+#
+# A Claude Code hook — a PreToolUse/Stop/SessionStart entry wired into a
+# settings.json. Declared because it was IN USE and undeclared (4 nodes:
+# gt-tap-guard, graph-capture-hook, quipu-session-capture.sh,
+# crew-only-guard.sh) — an aegis-rt9c I6 instance, found by ruling on
+# aegis-gljx rather than by any check.
+#
+# THIS IS THE CANONICAL KIND FOR A GUARD, and aegis:Guard was deliberately NOT
+# declared. Guard-ness is a ROLE, not a kind: the live graph realizes it as
+# ClaudeCodeHook, CLI, Script, Directive, SystemdService and DesignDoc. A Guard
+# class would have become a SEVENTH way to type a guard while consolidating
+# none of them. Type a guard by WHAT IT IS; say that it guards with an edge.
+
+aegis:ClaudeCodeHookShape a sh:NodeShape ;
+    sh:targetClass aegis:ClaudeCodeHook ;
+    sh:property [
+        sh:path aegis:event ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ═════���══════════════════════════════════════��══════════════════════
 # Relationship Constraints
 # ═══════════════════════════════════════════════════════════════════
