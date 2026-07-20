@@ -112,6 +112,16 @@ facts and preserves them again — `tx_id == NOOP_TX`, `retracted == 0`.
 Whatever the policy, the response **always** reports `identity_orphans` and
 `identity_orphan_entities`. Silence was the bug; the count is the control.
 
+### The blunt tool was the only tool
+
+Part of why this bit is that episode granularity was the finest handle
+available. Removing two stray edges meant retracting the whole episode — 33
+statements for a 2-statement target, a 16x blast radius — and the re-post that
+follows is where identity gets lost. `quipu_retract` / `POST /retract` now takes
+an optional `value` alongside `predicate`, so entity + predicate + value closes
+exactly one `(e, a, v)` statement. Reach for that first; retract the episode only
+when you really do mean the episode.
+
 ### Detecting existing ghosts
 
 For a whole-graph sweep, note that on this engine `FILTER NOT EXISTS` silently
