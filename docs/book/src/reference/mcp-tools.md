@@ -89,17 +89,27 @@ Retract facts for an entity.
 
 ### `quipu_retract_episode`
 
-Episode-scoped **logical** retraction (`POST /episode/retract`). Retracts every
-currently-active fact an episode's ingest contributed (activity node, entities,
-edges, reified statements) by closing `valid_to` — logical, not physical, so
-time-travel history is preserved. Entities and other episodes' facts (even about
-shared IRIs) are untouched. Idempotent.
+Episode-scoped **logical** retraction (`POST /episode/retract`). Retracts the
+facts an episode's ingest contributed (activity node, entities, edges, reified
+statements) by closing `valid_to` — logical, not physical, so time-travel history
+is preserved. Entities and other episodes' facts (even about shared IRIs) are
+untouched. Idempotent.
+
+By default (`on_orphan: "preserve"`) it does **not** retract every currently-active
+fact: it keeps `rdfs:label` / `rdf:type` alive for nodes that other episodes still
+reference, so scope retraction cannot leave a node visible to predicate queries but
+invisible to label/type scans.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `episode` | Yes | Episode name to retract (aliases: `episode_id`, `name`) |
 | `timestamp` | No | Retraction timestamp |
 | `actor` | No | Who is retracting |
+| `on_orphan` | No | `preserve` (default) \| `refuse` (reject if it would orphan identity) \| `allow` (retract everything). Alias: `orphan_policy` |
+
+Response: `tx_id`, `retracted`, `episode`, `statements`, plus identity accounting —
+`on_orphan`, `identity_preserved` (+`identity_preserved_statements`), and
+`identity_orphans` (+`identity_orphan_entities`).
 
 Retraction is a more sensitive write than assertion. The endpoint honours
 read-only mode and bearer auth today; when per-principal scopes (hq-azs) and

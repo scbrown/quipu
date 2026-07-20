@@ -121,11 +121,27 @@ Optional: `predicate` (only retract matching), `timestamp`, `actor`.
 
 ### `POST /episode/retract`
 
-Episode-scoped **logical** retraction. Retracts every currently-active fact an
-episode's ingest contributed — its activity node, generated entities, the bare
-relationship triples (edges), and any reified confidence statements — by closing
-their `valid_to` via the bitemporal retract path. Facts are never physically
-deleted, so time-travel queries (`/cord`, `/unravel`) still show them.
+Episode-scoped **logical** retraction. Retracts the facts an episode's ingest
+contributed — its activity node, generated entities, the bare relationship
+triples (edges), and any reified confidence statements — by closing their
+`valid_to` via the bitemporal retract path. Facts are never physically deleted,
+so time-travel queries (`/cord`, `/unravel`) still show them.
+
+**Identity of surviving nodes is preserved by default.** Identity triples
+(`rdfs:label`, `rdf:type`) are ordinary facts, so a naive scope retraction would
+strip them from any node this episode *named* even when edges from other episodes
+keep that node alive — leaving a "ghost": a node that answers predicate queries
+but is invisible to every label scan and type query. The `on_orphan` parameter
+decides that contract:
+
+| `on_orphan` (alias `orphan_policy`) | Behaviour |
+|-------------------------------------|-----------|
+| `preserve` (**default**) | Keep `rdfs:label` / `rdf:type` alive for nodes that retain surviving references. So the default does **not** retract "every currently-active fact" — it spares the identity of nodes that would otherwise be orphaned. |
+| `refuse` | If the retraction would orphan any node's identity, reject the whole operation (400) and change nothing. The safe mode when you do not want to strand entities. |
+| `allow` | Legacy behaviour: retract every currently-active fact the episode wrote, orphaned identity included. |
+
+Regardless of policy the response reports `identity_orphans` (a count) and names
+the affected nodes, so a caller can tell a cleanup from a mutilation.
 
 The retraction unit is the episode's ingest transaction(s), identified by their
 `source = "episode:{name}"` tag. Because identical assertions are deduplicated to
@@ -140,10 +156,16 @@ curl -s localhost:3030/episode/retract -X POST \
   -d '{"episode": "goldblum-deploy-verify-032"}'
 ```
 
-Aliases for `episode`: `episode_id`, `name`. Optional: `timestamp`, `actor`.
-**Idempotent** — retracting an already-retracted or unknown episode returns
-`{"retracted": 0}` and changes nothing. Response includes `tx_id`, `retracted`
-(count), and `statements` (the retracted facts).
+Aliases for `episode`: `episode_id`, `name`. Optional: `timestamp`, `actor`,
+`on_orphan` (`preserve` | `refuse` | `allow`, default `preserve` — see the table
+above). **Idempotent** — retracting an already-retracted or unknown episode
+returns `{"retracted": 0}` and changes nothing.
+
+Response fields: `tx_id`, `retracted` (count), `episode`, `statements` (the
+retracted facts), and the identity accounting — `on_orphan` (the policy applied),
+`identity_preserved` (count) with `identity_preserved_statements`, and
+`identity_orphans` (count) with `identity_orphan_entities` (`entity`,
+`lost_label`, `lost_type`).
 
 > **Auth (hq-azs / hq-otm).** Retraction is a write — and a *more* sensitive one
 > than assertion, since it removes facts from current views. The endpoint is in

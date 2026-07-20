@@ -527,6 +527,42 @@ fn test_retract_episode_keeps_identity_of_edge_reachable_node() {
 }
 
 #[test]
+fn test_retract_episode_refuse_rejects_and_writes_nothing() {
+    // The reference docs (rest-api.md / mcp-tools.md) promise on_orphan="refuse"
+    // rejects an orphaning retraction and changes nothing. Assert it at the TOOL
+    // level — the handler the docs describe — so the doc and the handler cannot
+    // drift apart. ghost_store() is exactly the orphaning case: retracting ep-a
+    // would strip ty4h's identity while ep-b's edge keeps it alive.
+    let mut store = ghost_store();
+
+    let err = tool_retract_episode(
+        &mut store,
+        &serde_json::json!({ "episode": "ep-a", "on_orphan": "refuse" }),
+    );
+    assert!(err.is_err(), "on_orphan=refuse must reject an orphaning retraction");
+
+    // Refuse means refuse: identity and the label are still there, nothing written.
+    assert!(
+        ask(&store, &format!("<{NS}ty4h> <{RDFS_LABEL}> \"ty4h\"")),
+        "a refused retraction must leave the label intact"
+    );
+    assert!(
+        ask(&store, &format!("<{NS}ty4h> a <{NS}Bead>")),
+        "a refused retraction must leave rdf:type intact"
+    );
+
+    // And an unknown/bad policy value is a clean error, not a silent default.
+    assert!(
+        tool_retract_episode(
+            &mut store,
+            &serde_json::json!({ "episode": "ep-a", "on_orphan": "destroy" }),
+        )
+        .is_err(),
+        "an unrecognized on_orphan value must error, not fall back to a default"
+    );
+}
+
+#[test]
 fn test_retract_episode_allow_ghosts_and_says_so() {
     // POSITIVE CONTROL: the assertions above must fail against the pre-fix
     // behaviour, which `allow` still is. What changed even here is silence —
