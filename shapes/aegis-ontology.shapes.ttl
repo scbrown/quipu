@@ -979,6 +979,88 @@ aegis:AttractionShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── Events & Software (aegis-rtht) ───────────────────────────────
+#
+# These four kinds are sanctioned by the extraction guide and were ALREADY IN
+# THE GRAPH before they were declared here — 32 live nodes between them at the
+# time of writing. They are reconciliation to the guide, not new vocabulary.
+#
+# Nobody noticed because nothing validated: for as long as zero shapes were
+# loaded server-side (aegis-1y3q), /episode accepted them silently. The
+# disagreement would first have surfaced as a validation failure on CORRECTLY
+# extracted data, in the same change that turned enforcement on. Declared now,
+# while enforcement is still off, so that flip stays boring.
+#
+# Only rdfs:label is required, per this file's own invariant (I1): a required
+# predicate nothing emits is the 133-violation defect aegis-z0xi removed. The
+# structured predicates below are maxCount-only — they constrain shape IF
+# present and demand nothing.
+
+# ── Incident ─────────────────────────────────────────────────────
+#
+# A discrete failure event with a start and (usually) an end. Bare kebab-case
+# per guide §1b. Distinct from FailurePattern: an Incident HAPPENED ONCE,
+# a FailurePattern RECURS. (aegis-dqn2: no similarity threshold can separate
+# "Dolt" the DatabaseService from "dolt-2.1.8-drop-pk-crash" the Incident —
+# which is exactly why they are different kinds and not one fuzzy pile.)
+
+aegis:IncidentShape a sh:NodeShape ;
+    sh:targetClass aegis:Incident ;
+    sh:property [
+        sh:path aegis:severity ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+# ── FailurePattern ───────────────────────────────────────────────
+#
+# A RECURRING failure class abstracted from one or more incidents — the graph's
+# most-used abstract kind (22 live nodes) and, until now, its largest undeclared
+# one (aegis-49qs). Naming is `fp-<kebab>` per guide §1b; note the live graph
+# already carries both `fp-`-prefixed and bare-kebab nodes, which aegis-4oeg
+# tracks. Declaring the kind does NOT fix that split — a shape constrains
+# properties, not identity — so do not read this block as closing 4oeg.
+
+aegis:FailurePatternShape a sh:NodeShape ;
+    sh:targetClass aegis:FailurePattern ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+# ── SoftwareVersion ──────────────────────────────────────────────
+#
+# A specific released version of a piece of software, so an incident can point
+# at the version that carried it rather than at the product in general.
+
+aegis:SoftwareVersionShape a sh:NodeShape ;
+    sh:targetClass aegis:SoftwareVersion ;
+    sh:property [
+        sh:path aegis:version ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+# ── StoragePool ──────────────────────────────────────────────────
+#
+# A backing storage pool (e.g. fastpool). Distinct from ZFSDataset: a dataset
+# lives IN a pool.
+
+aegis:StoragePoolShape a sh:NodeShape ;
+    sh:targetClass aegis:StoragePool ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ═════���══════════════════════════════════════��══════════════════════
 # Relationship Constraints
 # ═══════════════════════════════════════════════════════════════════
