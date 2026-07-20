@@ -399,6 +399,26 @@ async fn knot(
     Ok(axum::Json(result))
 }
 
+// ⚠ ro_handler! / rw_handler! ARE A NAMING CONVENTION, NOT A TYPE GUARANTEE
+// (aegis-e163). ro_handler! hands the tool a `&Store` and rw_handler! a
+// `&mut Store`, but `&Store` is NOT a read-only capability here: `Store` writes
+// through `&self` methods (interior mutability over the SQLite handle), so a tool
+// with a `&Store` parameter can and does commit transactions. An earlier comment
+// on `/resolve` claimed "ro_handler! hands a &Store, so the route cannot write
+// even by mistake; that is a type, not a convention" — that was false, and five
+// ro_handler! routes wrote (shapes, propose, accept/reject proposal,
+// overlay_create), all now rw_handler!.
+//
+// So the tier you pick here is a CLAIM you are responsible for, not something the
+// compiler checks. The invariant that IS enforced: `macro_tier_matches_write_
+// classification` (http_auth.rs) fails the build if an rw_handler! route is
+// absent from WRITE_ENDPOINTS or an ro_handler! route is present in it — i.e. the
+// macro tier and the read-only/auth classification cannot silently disagree
+// (that disagreement, one layer down, is the aegis-2f4n bypass). It cannot prove
+// an ro_handler! tool does not write — only a real read-only handle could, and
+// that is a larger refactor (a `ReadStore` newtype) noted on the bead. Until
+// then: if a tool calls a mutating store method, register it rw_handler! AND add
+// its route to WRITE_ENDPOINTS.
 macro_rules! ro_handler {
     ($name:ident, $tool:path) => {
         async fn $name(
@@ -433,11 +453,14 @@ ro_handler!(
     graphiti_search_nodes,
     quipu::mcp::graphiti::tool_search_nodes
 );
-ro_handler!(shapes, quipu::tool_shapes);
-// Named-graph overlays (aegis-g1al / #36). create + compose take an immutable
-// store lock (overlay_create writes the graphs registry under the mutex; compose
-// is a pure read); write needs &mut and is defined below like `knot`.
-ro_handler!(overlay_create, quipu::tool_overlay_create);
+// aegis-e163: /shapes WRITES (tool_shapes -> store.load_shapes / remove_shapes),
+// so it is rw_handler!, not the ro_handler! it was mis-registered as.
+rw_handler!(shapes, quipu::tool_shapes);
+// Named-graph overlays (aegis-g1al / #36). aegis-e163: overlay_create WRITES the
+// graphs registry (through a `&self` method — hence it was wrongly ro_handler!),
+// so it is rw_handler! now. compose is a genuine read (no mutating call). write
+// is a hand-written &mut handler defined below like `knot`.
+rw_handler!(overlay_create, quipu::tool_overlay_create);
 ro_handler!(overlay_compose, quipu::tool_overlay_compose);
 ro_handler!(cooccurrence, quipu::tool_cooccurrence);
 ro_handler!(policy_check, quipu::tool_policy_check);
@@ -467,10 +490,14 @@ async fn report_get(State(s): State<SharedStore>) -> Result<axum::Json<JsonValue
 }
 ro_handler!(context, quipu::tool_context);
 
-ro_handler!(propose_schema_change, quipu::tool_propose_schema_change);
+// aegis-e163: propose/accept/reject all WRITE (insert_proposal / accept_proposal
+// / reject_proposal persist proposal state through `&self`), so they are
+// rw_handler!, not the ro_handler! they were mis-registered as. list_proposals is
+// a genuine read.
+rw_handler!(propose_schema_change, quipu::tool_propose_schema_change);
 ro_handler!(list_proposals, quipu::tool_list_proposals);
-ro_handler!(accept_proposal, quipu::tool_accept_proposal);
-ro_handler!(reject_proposal, quipu::tool_reject_proposal);
+rw_handler!(accept_proposal, quipu::tool_accept_proposal);
+rw_handler!(reject_proposal, quipu::tool_reject_proposal);
 
 rw_handler!(episode, quipu::tool_episode);
 rw_handler!(episodes_complete, quipu::tool_episodes_complete);

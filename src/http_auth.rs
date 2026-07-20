@@ -340,4 +340,101 @@ mod tests {
              server.rs: {stale:?}. Remove them, or restore the route."
         );
     }
+
+    /// Map each handler ident named in a `.route("<path>", get(h)/post(h))` line
+    /// to its path. A handler may appear under more than one path only in theory;
+    /// here each is unique, so last-wins is fine.
+    fn handler_to_path() -> std::collections::HashMap<String, String> {
+        let src = include_str!("server.rs");
+        let mut map = std::collections::HashMap::new();
+        for line in src.lines() {
+            let Some(idx) = line.find(".route(\"") else { continue };
+            let rest = &line[idx + ".route(\"".len()..];
+            let Some(end) = rest.find('"') else { continue };
+            let path = rest[..end].to_string();
+            // Pull the handler ident out of every `get(<ident>` / `post(<ident>`.
+            for kw in ["get(", "post("] {
+                let mut from = 0;
+                while let Some(p) = rest[from..].find(kw) {
+                    let start = from + p + kw.len();
+                    let ident: String = rest[start..]
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                        .collect();
+                    if !ident.is_empty() {
+                        map.insert(ident, path.clone());
+                    }
+                    from = start;
+                }
+            }
+        }
+        map
+    }
+
+    /// Every `rw_handler!(<name>, ...)` / `ro_handler!(<name>, ...)` invocation in
+    /// server.rs, as `(is_rw, name)`. Tolerant of the macro spanning lines (the
+    /// name may be on the line after `ro_handler!(`).
+    fn macro_tiers() -> Vec<(bool, String)> {
+        let src = include_str!("server.rs");
+        let mut out = Vec::new();
+        for (marker, is_rw) in [("rw_handler!(", true), ("ro_handler!(", false)] {
+            let mut from = 0;
+            while let Some(p) = src[from..].find(marker) {
+                let after = from + p + marker.len();
+                let ident: String = src[after..]
+                    .chars()
+                    .skip_while(|c| c.is_whitespace())
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !ident.is_empty() {
+                    out.push((is_rw, ident));
+                }
+                from = after;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn macro_tier_matches_write_classification() {
+        // THE "ONE LAYER DOWN" ENFORCER (aegis-e163). The ro_handler!/rw_handler!
+        // tier is a naming convention, not a type guarantee — `&Store` writes via
+        // interior mutability, so an ro_handler! route CAN write. Five did
+        // (shapes, propose, accept/reject proposal, overlay_create) and were open
+        // to exactly the aegis-2f4n bypass one layer up. This pins the macro tier
+        // to the read-only/auth classification so the two cannot silently diverge:
+        //   - every rw_handler! route MUST be a write endpoint;
+        //   - no ro_handler! route may be a write endpoint.
+        // It cannot prove an ro_handler! tool never writes (only a real read-only
+        // handle could); it makes a MISMATCH between the tier and the auth list a
+        // build failure, which is the concrete drift this bug was.
+        let paths = handler_to_path();
+        let mut problems = Vec::new();
+        for (is_rw, name) in macro_tiers() {
+            let Some(path) = paths.get(&name) else {
+                // A macro handler that is never routed is dead code; flag it so the
+                // parser breaking (or a genuinely orphaned handler) is not silent.
+                problems.push(format!("{name}: rw/ro handler is not registered on any .route()"));
+                continue;
+            };
+            let is_write = WRITE_ENDPOINTS.contains(&path.as_str());
+            match (is_rw, is_write) {
+                (true, false) => problems.push(format!(
+                    "{path} ({name}) is rw_handler! but NOT in WRITE_ENDPOINTS — \
+                     classify it as a write or it bypasses read-only/auth"
+                )),
+                (false, true) => problems.push(format!(
+                    "{path} ({name}) is ro_handler! but IS in WRITE_ENDPOINTS — a \
+                     write route registered read-only is the aegis-e163 mis-tier; \
+                     register it rw_handler!"
+                )),
+                _ => {}
+            }
+        }
+        assert!(
+            problems.is_empty(),
+            "macro tier disagrees with the write classification:\n  {}",
+            problems.join("\n  ")
+        );
+    }
 }
