@@ -202,12 +202,16 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         store.search_config().oversample(limit),
     )?;
 
+    // Oversample in both paths: an entity has one embedding row per fact/text,
+    // so the raw top-N can be several rows of the same entity (aegis-a1s5).
+    // Fetching extra candidates leaves room to dedupe down to `limit` entities.
+    let oversampled = store.search_config().oversample(limit);
+
     let matches = if let Some(ref allowed) = scope {
-        // Oversample, then keep only in-scope entities (works for both the
-        // SQLite backend and as a safety net over LanceDB pushdown). entity_type
-        // is also pushed down to LanceDB for efficiency.
+        // Keep only in-scope entities (works for both the SQLite backend and as
+        // a safety net over LanceDB pushdown). entity_type is also pushed down
+        // to LanceDB for efficiency.
         let pushdown = entity_type.map(|t| format!("entity_type = '{t}'"));
-        let oversampled = store.search_config().oversample(limit);
         store
             .vector_store()
             .vector_search_filtered(&embedding, oversampled, pushdown.as_deref(), valid_at)?
@@ -217,11 +221,19 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                     .resolve(m.entity_id)
                     .is_ok_and(|iri| allowed.contains(&iri))
             })
-            .take(limit)
             .collect::<Vec<_>>()
     } else {
-        store.vector_search(&embedding, limit, valid_at)?
+        store.vector_search(&embedding, oversampled, valid_at)?
     };
+
+    // Dedupe by entity, keeping the highest-scoring occurrence. Matches arrive
+    // score-descending, so the first row seen for an entity is its best one.
+    let mut seen = std::collections::HashSet::new();
+    let matches: Vec<_> = matches
+        .into_iter()
+        .filter(|m| seen.insert(m.entity_id))
+        .take(limit)
+        .collect();
 
     let results: Vec<JsonValue> = matches
         .iter()

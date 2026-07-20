@@ -896,6 +896,61 @@ fn test_search_results_include_source_field() {
     assert_eq!(result["results"][0]["source"], "knowledge");
 }
 
+#[test]
+fn test_tool_search_dedupes_by_entity() {
+    // aegis-a1s5: an entity has one embedding row per fact/text (PK is
+    // (entity_id, valid_from)), so the raw top-N was returning the same entity
+    // 2-3x and wasting the result slots. Each entity must appear at most once,
+    // keeping its highest-scoring row, and the limit must be filled with
+    // *distinct* entities.
+    let store = test_store_with_data();
+    let emb: Vec<f32> = (0..8).map(|i| (1.0 + i as f32 * 0.1).sin()).collect();
+    let other: Vec<f32> = (0..8).map(|i| (2.0 + i as f32 * 0.1).sin()).collect();
+
+    let alice = store.intern("http://example.org/alice").unwrap();
+    for (n, day) in ["2026-01-01", "2026-01-02", "2026-01-03"]
+        .iter()
+        .enumerate()
+    {
+        store
+            .embed_entity(alice, &format!("Alice fact {n}"), &emb, day)
+            .unwrap();
+    }
+    let bob = store.intern("http://example.org/bob").unwrap();
+    store
+        .embed_entity(bob, "Bob", &other, "2026-01-01")
+        .unwrap();
+
+    let result = tool_search(
+        &store,
+        &serde_json::json!({ "embedding": emb, "limit": 10 }),
+    )
+    .unwrap();
+    let results = result["results"].as_array().unwrap();
+
+    let mut entities: Vec<&str> = results
+        .iter()
+        .map(|r| r["entity"].as_str().unwrap())
+        .collect();
+    let before = entities.len();
+    entities.sort_unstable();
+    entities.dedup();
+    assert_eq!(
+        before,
+        entities.len(),
+        "each entity must appear at most once"
+    );
+    assert_eq!(result["count"], 2, "alice (deduped) + bob");
+
+    // A limit smaller than the duplicate count must still return distinct
+    // entities, not one entity's rows filling every slot.
+    let limited =
+        tool_search(&store, &serde_json::json!({ "embedding": emb, "limit": 2 })).unwrap();
+    let limited = limited["results"].as_array().unwrap();
+    assert_eq!(limited.len(), 2);
+    assert_ne!(limited[0]["entity"], limited[1]["entity"]);
+}
+
 /// Set up two entities in different tenant groups (via episode provenance),
 /// each carrying the SAME embedding so an unfiltered vector search returns both.
 /// Returns the shared embedding. (hq-93d test fixture)
