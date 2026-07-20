@@ -1882,3 +1882,99 @@ fn test_signed_verdict_end_to_end_root_of_trust() {
     assert_eq!(bad["signature_valid"], false, "flipping outcome must break the sig");
     assert_eq!(bad["trusted"], false);
 }
+
+// ── aegis-fmyi × aegis-arup: the two changes meet in json_to_value ──────
+//
+// Triple-level retraction matches on exact `Value` equality and parses its
+// `value` param with `json_to_value`. Once a language-tagged literal stopped
+// being `Str("hello@en")` and became `Value::Lang`, the bare-string form could
+// no longer name it — so if `json_to_value` could not express a tagged literal,
+// lang-tagged facts would have become UNRETRACTABLE by the precise API.
+
+#[test]
+fn triple_retraction_can_name_a_lang_tagged_literal() {
+    let mut store = Store::open_in_memory().unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        r#"<http://example.org/s> <http://example.org/g> "hello"@en .
+<http://example.org/s> <http://example.org/g> "hello@en" .
+<http://example.org/s> <http://example.org/g> "hello"@fr ."#
+            .as_bytes(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-07-15T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // Retract ONLY the @en literal, named by tag.
+    let out = tool_retract(
+        &mut store,
+        &serde_json::json!({
+            "entity": "http://example.org/s",
+            "predicate": "http://example.org/g",
+            "value": {"value": "hello", "lang": "en"}
+        }),
+    )
+    .unwrap();
+    assert_eq!(out["retracted"], 1, "exactly the @en literal");
+
+    let rows = tool_query(
+        &store,
+        &serde_json::json!({"query": "SELECT ?o WHERE { <http://example.org/s> <http://example.org/g> ?o }"}),
+    )
+    .unwrap();
+    let left: Vec<_> = rows["rows"].as_array().unwrap().iter().map(|r| &r["o"]).collect();
+    assert_eq!(left.len(), 2, "the other two survive: {left:?}");
+    // The lookalike PLAIN STRING must be untouched — it is a different term.
+    assert!(
+        left.iter().any(|o| *o == &serde_json::json!("hello@en")),
+        "the plain string must survive being confused with the tag: {left:?}"
+    );
+    // …as must the same lexical form under a different tag.
+    assert!(
+        left.iter()
+            .any(|o| *o == &serde_json::json!({"value": "hello", "lang": "fr"})),
+        "@fr must survive: {left:?}"
+    );
+}
+
+#[test]
+fn triple_retraction_can_name_a_typed_literal() {
+    let mut store = Store::open_in_memory().unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        r#"<http://example.org/s> <http://example.org/d> "2026-07-15"^^<http://www.w3.org/2001/XMLSchema#date> .
+<http://example.org/s> <http://example.org/d> "2026-07-15" ."#
+            .as_bytes(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-07-15T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // The typed literal and the plain string share a lexical form; only the
+    // datatype separates them, so only the datatype can name one for removal.
+    let out = tool_retract(
+        &mut store,
+        &serde_json::json!({
+            "entity": "http://example.org/s",
+            "predicate": "http://example.org/d",
+            "value": {"value": "2026-07-15", "datatype": "http://www.w3.org/2001/XMLSchema#date"}
+        }),
+    )
+    .unwrap();
+    assert_eq!(out["retracted"], 1, "the xsd:date, not the plain string");
+
+    let rows = tool_query(
+        &store,
+        &serde_json::json!({"query": "SELECT ?o WHERE { <http://example.org/s> <http://example.org/d> ?o }"}),
+    )
+    .unwrap();
+    let left = rows["rows"].as_array().unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0]["o"], serde_json::json!("2026-07-15"), "plain string survives");
+}
