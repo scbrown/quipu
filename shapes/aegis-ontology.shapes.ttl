@@ -745,6 +745,57 @@ aegis:AnsibleRoleShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── AnsibleGroup ─────────────────────────────────────────────────
+#
+# An inventory group (a leaf host-group, a :children parent, or `all`).
+# DECLARED layer — see the extraction guide §3a. A group is not the hosts in it.
+
+aegis:AnsibleGroupShape a sh:NodeShape ;
+    sh:targetClass aegis:AnsibleGroup ;
+    sh:property [
+        sh:path aegis:groupName ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:src ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+# ── TerraformResource ────────────────────────────────────────────
+#
+# A resource block declared in terraform/*.tf, named `{resourceType}.{resourceName}`.
+# DECLARED layer — see the extraction guide §3a. A `proxmox_lxc` resource is NOT
+# the LXCContainer it provisions; they are related by aegis:provisions and must
+# never be merged, or drift becomes unrepresentable.
+
+aegis:TerraformResourceShape a sh:NodeShape ;
+    sh:targetClass aegis:TerraformResource ;
+    sh:property [
+        sh:path aegis:resourceType ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:resourceName ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:src ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ── DockerImage ──────��───────────────────────────────────────────
 #
 # A container image.
