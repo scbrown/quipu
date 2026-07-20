@@ -450,7 +450,17 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     };
 
     let (tx_id, count) =
-        store.retract_triples(entity_id, predicate_id, value.as_ref(), timestamp, actor)?;
+        store.retract_triples(
+            entity_id,
+            predicate_id,
+            value.as_ref(),
+            timestamp,
+            actor,
+            input
+                .get("allow_orphan")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        )?;
 
     Ok(serde_json::json!({
         "tx_id": tx_id,

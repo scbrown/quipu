@@ -1237,12 +1237,169 @@ fn retract_survives_duplicate_backing_rows() {
 
     // Previously: Err(UNIQUE constraint failed: facts.e, facts.a, facts.v, facts.tx)
     let (_tx, count) = store
-        .retract_triples(e, Some(a), Some(&v), "2026-01-03T00:00:00Z", Some("ian"))
+        .retract_triples(e, Some(a), Some(&v), "2026-01-03T00:00:00Z", Some("ian"), false)
         .expect("retraction must not fail on duplicate backing rows");
 
     assert_eq!(count, 1, "one logical triple retracted once, not once per row");
     assert!(
         store.entity_facts(e).unwrap().is_empty(),
         "every backing row must be closed, or the triple survives its own retraction"
+    );
+}
+
+/// Retracting ONE of an entity's types must leave the others alive (aegis-a0ne).
+///
+/// This is the discriminating case, and its absence is why the bug shipped: on a
+/// node with a SINGLE rdf:type, "removed the value you asked for" and "removed
+/// every row for that predicate" are THE SAME OBSERVABLE. Both controls in the
+/// original report had one type, both returned green, and the green was
+/// published. A single-type test is not coverage — it is a test that cannot
+/// fail. The failure mode it misses is silent: the node keeps its label,
+/// comments and edges and loses its type, so it stays visible to label scans
+/// and vanishes from every `?s a ?type` query. A half-ghost.
+#[test]
+fn retract_one_type_leaves_the_others() {
+    let mut store = test_store();
+
+    let e = store.intern("http://example.org/goldblum-repo").unwrap();
+    let a = store.intern("http://example.org/type").unwrap();
+    let keep = Value::Str("GitRepo".into());
+    let drop = Value::Str("GitRepository".into());
+
+    for v in [&keep, &drop] {
+        store
+            .transact(
+                &[Datum {
+                    entity: e,
+                    attribute: a,
+                    value: v.clone(),
+                    valid_from: "2026-01-01".into(),
+                    valid_to: None,
+                    op: Op::Assert,
+                }],
+                "2026-01-01T00:00:00Z",
+                None,
+                None,
+            )
+            .unwrap();
+    }
+    assert_eq!(store.entity_facts(e).unwrap().len(), 2, "precondition: two types");
+
+    let (_tx, count) = store
+        .retract_triples(e, Some(a), Some(&drop), "2026-01-02T00:00:00Z", Some("ian"), false)
+        .expect("targeted retraction must succeed");
+
+    assert_eq!(count, 1, "exactly ONE triple retracted, not every row for the predicate");
+
+    let left: Vec<Value> = store
+        .entity_facts(e)
+        .unwrap()
+        .into_iter()
+        .map(|f| f.value)
+        .collect();
+    assert_eq!(
+        left,
+        vec![keep],
+        "the untargeted type MUST survive — losing it ghosts the node: label and edges \
+         remain while every type query goes blind"
+    );
+}
+
+/// Retracting an entity's LAST rdf:type while it keeps other facts is refused
+/// unless explicitly overridden (aegis-a0ne).
+///
+/// Asserts all four arms, because a guard that only ever refuses is as useless
+/// as one that never does: refuse the half-ghost, allow the override, allow a
+/// retraction that leaves another type behind, and allow retracting an entity
+/// whole (nothing survives, so nothing is orphaned).
+#[test]
+fn retract_refuses_to_orphan_the_last_type() {
+    // The REAL rdf:type IRI — the guard keys on it, so a placeholder predicate
+    // would make this test pass without ever exercising the guard.
+    let ty = crate::namespace::RDF_TYPE;
+    let lbl = "http://example.org/label";
+
+    // ARM 1: last type + surviving facts -> REFUSED, and nothing is written.
+    let mut store = test_store();
+    let e = store.intern("http://example.org/goldblum-repo").unwrap();
+    let a = store.intern(ty).unwrap();
+    let l = store.intern(lbl).unwrap();
+    let t = Value::Str("GitRepository".into());
+    let mk = |entity, attribute, value: Value| Datum {
+        entity,
+        attribute,
+        value,
+        valid_from: "2026-01-01".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store
+        .transact(
+            &[
+                mk(e, a, t.clone()),
+                mk(e, l, Value::Str("goldblum-repo".into())),
+            ],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    assert!(
+        store
+            .retract_triples(e, Some(a), Some(&t), "2026-01-02", None, false)
+            .is_err(),
+        "stripping the last type off a surviving node must be refused"
+    );
+    assert_eq!(
+        store.entity_facts(e).unwrap().len(),
+        2,
+        "a refused retraction must write NOTHING"
+    );
+
+    // ARM 2: same call, explicit override -> allowed.
+    assert!(
+        store
+            .retract_triples(e, Some(a), Some(&t), "2026-01-02", None, true)
+            .is_ok(),
+        "allow_orphan must let a caller do it deliberately"
+    );
+
+    // ARM 3: another type survives -> allowed without override.
+    let mut s2 = test_store();
+    let e2 = s2.intern("http://example.org/two-types").unwrap();
+    let a2 = s2.intern(ty).unwrap();
+    let keep = Value::Str("GitRepo".into());
+    let drop = Value::Str("GitRepository".into());
+    s2.transact(
+        &[
+            mk(e2, a2, keep.clone()),
+            mk(e2, a2, drop.clone()),
+        ],
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    assert!(
+        s2.retract_triples(e2, Some(a2), Some(&drop), "2026-01-02", None, false)
+            .is_ok(),
+        "dropping one of two types leaves the node typed — must be allowed"
+    );
+
+    // ARM 4: whole-entity retraction -> nothing survives, so no ghost, allowed.
+    let mut s3 = test_store();
+    let e3 = s3.intern("http://example.org/whole").unwrap();
+    let a3 = s3.intern(ty).unwrap();
+    s3.transact(
+        &[mk(e3, a3, Value::Str("Thing".into()))],
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    assert!(
+        s3.retract_triples(e3, None, None, "2026-01-02", None, false)
+            .is_ok(),
+        "retracting an entity whole removes identity AND references — no ghost"
     );
 }

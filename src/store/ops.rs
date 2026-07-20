@@ -3,7 +3,7 @@
 use rusqlite::params;
 
 use crate::embedding;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::types::{Fact, Op, Value};
 
 use super::{AsOf, Datum, Store};
@@ -285,7 +285,7 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<(i64, usize)> {
-        self.retract_triples(entity, predicate, None, timestamp, actor)
+        self.retract_triples(entity, predicate, None, timestamp, actor, false)
     }
 
     /// Retract current facts for an entity, narrowed by predicate and/or value.
@@ -306,6 +306,7 @@ impl Store {
         value: Option<&Value>,
         timestamp: &str,
         actor: Option<&str>,
+        allow_orphan: bool,
     ) -> Result<(i64, usize)> {
         let facts: Vec<Fact> = self
             .entity_facts(entity)?
@@ -316,6 +317,33 @@ impl Store {
 
         if facts.is_empty() {
             return Ok((0, 0));
+        }
+
+        // Refuse to strip an entity's LAST rdf:type while it keeps other facts —
+        // that is a HALF-GHOST: label, comments and edges survive, so the node
+        // stays visible to label scans and disappears from every `?s a ?t`
+        // query. /episode/retract has had an orphan policy since aegis-arup;
+        // /retract is the sharper instrument and had none, so the blunt tool was
+        // guarded and the precise one was not. A real node (goldblum-repo) was
+        // left typeless this way while the call reported success (aegis-a0ne).
+        //
+        // Only fires when the entity SURVIVES: retracting an entity whole
+        // (predicate = None) removes identity and references together, which
+        // leaves no ghost and stays allowed.
+        if !allow_orphan {
+            let type_id = self.intern(crate::namespace::RDF_TYPE)?;
+            let all = self.entity_facts(entity)?;
+            let types_before = all.iter().filter(|f| f.attribute == type_id).count();
+            let types_going = facts.iter().filter(|f| f.attribute == type_id).count();
+            let survivors = all.len() - facts.len();
+            if types_before > 0 && types_going == types_before && survivors > 0 {
+                return Err(Error::InvalidValue(format!(
+                    "refusing to retract entity {entity}'s last rdf:type while {survivors} other \
+                     fact(s) survive — this would leave a typeless node that label scans still \
+                     find and type queries cannot. Retract the whole entity, assert the \
+                     replacement type first, or pass allow_orphan to override deliberately."
+                )));
+            }
         }
 
         let datums = retraction_datums(&facts);
