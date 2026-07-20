@@ -354,23 +354,55 @@ pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "found": removed
             }))
         }
-        _ => {
+        // Returns the stored turtle, so a caller can verify WHICH shapes are
+        // loaded rather than only their names. Without this, `list` proves a
+        // shape set exists under a name and nothing about its content: a load
+        // of a stale or wrong .ttl is indistinguishable from the right one, and
+        // every deploy-time assertion we have could only ever check names
+        // (aegis-1y3q). The turtle was already in the tuple and discarded.
+        "get" => {
+            let name = input
+                .get("name")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidValue("missing 'name' for get".into()))?;
             let shapes = store.list_shapes()?;
-            let items: Vec<JsonValue> = shapes
-                .iter()
-                .map(|(name, _, loaded_at)| {
-                    serde_json::json!({
-                        "name": name,
-                        "loaded_at": loaded_at
-                    })
-                })
-                .collect();
-            Ok(serde_json::json!({
-                "shapes": items,
-                "count": items.len()
-            }))
+            let found = shapes.iter().find(|(n, _, _)| n == name);
+            match found {
+                Some((n, turtle, loaded_at)) => Ok(serde_json::json!({
+                    "name": n,
+                    "turtle": turtle,
+                    "loaded_at": loaded_at
+                })),
+                None => Err(Error::InvalidValue(format!("no shape set named '{name}'"))),
+            }
         }
+        "list" => list_shapes_json(store),
+        // An unrecognized action USED TO FALL THROUGH TO `list`, so a typo
+        // ("laod") returned HTTP 200 and a plausible shape list — success by
+        // every signal a caller can see, having done nothing. Same silent-no-op
+        // class as `bd label` exiting 0 (aegis-oe10). A missing action still
+        // defaults to "list" above, which keeps a bare `{}` probe working.
+        other => Err(Error::InvalidValue(format!(
+            "unknown shapes action '{other}' (expected: load, list, get, remove)"
+        ))),
     }
+}
+
+fn list_shapes_json(store: &Store) -> Result<JsonValue> {
+    let shapes = store.list_shapes()?;
+    let items: Vec<JsonValue> = shapes
+        .iter()
+        .map(|(name, _, loaded_at)| {
+            serde_json::json!({
+                "name": name,
+                "loaded_at": loaded_at
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "shapes": items,
+        "count": items.len()
+    }))
 }
 
 /// MCP tool: `quipu_retract` -- Retract facts for an entity.

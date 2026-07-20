@@ -665,6 +665,55 @@ fn test_tool_retract_predicate() {
     assert_eq!(store.current_facts().unwrap().len(), 2);
 }
 
+/// `get` returns the stored turtle byte-for-byte, and an unrecognized action is
+/// an ERROR rather than a silent fallback to `list`.
+///
+/// Both halves matter and both are asserted, because the bug was that the
+/// SUCCESS path was indistinguishable from the failure path: a typo'd action
+/// returned 200 and a plausible shape list, so a caller could never tell a
+/// no-op from a load. A missing action still means `list` — a bare `{}` probe
+/// is a documented caller and must keep working (aegis-rtht / aegis-1y3q).
+#[test]
+fn test_tool_shapes_get_and_unknown_action() {
+    let store = Store::open_in_memory().unwrap();
+    let shapes = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\nex:S a sh:NodeShape ; sh:targetClass ex:T .\n";
+
+    tool_shapes(
+        &store,
+        &serde_json::json!({
+            "action": "load", "name": "roundtrip", "turtle": shapes, "timestamp": "2026-07-20"
+        }),
+    )
+    .unwrap();
+
+    // get -> exact content back, so a caller can verify WHICH shapes are loaded.
+    let got = tool_shapes(&store, &serde_json::json!({"action": "get", "name": "roundtrip"}))
+        .expect("get should succeed for a loaded set");
+    assert_eq!(got["turtle"], shapes, "get must round-trip the turtle exactly");
+    assert_eq!(got["name"], "roundtrip");
+
+    // get on an unknown name is an error, not an empty success.
+    assert!(
+        tool_shapes(&store, &serde_json::json!({"action": "get", "name": "absent"})).is_err(),
+        "get on a missing shape set must error"
+    );
+
+    // A typo must NOT silently behave like `list`.
+    let typo = tool_shapes(&store, &serde_json::json!({"action": "laod"}));
+    assert!(typo.is_err(), "an unknown action must error, not fall through to list");
+
+    // Explicit and implicit list both still work.
+    assert_eq!(
+        tool_shapes(&store, &serde_json::json!({"action": "list"})).unwrap()["count"],
+        1
+    );
+    assert_eq!(
+        tool_shapes(&store, &serde_json::json!({})).unwrap()["count"],
+        1,
+        "a bare {{}} probe must keep defaulting to list"
+    );
+}
+
 #[test]
 #[cfg(feature = "shacl")]
 fn test_tool_shapes_load_and_enforce() {
