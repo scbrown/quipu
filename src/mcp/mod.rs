@@ -843,7 +843,9 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "query": { "type": "string", "description": "Natural language search query (auto-embedded when EmbeddingProvider is attached)" },
                     "embedding": { "type": "array", "items": { "type": "number" }, "description": "Pre-computed query embedding vector (f32 array). Takes precedence over query." },
                     "limit": { "type": "integer", "description": "Maximum results (default: 10)" },
-                    "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" }
+                    "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" },
+                    "group_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: best-effort filter to entities from these provenance groups (episode-scoped label, NOT an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope)" },
+                    "entity_type": { "type": "string", "description": "Optional: restrict to entities of this rdf:type IRI" }
                 }
             }
         }),

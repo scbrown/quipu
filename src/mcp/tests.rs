@@ -838,6 +838,24 @@ fn test_tool_definitions() {
         assert_eq!(defs.len(), 25);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
+
+    // The only scoping parameters vector search has must be DISCOVERABLE from the
+    // manifest (aegis-il4g): `tool_search` reads `group_ids` and `entity_type` and
+    // changes results by them, but they were absent from the advertised schema, so
+    // a schema-driven MCP client could not find the one control the search exposes.
+    let search = defs
+        .iter()
+        .find(|d| d["name"] == "quipu_search")
+        .expect("quipu_search must be advertised");
+    let props = &search["inputSchema"]["properties"];
+    assert!(
+        props.get("group_ids").is_some(),
+        "quipu_search must advertise group_ids"
+    );
+    assert!(
+        props.get("entity_type").is_some(),
+        "quipu_search must advertise entity_type"
+    );
 }
 
 // ── Schema evolution proposal tool tests ────────────────────────────
@@ -1261,11 +1279,22 @@ fn test_tool_search_dedupes_by_entity() {
     assert_ne!(limited[0]["entity"], limited[1]["entity"]);
 }
 
-/// Set up two entities in different tenant groups (via episode provenance),
-/// each carrying the SAME embedding so an unfiltered vector search returns both.
-/// Returns the shared embedding. (hq-93d test fixture)
-fn two_tenant_store() -> (Store, Vec<f32>) {
+/// Set up THREE entities that share ONE embedding, so an unfiltered vector search
+/// returns all three:
+///   - AlphaSvc, BetaSvc: created by episodes, in provenance groups rig-a / rig-b.
+///   - GammaSvc: written via `tool_knot` with NO episode, so it is UNGROUPED
+///     (it has no `prov:wasGeneratedBy` activity to trace a group through).
+///
+/// GammaSvc is the case the old two-episode fixture could not express, and the
+/// reason `group_ids` behaviour was untestable: a group scope must DROP it (it
+/// traces back to no activity), not return it (aegis-il4g). Returns the shared
+/// embedding. (hq-93d / aegis-il4g test fixture)
+///
+/// "group", not "tenant": this is best-effort PROVENANCE scoping, not an isolation
+/// boundary (docs/design/group-isolation.md).
+fn two_group_store() -> (Store, Vec<f32>) {
     let mut store = Store::open_in_memory().unwrap();
+    let ns = crate::namespace::DEFAULT_BASE_NS;
     tool_episode(
         &mut store,
         &serde_json::json!({
@@ -1284,10 +1313,20 @@ fn two_tenant_store() -> (Store, Vec<f32>) {
         }),
     )
     .unwrap();
+    // An UNGROUPED fact: written via /knot, no episode, hence no
+    // prov:wasGeneratedBy — the exact shape a group filter must drop.
+    tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": format!("<{ns}GammaSvc> a <{ns}WebApplication> ."),
+            "timestamp": "2026-04-04T00:00:00Z",
+            "actor": "test", "source": "unit-test"
+        }),
+    )
+    .unwrap();
 
-    let ns = crate::namespace::DEFAULT_BASE_NS;
     let emb: Vec<f32> = (0..8).map(|i| (1.0 + i as f32 * 0.1).sin()).collect();
-    for name in ["AlphaSvc", "BetaSvc"] {
+    for name in ["AlphaSvc", "BetaSvc", "GammaSvc"] {
         let id = store.intern(&format!("{ns}{name}")).unwrap();
         store
             .embed_entity(id, name, &emb, "2026-04-04T00:00:00Z")
@@ -1298,20 +1337,30 @@ fn two_tenant_store() -> (Store, Vec<f32>) {
 
 #[test]
 fn test_tool_search_honors_group_ids() {
-    // hq-93d: an unscoped vector search leaks both tenants; scoping by group_ids
-    // must restrict results to that tenant.
-    let (store, emb) = two_tenant_store();
+    // aegis-il4g / hq-93d: `group_ids` is a best-effort PROVENANCE filter, not
+    // isolation. Two behaviours it must have, and the second was previously
+    // untestable because the fixture had no ungrouped entity:
+    //   1. an unscoped search returns everything — grouped AND ungrouped;
+    //   2. a group scope narrows to that group's episode-provenanced entities and
+    //      DROPS ungrouped /knot facts (they trace back to no activity). It does
+    //      NOT return them — the design doc used to state this backwards.
+    let (store, emb) = two_group_store();
 
-    // Unscoped → both tenants visible (the leak this bead fixes).
+    // Unscoped → all three visible, including the ungrouped GammaSvc.
     let all = tool_search(
         &store,
         &serde_json::json!({ "embedding": emb, "limit": 10 }),
     )
     .unwrap();
     assert_eq!(all["scoped"], false);
-    assert_eq!(all["count"], 2, "unscoped search sees every group");
+    assert_eq!(
+        all["count"], 3,
+        "unscoped search sees every group AND ungrouped facts"
+    );
 
-    // Scoped to rig-a → only AlphaSvc.
+    // Scoped to rig-a → ONLY AlphaSvc. Not BetaSvc (other group), and not GammaSvc
+    // (ungrouped — the case the old fixture could not reach). This drops-not-returns
+    // assertion goes RED if the required prov join is ever loosened to OPTIONAL.
     let scoped = tool_search(
         &store,
         &serde_json::json!({ "embedding": emb, "limit": 10, "group_ids": ["rig-a"] }),
@@ -1319,14 +1368,26 @@ fn test_tool_search_honors_group_ids() {
     .unwrap();
     assert_eq!(scoped["scoped"], true);
     let results = scoped["results"].as_array().unwrap();
-    assert_eq!(results.len(), 1, "must not leak the rig-b entity");
-    assert!(results[0]["entity"].as_str().unwrap().contains("AlphaSvc"));
+    let entities: Vec<&str> = results
+        .iter()
+        .map(|r| r["entity"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        results.len(),
+        1,
+        "group scope must drop the other group AND ungrouped facts"
+    );
+    assert!(entities[0].contains("AlphaSvc"));
+    assert!(
+        !entities.iter().any(|e| e.contains("GammaSvc")),
+        "an ungrouped /knot fact must be DROPPED from a group scope, not returned"
+    );
 }
 
 #[test]
 fn test_tool_search_honors_entity_type() {
     // hq-93d: scoping by entity_type restricts to that class.
-    let (store, emb) = two_tenant_store();
+    let (store, emb) = two_group_store();
     let ns = crate::namespace::DEFAULT_BASE_NS;
 
     let scoped = tool_search(

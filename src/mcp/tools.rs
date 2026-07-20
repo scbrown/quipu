@@ -187,9 +187,13 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 
     let valid_at = input.get("valid_at").and_then(|v| v.as_str());
 
-    // Tenant isolation (hq-93d): a plain vector search returns matches from every
-    // group/type, leaking cross-rig results. When the caller scopes the search
-    // with `group_ids` and/or `entity_type`, restrict to entities in that scope.
+    // Provenance scoping, NOT isolation (hq-93d; design: docs/design/group-isolation.md).
+    // A plain vector search returns matches from every group/type. When the caller
+    // scopes with `group_ids` and/or `entity_type`, narrow to entities in that scope
+    // — a best-effort PROVENANCE filter, not a tenant boundary: it is optional and
+    // caller-supplied (nothing forces a scope), and `/knot` facts (no episode) are
+    // DROPPED from a group scope because they trace back to no activity. Do not build
+    // an access decision on it; true isolation is deferred (keeper gate hq-2u3).
     let entity_type = input.get("entity_type").and_then(|v| v.as_str());
     let group_ids: Option<Vec<&str>> = input
         .get("group_ids")
@@ -261,10 +265,13 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 }
 
 /// Resolve the set of entity IRIs permitted by an optional `entity_type` and/or
-/// `group_ids` scope, used to enforce tenant isolation on vector search
-/// (hq-93d). Returns `Ok(None)` when no scope is requested (caller wants the
-/// full graph). Group membership is resolved via
-/// `prov:wasGeneratedBy → episode → groupId`, matching the `search_nodes` path.
+/// `group_ids` scope — best-effort PROVENANCE scoping, NOT tenant isolation
+/// (hq-93d; design: docs/design/group-isolation.md). Returns `Ok(None)` when no
+/// scope is requested (caller wants the full graph). Group membership is resolved
+/// via a REQUIRED `prov:wasGeneratedBy → episode → groupId` join, matching the
+/// `search_nodes` path — so `/knot` facts, which have no episode, are DROPPED from
+/// any group scope rather than returned. This is a narrowing filter, not a
+/// boundary a caller cannot widen.
 fn scoped_entity_iris(
     store: &Store,
     entity_type: Option<&str>,

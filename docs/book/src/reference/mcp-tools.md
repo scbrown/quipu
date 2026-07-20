@@ -130,6 +130,8 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
 | `valid_at` | No | Temporal filter |
+| `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label, **not** an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope) |
+| `entity_type` | No | Restrict to entities of this rdf:type IRI |
 
 ### `quipu_hybrid_search`
 

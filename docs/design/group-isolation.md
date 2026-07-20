@@ -22,8 +22,13 @@ Today `group_id` looks like a tenancy boundary but is not one. Concretely:
 - Facts asserted via `/knot` (and any non-episode write path) carry **no group
   at all**.
 - The `group_ids` filter on the search tools is **best-effort, post-hoc**: it
-  narrows results that happen to trace back to a matching activity. It does not
-  and cannot guarantee isolation, and silently returns ungrouped facts.
+  narrows results to those that trace back to a matching activity (a required
+  `prov:wasGeneratedBy → episode → groupId` join). It does not and cannot
+  guarantee isolation, and — because the join is required — it silently **drops**
+  ungrouped facts rather than returning them: a `/knot` fact has no episode to
+  trace, so a group scope excludes it. The hazard here is a **blind spot**
+  (under-returning), not a leak (over-returning) — the opposite operational
+  response from what "returns ungrouped facts" would demand.
 
 This is fine for *provenance* ("which episode produced this?"). It is **not**
 safe for *isolation* ("tenant A must never see tenant B's data"). Treating the
@@ -107,9 +112,12 @@ half-isolated milestone that is safe to ship. This is the gate, not a guideline.
 ## Usage guardrail (applies now)
 
 Until isolation is built, **do not store group-sensitive facts in Quipu on the
-assumption that `group_ids` hides them from other groups.** It does not:
-`group_ids` filtering is best-effort and **silently returns ungrouped facts**.
-Treat everything in Quipu as visible across the shared trust domain.
+assumption that `group_ids` hides them from other groups.** It does not, for two
+independent reasons: the filter is **optional and caller-supplied**, so any reader
+can simply omit it and see every group (this is the real isolation gap); and it is
+**best-effort provenance**, so a group scope silently **drops** ungrouped `/knot`
+facts (it under-returns — a blind spot — rather than isolating). Treat everything
+in Quipu as visible across the shared trust domain.
 
 **This is also the signal that flips the gate:** the moment a real need arises
 to keep some knowledge cross-invisible — per-rig private knowledge, sensitive

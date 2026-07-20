@@ -175,13 +175,20 @@ curl -s localhost:3030/shapes -X POST \
 
 ### `POST /search`
 
-Vector similarity search.
+Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
+`valid_at`, and best-effort scoping by `group_ids` / `entity_type`.
 
 ```bash
 curl -s localhost:3030/search -X POST \
   -H "Content-Type: application/json" \
   -d '{"embedding": [0.1, 0.2, ...], "limit": 10}'
 ```
+
+`group_ids` is a best-effort **provenance** filter, not an isolation boundary:
+it narrows to entities whose facts trace (via `prov:wasGeneratedBy → episode →
+groupId`) to a listed group, and it **drops** ungrouped `/knot` facts (they have
+no episode to trace). `entity_type` restricts to an rdf:type IRI. See
+[group-isolation](../../design/group-isolation.md).
 
 ### `POST /hybrid_search`
 
