@@ -50,6 +50,13 @@ async fn main() {
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();
 
+    // warn LOUDLY about documented, settable knobs this server does not
+    // act on (vector.backend = lancedb, federation.remotes), rather than accepting
+    // them and silently doing nothing.
+    for warning in config.unwired_warnings() {
+        eprintln!("warning: {warning}");
+    }
+
     let mut store = quipu::Store::open(&db_path).unwrap_or_else(|e| {
         eprintln!("error opening store {db_path}: {e}");
         std::process::exit(1);

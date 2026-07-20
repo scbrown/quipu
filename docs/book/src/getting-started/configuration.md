@@ -21,11 +21,6 @@ base_ns = "http://example.org/kb/"
 enabled = false
 # Bind address
 bind = "127.0.0.1:3030"
-
-# Federation: connect to remote Quipu instances
-[[quipu.federation.remotes]]
-name = "prod"
-url = "http://quipu.example:3030"
 ```
 
 ## Config Fields
@@ -36,7 +31,17 @@ url = "http://quipu.example:3030"
 | `base_ns` | aegis ontology NS | Base namespace for minted IRIs (set before first write; `--base-ns` overrides per CLI call) |
 | `server.enabled` | `false` | Enable REST API server |
 | `server.bind` | `127.0.0.1:3030` | Server bind address |
-| `federation.remotes` | `[]` | Remote Quipu endpoints |
+
+## Not wired into the `quipu` CLI / `quipu-server`
+
+These keys parse but the shipped binaries do **not** act on them — they exist for
+embedders that drive quipu as a library, or are planned. The binaries print a
+`warning:` if you set them, rather than accepting them silently:
+
+| Field | Status |
+|-------|--------|
+| `federation.remotes` | **Unimplemented.** There is no remote `GraphProvider`; remotes are ignored. See [Federation](../architecture/federation.md). |
+| `vector.backend = "lancedb"` | **Embedder-only.** The CLI/server never install a non-SQLite backend; queries always use the SQLite vectors table. A host embedding quipu can install one via `Store::set_local_vector_backend`. |
 
 ## Priority Order
 

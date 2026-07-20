@@ -333,11 +333,153 @@ impl QuipuConfig {
         }
         self
     }
+
+    /// Warnings for config knobs that are SET to a non-default value but that the
+    /// `quipu` CLI and `quipu-server` binaries do not act on.
+    ///
+    /// These are documented, settable capabilities that this repo wires to
+    /// nothing: `vector.backend = "lancedb"` (the binaries never install a
+    /// non-SQLite backend — that is an embedder-only path via
+    /// `Store::set_local_vector_backend`) and `federation.remotes` (there is no
+    /// remote `GraphProvider`, so remotes are ignored). Returned as strings so the
+    /// binaries can print them and a test can assert exactly which knobs are
+    /// unwired — the point is that a set-but-inert knob is LOUD, not silent. When
+    /// one of these is actually wired, remove its branch here AND its entry in
+    /// `config_knobs_are_wired_or_listed_unwired`.
+    pub fn unwired_warnings(&self) -> Vec<String> {
+        let mut w = Vec::new();
+        if self.vector.backend == VectorBackend::Lancedb {
+            w.push(
+                "vector.backend = \"lancedb\" is set but the quipu CLI/server do not read it; \
+                 queries still use the SQLite vectors table. LanceDB is an embedder-only backend \
+                 (Store::set_local_vector_backend)."
+                    .to_string(),
+            );
+        }
+        if !self.federation.remotes.is_empty() {
+            w.push(format!(
+                "federation.remotes has {} entry(ies) but federation is UNIMPLEMENTED — there is \
+                 no remote GraphProvider, so the remotes are ignored.",
+                self.federation.remotes.len()
+            ));
+        }
+        w
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Top-level `pub` fields of `QuipuConfig` that this repo deliberately does NOT
+    /// consume — documented capabilities that are unwired here. Each
+    /// entry is a promise: it is loud at runtime via `unwired_warnings()` and its
+    /// docs say "unimplemented". When one is wired, remove it here AND from
+    /// `unwired_warnings`, and the guard below will hold you to consuming it.
+    const UNWIRED_TOP_LEVEL: &[&str] = &["federation"];
+
+    /// Concatenated source of every `src/**/*.rs` EXCEPT config.rs, so the guard
+    /// can ask "is this field read anywhere but its own definition?".
+    fn src_without_config() -> String {
+        fn walk(dir: &std::path::Path, out: &mut String) {
+            let Ok(entries) = std::fs::read_dir(dir) else { return };
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs")
+                    && p.file_name().is_some_and(|n| n != "config.rs")
+                {
+                    if let Ok(s) = std::fs::read_to_string(&p) {
+                        out.push_str(&s);
+                        out.push('\n');
+                    }
+                }
+            }
+        }
+        let mut out = String::new();
+        walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut out);
+        out
+    }
+
+    fn quipu_config_top_level_fields() -> Vec<String> {
+        // Pull `pub NAME:` out of the `pub struct QuipuConfig { ... }` block only.
+        let src = include_str!("config.rs");
+        let start = src.find("pub struct QuipuConfig {").expect("QuipuConfig struct");
+        let body = &src[start..];
+        let end = body.find("\n}").expect("end of QuipuConfig");
+        body[..end]
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("pub "))
+            .filter_map(|l| l.split(':').next())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
+            .collect()
+    }
+
+    #[test]
+    fn config_knobs_are_wired_or_listed_unwired() {
+        // THE CLASS GUARD. A documented, settable config field that
+        // nothing reads is the failure mode this fleet keeps paying for — accepted
+        // and inert. This asserts every top-level QuipuConfig field is either
+        // consumed somewhere outside config.rs, or is explicitly on UNWIRED_TOP_LEVEL
+        // (which forces a runtime warning + an "unimplemented" doc note). Scoped to
+        // top-level fields because their names are distinctive; a generic leaf name
+        // like `name`/`url` cannot be grepped without false matches. federation was
+        // the wholly-dead sub-config this was written for.
+        let src = src_without_config();
+        let mut dead = Vec::new();
+        for field in quipu_config_top_level_fields() {
+            let consumed = src.contains(&format!(".{field}"));
+            let listed = UNWIRED_TOP_LEVEL.contains(&field.as_str());
+            if !consumed && !listed {
+                dead.push(field);
+            }
+        }
+        assert!(
+            dead.is_empty(),
+            "these QuipuConfig fields are settable+documented but read by NOTHING outside \
+             config.rs: {dead:?}. Wire each one, or add it to UNWIRED_TOP_LEVEL, give it a \
+             warning in unwired_warnings(), and mark it unimplemented in the docs — a knob \
+             that is accepted and does nothing is the silently-inert-config bug."
+        );
+        // And the allowlist must not rot: every entry must still be a real field
+        // AND still genuinely unconsumed, or it should have been removed.
+        for u in UNWIRED_TOP_LEVEL {
+            assert!(
+                quipu_config_top_level_fields().iter().any(|f| f == u),
+                "UNWIRED_TOP_LEVEL lists {u:?} which is not a QuipuConfig field — remove it"
+            );
+            assert!(
+                !src.contains(&format!(".{u}")),
+                "UNWIRED_TOP_LEVEL still lists {u:?} but it is now consumed outside config.rs — \
+                 it is wired; remove it from the allowlist and unwired_warnings()"
+            );
+        }
+    }
+
+    #[test]
+    fn unwired_knobs_warn_loudly_when_set() {
+        // The set-but-inert knobs must produce a warning, so they are never silent
+        //. Pins the two known cases; wiring one means updating this.
+        let mut cfg = QuipuConfig::default();
+        assert!(cfg.unwired_warnings().is_empty(), "defaults must not warn");
+
+        cfg.vector.backend = VectorBackend::Lancedb;
+        assert!(
+            cfg.unwired_warnings().iter().any(|w| w.contains("vector.backend")),
+            "vector.backend = lancedb must warn — the quipu binaries do not honour it"
+        );
+
+        cfg.federation.remotes.push(RemoteEndpoint {
+            name: "prod".into(),
+            url: "http://example:3030".into(),
+        });
+        assert!(
+            cfg.unwired_warnings().iter().any(|w| w.contains("federation")),
+            "a configured federation remote must warn — federation is unimplemented"
+        );
+    }
 
     #[test]
     fn search_clamp_limit() {

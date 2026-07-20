@@ -42,6 +42,11 @@ fn main() {
 
     // Load config from .bobbin/config.toml, then apply CLI overrides.
     let config = quipu::QuipuConfig::load(std::path::Path::new(".")).with_db_override(db_flag);
+    // a documented, settable knob that this binary does not act on must
+    // be LOUD, not silently inert. Only fires when the user actually set one.
+    for warning in config.unwired_warnings() {
+        eprintln!("warning: {warning}");
+    }
     let db_path_buf = config.store_path.to_string_lossy().to_string();
     let db_path: &str = &db_path_buf;
 

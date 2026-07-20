@@ -88,7 +88,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 - **Episode ingestion** — structured write path for agent-extracted knowledge. Typed nodes, edges, and provenance tracking (`prov:wasGeneratedBy`).
 - **Hybrid search** — SPARQL filters candidates, vector similarity ranks them. Combine structured queries with semantic meaning in one call. Type constraints are pushed down into the vector index for O(log n) filtered search with LanceDB.
-- **Dual vector backends** — default SQLite (brute-force cosine similarity) or optional LanceDB (ANN with predicate pushdown, Arrow columnar storage). Enable with `--features lancedb`.
+- **Dual vector backends** — default SQLite (brute-force cosine similarity), plus a LanceDB backend (ANN with predicate pushdown, Arrow columnar storage) behind `--features lancedb`. Note: the `quipu` CLI / `quipu-server` do not yet select LanceDB from config — it is installed by an embedder via `Store::set_local_vector_backend`; `vector.backend` is not read by the binaries.
 - **Context pipeline** — unified knowledge context shaped for agent consumption. Text search + link expansion with configurable depth and budget.
 - **Agent-friendly feedback** — validation errors include what failed, where, why, and what the valid alternatives are.
 
@@ -102,7 +102,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 **⚙️ Infrastructure**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
-- **Federation** — `GraphProvider` trait for multi-source queries. Query local and remote Quipu instances in a single operation.
+- **Federation** — a `GraphProvider` trait for multi-source queries. Trait-only today: quipu ships a `LocalProvider` but no remote provider, so remote federation is not yet available from the CLI/server, and `federation.remotes` config is inert.
 - **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 25 MCP tools for agent integration (26 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. CI runs fmt, clippy, tests, and markdown lint on every push.
@@ -295,6 +295,9 @@ See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of conten
 
 ## 📋 Feature Matrix
 
+Legend: ✅ available in the shipped `quipu` CLI / `quipu-server` · 🔩 library
+primitive only, not reachable from the shipped binaries · 🔜 planned.
+
 | Feature | Status | Notes |
 |---------|:------:|-------|
 | **Core** | | |
@@ -323,8 +326,8 @@ See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of conten
 | **AI-Native** | | |
 | Episode ingestion (Graphiti-compatible) | ✅ | Typed nodes, edges, provenance |
 | SQLite vector search (cosine) | ✅ | Default backend |
-| LanceDB ANN + predicate pushdown | ✅ | Optional `lancedb` feature |
-| LanceDB full-text search | ✅ | |
+| LanceDB ANN + predicate pushdown | 🔩 | `lancedb` feature; embedder-only — not selectable via config in the CLI/server |
+| LanceDB full-text search (BM25) | 🔜 | Library path exists but is unreachable from the shipped CLI/server; `/context` uses the SPARQL `CONTAINS` fallback |
 | Hybrid SPARQL + vector search | ✅ | |
 | Auto-embed on write | ✅ | Knot/episode hooks |
 | ONNX embedding pipeline | ✅ | Shared with Bobbin |
@@ -346,7 +349,7 @@ See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of conten
 | Python bindings | 🔜 | Planned |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |
-| GraphProvider federation trait | ✅ | Multi-source queries |
+| GraphProvider federation trait | 🔩 | Trait + `LocalProvider` only; no remote provider, `federation.remotes` inert |
 | Bobbin integration | ✅ | Namespace, IRI patterns, search |
 | Automated releases (release-plz) | ✅ | |
 | Clustering / replication | 🔜 | Planned |

@@ -435,7 +435,18 @@ pub fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
                 );
                 if result.migrated > 0 || result.skipped == 0 {
                     println!("  LanceDB path: {lance_path}");
-                    println!("  Set vector.backend = \"lancedb\" in .bobbin/config.toml to use it");
+                    // do NOT tell the user to "set vector.backend to use
+                    // it" — the quipu CLI and quipu-server DO NOT read that key, so
+                    // setting it changes nothing and the binary keeps querying the
+                    // SQLite vectors table. The migrated store is usable only by an
+                    // embedder that installs it via Store::set_local_vector_backend.
+                    // Printing the old instruction was the product itself directing
+                    // the user to a no-op.
+                    println!(
+                        "  NOTE: the quipu CLI/server do not yet read vector.backend, so this\n  \
+                         migrated store is NOT queried by `quipu`/`quipu-server`. It is usable\n  \
+                         only by an embedder that installs it via Store::set_local_vector_backend."
+                    );
                 }
             }
         }

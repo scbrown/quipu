@@ -1,8 +1,18 @@
 # Federation
 
-Quipu supports federated queries across multiple graph providers through
-the `GraphProvider` trait. This allows agents to query a local store and
-remote Quipu instances in a single operation.
+> **Status: trait-only, not wired.** The `GraphProvider` trait and
+> `FederatedProvider` exist as library primitives, but quipu ships **no remote
+> provider** — only `LocalProvider`. Nothing constructs a `FederatedProvider` from
+> config, and the `[[quipu.federation.remotes]]` keys below are **read by
+> nothing**: setting them does not federate anything, and the `quipu`/`quipu-server`
+> binaries print a `warning:` if you do. Everything past this banner describes the
+> trait surface an embedder could build on, and the *intended* result shape — not a
+> capability the shipped binaries provide. "Query local and remote instances in a
+> single operation" is not yet true; the remote half does not exist.
+
+Quipu defines federated queries across multiple graph providers through
+the `GraphProvider` trait, so that a host embedding quipu can query a local store
+and its own remote providers in a single operation.
 
 ## The GraphProvider Trait
 
@@ -52,24 +62,26 @@ for s in &statuses {
 }
 ```
 
-## Configuration
+## Configuration (planned — currently inert)
 
-Remote endpoints are configured in `.bobbin/config.toml`:
+> **These keys are read by nothing.** They are shown as the *intended*
+> shape for when a remote provider exists. Today, writing them into
+> `.bobbin/config.toml` parses and does nothing, and the binaries warn. Do not rely
+> on them.
+
+The intended form:
 
 ```toml
 [quipu]
 store_path = ".bobbin/quipu/quipu.db"
 
+# NOT YET IMPLEMENTED — remotes are ignored.
 [[quipu.federation.remotes]]
 name = "prod"
 url = "http://quipu.example:3030"
-
-[[quipu.federation.remotes]]
-name = "staging"
-url = "http://quipu-staging.example:3030"
 ```
 
-## Result Tagging
+## Result Tagging (intended)
 
 Federated query results include a `_provider` field so you can tell
 which source each result came from:
