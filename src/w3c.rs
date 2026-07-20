@@ -13,18 +13,20 @@
 //! ## Scope (deliberately bounded — see the bead)
 //!
 //! Term *kind* (uri vs. literal) IS preserved, because `Value::Ref` and
-//! `Value::Str` are distinct enum variants. Datatype and language tags are NOT
-//! recoverable here: they are destroyed at PARSE time
-//! (`sparql::filter::literal_to_value` collapses xsd:double/float/decimal into a
-//! single `Value::Float`, drops xsd:date, and mangles `"x"@en` into the string
-//! `"x@en"`). Restoring them requires extending the `Value` model and is tracked
-//! separately as aegis-fmyi.
+//! `Value::Str` are distinct enum variants.
 //!
-//! We synthesize xsd:integer / xsd:double / xsd:boolean datatypes ONLY from the
-//! `Int` / `Float` / `Bool` variants, which genuinely carry that information via
-//! their enum discriminant. We NEVER sniff a datatype back out of a `Value::Str`
-//! lexical form — a "passing" datatype round-trip after a serializer-only change
-//! would be evidence of exactly that sniffing, not of a fix.
+//! Datatypes and language tags are now preserved too, because the `Value` model
+//! carries them: `Value::Lang` and `Value::Typed` (aegis-fmyi). This paragraph
+//! used to say the opposite — that they were destroyed at PARSE time and could
+//! not be recovered here at any price. That was true, and it was the reason a
+//! serializer-only change could never have fixed them.
+//!
+//! Every datatype emitted below comes from the value itself: the `Int` / `Float`
+//! / `Bool` discriminants, or the IRI a `Typed` literal stored verbatim. We
+//! NEVER sniff a datatype or a language tag back out of a `Value::Str` lexical
+//! form — the plain string `"hello@en"` and the string `"2026-07-15"` are both
+//! legitimate, and guessing would manufacture confident lies. A datatype
+//! round-trip that "passes" via sniffing is evidence of the bug, not of a fix.
 
 use oxrdf::{vocab::xsd, Literal, NamedNode, Term as OxTerm, Triple as OxTriple, Variable};
 use oxrdfio::{RdfFormat, RdfSerializer};
@@ -172,6 +174,15 @@ fn value_to_term(store: &Store, val: &Value) -> OxTerm {
             OxTerm::from(NamedNode::new_unchecked(iri))
         }
         Value::Str(s) => OxTerm::from(Literal::new_simple_literal(s.clone())),
+        Value::Lang { lexical, lang } => Literal::new_language_tagged_literal(lexical, lang)
+            .map_or_else(
+                |_| OxTerm::from(Literal::new_simple_literal(lexical.clone())),
+                OxTerm::from,
+            ),
+        Value::Typed { lexical, datatype } => NamedNode::new(datatype).map_or_else(
+            |_| OxTerm::from(Literal::new_simple_literal(lexical.clone())),
+            |dt| OxTerm::from(Literal::new_typed_literal(lexical.clone(), dt)),
+        ),
         Value::Int(n) => OxTerm::from(Literal::new_typed_literal(n.to_string(), xsd::INTEGER)),
         Value::Float(f) => OxTerm::from(Literal::new_typed_literal(fmt_double(*f), xsd::DOUBLE)),
         Value::Bool(b) => OxTerm::from(Literal::new_typed_literal(b.to_string(), xsd::BOOLEAN)),

@@ -94,6 +94,11 @@ pub fn build_entity_text(store: &Store, entity_id: i64) -> Result<String> {
         } else {
             match &fact.value {
                 Value::Str(s) => literals.push(s.clone()),
+                // Embed the LEXICAL form only — the tag/datatype is metadata,
+                // not text a human wrote.
+                Value::Lang { lexical, .. } | Value::Typed { lexical, .. } => {
+                    literals.push(lexical.clone());
+                }
                 Value::Int(n) => literals.push(n.to_string()),
                 Value::Float(f) => literals.push(f.to_string()),
                 Value::Bool(b) => literals.push(b.to_string()),

@@ -62,6 +62,42 @@ pub const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
 pub const XSD_FLOAT: &str = "http://www.w3.org/2001/XMLSchema#float";
 pub const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
 pub const XSD_BOOLEAN: &str = "http://www.w3.org/2001/XMLSchema#boolean";
+pub const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
+
+/// `rdf:langString` — the datatype oxrdf reports for language-tagged literals.
+pub const RDF_LANG_STRING: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
+
+/// XSD datatypes whose lexical form is a number, for ordering and aggregation.
+///
+/// Used by `Value::as_f64` so a `Typed` literal that kept its datatype (e.g.
+/// `xsd:long`, `xsd:decimal`) still compares and sums numerically instead of
+/// having to be collapsed into `Int`/`Float` at parse time (aegis-fmyi).
+pub fn is_numeric_datatype(dt: &str) -> bool {
+    matches!(
+        dt,
+        XSD_INTEGER
+            | XSD_LONG
+            | XSD_INT
+            | XSD_SHORT
+            | XSD_BYTE
+            | XSD_NON_NEGATIVE_INTEGER
+            | XSD_POSITIVE_INTEGER
+            | XSD_UNSIGNED_LONG
+            | XSD_UNSIGNED_INT
+            | XSD_DOUBLE
+            | XSD_FLOAT
+            | XSD_DECIMAL
+    )
+}
+
+/// Whether an XSD datatype maps to `Value::Int`/`Value::Float` on parse.
+///
+/// Only the two canonical datatypes take the fast path; every other numeric
+/// datatype becomes `Value::Typed` so its IRI round-trips (`xsd:decimal` is
+/// exact, `xsd:double` is not — collapsing them is a silent semantic change).
+pub fn is_fast_path_numeric(dt: &str) -> bool {
+    matches!(dt, XSD_INTEGER | XSD_DOUBLE)
+}
 
 // ── Bobbin IRI constructors ───────────────────────────────────
 

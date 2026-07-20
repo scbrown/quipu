@@ -116,9 +116,27 @@ fn json_to_value(store: &Store, v: &JsonValue) -> Result<crate::types::Value> {
         if let Some(b) = o.get("bool").and_then(JsonValue::as_bool) {
             return Ok(Value::Bool(b));
         }
+        // A literal's tag/datatype rides in its own field. There is deliberately
+        // no way to smuggle one into the lexical string (aegis-fmyi).
+        if let Some(lexical) = o.get("value").and_then(JsonValue::as_str) {
+            if let Some(lang) = o.get("lang").and_then(JsonValue::as_str) {
+                return Ok(Value::Lang {
+                    lexical: lexical.to_string(),
+                    lang: lang.to_string(),
+                });
+            }
+            if let Some(datatype) = o.get("datatype").and_then(JsonValue::as_str) {
+                return Ok(Value::Typed {
+                    lexical: lexical.to_string(),
+                    datatype: datatype.to_string(),
+                });
+            }
+        }
     }
     Err(Error::InvalidValue(
-        "object must be a string literal or a tagged {iri|str|int|float|bool: ...}".into(),
+        "object must be a string literal, a tagged {iri|str|int|float|bool: ...}, \
+         or {value, lang} / {value, datatype}"
+            .into(),
     ))
 }
 
@@ -1073,6 +1091,14 @@ pub fn value_to_json(store: &Store, val: &Value) -> JsonValue {
             JsonValue::String(iri)
         }
         Value::Str(s) => JsonValue::String(s.clone()),
+        // Lang/Typed serialize as objects so the caller gets the CORRECT lexical
+        // value AND can recover the tag/datatype. Emitting a bare "hello@en"
+        // string here is what aegis-fmyi was filed against; a bare "hello" that
+        // silently drops the tag is the same loss one step later.
+        Value::Lang { lexical, lang } => serde_json::json!({"value": lexical, "lang": lang}),
+        Value::Typed { lexical, datatype } => {
+            serde_json::json!({"value": lexical, "datatype": datatype})
+        }
         Value::Int(n) => serde_json::json!(n),
         Value::Float(f) => serde_json::json!(f),
         Value::Bool(b) => JsonValue::Bool(*b),

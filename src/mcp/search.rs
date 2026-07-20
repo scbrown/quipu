@@ -190,6 +190,7 @@ fn entity_matches_query(
     for fact in &facts {
         let val_str = match &fact.value {
             Value::Str(s) => s.to_lowercase(),
+            Value::Lang { lexical, .. } | Value::Typed { lexical, .. } => lexical.to_lowercase(),
             Value::Int(n) => n.to_string(),
             Value::Float(f) => f.to_string(),
             Value::Bool(b) => b.to_string(),

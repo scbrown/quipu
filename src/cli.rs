@@ -571,6 +571,10 @@ pub fn format_value(store: &quipu::Store, val: &quipu::Value) -> String {
     match val {
         quipu::Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
         quipu::Value::Str(s) => format!("\"{s}\""),
+        // Turtle-ish notation, so the tag/datatype is visible as a term
+        // qualifier rather than pretending to be part of the string.
+        quipu::Value::Lang { lexical, lang } => format!("\"{lexical}\"@{lang}"),
+        quipu::Value::Typed { lexical, datatype } => format!("\"{lexical}\"^^<{datatype}>"),
         quipu::Value::Int(n) => n.to_string(),
         quipu::Value::Float(f) => f.to_string(),
         quipu::Value::Bool(b) => b.to_string(),

@@ -1061,3 +1061,130 @@ fn is_blank_never_matches_and_is_not_is_iri() {
     let iri = query(&store, "SELECT ?s WHERE { ?s ?p ?o . FILTER(isIRI(?s)) }").unwrap();
     assert_eq!(iri.rows().len(), 11, "isIRI must still match every subject");
 }
+
+// ── aegis-fmyi: numeric semantics survive datatype preservation ──────────
+//
+// Only xsd:integer and xsd:double take the Int/Float fast path now; every other
+// numeric datatype becomes `Value::Typed` so its IRI round-trips. That must not
+// turn xsd:long / xsd:decimal into strings for the query engine — a silent
+// regression to LEXICAL comparison would sort 100 before 9 and pass unnoticed.
+
+fn numeric_datatype_store() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    // Values chosen so lexical and numeric order DISAGREE: lexically
+    // "10" < "100" < "9", numerically 9 < 10 < 100.
+    let turtle = r#"
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ex:x ex:size "9"^^xsd:long ; ex:label "nine" .
+ex:y ex:size "10"^^xsd:decimal ; ex:label "ten" .
+ex:z ex:size "100"^^xsd:long ; ex:label "hundred" .
+"#;
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-07-15T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store
+}
+
+fn labels(result: &QueryResult) -> Vec<String> {
+    result
+        .rows()
+        .iter()
+        .filter_map(|r| r.get("l").and_then(|v| v.as_lexical().map(str::to_string)))
+        .collect()
+}
+
+#[test]
+fn order_by_is_numeric_for_preserved_numeric_datatypes() {
+    let store = numeric_datatype_store();
+    let result = query(
+        &store,
+        "SELECT ?l WHERE { ?e <http://example.org/size> ?s ; <http://example.org/label> ?l } ORDER BY ?s",
+    )
+    .unwrap();
+    assert_eq!(
+        labels(&result),
+        vec!["nine", "ten", "hundred"],
+        "xsd:long/xsd:decimal must order numerically; lexical order would be ten, hundred, nine"
+    );
+}
+
+#[test]
+fn filter_compares_preserved_numeric_datatypes_as_numbers() {
+    let store = numeric_datatype_store();
+    let result = query(
+        &store,
+        "SELECT ?l WHERE { ?e <http://example.org/size> ?s ; <http://example.org/label> ?l . FILTER(?s > 9) }",
+    )
+    .unwrap();
+    let mut got = labels(&result);
+    got.sort();
+    assert_eq!(got, vec!["hundred", "ten"], "9 excluded, 10 and 100 included");
+}
+
+#[test]
+fn sum_spans_mixed_numeric_datatypes() {
+    let store = numeric_datatype_store();
+    let result = query(
+        &store,
+        "SELECT (SUM(?s) AS ?total) WHERE { ?e <http://example.org/size> ?s }",
+    )
+    .unwrap();
+    assert_eq!(result.rows()[0].get("total").unwrap().as_f64(), Some(119.0));
+}
+
+#[test]
+fn is_numeric_and_is_literal_see_the_new_variants() {
+    let store = numeric_datatype_store();
+    // A Typed xsd:long is numeric even though it is not Value::Int.
+    let n = query(
+        &store,
+        "SELECT ?s WHERE { ?e <http://example.org/size> ?s . FILTER(isNumeric(?s)) }",
+    )
+    .unwrap();
+    assert_eq!(n.rows().len(), 3, "all three sizes are numeric");
+    // …and every literal, tagged or typed, is a literal.
+    let l = query(
+        &store,
+        "SELECT ?s WHERE { ?e <http://example.org/size> ?s . FILTER(isLiteral(?s)) }",
+    )
+    .unwrap();
+    assert_eq!(l.rows().len(), 3);
+}
+
+#[test]
+fn str_of_a_lang_literal_drops_the_tag() {
+    let mut store = Store::open_in_memory().unwrap();
+    ingest_rdf(
+        &mut store,
+        r#"<http://example.org/s> <http://example.org/g> "hello"@en ."#.as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-07-15T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    // STR("hello"@en) is "hello". It used to be "hello@en" — the tag had been
+    // glued into the lexical value at parse time (aegis-fmyi).
+    let r = query(
+        &store,
+        "SELECT ?s WHERE { ?e <http://example.org/g> ?s . FILTER(STR(?s) = \"hello\") }",
+    )
+    .unwrap();
+    assert_eq!(r.rows().len(), 1, "STR() must yield the bare lexical form");
+
+    let r = query(
+        &store,
+        "SELECT ?s WHERE { ?e <http://example.org/g> ?s . FILTER(STR(?s) = \"hello@en\") }",
+    )
+    .unwrap();
+    assert!(r.rows().is_empty(), "the tag must not appear in STR()");
+}

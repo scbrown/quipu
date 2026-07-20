@@ -45,6 +45,32 @@ pub enum Value {
     Bool(bool),
     /// Raw bytes.
     Bytes(Vec<u8>),
+    /// Language-tagged literal (`rdf:langString`): the LEXICAL value and the
+    /// BCP47 tag, stored separately.
+    ///
+    /// This variant exists because the tag used to be concatenated into the
+    /// lexical form (`"hello"@en` -> `Str("hello@en")`), which is irreversible
+    /// corruption: the plain string `hello@en` collapsed to the same value
+    /// (aegis-fmyi). Never reconstruct a lang tag by splitting a `Str` on `@`.
+    Lang {
+        /// The literal's lexical form, WITHOUT the tag: `"hello"`, never
+        /// `"hello@en"`.
+        lexical: String,
+        /// BCP47 language tag, without the leading `@`: `en`, `en-GB`.
+        lang: String,
+    },
+    /// Literal carrying an explicit datatype IRI that has no fast-path variant
+    /// (`xsd:date`, `xsd:dateTime`, `xsd:decimal`, integer subtypes, and any
+    /// custom datatype). The lexical form is preserved verbatim so the term
+    /// round-trips exactly.
+    Typed {
+        /// The literal's lexical form, preserved verbatim (no reparsing, no
+        /// canonicalization) so the term round-trips byte-for-byte.
+        lexical: String,
+        /// The datatype IRI in full, e.g.
+        /// `http://www.w3.org/2001/XMLSchema#date`.
+        datatype: String,
+    },
 }
 
 // Tag bytes used as the first byte of the stored BLOB.
@@ -54,6 +80,39 @@ const TAG_INT: u8 = 2;
 const TAG_FLOAT: u8 = 3;
 const TAG_BOOL: u8 = 4;
 const TAG_BYTES: u8 = 5;
+const TAG_LANG: u8 = 6;
+const TAG_TYPED: u8 = 7;
+
+/// Encode `{prefix, lexical}` as `[u16 LE prefix len][prefix][lexical]`.
+///
+/// The prefix (language tag / datatype IRI) is length-delimited so the lexical
+/// form can contain any byte sequence — including `@` — without ambiguity.
+fn encode_prefixed(tag: u8, prefix: &str, lexical: &str) -> Vec<u8> {
+    let plen = u16::try_from(prefix.len()).unwrap_or(u16::MAX);
+    let mut buf = Vec::with_capacity(3 + prefix.len() + lexical.len());
+    buf.push(tag);
+    buf.extend_from_slice(&plen.to_le_bytes());
+    buf.extend_from_slice(&prefix.as_bytes()[..plen as usize]);
+    buf.extend_from_slice(lexical.as_bytes());
+    buf
+}
+
+fn decode_prefixed(payload: &[u8], what: &str) -> crate::Result<(String, String)> {
+    if payload.len() < 2 {
+        return Err(crate::Error::InvalidValue(format!("truncated {what} value")));
+    }
+    let plen = u16::from_le_bytes([payload[0], payload[1]]) as usize;
+    if payload.len() < 2 + plen {
+        return Err(crate::Error::InvalidValue(format!(
+            "truncated {what} prefix"
+        )));
+    }
+    let prefix = std::str::from_utf8(&payload[2..2 + plen])
+        .map_err(|e| crate::Error::InvalidValue(format!("bad utf8 in {what} prefix: {e}")))?;
+    let lexical = std::str::from_utf8(&payload[2 + plen..])
+        .map_err(|e| crate::Error::InvalidValue(format!("bad utf8 in {what} lexical: {e}")))?;
+    Ok((prefix.to_string(), lexical.to_string()))
+}
 
 impl Value {
     /// Encode to a tagged blob for `SQLite` storage.
@@ -87,6 +146,8 @@ impl Value {
                 buf.extend_from_slice(data);
                 buf
             }
+            Self::Lang { lexical, lang } => encode_prefixed(TAG_LANG, lang, lexical),
+            Self::Typed { lexical, datatype } => encode_prefixed(TAG_TYPED, datatype, lexical),
         }
     }
 
@@ -128,7 +189,66 @@ impl Value {
                 Ok(Self::Bool(payload[0] != 0))
             }
             TAG_BYTES => Ok(Self::Bytes(payload.to_vec())),
+            TAG_LANG => {
+                let (lang, lexical) = decode_prefixed(payload, "lang")?;
+                Ok(Self::Lang { lexical, lang })
+            }
+            TAG_TYPED => {
+                let (datatype, lexical) = decode_prefixed(payload, "typed")?;
+                Ok(Self::Typed { lexical, datatype })
+            }
             _ => Err(crate::Error::InvalidValue(format!("unknown tag: {tag}"))),
+        }
+    }
+
+    /// The datatype IRI this value serializes as, if it is a literal with one.
+    ///
+    /// `None` for `Ref` (not a literal) and for plain strings (`xsd:string` is
+    /// implicit in RDF 1.1) and lang literals (their datatype is
+    /// `rdf:langString`, implied by the tag).
+    pub fn datatype(&self) -> Option<&str> {
+        match self {
+            Self::Typed { datatype, .. } => Some(datatype),
+            Self::Int(_) => Some(crate::namespace::XSD_INTEGER),
+            Self::Float(_) => Some(crate::namespace::XSD_DOUBLE),
+            Self::Bool(_) => Some(crate::namespace::XSD_BOOLEAN),
+            _ => None,
+        }
+    }
+
+    /// The literal's LEXICAL form — without any language tag or datatype
+    /// suffix. `None` for values that are not literals.
+    ///
+    /// `Lang { lexical: "hello", lang: "en" }.as_lexical()` is `"hello"`. That
+    /// it once was `"hello@en"` is the whole of aegis-fmyi.
+    pub fn as_lexical(&self) -> Option<&str> {
+        match self {
+            Self::Str(s) | Self::Lang { lexical: s, .. } | Self::Typed { lexical: s, .. } => {
+                Some(s)
+            }
+            _ => None,
+        }
+    }
+
+    /// The language tag, if this is a language-tagged literal.
+    pub fn language(&self) -> Option<&str> {
+        match self {
+            Self::Lang { lang, .. } => Some(lang),
+            _ => None,
+        }
+    }
+
+    /// Numeric view of a value for ordering/aggregation, including numeric
+    /// `Typed` literals (integer subtypes, `xsd:float`, `xsd:decimal`) which
+    /// keep their datatype rather than collapsing into `Int`/`Float`.
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Self::Int(n) => Some(*n as f64),
+            Self::Float(f) => Some(*f),
+            Self::Typed { lexical, datatype } if crate::namespace::is_numeric_datatype(datatype) => {
+                lexical.parse().ok()
+            }
+            _ => None,
         }
     }
 }

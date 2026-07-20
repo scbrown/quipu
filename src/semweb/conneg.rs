@@ -27,6 +27,12 @@ pub fn entity_json_ld(store: &Store, iri: &str) -> Result<JsonValue> {
                     json!({"@id": n})
                 }
                 Value::Str(s) => json!(s),
+                // JSON-LD value objects: the tag/datatype rides alongside the
+                // lexical form rather than being smuggled into it.
+                Value::Lang { lexical, lang } => json!({"@value": lexical, "@language": lang}),
+                Value::Typed { lexical, datatype } => {
+                    json!({"@value": lexical, "@type": datatype})
+                }
                 Value::Int(i) => json!(i),
                 Value::Float(f) => json!(f),
                 Value::Bool(b) => json!(b),
@@ -93,6 +99,17 @@ fn value_to_rdf_term(store: &Store, value: &Value) -> Result<oxrdf::Term> {
             }
         }
         Value::Str(s) => oxrdf::Term::Literal(oxrdf::Literal::new_simple_literal(s)),
+        Value::Lang { lexical, lang } => oxrdf::Term::Literal(
+            oxrdf::Literal::new_language_tagged_literal(lexical, lang)
+                .map_err(|e| Error::InvalidValue(format!("bad language tag: {e}")))?,
+        ),
+        Value::Typed { lexical, datatype } => {
+            oxrdf::Term::Literal(oxrdf::Literal::new_typed_literal(
+                lexical,
+                oxrdf::NamedNode::new(datatype)
+                    .map_err(|e| Error::InvalidValue(format!("bad datatype IRI: {e}")))?,
+            ))
+        }
         Value::Int(n) => oxrdf::Term::Literal(oxrdf::Literal::new_typed_literal(
             n.to_string(),
             oxrdf::NamedNode::new_unchecked("http://www.w3.org/2001/XMLSchema#integer"),
@@ -146,6 +163,14 @@ pub fn preview_card(store: &Store, iri: &str) -> Result<String> {
                 )
             }
             Value::Str(s) => super::html_escape(s),
+            Value::Lang { lexical, lang } => {
+                format!("{} <span class=\"lang\">@{}</span>", super::html_escape(lexical), super::html_escape(lang))
+            }
+            Value::Typed { lexical, datatype } => format!(
+                "{} <span class=\"datatype\">({})</span>",
+                super::html_escape(lexical),
+                super::html_escape(&short_name(datatype))
+            ),
             Value::Int(i) => i.to_string(),
             Value::Float(f) => format!("{f:.2}"),
             Value::Bool(b) => b.to_string(),

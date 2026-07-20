@@ -73,7 +73,16 @@ fn effective_boolean_value(v: &Value) -> Option<bool> {
         Value::Str(s) => Some(!s.is_empty()),
         Value::Int(i) => Some(*i != 0),
         Value::Float(f) => Some(*f != 0.0),
-        Value::Ref(_) | Value::Bytes(_) => None,
+        // SPARQL EBV: numeric literals test against zero, plain/lang strings
+        // against emptiness. Other datatypes have no EBV.
+        Value::Typed { lexical, datatype } if namespace::is_numeric_datatype(datatype) => {
+            lexical.parse::<f64>().ok().map(|f| f != 0.0)
+        }
+        Value::Typed { lexical, datatype } if datatype == namespace::XSD_BOOLEAN => {
+            Some(matches!(lexical.as_str(), "true" | "1"))
+        }
+        Value::Lang { lexical, .. } => Some(!lexical.is_empty()),
+        Value::Typed { .. } | Value::Ref(_) | Value::Bytes(_) => None,
     }
 }
 
@@ -114,22 +123,28 @@ fn eval_bool_function(
                 Some(Value::Ref(_))
             )
         }
-        // `Value` (types.rs:26) is Ref|Str|Int|Float|Bool|Bytes, and Ref is an
-        // IRI reference — the store has no blank-node representation, so this is
-        // false for every possible value rather than merely unimplemented. It was
-        // previously aliased to IsIri through a shared match arm, which made
-        // FILTER(isBlank(?s)) match every IRI in the store (aegis-t2jh).
+        // A `Value` has no blank-node variant: blank nodes are interned as
+        // `Ref`s to an IRI carrying a "_:" prefix, which this cannot see from
+        // here. So this is false for every possible value rather than merely
+        // unimplemented. It was previously aliased to IsIri through a shared
+        // match arm, which made FILTER(isBlank(?s)) match every IRI in the store
+        // (aegis-t2jh — still open; aegis-fmyi's Lang/Typed work does not
+        // resolve it).
         Function::IsBlank => false,
+        // Lang and Typed are literals too. Listing the non-literal variants and
+        // negating keeps this correct the next time a variant is added, instead
+        // of silently answering "false" for it.
         Function::IsLiteral => matches!(
             args.first().and_then(|e| eval_expr(store, e, row)),
-            Some(
-                Value::Str(_) | Value::Int(_) | Value::Float(_) | Value::Bool(_) | Value::Bytes(_)
-            )
+            Some(v) if !matches!(v, Value::Ref(_))
         ),
-        Function::IsNumeric => matches!(
-            args.first().and_then(|e| eval_expr(store, e, row)),
-            Some(Value::Int(_) | Value::Float(_))
-        ),
+        // Numeric Typed literals (xsd:long, xsd:decimal, …) are numeric — they
+        // only became `Typed` instead of `Int`/`Float` so their datatype IRI
+        // would survive. `as_f64` is the one place that knows which they are.
+        Function::IsNumeric => args
+            .first()
+            .and_then(|e| eval_expr(store, e, row))
+            .is_some_and(|v| v.as_f64().is_some()),
         other => {
             return Err(Error::InvalidValue(format!(
                 "unsupported FILTER function: {other:?}"
@@ -185,6 +200,9 @@ fn build_regex(pattern: &str, flags: &str) -> Result<regex::Regex> {
 fn value_to_string(store: &Store, v: &Value) -> String {
     match v {
         Value::Str(s) => s.clone(),
+        // SPARQL STR() yields the LEXICAL form — without the tag, without the
+        // datatype. STR("hello"@en) is "hello", never "hello@en".
+        Value::Lang { lexical, .. } | Value::Typed { lexical, .. } => lexical.clone(),
         Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
         Value::Int(i) => i.to_string(),
         Value::Float(f) => f.to_string(),
@@ -226,45 +244,51 @@ pub fn compare_values(
     row: &Bindings,
     pred: impl Fn(std::cmp::Ordering) -> bool,
 ) -> bool {
-    match (eval_expr(store, left, row), eval_expr(store, right, row)) {
-        (Some(Value::Int(a)), Some(Value::Int(b))) => pred(a.cmp(&b)),
-        (Some(Value::Float(a)), Some(Value::Float(b))) => a.partial_cmp(&b).is_some_and(&pred),
-        (Some(Value::Int(a)), Some(Value::Float(b))) => {
-            (a as f64).partial_cmp(&b).is_some_and(&pred)
-        }
-        (Some(Value::Float(a)), Some(Value::Int(b))) => {
-            a.partial_cmp(&(b as f64)).is_some_and(&pred)
-        }
-        (Some(Value::Str(a)), Some(Value::Str(b))) => pred(a.cmp(&b)),
+    let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
+        return false;
+    };
+    // Integers compare exactly; any other numeric pair — including Typed
+    // numerics that kept their datatype (xsd:long, xsd:decimal, …) rather than
+    // collapsing into Int/Float at parse — compares as f64.
+    if let (Value::Int(a), Value::Int(b)) = (&a, &b) {
+        return pred(a.cmp(b));
+    }
+    if let (Some(a), Some(b)) = (a.as_f64(), b.as_f64()) {
+        return a.partial_cmp(&b).is_some_and(&pred);
+    }
+    // String comparison uses the LEXICAL form, so "hello"@en compares as
+    // "hello" (it used to compare as "hello@en") and an xsd:date still orders
+    // by its ISO-8601 lexeme as it did when it was silently a plain string.
+    match (a.as_lexical(), b.as_lexical()) {
+        (Some(a), Some(b)) => pred(a.cmp(b)),
         _ => false,
     }
 }
 
 /// Convert an oxrdf Literal to a Value (same logic as rdf module).
 pub fn literal_to_value(lit: &Literal) -> Value {
+    // A language tag must be checked FIRST: its datatype is rdf:langString.
+    // Never fold the tag into the lexical form — that is irreversible (the
+    // plain string "hello@en" would become indistinguishable). aegis-fmyi.
+    if let Some(lang) = lit.language() {
+        return Value::Lang {
+            lexical: lit.value().to_string(),
+            lang: lang.to_string(),
+        };
+    }
     let dt = lit.datatype().as_str();
+    let typed = || Value::Typed {
+        lexical: lit.value().to_string(),
+        datatype: dt.to_string(),
+    };
     match dt {
-        namespace::XSD_INTEGER | namespace::XSD_LONG | namespace::XSD_INT => {
-            if let Ok(n) = lit.value().parse::<i64>() {
-                Value::Int(n)
-            } else {
-                Value::Str(lit.value().to_string())
-            }
-        }
-        namespace::XSD_DOUBLE | namespace::XSD_FLOAT | namespace::XSD_DECIMAL => {
-            if let Ok(f) = lit.value().parse::<f64>() {
-                Value::Float(f)
-            } else {
-                Value::Str(lit.value().to_string())
-            }
-        }
+        namespace::XSD_INTEGER => lit.value().parse::<i64>().map_or_else(|_| typed(), Value::Int),
+        namespace::XSD_DOUBLE => lit.value().parse::<f64>().map_or_else(|_| typed(), Value::Float),
         namespace::XSD_BOOLEAN => Value::Bool(matches!(lit.value(), "true" | "1")),
-        _ => {
-            if let Some(lang) = lit.language() {
-                Value::Str(format!("{}@{}", lit.value(), lang))
-            } else {
-                Value::Str(lit.value().to_string())
-            }
-        }
+        // RDF 1.1: a plain literal's datatype IS xsd:string, so Str is lossless.
+        namespace::XSD_STRING => Value::Str(lit.value().to_string()),
+        // Every other datatype — xsd:date, xsd:decimal, integer subtypes,
+        // customs — keeps its IRI verbatim instead of being destroyed.
+        _ => typed(),
     }
 }

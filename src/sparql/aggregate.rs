@@ -54,13 +54,12 @@ pub fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings
                     let mut sum = 0.0f64;
                     let mut all_int = true;
                     for v in &values {
-                        match v {
-                            Value::Int(n) => sum += *n as f64,
-                            Value::Float(f) => {
-                                sum += f;
-                                all_int = false;
-                            }
-                            _ => {}
+                        // as_f64 also sees numeric Typed literals (xsd:long,
+                        // xsd:decimal, …), which keep their datatype rather
+                        // than collapsing into Int/Float at parse (aegis-fmyi).
+                        if let Some(n) = v.as_f64() {
+                            sum += n;
+                            all_int &= is_integral(v);
                         }
                     }
                     if all_int {
@@ -76,16 +75,9 @@ pub fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings
                     let mut sum = 0.0f64;
                     let mut count = 0usize;
                     for v in &values {
-                        match v {
-                            Value::Int(n) => {
-                                sum += *n as f64;
-                                count += 1;
-                            }
-                            Value::Float(f) => {
-                                sum += f;
-                                count += 1;
-                            }
-                            _ => {}
+                        if let Some(n) = v.as_f64() {
+                            sum += n;
+                            count += 1;
                         }
                     }
                     if count == 0 {
@@ -125,6 +117,11 @@ pub fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings
                         .iter()
                         .map(|v| match v {
                             Value::Str(s) => s.clone(),
+                            // GROUP_CONCAT concatenates lexical forms, so a
+                            // lang literal contributes "hello", not "hello@en".
+                            Value::Lang { lexical, .. } | Value::Typed { lexical, .. } => {
+                                lexical.clone()
+                            }
                             Value::Int(n) => n.to_string(),
                             Value::Float(f) => f.to_string(),
                             Value::Bool(b) => b.to_string(),
@@ -147,19 +144,41 @@ pub fn compare_option_values(a: &Option<Value>, b: &Option<Value>) -> std::cmp::
         (Some(_), None) => std::cmp::Ordering::Greater,
         (Some(va), Some(vb)) => match (va, vb) {
             (Value::Int(a), Value::Int(b)) => a.cmp(b),
-            (Value::Float(a), Value::Float(b)) => {
-                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-            }
-            (Value::Int(a), Value::Float(b)) => (*a as f64)
-                .partial_cmp(b)
-                .unwrap_or(std::cmp::Ordering::Equal),
-            (Value::Float(a), Value::Int(b)) => a
-                .partial_cmp(&(*b as f64))
-                .unwrap_or(std::cmp::Ordering::Equal),
             (Value::Str(a), Value::Str(b)) => a.cmp(b),
             (Value::Bool(a), Value::Bool(b)) => a.cmp(b),
             (Value::Ref(a), Value::Ref(b)) => a.cmp(b),
-            _ => std::cmp::Ordering::Equal,
+            _ => match (va.as_f64(), vb.as_f64()) {
+                // Any numeric pair, including Typed numerics that kept their
+                // datatype (xsd:long, xsd:decimal, …), orders numerically.
+                (Some(a), Some(b)) => a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal),
+                // Otherwise fall back to lexical order for literals that have
+                // a lexical form at all; anything else is incomparable.
+                _ => match (va.as_lexical(), vb.as_lexical()) {
+                    (Some(a), Some(b)) => a.cmp(b),
+                    _ => std::cmp::Ordering::Equal,
+                },
+            },
         },
+    }
+}
+
+/// Does this value carry an integer-valued datatype? Used by SUM to decide
+/// whether the total stays an integer.
+fn is_integral(v: &Value) -> bool {
+    match v {
+        Value::Int(_) => true,
+        Value::Typed { datatype, .. } => matches!(
+            datatype.as_str(),
+            crate::namespace::XSD_INTEGER
+                | crate::namespace::XSD_LONG
+                | crate::namespace::XSD_INT
+                | crate::namespace::XSD_SHORT
+                | crate::namespace::XSD_BYTE
+                | crate::namespace::XSD_NON_NEGATIVE_INTEGER
+                | crate::namespace::XSD_POSITIVE_INTEGER
+                | crate::namespace::XSD_UNSIGNED_LONG
+                | crate::namespace::XSD_UNSIGNED_INT
+        ),
+        _ => false,
     }
 }
