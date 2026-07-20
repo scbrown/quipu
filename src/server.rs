@@ -173,6 +173,7 @@ async fn main() {
         .route("/quipu-components.js", get(components_js))
         // Core API
         .route("/health", get(health))
+        .route("/version", get(version))
         .route("/stats", get(stats))
         .route("/query", post(query))
         .route("/knot", post(knot))
@@ -298,6 +299,31 @@ async fn components_js() -> impl IntoResponse {
 
 async fn health() -> impl IntoResponse {
     axum::Json(json!({"status": "ok"}))
+}
+
+/// What build is actually running (aegis-odnr).
+///
+/// `/health` answers `{"status":"ok"}` identically on every build ever made, so
+/// "is the fix deployed?" could not be answered from outside — a P0 was filed
+/// against the wrong root cause because source was read and the DEPLOYED server
+/// was measured. The git SHA is the field that matters: a semantic version does
+/// not move when a fix lands (shantytown's stayed 0.0.1 through every install
+/// and never signalled drift once).
+///
+/// `dirty` is reported because a build from an uncommitted tree is NOT the SHA
+/// it claims, and a deploy check that cannot see that is back where it started.
+/// `features` is included so "compiled with shacl" stops being an inference
+/// from the presence of a route.
+async fn version() -> impl IntoResponse {
+    axum::Json(json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "git_sha": env!("QUIPU_GIT_SHA"),
+        "git_dirty": env!("QUIPU_GIT_DIRTY") == "true",
+        "features": {
+            "shacl": cfg!(feature = "shacl"),
+            "onnx": cfg!(feature = "onnx"),
+        }
+    }))
 }
 
 async fn stats(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
