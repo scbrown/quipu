@@ -95,7 +95,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 **🧠 Reasoning Engine**
 
 - **Datalog over EAVT** — forward-chaining rules in Turtle DSL, evaluated by `datafrog` with semi-naive fixpoint. Stratified negation-as-failure. Derived facts are first-class triples with provenance.
-- **Reactive evaluation** — `TransactObserver` re-runs affected rules on every write. Delta-aware: only changed predicates trigger re-evaluation.
+- **Reactive evaluation** — `TransactObserver` re-runs affected rules on every write. Delta-aware: only changed predicates trigger re-evaluation. Behind the non-default `reactive-reasoner` feature; `reason --reactive` errors without it.
 - **Counterfactual queries** — `Store::speculate()` forks a hypothetical view via SQLite SAVEPOINT. Answer "what if we remove X?" without mutation.
 - **Impact analysis** — BFS walk over entity edges with configurable depth and predicate filters. CLI (`quipu impact`), REST (`POST /impact`), and MCP tool.
 
@@ -203,7 +203,7 @@ quipu reason --rules rules.ttl --db ops.db
 The reasoner adds forward-chaining inference over the EAVT fact log:
 
 - **Datalog rule engine** — rules written in Turtle DSL, evaluated with semi-naive `datafrog`. Stratified negation-as-failure. Derived facts written back via `Store::transact()` with full provenance.
-- **Reactive evaluation** — `TransactObserver` keeps derived facts fresh as base facts change. Delta-aware: only affected rules re-run.
+- **Reactive evaluation** — `TransactObserver` keeps derived facts fresh as base facts change. Delta-aware: only affected rules re-run. Optional `reactive-reasoner` feature.
 - **Counterfactual queries** — `Store::speculate()` forks a view (SQLite SAVEPOINT) to answer "what if?" without mutation.
 - **Impact analysis** — BFS walk over entity edges with configurable hop depth and predicate filters. Available as CLI, REST endpoint (`POST /impact`), and MCP tool.
 
@@ -335,7 +335,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | **Reasoner** | | |
 | Impact analysis (BFS) | ✅ | CLI, REST, MCP tool |
 | Datalog rule engine (datafrog) | ✅ | Turtle DSL, stratified negation |
-| Reactive evaluation | ✅ | TransactObserver, delta-aware |
+| Reactive evaluation | ✅ | TransactObserver, delta-aware. Optional `reactive-reasoner` feature; `reason --reactive` errors without it |
 | Counterfactual queries | ✅ | `speculate()` via SQLite SAVEPOINT |
 | Incremental truth maintenance | 🔜 | Planned (Phase 5) |
 | **Interfaces** | | |

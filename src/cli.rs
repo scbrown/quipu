@@ -498,6 +498,20 @@ pub fn cmd_impact(args: &[String], db_path: &str) {
 /// a [`TransactObserver`] so derived facts stay fresh automatically on
 /// subsequent `transact()` calls within this session.
 pub fn cmd_reason(args: &[String], db_path: &str) {
+    // `--reactive` is gated behind the non-default `reactive-reasoner` feature. On
+    // a default build the flag was parsed by nothing and produced NO message — the
+    // command ran the normal reasoner and reported success, so an operator ran
+    // `quipu reason --reactive`, saw a clean report, and believed derived facts were
+    // now self-maintaining when nothing had registered an observer. Refuse loudly
+    // instead, matching the `ontology` / `migrate-vectors` feature-gates in main.rs.
+    // A flag that silently does nothing is worse than one that errors.
+    #[cfg(not(feature = "reactive-reasoner"))]
+    if args.iter().any(|a| a == "--reactive") {
+        eprintln!("error: --reactive requires the 'reactive-reasoner' feature");
+        eprintln!("  rebuild with: cargo build --features reactive-reasoner");
+        std::process::exit(1);
+    }
+
     let rules_path = args
         .windows(2)
         .find(|w| w[0] == "--rules")

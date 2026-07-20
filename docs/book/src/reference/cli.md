@@ -148,13 +148,14 @@ Run the Datalog reasoner to derive facts from rules.
 ```bash
 quipu reason --db my.db
 quipu reason --rules custom-rules.ttl --db my.db
-quipu reason --reactive --db my.db
+# --reactive needs a non-default feature (see below):
+quipu reason --reactive --db my.db   # requires: cargo build --features reactive-reasoner
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--rules <file>` | `shapes/aegis-rules.ttl` | Turtle file containing rules |
-| `--reactive` | off | Register reactive observer after evaluation |
+| `--reactive` | off | Register reactive observer after evaluation. **Requires the non-default `reactive-reasoner` feature**; on a build without it, `quipu reason --reactive` errors and exits non-zero rather than silently doing nothing. |
 
 Output shows asserted/retracted counts per rule. Derived facts are written
 with `source = "reasoner:<rule-id>"` provenance.

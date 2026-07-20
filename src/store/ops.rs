@@ -214,9 +214,13 @@ impl Store {
                 let mut retracts = Vec::new();
                 // Only notify observers about datums that were actually written.
                 for d in &written_datums {
+                    // `written_datums` is `Vec<&Datum>`, so `d` here is `&&Datum` and
+                    // a bare `d.clone()` clones the REFERENCE (`&Datum`), not the
+                    // Datum — which is why this feature stopped compiling. Deref to
+                    // the value so `Delta.asserts: Vec<Datum>` gets owned Datums.
                     match d.op {
-                        Op::Assert => asserts.push(d.clone()),
-                        Op::Retract => retracts.push(d.clone()),
+                        Op::Assert => asserts.push((**d).clone()),
+                        Op::Retract => retracts.push((**d).clone()),
                         // Overlay view-markers are transient/overlay-class and
                         // are excluded from the committed reactive stream (#36).
                         Op::Tombstone => {}
