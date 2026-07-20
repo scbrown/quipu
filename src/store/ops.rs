@@ -285,14 +285,34 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<(i64, usize)> {
-        let facts = if let Some(pred) = predicate {
-            let all = self.entity_facts(entity)?;
-            all.into_iter()
-                .filter(|f| f.attribute == pred)
-                .collect::<Vec<_>>()
-        } else {
-            self.entity_facts(entity)?
-        };
+        self.retract_triples(entity, predicate, None, timestamp, actor)
+    }
+
+    /// Retract current facts for an entity, narrowed by predicate and/or value.
+    ///
+    /// With all three of entity, predicate and value supplied this is
+    /// TRIPLE-LEVEL retraction: exactly one `(e, a, v)` statement is closed
+    /// (aegis-arup ask 1). Episode granularity was previously the finest handle
+    /// available, so removing two stray edges meant retracting the whole episode
+    /// — 33 statements for a 2-statement target, a 16x blast radius, and the
+    /// rebuild that follows is what put node identity at risk in the first
+    /// place. Precision here removes the reason to reach for the blunt tool.
+    ///
+    /// Returns `(tx_id, count)`; `(0, 0)` when nothing matched.
+    pub fn retract_triples(
+        &mut self,
+        entity: i64,
+        predicate: Option<i64>,
+        value: Option<&Value>,
+        timestamp: &str,
+        actor: Option<&str>,
+    ) -> Result<(i64, usize)> {
+        let facts: Vec<Fact> = self
+            .entity_facts(entity)?
+            .into_iter()
+            .filter(|f| predicate.is_none_or(|p| f.attribute == p))
+            .filter(|f| value.is_none_or(|v| &f.value == v))
+            .collect();
 
         if facts.is_empty() {
             return Ok((0, 0));

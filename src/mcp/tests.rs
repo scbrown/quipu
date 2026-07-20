@@ -321,6 +321,109 @@ fn test_retract_episode_idempotent_and_unknown() {
     assert!(tool_retract_episode(&mut store, &serde_json::json!({})).is_err());
 }
 
+#[test]
+fn test_retract_triple_level_removes_exactly_one_statement() {
+    // aegis-arup ask 1. maldoon needed 2 stray edges gone; the only handle was
+    // "retract the episode" — 33 statements for a 2-statement target. entity +
+    // predicate + value pins one triple, so the blunt tool is no longer the
+    // only tool.
+    let mut store = Store::open_in_memory().unwrap();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-strays",
+            "timestamp": "2026-04-01T00:00:00Z",
+            "nodes": [
+                {"name": "jw3k", "type": "Bead"},
+                {"name": "stray", "type": "Bead"},
+                {"name": "keeper", "type": "Bead"}
+            ],
+            "edges": [
+                {"source": "jw3k", "target": "stray", "relation": "instance_of"},
+                {"source": "jw3k", "target": "keeper", "relation": "instance_of"}
+            ]
+        }),
+    )
+    .unwrap();
+    let before = tool_query(
+        &store,
+        &serde_json::json!({ "query": format!("SELECT ?p ?o WHERE {{ <{NS}jw3k> ?p ?o }}") }),
+    )
+    .unwrap()["count"]
+        .as_i64()
+        .unwrap();
+
+    let out = tool_retract(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}jw3k"),
+            "predicate": format!("{NS}instance_of"),
+            "value": {"iri": format!("{NS}stray")}
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(out["retracted"], 1, "exactly one statement, not the episode");
+    assert!(!ask(
+        &store,
+        &format!("<{NS}jw3k> <{NS}instance_of> <{NS}stray>")
+    ));
+    // The sibling edge, the node's identity, and everything else survive.
+    assert!(ask(
+        &store,
+        &format!("<{NS}jw3k> <{NS}instance_of> <{NS}keeper>")
+    ));
+    assert!(ask(&store, &format!("<{NS}jw3k> <{RDFS_LABEL}> \"jw3k\"")));
+    let after = tool_query(
+        &store,
+        &serde_json::json!({ "query": format!("SELECT ?p ?o WHERE {{ <{NS}jw3k> ?p ?o }}") }),
+    )
+    .unwrap()["count"]
+        .as_i64()
+        .unwrap();
+    assert_eq!(after, before - 1, "blast radius is exactly 1");
+}
+
+#[test]
+fn test_retract_without_value_still_takes_the_whole_predicate() {
+    // POSITIVE CONTROL for the test above: drop the `value` narrowing and BOTH
+    // instance_of edges go. If `value` were silently ignored, the test above
+    // would pass for the wrong reason — this pins the difference.
+    let mut store = Store::open_in_memory().unwrap();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-strays",
+            "timestamp": "2026-04-01T00:00:00Z",
+            "nodes": [
+                {"name": "jw3k", "type": "Bead"},
+                {"name": "stray", "type": "Bead"},
+                {"name": "keeper", "type": "Bead"}
+            ],
+            "edges": [
+                {"source": "jw3k", "target": "stray", "relation": "instance_of"},
+                {"source": "jw3k", "target": "keeper", "relation": "instance_of"}
+            ]
+        }),
+    )
+    .unwrap();
+
+    let out = tool_retract(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}jw3k"),
+            "predicate": format!("{NS}instance_of")
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(out["retracted"], 2);
+    assert!(!ask(
+        &store,
+        &format!("<{NS}jw3k> <{NS}instance_of> <{NS}keeper>")
+    ));
+}
+
 // -- Ghost nodes at the API boundary (aegis-arup) --
 
 /// maldoon's specimen, through the real ingest path: episode A declares a node's

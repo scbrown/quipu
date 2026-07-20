@@ -374,6 +374,13 @@ pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 }
 
 /// MCP tool: `quipu_retract` -- Retract facts for an entity.
+///
+/// Input: `{ "entity": "<IRI>", "predicate"?: "<IRI>", "value"?: <object-value>,
+///           "timestamp"?: "...", "actor"?: "..." }`. `predicate` and `value`
+/// narrow the scope; supplying all three retracts exactly ONE `(e, a, v)`
+/// statement (aegis-arup ask 1 — episode granularity was the finest handle
+/// available, which is what forced a 16x blast radius and the identity-losing
+/// rebuild that followed).
 pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let entity_iri = input
         .get("entity")
@@ -402,7 +409,16 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
 
     let actor = input.get("actor").and_then(|v| v.as_str());
 
-    let (tx_id, count) = store.retract_entity(entity_id, predicate_id, timestamp, actor)?;
+    // With entity + predicate + value this is TRIPLE-LEVEL retraction: exactly
+    // one statement, instead of "retract the whole episode and rebuild"
+    // (aegis-arup).
+    let value = match input.get("value") {
+        Some(v) => Some(super::json_to_value(store, v)?),
+        None => None,
+    };
+
+    let (tx_id, count) =
+        store.retract_triples(entity_id, predicate_id, value.as_ref(), timestamp, actor)?;
 
     Ok(serde_json::json!({
         "tx_id": tx_id,

@@ -790,12 +790,13 @@ pub fn tool_definitions() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_retract",
-            "description": "Retract facts for an entity (all facts, or filtered by predicate)",
+            "description": "Retract facts for an entity: all of them, or narrowed by predicate and/or value. Entity + predicate + value retracts exactly ONE (e,a,v) statement — use this to remove a stray edge instead of retracting a whole episode and rebuilding it.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "entity": { "type": "string", "description": "IRI of the entity to retract" },
                     "predicate": { "type": "string", "description": "Optional: only retract facts with this predicate IRI" },
+                    "value": { "description": "Optional: only retract facts with this object value. A bare string is a literal; use {\"iri\": \"...\"} for a reference, or {\"int\"|\"float\"|\"bool\": ...}. With entity + predicate this pins a single triple." },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the retraction" },
                     "actor": { "type": "string", "description": "Who is performing the retraction" }
                 },
