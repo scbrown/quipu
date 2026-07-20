@@ -1170,3 +1170,79 @@ fn compose_view_dedupes_reasserted_root_facts() {
     let matches = view.iter().filter(|f| f.entity == e && f.attribute == a).count();
     assert_eq!(matches, 1, "compose must dedupe the re-asserted base fact to one triple");
 }
+
+/// Retraction must survive an entity whose logical triple is backed by MANY
+/// fact rows, and must close it exactly once (aegis-a0ne).
+///
+/// The store is append-only, so a re-assert from another transaction adds a row
+/// rather than replacing one. Mapping those rows 1:1 onto retraction datums put
+/// several identical `(e, a, v)` into one tx and blew the `(e, a, v, tx)`
+/// PRIMARY KEY, so retraction failed with a UNIQUE constraint error on exactly
+/// the oldest, most re-asserted entities — the ones most worth retracting. Live
+/// `luvu` carried 29 rows of one `rdf:type` value.
+///
+/// The duplicates are inserted DIRECTLY here on purpose: today's `transact`
+/// skips an assert whose (e, a, v) is already active, so the modern write path
+/// can no longer produce this state and a test built on it would pass against
+/// the bug. That is precisely why the original hypothesis looked disproven when
+/// checked with a freshly-ingested node.
+#[test]
+fn retract_survives_duplicate_backing_rows() {
+    let mut store = test_store();
+
+    let e = store.intern("http://example.org/luvu").unwrap();
+    let a = store.intern("http://example.org/type").unwrap();
+    let v = Value::Str("BareMetalHost".into());
+
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: v.clone(),
+                valid_from: "2026-01-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    // Simulate the pre-dedup ingest path: the same live triple, more rows.
+    for _ in 0..3 {
+        store
+            .conn
+            .execute(
+                "INSERT INTO transactions (timestamp, actor, source) VALUES ('2026-01-02', NULL, 'legacy')",
+                [],
+            )
+            .unwrap();
+        let tx = store.conn.last_insert_rowid();
+        store
+            .conn
+            .execute(
+                "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
+                 VALUES (?1, ?2, ?3, 0, ?4, '2026-01-02', NULL, 1)",
+                rusqlite::params![e, a, v.to_bytes(), tx],
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        store.entity_facts(e).unwrap().len(),
+        4,
+        "precondition: one logical triple backed by four rows"
+    );
+
+    // Previously: Err(UNIQUE constraint failed: facts.e, facts.a, facts.v, facts.tx)
+    let (_tx, count) = store
+        .retract_triples(e, Some(a), Some(&v), "2026-01-03T00:00:00Z", Some("ian"))
+        .expect("retraction must not fail on duplicate backing rows");
+
+    assert_eq!(count, 1, "one logical triple retracted once, not once per row");
+    assert!(
+        store.entity_facts(e).unwrap().is_empty(),
+        "every backing row must be closed, or the triple survives its own retraction"
+    );
+}

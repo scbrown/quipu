@@ -318,18 +318,7 @@ impl Store {
             return Ok((0, 0));
         }
 
-        let datums: Vec<Datum> = facts
-            .iter()
-            .map(|f| Datum {
-                entity: f.entity,
-                attribute: f.attribute,
-                value: f.value.clone(),
-                valid_from: f.valid_from.clone(),
-                valid_to: None,
-                op: Op::Retract,
-            })
-            .collect();
-
+        let datums = retraction_datums(&facts);
         let count = datums.len();
         let tx_id = self.transact(&datums, timestamp, actor, Some("retract"))?;
         Ok((tx_id, count))
@@ -781,4 +770,47 @@ impl Store {
         }
         Ok(facts)
     }
+}
+
+/// Build retraction datums for `facts`, at most ONE per distinct `(e, a, v)`.
+///
+/// The store is append-only, so one logical triple can be backed by MANY fact
+/// rows — every re-assert from a different transaction adds another. `facts` is
+/// therefore NOT deduplicated, and mapping it 1:1 onto retraction datums put
+/// several rows with the same `(e, a, v)` into a single transaction. That
+/// violates `facts`' PRIMARY KEY `(e, a, v, tx)`, so retraction failed outright
+/// with a UNIQUE constraint error — on exactly the entities most worth
+/// retracting, because being old and re-asserted is what creates the duplicates.
+///
+/// Measured on the live graph (aegis-a0ne), counting only what `entity_facts`
+/// actually returns (`op = 1 AND valid_to IS NULL`): 86 duplicate groups over
+/// 29 of 972 entities (3.0%), worst single group 132 rows. The affected set is
+/// the graph's most-referenced nodes — graphiti (+273 redundant rows), kota
+/// (+123), bobbin, traefik, dolt — i.e. retraction failed precisely on the
+/// entities most likely to need correcting. `luvu` carried 29 rows of one
+/// `rdf:type` value, 2 of another, and 32 `rdfs:label` rows.
+///
+/// Retracting a triple once is also the correct SEMANTICS — the duplicate rows
+/// are one statement, not N — so this both fixes the crash and states the
+/// intent. Dedupe is linear because `Value` is only `PartialEq`; per-entity
+/// fact counts are small.
+fn retraction_datums(facts: &[Fact]) -> Vec<Datum> {
+    let mut datums: Vec<Datum> = Vec::with_capacity(facts.len());
+    for f in facts {
+        let already = datums
+            .iter()
+            .any(|d| d.entity == f.entity && d.attribute == f.attribute && d.value == f.value);
+        if already {
+            continue;
+        }
+        datums.push(Datum {
+            entity: f.entity,
+            attribute: f.attribute,
+            value: f.value.clone(),
+            valid_from: f.valid_from.clone(),
+            valid_to: None,
+            op: Op::Retract,
+        });
+    }
+    datums
 }
