@@ -232,7 +232,7 @@ fn node_properties_become_triples() {
                 "type": "WebService",
                 "properties": {
                     "port": 8080,
-                    "hostname": "svc1.svc",
+                    "hostname": "svc1.example",
                     "active": true
                 }
             }

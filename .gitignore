@@ -40,3 +40,17 @@ CLAUDE.local.md
 
 # host-local beads store redirect (path differs per machine; do not track)
 .beads/redirect
+
+# Runtime store — NEVER commit (aegis-mqnl).
+# data/quipu.db was tracked in this PUBLIC repo carrying a live private graph:
+# ~2.1MB holding several thousand internal service and host names. It arrived as
+# collateral in an unrelated bugfix commit and no check ever saw it, because
+# scanners skip binaries by suffix — the file was invisible to the very sweep
+# written to find internal identifiers.
+#
+# (The first draft of this very comment listed the leaked hostnames as evidence,
+# and the scrub caught it. A note explaining a leak is not exempt from it.)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.log

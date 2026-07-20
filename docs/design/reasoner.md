@@ -295,7 +295,7 @@ The REPL can offer an interactive variant (`quipu repl` gains a
 
 ## Rule Examples for Aegis Homelab
 
-Grounded in `/home/braino/workspace/aegis/ontology/entities/*.jsonld`:
+Grounded in `/home/user/workspace/aegis/ontology/entities/*.jsonld`:
 
 ```text
 # A package affects every service in its container.

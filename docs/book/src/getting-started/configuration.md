@@ -22,7 +22,7 @@ bind = "127.0.0.1:3030"
 # Federation: connect to remote Quipu instances
 [[quipu.federation.remotes]]
 name = "prod"
-url = "http://quipu.svc:3030"
+url = "http://quipu.example:3030"
 ```
 
 ## Config Fields

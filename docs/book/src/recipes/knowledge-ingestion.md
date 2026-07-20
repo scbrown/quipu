@@ -28,7 +28,7 @@ Via REST:
 curl -s localhost:3030/knot -X POST \
   -H "Content-Type: application/json" \
   -d '{
-    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:koror a hw:Host ; hw:hostname \"koror.lan\" .",
+    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:koror a hw:Host ; hw:hostname \"koror.example\" .",
     "timestamp": "2026-04-01",
     "actor": "bulk-import"
   }'

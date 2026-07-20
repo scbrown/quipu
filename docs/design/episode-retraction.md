@@ -183,23 +183,23 @@ deploy verification:
 
 ```bash
 # 1. Confirm a test episode's facts are currently live (expect rows).
-curl -s http://quipu.svc/query -X POST -H 'Content-Type: application/json' \
+curl -s http://quipu.example/query -X POST -H 'Content-Type: application/json' \
   -d '{"query":"SELECT ?s ?p ?o WHERE { ?s ?p ?o . <http://aegis.gastown.local/ontology/episode_goldblum-deploy-verify-032> ?p2 ?o2 } LIMIT 5"}'
 
 # 2. Retract each test episode (idempotent; safe to re-run).
 for ep in goldblum-deploy-verify-032 goldblum-confidence-verify-032 goldblum-final-verify-032; do
-  curl -s http://quipu.svc/episode/retract -X POST -H 'Content-Type: application/json' \
+  curl -s http://quipu.example/episode/retract -X POST -H 'Content-Type: application/json' \
     -d "{\"episode\":\"$ep\",\"actor\":\"goldblum\"}"
   echo
 done
 
 # 3. Verify the test facts are gone from CURRENT queries (expect 0 rows / ASK false),
 #    e.g. the deploy-test edge:
-curl -s http://quipu.svc/query -X POST -H 'Content-Type: application/json' \
+curl -s http://quipu.example/query -X POST -H 'Content-Type: application/json' \
   -d '{"query":"ASK { <http://aegis.gastown.local/ontology/quipu-server> <http://aegis.gastown.local/ontology/running_version_on> ?v }"}'
 
 # 4. Confirm real entities survive (expect the real facts intact).
-curl -s http://quipu.svc/query -X POST -H 'Content-Type: application/json' \
+curl -s http://quipu.example/query -X POST -H 'Content-Type: application/json' \
   -d '{"query":"SELECT ?p ?o WHERE { <http://aegis.gastown.local/ontology/quipu-server> ?p ?o }"}'
 
 # 5. IDENTITY POST-CHECK (aegis-arup). "Facts gone, shared entities intact" reads
@@ -209,7 +209,7 @@ curl -s http://quipu.svc/query -X POST -H 'Content-Type: application/json' \
 #      - every response above must show "identity_orphans": 0, or (under the
 #        default preserve policy) a matching "identity_preserved" count;
 #      - and the label scan must still return them:
-curl -s http://quipu.svc/query -X POST -H 'Content-Type: application/json' \
+curl -s http://quipu.example/query -X POST -H 'Content-Type: application/json' \
   -d '{"query":"ASK { <http://aegis.gastown.local/ontology/quipu-server> <http://www.w3.org/2000/01/rdf-schema#label> ?l }"}'
 ```
 

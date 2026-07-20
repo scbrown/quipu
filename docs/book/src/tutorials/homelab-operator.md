@@ -27,13 +27,13 @@ hw:Database   rdfs:subClassOf hw:Service .
 # Hosts
 hw:koror a hw:Host ;
     rdfs:label   "koror" ;
-    hw:hostname  "koror.lan" ;
+    hw:hostname  "koror.example" ;
     hw:cpuCores  "8"^^xsd:integer ;
     hw:memoryMB  "32768"^^xsd:integer .
 
 hw:palau a hw:Host ;
     rdfs:label   "palau" ;
-    hw:hostname  "palau.lan" ;
+    hw:hostname  "palau.example" ;
     hw:cpuCores  "4"^^xsd:integer ;
     hw:memoryMB  "16384"^^xsd:integer .
 
@@ -210,7 +210,7 @@ curl -s localhost:3030/episode -X POST \
     "source": "prometheus-sd",
     "nodes": [
       {"name": "redis", "type": "Service", "description": "Cache layer"},
-      {"name": "yap", "type": "Host", "properties": {"hostname": "yap.lan"}}
+      {"name": "yap", "type": "Host", "properties": {"hostname": "yap.example"}}
     ],
     "edges": [
       {"source": "redis", "target": "yap", "relation": "runsOn"},

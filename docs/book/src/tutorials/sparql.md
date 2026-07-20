@@ -17,21 +17,21 @@ Save this as `homelab.ttl`:
 # --- Hosts ---
 hw:koror      a hw:Host ;
     rdfs:label      "koror" ;
-    hw:hostname     "koror.lan" ;
+    hw:hostname     "koror.example" ;
     hw:cpuCores     "8"^^xsd:integer ;
     hw:memoryMB     "32768"^^xsd:integer ;
     hw:role         "hypervisor" .
 
 hw:palau      a hw:Host ;
     rdfs:label      "palau" ;
-    hw:hostname     "palau.lan" ;
+    hw:hostname     "palau.example" ;
     hw:cpuCores     "4"^^xsd:integer ;
     hw:memoryMB     "16384"^^xsd:integer ;
     hw:role         "storage" .
 
 hw:yap        a hw:Host ;
     rdfs:label      "yap" ;
-    hw:hostname     "yap.lan" ;
+    hw:hostname     "yap.example" ;
     hw:cpuCores     "4"^^xsd:integer ;
     hw:memoryMB     "8192"^^xsd:integer ;
     hw:role         "edge" .

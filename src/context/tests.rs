@@ -22,7 +22,7 @@ ex:traefik rdf:type ex:WebApplication ;
 
 ex:kota rdf:type ex:ProxmoxNode ;
     rdfs:label "Kota" ;
-    ex:hostname "kota.lan" ;
+    ex:hostname "kota.example" ;
     ex:manages ex:traefik .
 
 ex:forgejo rdf:type ex:WebApplication ;
@@ -32,7 +32,7 @@ ex:forgejo rdf:type ex:WebApplication ;
 
 ex:koror rdf:type ex:ProxmoxNode ;
     rdfs:label "Koror" ;
-    ex:hostname "koror.lan" .
+    ex:hostname "koror.example" .
     "#;
 
     let mut store = store;

@@ -49,7 +49,7 @@ The object of a triple can be either:
 
 ```turtle
 hw:koror  hw:runs      hw:traefik .          # reference → another entity
-hw:koror  hw:hostname  "koror.lan" .          # literal → a string
+hw:koror  hw:hostname  "koror.example" .          # literal → a string
 hw:koror  hw:cpuCores  "4"^^xsd:integer .     # literal → a typed number
 ```
 
@@ -94,7 +94,7 @@ From the REST API:
 curl -s localhost:3030/knot -X POST \
   -H "Content-Type: application/json" \
   -d '{
-    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:koror a hw:Host ; hw:hostname \"koror.lan\" ."
+    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:koror a hw:Host ; hw:hostname \"koror.example\" ."
   }'
 ```
 
@@ -106,7 +106,7 @@ curl -s localhost:3030/episode -X POST \
   -d '{
     "name": "homelab-inventory",
     "nodes": [
-      {"name": "koror", "type": "Host", "properties": {"hostname": "koror.lan"}},
+      {"name": "koror", "type": "Host", "properties": {"hostname": "koror.example"}},
       {"name": "traefik", "type": "WebApp"}
     ],
     "edges": [

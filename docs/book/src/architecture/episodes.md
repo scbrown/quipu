@@ -17,7 +17,7 @@ change -- it packages that knowledge as an episode with typed nodes and edges.
       "name": "koror",
       "type": "ProxmoxNode",
       "description": "Proxmox host, rebuilt after failure",
-      "properties": { "hostname": "koror.lan", "status": "recovered" }
+      "properties": { "hostname": "koror.example", "status": "recovered" }
     },
     {
       "name": "kota",

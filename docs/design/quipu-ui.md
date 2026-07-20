@@ -253,7 +253,7 @@ koror (ProxmoxNode)
  2026-03-29  ✗ status: "down" retracted
  2026-03-29  ✓ status: "online" asserted
              ↳ episode: koror-recovery-complete
- 2026-04-01  ✓ depends_on: dns.lan asserted
+ 2026-04-01  ✓ depends_on: dns.example asserted
              ↳ episode: dns-migration
 ```
 
@@ -370,7 +370,7 @@ Bobbin search results that match knowledge entities get a badge:
 
 ```text
 search_result.rs:42  — HybridSearch trait definition
-  📊 koror (ProxmoxNode)  →  http://quipu.svc:3030/entity/aegis:koror
+  📊 koror (ProxmoxNode)  →  http://quipu.example:3030/entity/aegis:koror
 ```
 
 The badge is a hyperlink. Clicking it opens Quipu's standalone UI. Bobbin
@@ -397,7 +397,7 @@ or web component. Quipu renders itself — Bobbin just provides the viewport.
 │ ┌─ Knowledge (powered by Quipu) ────────────┐ │
 │ │ ┌─────────────────────────────────────────┐│ │
 │ │ │  << Quipu renders this entire area >>   ││ │
-│ │ │  Graph: dns.lan → AdGuard → koror       ││ │
+│ │ │  Graph: dns.example → AdGuard → koror       ││ │
 │ │ │  Entities: 3 | Edges: 5 | Valid ✓       ││ │
 │ │ └─────────────────────────────────────────┘│ │
 │ └───────────────────────────────────────────┘ │
@@ -414,7 +414,7 @@ Bobbin needs to annotate its own results.
 
 ```html
 <quipu-graph
-  endpoint="http://quipu.svc:3030"
+  endpoint="http://quipu.example:3030"
   query="SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?s a aegis:SystemdService }"
   height="400px">
 </quipu-graph>
@@ -470,7 +470,7 @@ Bobbin's knowledge integration is:
 | Concern         | Approach                   | Rationale                              |
 |-----------------|----------------------------|----------------------------------------|
 | Knowledge panel | `<quipu-graph>` web comp   | Quipu owns rendering                   |
-| Entity links    | Hyperlinks to quipu.svc    | Zero coupling                          |
+| Entity links    | Hyperlinks to quipu.example    | Zero coupling                          |
 | Context viz     | `<quipu-context>` web comp | Quipu shows what it contributed         |
 | Data flow       | quipu crate API            | Already exists, compile-time checked    |
 
@@ -548,13 +548,13 @@ machine-readable, incrementally adoptable.
     "quipu": "https://quipu.dev/ontology#"
   },
   "@type": "SoftwareSourceCode",
-  "@id": "https://quipu.svc/entity/parseConfig",
+  "@id": "https://quipu.example/entity/parseConfig",
   "name": "parseConfig",
   "programmingLanguage": "Go",
   "quipu:dependsOn": [
-    {"@id": "https://quipu.svc/entity/yamlParser"}
+    {"@id": "https://quipu.example/entity/yamlParser"}
   ],
-  "quipu:ownedBy": {"@id": "https://quipu.svc/entity/team-platform"}
+  "quipu:ownedBy": {"@id": "https://quipu.example/entity/team-platform"}
 }
 </script>
 ```
@@ -589,7 +589,7 @@ With format-specific sub-paths for debugging:
 /entity/koror/ttl
 ```
 
-**Why this matters**: Bobbin links to `quipu.svc/entity/koror`. Browsers get a
+**Why this matters**: Bobbin links to `quipu.example/entity/koror`. Browsers get a
 rich HTML page. API clients get JSON-LD. SPARQL engines get Turtle. Zero extra
 integration code — just HTTP content negotiation doing its job.
 
@@ -1072,7 +1072,7 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 - Remove the `KnowledgeViewSet` trait and all rendering logic
 - Replace with web component embedding (`<quipu-*>` elements)
 - Bobbin's "knowledge tab" becomes an iframe or web component host
-- Bobbin's `/kb/*` routes are removed — link to quipu.svc instead
+- Bobbin's `/kb/*` routes are removed — link to quipu.example instead
 - Keep the CSS design system sharing (Quipu adopts Bobbin's dark theme tokens)
 
 ## Phased Implementation

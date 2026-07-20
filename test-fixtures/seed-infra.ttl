@@ -26,28 +26,28 @@ aegis:ct-100 a aegis:LXCContainer ;
     rdfs:label "ct-100" ;
     aegis:ctId "100"^^xsd:integer ;
     aegis:hostname "ct-100" ;
-    aegis:ipAddress "10.0.0.100" ;
+    aegis:ipAddress "192.0.2.100" ;
     aegis:runs_on aegis:koror .
 
 aegis:ct-101 a aegis:LXCContainer ;
     rdfs:label "ct-101" ;
     aegis:ctId "101"^^xsd:integer ;
     aegis:hostname "ct-101" ;
-    aegis:ipAddress "10.0.0.101" ;
+    aegis:ipAddress "192.0.2.101" ;
     aegis:runs_on aegis:koror .
 
 aegis:ct-102 a aegis:LXCContainer ;
     rdfs:label "ct-102" ;
     aegis:ctId "102"^^xsd:integer ;
     aegis:hostname "ct-102" ;
-    aegis:ipAddress "10.0.0.102" ;
+    aegis:ipAddress "192.0.2.102" ;
     aegis:runs_on aegis:koror .
 
 aegis:ct-103 a aegis:LXCContainer ;
     rdfs:label "ct-103" ;
     aegis:ctId "103"^^xsd:integer ;
     aegis:hostname "ct-103" ;
-    aegis:ipAddress "10.0.0.103" ;
+    aegis:ipAddress "192.0.2.103" ;
     aegis:runs_on aegis:koror .
 
 # ── LXC Containers: kota ─────────────────────────────────────
@@ -56,28 +56,28 @@ aegis:ct-200 a aegis:LXCContainer ;
     rdfs:label "ct-200" ;
     aegis:ctId "200"^^xsd:integer ;
     aegis:hostname "ct-200" ;
-    aegis:ipAddress "10.0.0.200" ;
+    aegis:ipAddress "192.0.2.200" ;
     aegis:runs_on aegis:kota .
 
 aegis:ct-201 a aegis:LXCContainer ;
     rdfs:label "ct-201" ;
     aegis:ctId "201"^^xsd:integer ;
     aegis:hostname "ct-201" ;
-    aegis:ipAddress "10.0.0.201" ;
+    aegis:ipAddress "192.0.2.201" ;
     aegis:runs_on aegis:kota .
 
 aegis:ct-202 a aegis:LXCContainer ;
     rdfs:label "ct-202" ;
     aegis:ctId "202"^^xsd:integer ;
     aegis:hostname "ct-202" ;
-    aegis:ipAddress "10.0.0.202" ;
+    aegis:ipAddress "192.0.2.202" ;
     aegis:runs_on aegis:kota .
 
 aegis:ct-203 a aegis:LXCContainer ;
     rdfs:label "ct-203" ;
     aegis:ctId "203"^^xsd:integer ;
     aegis:hostname "ct-203" ;
-    aegis:ipAddress "10.0.0.203" ;
+    aegis:ipAddress "192.0.2.203" ;
     aegis:runs_on aegis:kota .
 
 # ── LXC Containers: niue ─────────────────────────────────────
@@ -86,28 +86,28 @@ aegis:ct-300 a aegis:LXCContainer ;
     rdfs:label "ct-300" ;
     aegis:ctId "300"^^xsd:integer ;
     aegis:hostname "ct-300" ;
-    aegis:ipAddress "10.0.0.30" ;
+    aegis:ipAddress "192.0.2.30" ;
     aegis:runs_on aegis:niue .
 
 aegis:ct-301 a aegis:LXCContainer ;
     rdfs:label "ct-301" ;
     aegis:ctId "301"^^xsd:integer ;
     aegis:hostname "ct-301" ;
-    aegis:ipAddress "10.0.0.31" ;
+    aegis:ipAddress "192.0.2.31" ;
     aegis:runs_on aegis:niue .
 
 aegis:ct-302 a aegis:LXCContainer ;
     rdfs:label "ct-302" ;
     aegis:ctId "302"^^xsd:integer ;
     aegis:hostname "ct-302" ;
-    aegis:ipAddress "10.0.0.32" ;
+    aegis:ipAddress "192.0.2.32" ;
     aegis:runs_on aegis:niue .
 
 aegis:ct-303 a aegis:LXCContainer ;
     rdfs:label "ct-303" ;
     aegis:ctId "303"^^xsd:integer ;
     aegis:hostname "ct-303" ;
-    aegis:ipAddress "10.0.0.33" ;
+    aegis:ipAddress "192.0.2.33" ;
     aegis:runs_on aegis:niue .
 
 # ── Systemd Services ─────────────────────────────────────────

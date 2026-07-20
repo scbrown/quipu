@@ -62,11 +62,11 @@ store_path = ".bobbin/quipu/quipu.db"
 
 [[quipu.federation.remotes]]
 name = "prod"
-url = "http://quipu.svc:3030"
+url = "http://quipu.example:3030"
 
 [[quipu.federation.remotes]]
 name = "staging"
-url = "http://quipu-staging.svc:3030"
+url = "http://quipu-staging.example:3030"
 ```
 
 ## Result Tagging

@@ -27,73 +27,73 @@
         "name": "ct-100",
         "type": "LXCContainer",
         "description": "Traefik reverse proxy",
-        "properties": { "ctId": 100, "hostname": "ct-100", "ipAddress": "10.0.0.100" }
+        "properties": { "ctId": 100, "hostname": "ct-100", "ipAddress": "192.0.2.100" }
       },
       {
         "name": "ct-101",
         "type": "LXCContainer",
         "description": "Grafana + Prometheus monitoring",
-        "properties": { "ctId": 101, "hostname": "ct-101", "ipAddress": "10.0.0.101" }
+        "properties": { "ctId": 101, "hostname": "ct-101", "ipAddress": "192.0.2.101" }
       },
       {
         "name": "ct-102",
         "type": "LXCContainer",
         "description": "Quipu server + FalkorDB",
-        "properties": { "ctId": 102, "hostname": "ct-102", "ipAddress": "10.0.0.102" }
+        "properties": { "ctId": 102, "hostname": "ct-102", "ipAddress": "192.0.2.102" }
       },
       {
         "name": "ct-103",
         "type": "LXCContainer",
         "description": "Forgejo git hosting",
-        "properties": { "ctId": 103, "hostname": "ct-103", "ipAddress": "10.0.0.103" }
+        "properties": { "ctId": 103, "hostname": "ct-103", "ipAddress": "192.0.2.103" }
       },
       {
         "name": "ct-200",
         "type": "LXCContainer",
         "description": "PostgreSQL database",
-        "properties": { "ctId": 200, "hostname": "ct-200", "ipAddress": "10.0.0.200" }
+        "properties": { "ctId": 200, "hostname": "ct-200", "ipAddress": "192.0.2.200" }
       },
       {
         "name": "ct-201",
         "type": "LXCContainer",
         "description": "Dolt version-controlled database",
-        "properties": { "ctId": 201, "hostname": "ct-201", "ipAddress": "10.0.0.201" }
+        "properties": { "ctId": 201, "hostname": "ct-201", "ipAddress": "192.0.2.201" }
       },
       {
         "name": "ct-202",
         "type": "LXCContainer",
         "description": "Minio object storage",
-        "properties": { "ctId": 202, "hostname": "ct-202", "ipAddress": "10.0.0.202" }
+        "properties": { "ctId": 202, "hostname": "ct-202", "ipAddress": "192.0.2.202" }
       },
       {
         "name": "ct-203",
         "type": "LXCContainer",
         "description": "Plex media server",
-        "properties": { "ctId": 203, "hostname": "ct-203", "ipAddress": "10.0.0.203" }
+        "properties": { "ctId": 203, "hostname": "ct-203", "ipAddress": "192.0.2.203" }
       },
       {
         "name": "ct-300",
         "type": "LXCContainer",
         "description": "Restic backup runner",
-        "properties": { "ctId": 300, "hostname": "ct-300", "ipAddress": "10.0.0.30" }
+        "properties": { "ctId": 300, "hostname": "ct-300", "ipAddress": "192.0.2.30" }
       },
       {
         "name": "ct-301",
         "type": "LXCContainer",
         "description": "Pi-hole DNS",
-        "properties": { "ctId": 301, "hostname": "ct-301", "ipAddress": "10.0.0.31" }
+        "properties": { "ctId": 301, "hostname": "ct-301", "ipAddress": "192.0.2.31" }
       },
       {
         "name": "ct-302",
         "type": "LXCContainer",
         "description": "Caddy web server",
-        "properties": { "ctId": 302, "hostname": "ct-302", "ipAddress": "10.0.0.32" }
+        "properties": { "ctId": 302, "hostname": "ct-302", "ipAddress": "192.0.2.32" }
       },
       {
         "name": "ct-303",
         "type": "LXCContainer",
         "description": "Alertmanager",
-        "properties": { "ctId": 303, "hostname": "ct-303", "ipAddress": "10.0.0.33" }
+        "properties": { "ctId": 303, "hostname": "ct-303", "ipAddress": "192.0.2.33" }
       },
       {
         "name": "traefik",

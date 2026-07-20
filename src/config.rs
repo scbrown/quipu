@@ -281,7 +281,7 @@ pub struct RemoteEndpoint {
     /// Human-readable name for this remote.
     pub name: String,
 
-    /// URL of the remote Quipu REST API (e.g., `http://quipu.svc:3030`).
+    /// URL of the remote Quipu REST API (e.g., `http://quipu.example:3030`).
     pub url: String,
 }
 
@@ -395,7 +395,7 @@ bind = "0.0.0.0:8080"
 
 [[quipu.federation.remotes]]
 name = "prod"
-url = "http://quipu.svc:3030"
+url = "http://quipu.example:3030"
 
 [quipu.embedding]
 auto_embed = true
@@ -409,7 +409,7 @@ embed_batch_size = 64
         assert_eq!(cfg.server.bind, "0.0.0.0:8080");
         assert_eq!(cfg.federation.remotes.len(), 1);
         assert_eq!(cfg.federation.remotes[0].name, "prod");
-        assert_eq!(cfg.federation.remotes[0].url, "http://quipu.svc:3030");
+        assert_eq!(cfg.federation.remotes[0].url, "http://quipu.example:3030");
         assert!(cfg.embedding.auto_embed);
         assert_eq!(cfg.embedding.embed_batch_size, 64);
     }

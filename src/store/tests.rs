@@ -158,7 +158,7 @@ fn contradiction_detection() {
             &[Datum {
                 entity: e,
                 attribute: a,
-                value: Value::Str("10.0.0.1".into()),
+                value: Value::Str("192.0.2.1".into()),
                 valid_from: "2026-01-01".into(),
                 valid_to: None,
                 op: Op::Assert,
@@ -174,7 +174,7 @@ fn contradiction_detection() {
             &[Datum {
                 entity: e,
                 attribute: a,
-                value: Value::Str("10.0.0.2".into()),
+                value: Value::Str("192.0.2.2".into()),
                 valid_from: "2026-02-01".into(),
                 valid_to: None,
                 op: Op::Assert,
@@ -187,8 +187,8 @@ fn contradiction_detection() {
 
     let contradictions = store.detect_contradictions(e, a).unwrap();
     assert_eq!(contradictions.len(), 1);
-    assert_eq!(contradictions[0].0.value, Value::Str("10.0.0.1".into()));
-    assert_eq!(contradictions[0].1.value, Value::Str("10.0.0.2".into()));
+    assert_eq!(contradictions[0].0.value, Value::Str("192.0.2.1".into()));
+    assert_eq!(contradictions[0].1.value, Value::Str("192.0.2.2".into()));
 }
 
 #[test]
