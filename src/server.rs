@@ -489,10 +489,52 @@ macro_rules! rw_handler {
     };
 }
 
+/// A vector-search handler that embeds the query text OUTSIDE the store lock.
+///
+/// The ONNX query-embed is CPU-bound (tens of ms) and was run *inside* the global
+/// `Store` mutex — every concurrent /search serialized across it, so a burst drained
+/// in sum-of-embeds wall time, and (before store work moved to the blocking pool)
+/// it parked the async workers and stalled even lock-free /health. `blocking()`
+/// already keeps the work off the reactor; this additionally shrinks the lock
+/// hold-time to the vector/SPARQL step so concurrent embeds run in PARALLEL.
+///
+/// Mechanism: take a brief lock only to clone the cheap `Arc<dyn EmbeddingProvider>`,
+/// release it, run `embed_text` lock-free, then inject the vector as the
+/// pre-computed `embedding` the tool already accepts — so the tool skips its own
+/// in-lock embed and the second lock covers only the search. A caller-supplied
+/// `embedding`, or a missing provider, is passed straight through unchanged (the
+/// tool then embeds or errors exactly as before), so behaviour is identical.
+macro_rules! embed_handler {
+    ($name:ident, $tool:path) => {
+        async fn $name(
+            State(s): State<SharedStore>,
+            axum::Json(i): axum::Json<JsonValue>,
+        ) -> Result<axum::Json<JsonValue>, AppError> {
+            blocking(move || {
+                let mut i = i;
+                if i.get("embedding").is_none() {
+                    if let Some(text) = i.get("query").and_then(|v| v.as_str()).map(str::to_owned) {
+                        // Brief lock: clone the Arc provider, then DROP the guard.
+                        let provider = { s.lock().unwrap().embedding_provider() };
+                        if let Some(provider) = provider {
+                            let vec = provider.embed_text(&text)?; // CPU work, LOCK-FREE
+                            if let Some(obj) = i.as_object_mut() {
+                                obj.insert("embedding".to_string(), serde_json::json!(vec));
+                            }
+                        }
+                    }
+                }
+                Ok(axum::Json($tool(&s.lock().unwrap(), &i)?))
+            })
+            .await
+        }
+    };
+}
+
 ro_handler!(cord, quipu::tool_cord);
 ro_handler!(unravel, quipu::tool_unravel);
-ro_handler!(search, quipu::tool_search);
-ro_handler!(hybrid_search, quipu::tool_hybrid_search);
+embed_handler!(search, quipu::tool_search);
+embed_handler!(hybrid_search, quipu::tool_hybrid_search);
 ro_handler!(unified_search, quipu::tool_unified_search);
 ro_handler!(ask, quipu::tool_ask);
 ro_handler!(search_nodes, quipu::tool_search_nodes);
@@ -846,5 +888,80 @@ impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
         let body = json!({ "error": self.0.to_string() });
         (StatusCode::BAD_REQUEST, axum::Json(body)).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quipu::Store;
+
+    /// An embedding provider whose embed is deliberately SLOW, so that whether the
+    /// store lock is held across it is observable in wall-clock time.
+    struct SleepyProvider;
+    impl EmbeddingProvider for SleepyProvider {
+        fn embed_text(&self, _text: &str) -> quipu::Result<Vec<f32>> {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            Ok(vec![0.1f32; 384])
+        }
+        fn dimension(&self) -> usize {
+            384
+        }
+    }
+
+    /// m4s2: the query-embed must run OUTSIDE the global `Store` mutex, so
+    /// concurrent /search embeds OVERLAP instead of serializing on the lock.
+    ///
+    /// Deterministic stand-in for the ONNX 30/50-concurrency probe: with a
+    /// provider that sleeps 200ms per embed, four concurrent searches finish in
+    /// ~one embed's time when the lock is released across the embed (the fix), and
+    /// in ~four embeds' time when it is not. The 600ms threshold sits between the
+    /// parallel (~200-300ms) and serial (~800ms) outcomes, so this test PASSES on
+    /// the embed-outside-lock handler and FAILS on the pre-fix in-lock one.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_search_embeds_do_not_serialize_on_the_store_lock() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.set_embedding_provider(Arc::new(SleepyProvider));
+        let shared: SharedStore = Arc::new(Mutex::new(store));
+
+        let call = || {
+            let s = shared.clone();
+            async move { search(State(s), axum::Json(json!({ "query": "x", "limit": 1 }))).await }
+        };
+
+        let start = std::time::Instant::now();
+        let (a, b, c, d) = tokio::join!(call(), call(), call(), call());
+        let elapsed = start.elapsed();
+
+        for r in [a, b, c, d] {
+            assert!(r.is_ok(), "search over an empty store should succeed with a scoped:false empty result");
+        }
+        assert!(
+            elapsed < std::time::Duration::from_millis(600),
+            "four concurrent embeds serialized on the store lock ({elapsed:?}) — the embed is \
+             being held inside the mutex again (m4s2 regressed)"
+        );
+    }
+
+    /// Guard the fix's invariant: a caller-supplied `embedding` must pass straight
+    /// through, never touching the provider — so pre-computed callers keep working
+    /// and the injection path only fires for text queries.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn precomputed_embedding_bypasses_the_provider() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.set_embedding_provider(Arc::new(SleepyProvider)); // would sleep 200ms if consulted
+        let shared: SharedStore = Arc::new(Mutex::new(store));
+
+        let start = std::time::Instant::now();
+        let r = search(
+            State(shared),
+            axum::Json(json!({ "embedding": vec![0.2f32; 384], "limit": 1 })),
+        )
+        .await;
+        assert!(r.is_ok(), "a pre-computed embedding search should succeed");
+        assert!(
+            start.elapsed() < std::time::Duration::from_millis(150),
+            "the sleepy provider was consulted despite a pre-computed embedding"
+        );
     }
 }
