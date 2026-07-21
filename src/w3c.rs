@@ -28,7 +28,7 @@
 //! legitimate, and guessing would manufacture confident lies. A datatype
 //! round-trip that "passes" via sniffing is evidence of the bug, not of a fix.
 
-use oxrdf::{vocab::xsd, Literal, NamedNode, Term as OxTerm, Triple as OxTriple, Variable};
+use oxrdf::{Literal, NamedNode, Term as OxTerm, Triple as OxTriple, Variable, vocab::xsd};
 use oxrdfio::{RdfFormat, RdfSerializer};
 use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 
@@ -110,7 +110,10 @@ pub fn serialize(
                 // are omitted from the binding, which is exactly W3C-correct.
                 let binding: Vec<(&Variable, OxTerm)> = vars
                     .iter()
-                    .filter_map(|var| row.get(var.as_str()).map(|val| (var, value_to_term(store, val))))
+                    .filter_map(|var| {
+                        row.get(var.as_str())
+                            .map(|val| (var, value_to_term(store, val)))
+                    })
                     .collect();
                 ser.serialize(binding.iter().map(|(v, t)| (*v, t)))
                     .map_err(|e| Error::Serialization(format!("W3C results row: {e}")))?;
@@ -189,7 +192,9 @@ fn value_to_term(store: &Store, val: &Value) -> OxTerm {
         // No honest W3C term for opaque bytes; keep the bespoke placeholder as a
         // plain literal rather than invent a datatype. Bytes do not appear in
         // SPARQL bindings in practice (they back vector blobs, not queried terms).
-        Value::Bytes(b) => OxTerm::from(Literal::new_simple_literal(format!("<{} bytes>", b.len()))),
+        Value::Bytes(b) => {
+            OxTerm::from(Literal::new_simple_literal(format!("<{} bytes>", b.len())))
+        }
     }
 }
 
@@ -199,10 +204,18 @@ fn fmt_double(f: f64) -> String {
     if f.is_nan() {
         "NaN".to_string()
     } else if f.is_infinite() {
-        if f > 0.0 { "INF".to_string() } else { "-INF".to_string() }
+        if f > 0.0 {
+            "INF".to_string()
+        } else {
+            "-INF".to_string()
+        }
     } else {
         let s = f.to_string();
-        if s.contains(['.', 'e', 'E']) { s } else { format!("{s}.0") }
+        if s.contains(['.', 'e', 'E']) {
+            s
+        } else {
+            format!("{s}.0")
+        }
     }
 }
 
@@ -223,10 +236,19 @@ mod tests {
 
     #[test]
     fn negotiate_maps_standard_types_and_ignores_the_rest() {
-        assert_eq!(negotiate("application/sparql-results+json"), Some(ResultFormat::SparqlJson));
-        assert_eq!(negotiate("application/sparql-results+xml"), Some(ResultFormat::SparqlXml));
+        assert_eq!(
+            negotiate("application/sparql-results+json"),
+            Some(ResultFormat::SparqlJson)
+        );
+        assert_eq!(
+            negotiate("application/sparql-results+xml"),
+            Some(ResultFormat::SparqlXml)
+        );
         assert_eq!(negotiate("text/turtle"), Some(ResultFormat::Turtle));
-        assert_eq!(negotiate("application/n-triples"), Some(ResultFormat::NTriples));
+        assert_eq!(
+            negotiate("application/n-triples"),
+            Some(ResultFormat::NTriples)
+        );
         // case-insensitive + parameters tolerated
         assert_eq!(
             negotiate("Application/SPARQL-Results+JSON; charset=utf-8"),

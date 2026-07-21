@@ -177,13 +177,8 @@ pub fn tool_episodes_complete(store: &mut Store, input: &JsonValue) -> Result<Js
     // Mint IRIs under the CONFIGURED namespace, not the hardcoded aegis default
     // (aegis-4h3x). Read before the &mut borrow, same as opts.
     let base_ns = store.base_ns().to_string();
-    let result = episode::ingest_episode_with_resolution(
-        store,
-        &episode,
-        timestamp,
-        &base_ns,
-        Some(&opts),
-    )?;
+    let result =
+        episode::ingest_episode_with_resolution(store, &episode, timestamp, &base_ns, Some(&opts))?;
 
     Ok(serde_json::json!({
         "tx_id": result.tx_id,

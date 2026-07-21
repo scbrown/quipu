@@ -20,7 +20,7 @@
 //! single-valued replace); quipu stays semantics-agnostic and carries no
 //! per-predicate cardinality — one rule for every predicate.
 
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 
 use crate::error::{Error, Result};
 use crate::types::{Fact, Op, Value};
@@ -48,12 +48,12 @@ impl Store {
             Some(other) => {
                 return Err(Error::InvalidValue(format!(
                     "parent branch g={parent_branch} is class '{other}'; an overlay must extend a committed graph"
-                )))
+                )));
             }
             None => {
                 return Err(Error::InvalidValue(format!(
                     "parent branch g={parent_branch} is not a registered graph"
-                )))
+                )));
             }
         }
 
@@ -100,7 +100,9 @@ impl Store {
             )
             .optional()?
             .flatten()
-            .ok_or_else(|| Error::InvalidValue(format!("g={overlay_g} is not a registered overlay")))
+            .ok_or_else(|| {
+                Error::InvalidValue(format!("g={overlay_g} is not a registered overlay"))
+            })
     }
 
     /// The class of a graph (`committed` | `overlay`), or `None` if unregistered.

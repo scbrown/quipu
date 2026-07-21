@@ -191,13 +191,7 @@ pub fn ingest_episode(
     // batch drain that loses entire episodes with no clue why. Fail loud and
     // specific instead: name the offending node so the caller can fix and re-POST.
     for node in &episode.nodes {
-        if node
-            .node_type
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or("")
-            .is_empty()
-        {
+        if node.node_type.as_deref().map_or("", str::trim).is_empty() {
             return Err(crate::error::Error::InvalidValue(format!(
                 "node '{}' has no type — every node requires a non-empty type. An \
                  untyped node produces malformed Turtle that discards the whole \

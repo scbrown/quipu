@@ -164,7 +164,11 @@ pub fn preview_card(store: &Store, iri: &str) -> Result<String> {
             }
             Value::Str(s) => super::html_escape(s),
             Value::Lang { lexical, lang } => {
-                format!("{} <span class=\"lang\">@{}</span>", super::html_escape(lexical), super::html_escape(lang))
+                format!(
+                    "{} <span class=\"lang\">@{}</span>",
+                    super::html_escape(lexical),
+                    super::html_escape(lang)
+                )
             }
             Value::Typed { lexical, datatype } => format!(
                 "{} <span class=\"datatype\">({})</span>",

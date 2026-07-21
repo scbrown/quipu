@@ -403,7 +403,10 @@ fn test_retract_triple_level_removes_exactly_one_statement() {
     )
     .unwrap();
 
-    assert_eq!(out["retracted"], 1, "exactly one statement, not the episode");
+    assert_eq!(
+        out["retracted"], 1,
+        "exactly one statement, not the episode"
+    );
     assert!(!ask(
         &store,
         &format!("<{NS}jw3k> <{NS}instance_of> <{NS}stray>")
@@ -497,17 +500,16 @@ fn ghost_store() -> Store {
 #[test]
 fn test_retract_episode_keeps_identity_of_edge_reachable_node() {
     let mut store = ghost_store();
-    assert!(ask(
-        &store,
-        &format!("<{NS}ty4h> <{RDFS_LABEL}> \"ty4h\"")
-    ));
+    assert!(ask(&store, &format!("<{NS}ty4h> <{RDFS_LABEL}> \"ty4h\"")));
 
-    let out =
-        tool_retract_episode(&mut store, &serde_json::json!({ "episode": "ep-a" })).unwrap();
+    let out = tool_retract_episode(&mut store, &serde_json::json!({ "episode": "ep-a" })).unwrap();
 
     assert_eq!(out["on_orphan"], "preserve");
     assert_eq!(out["identity_orphans"], 1);
-    assert_eq!(out["identity_orphan_entities"][0]["entity"], format!("{NS}ty4h"));
+    assert_eq!(
+        out["identity_orphan_entities"][0]["entity"],
+        format!("{NS}ty4h")
+    );
     assert!(out["identity_preserved"].as_i64().unwrap() >= 2);
 
     // Still findable by the two discovery paths every agent-facing read uses.
@@ -539,7 +541,10 @@ fn test_retract_episode_refuse_rejects_and_writes_nothing() {
         &mut store,
         &serde_json::json!({ "episode": "ep-a", "on_orphan": "refuse" }),
     );
-    assert!(err.is_err(), "on_orphan=refuse must reject an orphaning retraction");
+    assert!(
+        err.is_err(),
+        "on_orphan=refuse must reject an orphaning retraction"
+    );
 
     // Refuse means refuse: identity and the label are still there, nothing written.
     assert!(
@@ -762,7 +767,10 @@ fn test_tool_retract_bare_string_for_an_iri_edge_is_refused() {
         }),
     )
     .unwrap();
-    assert!(ask(&store, &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")));
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")
+    ));
 
     // The footgun: value as a BARE STRING. json_to_value -> Value::Str, which can
     // never equal the stored Value::Ref, so nothing matches. Must error, not 0.
@@ -775,9 +783,15 @@ fn test_tool_retract_bare_string_for_an_iri_edge_is_refused() {
         }),
     );
     let err = footgun.expect_err("a bare-string object for an IRI edge must be refused");
-    assert!(err.to_string().contains("string literal"), "error must name the mismatch: {err}");
+    assert!(
+        err.to_string().contains("string literal"),
+        "error must name the mismatch: {err}"
+    );
     // The edge SURVIVED the refusal (no silent partial write).
-    assert!(ask(&store, &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")));
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")
+    ));
 
     // The shape the error teaches works: {"iri": ...} retracts the one edge.
     let ok = tool_retract(
@@ -789,8 +803,14 @@ fn test_tool_retract_bare_string_for_an_iri_edge_is_refused() {
         }),
     )
     .unwrap();
-    assert_eq!(ok["retracted"], 1, "the correctly shaped object retracts the edge");
-    assert!(!ask(&store, &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")));
+    assert_eq!(
+        ok["retracted"], 1,
+        "the correctly shaped object retracts the edge"
+    );
+    assert!(!ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")
+    ));
 }
 
 /// `get` returns the stored turtle byte-for-byte, and an unrecognized action is
@@ -815,20 +835,33 @@ fn test_tool_shapes_get_and_unknown_action() {
     .unwrap();
 
     // get -> exact content back, so a caller can verify WHICH shapes are loaded.
-    let got = tool_shapes(&store, &serde_json::json!({"action": "get", "name": "roundtrip"}))
-        .expect("get should succeed for a loaded set");
-    assert_eq!(got["turtle"], shapes, "get must round-trip the turtle exactly");
+    let got = tool_shapes(
+        &store,
+        &serde_json::json!({"action": "get", "name": "roundtrip"}),
+    )
+    .expect("get should succeed for a loaded set");
+    assert_eq!(
+        got["turtle"], shapes,
+        "get must round-trip the turtle exactly"
+    );
     assert_eq!(got["name"], "roundtrip");
 
     // get on an unknown name is an error, not an empty success.
     assert!(
-        tool_shapes(&store, &serde_json::json!({"action": "get", "name": "absent"})).is_err(),
+        tool_shapes(
+            &store,
+            &serde_json::json!({"action": "get", "name": "absent"})
+        )
+        .is_err(),
         "get on a missing shape set must error"
     );
 
     // A typo must NOT silently behave like `list`.
     let typo = tool_shapes(&store, &serde_json::json!({"action": "laod"}));
-    assert!(typo.is_err(), "an unknown action must error, not fall through to list");
+    assert!(
+        typo.is_err(),
+        "an unknown action must error, not fall through to list"
+    );
 
     // Explicit and implicit list both still work.
     assert_eq!(
@@ -956,18 +989,23 @@ fn readme_mcp_tool_counts_match_the_manifest() {
     // primary count is 25 and the parenthetical is "(N with owl)" = 26.
     let base = tool_definitions().len();
     let with_owl = base + 1; // quipu_load_ontology is the only owl-gated tool.
-    let readme = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"),
-    )
-    .unwrap();
+    let readme =
+        std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"))
+            .unwrap();
 
     // "(<N> tools)" — the architecture diagram.
     for cap in counts_before(&readme, " tools)") {
-        assert_eq!(cap, base, "README '({cap} tools)' disagrees with the {base}-tool manifest");
+        assert_eq!(
+            cap, base,
+            "README '({cap} tools)' disagrees with the {base}-tool manifest"
+        );
     }
     // "<N> MCP tools" — prose mentions.
     for cap in counts_before(&readme, " MCP tools") {
-        assert_eq!(cap, base, "README '{cap} MCP tools' disagrees with the {base}-tool manifest");
+        assert_eq!(
+            cap, base,
+            "README '{cap} MCP tools' disagrees with the {base}-tool manifest"
+        );
     }
     // "MCP tools (<N>; <M> with `owl`)" — the feature matrix row. Identified by
     // the `(N;` form, which the prose "MCP tools (M with owl)" mentions do not have.
@@ -1434,11 +1472,11 @@ fn test_tool_search_dedupes_by_entity() {
 
 /// Set up THREE entities that share ONE embedding, so an unfiltered vector search
 /// returns all three:
-///   - AlphaSvc, BetaSvc: created by episodes, in provenance groups rig-a / rig-b.
-///   - GammaSvc: written via `tool_knot` with NO episode, so it is UNGROUPED
+///   - `AlphaSvc`, `BetaSvc`: created by episodes, in provenance groups rig-a / rig-b.
+///   - `GammaSvc`: written via `tool_knot` with NO episode, so it is UNGROUPED
 ///     (it has no `prov:wasGeneratedBy` activity to trace a group through).
 ///
-/// GammaSvc is the case the old two-episode fixture could not express, and the
+/// `GammaSvc` is the case the old two-episode fixture could not express, and the
 /// reason `group_ids` behaviour was untestable: a group scope must DROP it (it
 /// traces back to no activity), not return it (aegis-il4g). Returns the shared
 /// embedding. (hq-93d / aegis-il4g test fixture)
@@ -2134,9 +2172,15 @@ fn test_cooccurrence_deterministic_set_overlap() {
     let result = super::tool_cooccurrence(&store, &input).unwrap();
 
     // beadX shares E1 with beadT; beadY (E9) shares nothing.
-    assert_eq!(result["count"], 1, "exactly one co-occurring work-item: {result:#?}");
+    assert_eq!(
+        result["count"], 1,
+        "exactly one co-occurring work-item: {result:#?}"
+    );
     let co = result["cooccurring"].as_array().unwrap();
-    assert_eq!(co[0]["work_item"], "http://aegis.gastown.local/ontology/beadX");
+    assert_eq!(
+        co[0]["work_item"],
+        "http://aegis.gastown.local/ontology/beadX"
+    );
     assert_eq!(co[0]["shared_entities"], 1);
 
     // Injection guard: a work_item that could break out of <...> is rejected.
@@ -2152,8 +2196,16 @@ fn test_policy_check_committed_tier_evaluation() {
     let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
         a:sym1 a a:CodeSymbol ; a:hasTest a:test1 .\n\
         a:sym2 a a:CodeSymbol .\n";
-    crate::rdf::ingest_rdf(&mut store, ttl.as_bytes(), oxrdfio::RdfFormat::Turtle,
-        None, "2026-01-01T00:00:00Z", None, None).unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
 
     let claim = "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a:hasTest ?t }";
     // sym1 has a test -> satisfied
@@ -2172,22 +2224,38 @@ fn test_policy_check_committed_tier_evaluation() {
 
     // unknown: an evidence probe that's false (target isn't even a CodeSymbol -> no evidence)
     let probe = "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a a:CodeSymbol }";
-    let r3 = super::tool_policy_check(&store, &serde_json::json!({
-        "claim": claim, "evidence_probe": probe,
-        "target": "http://aegis.gastown.local/ontology/nothere", "predicate_id": "has-test"
-    })).unwrap();
-    assert_eq!(r3["outcome"], "unknown", "no-evidence must be unknown, not unsatisfied: {r3:#?}");
+    let r3 = super::tool_policy_check(
+        &store,
+        &serde_json::json!({
+            "claim": claim, "evidence_probe": probe,
+            "target": "http://aegis.gastown.local/ontology/nothere", "predicate_id": "has-test"
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        r3["outcome"], "unknown",
+        "no-evidence must be unknown, not unsatisfied: {r3:#?}"
+    );
 
     // reproducible: same inputs -> same evidence hash
     let r1b = super::tool_policy_check(&store, &serde_json::json!({
         "claim": claim, "target": "http://aegis.gastown.local/ontology/sym1", "predicate_id": "has-test"
     })).unwrap();
-    assert_eq!(r1["evidence_hash"], r1b["evidence_hash"], "verdict must be reproducible");
+    assert_eq!(
+        r1["evidence_hash"], r1b["evidence_hash"],
+        "verdict must be reproducible"
+    );
 
     // injection guard on target
-    assert!(super::tool_policy_check(&store, &serde_json::json!({
-        "claim": claim, "target": "x> } INSERT {"
-    })).is_err());
+    assert!(
+        super::tool_policy_check(
+            &store,
+            &serde_json::json!({
+                "claim": claim, "target": "x> } INSERT {"
+            })
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -2196,13 +2264,29 @@ fn test_verifier_registry_authority() {
     let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
         a:reg1 a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" .\n\
         a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n";
-    crate::rdf::ingest_rdf(&mut store, ttl.as_bytes(), oxrdfio::RdfFormat::Turtle,
-        None, "2026-01-01T00:00:00Z", None, None).unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
 
     // quipu IS registered for has-test; NOT for something-else.
-    let a = super::tool_verifier_authorized(&store, &serde_json::json!({"verifier":"quipu","predicate":"has-test"})).unwrap();
+    let a = super::tool_verifier_authorized(
+        &store,
+        &serde_json::json!({"verifier":"quipu","predicate":"has-test"}),
+    )
+    .unwrap();
     assert_eq!(a["authorized"], true, "{a:#?}");
-    let b = super::tool_verifier_authorized(&store, &serde_json::json!({"verifier":"quipu","predicate":"other"})).unwrap();
+    let b = super::tool_verifier_authorized(
+        &store,
+        &serde_json::json!({"verifier":"quipu","predicate":"other"}),
+    )
+    .unwrap();
     assert_eq!(b["authorized"], false);
 
     // policy_check surfaces the authority flag: predicate_id has-test -> authorized.
@@ -2211,7 +2295,10 @@ fn test_verifier_registry_authority() {
         "claim": claim, "target": "http://aegis.gastown.local/ontology/sym1", "predicate_id": "has-test"
     })).unwrap();
     assert_eq!(v["outcome"], "satisfied");
-    assert_eq!(v["verifier_authorized"], true, "quipu is registered for has-test: {v:#?}");
+    assert_eq!(
+        v["verifier_authorized"], true,
+        "quipu is registered for has-test: {v:#?}"
+    );
 }
 
 #[test]
@@ -2230,8 +2317,16 @@ fn test_signed_verdict_end_to_end_root_of_trust() {
          a:reg a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" ; a:publicKey \"{pubkey}\" .\n\
          a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n"
     );
-    crate::rdf::ingest_rdf(&mut store, ttl.as_bytes(), oxrdfio::RdfFormat::Turtle,
-        None, "2026-01-01T00:00:00Z", None, None).unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
 
     // Evaluate -> SIGNED verdict.
     let claim = "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a:hasTest ?t }";
@@ -2239,20 +2334,29 @@ fn test_signed_verdict_end_to_end_root_of_trust() {
         "claim": claim, "target": "http://aegis.gastown.local/ontology/sym1", "predicate_id": "has-test"
     })).unwrap();
     assert_eq!(v["outcome"], "satisfied");
-    assert_eq!(v["signed"], true, "a signing identity is set -> verdict must be signed: {v:#?}");
+    assert_eq!(
+        v["signed"], true,
+        "a signing identity is set -> verdict must be signed: {v:#?}"
+    );
     assert!(v["signature"].as_str().unwrap().len() >= 64);
 
     // Verify against the registered key -> trusted.
     let ok = super::tool_verdict_verify(&store, &v).unwrap();
     assert_eq!(ok["signature_valid"], true, "{ok:#?}");
     assert_eq!(ok["verifier_authorized"], true);
-    assert_eq!(ok["trusted"], true, "signed by the registered key + authorized: {ok:#?}");
+    assert_eq!(
+        ok["trusted"], true,
+        "signed by the registered key + authorized: {ok:#?}"
+    );
 
     // Tamper the outcome -> signature no longer valid, not trusted.
     let mut forged = v.clone();
     forged["outcome"] = serde_json::json!("unsatisfied");
     let bad = super::tool_verdict_verify(&store, &forged).unwrap();
-    assert_eq!(bad["signature_valid"], false, "flipping outcome must break the sig");
+    assert_eq!(
+        bad["signature_valid"], false,
+        "flipping outcome must break the sig"
+    );
     assert_eq!(bad["trusted"], false);
 }
 
@@ -2298,7 +2402,12 @@ fn triple_retraction_can_name_a_lang_tagged_literal() {
         &serde_json::json!({"query": "SELECT ?o WHERE { <http://example.org/s> <http://example.org/g> ?o }"}),
     )
     .unwrap();
-    let left: Vec<_> = rows["rows"].as_array().unwrap().iter().map(|r| &r["o"]).collect();
+    let left: Vec<_> = rows["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| &r["o"])
+        .collect();
     assert_eq!(left.len(), 2, "the other two survive: {left:?}");
     // The lookalike PLAIN STRING must be untouched — it is a different term.
     assert!(
@@ -2349,5 +2458,9 @@ fn triple_retraction_can_name_a_typed_literal() {
     .unwrap();
     let left = rows["rows"].as_array().unwrap();
     assert_eq!(left.len(), 1);
-    assert_eq!(left[0]["o"], serde_json::json!("2026-07-15"), "plain string survives");
+    assert_eq!(
+        left[0]["o"],
+        serde_json::json!("2026-07-15"),
+        "plain string survives"
+    );
 }

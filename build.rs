@@ -26,8 +26,7 @@ fn main() {
         .output()
         .ok()
         .filter(|o| o.status.success())
-        .map(|o| !o.stdout.is_empty())
-        .unwrap_or(false);
+        .is_some_and(|o| !o.stdout.is_empty());
 
     println!("cargo:rustc-env=QUIPU_GIT_SHA={sha}");
     println!("cargo:rustc-env=QUIPU_GIT_DIRTY={dirty}");

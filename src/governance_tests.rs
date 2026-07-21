@@ -3,7 +3,7 @@
 //! policy / step / verdict definition that violates its shape is rejected at
 //! write; well-formed ones conform. See the governance-plane design.
 
-use crate::shacl::{validate_shapes, Validator};
+use crate::shacl::{Validator, validate_shapes};
 
 const SHAPES: &str = include_str!("../shapes/governance.ttl");
 const NS: &str = "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n";
@@ -24,7 +24,11 @@ fn well_formed_workflow_and_step_conform() {
              aegis:boundary \"transition\" ; aegis:effect \"deny\" .\n"
     );
     let fb = validate_shapes(SHAPES, &data).unwrap();
-    assert!(fb.conforms, "well-formed workflow should conform: {:#?}", fb.results);
+    assert!(
+        fb.conforms,
+        "well-formed workflow should conform: {:#?}",
+        fb.results
+    );
 }
 
 #[test]
@@ -37,9 +41,8 @@ fn workflow_without_a_step_is_rejected() {
 
 #[test]
 fn policy_missing_target_or_claim_is_rejected() {
-    let data = format!(
-        "{NS}\naegis:p a aegis:Policy ; rdfs:label \"p\" ; aegis:targets \"Step\" .\n"
-    );
+    let data =
+        format!("{NS}\naegis:p a aegis:Policy ; rdfs:label \"p\" ; aegis:targets \"Step\" .\n");
     // missing aegis:claim (minCount 1)
     let fb = validate_shapes(SHAPES, &data).unwrap();
     assert!(!fb.conforms, "a policy without a claim must be rejected");
@@ -52,7 +55,10 @@ fn policy_effect_out_of_enum_is_rejected() {
          aegis:targets \"Step\" ; aegis:claim \"c\" ; aegis:effect \"nuke\" .\n"
     );
     let fb = validate_shapes(SHAPES, &data).unwrap();
-    assert!(!fb.conforms, "an effect outside the allowed set must be rejected");
+    assert!(
+        !fb.conforms,
+        "an effect outside the allowed set must be rejected"
+    );
 }
 
 #[test]
@@ -65,7 +71,11 @@ fn well_formed_verdict_conforms_and_unknown_outcome_is_valid() {
          aegis:verifier \"ci\" ; aegis:signature \"sig:..\" ; aegis:tier \"attested\" ; aegis:freshness \"fresh\" .\n"
     );
     let fb = validate_shapes(SHAPES, &data).unwrap();
-    assert!(fb.conforms, "well-formed verdict should conform: {:#?}", fb.results);
+    assert!(
+        fb.conforms,
+        "well-formed verdict should conform: {:#?}",
+        fb.results
+    );
 }
 
 #[test]
@@ -77,7 +87,10 @@ fn verdict_without_signature_or_evidence_hash_is_rejected() {
          aegis:predicateId \"p\" ; aegis:targetRef \"r\" ; aegis:outcome \"satisfied\" ; aegis:verifier \"hank\" .\n"
     );
     let fb = validate_shapes(SHAPES, &data).unwrap();
-    assert!(!fb.conforms, "an unsigned / unbound verdict must be rejected");
+    assert!(
+        !fb.conforms,
+        "an unsigned / unbound verdict must be rejected"
+    );
 }
 
 #[test]
@@ -86,12 +99,18 @@ fn decision_outcome_enum_enforced() {
         "{NS}\naegis:d a aegis:Decision ; rdfs:label \"d\" ; \
          aegis:outcome \"approve\" ; aegis:by \"stiwi\" ; aegis:evidenceHash \"h\" .\n"
     );
-    assert!(validate_shapes(SHAPES, &ok).unwrap().conforms, "valid decision should conform");
+    assert!(
+        validate_shapes(SHAPES, &ok).unwrap().conforms,
+        "valid decision should conform"
+    );
     let bad = format!(
         "{NS}\naegis:d a aegis:Decision ; rdfs:label \"d\" ; \
          aegis:outcome \"maybe\" ; aegis:by \"stiwi\" ; aegis:evidenceHash \"h\" .\n"
     );
-    assert!(!validate_shapes(SHAPES, &bad).unwrap().conforms, "a non-enum decision outcome must be rejected");
+    assert!(
+        !validate_shapes(SHAPES, &bad).unwrap().conforms,
+        "a non-enum decision outcome must be rejected"
+    );
 }
 
 #[test]
@@ -99,7 +118,10 @@ fn transition_requires_on_and_to() {
     let data = format!("{NS}\naegis:t a aegis:Transition ; aegis:on \"approve\" .\n");
     // missing aegis:to
     let fb = validate_shapes(SHAPES, &data).unwrap();
-    assert!(!fb.conforms, "a transition without a target Step must be rejected");
+    assert!(
+        !fb.conforms,
+        "a transition without a target Step must be rejected"
+    );
 }
 
 #[test]
@@ -107,7 +129,13 @@ fn verifier_registration_shape() {
     let ok = format!(
         "{NS}\naegis:r a aegis:VerifierRegistration ; aegis:verifier \"hank\" ; aegis:attests \"has-test\" .\n"
     );
-    assert!(validate_shapes(SHAPES, &ok).unwrap().conforms, "valid registration should conform");
+    assert!(
+        validate_shapes(SHAPES, &ok).unwrap().conforms,
+        "valid registration should conform"
+    );
     let bad = format!("{NS}\naegis:r a aegis:VerifierRegistration ; aegis:verifier \"hank\" .\n");
-    assert!(!validate_shapes(SHAPES, &bad).unwrap().conforms, "registration without an attested predicate must be rejected");
+    assert!(
+        !validate_shapes(SHAPES, &bad).unwrap().conforms,
+        "registration without an attested predicate must be rejected"
+    );
 }

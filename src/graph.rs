@@ -1093,7 +1093,7 @@ ex:a1 ex:link ex:b1 .
     }
 
     /// AC 5: a re-run bitemporally SUPERSEDES prior membership — no stale
-    /// accumulation. Driven through persist_communities directly with changed
+    /// accumulation. Driven through `persist_communities` directly with changed
     /// partitions so the supersede is unambiguous.
     #[test]
     fn persist_supersedes_prior_membership() {

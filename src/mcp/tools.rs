@@ -469,18 +469,17 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         None => None,
     };
 
-    let (tx_id, count) =
-        store.retract_triples(
-            entity_id,
-            predicate_id,
-            value.as_ref(),
-            timestamp,
-            actor,
-            input
-                .get("allow_orphan")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false),
-        )?;
+    let (tx_id, count) = store.retract_triples(
+        entity_id,
+        predicate_id,
+        value.as_ref(),
+        timestamp,
+        actor,
+        input
+            .get("allow_orphan")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+    )?;
 
     Ok(serde_json::json!({
         "tx_id": tx_id,
@@ -623,13 +622,8 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     // Mint IRIs under the CONFIGURED namespace, not the hardcoded aegis default
     // (aegis-4h3x). Read before the &mut borrow, same as opts.
     let base_ns = store.base_ns().to_string();
-    let result = episode::ingest_episode_with_resolution(
-        store,
-        &ep,
-        timestamp,
-        &base_ns,
-        Some(&opts),
-    )?;
+    let result =
+        episode::ingest_episode_with_resolution(store, &ep, timestamp, &base_ns, Some(&opts))?;
 
     Ok(serde_json::json!({
         "tx_id": result.tx_id,

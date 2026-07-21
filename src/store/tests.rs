@@ -739,7 +739,13 @@ fn ghost_fixture() -> (Store, i64, i64, i64, i64, i64, i64) {
     // Episode A declares the node's identity plus an ordinary fact.
     assert_episode_fact(&mut store, "ep-a", node, label, Value::Str("ty4h".into()));
     assert_episode_fact(&mut store, "ep-a", node, rdf_type, Value::Ref(bead));
-    assert_episode_fact(&mut store, "ep-a", node, comment, Value::Str("notes".into()));
+    assert_episode_fact(
+        &mut store,
+        "ep-a",
+        node,
+        comment,
+        Value::Str("notes".into()),
+    );
     // Episode B adds an inbound edge — this is what keeps the node in the graph.
     assert_episode_fact(&mut store, "ep-b", other, applies_to, Value::Ref(node));
 
@@ -929,12 +935,20 @@ fn named_graph_migration_is_additive_and_defaults_existing_facts_to_root() {
         .unwrap();
     assert!(has_g_after, "migration must add the g column");
     let (cnt, g): (i64, i64) = conn
-        .query_row("SELECT COUNT(*), MIN(g) FROM facts WHERE e=10 AND a=20", [], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
+        .query_row(
+            "SELECT COUNT(*), MIN(g) FROM facts WHERE e=10 AND a=20",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .unwrap();
-    assert_eq!(cnt, 1, "existing fact must survive the migration (no data loss)");
-    assert_eq!(g, 0, "existing facts must default to ROOT (g=0), un-mutated");
+    assert_eq!(
+        cnt, 1,
+        "existing fact must survive the migration (no data loss)"
+    );
+    assert_eq!(
+        g, 0,
+        "existing facts must default to ROOT (g=0), un-mutated"
+    );
 
     // Idempotent: running it again is a no-op, not an error.
     Store::migrate_named_graphs(&conn).unwrap();
@@ -980,14 +994,22 @@ fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
         .unwrap()
         .exists([])
         .unwrap();
-    assert!(has_idx, "idx_geav must be created when open() migrates a pre-quad store");
+    assert!(
+        has_idx,
+        "idx_geav must be created when open() migrates a pre-quad store"
+    );
     let (cnt, g): (i64, i64) = store
         .conn
-        .query_row("SELECT COUNT(*), MIN(g) FROM facts WHERE e=10 AND a=20", [], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
+        .query_row(
+            "SELECT COUNT(*), MIN(g) FROM facts WHERE e=10 AND a=20",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
         .unwrap();
-    assert_eq!(cnt, 1, "existing fact must survive the migration (no data loss)");
+    assert_eq!(
+        cnt, 1,
+        "existing fact must survive the migration (no data loss)"
+    );
     assert_eq!(g, 0, "existing fact must land in ROOT (g=0), un-mutated");
 
     // Idempotent through the real path: re-opening the migrated store is clean.
@@ -1052,18 +1074,38 @@ fn compose_view_resolves_assert_tombstone_fallthrough_without_touching_root() {
     let ov = store.overlay_create("http://ex/graph/tenant-1", 0).unwrap();
     // overlay: assert a new triple, and TOMBSTONE the root's (e,hide,"H").
     store
-        .overlay_write(ov, Op::Assert, e, add, Value::Str("A".into()), "2026-01-02T00:00:00Z")
+        .overlay_write(
+            ov,
+            Op::Assert,
+            e,
+            add,
+            Value::Str("A".into()),
+            "2026-01-02T00:00:00Z",
+        )
         .unwrap();
     store
-        .overlay_write(ov, Op::Tombstone, e, hide, Value::Str("H".into()), "2026-01-02T00:00:00Z")
+        .overlay_write(
+            ov,
+            Op::Tombstone,
+            e,
+            hide,
+            Value::Str("H".into()),
+            "2026-01-02T00:00:00Z",
+        )
         .unwrap();
 
     // Composed view = { (e,keep,K) fell through, (e,add,A) overlay assert }. hide is gone.
     let view = store.compose_view(ov).unwrap();
     let attrs: std::collections::BTreeSet<i64> = view.iter().map(|f| f.attribute).collect();
-    assert!(attrs.contains(&keep), "root triple the overlay ignores falls through");
+    assert!(
+        attrs.contains(&keep),
+        "root triple the overlay ignores falls through"
+    );
     assert!(attrs.contains(&add), "overlay assertion is present");
-    assert!(!attrs.contains(&hide), "root triple the overlay tombstones is hidden");
+    assert!(
+        !attrs.contains(&hide),
+        "root triple the overlay tombstones is hidden"
+    );
     assert_eq!(view.len(), 2, "exactly keep + add, no duplicates");
 
     // ROOT is un-mutated: a plain read of g=0 still sees both original triples,
@@ -1076,11 +1118,21 @@ fn compose_view_resolves_assert_tombstone_fallthrough_without_touching_root() {
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(root_hide, 1, "tombstone must NOT touch the root fact (base un-mutated)");
+    assert_eq!(
+        root_hide, 1,
+        "tombstone must NOT touch the root fact (base un-mutated)"
+    );
 
     // Tombstone is idempotent (second one is a no-op, no error).
     store
-        .overlay_write(ov, Op::Tombstone, e, hide, Value::Str("H".into()), "2026-01-03T00:00:00Z")
+        .overlay_write(
+            ov,
+            Op::Tombstone,
+            e,
+            hide,
+            Value::Str("H".into()),
+            "2026-01-03T00:00:00Z",
+        )
         .unwrap();
     let tomb_count: i64 = store
         .conn
@@ -1093,9 +1145,11 @@ fn compose_view_resolves_assert_tombstone_fallthrough_without_touching_root() {
     assert_eq!(tomb_count, 1, "tombstone is idempotent");
 
     // overlay_write rejects a non-overlay target graph.
-    assert!(store
-        .overlay_write(0, Op::Assert, e, add, Value::Str("x".into()), "t")
-        .is_err());
+    assert!(
+        store
+            .overlay_write(0, Op::Assert, e, add, Value::Str("x".into()), "t")
+            .is_err()
+    );
 }
 
 #[test]
@@ -1110,30 +1164,85 @@ fn overlay_writes_do_not_touch_root() {
     let a = store.intern("http://example.org/status").unwrap();
     let overlay = store.intern("http://example.org/graph/tenant-1").unwrap();
     let d = |v: &str, op| Datum {
-        entity: e, attribute: a, value: Value::Str(v.to_string()),
-        valid_from: "2026-01-01T00:00:00Z".into(), valid_to: None, op,
+        entity: e,
+        attribute: a,
+        value: Value::Str(v.to_string()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op,
     };
 
     // 1. Assert (e,a,"up") into ROOT.
-    store.transact(&[d("up", Op::Assert)], "2026-01-01T00:00:00Z", None, None).unwrap();
+    store
+        .transact(&[d("up", Op::Assert)], "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
     // 2. Assert the SAME (e,a,"up") into an overlay — must NOT be skipped as a dup.
-    store.transact_to_graph(&[d("up", Op::Assert)], "2026-01-02T00:00:00Z", None, None, overlay).unwrap();
+    store
+        .transact_to_graph(
+            &[d("up", Op::Assert)],
+            "2026-01-02T00:00:00Z",
+            None,
+            None,
+            overlay,
+        )
+        .unwrap();
 
-    let root_up: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL", [e,a], |r| r.get(0)).unwrap();
-    let ov_up: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=?3 AND op=1 AND valid_to IS NULL", [e,a,overlay], |r| r.get(0)).unwrap();
+    let root_up: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL",
+            [e, a],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let ov_up: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=?3 AND op=1 AND valid_to IS NULL",
+            [e, a, overlay],
+            |r| r.get(0),
+        )
+        .unwrap();
     assert_eq!(root_up, 1, "ROOT keeps its fact");
-    assert_eq!(ov_up, 1, "overlay gets its OWN fact — not skipped as a dup of ROOT");
+    assert_eq!(
+        ov_up, 1,
+        "overlay gets its OWN fact — not skipped as a dup of ROOT"
+    );
 
     // 3. Retract in the OVERLAY. Must close only the overlay row; ROOT untouched.
-    store.transact_to_graph(&[d("up", Op::Retract)], "2026-01-03T00:00:00Z", None, None, overlay).unwrap();
-    let root_after: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL", [e,a], |r| r.get(0)).unwrap();
-    let ov_after: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=?3 AND op=1 AND valid_to IS NULL", [e,a,overlay], |r| r.get(0)).unwrap();
-    assert_eq!(root_after, 1, "overlay retract must NOT close the ROOT fact (base un-mutated)");
-    assert_eq!(ov_after, 0, "overlay retract closes only its own graph's assertion");
+    store
+        .transact_to_graph(
+            &[d("up", Op::Retract)],
+            "2026-01-03T00:00:00Z",
+            None,
+            None,
+            overlay,
+        )
+        .unwrap();
+    let root_after: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL",
+            [e, a],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let ov_after: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=?3 AND op=1 AND valid_to IS NULL",
+            [e, a, overlay],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        root_after, 1,
+        "overlay retract must NOT close the ROOT fact (base un-mutated)"
+    );
+    assert_eq!(
+        ov_after, 0,
+        "overlay retract closes only its own graph's assertion"
+    );
 }
 
 #[test]
@@ -1147,28 +1256,56 @@ fn compose_view_dedupes_reasserted_root_facts() {
     let a = store.intern("http://ex/p").unwrap();
     store
         .transact(
-            &[Datum { entity: e, attribute: a, value: Value::Str("K".into()),
-                valid_from: "2026-01-01T00:00:00Z".into(), valid_to: None, op: Op::Assert }],
-            "2026-01-01T00:00:00Z", None, None)
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("K".into()),
+                valid_from: "2026-01-01T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
         .unwrap();
     // Force a DUPLICATE current row in ROOT (as ingest/history produce in the
     // live db), bypassing transact's idempotency.
     let vb = Value::Str("K".into()).to_bytes();
-    store.conn.execute(
-        "INSERT INTO transactions (timestamp) VALUES ('2026-01-02T00:00:00Z')", []).unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO transactions (timestamp) VALUES ('2026-01-02T00:00:00Z')",
+            [],
+        )
+        .unwrap();
     let tx2 = store.conn.last_insert_rowid();
     store.conn.execute(
         "INSERT INTO facts (e,a,v,g,tx,valid_from,valid_to,op) VALUES (?1,?2,?3,0,?4,'2026-01-02T00:00:00Z',NULL,1)",
         rusqlite::params![e, a, vb, tx2]).unwrap();
-    let dup_count: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL",
-        [e, a], |r| r.get(0)).unwrap();
-    assert_eq!(dup_count, 2, "precondition: two current rows for the same triple");
+    let dup_count: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND a=?2 AND g=0 AND op=1 AND valid_to IS NULL",
+            [e, a],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        dup_count, 2,
+        "precondition: two current rows for the same triple"
+    );
 
     let ov = store.overlay_create("http://ex/g/t", 0).unwrap();
     let view = store.compose_view(ov).unwrap();
-    let matches = view.iter().filter(|f| f.entity == e && f.attribute == a).count();
-    assert_eq!(matches, 1, "compose must dedupe the re-asserted base fact to one triple");
+    let matches = view
+        .iter()
+        .filter(|f| f.entity == e && f.attribute == a)
+        .count();
+    assert_eq!(
+        matches, 1,
+        "compose must dedupe the re-asserted base fact to one triple"
+    );
 }
 
 /// Retraction must survive an entity whose logical triple is backed by MANY
@@ -1237,10 +1374,20 @@ fn retract_survives_duplicate_backing_rows() {
 
     // Previously: Err(UNIQUE constraint failed: facts.e, facts.a, facts.v, facts.tx)
     let (_tx, count) = store
-        .retract_triples(e, Some(a), Some(&v), "2026-01-03T00:00:00Z", Some("ian"), false)
+        .retract_triples(
+            e,
+            Some(a),
+            Some(&v),
+            "2026-01-03T00:00:00Z",
+            Some("ian"),
+            false,
+        )
         .expect("retraction must not fail on duplicate backing rows");
 
-    assert_eq!(count, 1, "one logical triple retracted once, not once per row");
+    assert_eq!(
+        count, 1,
+        "one logical triple retracted once, not once per row"
+    );
     assert!(
         store.entity_facts(e).unwrap().is_empty(),
         "every backing row must be closed, or the triple survives its own retraction"
@@ -1283,13 +1430,27 @@ fn retract_one_type_leaves_the_others() {
             )
             .unwrap();
     }
-    assert_eq!(store.entity_facts(e).unwrap().len(), 2, "precondition: two types");
+    assert_eq!(
+        store.entity_facts(e).unwrap().len(),
+        2,
+        "precondition: two types"
+    );
 
     let (_tx, count) = store
-        .retract_triples(e, Some(a), Some(&drop), "2026-01-02T00:00:00Z", Some("ian"), false)
+        .retract_triples(
+            e,
+            Some(a),
+            Some(&drop),
+            "2026-01-02T00:00:00Z",
+            Some("ian"),
+            false,
+        )
         .expect("targeted retraction must succeed");
 
-    assert_eq!(count, 1, "exactly ONE triple retracted, not every row for the predicate");
+    assert_eq!(
+        count, 1,
+        "exactly ONE triple retracted, not every row for the predicate"
+    );
 
     let left: Vec<Value> = store
         .entity_facts(e)
@@ -1344,34 +1505,85 @@ fn retract_str_for_an_iri_edge_is_loud_not_silent() {
     // nothing; the API must now SAY so instead of returning retracted:0.
     let bare = Value::Str("http://example.org/kprobe-b".into());
     let err = store
-        .retract_triples(agent, Some(reports_to), Some(&bare), "2026-01-02", None, false)
+        .retract_triples(
+            agent,
+            Some(reports_to),
+            Some(&bare),
+            "2026-01-02",
+            None,
+            false,
+        )
         .expect_err("a bare string for an IRI edge must be refused, not silently no-op");
     let msg = err.to_string();
-    assert!(msg.contains("string literal"), "error must name the shape mismatch: {msg}");
-    assert!(msg.contains("iri"), "error must teach the {{\"iri\": ...}} shape: {msg}");
+    assert!(
+        msg.contains("string literal"),
+        "error must name the shape mismatch: {msg}"
+    );
+    assert!(
+        msg.contains("iri"),
+        "error must teach the {{\"iri\": ...}} shape: {msg}"
+    );
     // ...and it wrote nothing.
-    assert_eq!(store.entity_facts(agent).unwrap().len(), 1, "the edge must survive a refused retract");
+    assert_eq!(
+        store.entity_facts(agent).unwrap().len(),
+        1,
+        "the edge must survive a refused retract"
+    );
 
     // ARM 2: the correctly shaped object retracts exactly the one edge.
     let (_tx, count) = store
-        .retract_triples(agent, Some(reports_to), Some(&Value::Ref(boss)), "2026-01-03", None, false)
+        .retract_triples(
+            agent,
+            Some(reports_to),
+            Some(&Value::Ref(boss)),
+            "2026-01-03",
+            None,
+            false,
+        )
         .expect("a Ref-shaped object must retract the edge");
     assert_eq!(count, 1, "exactly the one reports_to edge");
-    assert!(store.entity_facts(agent).unwrap().is_empty(), "the old supervisor edge is gone");
+    assert!(
+        store.entity_facts(agent).unwrap().is_empty(),
+        "the old supervisor edge is gone"
+    );
 
     // ARM 3: re-parenting COMPLETES — assert the new supervisor.
     store
-        .transact(&[edge(agent, reports_to, Value::Ref(boss2))], "2026-01-03T00:01:00Z", None, None)
+        .transact(
+            &[edge(agent, reports_to, Value::Ref(boss2))],
+            "2026-01-03T00:01:00Z",
+            None,
+            None,
+        )
         .unwrap();
-    let now: Vec<Value> = store.entity_facts(agent).unwrap().into_iter().map(|f| f.value).collect();
-    assert_eq!(now, vec![Value::Ref(boss2)], "the agent now reports to the new supervisor, and only that");
+    let now: Vec<Value> = store
+        .entity_facts(agent)
+        .unwrap()
+        .into_iter()
+        .map(|f| f.value)
+        .collect();
+    assert_eq!(
+        now,
+        vec![Value::Ref(boss2)],
+        "the agent now reports to the new supervisor, and only that"
+    );
 
     // ARM 4: a correctly shaped but absent object is an idempotent no-op, NOT an
     // error. The guard fires only on the unambiguous Str-for-Ref mistake.
     let (_tx, count) = store
-        .retract_triples(agent, Some(reports_to), Some(&Value::Ref(boss)), "2026-01-04", None, false)
+        .retract_triples(
+            agent,
+            Some(reports_to),
+            Some(&Value::Ref(boss)),
+            "2026-01-04",
+            None,
+            false,
+        )
         .expect("re-retracting an absent, correctly-shaped edge must stay idempotent");
-    assert_eq!(count, 0, "nothing to retract -> a quiet no-op, not a refusal");
+    assert_eq!(
+        count, 0,
+        "nothing to retract -> a quiet no-op, not a refusal"
+    );
 }
 
 /// The residual `{"retracted":0}` ambiguity: a bare IRI-shaped string on a
@@ -1399,7 +1611,10 @@ fn retract_bare_iri_string_errors_even_with_no_matching_fact() {
     let err = store
         .retract_triples(node, Some(rdf_type), Some(&bare), "2026-01-02", None, false)
         .expect_err("a bare IRI-shaped string must be refused even with no matching fact");
-    assert!(err.to_string().contains("iri"), "error must teach the {{\"iri\": ...}} form: {err}");
+    assert!(
+        err.to_string().contains("iri"),
+        "error must teach the {{\"iri\": ...}} form: {err}"
+    );
 
     // ARM B: THE DIVERGENCE. A correctly shaped `{iri}` object for a triple that
     // genuinely does not exist stays an idempotent `retracted: 0` — a fix that
@@ -1414,7 +1629,14 @@ fn retract_bare_iri_string_errors_even_with_no_matching_fact() {
     // a real idempotent no-op, not a mistake — the guard must not cry wolf.
     let plain = Value::Str("just a label".into());
     let (_tx, count) = store
-        .retract_triples(node, Some(rdf_type), Some(&plain), "2026-01-04", None, false)
+        .retract_triples(
+            node,
+            Some(rdf_type),
+            Some(&plain),
+            "2026-01-04",
+            None,
+            false,
+        )
         .expect("a plain literal with no matching fact is a legitimate no-op");
     assert_eq!(count, 0, "no scheme -> treated as a literal -> quiet no-op");
 }
@@ -1485,10 +1707,7 @@ fn retract_refuses_to_orphan_the_last_type() {
     let keep = Value::Str("GitRepo".into());
     let drop = Value::Str("GitRepository".into());
     s2.transact(
-        &[
-            mk(e2, a2, keep.clone()),
-            mk(e2, a2, drop.clone()),
-        ],
+        &[mk(e2, a2, keep.clone()), mk(e2, a2, drop.clone())],
         "2026-01-01T00:00:00Z",
         None,
         None,

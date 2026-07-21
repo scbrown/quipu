@@ -1048,11 +1048,7 @@ fn is_blank_never_matches_and_is_not_is_iri() {
     // `Value` (types.rs) is Ref|Str|Int|Float|Bool|Bytes — the store has no
     // blank-node representation, so isBlank() is false for every term rather
     // than merely unimplemented.
-    let blank = query(
-        &store,
-        "SELECT ?s WHERE { ?s ?p ?o . FILTER(isBlank(?s)) }",
-    )
-    .unwrap();
+    let blank = query(&store, "SELECT ?s WHERE { ?s ?p ?o . FILTER(isBlank(?s)) }").unwrap();
     assert_eq!(blank.rows().len(), 0, "isBlank must never match");
 
     // Discriminates against aegis-t2jh, where IsBlank shared a match arm with
@@ -1126,7 +1122,11 @@ fn filter_compares_preserved_numeric_datatypes_as_numbers() {
     .unwrap();
     let mut got = labels(&result);
     got.sort();
-    assert_eq!(got, vec!["hundred", "ten"], "9 excluded, 10 and 100 included");
+    assert_eq!(
+        got,
+        vec!["hundred", "ten"],
+        "9 excluded, 10 and 100 included"
+    );
 }
 
 #[test]

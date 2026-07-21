@@ -99,7 +99,9 @@ fn encode_prefixed(tag: u8, prefix: &str, lexical: &str) -> Vec<u8> {
 
 fn decode_prefixed(payload: &[u8], what: &str) -> crate::Result<(String, String)> {
     if payload.len() < 2 {
-        return Err(crate::Error::InvalidValue(format!("truncated {what} value")));
+        return Err(crate::Error::InvalidValue(format!(
+            "truncated {what} value"
+        )));
     }
     let plen = u16::from_le_bytes([payload[0], payload[1]]) as usize;
     if payload.len() < 2 + plen {
@@ -245,7 +247,9 @@ impl Value {
         match self {
             Self::Int(n) => Some(*n as f64),
             Self::Float(f) => Some(*f),
-            Self::Typed { lexical, datatype } if crate::namespace::is_numeric_datatype(datatype) => {
+            Self::Typed { lexical, datatype }
+                if crate::namespace::is_numeric_datatype(datatype) =>
+            {
                 lexical.parse().ok()
             }
             _ => None,

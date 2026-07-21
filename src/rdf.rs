@@ -83,9 +83,9 @@ fn literal_to_value(lit: &Literal) -> Result<Value> {
             // ingest error, not a string — but they keep their datatype IRI so
             // xsd:long/xsd:decimal/xsd:double stay distinguishable.
             if namespace::is_numeric_datatype(dt) {
-                lit.value().parse::<f64>().map_err(|e| {
-                    Error::InvalidValue(format!("bad numeric literal <{dt}>: {e}"))
-                })?;
+                lit.value()
+                    .parse::<f64>()
+                    .map_err(|e| Error::InvalidValue(format!("bad numeric literal <{dt}>: {e}")))?;
             }
             Ok(Value::Typed {
                 lexical: lit.value().to_string(),
@@ -182,7 +182,7 @@ pub fn ingest_rdf(
 }
 
 /// Ingest RDF into a specific named graph `g` (aegis-g1al / #36). g=0 is ROOT.
-/// All facts from this parse land in `graph`, via transact_to_graph, so an
+/// All facts from this parse land in `graph`, via `transact_to_graph`, so an
 /// overlay ingest extends ROOT without mutating it.
 #[allow(clippy::too_many_arguments)]
 pub fn ingest_rdf_to_graph(
@@ -459,7 +459,10 @@ ex:bob a ex:Person ;
             // Datatypes without a fast-path variant keep their IRI verbatim
             // instead of decaying into an untyped string.
             (
-                Literal::new_typed_literal("2026-07-15", NamedNode::new_unchecked(format!("{xsd}date"))),
+                Literal::new_typed_literal(
+                    "2026-07-15",
+                    NamedNode::new_unchecked(format!("{xsd}date")),
+                ),
                 Value::Typed {
                     lexical: "2026-07-15".into(),
                     datatype: format!("{xsd}date"),
@@ -468,7 +471,10 @@ ex:bob a ex:Person ;
             // xsd:decimal is EXACT and xsd:double is not; collapsing both into
             // f64 was a silent change of numeric semantics.
             (
-                Literal::new_typed_literal("3.25", NamedNode::new_unchecked(format!("{xsd}decimal"))),
+                Literal::new_typed_literal(
+                    "3.25",
+                    NamedNode::new_unchecked(format!("{xsd}decimal")),
+                ),
                 Value::Typed {
                     lexical: "3.25".into(),
                     datatype: format!("{xsd}decimal"),
@@ -706,7 +712,10 @@ ex:s ex:greeting "hello"@en ;
     fn plain_string_is_not_sniffed_into_a_lang_literal() {
         let mut store = Store::open_in_memory().unwrap();
         let term = value_to_term(&store, &Value::Str("hello@en".into())).unwrap();
-        assert_eq!(term, OxTerm::Literal(Literal::new_simple_literal("hello@en")));
+        assert_eq!(
+            term,
+            OxTerm::Literal(Literal::new_simple_literal("hello@en"))
+        );
         // …and not into a datatype either.
         let term = value_to_term(&store, &Value::Str("2026-07-15".into())).unwrap();
         assert_eq!(
@@ -734,7 +743,11 @@ ex:s ex:greeting "hello"@en ;
                 datatype: "http://example.org/T".into(),
             },
         ] {
-            assert_eq!(Value::from_bytes(&v.to_bytes()).unwrap(), v, "round trip: {v:?}");
+            assert_eq!(
+                Value::from_bytes(&v.to_bytes()).unwrap(),
+                v,
+                "round trip: {v:?}"
+            );
         }
     }
 }

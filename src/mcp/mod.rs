@@ -182,13 +182,12 @@ fn fetch_scalar(store: &Store, subject: &str, predicate: &str) -> Result<Option<
     guard_iri(predicate)?;
     let q = format!("SELECT ?o WHERE {{ <{subject}> <{predicate}> ?o }} LIMIT 1");
     match sparql::query_temporal(store, &q, &TemporalContext::default())? {
-        QueryResult::Select { rows, .. } => Ok(rows
-            .first()
-            .and_then(|r| r.get("o"))
-            .and_then(|v| match v {
+        QueryResult::Select { rows, .. } => {
+            Ok(rows.first().and_then(|r| r.get("o")).and_then(|v| match v {
                 crate::types::Value::Str(s) => Some(s.clone()),
                 _ => None,
-            })),
+            }))
+        }
         _ => Ok(None),
     }
 }
@@ -226,12 +225,12 @@ fn registered_public_key(store: &Store, verifier: &str) -> Result<Option<String>
          SELECT ?k WHERE {{ ?r a a:VerifierRegistration ; a:verifier {v} ; a:publicKey ?k }} LIMIT 1"
     );
     match sparql::query_temporal(store, &q, &TemporalContext::default())? {
-        QueryResult::Select { rows, .. } => Ok(rows.first().and_then(|r| r.get("k")).and_then(|v| {
-            match v {
+        QueryResult::Select { rows, .. } => {
+            Ok(rows.first().and_then(|r| r.get("k")).and_then(|v| match v {
                 crate::types::Value::Str(s) => Some(s.clone()),
                 _ => None,
-            }
-        })),
+            }))
+        }
         _ => Ok(None),
     }
 }
@@ -309,7 +308,7 @@ pub fn tool_verifier_authorized(store: &Store, input: &JsonValue) -> Result<Json
 /// Given a Policy (its `aegis:claim` = a SPARQL ASK, optionally with a `$target`
 /// placeholder) and a target IRI, evaluates the claim over the committed graph
 /// and returns a **Verdict**: `outcome` ∈ {satisfied | unsatisfied | unknown},
-/// bound to a reproducible `evidence_hash` of (predicate, target, valid_at,
+/// bound to a reproducible `evidence_hash` of (predicate, target, `valid_at`,
 /// bound claim).
 ///
 /// This is the deterministic, reproducible half: any verifier re-runs the same
@@ -330,33 +329,35 @@ pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         .ok_or_else(|| Error::InvalidValue("missing 'target' parameter".into()))?;
     guard_iri(target)?;
 
-    let (claim, predicate_id, evidence_probe) =
-        if let Some(claim) = input.get("claim").and_then(JsonValue::as_str) {
-            (
-                claim.to_string(),
-                input
-                    .get("predicate_id")
-                    .and_then(JsonValue::as_str)
-                    .unwrap_or("inline")
-                    .to_string(),
-                input
-                    .get("evidence_probe")
-                    .and_then(JsonValue::as_str)
-                    .map(std::string::ToString::to_string),
-            )
-        } else if let Some(policy) = input.get("policy").and_then(JsonValue::as_str) {
-            let claim = fetch_scalar(store, policy, "http://aegis.gastown.local/ontology/claim")?
-                .ok_or_else(|| {
-                    Error::InvalidValue(format!("policy '{policy}' has no aegis:claim"))
-                })?;
-            let probe =
-                fetch_scalar(store, policy, "http://aegis.gastown.local/ontology/evidenceProbe")?;
-            (claim, policy.to_string(), probe)
-        } else {
-            return Err(Error::InvalidValue(
-                "provide either 'policy' or inline 'claim'".into(),
-            ));
-        };
+    let (claim, predicate_id, evidence_probe) = if let Some(claim) =
+        input.get("claim").and_then(JsonValue::as_str)
+    {
+        (
+            claim.to_string(),
+            input
+                .get("predicate_id")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("inline")
+                .to_string(),
+            input
+                .get("evidence_probe")
+                .and_then(JsonValue::as_str)
+                .map(std::string::ToString::to_string),
+        )
+    } else if let Some(policy) = input.get("policy").and_then(JsonValue::as_str) {
+        let claim = fetch_scalar(store, policy, "http://aegis.gastown.local/ontology/claim")?
+            .ok_or_else(|| Error::InvalidValue(format!("policy '{policy}' has no aegis:claim")))?;
+        let probe = fetch_scalar(
+            store,
+            policy,
+            "http://aegis.gastown.local/ontology/evidenceProbe",
+        )?;
+        (claim, policy.to_string(), probe)
+    } else {
+        return Err(Error::InvalidValue(
+            "provide either 'policy' or inline 'claim'".into(),
+        ));
+    };
 
     let ctx = TemporalContext {
         valid_at: input
@@ -452,7 +453,10 @@ pub fn tool_cooccurrence(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         .ok_or_else(|| Error::InvalidValue("missing 'work_item' parameter".into()))?;
     // The IRI is inlined into the query, so reject anything that could break out
     // of the `<...>` and inject SPARQL. A real IRI contains none of these.
-    if item.chars().any(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '{' | '}' | '\\')) {
+    if item
+        .chars()
+        .any(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '{' | '}' | '\\'))
+    {
         return Err(Error::InvalidValue(
             "'work_item' must be a bare IRI (no whitespace or < > \" { } \\)".into(),
         ));
@@ -530,7 +534,7 @@ pub fn tool_overlay_write(store: &mut Store, input: &JsonValue) -> Result<JsonVa
         _ => {
             return Err(Error::InvalidValue(
                 "'op' must be one of: assert | retract | tombstone".into(),
-            ))
+            ));
         }
     };
     let subject = input
@@ -550,7 +554,10 @@ pub fn tool_overlay_write(store: &mut Store, input: &JsonValue) -> Result<JsonVa
     let a = store.intern(predicate)?;
     let value = json_to_value(store, object)?;
     let now = crate::time::now_iso();
-    let ts = input.get("timestamp").and_then(JsonValue::as_str).unwrap_or(&now);
+    let ts = input
+        .get("timestamp")
+        .and_then(JsonValue::as_str)
+        .unwrap_or(&now);
     let tx_id = store.overlay_write(overlay_g, op, e, a, value, ts)?;
     Ok(serde_json::json!({ "tx_id": tx_id }))
 }

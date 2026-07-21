@@ -282,8 +282,14 @@ pub fn literal_to_value(lit: &Literal) -> Value {
         datatype: dt.to_string(),
     };
     match dt {
-        namespace::XSD_INTEGER => lit.value().parse::<i64>().map_or_else(|_| typed(), Value::Int),
-        namespace::XSD_DOUBLE => lit.value().parse::<f64>().map_or_else(|_| typed(), Value::Float),
+        namespace::XSD_INTEGER => lit
+            .value()
+            .parse::<i64>()
+            .map_or_else(|_| typed(), Value::Int),
+        namespace::XSD_DOUBLE => lit
+            .value()
+            .parse::<f64>()
+            .map_or_else(|_| typed(), Value::Float),
         namespace::XSD_BOOLEAN => Value::Bool(matches!(lit.value(), "true" | "1")),
         // RDF 1.1: a plain literal's datatype IS xsd:string, so Str is lossless.
         namespace::XSD_STRING => Value::Str(lit.value().to_string()),

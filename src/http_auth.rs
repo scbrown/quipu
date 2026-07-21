@@ -49,9 +49,9 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/embed_backfill",
     // aegis-2f4n: registered write routes that WRITE_ENDPOINTS had silently
     // omitted, so read-only mode and bearer auth did not cover them.
-    "/project",         // rw_handler; louvain persists quipu:memberOfCommunity when persist:true
-    "/overlay/write",   // &mut handler -> store.overlay_write, returns a tx_id
-    "/overlay/create",  // ro_handler by signature, but writes the graphs registry
+    "/project", // rw_handler; louvain persists quipu:memberOfCommunity when persist:true
+    "/overlay/write", // &mut handler -> store.overlay_write, returns a tx_id
+    "/overlay/create", // ro_handler by signature, but writes the graphs registry
 ];
 
 /// The set of read endpoints: every registered route that does NOT mutate state.
@@ -230,9 +230,18 @@ mod tests {
         // aegis-2f4n: the three routes that were open under read-only mode and
         // bearer auth because WRITE_ENDPOINTS omitted them. Named so a regression
         // that drops any of them is a loud, specific failure.
-        assert!(is_write_endpoint("/project"), "/project persists communities on persist:true");
-        assert!(is_write_endpoint("/overlay/write"), "/overlay/write commits a tx");
-        assert!(is_write_endpoint("/overlay/create"), "/overlay/create writes the graphs registry");
+        assert!(
+            is_write_endpoint("/project"),
+            "/project persists communities on persist:true"
+        );
+        assert!(
+            is_write_endpoint("/overlay/write"),
+            "/overlay/write commits a tx"
+        );
+        assert!(
+            is_write_endpoint("/overlay/create"),
+            "/overlay/create writes the graphs registry"
+        );
         // ro_handler routes that nonetheless write via &Store interior mutability —
         // must stay writes; removing them (they "look" like reads) reopens them.
         assert!(is_write_endpoint("/shapes"));
@@ -348,7 +357,9 @@ mod tests {
         let src = include_str!("server.rs");
         let mut map = std::collections::HashMap::new();
         for line in src.lines() {
-            let Some(idx) = line.find(".route(\"") else { continue };
+            let Some(idx) = line.find(".route(\"") else {
+                continue;
+            };
             let rest = &line[idx + ".route(\"".len()..];
             let Some(end) = rest.find('"') else { continue };
             let path = rest[..end].to_string();
@@ -414,7 +425,9 @@ mod tests {
             let Some(path) = paths.get(&name) else {
                 // A macro handler that is never routed is dead code; flag it so the
                 // parser breaking (or a genuinely orphaned handler) is not silent.
-                problems.push(format!("{name}: rw/ro handler is not registered on any .route()"));
+                problems.push(format!(
+                    "{name}: rw/ro handler is not registered on any .route()"
+                ));
                 continue;
             };
             let is_write = WRITE_ENDPOINTS.contains(&path.as_str());

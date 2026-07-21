@@ -22,7 +22,7 @@
 use std::path::Path;
 
 use ring::rand::SystemRandom;
-use ring::signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519};
+use ring::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
 
 use crate::error::{Error, Result};
 
@@ -74,7 +74,9 @@ pub fn verify_hex(public_key_hex: &str, message: &[u8], signature_hex: &str) -> 
     let (Ok(pk), Ok(sig)) = (hex::decode(public_key_hex), hex::decode(signature_hex)) else {
         return false;
     };
-    UnparsedPublicKey::new(&ED25519, pk).verify(message, &sig).is_ok()
+    UnparsedPublicKey::new(&ED25519, pk)
+        .verify(message, &sig)
+        .is_ok()
 }
 
 /// The canonical byte string signed for a verdict. Deterministic field order so
@@ -152,17 +154,39 @@ mod tests {
         let doc = Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
         let kp = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
         let pk = public_key_hex(&kp);
-        let msg = verdict_message("has-test", "sym1", "satisfied", "fnv1a:ab", "committed", "quipu");
+        let msg = verdict_message(
+            "has-test",
+            "sym1",
+            "satisfied",
+            "fnv1a:ab",
+            "committed",
+            "quipu",
+        );
         let sig = sign_hex(&kp, &msg);
-        assert!(verify_hex(&pk, &msg, &sig), "a genuine signature must verify");
+        assert!(
+            verify_hex(&pk, &msg, &sig),
+            "a genuine signature must verify"
+        );
         // tampered message
-        let tampered =
-            verdict_message("has-test", "sym1", "unsatisfied", "fnv1a:ab", "committed", "quipu");
-        assert!(!verify_hex(&pk, &tampered, &sig), "flipping the outcome must break the sig");
+        let tampered = verdict_message(
+            "has-test",
+            "sym1",
+            "unsatisfied",
+            "fnv1a:ab",
+            "committed",
+            "quipu",
+        );
+        assert!(
+            !verify_hex(&pk, &tampered, &sig),
+            "flipping the outcome must break the sig"
+        );
         // wrong key
         let doc2 = Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
         let kp2 = Ed25519KeyPair::from_pkcs8(doc2.as_ref()).unwrap();
-        assert!(!verify_hex(&public_key_hex(&kp2), &msg, &sig), "a different key must not verify");
+        assert!(
+            !verify_hex(&public_key_hex(&kp2), &msg, &sig),
+            "a different key must not verify"
+        );
         // garbage inputs never panic
         assert!(!verify_hex("zz", &msg, &sig));
         assert!(!verify_hex(&pk, &msg, "not-hex"));
@@ -177,7 +201,11 @@ mod tests {
         let pk1 = public_key_hex(&kp1);
         // second load reads the same persisted key
         let kp2 = load_or_generate(&path).unwrap();
-        assert_eq!(pk1, public_key_hex(&kp2), "reload must yield the same identity");
+        assert_eq!(
+            pk1,
+            public_key_hex(&kp2),
+            "reload must yield the same identity"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;

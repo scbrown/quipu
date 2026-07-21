@@ -639,10 +639,7 @@ fn edge_confidence_enum_persists_and_is_sparql_queryable() {
     // the bare assertion matches `svcA dependsOn ?o`.
     let bare = crate::sparql::query(
         &store,
-        &format!(
-            "SELECT ?o WHERE {{ <{ns}svcA> <{ns}dependsOn> ?o }}",
-            ns = TEST_BASE_NS
-        ),
+        &format!("SELECT ?o WHERE {{ <{TEST_BASE_NS}svcA> <{TEST_BASE_NS}dependsOn> ?o }}"),
     )
     .unwrap();
     assert_eq!(
@@ -700,9 +697,18 @@ fn untyped_node_is_rejected_with_a_clear_error_not_a_turtle_400() {
         .expect_err("an untyped node must be rejected");
     let msg = err.to_string();
     // Diagnosable: names the node and the cause, not a raw Turtle parse error.
-    assert!(msg.contains("the-untyped-one"), "error must name the untyped node: {msg}");
-    assert!(msg.contains("type"), "error must explain it is a type problem: {msg}");
-    assert!(!msg.to_lowercase().contains("parse"), "must NOT be a cryptic Turtle parse error: {msg}");
+    assert!(
+        msg.contains("the-untyped-one"),
+        "error must name the untyped node: {msg}"
+    );
+    assert!(
+        msg.contains("type"),
+        "error must explain it is a type problem: {msg}"
+    );
+    assert!(
+        !msg.to_lowercase().contains("parse"),
+        "must NOT be a cryptic Turtle parse error: {msg}"
+    );
 }
 
 #[test]
@@ -731,16 +737,40 @@ fn episode_graph_field_writes_to_named_graph_not_root() {
     let overlay_g = store.intern("http://example.org/graph/tenant-1").unwrap();
     // svc-x's facts must be in the overlay graph, none in ROOT.
     let svc_x = store.intern(&format!("{TEST_BASE_NS}svc-x")).unwrap();
-    let in_overlay: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=?2", [svc_x, overlay_g], |r| r.get(0)).unwrap();
-    let in_root: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=0", [svc_x], |r| r.get(0)).unwrap();
-    assert!(in_overlay > 0, "overlay episode's facts must land in the named graph");
-    assert_eq!(in_root, 0, "overlay episode must write NOTHING to ROOT (base un-mutated)");
+    let in_overlay: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=?2",
+            [svc_x, overlay_g],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let in_root: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=0",
+            [svc_x],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        in_overlay > 0,
+        "overlay episode's facts must land in the named graph"
+    );
+    assert_eq!(
+        in_root, 0,
+        "overlay episode must write NOTHING to ROOT (base un-mutated)"
+    );
 
     // svc-y (no graph field) must be in ROOT.
     let svc_y = store.intern(&format!("{TEST_BASE_NS}svc-y")).unwrap();
-    let y_in_root: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=0", [svc_y], |r| r.get(0)).unwrap();
+    let y_in_root: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e=?1 AND g=0",
+            [svc_y],
+            |r| r.get(0),
+        )
+        .unwrap();
     assert!(y_in_root > 0, "a no-graph episode must write ROOT (g=0)");
 }
