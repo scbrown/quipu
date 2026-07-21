@@ -23,6 +23,9 @@ pub enum Error {
         messages: Vec<String>,
     },
 
+    #[error("policy denied: {0}")]
+    PolicyDenied(String),
+
     #[error("store error: {0}")]
     Store(String),
 

@@ -8,6 +8,7 @@ pub mod context;
 pub mod embedding;
 pub mod episode;
 pub mod error;
+pub mod governance;
 pub mod graph;
 pub mod http_auth;
 pub mod impact;
@@ -28,9 +29,9 @@ pub mod report;
 pub mod resolution;
 pub mod schema;
 pub mod semweb;
-pub mod signing;
 #[cfg(feature = "shacl")]
 pub mod shacl;
+pub mod signing;
 pub mod sparql;
 pub mod store;
 pub mod time;
@@ -42,8 +43,8 @@ pub mod vector_lance;
 pub mod w3c;
 
 pub use config::{
-    EmbeddingConfig, FederationConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, SearchConfig,
-    ServerConfig, ShaclConfig, VectorBackend, VectorConfig,
+    EmbeddingConfig, FederationConfig, GovernanceConfig, QuipuConfig, RemoteEndpoint,
+    ResolutionConfig, SearchConfig, ServerConfig, ShaclConfig, VectorBackend, VectorConfig,
 };
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
@@ -83,8 +84,8 @@ pub use mcp::tools::{
 };
 pub use mcp::{
     query_result, tool_cooccurrence, tool_definitions, tool_knot, tool_overlay_compose,
-    tool_overlay_create, tool_overlay_write, tool_policy_check, tool_query,
-    tool_verdict_verify, tool_verifier_authorized, value_to_json,
+    tool_overlay_create, tool_overlay_write, tool_policy_check, tool_query, tool_verdict_verify,
+    tool_verifier_authorized, value_to_json,
 };
 #[cfg(feature = "lancedb")]
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};

@@ -73,6 +73,19 @@ pub struct ShaclConfig {
     pub validate_on_write: bool,
 }
 
+/// Governance enforcement policy (the loom, write-path gate).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct GovernanceConfig {
+    /// Enforce `boundary:"action"` governance policies on every write. When set,
+    /// `Store::transact` evaluates the applicable policies against the pending
+    /// post-state and rejects the write (`Error::PolicyDenied`) if a `deny`
+    /// policy's claim is unsatisfied for a touched target. Default false — opt
+    /// in, mirroring `shacl.validate_on_write`. See
+    /// `docs/design/policy-edit-hooks.md`.
+    pub enforce_on_write: bool,
+}
+
 /// Vector storage backend selection.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -154,7 +167,6 @@ pub struct QuipuConfig {
     // parse-safe (this struct is `#[serde(default)]`, no `deny_unknown_fields`,
     // so an old config carrying `schema_path` is simply ignored). If a schema
     // directory is wanted later, add it back WITH the code that reads it.
-
     /// Base namespace URI for ontology entities (default: `DEFAULT_BASE_NS`).
     pub base_ns: String,
 
@@ -178,6 +190,9 @@ pub struct QuipuConfig {
 
     /// SHACL validation policy.
     pub shacl: ShaclConfig,
+
+    /// Governance enforcement policy (write-path gate).
+    pub governance: GovernanceConfig,
 }
 
 impl Default for QuipuConfig {
@@ -192,6 +207,7 @@ impl Default for QuipuConfig {
             resolution: ResolutionConfig::default(),
             search: SearchConfig::default(),
             shacl: ShaclConfig::default(),
+            governance: GovernanceConfig::default(),
         }
     }
 }
@@ -382,30 +398,36 @@ mod tests {
     /// can ask "is this field read anywhere but its own definition?".
     fn src_without_config() -> String {
         fn walk(dir: &std::path::Path, out: &mut String) {
-            let Ok(entries) = std::fs::read_dir(dir) else { return };
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
             for e in entries.flatten() {
                 let p = e.path();
                 if p.is_dir() {
                     walk(&p, out);
                 } else if p.extension().is_some_and(|x| x == "rs")
                     && p.file_name().is_some_and(|n| n != "config.rs")
+                    && let Ok(s) = std::fs::read_to_string(&p)
                 {
-                    if let Ok(s) = std::fs::read_to_string(&p) {
-                        out.push_str(&s);
-                        out.push('\n');
-                    }
+                    out.push_str(&s);
+                    out.push('\n');
                 }
             }
         }
         let mut out = String::new();
-        walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut out);
+        walk(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut out,
+        );
         out
     }
 
     fn quipu_config_top_level_fields() -> Vec<String> {
         // Pull `pub NAME:` out of the `pub struct QuipuConfig { ... }` block only.
         let src = include_str!("config.rs");
-        let start = src.find("pub struct QuipuConfig {").expect("QuipuConfig struct");
+        let start = src
+            .find("pub struct QuipuConfig {")
+            .expect("QuipuConfig struct");
         let body = &src[start..];
         let end = body.find("\n}").expect("end of QuipuConfig");
         body[..end]
@@ -467,7 +489,9 @@ mod tests {
 
         cfg.vector.backend = VectorBackend::Lancedb;
         assert!(
-            cfg.unwired_warnings().iter().any(|w| w.contains("vector.backend")),
+            cfg.unwired_warnings()
+                .iter()
+                .any(|w| w.contains("vector.backend")),
             "vector.backend = lancedb must warn — the quipu binaries do not honour it"
         );
 
@@ -476,7 +500,9 @@ mod tests {
             url: "http://example:3030".into(),
         });
         assert!(
-            cfg.unwired_warnings().iter().any(|w| w.contains("federation")),
+            cfg.unwired_warnings()
+                .iter()
+                .any(|w| w.contains("federation")),
             "a configured federation remote must warn — federation is unimplemented"
         );
     }

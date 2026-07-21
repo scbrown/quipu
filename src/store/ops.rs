@@ -8,6 +8,19 @@ use crate::types::{Fact, Op, Value};
 
 use super::{AsOf, Datum, Store};
 
+/// Result of staging a transaction's rows into the open `quipu_transact`
+/// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
+struct Staged {
+    tx_id: i64,
+    /// Datums actually asserted (skipping idempotent no-ops), for reactive
+    /// observer notification.
+    #[cfg(feature = "reactive-reasoner")]
+    asserts: Vec<Datum>,
+    /// Datums actually retracted, for reactive observer notification.
+    #[cfg(feature = "reactive-reasoner")]
+    retracts: Vec<Datum>,
+}
+
 /// What episode-scoped retraction does when removing an episode's facts would
 /// strip a node's IDENTITY (`rdfs:label` / `rdf:type`) while leaving it
 /// referenced by facts from other episodes — a GHOST NODE (aegis-arup).
@@ -106,7 +119,7 @@ impl Store {
 
     /// Write a batch to a specific named graph. g=0 is ROOT. Idempotency and
     /// retraction are SCOPED to `graph`: writing to an overlay never skips a
-    /// triple because ROOT has it, and never closes a ROOT fact's valid_to. The
+    /// triple because ROOT has it, and never closes a ROOT fact's `valid_to`. The
     /// same (e,a,v) coexists across graphs, and an overlay's retract closes only
     /// its OWN assertions — the base stays un-mutated (Stiwi's #36 requirement,
     /// enforced in SQL, not convention). Cross-graph SHADOWING (an overlay
@@ -120,34 +133,75 @@ impl Store {
         source: Option<&str>,
         graph: i64,
     ) -> Result<i64> {
-        // Use savepoint (not transaction) so transact() can nest inside
-        // speculate()'s outer savepoint.
-        let sp = self.conn.savepoint()?;
-        sp.execute(
+        // Manual savepoint commands (not the RAII `Savepoint`) so `&self` stays
+        // usable for the write-time policy guard AFTER the datums are staged but
+        // BEFORE commit — the `&Store`-based SPARQL evaluator cannot run while a
+        // `Savepoint` holds a mutable borrow of the connection. Nests inside
+        // speculate()'s outer savepoint exactly as the RAII form did.
+        self.conn.execute_batch("SAVEPOINT quipu_transact")?;
+        match self.stage_and_guard(datums, timestamp, actor, source, graph) {
+            Ok(staged) => {
+                let tx_id = staged.tx_id;
+                self.conn.execute_batch("RELEASE quipu_transact")?;
+                self.after_commit_hooks(datums, staged, timestamp, source)?;
+                // A write that defined or amended a policy makes the cached
+                // registry stale.
+                self.invalidate_policy_registry_if_governance(datums)?;
+                Ok(tx_id)
+            }
+            Err(e) => {
+                // Undo the staged datums and the transaction row; the store is
+                // left byte-identical to before this call (no partial mutation).
+                let _ = self
+                    .conn
+                    .execute_batch("ROLLBACK TO quipu_transact; RELEASE quipu_transact");
+                Err(e)
+            }
+        }
+    }
+
+    /// Stage a transaction's rows into the open `quipu_transact` savepoint, then
+    /// run the write-time policy guard against the pending post-state. Returns
+    /// the tx id (and, under `reactive-reasoner`, the written datum indices) on
+    /// success; any `Err` (including a policy denial) leaves the savepoint open
+    /// for the caller to roll back.
+    fn stage_and_guard(
+        &mut self,
+        datums: &[Datum],
+        timestamp: &str,
+        actor: Option<&str>,
+        source: Option<&str>,
+        graph: i64,
+    ) -> Result<Staged> {
+        self.conn.execute(
             "INSERT INTO transactions (timestamp, actor, source) VALUES (?1, ?2, ?3)",
             params![timestamp, actor, source],
         )?;
-        let tx_id = sp.last_insert_rowid();
+        let tx_id = self.conn.last_insert_rowid();
 
-        // Track which datums were actually written (for observer notification).
+        // Collect the datums actually written (for observer notification),
+        // classified by op. Overlay view-markers (Tombstone) are excluded from
+        // the committed reactive stream (#36).
         #[cfg(feature = "reactive-reasoner")]
-        let mut written_datums: Vec<&Datum> = Vec::with_capacity(datums.len());
+        let mut asserts: Vec<Datum> = Vec::new();
+        #[cfg(feature = "reactive-reasoner")]
+        let mut retracts: Vec<Datum> = Vec::new();
 
         {
-            let mut insert = sp.prepare(
+            let mut insert = self.conn.prepare(
                 "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             )?;
             // Retraction is SCOPED to `graph`: an overlay closing an assertion
             // touches only its own graph, never ROOT (base un-mutated, #36).
-            let mut close_assertion = sp.prepare(
+            let mut close_assertion = self.conn.prepare(
                 "UPDATE facts SET valid_to = ?1 \
                  WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
             )?;
             // Idempotent assertions: skip if an active fact with the same
             // (e, a, v) already exists IN THIS GRAPH. Scoped to `graph` so the
             // same triple can be asserted independently into ROOT and overlays.
-            let mut check_exists = sp.prepare(
+            let mut check_exists = self.conn.prepare(
                 "SELECT 1 FROM facts \
                  WHERE e = ?1 AND a = ?2 AND v = ?3 AND g = ?4 AND op = 1 AND valid_to IS NULL \
                  LIMIT 1",
@@ -155,8 +209,13 @@ impl Store {
             for d in datums {
                 let v_bytes = d.value.to_bytes();
                 if d.op == Op::Retract {
-                    close_assertion
-                        .execute(params![timestamp, d.entity, d.attribute, v_bytes, graph])?;
+                    close_assertion.execute(params![
+                        timestamp,
+                        d.entity,
+                        d.attribute,
+                        v_bytes,
+                        graph
+                    ])?;
                 } else {
                     // Skip assertion if an identical active fact already exists
                     // IN THIS GRAPH.
@@ -178,12 +237,38 @@ impl Store {
                     d.op as i32,
                 ])?;
                 #[cfg(feature = "reactive-reasoner")]
-                written_datums.push(d);
+                match d.op {
+                    Op::Assert => asserts.push(d.clone()),
+                    Op::Retract => retracts.push(d.clone()),
+                    Op::Tombstone => {}
+                }
             }
         }
 
-        sp.commit()?;
+        // Write-time policy guard (the loom). Runs against the staged post-state
+        // (same connection sees the open savepoint). A denial returns Err here
+        // and the caller rolls the savepoint back — the write never commits.
+        self.enforce_write_policies(datums, graph)?;
 
+        Ok(Staged {
+            tx_id,
+            #[cfg(feature = "reactive-reasoner")]
+            asserts,
+            #[cfg(feature = "reactive-reasoner")]
+            retracts,
+        })
+    }
+
+    /// Post-commit side effects: auto-embedding and reactive observers. Runs
+    /// after the savepoint is released (the write is durable relative to the
+    /// parent), preserving the previous ordering.
+    fn after_commit_hooks(
+        &mut self,
+        datums: &[Datum],
+        staged: Staged,
+        timestamp: &str,
+        source: Option<&str>,
+    ) -> Result<()> {
         // Post-transact hook: auto-embed touched entities.
         // Skipped when a vector search delegate is set — embeddings belong in
         // the external index layer (e.g. Bobbin's LanceDB).
@@ -210,26 +295,10 @@ impl Store {
             use super::Delta;
 
             if !self.observers.is_empty() {
-                let mut asserts = Vec::new();
-                let mut retracts = Vec::new();
-                // Only notify observers about datums that were actually written.
-                for d in &written_datums {
-                    // `written_datums` is `Vec<&Datum>`, so `d` here is `&&Datum` and
-                    // a bare `d.clone()` clones the REFERENCE (`&Datum`), not the
-                    // Datum — which is why this feature stopped compiling. Deref to
-                    // the value so `Delta.asserts: Vec<Datum>` gets owned Datums.
-                    match d.op {
-                        Op::Assert => asserts.push((**d).clone()),
-                        Op::Retract => retracts.push((**d).clone()),
-                        // Overlay view-markers are transient/overlay-class and
-                        // are excluded from the committed reactive stream (#36).
-                        Op::Tombstone => {}
-                    }
-                }
                 let delta = Delta {
-                    tx: tx_id,
-                    asserts,
-                    retracts,
+                    tx: staged.tx_id,
+                    asserts: staged.asserts,
+                    retracts: staged.retracts,
                     source: source.map(String::from),
                 };
 
@@ -240,7 +309,12 @@ impl Store {
             }
         }
 
-        Ok(tx_id)
+        // `staged` (its tx id / written indices) and `source` are only consumed
+        // by the reactive-reasoner observer dispatch above.
+        #[cfg(not(feature = "reactive-reasoner"))]
+        let _ = (staged, source);
+
+        Ok(())
     }
 
     /// Execute `f` against a speculative fork of the store with `hypothetical`

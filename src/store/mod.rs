@@ -9,9 +9,12 @@ use std::sync::Arc;
 
 use rusqlite::{Connection, params};
 
-use crate::config::{EmbeddingConfig, ResolutionConfig, SearchConfig, ShaclConfig};
+use crate::config::{
+    EmbeddingConfig, GovernanceConfig, ResolutionConfig, SearchConfig, ShaclConfig,
+};
 use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
+use crate::governance::PolicyRegistry;
 use crate::schema::INIT_SQL;
 use crate::types::Value;
 use crate::vector::{KnowledgeVectorStore, VECTORS_SQL};
@@ -38,6 +41,15 @@ pub struct Store {
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,
+    /// Governance enforcement policy. When `enforce_on_write` is set, the write
+    /// path evaluates `boundary:"action"` policies against the pending state and
+    /// rejects a write that leaves a governed target non-compliant (the loom's
+    /// write-time gate). Default disabled. See `docs/design/policy-edit-hooks.md`.
+    pub(crate) governance_config: GovernanceConfig,
+    /// Cached registry of active action-boundary policies, indexed by target
+    /// type. Built lazily on the first enforced write and invalidated when a
+    /// transaction defines or amends a policy. `None` = not yet built / stale.
+    pub(crate) policy_registry: Option<PolicyRegistry>,
     /// Base namespace new IRIs are minted under on the episode write paths.
     /// Defaults to the built-in aegis namespace; the server sets it from
     /// `[quipu].base_ns` at startup so a non-aegis deployment does not silently
@@ -144,6 +156,8 @@ impl Store {
             resolution_config: ResolutionConfig::default(),
             search_config: SearchConfig::default(),
             shacl_config: ShaclConfig::default(),
+            governance_config: GovernanceConfig::default(),
+            policy_registry: None,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
             vector_delegate: None,
             local_vector_backend: None,
@@ -207,6 +221,51 @@ impl Store {
     /// Get a reference to the SHACL validation config.
     pub fn shacl_config(&self) -> &ShaclConfig {
         &self.shacl_config
+    }
+
+    /// Get a mutable reference to the governance enforcement config.
+    pub fn governance_config_mut(&mut self) -> &mut GovernanceConfig {
+        &mut self.governance_config
+    }
+
+    /// Get a reference to the governance enforcement config.
+    pub fn governance_config(&self) -> &GovernanceConfig {
+        &self.governance_config
+    }
+
+    /// Evaluate action-boundary policies for a staged write. No-op unless
+    /// `governance.enforce_on_write` is set. Builds and caches the policy
+    /// registry on first use. Returns `Err(PolicyDenied)` when a `deny` policy's
+    /// claim is unsatisfied for a touched target — the caller rolls the write
+    /// back so nothing is committed.
+    pub(crate) fn enforce_write_policies(&mut self, datums: &[Datum], graph: i64) -> Result<()> {
+        if !self.governance_config.enforce_on_write {
+            return Ok(());
+        }
+        if self.policy_registry.is_none() {
+            self.policy_registry = Some(PolicyRegistry::build(self)?);
+        }
+        // Take the registry out so the evaluator can borrow `&self` (SPARQL);
+        // restore it afterwards. Evaluation never mutates the registry.
+        let registry = self.policy_registry.take().expect("registry just built");
+        let result = registry.evaluate_write(self, datums, graph);
+        self.policy_registry = Some(registry);
+        result
+    }
+
+    /// Invalidate the cached policy registry if this transaction defined or
+    /// amended a governance policy. Cheap no-op unless enforcement is enabled.
+    pub(crate) fn invalidate_policy_registry_if_governance(
+        &mut self,
+        datums: &[Datum],
+    ) -> Result<()> {
+        if !self.governance_config.enforce_on_write {
+            return Ok(());
+        }
+        if crate::governance::is_governance_write(self, datums)? {
+            self.policy_registry = None;
+        }
+        Ok(())
     }
 
     /// Set an external vector search delegate.
@@ -292,7 +351,7 @@ impl Store {
     ///
     /// It also owns the `idx_geav` graph index (NOT `schema::INIT_SQL`), and
     /// creates it unconditionally for both fresh and just-migrated stores.
-    /// INIT_SQL runs first and against pre-quad stores too, so a
+    /// `INIT_SQL` runs first and against pre-quad stores too, so a
     /// `CREATE INDEX ... ON facts(g, ...)` there hard-fails with
     /// `no such column: g` before this ALTER can add the column (aegis-akb8:
     /// caught by a scratch-copy smoke test before a blind swap would have

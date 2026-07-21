@@ -93,6 +93,16 @@ async fn main() {
         eprintln!("SHACL write-validation enabled (loaded shapes enforced on every write)");
     }
 
+    // Apply the governance enforcement policy: when enabled, `boundary:"action"`
+    // policies gate every write (the loom's write-time gate, see
+    // docs/design/policy-edit-hooks.md).
+    store.governance_config_mut().clone_from(&config.governance);
+    if config.governance.enforce_on_write {
+        eprintln!(
+            "Governance write-enforcement enabled (action-boundary policies gate every write)"
+        );
+    }
+
     if let (Some(model_path), Some(tokenizer_path)) = (
         &config.embedding.model_path,
         &config.embedding.tokenizer_path,
@@ -133,7 +143,10 @@ async fn main() {
                 "verdict signing enabled (verifier=quipu, key={})",
                 signing_key_path.display()
             );
-            eprintln!("  register this public key to trust its verdicts: {}", id.public_key_hex());
+            eprintln!(
+                "  register this public key to trust its verdicts: {}",
+                id.public_key_hex()
+            );
             store.set_signing_identity(Arc::new(id));
         }
         Err(e) => eprintln!("warning: verdict signing disabled -- {e}"),
@@ -886,8 +899,14 @@ impl From<quipu::Error> for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
+        // A governance denial is an authorization outcome, not a malformed
+        // request — surface it as 403 so callers can distinguish it.
+        let status = match &self.0 {
+            quipu::Error::PolicyDenied(_) => StatusCode::FORBIDDEN,
+            _ => StatusCode::BAD_REQUEST,
+        };
         let body = json!({ "error": self.0.to_string() });
-        (StatusCode::BAD_REQUEST, axum::Json(body)).into_response()
+        (status, axum::Json(body)).into_response()
     }
 }
 
@@ -934,7 +953,10 @@ mod tests {
         let elapsed = start.elapsed();
 
         for r in [a, b, c, d] {
-            assert!(r.is_ok(), "search over an empty store should succeed with a scoped:false empty result");
+            assert!(
+                r.is_ok(),
+                "search over an empty store should succeed with a scoped:false empty result"
+            );
         }
         assert!(
             elapsed < std::time::Duration::from_millis(600),
