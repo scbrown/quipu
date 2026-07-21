@@ -4,8 +4,8 @@
 //! active `boundary:"action"` governance policies indexed by target-type IRI;
 //! [`PolicyRegistry::evaluate_write`] runs the applicable claims against the
 //! **pending post-state** (the datums are already staged in the open savepoint
-//! when the guard runs) and returns `Err(PolicyDenied)` when a `deny` policy's
-//! claim is unsatisfied for a touched target.
+//! when the guard runs) and returns `Err(PolicyDenied)` when a blocking policy's
+//! claim is unsatisfied for a touched target (see [`effect_blocks`]).
 //!
 //! Runtime-gated by `[quipu.governance] enforce_on_write` (default off). The
 //! registry is built once and cached on the [`Store`]; a write that defines or
@@ -30,9 +30,10 @@ struct CompiledPolicy {
     target_type_iri: String,
     /// The `aegis:claim` SPARQL ASK (the compliant condition), with `$target`.
     claim: String,
-    /// The `aegis:effect`. Only `"deny"` blocks at the write gate in v1;
-    /// absent effect defaults to `"deny"` (fail-closed for an action-boundary
-    /// policy that carries a claim). See the design doc for the full table.
+    /// The `aegis:effect`. `deny`/`require-approval`/`escalate` block at the
+    /// write gate (see [`effect_blocks`]); absent effect defaults to `"deny"`
+    /// (fail-closed for an action-boundary policy that carries a claim). See the
+    /// design doc for the full table.
     effect: String,
     /// Optional `aegis:evidenceProbe` ASK ("does the evidence exist yet?"). When
     /// present and false, the outcome is `unknown` and the write is NOT blocked.
@@ -87,8 +88,8 @@ impl PolicyRegistry {
     }
 
     /// Evaluate the applicable action-boundary policies for a write. Returns
-    /// `Err(PolicyDenied)` on the first `deny` policy whose claim is unsatisfied
-    /// for a touched target; otherwise `Ok(())`.
+    /// `Err(PolicyDenied)` on the first blocking policy whose claim is
+    /// unsatisfied for a touched target; otherwise `Ok(())`.
     pub fn evaluate_write(&self, store: &Store, datums: &[Datum], graph: i64) -> Result<()> {
         if self.by_type.is_empty() {
             return Ok(());
@@ -155,10 +156,23 @@ fn entity_type_iris(
     Ok(out)
 }
 
-/// Evaluate a single policy against a single target entity. Only `deny` blocks
-/// in v1; other effects run no ASK (nothing to enforce at the write gate).
+/// Whether an effect blocks the write at the action boundary.
+///
+/// Blocking effects fail **closed**: `deny` outright, and
+/// `require-approval`/`escalate` because a write that needs a human decision
+/// cannot proceed through a seam that has no channel to grant one. Recording the
+/// pending decision and routing it to the workflow layer is a follow-up
+/// (Q-APPROVAL-followup); until then the honest behaviour is to refuse the write
+/// rather than let a `require-approval` policy pass silently. `allow`, `warn`,
+/// and `record` are advisory and never block.
+fn effect_blocks(effect: &str) -> bool {
+    matches!(effect, "deny" | "require-approval" | "escalate")
+}
+
+/// Evaluate a single policy against a single target entity. A non-blocking
+/// effect runs no ASK (nothing to enforce at the write gate).
 fn evaluate_one(store: &Store, entity_iri: &str, policy: &CompiledPolicy) -> Result<()> {
-    if policy.effect != "deny" {
+    if !effect_blocks(&policy.effect) {
         return Ok(());
     }
     guard_iri(entity_iri)?;
@@ -178,8 +192,8 @@ fn evaluate_one(store: &Store, entity_iri: &str, policy: &CompiledPolicy) -> Res
         Ok(())
     } else {
         Err(Error::PolicyDenied(format!(
-            "'{entity_iri}' violates policy '{}' (target type '{}'): claim unsatisfied",
-            policy.policy_iri, policy.target_type_iri
+            "'{entity_iri}' blocked by policy '{}' (effect '{}', target type '{}'): claim unsatisfied",
+            policy.policy_iri, policy.effect, policy.target_type_iri
         )))
     }
 }
@@ -280,9 +294,26 @@ mod tests {
         Value::Ref(store.intern(type_iri).unwrap())
     }
 
-    /// Define an action-boundary `deny` policy: entities of `target_type` must
-    /// satisfy `claim`.
-    fn define_policy(store: &mut Store, policy_iri: &str, target_type: &str, claim: &str) {
+    fn retract_datum(store: &Store, s: &str, p: &str, v: Value) -> Datum {
+        Datum {
+            entity: store.intern(s).unwrap(),
+            attribute: store.intern(p).unwrap(),
+            value: v,
+            valid_from: TS.to_string(),
+            valid_to: None,
+            op: Op::Retract,
+        }
+    }
+
+    /// Define an action-boundary policy with the given `effect`: entities of
+    /// `target_type` must satisfy `claim`.
+    fn define_policy_with_effect(
+        store: &mut Store,
+        policy_iri: &str,
+        target_type: &str,
+        claim: &str,
+        effect: &str,
+    ) {
         let policy_class = format!("{DEFAULT_BASE_NS}Policy");
         let datums = vec![
             assert_datum(store, policy_iri, RDF_TYPE, type_ref(store, &policy_class)),
@@ -308,15 +339,23 @@ mod tests {
                 store,
                 policy_iri,
                 &format!("{DEFAULT_BASE_NS}effect"),
-                Value::Str("deny".to_string()),
+                Value::Str(effect.to_string()),
             ),
         ];
         store.transact(&datums, TS, None, None).unwrap();
     }
 
+    /// Define an action-boundary `deny` policy.
+    fn define_policy(store: &mut Store, policy_iri: &str, target_type: &str, claim: &str) {
+        define_policy_with_effect(store, policy_iri, target_type, claim, "deny");
+    }
+
+    fn ask(store: &Store, q: &str) -> bool {
+        matches!(sparql::query(store, q).unwrap(), QueryResult::Ask(true))
+    }
+
     fn has_any_fact(store: &Store, subject: &str) -> bool {
-        let q = format!("ASK {{ <{subject}> ?p ?o }}");
-        matches!(sparql::query(store, &q).unwrap(), QueryResult::Ask(true))
+        ask(store, &format!("ASK {{ <{subject}> ?p ?o }}"))
     }
 
     #[test]
@@ -351,6 +390,113 @@ mod tests {
             .transact(&good, TS, None, None)
             .expect("a compliant write passes the gate");
         assert!(has_any_fact(&store, "http://ex/d2"));
+    }
+
+    #[test]
+    fn require_approval_blocks_fail_closed() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.governance_config_mut().enforce_on_write = true;
+        // A require-approval policy must not pass silently — the write is
+        // refused because this seam cannot grant the approval.
+        define_policy_with_effect(
+            &mut store,
+            "http://ex/PA",
+            DOC_TYPE,
+            REQUIRE_LABEL,
+            "require-approval",
+        );
+
+        let bad = vec![assert_datum(
+            &store,
+            "http://ex/d1",
+            RDF_TYPE,
+            type_ref(&store, DOC_TYPE),
+        )];
+        let err = store.transact(&bad, TS, None, None);
+        assert!(
+            matches!(err, Err(Error::PolicyDenied(_))),
+            "require-approval must fail closed, got {err:?}"
+        );
+        assert!(!has_any_fact(&store, "http://ex/d1"));
+    }
+
+    #[test]
+    fn advisory_effects_do_not_block() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.governance_config_mut().enforce_on_write = true;
+        // A `warn` policy is advisory — a non-compliant write still lands.
+        define_policy_with_effect(&mut store, "http://ex/PW", DOC_TYPE, REQUIRE_LABEL, "warn");
+
+        let bad = vec![assert_datum(
+            &store,
+            "http://ex/d1",
+            RDF_TYPE,
+            type_ref(&store, DOC_TYPE),
+        )];
+        store
+            .transact(&bad, TS, None, None)
+            .expect("an advisory `warn` policy never blocks");
+        assert!(has_any_fact(&store, "http://ex/d1"));
+    }
+
+    #[test]
+    fn retracting_a_required_fact_is_denied() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.governance_config_mut().enforce_on_write = true;
+        define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
+
+        // A compliant Doc with a label.
+        let good = vec![
+            assert_datum(&store, "http://ex/d1", RDF_TYPE, type_ref(&store, DOC_TYPE)),
+            assert_datum(&store, "http://ex/d1", RDFS_LABEL, Value::Str("hi".into())),
+        ];
+        store.transact(&good, TS, None, None).unwrap();
+
+        // Retracting the label leaves the Doc non-compliant → denied, and the
+        // label survives the rollback.
+        let strip = vec![retract_datum(
+            &store,
+            "http://ex/d1",
+            RDFS_LABEL,
+            Value::Str("hi".into()),
+        )];
+        let err = store.transact(&strip, TS, None, None);
+        assert!(
+            matches!(err, Err(Error::PolicyDenied(_))),
+            "a retraction that violates a policy must be denied, got {err:?}"
+        );
+        assert!(
+            ask(
+                &store,
+                "ASK { <http://ex/d1> <http://www.w3.org/2000/01/rdf-schema#label> ?l }"
+            ),
+            "the required fact must survive the rolled-back retraction"
+        );
+    }
+
+    #[test]
+    fn unrelated_edit_of_a_compliant_entity_passes() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.governance_config_mut().enforce_on_write = true;
+        define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
+
+        let good = vec![
+            assert_datum(&store, "http://ex/d1", RDF_TYPE, type_ref(&store, DOC_TYPE)),
+            assert_datum(&store, "http://ex/d1", RDFS_LABEL, Value::Str("hi".into())),
+        ];
+        store.transact(&good, TS, None, None).unwrap();
+
+        // Editing an unrelated property leaves the label intact → still compliant.
+        let edit = vec![assert_datum(
+            &store,
+            "http://ex/d1",
+            "http://ex/color",
+            Value::Str("red".into()),
+        )];
+        store
+            .transact(&edit, TS, None, None)
+            .expect("an edit that keeps the entity compliant is not blocked");
+        assert!(ask(&store, "ASK { <http://ex/d1> <http://ex/color> ?c }"));
     }
 
     #[test]

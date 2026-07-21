@@ -87,11 +87,14 @@ once the SPARQL parser is exposed for reuse.
 The `claim` states the **compliant condition** (claim satisfied = good), matching
 `quipu_policy_check`'s `satisfied` outcome. At the write gate:
 
-- `deny` → if the claim is **unsatisfied** for a touched target, reject the write.
-- `allow`, `warn`, `record` → **non-blocking** (write proceeds).
-- `require-approval`, `escalate` → recognized but **not blocked** at the pure
-  write gate in v1; these belong to the workflow/transition layer. This is
-  documented, not silent — see backlog `Q-APPROVAL`.
+- `deny`, `require-approval`, `escalate` → **block** (fail closed) when the claim
+  is **unsatisfied** for a touched target. `require-approval`/`escalate` block
+  because a write needing a human decision cannot proceed through a seam that has
+  no channel to grant one; refusing is the honest behaviour, versus letting a
+  `require-approval` policy pass silently. Recording the pending decision and
+  routing it to the workflow layer is the remaining half of `Q-APPROVAL`.
+- `allow`, `warn`, `record` → **advisory, non-blocking** (write proceeds, no ASK
+  is even run).
 
 ### Config & safety
 
@@ -132,13 +135,19 @@ Status: ☐ open · ☑ done (this change).
 - **Q-CONFIG** ☑ `[quipu.governance] enforce_on_write` wired from server
   startup; `PolicyDenied` error → HTTP 403. *AC:* default false; toggling it on
   enforces without code change.
-- **Q-APPROVAL** ☐ Wire `require-approval` / `escalate` effects to the
-  workflow/transition layer (human approval flow). *AC:* a violated
-  `require-approval` policy blocks the write and records a pending-approval
-  decision, rather than passing through.
-- **Q-CLAIM-AST** ☐ Cache a compiled claim AST in the registry (needs the SPARQL
-  parser exposed for reuse). *AC:* claim parsing happens once per policy load,
-  not per edit; measured ASK latency drops on hot policies.
+- **Q-APPROVAL** ◐ Partial. `require-approval`/`escalate` now **block** at the
+  write gate (fail closed) instead of passing silently. Remaining: record a
+  pending-approval `Decision` and route it to the workflow layer so an approver
+  can release the write. *AC:* a violated `require-approval` policy blocks the
+  write AND records a pending-approval decision.
+- **Q-CLAIM-AST** ☐ Cache a compiled claim AST in the registry. Deferred: the
+  claim's `$target` is a SPARQL variable currently string-substituted pre-parse,
+  and `sparql::eval_pattern` takes no seed bindings — reuse needs a
+  seed-binding variant that pre-binds `?target` in the BGP evaluator, a core
+  SPARQL-internals refactor. The dominant per-edit costs (metadata `SELECT`,
+  ungoverned-type ASKs) are already eliminated, so this is a marginal win on the
+  governed path only. *AC:* claim parsing happens once per policy load, not per
+  edit.
 - **Q-TRANSITION** ☐ `boundary:"transition"` enforcement at step transitions
   (the second half of the boundary enum). *AC:* a transition policy gates its
   workflow step the way `action` gates a write.
