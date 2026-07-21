@@ -117,7 +117,29 @@ curl -s localhost:3030/retract -X POST \
   -d '{"entity": "http://example.org/old-service"}'
 ```
 
-Optional: `predicate` (only retract matching), `timestamp`, `actor`.
+Optional: `predicate` (only retract matching), `timestamp`, `actor`, and `value`
+(retract only the one matching triple).
+
+**The `value` shape matters.** An object that is an IRI reference — the target of
+an edge such as `reports_to` or `rdf:type` — must be given as a tagged object, not
+a bare string:
+
+```bash
+# retract exactly  <svc> reports_to <boss>
+curl -s localhost:3030/retract -X POST -H "Content-Type: application/json" \
+  -d '{"entity": "http://example.org/svc",
+       "predicate": "http://example.org/reports_to",
+       "value": {"iri": "http://example.org/boss"}}'
+```
+
+A **bare string** (`"value": "http://example.org/boss"`) is matched as a string
+*literal*, which can never equal a stored IRI reference. Rather than silently
+report `{"retracted": 0}` — indistinguishable from "the triple was already gone" —
+the endpoint now **returns a 400 error** naming the `{"iri": ...}` form whenever a
+bare string cannot match: either the predicate's stored objects are IRIs, or the
+string itself parses as an IRI (has a `scheme://`). A correctly shaped `{"iri":
+...}` (or a genuine string literal) for a triple that does not exist is still a
+quiet, idempotent `{"retracted": 0}`.
 
 ### `POST /episode/retract`
 

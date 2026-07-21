@@ -322,18 +322,28 @@ impl Store {
         if facts.is_empty() {
             // A value was given but matched nothing. Distinguish an idempotent
             // no-op (the triple is genuinely absent) from the SILENT FOOTGUN
-            // that froze re-parenting: a bare-string object for an
-            // IRI-valued predicate. The write API turns a bare `"kprobe-b"`
-            // into `Value::Str`, which can NEVER equal the stored
-            // `Value::Ref(kprobe-b)`, so the edge survives and the call reports
-            // success with `retracted: 0` — a refusal shaped exactly like a
-            // success, which is why nobody could re-parent an agent and nobody
-            // was told. Only the unambiguous case errors: a `Str` value where
-            // the predicate holds ONLY `Ref` objects. A `Str` could never have
-            // been a valid object there, so this is always a caller mistake,
-            // never a legitimate re-retraction — idempotency for correctly
-            // shaped values (and for genuinely absent facts) is preserved by
-            // falling through to `Ok((0, 0))`.
+            // that froze re-parenting: a bare-string object for an IRI-valued
+            // predicate. The write API turns a bare `"kprobe-b"` into
+            // `Value::Str`, which can NEVER equal the stored `Value::Ref(kprobe-b)`,
+            // so the edge survives and the call reports success with
+            // `retracted: 0` — a refusal shaped exactly like a success. `0` here
+            // means BOTH "nothing was there" and "you addressed it wrongly", which
+            // are opposite facts (one a clean no-op, one your bug) the caller
+            // cannot tell apart.
+            //
+            // Error on the two cases that are unambiguously the shape mistake, and
+            // ONLY those, so genuine idempotent retraction (a correctly-shaped
+            // value that is simply absent) still falls through to `Ok((0, 0))`:
+            //   1. the predicate on this entity holds ONLY `Ref` objects — a `Str`
+            //      could never have matched, so it is always a caller mistake;
+            //   2. the predicate has NO current fact on this entity to compare
+            //      against, but the bare string itself PARSES as an IRI (has a
+            //      `scheme://`) — almost certainly a mis-shaped edge retract, e.g.
+            //      `rdf:type` whose value was already retracted once. A value that
+            //      is a plain literal (no scheme) stays a quiet no-op.
+            // A predicate that stores string literals (holds a `Str`) is left
+            // alone: a bare string is the RIGHT shape there, so absence is a real
+            // idempotent no-op, not a mistake.
             if let (Some(Value::Str(s)), Some(p)) = (value, predicate) {
                 let on_pred: Vec<Value> = self
                     .entity_facts(entity)?
@@ -343,13 +353,19 @@ impl Store {
                     .collect();
                 let holds_ref = on_pred.iter().any(|v| matches!(v, Value::Ref(_)));
                 let holds_str = on_pred.iter().any(|v| matches!(v, Value::Str(_)));
-                if holds_ref && !holds_str {
+                // A bare token with a `scheme://` and no whitespace is an IRI a
+                // caller forgot to wrap, not a literal.
+                let looks_like_iri = s.contains("://") && !s.chars().any(char::is_whitespace);
+                let ref_only = holds_ref && !holds_str;
+                let absent_but_iri_shaped = on_pred.is_empty() && looks_like_iri;
+                if ref_only || absent_but_iri_shaped {
                     let pred_iri = self.resolve(p)?;
                     return Err(Error::InvalidValue(format!(
                         "retract matched nothing: object \"{s}\" is a string literal, but \
-                         <{pred_iri}> on this entity holds IRI reference(s). Pass the object \
-                         as {{\"iri\": \"{s}\"}} to retract the edge — a bare string can never \
-                         equal a stored reference, so it silently retracts nothing."
+                         <{pred_iri}> takes an IRI reference. Pass the object as \
+                         {{\"iri\": \"{s}\"}} to retract the edge — a bare string is matched \
+                         as a literal and can never equal a stored reference, so it silently \
+                         retracts nothing."
                     )));
                 }
             }

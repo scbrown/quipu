@@ -1374,6 +1374,51 @@ fn retract_str_for_an_iri_edge_is_loud_not_silent() {
     assert_eq!(count, 0, "nothing to retract -> a quiet no-op, not a refusal");
 }
 
+/// The residual `{"retracted":0}` ambiguity: a bare IRI-shaped string on a
+/// predicate that has NO current fact to compare against still used to no-op
+/// silently — the case that nearly got a freshly-deployed fix reported as broken
+/// (an operator retracting `rdf:type` with a bare string). The two outcomes MUST
+/// diverge, and this test would FAIL against pre-fix behaviour, where BOTH arms
+/// returned `Ok((_, 0))` (per the standing negative-test rule).
+#[test]
+fn retract_bare_iri_string_errors_even_with_no_matching_fact() {
+    let mut store = test_store();
+    let node = store.intern("http://example.org/some-node").unwrap();
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+
+    // The entity has NO rdf:type fact at all (already retracted, or never set).
+    assert!(
+        store.entity_facts(node).unwrap().is_empty(),
+        "precondition: nothing to compare the retract value against"
+    );
+
+    // ARM A: a bare string that PARSES as an IRI -> ERROR, not a silent 0. There
+    // is no stored Ref to infer from, so the string's own `scheme://` is the
+    // signal it is a mis-shaped edge retract.
+    let bare = Value::Str("http://example.org/Person".into());
+    let err = store
+        .retract_triples(node, Some(rdf_type), Some(&bare), "2026-01-02", None, false)
+        .expect_err("a bare IRI-shaped string must be refused even with no matching fact");
+    assert!(err.to_string().contains("iri"), "error must teach the {{\"iri\": ...}} form: {err}");
+
+    // ARM B: THE DIVERGENCE. A correctly shaped `{iri}` object for a triple that
+    // genuinely does not exist stays an idempotent `retracted: 0` — a fix that
+    // turned this into an error too would just move the ambiguity.
+    let iri = Value::Ref(store.intern("http://example.org/Person").unwrap());
+    let (_tx, count) = store
+        .retract_triples(node, Some(rdf_type), Some(&iri), "2026-01-03", None, false)
+        .expect("a correctly shaped, genuinely-absent object must stay a quiet no-op");
+    assert_eq!(count, 0, "absent + correctly shaped -> 0, NOT an error");
+
+    // ARM C: a plain string literal (no scheme) on an entity with no such fact is
+    // a real idempotent no-op, not a mistake — the guard must not cry wolf.
+    let plain = Value::Str("just a label".into());
+    let (_tx, count) = store
+        .retract_triples(node, Some(rdf_type), Some(&plain), "2026-01-04", None, false)
+        .expect("a plain literal with no matching fact is a legitimate no-op");
+    assert_eq!(count, 0, "no scheme -> treated as a literal -> quiet no-op");
+}
+
 /// Retracting an entity's LAST rdf:type while it keeps other facts is refused
 /// unless explicitly overridden (aegis-a0ne).
 ///
