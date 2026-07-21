@@ -320,6 +320,39 @@ impl Store {
             .collect();
 
         if facts.is_empty() {
+            // A value was given but matched nothing. Distinguish an idempotent
+            // no-op (the triple is genuinely absent) from the SILENT FOOTGUN
+            // that froze re-parenting: a bare-string object for an
+            // IRI-valued predicate. The write API turns a bare `"kprobe-b"`
+            // into `Value::Str`, which can NEVER equal the stored
+            // `Value::Ref(kprobe-b)`, so the edge survives and the call reports
+            // success with `retracted: 0` — a refusal shaped exactly like a
+            // success, which is why nobody could re-parent an agent and nobody
+            // was told. Only the unambiguous case errors: a `Str` value where
+            // the predicate holds ONLY `Ref` objects. A `Str` could never have
+            // been a valid object there, so this is always a caller mistake,
+            // never a legitimate re-retraction — idempotency for correctly
+            // shaped values (and for genuinely absent facts) is preserved by
+            // falling through to `Ok((0, 0))`.
+            if let (Some(Value::Str(s)), Some(p)) = (value, predicate) {
+                let on_pred: Vec<Value> = self
+                    .entity_facts(entity)?
+                    .into_iter()
+                    .filter(|f| f.attribute == p)
+                    .map(|f| f.value)
+                    .collect();
+                let holds_ref = on_pred.iter().any(|v| matches!(v, Value::Ref(_)));
+                let holds_str = on_pred.iter().any(|v| matches!(v, Value::Str(_)));
+                if holds_ref && !holds_str {
+                    let pred_iri = self.resolve(p)?;
+                    return Err(Error::InvalidValue(format!(
+                        "retract matched nothing: object \"{s}\" is a string literal, but \
+                         <{pred_iri}> on this entity holds IRI reference(s). Pass the object \
+                         as {{\"iri\": \"{s}\"}} to retract the edge — a bare string can never \
+                         equal a stored reference, so it silently retracts nothing."
+                    )));
+                }
+            }
             return Ok((0, 0));
         }
 

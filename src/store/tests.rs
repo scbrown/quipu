@@ -1305,6 +1305,75 @@ fn retract_one_type_leaves_the_others() {
     );
 }
 
+/// The frozen-source-of-truth bug: a bare-string object for an
+/// IRI-valued predicate retracts NOTHING and used to report success, so no
+/// agent could ever be re-parented and nobody was told. All four arms, because
+/// a guard that only ever refuses is as useless as one that never does:
+///   1. bare `Str` for a `Ref`-only predicate -> LOUD error (the footgun),
+///   2. correctly shaped `Ref` -> retracts the one edge (the fix works),
+///   3. assert the replacement -> re-parenting actually completes end to end,
+///   4. a correctly shaped but genuinely-absent `Ref` -> idempotent `(0, 0)`,
+///      NOT an error (the guard must not break legitimate re-retraction).
+#[test]
+fn retract_str_for_an_iri_edge_is_loud_not_silent() {
+    let mut store = test_store();
+    let agent = store.intern("http://example.org/kprobe-a").unwrap();
+    let reports_to = store.intern("http://example.org/reports_to").unwrap();
+    let boss = store.intern("http://example.org/kprobe-b").unwrap();
+    let boss2 = store.intern("http://example.org/kprobe-c").unwrap();
+
+    let edge = |entity, attribute, value| Datum {
+        entity,
+        attribute,
+        value,
+        valid_from: "2026-01-01".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store
+        .transact(
+            &[edge(agent, reports_to, Value::Ref(boss))],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    // ARM 1: the footgun — a bare string that json_to_value would build as
+    // Value::Str. It can never equal the stored Value::Ref, so it matches
+    // nothing; the API must now SAY so instead of returning retracted:0.
+    let bare = Value::Str("http://example.org/kprobe-b".into());
+    let err = store
+        .retract_triples(agent, Some(reports_to), Some(&bare), "2026-01-02", None, false)
+        .expect_err("a bare string for an IRI edge must be refused, not silently no-op");
+    let msg = err.to_string();
+    assert!(msg.contains("string literal"), "error must name the shape mismatch: {msg}");
+    assert!(msg.contains("iri"), "error must teach the {{\"iri\": ...}} shape: {msg}");
+    // ...and it wrote nothing.
+    assert_eq!(store.entity_facts(agent).unwrap().len(), 1, "the edge must survive a refused retract");
+
+    // ARM 2: the correctly shaped object retracts exactly the one edge.
+    let (_tx, count) = store
+        .retract_triples(agent, Some(reports_to), Some(&Value::Ref(boss)), "2026-01-03", None, false)
+        .expect("a Ref-shaped object must retract the edge");
+    assert_eq!(count, 1, "exactly the one reports_to edge");
+    assert!(store.entity_facts(agent).unwrap().is_empty(), "the old supervisor edge is gone");
+
+    // ARM 3: re-parenting COMPLETES — assert the new supervisor.
+    store
+        .transact(&[edge(agent, reports_to, Value::Ref(boss2))], "2026-01-03T00:01:00Z", None, None)
+        .unwrap();
+    let now: Vec<Value> = store.entity_facts(agent).unwrap().into_iter().map(|f| f.value).collect();
+    assert_eq!(now, vec![Value::Ref(boss2)], "the agent now reports to the new supervisor, and only that");
+
+    // ARM 4: a correctly shaped but absent object is an idempotent no-op, NOT an
+    // error. The guard fires only on the unambiguous Str-for-Ref mistake.
+    let (_tx, count) = store
+        .retract_triples(agent, Some(reports_to), Some(&Value::Ref(boss)), "2026-01-04", None, false)
+        .expect("re-retracting an absent, correctly-shaped edge must stay idempotent");
+    assert_eq!(count, 0, "nothing to retract -> a quiet no-op, not a refusal");
+}
+
 /// Retracting an entity's LAST rdf:type while it keeps other facts is refused
 /// unless explicitly overridden (aegis-a0ne).
 ///

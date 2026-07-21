@@ -741,6 +741,58 @@ fn test_tool_retract_predicate() {
     assert_eq!(store.current_facts().unwrap().len(), 2);
 }
 
+/// Through the JSON boundary, where `json_to_value` is what turns a bare string
+/// into `Value::Str`: a bare-string object for an IRI edge must be
+/// REFUSED loudly, not reported as `{"retracted": 0}`. Then the `{"iri": ...}`
+/// shape the error teaches must actually retract the edge — so re-parenting,
+/// which is retract-old-edge then assert-new, is unblocked end to end.
+#[test]
+fn test_tool_retract_bare_string_for_an_iri_edge_is_refused() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-crew",
+            "timestamp": "2026-04-01T00:00:00Z",
+            "nodes": [
+                {"name": "kprobe-a", "type": "CrewMember"},
+                {"name": "kprobe-b", "type": "CrewMember"}
+            ],
+            "edges": [{"source": "kprobe-a", "target": "kprobe-b", "relation": "reports_to"}]
+        }),
+    )
+    .unwrap();
+    assert!(ask(&store, &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")));
+
+    // The footgun: value as a BARE STRING. json_to_value -> Value::Str, which can
+    // never equal the stored Value::Ref, so nothing matches. Must error, not 0.
+    let footgun = tool_retract(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}reports_to"),
+            "value": format!("{NS}kprobe-b")
+        }),
+    );
+    let err = footgun.expect_err("a bare-string object for an IRI edge must be refused");
+    assert!(err.to_string().contains("string literal"), "error must name the mismatch: {err}");
+    // The edge SURVIVED the refusal (no silent partial write).
+    assert!(ask(&store, &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")));
+
+    // The shape the error teaches works: {"iri": ...} retracts the one edge.
+    let ok = tool_retract(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}reports_to"),
+            "value": {"iri": format!("{NS}kprobe-b")}
+        }),
+    )
+    .unwrap();
+    assert_eq!(ok["retracted"], 1, "the correctly shaped object retracts the edge");
+    assert!(!ask(&store, &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")));
+}
+
 /// `get` returns the stored turtle byte-for-byte, and an unrecognized action is
 /// an ERROR rather than a silent fallback to `list`.
 ///
