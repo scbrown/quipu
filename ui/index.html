@@ -777,6 +777,113 @@ pre.json-result {
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; } }
 
+/* ── Graph overlay (loading / empty) ── */
+/* min-width:0 lets the flex child shrink so the detail panel stays on-screen
+   when it opens (otherwise the canvas' intrinsic width pushes it off). */
+#explorer .graph-area { position: relative; min-width: 0; }
+.graph-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ── Graph legend ── */
+.graph-legend {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(22, 33, 62, 0.9);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: 0.65rem;
+  max-width: 200px;
+  max-height: 70%;
+  overflow-y: auto;
+  z-index: 6;
+}
+.graph-legend > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  list-style: none;
+  user-select: none;
+}
+.graph-legend > summary::-webkit-details-marker { display: none; }
+.graph-legend[open] > summary { margin-bottom: 4px; border-bottom: 1px solid var(--border); padding-bottom: 3px; }
+.graph-legend .legend-row { display: flex; align-items: center; gap: 5px; padding: 1px 0; color: var(--text-muted); }
+.graph-legend .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Type badge dot + count ── */
+.badge-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+/* ── Detail panel sections ── */
+.detail-sub { margin-bottom: 0.75rem; display: flex; flex-wrap: wrap; gap: 4px; }
+.mini-type {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+}
+.detail-section { margin-bottom: 0.9rem; }
+.detail-section h4 {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+}
+.detail-section h4 .count {
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  padding: 0 6px;
+  font-size: 0.65rem;
+  margin-left: 2px;
+}
+.detail-section h4 .hint { text-transform: none; letter-spacing: 0; color: var(--text-muted); font-weight: 400; font-size: 0.65rem; float: right; }
+.rel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.rel-row:hover { background: var(--bg-elevated); }
+.rel-pred { color: var(--accent); font-family: var(--mono); font-size: 0.7rem; }
+.rel-arrow { color: var(--text-muted); }
+.rel-target { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.provenance .prov-list { display: flex; flex-direction: column; gap: 2px; }
+.prov-ep {
+  font-size: 0.7rem;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  padding: 2px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Timeline extra ── */
+.timeline-subtitle { font-size: 0.75rem; color: var(--text-muted); }
+.timeline-entry .entry-meta { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.timeline-entry .entry-count {
+  font-size: 0.68rem;
+  background: var(--bg-elevated);
+  color: var(--success);
+  border-radius: 8px;
+  padding: 1px 6px;
+}
+.timeline-entry .entry-summary { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem; }
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -860,6 +967,10 @@ LIMIT 25</textarea>
       <div id="results-container">
         <div class="query-examples" id="query-examples">
           <h4>Example Queries</h4>
+          <div class="example-query" data-query="SELECT ?from ?rel ?to WHERE { ?from ?rel ?to . ?to a ?t . FILTER(?rel != &lt;http://www.w3.org/1999/02/22-rdf-syntax-ns#type&gt; &amp;&amp; !STRSTARTS(STR(?rel), &quot;http://www.w3.org/ns/prov#&quot;)) } LIMIT 50">
+            <span class="label">Entity relations</span>
+            Named relations between entities (runs_on, routes_to, …)
+          </div>
           <div class="example-query" data-query="SELECT ?s ?type WHERE { ?s a ?type } LIMIT 50">
             <span class="label">All entity types</span>
             SELECT ?s ?type WHERE { ?s a ?type } LIMIT 50
@@ -888,14 +999,15 @@ LIMIT 25</textarea>
   <!-- ── Episode Timeline ── -->
   <section id="timeline" class="view">
     <div class="timeline-toolbar">
-      <button class="btn" id="load-episodes">Load Episodes</button>
+      <button class="btn" id="load-episodes">Reload</button>
+      <span class="timeline-subtitle">Episodes are provenance — each is an ingestion that produced facts. Click one to see the entities it created.</span>
       <span style="flex:1"></span>
       <span class="result-meta" id="timeline-meta"></span>
     </div>
     <div class="timeline-entries" id="timeline-entries">
       <div class="empty-state">
-        <div class="icon">&#x1F4DC;</div>
-        <p>Click "Load Episodes" to view ingested episodes and their extracted knowledge.</p>
+        <span class="spinner"></span>
+        <p>Loading episodes…</p>
       </div>
     </div>
   </section>
@@ -923,19 +1035,46 @@ LIMIT 25</textarea>
 <script>
 'use strict';
 
-const API = window.location.origin;
+// API base: defaults to this page's origin, but can be pointed at a remote
+// Quipu server with ?api=http://host:port (handy for a statically-served UI).
+const API = new URLSearchParams(location.search).get('api') || window.location.origin;
+
+// ── Namespace constants ──
+const RDF_NS = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+const RDFS_NS = 'http://www.w3.org/2000/01/rdf-schema#';
+const PROV_NS = 'http://www.w3.org/ns/prov#';
+const RDF_TYPE = RDF_NS + 'type';
+const RDFS_LABEL = RDFS_NS + 'label';
+const PROV_ACTIVITY = PROV_NS + 'Activity';
+const PROV_GENBY = PROV_NS + 'wasGeneratedBy';
+
+// A predicate is a domain *relation* (a graph edge) when it is neither the
+// rdf:type marker, nor rdfs:* metadata (labels/comments), nor prov:* provenance
+// (wasGeneratedBy et al.). Those are what buried the real graph under episodes.
+function isRelationPred(pred) {
+  return pred !== RDF_TYPE
+    && !pred.startsWith(RDFS_NS)
+    && !pred.startsWith(RDF_NS)
+    && !pred.startsWith(PROV_NS);
+}
 
 // ── State ──
 const state = {
-  entities: [],
-  types: new Set(),
+  entities: [],          // all entities (incl. episodes)
+  byIri: new Map(),      // iri -> entity
+  domainEntities: [],    // non-episode, named entities (the graph)
+  incoming: new Map(),   // iri -> [{source, predicate}] reverse relations
+  typeCounts: new Map(), // domain type IRI -> count
+  types: new Set(),      // domain type IRIs
   activeType: null,
   selectedEntity: null,
+  loaded: false,
   cy: null,
   editor: null,
   resultFormat: 'table',
   lastResult: null,
   shapesTab: 'distribution',
+  timelineLoaded: false,
 };
 
 // ── API helpers ──
@@ -980,15 +1119,48 @@ function shortIri(iri) {
   return idx >= 0 ? iri.slice(idx + 1) : iri;
 }
 
+// Stable, high-contrast palette. Each entity family gets its own hue so the
+// graph is readable at a glance; unknown types fall back to a hashed hue rather
+// than all collapsing to one gray.
+const TYPE_PALETTE = [
+  '#4cc9f0', '#4ecca3', '#f7a072', '#c77dff', '#ffd166',
+  '#ef476f', '#06d6a0', '#118ab2', '#f78c6b', '#8338ec',
+  '#3a86ff', '#fb5607', '#ff006e', '#8ac926', '#00bbf9',
+];
+function hashHue(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return TYPE_PALETTE[h % TYPE_PALETTE.length];
+}
+// Curated colors for the common ontology families (keeps related types coherent).
+const TYPE_COLORS = {
+  lxccontainer: '#4cc9f0', dockercontainer: '#4cc9f0', proxmoxnode: '#118ab2',
+  baremetalhost: '#118ab2', physicalhost: '#118ab2',
+  webapplication: '#4ecca3', systemdservice: '#06d6a0', databaseservice: '#8ac926',
+  reverseproxyroute: '#ffd166', traefikroute: '#ffd166', nginxvhost: '#ffd166',
+  invalidroute: '#ef476f', metricsendpoint: '#00bbf9',
+  crewmember: '#f7a072', rig: '#f78c6b',
+  bead: '#c77dff', directive: '#8338ec', decisionrecord: '#8338ec', designdoc: '#8338ec',
+  gitrepository: '#3a86ff', configfile: '#ffca3a', cli: '#a0a0d0',
+};
 function typeColor(typeIri) {
+  if (!typeIri) return 'var(--node-default)';
+  if (typeIri === PROV_ACTIVITY) return '#5a5a7a';
   const s = shortIri(typeIri).toLowerCase();
-  if (s.includes('host') || s.includes('node') || s.includes('container') || s.includes('server') || s.includes('baremetal'))
-    return 'var(--node-host)';
-  if (s.includes('service') || s.includes('app') || s.includes('web'))
-    return 'var(--node-service)';
-  if (s.includes('person') || s.includes('crew') || s.includes('member'))
-    return 'var(--node-person)';
-  return 'var(--node-default)';
+  if (TYPE_COLORS[s]) return TYPE_COLORS[s];
+  // fuzzy fallbacks
+  if (s.includes('host') || s.includes('node') || s.includes('container')) return '#4cc9f0';
+  if (s.includes('service') || s.includes('app') || s.includes('web')) return '#4ecca3';
+  if (s.includes('route') || s.includes('proxy')) return '#ffd166';
+  if (s.includes('person') || s.includes('crew') || s.includes('member')) return '#f7a072';
+  return hashHue(s);
+}
+
+// Best display name for an entity: its rdfs:label if it is a real literal,
+// otherwise the short (prefixed) IRI.
+function entityLabel(ent) {
+  const lbl = (ent._labels || []).find(v => typeof v === 'string' && !v.startsWith('http'));
+  return lbl || shortIri(ent.iri);
 }
 
 // ── Router ──
@@ -1002,7 +1174,8 @@ function navigate() {
   if (view) view.classList.add('active');
   if (link) link.classList.add('active');
 
-  if (hash === 'explorer' && !state.entities.length) loadEntities();
+  if (hash === 'explorer' && !state.loaded) loadEntities();
+  if (hash === 'timeline' && !state.timelineLoaded) loadEpisodes();
   if (hash === 'shapes') loadShapes();
   // CodeMirror renders blank when initialized in a hidden container; (re)init
   // and refresh once the workbench tab is actually visible (GH#9).
@@ -1029,44 +1202,122 @@ async function checkHealth() {
 }
 
 // ── Explorer ──
-async function loadEntities() {
-  try {
-    const data = await api('/cord', { limit: 500 });
-    state.entities = data.entities || [];
-    state.types.clear();
 
-    for (const ent of state.entities) {
-      const typeFact = (ent.facts || []).find(f =>
-        f.predicate === 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
-      );
-      ent._type = typeFact ? typeFact.value : null;
-      ent._label = shortIri(ent.iri);
-      if (ent._type) state.types.add(ent._type);
-    }
+// De-duplicate facts by (predicate, value). Entity resolution being off means
+// the same triple is re-asserted by every episode that mentions it, so raw
+// facts contain heavy duplication that would otherwise become duplicate rows
+// and duplicate edges (aegis: entity-resolution note).
+function dedupeFacts(facts) {
+  const seen = new Set();
+  const out = [];
+  for (const f of (facts || [])) {
+    const key = f.predicate + ' ' + JSON.stringify(f.value);
+    if (!seen.has(key)) { seen.add(key); out.push(f); }
+  }
+  return out;
+}
+
+function isEpisodeEntity(iri, types) {
+  return types.includes(PROV_ACTIVITY) || /(?:[/#])episode[_-]|graphiti-fact/.test(iri);
+}
+
+function processEntity(ent) {
+  const facts = dedupeFacts(ent.facts);
+  const types = facts.filter(f => f.predicate === RDF_TYPE).map(f => f.value);
+  const labels = facts.filter(f => f.predicate === RDFS_LABEL).map(f => f.value);
+  const isEp = isEpisodeEntity(ent.iri, types);
+  const domainType = types.find(t => t !== PROV_ACTIVITY) || (isEp ? PROV_ACTIVITY : null);
+  return Object.assign(ent, {
+    _facts: facts,
+    _types: types,
+    _labels: labels,
+    _isEpisode: isEp,
+    _type: domainType,
+    _label: labels.find(v => typeof v === 'string' && !v.startsWith('http')) || shortIri(ent.iri),
+  });
+}
+
+function setGraphOverlay(msg) {
+  let ov = document.getElementById('graph-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'graph-overlay';
+    ov.className = 'graph-overlay';
+    document.querySelector('#explorer .graph-area').appendChild(ov);
+  }
+  if (msg === null) { ov.style.display = 'none'; return; }
+  ov.style.display = 'flex';
+  ov.innerHTML = msg;
+}
+
+async function loadEntities() {
+  setGraphOverlay('<div class="empty-state"><span class="spinner"></span><p>Loading entities…</p></div>');
+  try {
+    // Pull the full set; episodes are filtered out client-side so the DEFAULT
+    // graph is named entities + relations, not provenance blobs.
+    const data = await api('/cord', { limit: 5000 });
+    state.entities = (data.entities || []).map(processEntity);
+    state.byIri = new Map(state.entities.map(e => [e.iri, e]));
+    state.domainEntities = state.entities.filter(e => !e._isEpisode);
+    buildIndexes();
+    computeTypeCounts();
+    state.loaded = true;
 
     renderTypeFilters();
     renderEntityList();
     renderGraph();
   } catch (e) {
+    setGraphOverlay(`<div class="empty-state"><div class="icon">&#x26A0;</div><p>Failed to load entities: ${escapeHtml(e.message)}</p></div>`);
     toast('Failed to load entities: ' + e.message, true);
+  }
+}
+
+// Reverse relation index (incoming edges) over domain entities only.
+function buildIndexes() {
+  state.incoming = new Map();
+  for (const e of state.domainEntities) {
+    for (const f of e._facts) {
+      if (!isRelationPred(f.predicate)) continue;
+      if (typeof f.value !== 'string' || !state.byIri.has(f.value)) continue;
+      if (state.byIri.get(f.value)._isEpisode) continue;
+      if (!state.incoming.has(f.value)) state.incoming.set(f.value, []);
+      state.incoming.get(f.value).push({ source: e.iri, predicate: f.predicate });
+    }
+  }
+}
+
+function computeTypeCounts() {
+  state.typeCounts = new Map();
+  state.types = new Set();
+  for (const e of state.domainEntities) {
+    const t = e._type;
+    if (!t) continue;
+    state.types.add(t);
+    state.typeCounts.set(t, (state.typeCounts.get(t) || 0) + 1);
   }
 }
 
 function renderTypeFilters() {
   const container = document.getElementById('type-filters');
   container.innerHTML = '';
+
   const allBtn = document.createElement('span');
   allBtn.className = 'type-badge' + (!state.activeType ? ' active' : '');
-  allBtn.textContent = 'All';
+  allBtn.textContent = `All (${state.domainEntities.length})`;
   allBtn.onclick = () => { state.activeType = null; renderTypeFilters(); renderEntityList(); renderGraph(); };
   container.appendChild(allBtn);
 
-  for (const t of state.types) {
+  // Sort types by descending count for a scannable, meaningful order.
+  const sorted = [...state.types].sort((a, b) => (state.typeCounts.get(b) || 0) - (state.typeCounts.get(a) || 0));
+  for (const t of sorted) {
     const badge = document.createElement('span');
     badge.className = 'type-badge' + (state.activeType === t ? ' active' : '');
-    badge.textContent = shortIri(t);
-    badge.style.borderColor = typeColor(t);
-    if (state.activeType === t) badge.style.background = typeColor(t) + '22';
+    const dot = document.createElement('span');
+    dot.className = 'badge-dot';
+    dot.style.background = typeColor(t);
+    badge.appendChild(dot);
+    badge.appendChild(document.createTextNode(`${shortIri(t)} (${state.typeCounts.get(t) || 0})`));
+    if (state.activeType === t) { badge.style.borderColor = typeColor(t); badge.style.background = typeColor(t) + '22'; }
     badge.onclick = () => {
       state.activeType = state.activeType === t ? null : t;
       renderTypeFilters();
@@ -1078,10 +1329,11 @@ function renderTypeFilters() {
 }
 
 function filteredEntities() {
-  let ents = state.entities;
+  let ents = state.domainEntities;
   if (state.activeType) ents = ents.filter(e => e._type === state.activeType);
   const q = document.getElementById('entity-search').value.toLowerCase();
-  if (q) ents = ents.filter(e => e._label.toLowerCase().includes(q) || e.iri.toLowerCase().includes(q));
+  if (q) ents = ents.filter(e =>
+    e._label.toLowerCase().includes(q) || e.iri.toLowerCase().includes(q));
   return ents;
 }
 
@@ -1116,6 +1368,8 @@ function selectEntity(ent) {
   showDetail(ent);
 
   if (state.cy) {
+    // The panel opening shrinks the graph area; let cytoscape re-measure.
+    state.cy.resize();
     state.cy.elements().removeClass('highlighted');
     const node = state.cy.getElementById(ent.iri);
     if (node.length) {
@@ -1130,73 +1384,119 @@ function selectEntity(ent) {
 function showDetail(ent) {
   const panel = document.getElementById('detail-panel');
   panel.classList.add('open');
-  document.getElementById('detail-title').textContent = shortIri(ent.iri);
-  document.getElementById('detail-title').title = ent.iri;
 
-  const tbody = document.getElementById('detail-facts');
-  tbody.innerHTML = '';
-  for (const fact of (ent.facts || [])) {
-    const tr = document.createElement('tr');
-    const tdP = document.createElement('td');
-    tdP.className = 'pred';
-    tdP.textContent = shortIri(fact.predicate);
-    tdP.title = fact.predicate;
-    const tdV = document.createElement('td');
-    tdV.textContent = shortIri(String(fact.value));
-    tdV.title = String(fact.value);
-    tr.appendChild(tdP);
-    tr.appendChild(tdV);
-    tbody.appendChild(tr);
+  const facts = ent._facts || dedupeFacts(ent.facts);
+  const isRef = v => typeof v === 'string' && state.byIri.has(v);
+
+  // Partition facts into: type, relations (IRI targets), attributes (literals),
+  // and provenance (prov:wasGeneratedBy → episodes).
+  const relations = [];   // {predicate, value}
+  const attrs = [];       // {predicate, value}
+  const provEps = [];     // episode iris
+  for (const f of facts) {
+    if (f.predicate === RDF_TYPE) continue;
+    if (f.predicate === PROV_GENBY) { provEps.push(f.value); continue; }
+    if (f.predicate.startsWith(PROV_NS)) { provEps.push(f.value); continue; }
+    if (isRelationPred(f.predicate) && isRef(f.value)) relations.push(f);
+    else attrs.push(f);
   }
+  const incoming = state.incoming.get(ent.iri) || [];
+
+  const colorFor = t => typeColor(t);
+  const typeBadges = (ent._types || [])
+    .map(t => `<span class="mini-type" style="border-color:${colorFor(t)};color:${colorFor(t)}">${escapeHtml(shortIri(t))}</span>`)
+    .join(' ');
+
+  const relRow = (pred, iri, dir) => {
+    const tgt = state.byIri.get(iri);
+    const name = tgt ? tgt._label : shortIri(iri);
+    const arrow = dir === 'out' ? '→' : '←';
+    return `<div class="rel-row" data-iri="${escapeHtml(iri)}" title="${escapeHtml(iri)}">
+      <span class="rel-pred">${escapeHtml(shortIri(pred))}</span>
+      <span class="rel-arrow">${arrow}</span>
+      <span class="rel-target">${escapeHtml(name)}</span></div>`;
+  };
+
+  let html = `<h3 title="${escapeHtml(ent.iri)}">${escapeHtml(ent._label)}</h3>`;
+  html += `<div class="detail-sub">${typeBadges || '<span class="mini-type">untyped</span>'}</div>`;
+
+  if (relations.length || incoming.length) {
+    html += `<div class="detail-section"><h4>Relations <span class="count">${relations.length + incoming.length}</span></h4>`;
+    html += relations.map(f => relRow(f.predicate, f.value, 'out')).join('');
+    html += incoming.map(r => relRow(r.predicate, r.source, 'in')).join('');
+    html += `</div>`;
+  }
+
+  if (attrs.length) {
+    html += `<div class="detail-section"><h4>Attributes <span class="count">${attrs.length}</span></h4><table class="fact-table"><tbody>`;
+    for (const f of attrs) {
+      html += `<tr><td class="pred" title="${escapeHtml(f.predicate)}">${escapeHtml(shortIri(f.predicate))}</td><td title="${escapeHtml(String(f.value))}">${escapeHtml(shortIri(String(f.value)))}</td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  if (provEps.length) {
+    const uniq = [...new Set(provEps)];
+    html += `<div class="detail-section provenance"><h4 class="collapsible">Provenance <span class="count">${uniq.length}</span> <span class="hint">how do we know this</span></h4>`;
+    html += `<div class="prov-list">` + uniq.map(iri =>
+      `<div class="prov-ep" title="${escapeHtml(String(iri))}">&#x1F4DC; ${escapeHtml(shortIri(String(iri)))}</div>`).join('') + `</div></div>`;
+  }
+
+  panel.innerHTML = html;
+
+  // Wire clicks: navigate to a related entity.
+  panel.querySelectorAll('.rel-row').forEach(row => {
+    row.onclick = () => {
+      const tgt = state.byIri.get(row.dataset.iri);
+      if (tgt) selectEntity(tgt);
+    };
+  });
+}
+
+function nodeData(iri) {
+  const e = state.byIri.get(iri);
+  return { data: { id: iri, label: e ? e._label : shortIri(iri), type: e && e._type || '', color: typeColor(e && e._type) } };
 }
 
 function renderGraph() {
-  const ents = filteredEntities();
-  const nodes = [];
+  // Seeds = the entities currently shown in the list (type filter + search).
+  const seeds = new Set(filteredEntities().map(e => e.iri));
+  const nodeIds = new Set(seeds);   // isolated seeds still appear
   const edges = [];
-  const nodeSet = new Set();
+  const edgeSeen = new Set();
 
-  for (const ent of ents) {
-    if (!nodeSet.has(ent.iri)) {
-      nodeSet.add(ent.iri);
-      nodes.push({
-        data: {
-          id: ent.iri,
-          label: ent._label,
-          type: ent._type || '',
-          color: typeColor(ent._type || ''),
-        }
-      });
-    }
-
-    for (const fact of (ent.facts || [])) {
-      if (typeof fact.value === 'string' && fact.value.startsWith('http') &&
-          fact.predicate !== 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type') {
-        // Add target node if it's in our entity set
-        const targetEnt = ents.find(e => e.iri === fact.value);
-        if (targetEnt && !nodeSet.has(fact.value)) {
-          nodeSet.add(fact.value);
-          nodes.push({
-            data: {
-              id: fact.value,
-              label: shortIri(fact.value),
-              type: targetEnt._type || '',
-              color: typeColor(targetEnt._type || ''),
-            }
-          });
-        }
-        if (nodeSet.has(fact.value)) {
-          edges.push({
-            data: {
-              source: ent.iri,
-              target: fact.value,
-              label: shortIri(fact.predicate),
-            }
-          });
-        }
-      }
+  // Edges are DOMAIN RELATIONS only (runs_on, routes_to, depends_on, …) — never
+  // rdf:type, rdfs:* or prov:* — so the graph shows the entity-relation model,
+  // not the provenance/episode scaffolding that used to bury it. An edge is
+  // included when either endpoint is a seed, pulling in 1-hop neighbours so the
+  // relations of a filtered type stay visible.
+  for (const e of state.domainEntities) {
+    for (const f of e._facts) {
+      if (!isRelationPred(f.predicate)) continue;
+      if (typeof f.value !== 'string' || !state.byIri.has(f.value)) continue;
+      if (state.byIri.get(f.value)._isEpisode) continue;
+      if (!(seeds.has(e.iri) || seeds.has(f.value))) continue;
+      const key = e.iri + '|' + f.predicate + '|' + f.value;
+      if (edgeSeen.has(key)) continue;
+      edgeSeen.add(key);
+      nodeIds.add(e.iri);
+      nodeIds.add(f.value);
+      edges.push({ data: { source: e.iri, target: f.value, label: shortIri(f.predicate) } });
     }
   }
+
+  const nodes = [...nodeIds].map(nodeData);
+
+  // Honest empty state — a blank canvas reads as "broken".
+  if (nodes.length === 0) {
+    if (state.cy) { state.cy.destroy(); state.cy = null; }
+    setGraphOverlay(`<div class="empty-state"><div class="icon">&#x1F50D;</div><p>${
+      state.domainEntities.length === 0
+        ? 'No entities in the graph yet.'
+        : 'No entities match this filter.'}</p></div>`);
+    return;
+  }
+  setGraphOverlay(null);
 
   if (state.cy) state.cy.destroy();
 
@@ -1271,13 +1571,44 @@ function renderGraph() {
 
   state.cy.on('tap', 'node', function(evt) {
     const nodeId = evt.target.id();
-    const ent = state.entities.find(e => e.iri === nodeId);
+    const ent = state.byIri.get(nodeId);
     if (ent) selectEntity(ent);
   });
+
+  renderLegend(nodes);
+}
+
+// Build a color legend from the entity types currently on the canvas.
+function renderLegend(nodes) {
+  const area = document.querySelector('#explorer .graph-area');
+  let legend = document.getElementById('graph-legend');
+  const typesShown = new Map();
+  for (const n of nodes) {
+    const t = n.data.type;
+    if (!t) continue;
+    if (!typesShown.has(t)) typesShown.set(t, n.data.color);
+  }
+  if (typesShown.size === 0) { if (legend) legend.remove(); return; }
+  if (!legend) {
+    legend = document.createElement('details');
+    legend.id = 'graph-legend';
+    legend.className = 'graph-legend';
+    area.appendChild(legend);
+  }
+  legend.innerHTML = `<summary>Legend (${typesShown.size} types)</summary>` + [...typesShown.entries()]
+    .map(([t, c]) => `<div class="legend-row"><span class="legend-dot" style="background:${c}"></span>${escapeHtml(shortIri(t))}</div>`)
+    .join('');
 }
 
 document.getElementById('entity-search').addEventListener('input', () => {
   renderEntityList();
+});
+
+// Enter centres the graph on the first match.
+document.getElementById('entity-search').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const first = filteredEntities()[0];
+  if (first) selectEntity(first);
 });
 
 // ── Workbench ──
@@ -1362,6 +1693,10 @@ function renderResults() {
 
   // Table view
   if (data.rows && data.variables) {
+    if (data.rows.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="icon">&#x2205;</div><p>Query ran successfully but returned no rows.</p></div>';
+      return;
+    }
     let html = '<table class="results-table"><thead><tr>';
     for (const v of data.variables) html += `<th>${escapeHtml(v)}</th>`;
     html += '</tr></thead><tbody>';
@@ -1419,6 +1754,7 @@ document.getElementById('btn-examples').addEventListener('click', () => {
 
 // ── Timeline ──
 async function loadEpisodes() {
+  state.timelineLoaded = true;
   const btn = document.getElementById('load-episodes');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>';
@@ -1495,7 +1831,7 @@ async function loadEpisodes() {
     toast('Failed to load episodes: ' + e.message, true);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Load Episodes';
+    btn.textContent = 'Reload';
   }
 }
 
@@ -1568,7 +1904,8 @@ async function renderShapesTab() {
         return;
       }
 
-      let html = '<div class="type-distribution">';
+      let html = '<p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem">Entity count by rdf:type across the whole store. <strong>prov:Activity</strong> counts ingestion episodes (provenance), not domain entities — those live in the Timeline tab.</p>';
+      html += '<div class="type-distribution">';
       for (const row of data.rows) {
         const typeName = shortIri(row.type || '');
         const count = row.count || 0;
@@ -1580,7 +1917,7 @@ async function renderShapesTab() {
       content.innerHTML = `<div class="empty-state"><p>Error: ${escapeHtml(e.message)}</p></div>`;
     }
   } else if (state.shapesTab === 'browser') {
-    content.innerHTML = '<div class="empty-state"><p>Shape browser shows SHACL constraint details. Load shapes via POST /shapes to see them here.</p></div>';
+    content.innerHTML = '<div class="empty-state"><div class="icon">&#x25A9;</div><p>The Shape Browser shows SHACL constraint details for loaded shapes. None are loaded in this session yet — load shapes via <code>POST /shapes</code>, then select one from the left.</p></div>';
   } else if (state.shapesTab === 'validation') {
     content.innerHTML = `
       <h4 style="margin-bottom:0.75rem;font-size:0.9rem">Run Validation</h4>
