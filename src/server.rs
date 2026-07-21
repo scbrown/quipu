@@ -343,26 +343,61 @@ async fn version() -> impl IntoResponse {
     }))
 }
 
-async fn stats(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
-
-    let mut entities = std::collections::HashSet::new();
-    let mut predicates = std::collections::HashSet::new();
-    for row in result.rows() {
-        if let Some(quipu::Value::Ref(id)) = row.get("s") {
-            entities.insert(*id);
-        }
-        if let Some(quipu::Value::Ref(id)) = row.get("p") {
-            predicates.insert(*id);
-        }
+/// Run store work on the blocking pool instead of an async worker (deploy: the
+/// public-503 starvation).
+///
+/// Every store call here is synchronous, CPU-bound SQLite/SPARQL work behind a
+/// `std::sync::Mutex`, and some of it runs for tens of seconds. Awaiting it
+/// directly on a runtime worker parks that worker for the whole request. The
+/// deployed unit sets `CPUQuota=100%`, so `available_parallelism()` reports 1-2
+/// and tokio starts just **two** workers — a couple of slow requests park the
+/// entire reactor, `/health` stops answering, and Traefik's health check (30s
+/// interval, 5s timeout) ejects the backend. The public endpoint then 503s
+/// "no available server" for everyone until the slow request finishes.
+///
+/// `spawn_blocking` moves the work to the blocking pool (512 threads by
+/// default, independent of worker count), so the reactor stays free to answer
+/// `/health` no matter how long a query runs. The store mutex still serializes
+/// store access — that is a separate, intended property — but it no longer
+/// serializes the HTTP server itself.
+async fn blocking<T, F>(f: F) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    match tokio::task::spawn_blocking(f).await {
+        Ok(result) => result,
+        // Only reachable if the handler panicked; the mutex is then poisoned and
+        // the process is not going to recover on its own either way.
+        Err(e) => Err(AppError(quipu::Error::InvalidValue(format!(
+            "request handler failed: {e}"
+        )))),
     }
+}
 
-    Ok(axum::Json(json!({
-        "facts": result.rows().len(),
-        "entities": entities.len(),
-        "predicates": predicates.len()
-    })))
+async fn stats(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let store = store.lock().unwrap();
+        let result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
+
+        let mut entities = std::collections::HashSet::new();
+        let mut predicates = std::collections::HashSet::new();
+        for row in result.rows() {
+            if let Some(quipu::Value::Ref(id)) = row.get("s") {
+                entities.insert(*id);
+            }
+            if let Some(quipu::Value::Ref(id)) = row.get("p") {
+                predicates.insert(*id);
+            }
+        }
+
+        Ok(axum::Json(json!({
+            "facts": result.rows().len(),
+            "entities": entities.len(),
+            "predicates": predicates.len()
+        })))
+    })
+    .await
 }
 
 async fn query(
@@ -370,8 +405,6 @@ async fn query(
     headers: HeaderMap,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::response::Response, AppError> {
-    let store = store.lock().unwrap();
-
     // Content negotiation (aegis-u7ag): an explicit standard Accept header opts
     // into the W3C SPARQL 1.1 results/RDF shape; absent / */* / application/json
     // keeps the default bespoke rows shape byte-for-byte, so existing callers are
@@ -379,31 +412,39 @@ async fn query(
     let accept = headers
         .get(axum::http::header::ACCEPT)
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    if let Some(fmt) = quipu::w3c::negotiate(accept) {
-        let (result, _truncated) = quipu::query_result(&store, &input)?;
-        if let Some((content_type, body)) = quipu::w3c::serialize(&store, &result, fmt)? {
-            return Ok((
-                [(axum::http::header::CONTENT_TYPE, content_type)],
-                body,
-            )
-                .into_response());
-        }
-        // Format did not fit the result variant (e.g. text/turtle for a SELECT);
-        // fall through to the default shape rather than erroring.
-    }
+        .unwrap_or("")
+        .to_string();
 
-    let result = quipu::tool_query(&store, &input)?;
-    Ok(axum::Json(result).into_response())
+    blocking(move || {
+        let store = store.lock().unwrap();
+
+        if let Some(fmt) = quipu::w3c::negotiate(&accept) {
+            let (result, _truncated) = quipu::query_result(&store, &input)?;
+            if let Some((content_type, body)) = quipu::w3c::serialize(&store, &result, fmt)? {
+                return Ok(
+                    ([(axum::http::header::CONTENT_TYPE, content_type)], body).into_response()
+                );
+            }
+            // Format did not fit the result variant (e.g. text/turtle for a SELECT);
+            // fall through to the default shape rather than erroring.
+        }
+
+        let result = quipu::tool_query(&store, &input)?;
+        Ok(axum::Json(result).into_response())
+    })
+    .await
 }
 
 async fn knot(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let mut store = store.lock().unwrap();
-    let result = quipu::tool_knot(&mut store, &input)?;
-    Ok(axum::Json(result))
+    blocking(move || {
+        let mut store = store.lock().unwrap();
+        let result = quipu::tool_knot(&mut store, &input)?;
+        Ok(axum::Json(result))
+    })
+    .await
 }
 
 // ⚠ ro_handler! / rw_handler! ARE A NAMING CONVENTION, NOT A TYPE GUARANTEE
@@ -432,7 +473,7 @@ macro_rules! ro_handler {
             State(s): State<SharedStore>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
-            Ok(axum::Json($tool(&s.lock().unwrap(), &i)?))
+            blocking(move || Ok(axum::Json($tool(&s.lock().unwrap(), &i)?))).await
         }
     };
 }
@@ -443,7 +484,7 @@ macro_rules! rw_handler {
             State(s): State<SharedStore>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
-            Ok(axum::Json($tool(&mut s.lock().unwrap(), &i)?))
+            blocking(move || Ok(axum::Json($tool(&mut s.lock().unwrap(), &i)?))).await
         }
     };
 }
@@ -478,9 +519,12 @@ async fn overlay_write(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let mut store = store.lock().unwrap();
-    let result = quipu::tool_overlay_write(&mut store, &input)?;
-    Ok(axum::Json(result))
+    blocking(move || {
+        let mut store = store.lock().unwrap();
+        let result = quipu::tool_overlay_write(&mut store, &input)?;
+        Ok(axum::Json(result))
+    })
+    .await
 }
 // `tool_project` is read-only by default but the `louvain` algorithm can write
 // `quipu:memberOfCommunity` facts when `persist:true`, so it needs a mutable store.
@@ -490,10 +534,13 @@ rw_handler!(project_graph, quipu::tool_project);
 // report with defaults so a browser/skill can fetch it with no payload.
 ro_handler!(report, quipu::tool_report);
 async fn report_get(State(s): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
-    Ok(axum::Json(quipu::tool_report(
-        &s.lock().unwrap(),
-        &serde_json::json!({}),
-    )?))
+    blocking(move || {
+        Ok(axum::Json(quipu::tool_report(
+            &s.lock().unwrap(),
+            &serde_json::json!({}),
+        )?))
+    })
+    .await
 }
 ro_handler!(context, quipu::tool_context);
 
@@ -516,7 +563,9 @@ async fn validate(
     State(_store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    Ok(axum::Json(quipu::tool_validate(&input)?))
+    // No store lock, but SHACL validation is CPU-bound and unbounded in the size
+    // of the payload, so it belongs off the reactor too.
+    blocking(move || Ok(axum::Json(quipu::tool_validate(&input)?))).await
 }
 
 fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Result<usize, String> {
@@ -570,52 +619,61 @@ fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Result<usize, S
 async fn embed_backfill(
     State(store): State<SharedStore>,
 ) -> std::result::Result<axum::Json<JsonValue>, AppError> {
-    let mut s = store.lock().unwrap();
-    match backfill_embeddings(&mut s) {
-        Ok(n) => Ok(axum::Json(json!({"status": "ok", "entities_embedded": n}))),
-        Err(e) => Ok(axum::Json(json!({"status": "error", "error": e}))),
-    }
+    blocking(move || {
+        let mut s = store.lock().unwrap();
+        match backfill_embeddings(&mut s) {
+            Ok(n) => Ok(axum::Json(json!({"status": "ok", "entities_embedded": n}))),
+            Err(e) => Ok(axum::Json(json!({"status": "error", "error": e}))),
+        }
+    })
+    .await
 }
 
 async fn entity_history(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let iri = input
-        .get("iri")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| quipu::Error::InvalidValue("missing 'iri' parameter".into()))?;
-    let store = store.lock().unwrap();
-    let eid = store
-        .lookup(iri)?
-        .ok_or_else(|| quipu::Error::InvalidValue(format!("entity not found: {iri}")))?;
-    let entries: Vec<JsonValue> = store
-        .entity_history(eid)?
-        .iter()
-        .map(|f| {
-            let pred = store.resolve(f.attribute).unwrap_or_default();
-            json!({ "op": if f.op == quipu::Op::Assert { "assert" } else { "retract" },
-                "predicate": pred, "value": quipu::value_to_json(&store, &f.value),
-                "valid_from": f.valid_from, "valid_to": f.valid_to, "tx": f.tx })
-        })
-        .collect();
-    Ok(axum::Json(
-        json!({ "iri": iri, "history": entries, "count": entries.len() }),
-    ))
+    blocking(move || {
+        let iri = input
+            .get("iri")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| quipu::Error::InvalidValue("missing 'iri' parameter".into()))?;
+        let store = store.lock().unwrap();
+        let eid = store
+            .lookup(iri)?
+            .ok_or_else(|| quipu::Error::InvalidValue(format!("entity not found: {iri}")))?;
+        let entries: Vec<JsonValue> = store
+            .entity_history(eid)?
+            .iter()
+            .map(|f| {
+                let pred = store.resolve(f.attribute).unwrap_or_default();
+                json!({ "op": if f.op == quipu::Op::Assert { "assert" } else { "retract" },
+                    "predicate": pred, "value": quipu::value_to_json(&store, &f.value),
+                    "valid_from": f.valid_from, "valid_to": f.valid_to, "tx": f.tx })
+            })
+            .collect();
+        Ok(axum::Json(
+            json!({ "iri": iri, "history": entries, "count": entries.len() }),
+        ))
+    })
+    .await
 }
 
 async fn transactions(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
-    let store = store.lock().unwrap();
-    let entries: Vec<JsonValue> = store
-        .list_transactions()?
-        .iter()
-        .map(|t| {
-            json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor, "source": t.source })
-        })
-        .collect();
-    Ok(axum::Json(
-        json!({ "transactions": entries, "count": entries.len() }),
-    ))
+    blocking(move || {
+        let store = store.lock().unwrap();
+        let entries: Vec<JsonValue> = store
+            .list_transactions()?
+            .iter()
+            .map(|t| {
+                json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor, "source": t.source })
+            })
+            .collect();
+        Ok(axum::Json(
+            json!({ "transactions": entries, "count": entries.len() }),
+        ))
+    })
+    .await
 }
 
 async fn entity_conneg(
@@ -627,32 +685,43 @@ async fn entity_conneg(
         .get("accept")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("text/html");
-    let decoded = semweb::decode_iri(&iri);
-    if accept.contains("application/ld+json") || accept.contains("application/json") {
-        let j = semweb::entity_json_ld(&store.lock().unwrap(), &decoded)?;
-        Ok(json_ld_response(j))
-    } else if accept.contains("text/turtle") || accept.contains("application/x-turtle") {
-        let t = semweb::entity_turtle(&store.lock().unwrap(), &decoded)?;
-        Ok(turtle_response(t))
-    } else {
-        Ok(Html(UI_HTML).into_response())
+    let json_ld = accept.contains("application/ld+json") || accept.contains("application/json");
+    let turtle = accept.contains("text/turtle") || accept.contains("application/x-turtle");
+    if !json_ld && !turtle {
+        return Ok(Html(UI_HTML).into_response());
     }
+    blocking(move || {
+        let decoded = semweb::decode_iri(&iri);
+        let store = store.lock().unwrap();
+        if json_ld {
+            Ok(json_ld_response(semweb::entity_json_ld(&store, &decoded)?))
+        } else {
+            Ok(turtle_response(semweb::entity_turtle(&store, &decoded)?))
+        }
+    })
+    .await
 }
 
 async fn entity_json(
     State(store): State<SharedStore>,
     Path(iri): Path<String>,
 ) -> Result<axum::response::Response, AppError> {
-    let j = semweb::entity_json_ld(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
-    Ok(json_ld_response(j))
+    blocking(move || {
+        let j = semweb::entity_json_ld(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+        Ok(json_ld_response(j))
+    })
+    .await
 }
 
 async fn entity_turtle_suffix(
     State(store): State<SharedStore>,
     Path(iri): Path<String>,
 ) -> Result<axum::response::Response, AppError> {
-    let t = semweb::entity_turtle(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
-    Ok(turtle_response(t))
+    blocking(move || {
+        let t = semweb::entity_turtle(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+        Ok(turtle_response(t))
+    })
+    .await
 }
 
 async fn entity_html(State(_s): State<SharedStore>, Path(_i): Path<String>) -> Html<&'static str> {
@@ -682,16 +751,19 @@ async fn spotlight_handler(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let text = input
-        .get("text")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| quipu::Error::InvalidValue("missing 'text' parameter".into()))?;
-    let confidence = input
-        .get("confidence")
-        .and_then(serde_json::Value::as_f64)
-        .unwrap_or(0.5);
-    let store = store.lock().unwrap();
-    Ok(axum::Json(semweb::spotlight(&store, text, confidence)?))
+    blocking(move || {
+        let text = input
+            .get("text")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| quipu::Error::InvalidValue("missing 'text' parameter".into()))?;
+        let confidence = input
+            .get("confidence")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(0.5);
+        let store = store.lock().unwrap();
+        Ok(axum::Json(semweb::spotlight(&store, text, confidence)?))
+    })
+    .await
 }
 
 #[derive(serde::Deserialize)]
@@ -715,15 +787,18 @@ async fn fragments_handler(
         page: p.page.unwrap_or(1).max(1),
         page_size: p.page_size.unwrap_or(100).min(1000),
     };
-    let result = semweb::fragments(&store.lock().unwrap(), &q)?;
-    Ok((
-        [
-            (axum::http::header::CONTENT_TYPE, "application/json"),
-            (axum::http::header::CACHE_CONTROL, "public, max-age=60"),
-        ],
-        axum::Json(result),
-    )
-        .into_response())
+    blocking(move || {
+        let result = semweb::fragments(&store.lock().unwrap(), &q)?;
+        Ok((
+            [
+                (axum::http::header::CONTENT_TYPE, "application/json"),
+                (axum::http::header::CACHE_CONTROL, "public, max-age=60"),
+            ],
+            axum::Json(result),
+        )
+            .into_response())
+    })
+    .await
 }
 
 async fn reconcile_handler(
@@ -733,24 +808,30 @@ async fn reconcile_handler(
     if input.get("queries").is_none() {
         return Ok(axum::Json(semweb::reconcile_manifest()));
     }
-    let queries = input
-        .get("queries")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| quipu::Error::InvalidValue("'queries' must be an object".into()))?;
-    let store = store.lock().unwrap();
-    Ok(axum::Json(semweb::reconcile(&store, queries)?))
+    blocking(move || {
+        let queries = input
+            .get("queries")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| quipu::Error::InvalidValue("'queries' must be an object".into()))?;
+        let store = store.lock().unwrap();
+        Ok(axum::Json(semweb::reconcile(&store, queries)?))
+    })
+    .await
 }
 
 async fn preview_handler(
     State(store): State<SharedStore>,
     Path(iri): Path<String>,
 ) -> Result<axum::response::Response, AppError> {
-    let html = semweb::preview_card(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
-    Ok((
-        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        html,
-    )
-        .into_response())
+    blocking(move || {
+        let html = semweb::preview_card(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+        Ok((
+            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            html,
+        )
+            .into_response())
+    })
+    .await
 }
 
 struct AppError(quipu::Error);

@@ -1538,6 +1538,76 @@ fn test_tool_search_honors_group_ids() {
 }
 
 #[test]
+fn test_tool_search_scope_is_not_truncated_by_limit() {
+    // The scope set is a provenance-scope ALLOW-LIST, so it must cover the whole
+    // group regardless of the caller's `limit`. It used to be built with
+    // `LIMIT oversample(limit)`, which capped it at a handful of arbitrary
+    // entities — on the live graph that made 357 of one group's 457 entities
+    // permanently unsearchable, and the smaller the caller's limit the more of
+    // the group vanished.
+    let mut store = Store::open_in_memory().unwrap();
+    let n = 30;
+    let nodes: Vec<_> = (0..n)
+        .map(|i| serde_json::json!({"name": format!("Svc{i:02}"), "type": "WebApplication"}))
+        .collect();
+    tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "ep-big", "group_id": "big-rig",
+            "nodes": nodes, "edges": [],
+            "timestamp": "2026-04-04T00:00:00Z"
+        }),
+    )
+    .unwrap();
+
+    // Each entity gets its own embedding, so querying with entity i's vector
+    // makes entity i the unambiguous nearest neighbour.
+    let ns = crate::namespace::DEFAULT_BASE_NS;
+    let embedding_of = |i: usize| -> Vec<f32> {
+        (0..n)
+            .map(|d| if d == i { 1.0 } else { 0.0 })
+            .collect::<Vec<f32>>()
+    };
+    for i in 0..n {
+        let id = store.intern(&format!("{ns}Svc{i:02}")).unwrap();
+        store
+            .embed_entity(
+                id,
+                &format!("Svc{i:02}"),
+                &embedding_of(i),
+                "2026-04-04T00:00:00Z",
+            )
+            .unwrap();
+    }
+
+    // Every in-group entity must be findable, even at limit=1 — the limit bounds
+    // the RESULTS, never the set of entities allowed to produce them.
+    for i in 0..n {
+        let result = tool_search(
+            &store,
+            &serde_json::json!({
+                "embedding": embedding_of(i), "limit": 1, "group_ids": ["big-rig"]
+            }),
+        )
+        .unwrap();
+        let results = result["results"].as_array().unwrap();
+        assert_eq!(
+            results.len(),
+            1,
+            "Svc{i:02} is in group big-rig but a scoped search could not reach it"
+        );
+        assert!(
+            results[0]["entity"]
+                .as_str()
+                .unwrap()
+                .ends_with(&format!("Svc{i:02}")),
+            "expected Svc{i:02}, got {}",
+            results[0]["entity"]
+        );
+    }
+}
+
+#[test]
 fn test_tool_search_honors_entity_type() {
     // hq-93d: scoping by entity_type restricts to that class.
     let (store, emb) = two_group_store();

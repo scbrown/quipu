@@ -200,12 +200,7 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect());
 
-    let scope = scoped_entity_iris(
-        store,
-        entity_type,
-        group_ids.as_deref(),
-        store.search_config().oversample(limit),
-    )?;
+    let scope = scoped_entity_iris(store, entity_type, group_ids.as_deref())?;
 
     // Oversample in both paths: an entity has one embedding row per fact/text,
     // so the raw top-N can be several rows of the same entity (aegis-a1s5).
@@ -272,11 +267,28 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 /// `search_nodes` path — so `/knot` facts, which have no episode, are DROPPED from
 /// any group scope rather than returned. This is a narrowing filter, not a
 /// boundary a caller cannot widen.
+///
+/// Pattern order matters (perf). The BGP evaluator joins triple patterns left to
+/// right, running one SQL query per pattern *per surviving row*, so the leading
+/// pattern decides the whole cost. This query used to open with an unbound
+/// `?s ?p ?o .`, which enumerated every fact in the graph and then probed the
+/// store once per fact: 53.6s on a 4967-fact graph, during which the server's CPU
+/// quota was saturated and Traefik dropped the backend, 503-ing the public
+/// endpoint for everyone else. The `?s ?p ?o` triple also constrained nothing —
+/// every ?s the remaining patterns can bind necessarily has a fact.
+///
+/// So: drop it, and lead with the most selective pattern (episode→groupId, one
+/// row per episode) rather than the fan-out one (?s→episode). Same 4967-fact
+/// graph, same results: 53.6s → 0.016s.
+///
+/// There is deliberately no LIMIT. This scope set is an *allow-list*; truncating
+/// it silently drops legitimate in-scope entities from every scoped search. The
+/// old `LIMIT oversample(limit)` capped one populous group at 100 of its
+/// 457 entities, so ~78% of that group's graph was unsearchable.
 fn scoped_entity_iris(
     store: &Store,
     entity_type: Option<&str>,
     group_ids: Option<&[&str]>,
-    limit: usize,
 ) -> Result<Option<std::collections::HashSet<String>>> {
     let has_group = group_ids.is_some_and(|g| !g.is_empty());
     if entity_type.is_none() && !has_group {
@@ -284,14 +296,11 @@ fn scoped_entity_iris(
     }
 
     let mut patterns = String::new();
-    if let Some(type_iri) = entity_type {
-        let safe_type = type_iri.replace('>', "\\>");
-        patterns.push_str(&format!("?s a <{safe_type}> . "));
-    }
+    let mut filters = String::new();
     if has_group {
         patterns.push_str(
-            "?s <http://www.w3.org/ns/prov#wasGeneratedBy> ?_episode . \
-             ?_episode <http://aegis.gastown.local/ontology/groupId> ?_gid . ",
+            "?_episode <http://aegis.gastown.local/ontology/groupId> ?_gid . \
+             ?s <http://www.w3.org/ns/prov#wasGeneratedBy> ?_episode . ",
         );
         let gid_filters: Vec<String> = group_ids
             .unwrap()
@@ -301,10 +310,14 @@ fn scoped_entity_iris(
                 format!("?_gid = '{safe}'")
             })
             .collect();
-        patterns.push_str(&format!("FILTER({}) ", gid_filters.join(" || ")));
+        filters.push_str(&format!("FILTER({}) ", gid_filters.join(" || ")));
+    }
+    if let Some(type_iri) = entity_type {
+        let safe_type = type_iri.replace('>', "\\>");
+        patterns.push_str(&format!("?s a <{safe_type}> . "));
     }
 
-    let sparql = format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o . {patterns}}} LIMIT {limit}");
+    let sparql = format!("SELECT DISTINCT ?s WHERE {{ {patterns}{filters}}}");
     let result = sparql::query(store, &sparql)?;
 
     let mut iris = std::collections::HashSet::new();
