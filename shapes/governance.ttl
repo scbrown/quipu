@@ -229,6 +229,14 @@ aegis:SelectorShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
+        # For a tree-sitter-tier selector, the grammar the `.scm` evidenceSource is
+        # written against (`rust`, `python`, …) — mirrors Hank's Rule.language.
+        # Optional: a non-structural selector has no grammar.
+        sh:path aegis:language ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
         sh:path aegis:tier ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;

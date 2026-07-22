@@ -33,6 +33,7 @@
 aegis:sel_rust_line_comments a aegis:Selector ;
     aegis:name "rust-line-comments" ;
     aegis:evidenceSource "(line_comment) @c" ;
+    aegis:language "rust" ;
     aegis:tier "tree-sitter" .
 
 aegis:pred_todo_has_ticket a aegis:Predicate ;
