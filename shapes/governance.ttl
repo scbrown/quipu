@@ -191,6 +191,21 @@ aegis:PolicyShape a sh:NodeShape ;
         sh:path aegis:assignsWorkflow ;
         sh:class aegis:Workflow ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # A structural (tree-sitter-tier) policy names the two atoms it composes:
+        # the Selector that picks nodes and the Predicate that tests them. Both
+        # OPTIONAL — a committed-tier policy carries only its SPARQL-ASK `claim`.
+        # Hank projects these atoms to evaluate the policy where the evidence is
+        # hot, at the pre-edit seam (hank docs/book/src/design/policy-edit-hooks.md).
+        sh:path aegis:selector ;
+        sh:class aegis:Selector ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:predicate ;
+        sh:class aegis:Predicate ;
+        sh:maxCount 1 ;
     ] .
 
 # ═══════════════════════════════════════════════════════════════════
@@ -239,6 +254,22 @@ aegis:PredicateShape a sh:NodeShape ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
         sh:in ( "live" "lsp" "tree-sitter" "committed" "attested" ) ;
+    ] ;
+    sh:property [
+        # The predicate direction for a tree-sitter-tier rule — mirrors Hank's
+        # rules::MatchType so a projected policy round-trips. Optional: a
+        # SPARQL-ASK predicate encodes its own direction.
+        sh:path aegis:matchType ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "must-match" "must-not-match" "must-exist" ) ;
+    ] ;
+    sh:property [
+        # An optional pre-filter regex: only captures whose text matches the gate
+        # are tested by the predicate (e.g. only comments containing TODO).
+        sh:path aegis:gate ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
     ] .
 
 # ═══════════════════════════════════════════════════════════════════

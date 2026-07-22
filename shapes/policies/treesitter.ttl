@@ -1,0 +1,84 @@
+# Canonical tree-sitter-tier policy catalog — the source of truth Hank projects.
+#
+# These are the "structural / lexical" policies a linter finds hard or slow to
+# express, composed from the governance atoms in shapes/governance.ttl: a
+# Selector (a tree-sitter .scm capture query — which nodes) and a Predicate (a
+# regex over their text + a direction — what they must / must not be), bound into
+# an aegis:Policy at the boundary:"action" (pre-edit) seam.
+#
+# Evidence locality (hank docs/book/src/design/policy-edit-hooks.md): these carry
+# tier "tree-sitter", so Hank — which holds that evidence hot — evaluates them at
+# `hank hook pre-edit`. The definitions live HERE regardless; Hank holds only a
+# projected read cache. The field names line up with Hank's rules::Rule:
+#   aegis:Selector.evidenceSource   <->  Rule.query   (.scm)
+#   aegis:Predicate.evidenceSource  <->  Rule.pattern (regex)
+#   aegis:Predicate.matchType       <->  Rule.match_type
+#   aegis:Predicate.gate            <->  Rule.gate
+#
+# Validate against the shapes before loading:
+#   cargo test governance  (see src/governance_tests.rs)
+# Load via POST /shapes / quipu knot.
+#
+# NB: a backslash in a Turtle string is an escape, so a regex `\b` is written
+# `\\b` here.
+
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+# ═══════════════════════════════════════════════════════════════════
+# todo-needs-ticket — a TODO comment must cite a ticket (must-match, gated).
+# effect "warn": advisory. The awkward-for-a-linter rule.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:sel_rust_line_comments a aegis:Selector ;
+    aegis:name "rust-line-comments" ;
+    aegis:evidenceSource "(line_comment) @c" ;
+    aegis:tier "tree-sitter" .
+
+aegis:pred_todo_has_ticket a aegis:Predicate ;
+    aegis:name "todo-has-ticket" ;
+    aegis:evidenceSource "\\b[A-Z]+-[0-9]+\\b" ;
+    aegis:matchType "must-match" ;
+    aegis:gate "\\bTODO\\b" ;
+    aegis:tier "tree-sitter" .
+
+aegis:policy_todo_needs_ticket a aegis:Policy ;
+    rdfs:label "todo-needs-ticket" ;
+    aegis:targets "CodeModule" ;
+    aegis:claim "for each rust line_comment matching /\\bTODO\\b/: its text matches /\\b[A-Z]+-[0-9]+\\b/" ;
+    aegis:boundary "action" ;
+    aegis:effect "warn" ;
+    aegis:selector aegis:sel_rust_line_comments ;
+    aegis:predicate aegis:pred_todo_has_ticket .
+
+# ═══════════════════════════════════════════════════════════════════
+# no-ticket-in-comment — a comment must NOT carry a ticket id (must-not-match).
+# effect "deny": ticket references belong in commits / PRs, not source comments.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:pred_no_ticket_in_comment a aegis:Predicate ;
+    aegis:name "no-ticket-in-comment" ;
+    aegis:evidenceSource "\\b[A-Z]+-[0-9]+\\b" ;
+    aegis:matchType "must-not-match" ;
+    aegis:tier "tree-sitter" .
+
+aegis:policy_no_ticket_in_comment a aegis:Policy ;
+    rdfs:label "no-ticket-in-comment" ;
+    aegis:targets "CodeModule" ;
+    aegis:claim "no rust line_comment's text matches /\\b[A-Z]+-[0-9]+\\b/" ;
+    aegis:boundary "action" ;
+    aegis:effect "deny" ;
+    aegis:selector aegis:sel_rust_line_comments ;
+    aegis:predicate aegis:pred_no_ticket_in_comment .
+
+# ═══════════════════════════════════════════════════════════════════
+# VerifierRegistration — the root of trust for Hank's edit-time verdicts.
+# Registers the `hank` verifier identity as authorized to attest these two
+# structural predicates, so a promoted aegis:Verdict is accepted (Phase 4,
+# H-PROMOTE-VERDICT). `publicKey` is omitted until Hank verdict signing lands —
+# the registration is a meaningful authority record before signatures exist.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:reg_hank_structural a aegis:VerifierRegistration ;
+    aegis:verifier "hank" ;
+    aegis:attests "todo-needs-ticket" , "no-ticket-in-comment" .

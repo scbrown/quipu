@@ -103,6 +103,25 @@ mirroring `shacl.validate_on_write`. Default builds and existing deployments are
 **unchanged**; enforcement is opt-in. Not behind `reactive-reasoner` (the
 existing `TransactObserver` seam is post-commit and cannot veto).
 
+### The tree-sitter-tier catalog (`shapes/policies/treesitter.ttl`)
+
+The canonical, SHACL-validated source of the structural policies Hank projects.
+Each is composed from the governance atoms: an `aegis:Selector` (a tree-sitter
+`.scm` capture — which nodes) and an `aegis:Predicate` (a regex + an
+`aegis:matchType` of `must-match` / `must-not-match` / `must-exist`, plus an
+optional `aegis:gate` pre-filter — what their text must be), bound into an
+`aegis:Policy` at `boundary:"action"` with `tier "tree-sitter"`. Two shipped
+examples: `todo-needs-ticket` (a TODO comment must cite a ticket) and
+`no-ticket-in-comment` (the opposite direction). The catalog is validated against
+`governance.ttl` in `src/governance_tests.rs::treesitter_policy_catalog_conforms`.
+
+The atom field names line up one-to-one with Hank's `rules::Rule`
+(`evidenceSource`↔`query`/`pattern`, `matchType`↔`match_type`, `gate`↔`gate`,
+`tier`↔`Tier::TreeSitter`), so the Phase-B projection deserializes a policy
+straight into a `Rule` — the seam is a decode, not a redesign. An
+`aegis:VerifierRegistration` for the `hank` verifier authorizes it to attest
+these predicates when its edit-time verdicts promote back (H-PROMOTE-VERDICT).
+
 ## Phase B — hank projection (backlogged, Phase-4-blocked)
 
 Hank holds a **hot, compiled projection** of quipu's `boundary:"action"`

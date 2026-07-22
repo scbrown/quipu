@@ -138,7 +138,11 @@ fn policy_can_assign_a_workflow() {
              aegis:effect \"require-approval\" ; aegis:assignsWorkflow aegis:uidemo .\n"
     );
     let fb = validate_shapes(SHAPES, &data).unwrap();
-    assert!(fb.conforms, "a policy assigning a well-formed workflow should conform: {:#?}", fb.results);
+    assert!(
+        fb.conforms,
+        "a policy assigning a well-formed workflow should conform: {:#?}",
+        fb.results
+    );
 }
 
 #[test]
@@ -150,7 +154,10 @@ fn policy_assigns_workflow_must_point_at_a_workflow() {
          aegis:targets \"Step\" ; aegis:claim \"c\" ; aegis:assignsWorkflow aegis:ghost .\n"
     );
     let fb = validate_shapes(SHAPES, &data).unwrap();
-    assert!(!fb.conforms, "assignsWorkflow must reference an aegis:Workflow");
+    assert!(
+        !fb.conforms,
+        "assignsWorkflow must reference an aegis:Workflow"
+    );
 }
 
 #[test]
@@ -167,4 +174,63 @@ fn verifier_registration_shape() {
         !validate_shapes(SHAPES, &bad).unwrap().conforms,
         "registration without an attested predicate must be rejected"
     );
+}
+
+// ── Tree-sitter-tier policy catalog (shapes/policies/treesitter.ttl) ──────────
+
+const TREESITTER_CATALOG: &str = include_str!("../shapes/policies/treesitter.ttl");
+
+#[test]
+fn treesitter_policy_catalog_conforms() {
+    // The shipped tree-sitter-tier catalog — the canonical source Hank projects —
+    // must validate against the governance shapes, the same in-graph check Hank
+    // runs before it promotes. A drift here is caught at `cargo test`, not at load.
+    let fb = validate_shapes(SHAPES, TREESITTER_CATALOG).unwrap();
+    assert!(
+        fb.conforms,
+        "tree-sitter policy catalog should conform: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn a_policy_may_name_a_selector_and_predicate() {
+    // The additive congruence link: a structural policy composes its two atoms.
+    let data = format!(
+        "{NS}\n\
+         aegis:s a aegis:Selector ; aegis:name \"c\" ; aegis:evidenceSource \"(line_comment) @c\" ; aegis:tier \"tree-sitter\" .\n\
+         aegis:pr a aegis:Predicate ; aegis:name \"t\" ; aegis:evidenceSource \"X-1\" ; aegis:matchType \"must-not-match\" ; aegis:tier \"tree-sitter\" .\n\
+         aegis:p a aegis:Policy ; rdfs:label \"p\" ; aegis:targets \"CodeModule\" ; aegis:claim \"c\" ; \
+             aegis:boundary \"action\" ; aegis:effect \"deny\" ; aegis:selector aegis:s ; aegis:predicate aegis:pr .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        fb.conforms,
+        "a policy naming a selector + predicate should conform: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn predicate_match_type_out_of_enum_is_rejected() {
+    let data = format!(
+        "{NS}\naegis:pr a aegis:Predicate ; aegis:name \"t\" ; \
+         aegis:evidenceSource \"x\" ; aegis:matchType \"must-explode\" .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        !fb.conforms,
+        "a matchType outside the enum must be rejected"
+    );
+}
+
+#[test]
+fn policy_selector_must_point_at_a_selector() {
+    // sh:class aegis:Selector — selector pointing at a non-Selector is malformed.
+    let data = format!(
+        "{NS}\naegis:p a aegis:Policy ; rdfs:label \"p\" ; aegis:targets \"CodeModule\" ; \
+         aegis:claim \"c\" ; aegis:selector aegis:ghost .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(!fb.conforms, "selector must reference an aegis:Selector");
 }
