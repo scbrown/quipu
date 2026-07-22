@@ -83,3 +83,8 @@ aegis:policy_no_ticket_in_comment a aegis:Policy ;
 aegis:reg_hank_structural a aegis:VerifierRegistration ;
     aegis:verifier "hank" ;
     aegis:attests "todo-needs-ticket" , "no-ticket-in-comment" .
+    # A human adds hank's public key once hank's signing identity is provisioned:
+    #   aegis:publicKey "<hex from `hank verifier`>" .
+    # Until then this is a valid AUTHORITY record (publicKey is optional); a hank
+    # verdict is accepted at write, and TRUSTED once the key is registered —
+    # mirroring quipu's own "a human registers the verifier's key" model.
