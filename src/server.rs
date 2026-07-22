@@ -534,10 +534,29 @@ async fn entity_history(
     ))
 }
 
-async fn transactions(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
+#[derive(serde::Deserialize)]
+struct TransactionParams {
+    since: Option<i64>,
+    limit: Option<i64>,
+}
+
+async fn transactions(
+    State(store): State<SharedStore>,
+    Query(p): Query<TransactionParams>,
+) -> Result<axum::Json<JsonValue>, AppError> {
     let store = store.lock().unwrap();
-    let entries: Vec<JsonValue> = store
-        .list_transactions()?
+    // Cursor for pollers (Shantytown's event subscription): `?since=<tx>` returns
+    // only newer transactions so a watermarked poll is O(new), not O(whole log).
+    // No params -> the full log, preserving the original behaviour.
+    let txns = if p.since.is_none() && p.limit.is_none() {
+        store.list_transactions()?
+    } else {
+        store.list_transactions_since(
+            p.since.unwrap_or(0),
+            p.limit.unwrap_or(1000).clamp(1, 10_000),
+        )?
+    };
+    let entries: Vec<JsonValue> = txns
         .iter()
         .map(|t| {
             json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor, "source": t.source })
