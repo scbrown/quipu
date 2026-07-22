@@ -892,6 +892,31 @@ impl Store {
         Ok(txns)
     }
 
+    /// Transactions with `id > since`, ordered, capped at `limit`. This is the
+    /// cursor a watermarked poller (e.g. Shantytown's event subscription)
+    /// advances so each poll is O(new transactions), not O(whole log).
+    pub fn list_transactions_since(
+        &self,
+        since: i64,
+        limit: i64,
+    ) -> Result<Vec<crate::types::Transaction>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, timestamp, actor, source FROM transactions \
+             WHERE id > ?1 ORDER BY id LIMIT ?2",
+        )?;
+        let mut txns = Vec::new();
+        let mut rows = stmt.query(params![since, limit])?;
+        while let Some(row) = rows.next()? {
+            txns.push(crate::types::Transaction {
+                id: row.get(0)?,
+                timestamp: row.get(1)?,
+                actor: row.get(2)?,
+                source: row.get(3)?,
+            });
+        }
+        Ok(txns)
+    }
+
     /// Return the full history of a specific entity+attribute pair.
     pub fn attribute_history(&self, entity: i64, attribute: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(

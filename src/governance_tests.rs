@@ -125,6 +125,35 @@ fn transition_requires_on_and_to() {
 }
 
 #[test]
+fn policy_can_assign_a_workflow() {
+    // A policy's require-approval / escalate effect names the workflow to run via
+    // aegis:assignsWorkflow -> a well-formed aegis:Workflow. This is the seam a
+    // Hank guard / Shantytown subscriber reads.
+    let data = format!(
+        "{NS}\n\
+         aegis:uidemo a aegis:Workflow ; rdfs:label \"ui-demo-required\" ; aegis:hasStep aegis:demo .\n\
+         aegis:demo a aegis:Step ; rdfs:label \"demo the UI effect\" ; aegis:actor \"agent\" .\n\
+         aegis:p a aegis:Policy ; rdfs:label \"ui-surface-demo\" ; \
+             aegis:targets \"CodeModule\" ; aegis:claim \"c\" ; aegis:boundary \"transition\" ; \
+             aegis:effect \"require-approval\" ; aegis:assignsWorkflow aegis:uidemo .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(fb.conforms, "a policy assigning a well-formed workflow should conform: {:#?}", fb.results);
+}
+
+#[test]
+fn policy_assigns_workflow_must_point_at_a_workflow() {
+    // sh:class aegis:Workflow — assignsWorkflow pointing at a non-Workflow
+    // (here an untyped node) is a malformed policy, rejected at write.
+    let data = format!(
+        "{NS}\naegis:p a aegis:Policy ; rdfs:label \"p\" ; \
+         aegis:targets \"Step\" ; aegis:claim \"c\" ; aegis:assignsWorkflow aegis:ghost .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(!fb.conforms, "assignsWorkflow must reference an aegis:Workflow");
+}
+
+#[test]
 fn verifier_registration_shape() {
     let ok = format!(
         "{NS}\naegis:r a aegis:VerifierRegistration ; aegis:verifier \"hank\" ; aegis:attests \"has-test\" .\n"
