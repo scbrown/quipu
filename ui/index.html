@@ -1278,16 +1278,23 @@ function navigate() {
   // /cord entity load they queue behind it and the page sits on "Loading
   // node..." for the whole load. Node page first, explorer bulk load after.
   const entityBoot = location.pathname.startsWith('/entity/') && !state._nodePageBooted;
+  const kickExplorer = () => {
+    if (!state.loaded) loadEntities();
+    if (!state._deepLinksLoaded) loadDeepLinkRegistry().then(ok => { state._deepLinksLoaded = ok; });
+  };
   if (entityBoot) {
     state._nodePageBooted = true;
     const iri = decodeURIComponent(location.pathname.slice('/entity/'.length));
-    openNodePage(iri).finally(() => {
-      if (hash === 'explorer' && !state.loaded) loadEntities();
-      if (!state._deepLinksLoaded) loadDeepLinkRegistry().then(ok => { state._deepLinksLoaded = ok; });
-    });
-  } else {
-    if (hash === 'explorer' && !state.loaded) loadEntities();
-    if (!state._deepLinksLoaded) loadDeepLinkRegistry().then(ok => { state._deepLinksLoaded = ok; });
+    // The boot promise is TRACKED so that navigate()'s OTHER invocations (the
+    // app sets location.hash at init -> hashchange -> navigate again) defer
+    // the heavy /cord load behind it. Without this the bulk load fires in the
+    // same millisecond and the store mutex starves the node page's two cheap
+    // queries for the whole /cord duration.
+    state._nodePageBoot = openNodePage(iri);
+    state._nodePageBoot.finally(kickExplorer);
+  } else if (hash === 'explorer' || !state._deepLinksLoaded) {
+    if (state._nodePageBoot) state._nodePageBoot.finally(kickExplorer);
+    else kickExplorer();
   }
   if (hash === 'timeline' && !state.timelineLoaded) loadEpisodes();
   if (hash === 'shapes') loadShapes();
@@ -1636,6 +1643,7 @@ async function fetchIncomingForPage(iri) {
 }
 
 async function openNodePage(iri) {
+  state._currentNodePage = iri;
   let page = document.getElementById('node-page');
   if (!page) {
     page = document.createElement('div');
@@ -1733,6 +1741,7 @@ function renderNodePageContent(page, ent, incoming) {
 }
 
 function closeNodePage() {
+  state._currentNodePage = null;
   const page = document.getElementById('node-page');
   if (page) page.style.display = 'none';
   if (location.pathname.startsWith('/entity/')) history.pushState({}, '', '/');
@@ -1740,7 +1749,11 @@ function closeNodePage() {
 
 window.addEventListener('popstate', () => {
   if (location.pathname.startsWith('/entity/')) {
-    openNodePage(decodeURIComponent(location.pathname.slice('/entity/'.length)));
+    const iri = decodeURIComponent(location.pathname.slice('/entity/'.length));
+    // Hash-only history events (the app sets location.hash at init) fire
+    // popstate too; re-opening the SAME page would reset it to "Loading" and
+    // double every query.
+    if (state._currentNodePage !== iri) openNodePage(iri);
   } else {
     const page = document.getElementById('node-page');
     if (page) page.style.display = 'none';
