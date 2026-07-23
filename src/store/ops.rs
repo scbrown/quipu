@@ -187,6 +187,11 @@ impl Store {
         #[cfg(feature = "reactive-reasoner")]
         let mut retracts: Vec<Datum> = Vec::new();
 
+        // Datums ACTUALLY written (idempotent no-ops excluded), for the event
+        // log (event-log P1). Unconditional — events are core, not a feature.
+        let mut written_asserts: Vec<&Datum> = Vec::new();
+        let mut written_retracts: Vec<&Datum> = Vec::new();
+
         {
             let mut insert = self.conn.prepare(
                 "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
@@ -216,6 +221,7 @@ impl Store {
                         v_bytes,
                         graph
                     ])?;
+                    written_retracts.push(d);
                 } else {
                     // Skip assertion if an identical active fact already exists
                     // IN THIS GRAPH.
@@ -224,6 +230,9 @@ impl Store {
                         .unwrap_or(false);
                     if exists {
                         continue;
+                    }
+                    if d.op == Op::Assert {
+                        written_asserts.push(d);
                     }
                 }
                 insert.execute(params![
@@ -249,6 +258,19 @@ impl Store {
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.
         self.enforce_write_policies(datums, graph)?;
+
+        // Event log (event-log P1): append this tx's semantic events INSIDE the
+        // savepoint, AFTER the policy guard — a denied write emits nothing, a
+        // rolled-back write takes its events with it, and offset order equals
+        // commit order because nothing else can commit between here and RELEASE.
+        self.emit_events(
+            &written_asserts,
+            &written_retracts,
+            tx_id,
+            timestamp,
+            source,
+            graph,
+        )?;
 
         Ok(Staged {
             tx_id,

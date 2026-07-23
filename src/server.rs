@@ -245,6 +245,9 @@ async fn main() {
         .route("/entity/{iri}/html", get(entity_html))
         .route("/entity_history", post(entity_history))
         .route("/transactions", get(transactions))
+        // Event log pull API (event-log P1)
+        .route("/events", get(events_get))
+        .route("/events/commit", post(events_commit))
         // Semantic web APIs (Phase 4)
         .route("/spotlight", post(spotlight_handler))
         .route("/fragments", get(fragments_handler))
@@ -759,6 +762,102 @@ async fn entity_history(
 struct TransactionParams {
     since: Option<i64>,
     limit: Option<i64>,
+}
+
+/// Query parameters for the event-log pull API (event-log P1).
+#[derive(serde::Deserialize)]
+struct EventParams {
+    /// Return events with offset STRICTLY AFTER this. Explicit `since` wins
+    /// over `consumer` so a caller can inspect any window without moving (or
+    /// consulting) its durable cursor.
+    since: Option<i64>,
+    limit: Option<i64>,
+    /// Comma-separated event types (e.g. `edge.added,type.new`).
+    types: Option<String>,
+    /// Filter to a single group_id (episode grouping, e.g. `aegis-ontology`).
+    group: Option<String>,
+    /// Resume from this consumer's durable committed offset.
+    consumer: Option<String>,
+}
+
+/// GET /events — pull a batch of graph-change events in offset order.
+/// Response: `{events, next_offset, lag, committed_offset?}`; pass
+/// `next_offset` back as `since` (or POST /events/commit it) to page forward.
+async fn events_get(
+    State(store): State<SharedStore>,
+    Query(p): Query<EventParams>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let store = store.lock().unwrap();
+        let committed: Option<i64> = match (&p.since, &p.consumer) {
+            (None, Some(c)) => Some(store.consumer_committed(c)?),
+            _ => None,
+        };
+        let since = p.since.unwrap_or_else(|| committed.unwrap_or(0));
+        let limit = p.limit.unwrap_or(100).clamp(1, 10_000) as usize;
+        let types: Option<Vec<String>> = p.types.as_deref().map(|t| {
+            t.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect()
+        });
+        let rows = store.events_after(since, limit, types.as_deref(), p.group.as_deref())?;
+        // next_offset is the cursor for the NEXT call; when the batch is empty
+        // it stays at `since` so polling is a fixpoint, not a rewind.
+        let next_offset = rows.last().map_or(since, |r| r.offset);
+        // Lag counts ALL events beyond the cursor, unfiltered — it answers
+        // "how far behind the log am I", not "how many match my filter".
+        let latest = store.latest_event_offset()?;
+        let lag = (latest - next_offset).max(0);
+        let events: Vec<JsonValue> = rows
+            .iter()
+            .map(quipu::store::events::EventRow::to_json)
+            .collect();
+        let mut body = json!({
+            "events": events,
+            "next_offset": next_offset,
+            "lag": lag,
+        });
+        if let Some(c) = committed {
+            body["committed_offset"] = json!(c);
+        }
+        Ok(axum::Json(body))
+    })
+    .await
+}
+
+/// POST /events/commit `{consumer_id, offset}` — durably record a consumer's
+/// cursor. Any offset >= 0 is accepted, including a LOWER one (the explicit
+/// replay knob; delivery is at-least-once and consumers dedup by offset).
+async fn events_commit(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let consumer_id = input
+            .get("consumer_id")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| quipu::Error::InvalidValue("consumer_id is required".into()))?
+            .to_string();
+        let offset = input
+            .get("offset")
+            .and_then(serde_json::Value::as_i64)
+            .ok_or_else(|| quipu::Error::InvalidValue("offset (integer) is required".into()))?;
+        if offset < 0 {
+            return Err(quipu::Error::InvalidValue("offset must be >= 0".into()).into());
+        }
+        let store = store.lock().unwrap();
+        let now = quipu::time::now_iso();
+        store.commit_consumer(&consumer_id, offset, &now)?;
+        Ok(axum::Json(json!({
+            "consumer_id": consumer_id,
+            "committed_offset": offset,
+        })))
+    })
+    .await
 }
 
 async fn transactions(

@@ -89,4 +89,44 @@ CREATE TABLE IF NOT EXISTS ontologies (
     turtle    TEXT NOT NULL,
     loaded_at TEXT NOT NULL
 );
+
+-- Event log (event-log P1): append-only, offset-ordered log of
+-- graph-change events, written IN THE SAME TRANSACTION as the graph write so
+-- offset order == commit order and a rolled-back write leaves no event behind.
+-- Durable append-only per the durable-retention decision: no expiry — a consumer
+-- down for weeks replays from its committed offset (the reactor-down-6wk fix).
+-- AUTOINCREMENT (not bare rowid) so offsets are never reused even after a
+-- savepoint rollback discards staged rows — a consumer's cursor can trust that
+-- offset N is forever the same event or a gap, never a DIFFERENT event.
+CREATE TABLE IF NOT EXISTS events (
+    "offset"  INTEGER PRIMARY KEY AUTOINCREMENT,
+    type      TEXT    NOT NULL,
+    ts        TEXT    NOT NULL,
+    subject   TEXT,
+    group_id  TEXT,
+    tx_id     INTEGER NOT NULL,
+    payload   TEXT    NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_events_type  ON events(type, "offset");
+CREATE INDEX IF NOT EXISTS idx_events_group ON events(group_id, "offset");
+
+-- Durable consumer cursor registry (pull-resume). committed_offset is the
+-- HIGHEST offset the consumer has processed; resume returns events AFTER it.
+CREATE TABLE IF NOT EXISTS consumers (
+    consumer_id      TEXT PRIMARY KEY,
+    committed_offset INTEGER NOT NULL DEFAULT 0,
+    filter           TEXT,
+    updated_at       TEXT
+);
+
+-- Schema-term first-sight registry (a hard requirement of the event-log P1
+-- spec): powers type.new / predicate.new — emitted exactly ONCE, the first
+-- time a node type or a predicate IRI is observed in the store. first_offset
+-- records the event that announced it.
+CREATE TABLE IF NOT EXISTS schema_terms (
+    term         TEXT NOT NULL,
+    kind         TEXT NOT NULL CHECK (kind IN ('type','predicate')),
+    first_offset INTEGER NOT NULL,
+    PRIMARY KEY (term, kind)
+);
 "#;

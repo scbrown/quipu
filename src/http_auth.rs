@@ -52,6 +52,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/project", // rw_handler; louvain persists quipu:memberOfCommunity when persist:true
     "/overlay/write", // &mut handler -> store.overlay_write, returns a tx_id
     "/overlay/create", // ro_handler by signature, but writes the graphs registry
+    "/events/commit", // durable consumer cursor upsert (event-log P1)
 ];
 
 /// The set of read endpoints: every registered route that does NOT mutate state.
@@ -91,6 +92,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/entity/{iri}/html",
     "/entity_history",
     "/transactions",
+    "/events", // pull-batch event log read (event-log P1); the commit half is a write
     "/spotlight",
     "/fragments",
     "/reconcile",
