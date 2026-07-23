@@ -287,6 +287,11 @@ async fn main() {
         // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
         // preflight (GH#5). Built above from the configured allowlist.
         .layer(cors)
+        // Body limit: axum's 2MB default silently caps /knot at small graphs —
+        // a code-graph promotion of one real repository is ~9MB of Turtle and
+        // was refused 413. 64MB bounds a whole-repo promotion with headroom
+        // while still refusing runaway bodies.
+        .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
         // Request log, outermost so every request (including CORS preflights
         // and auth rejections) leaves a trace. Until this existed, server.log
         // was startup banners only, and a wedged instance left NOTHING to RCA
