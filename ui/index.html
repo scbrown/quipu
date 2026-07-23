@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quipu — Knowledge Graph Explorer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='8' r='4' fill='%234cc9f0'/%3E%3Ccircle cx='24' cy='10' r='4' fill='%234ecca3'/%3E%3Ccircle cx='16' cy='24' r='4' fill='%23e94560'/%3E%3Cpath d='M8 8L24 10L16 24Z' fill='none' stroke='%238892a4' stroke-width='1.5'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
 <style>
@@ -157,6 +158,46 @@ main {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.load-note {
+  flex-basis: 100%;
+  font-size: 0.68rem;
+  color: var(--warning);
+  padding: 2px 4px;
+}
+
+.filter-divider {
+  flex-basis: 100%;
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  border-top: 1px dashed var(--border);
+  margin-top: 4px;
+  padding: 4px 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.list-more {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 0.5rem 0.75rem;
+  font-style: italic;
+}
+
+.graph-note {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 10;
+  font-size: 0.72rem;
+  color: var(--warning);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
 }
 
 .type-badge {
@@ -217,6 +258,7 @@ main {
   flex: 1;
   display: flex;
   flex-direction: column;
+  position: relative;  /* anchors .graph-note / overlay / legend */
 }
 
 #cy {
@@ -1162,6 +1204,8 @@ const state = {
   entities: [],          // all entities (incl. episodes)
   byIri: new Map(),      // iri -> entity
   domainEntities: [],    // non-episode, named entities (the graph)
+  infraEntities: [],     // domainEntities minus the code plane (the DEFAULT view)
+  serverStats: null,     // /stats payload — used to surface load truncation honestly
   incoming: new Map(),   // iri -> [{source, predicate}] reverse relations
   typeCounts: new Map(), // domain type IRI -> count
   types: new Set(),      // domain type IRIs
@@ -1199,6 +1243,13 @@ function toast(msg, isError) {
 
 function shortIri(iri) {
   if (typeof iri !== 'string') return String(iri);
+  // Code-plane IRIs embed URL-encoded paths (…/ontology/code/quipu/src%2Fshacl.rs::validate).
+  // Show them decoded and without the namespace so they read as code, not soup.
+  const codeIdx = iri.indexOf('/ontology/code/');
+  if (codeIdx >= 0) {
+    try { return 'code:' + decodeURIComponent(iri.slice(codeIdx + '/ontology/code/'.length)); }
+    catch { /* malformed escape — fall through to prefix handling */ }
+  }
   const prefixes = {
     'http://aegis.gastown.local/ontology/': 'aegis:',
     'http://www.w3.org/1999/02/22-rdf-syntax-ns#': 'rdf:',
@@ -1243,7 +1294,9 @@ const TYPE_COLORS = {
   gitrepository: '#3a86ff', configfile: '#ffca3a', cli: '#a0a0d0',
 };
 function typeColor(typeIri) {
-  if (!typeIri) return 'var(--node-default)';
+  // Literal hex, never a CSS var — cytoscape styles don't resolve var() and
+  // warn on every node (124 console warnings per load, untyped nodes uncolored).
+  if (!typeIri) return '#8892a4';
   if (typeIri === PROV_ACTIVITY) return '#5a5a7a';
   const s = shortIri(typeIri).toLowerCase();
   if (TYPE_COLORS[s]) return TYPE_COLORS[s];
@@ -1312,6 +1365,7 @@ window.addEventListener('hashchange', navigate);
 async function checkHealth() {
   try {
     const [health, stats] = await Promise.all([api('/health'), api('/stats')]);
+    state.serverStats = stats;
     const dot = document.getElementById('health-dot');
     const text = document.getElementById('stats-text');
     dot.className = 'dot ok';
@@ -1332,7 +1386,7 @@ function dedupeFacts(facts) {
   const seen = new Set();
   const out = [];
   for (const f of (facts || [])) {
-    const key = f.predicate + ' ' + JSON.stringify(f.value);
+    const key = f.predicate + '\u0000' + JSON.stringify(f.value);
     if (!seen.has(key)) { seen.add(key); out.push(f); }
   }
   return out;
@@ -1340,6 +1394,21 @@ function dedupeFacts(facts) {
 
 function isEpisodeEntity(iri, types) {
   return types.includes(PROV_ACTIVITY) || /(?:[/#])episode[_-]|graphiti-fact/.test(iri);
+}
+
+// The CODE PLANE: entities promoted from source code (symbols, sections,
+// modules, commits). They are ~75% of the store, carry no rdfs:label by
+// contract, and as the default view they bury the infra plane in exactly the
+// way episodes used to. Secondary view: reachable via the type filter, never
+// the front door.
+const CODE_PLANE_TYPES = new Set([
+  'http://aegis.gastown.local/ontology/CodeSymbol',
+  'http://aegis.gastown.local/ontology/Section',
+  'http://aegis.gastown.local/ontology/CodeModule',
+  'http://aegis.gastown.local/ontology/Commit',
+]);
+function isCodePlaneEntity(iri, types) {
+  return iri.includes('/ontology/code/') || types.some(t => CODE_PLANE_TYPES.has(t));
 }
 
 function processEntity(ent) {
@@ -1353,6 +1422,7 @@ function processEntity(ent) {
     _types: types,
     _labels: labels,
     _isEpisode: isEp,
+    _isCode: !isEp && isCodePlaneEntity(ent.iri, types),
     _type: domainType,
     _label: labels.find(v => typeof v === 'string' && !v.startsWith('http')) || shortIri(ent.iri),
   });
@@ -1380,6 +1450,7 @@ async function loadEntities() {
     state.entities = (data.entities || []).map(processEntity);
     state.byIri = new Map(state.entities.map(e => [e.iri, e]));
     state.domainEntities = state.entities.filter(e => !e._isEpisode);
+    state.infraEntities = state.domainEntities.filter(e => !e._isCode);
     buildIndexes();
     computeTypeCounts();
     state.loaded = true;
@@ -1393,9 +1464,12 @@ async function loadEntities() {
   }
 }
 
-// Reverse relation index (incoming edges) over domain entities only.
+// Reverse relation index (incoming edges) over domain entities only, plus a
+// per-entity relation degree used to pick which nodes deserve canvas space.
 function buildIndexes() {
   state.incoming = new Map();
+  state.degree = new Map();
+  const bump = (iri) => state.degree.set(iri, (state.degree.get(iri) || 0) + 1);
   for (const e of state.domainEntities) {
     for (const f of e._facts) {
       if (!isRelationPred(f.predicate)) continue;
@@ -1403,6 +1477,8 @@ function buildIndexes() {
       if (state.byIri.get(f.value)._isEpisode) continue;
       if (!state.incoming.has(f.value)) state.incoming.set(f.value, []);
       state.incoming.get(f.value).push({ source: e.iri, predicate: f.predicate });
+      bump(e.iri);
+      bump(f.value);
     }
   }
 }
@@ -1418,19 +1494,40 @@ function computeTypeCounts() {
   }
 }
 
+// True when the active type filter selects a code-plane type — the one case
+// where the default code-plane exclusion must yield.
+function activeTypeIsCode(t) {
+  return t && (CODE_PLANE_TYPES.has(t) || t.includes('/ontology/code'));
+}
+
 function renderTypeFilters() {
   const container = document.getElementById('type-filters');
   container.innerHTML = '';
 
+  // Honest truncation notice: /cord is paged, the store may be bigger than one
+  // page. A silently partial sidebar reads as "that's everything" (no-silent-caps).
+  const total = state.serverStats && state.serverStats.entities;
+  if (total && state.entities.length < total) {
+    const note = document.createElement('div');
+    note.className = 'load-note';
+    note.textContent = `Loaded ${state.entities.length.toLocaleString()} of ${total.toLocaleString()} entities (server page limit) — search queries the loaded set only`;
+    container.appendChild(note);
+  }
+
   const allBtn = document.createElement('span');
   allBtn.className = 'type-badge' + (!state.activeType ? ' active' : '');
-  allBtn.textContent = `All (${state.domainEntities.length})`;
+  allBtn.textContent = `All (${state.infraEntities.length})`;
+  allBtn.title = 'All infrastructure entities — the code plane is listed separately below';
   allBtn.onclick = () => { state.activeType = null; renderTypeFilters(); renderEntityList(); renderGraph(); };
   container.appendChild(allBtn);
 
-  // Sort types by descending count for a scannable, meaningful order.
+  // Sort types by descending count; infra types first, code-plane types behind
+  // a divider so 3,000+ code symbols never bury the ~40 infra types.
   const sorted = [...state.types].sort((a, b) => (state.typeCounts.get(b) || 0) - (state.typeCounts.get(a) || 0));
-  for (const t of sorted) {
+  const infraTypes = sorted.filter(t => !activeTypeIsCode(t));
+  const codeTypes = sorted.filter(t => activeTypeIsCode(t));
+  const codeCount = state.domainEntities.length - state.infraEntities.length;
+  const renderBadges = (types) => { for (const t of types) {
     const badge = document.createElement('span');
     badge.className = 'type-badge' + (state.activeType === t ? ' active' : '');
     const dot = document.createElement('span');
@@ -1446,21 +1543,38 @@ function renderTypeFilters() {
       renderGraph();
     };
     container.appendChild(badge);
+  } };
+
+  renderBadges(infraTypes);
+  if (codeTypes.length) {
+    const divider = document.createElement('div');
+    divider.className = 'filter-divider';
+    divider.textContent = `Code plane (${codeCount.toLocaleString()} — hidden from the default view)`;
+    divider.title = 'Entities promoted from source code. Pick a type to explore them; they are excluded from "All" so the infrastructure graph stays readable.';
+    container.appendChild(divider);
+    renderBadges(codeTypes);
   }
 }
 
 function filteredEntities() {
-  let ents = state.domainEntities;
-  if (state.activeType) ents = ents.filter(e => e._type === state.activeType);
+  // Default = the infra plane; the code plane only appears when its own type
+  // filter is selected (same principle as the episode exclusion).
+  let ents = state.activeType ? state.domainEntities.filter(e => e._type === state.activeType)
+                              : state.infraEntities;
   const q = document.getElementById('entity-search').value.toLowerCase();
   if (q) ents = ents.filter(e =>
     e._label.toLowerCase().includes(q) || e.iri.toLowerCase().includes(q));
   return ents;
 }
 
+// Cap the sidebar's DOM: rendering 4,000+ rows makes tab load visibly slow and
+// the tail is unreachable by scrolling anyway — search reaches everything.
+const LIST_RENDER_CAP = 250;
+
 function renderEntityList() {
   const container = document.getElementById('entity-list');
-  const ents = filteredEntities();
+  const allEnts = filteredEntities();
+  const ents = allEnts.slice(0, LIST_RENDER_CAP);
   container.innerHTML = '';
 
   for (const ent of ents) {
@@ -1480,6 +1594,18 @@ function renderEntityList() {
     div.appendChild(name);
     div.onclick = () => selectEntity(ent);
     container.appendChild(div);
+  }
+
+  if (allEnts.length > ents.length) {
+    const more = document.createElement('div');
+    more.className = 'list-more';
+    more.textContent = `… ${(allEnts.length - ents.length).toLocaleString()} more — refine with search`;
+    container.appendChild(more);
+  } else if (allEnts.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'list-more';
+    empty.textContent = 'No entities match.';
+    container.appendChild(empty);
   }
 }
 
@@ -1765,24 +1891,48 @@ function nodeData(iri) {
   return { data: { id: iri, label: e ? e._label : shortIri(iri), type: e && e._type || '', color: typeColor(e && e._type) } };
 }
 
+// Above this many seed nodes a force layout is unreadable and the tab can hang;
+// cap and SAY SO rather than silently drawing soup (no-silent-caps). The cap
+// keeps the MOST-CONNECTED entities — the graph's job is showing relations, so
+// canvas space goes to nodes that have them, not to whatever loaded first.
+const GRAPH_SEED_CAP = 250;
+
 function renderGraph() {
   // Seeds = the entities currently shown in the list (type filter + search).
-  const seeds = new Set(filteredEntities().map(e => e.iri));
+  let allSeeds = filteredEntities();
+  const capped = allSeeds.length > GRAPH_SEED_CAP;
+  if (capped) {
+    allSeeds = [...allSeeds].sort((a, b) =>
+      (state.degree.get(b.iri) || 0) - (state.degree.get(a.iri) || 0));
+  }
+  const seeds = new Set(allSeeds.slice(0, GRAPH_SEED_CAP).map(e => e.iri));
+  const noteEl = document.getElementById('graph-note');
+  if (noteEl) noteEl.remove();
+  if (capped) {
+    const note = document.createElement('div');
+    note.id = 'graph-note';
+    note.className = 'graph-note';
+    note.textContent = `Drawing the ${GRAPH_SEED_CAP} most-connected of ${allSeeds.length.toLocaleString()} entities — narrow with search or a type filter to see the rest`;
+    document.querySelector('#explorer .graph-area').appendChild(note);
+  }
   const nodeIds = new Set(seeds);   // isolated seeds still appear
   const edges = [];
   const edgeSeen = new Set();
 
   // Edges are DOMAIN RELATIONS only (runs_on, routes_to, depends_on, …) — never
   // rdf:type, rdfs:* or prov:* — so the graph shows the entity-relation model,
-  // not the provenance/episode scaffolding that used to bury it. An edge is
-  // included when either endpoint is a seed, pulling in 1-hop neighbours so the
-  // relations of a filtered type stay visible.
+  // not the provenance/episode scaffolding that used to bury it. For a narrow
+  // selection an edge is included when either endpoint is a seed (1-hop
+  // neighbours keep a filtered type's relations visible); for a CAPPED view the
+  // graph is the seed-to-seed core — hub neighbourhoods would re-inflate it
+  // past readability.
   for (const e of state.domainEntities) {
     for (const f of e._facts) {
       if (!isRelationPred(f.predicate)) continue;
       if (typeof f.value !== 'string' || !state.byIri.has(f.value)) continue;
       if (state.byIri.get(f.value)._isEpisode) continue;
-      if (!(seeds.has(e.iri) || seeds.has(f.value))) continue;
+      if (capped ? !(seeds.has(e.iri) && seeds.has(f.value))
+                 : !(seeds.has(e.iri) || seeds.has(f.value))) continue;
       const key = e.iri + '|' + f.predicate + '|' + f.value;
       if (edgeSeen.has(key)) continue;
       edgeSeen.add(key);
@@ -1865,7 +2015,8 @@ function renderGraph() {
     layout: {
       // Force-directed (cose) reveals structure; fall back to a hierarchical
       // layout only for very large graphs — never the unreadable grid (GH#6).
-      name: nodes.length > 600 ? 'breadthfirst' : 'cose',
+      // The seed cap keeps node counts in cose range for every default view.
+      name: nodes.length > 800 ? 'breadthfirst' : 'cose',
       animate: false,
       // Spread nodes further apart as the graph grows so large views stay legible.
       nodeRepulsion: function() { return nodes.length > 200 ? 16000 : 8000; },
@@ -2068,15 +2219,36 @@ async function loadEpisodes() {
 
   try {
     const data = await api('/query', {
-      query: `SELECT ?ep ?name ?body ?source ?time WHERE {
+      query: `SELECT ?ep ?name ?body ?source ?group WHERE {
   ?ep a <http://www.w3.org/ns/prov#Activity> .
   OPTIONAL { ?ep <http://www.w3.org/2000/01/rdf-schema#label> ?name }
   OPTIONAL { ?ep <http://aegis.gastown.local/ontology/episodeBody> ?body }
   OPTIONAL { ?ep <http://aegis.gastown.local/ontology/source> ?source }
-  OPTIONAL { ?ep <http://aegis.gastown.local/ontology/groupId> ?time }
+  OPTIONAL { ?ep <http://aegis.gastown.local/ontology/groupId> ?group }
   FILTER(!CONTAINS(STR(?ep), "graphiti-fact"))
-} ORDER BY DESC(?time) LIMIT 200`
+} LIMIT 500`
     });
+
+    // Episodes carry no time predicate — the only recency source is the
+    // transaction log. Map each episode to its first transaction (creation);
+    // sort newest-first on that. (The previous ORDER BY sorted on groupId,
+    // which is a namespace string, not a time — the list opened on year-old
+    // test episodes and called itself a timeline.)
+    const epTx = new Map();   // episode name -> {id, timestamp}
+    try {
+      const txLog = await api('/transactions');
+      for (const t of (txLog.transactions || [])) {
+        if (typeof t.source !== 'string' || !t.source.startsWith('episode:')) continue;
+        const name = t.source.slice('episode:'.length);
+        if (!epTx.has(name)) epTx.set(name, { id: t.id, timestamp: t.timestamp });
+      }
+    } catch (_) { /* ordering degrades gracefully to unordered */ }
+    const txOf = (row) => {
+      const iri = row.ep || '';
+      const tail = iri.slice(iri.lastIndexOf('/') + 1).replace(/^episode[_-]/, '');
+      return epTx.get(tail) || null;
+    };
+    if (data.rows) data.rows.sort((a, b) => ((txOf(b) || {}).id || 0) - ((txOf(a) || {}).id || 0));
 
     // Per-episode entity counts (one grouped query, mapped by episode IRI) — GH#8.
     let countByEp = {};
@@ -2090,7 +2262,8 @@ async function loadEpisodes() {
     } catch (_) { /* counts are best-effort */ }
 
     const meta = document.getElementById('timeline-meta');
-    meta.textContent = `${data.count || 0} episodes`;
+    const shown = data.count || 0;
+    meta.textContent = shown >= 500 ? `latest ${shown} episodes (more exist)` : `${shown} episodes, newest first`;
 
     const container = document.getElementById('timeline-entries');
 
@@ -2108,12 +2281,17 @@ async function loadEpisodes() {
       const name = row.name || shortIri(epIri);
       const body = row.body || '';
       const source = row.source || '';
-      const time = row.time || '';
+      const tx = txOf(row);
+      // Epoch-0 stamps are migration artifacts, not information.
+      const when = (tx && tx.timestamp && !tx.timestamp.startsWith('1970-'))
+        ? tx.timestamp.replace('T', ' ').replace(/:\d\d(\.\d+)?Z?$/, '') : '';
+      const group = row.group || '';
       const summary = body ? body.split('\n')[0].slice(0, 160) : '';
       const n = countByEp[epIri];
       const countChip = (n !== undefined)
-        ? `<span class="entry-count" title="entities extracted">${escapeHtml(String(n))} entities</span>`
+        ? `<span class="entry-count" title="entities extracted">${escapeHtml(String(n))} ${Number(n) === 1 ? 'entity' : 'entities'}</span>`
         : '';
+      const time = when || group;  // best available context chip
 
       entry.innerHTML = `
         <div class="entry-header">
