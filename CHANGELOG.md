@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.11] - 2026-07-23
+
+### Miscellaneous
+
+- Update Cargo.toml dependencies([0000000](https://github.com/scbrown/quipu/commit/0000000))
+
 ## [0.3.10] - 2026-07-23
 
 ### Added
