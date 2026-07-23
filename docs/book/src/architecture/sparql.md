@@ -7,7 +7,7 @@
 > filtering are all live (`src/sparql/`). Note the doc UNDER-claims: it marks
 > "Property paths: Planned," but they are fully implemented in
 > `src/sparql/property_path.rs` (Reverse/Sequence/Alternative/ZeroOrMore/OneOrMore) —
-> update that line.
+> the table row below is now corrected.
 
 Quipu includes a custom SPARQL evaluator that compiles queries directly
 against the SQLite fact log. No separate triple store or graph database
@@ -59,7 +59,7 @@ for row in result.rows() {
 | GROUP BY | Supported | `GROUP BY ?type` |
 | HAVING | Supported | `HAVING(COUNT(?s) > 2)` |
 | EXTEND (BIND) | Supported | Computed variables |
-| Property paths | Not yet | Planned |
+| Property paths | Supported | Reverse `^`, Sequence `/`, Alternative `|`, `*`, `+` (`src/sparql/property_path.rs`) |
 
 ### Aggregates
 

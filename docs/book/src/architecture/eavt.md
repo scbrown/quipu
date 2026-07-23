@@ -1,14 +1,13 @@
 # EAVT Fact Log
 
-> **Implementation status (2026-07-23, kelly):** 🟡 **Implemented, but the schema
-> tables below have drifted.** Core is real and shipped: `facts`/`terms`/`transactions`
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented** (the schema + value-tag tables were corrected in this commit). Core is real and shipped: `facts`/`terms`/`transactions`
 > with the `idx_eavt`/`idx_aevt`/`idx_vaet`/`idx_tx` indexes, bitemporal
 > `valid_from`/`valid_to`, current-state `op=1 AND valid_to IS NULL`, and the term
 > dictionary (`src/schema.rs`, `src/store/mod.rs`). **Drift, three items:** the real
 > `facts` table also has a **`g` (graph) column + `idx_geav`** (named-graph support),
 > absent from the doc's `CREATE TABLE`; the `op` discriminant also has **2 = Tombstone**
 > (doc shows only 1/0); and the value-encoding table omits **tag 6 = Lang** and **tag 7
-> = Typed** (`src/types.rs`). Update the schema + value-tag tables to match.
+> = Typed** (`src/types.rs`) — the schema + value-tag tables below are now corrected to match.
 
 The core of Quipu is an immutable, bitemporal fact log stored in SQLite.
 Every fact is an append-only entry that is never deleted, only superseded.
@@ -23,10 +22,17 @@ CREATE TABLE facts (
     tx        INTEGER NOT NULL,  -- transaction ID
     valid_from TEXT   NOT NULL,  -- when fact became true
     valid_to   TEXT,             -- when fact stopped being true (NULL = current)
-    op        INTEGER NOT NULL,  -- 1 = assert, 0 = retract
+    op        INTEGER NOT NULL,  -- 1 = assert, 0 = retract, 2 = tombstone (overlay absence)
+    g         INTEGER NOT NULL DEFAULT 0,  -- named graph (0 = default/root graph)
     PRIMARY KEY (e, a, v, tx)
 );
 ```
+
+Alongside the `idx_eavt` / `idx_aevt` / `idx_vaet` covering indexes, a
+graph-scoped `idx_geav ON facts(g, e, a, v, valid_from)` supports named-graph
+reads (the `g` column; graph 0 is the default/root graph — writes target it
+unless `transact_to_graph` names another). `op = 2` (tombstone) marks a specific
+`(e, a, v)` absent in an overlay's composed view, distinct from a retract.
 
 ### Term Dictionary
 
@@ -90,5 +96,7 @@ Values are stored as tagged BLOBs with a single-byte type discriminant:
 | 3   | Float | f64 (little-endian) |
 | 4   | Bool | single byte (0/1) |
 | 5   | Bytes | raw bytes |
+| 6   | Lang | language tag + lexical form (`Value::Lang { lexical, lang }`) |
+| 7   | Typed | datatype IRI + lexical form (`Value::Typed { lexical, datatype }`) |
 
 This preserves type fidelity across round-trips without external schema lookups.
