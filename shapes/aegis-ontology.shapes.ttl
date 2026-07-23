@@ -1395,4 +1395,3 @@ aegis:ModifiesShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
     sh:targetSubjectsOf aegis:modifies ;
     sh:property [ sh:path aegis:modifies ; sh:nodeKind sh:IRI ; ] .
-
