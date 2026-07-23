@@ -162,7 +162,9 @@ impl Metrics {
 
 /// Escape a Prometheus label value.
 fn esc(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
 }
 
 #[cfg(test)]
@@ -183,12 +185,15 @@ mod tests {
         assert!(text.contains("quipu_http_requests_total{endpoint=\"/knot\",status=\"400\"} 1"));
         // 21s lands past every finite bucket: le="30" cumulative picks it up,
         // and only +Inf and le="30" see the second observation.
-        assert!(text
-            .contains("quipu_http_request_duration_seconds_bucket{endpoint=\"/query\",le=\"0.1\"} 1"));
-        assert!(text
-            .contains("quipu_http_request_duration_seconds_bucket{endpoint=\"/query\",le=\"30\"} 2"));
-        assert!(text
-            .contains("quipu_http_request_duration_seconds_bucket{endpoint=\"/query\",le=\"+Inf\"} 2"));
+        assert!(text.contains(
+            "quipu_http_request_duration_seconds_bucket{endpoint=\"/query\",le=\"0.1\"} 1"
+        ));
+        assert!(text.contains(
+            "quipu_http_request_duration_seconds_bucket{endpoint=\"/query\",le=\"30\"} 2"
+        ));
+        assert!(text.contains(
+            "quipu_http_request_duration_seconds_bucket{endpoint=\"/query\",le=\"+Inf\"} 2"
+        ));
         assert!(text.contains("quipu_http_request_duration_seconds_count{endpoint=\"/query\"} 2"));
         // The policy vocabulary is quipu's own three-valued one.
         assert!(text.contains("quipu_policy_check_total{outcome=\"satisfied\"} 1"));

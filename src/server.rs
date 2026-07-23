@@ -358,7 +358,9 @@ async fn main() {
                         Ok(outcomes) => {
                             for (sub, o) in outcomes {
                                 if let quipu::store::push::Delivery::Failed = o {
-                                    eprintln!("push: delivery to '{sub}' failed; will retry (cursor held)");
+                                    eprintln!(
+                                        "push: delivery to '{sub}' failed; will retry (cursor held)"
+                                    );
                                 }
                             }
                         }

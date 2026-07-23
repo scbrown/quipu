@@ -1,9 +1,9 @@
 //! The core fact log store backed by `SQLite`.
 
 pub mod events;
-pub mod push;
 pub mod ops;
 pub mod overlays;
+pub mod push;
 #[cfg(test)]
 mod tests;
 
@@ -161,7 +161,6 @@ impl Store {
     pub fn clear_pending_write_events(&self) {
         self.pending_write_events.borrow_mut().clear();
     }
-
 
     /// Open (or create) a Quipu store at the given path.
     pub fn open(path: &str) -> Result<Self> {
@@ -444,7 +443,11 @@ impl Store {
         )?;
         let mut rows = stmt.query([])?;
         let row = rows.next()?.expect("aggregate always returns one row");
-        Ok((row.get::<_, i64>(0)? as u64, row.get::<_, i64>(1)? as u64, row.get::<_, i64>(2)? as u64))
+        Ok((
+            row.get::<_, i64>(0)? as u64,
+            row.get::<_, i64>(1)? as u64,
+            row.get::<_, i64>(2)? as u64,
+        ))
     }
 
     /// Retrieve a transaction by id.

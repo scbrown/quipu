@@ -530,6 +530,7 @@ impl Store {
         value: Value,
         timestamp: &str,
         actor: Option<&str>,
+        explicit_str: bool,
     ) -> Result<(i64, usize, usize)> {
         let current: Vec<Fact> = self
             .entity_facts(entity)?
@@ -540,19 +541,30 @@ impl Store {
         // The vqy9 footgun, write-side: a bare string for an IRI-valued
         // predicate would ASSERT a `Str` literal where every neighbour is a
         // `Ref` — a mis-shaped edge that answers no traversal. Refuse the two
-        // unambiguous cases (predicate currently holds only Refs; or the
-        // string itself is IRI-shaped), same discipline as retract_triples.
+        // unambiguous cases, the SAME two as retract_triples: the predicate
+        // currently holds only Refs; or it holds NOTHING and the string is
+        // IRI-shaped. A predicate that already stores string literals is left
+        // alone even when the new string looks like a URL — URL-valued
+        // literals (backend, externalUrl) are legitimate Strs, and refusing
+        // them blocked the first real supersede batch this route was built
+        // for. `explicit_str` is the caller saying {"str": "..."} — a tagged
+        // literal is a stated intent, so the heuristic stands aside entirely
+        // (json_to_value collapses both spellings to Value::Str, so the tag
+        // must ride in as a flag or it is not an escape hatch at all).
         if let Value::Str(s) = &value {
             let holds_ref = current.iter().any(|f| matches!(f.value, Value::Ref(_)));
             let holds_str = current.iter().any(|f| matches!(f.value, Value::Str(_)));
             let looks_like_iri = s.contains("://") && !s.chars().any(char::is_whitespace);
-            if (holds_ref && !holds_str) || looks_like_iri {
+            if !explicit_str
+                && ((holds_ref && !holds_str) || (current.is_empty() && looks_like_iri))
+            {
                 let pred_iri = self.resolve(predicate)?;
                 return Err(Error::InvalidValue(format!(
                     "set refused: object \"{s}\" is a string literal, but <{pred_iri}> \
                      takes an IRI reference. Pass the object as {{\"iri\": \"{s}\"}} to \
-                     set the edge — a bare string would be stored as a literal that no \
-                     graph traversal can follow."
+                     set an edge, or as {{\"str\": \"{s}\"}} to state that a literal is \
+                     intended — a bare IRI-shaped string here is almost always a mis-shaped \
+                     edge that no graph traversal can follow."
                 )));
             }
         }

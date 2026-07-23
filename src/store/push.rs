@@ -70,7 +70,10 @@ impl Store {
             return Err(Error::InvalidValue("webhook_url is required".into()));
         }
         let types_json = match types {
-            Some(t) if !t.is_empty() => Some(serde_json::to_string(t).map_err(|e| Error::InvalidValue(format!("types encode: {e}")))?),
+            Some(t) if !t.is_empty() => Some(
+                serde_json::to_string(t)
+                    .map_err(|e| Error::InvalidValue(format!("types encode: {e}")))?,
+            ),
             _ => None,
         };
         self.conn.execute(
@@ -94,8 +97,7 @@ impl Store {
             Ok(Subscription {
                 id: r.get(0)?,
                 consumer_id: r.get(1)?,
-                types: types_json
-                    .and_then(|t| serde_json::from_str::<Vec<String>>(&t).ok()),
+                types: types_json.and_then(|t| serde_json::from_str::<Vec<String>>(&t).ok()),
                 mode: r.get(3)?,
                 webhook_url: r.get(4)?,
                 batch_size: r.get::<_, i64>(5)? as usize,
@@ -171,7 +173,10 @@ pub fn deliver_tick(
             store.commit_consumer(&cursor_id, last, &now_iso)?;
             out.push((
                 sub.consumer_id.clone(),
-                Delivery::Delivered { n: events.len(), to: last },
+                Delivery::Delivered {
+                    n: events.len(),
+                    to: last,
+                },
             ));
         } else {
             out.push((sub.consumer_id.clone(), Delivery::Failed));
@@ -234,8 +239,17 @@ mod tests {
     #[test]
     fn realtime_delivers_in_offset_order() {
         let mut s = store();
-        s.subscription_create("c1", None, None, "realtime", "http://x/hook", 50, 30,
-                              "2026-07-23T00:00:00Z").unwrap();
+        s.subscription_create(
+            "c1",
+            None,
+            None,
+            "realtime",
+            "http://x/hook",
+            50,
+            30,
+            "2026-07-23T00:00:00Z",
+        )
+        .unwrap();
         ingest(&mut s, "e1");
         ingest(&mut s, "e2");
         let mut seen: Vec<i64> = Vec::new();
@@ -261,8 +275,17 @@ mod tests {
     #[test]
     fn failed_delivery_replays_after_revival() {
         let mut s = store();
-        s.subscription_create("c1", None, None, "realtime", "http://x/hook", 50, 30,
-                              "2026-07-23T00:00:00Z").unwrap();
+        s.subscription_create(
+            "c1",
+            None,
+            None,
+            "realtime",
+            "http://x/hook",
+            50,
+            30,
+            "2026-07-23T00:00:00Z",
+        )
+        .unwrap();
         ingest(&mut s, "e1");
         let out = deliver_tick(&s, 0, &mut |_, _| false).unwrap(); // receiver dead
         assert_eq!(out[0].1, Delivery::Failed);
@@ -284,11 +307,24 @@ mod tests {
     #[test]
     fn type_filter_excludes_non_matching() {
         let mut s = store();
-        s.subscription_create("c1", Some(&["no.such.type".into()]), None, "realtime",
-                              "http://x/hook", 50, 30, "2026-07-23T00:00:00Z").unwrap();
+        s.subscription_create(
+            "c1",
+            Some(&["no.such.type".into()]),
+            None,
+            "realtime",
+            "http://x/hook",
+            50,
+            30,
+            "2026-07-23T00:00:00Z",
+        )
+        .unwrap();
         ingest(&mut s, "e1");
         let mut called = false;
-        let out = deliver_tick(&s, 0, &mut |_, _| { called = true; true }).unwrap();
+        let out = deliver_tick(&s, 0, &mut |_, _| {
+            called = true;
+            true
+        })
+        .unwrap();
         assert_eq!(out[0].1, Delivery::Nothing);
         assert!(!called, "poster must not be called for non-matching events");
     }
@@ -297,39 +333,76 @@ mod tests {
     #[test]
     fn batch_mode_holds_then_flushes() {
         let mut s = store();
-        s.subscription_create("c1", None, None, "batch", "http://x/hook",
-                              1000, 60, "2026-07-23T00:00:00Z").unwrap();
+        s.subscription_create(
+            "c1",
+            None,
+            None,
+            "batch",
+            "http://x/hook",
+            1000,
+            60,
+            "2026-07-23T00:00:00Z",
+        )
+        .unwrap();
         ingest(&mut s, "e1");
         let base = ts_epoch("2026-07-23T00:00:00Z").unwrap();
         // Under size, within window -> hold.
         let out = deliver_tick(&s, base + 10, &mut |_, _| true).unwrap();
-        assert_eq!(out[0].1, Delivery::Nothing, "held: under size, inside window");
+        assert_eq!(
+            out[0].1,
+            Delivery::Nothing,
+            "held: under size, inside window"
+        );
         // Window elapsed -> flush.
         let out = deliver_tick(&s, base + 61, &mut |_, _| true).unwrap();
-        assert!(matches!(out[0].1, Delivery::Delivered { .. }), "window flush");
+        assert!(
+            matches!(out[0].1, Delivery::Delivered { .. }),
+            "window flush"
+        );
     }
 
     /// A sparql_ask filter is refused loudly, not stored-and-ignored.
     #[test]
     fn sparql_ask_refused_until_evaluated() {
         let s = store();
-        let err = s.subscription_create("c1", None, Some("ASK { ?s ?p ?o }"),
-                                        "realtime", "http://x/hook", 50, 30,
-                                        "2026-07-23T00:00:00Z");
+        let err = s.subscription_create(
+            "c1",
+            None,
+            Some("ASK { ?s ?p ?o }"),
+            "realtime",
+            "http://x/hook",
+            50,
+            30,
+            "2026-07-23T00:00:00Z",
+        );
         assert!(err.is_err());
     }
 
     #[test]
     fn registry_crud_roundtrip() {
         let s = store();
-        s.subscription_create("c1", Some(&["episode.ingested".into()]), None,
-                              "realtime", "http://x/hook", 50, 30,
-                              "2026-07-23T00:00:00Z").unwrap();
+        s.subscription_create(
+            "c1",
+            Some(&["episode.ingested".into()]),
+            None,
+            "realtime",
+            "http://x/hook",
+            50,
+            30,
+            "2026-07-23T00:00:00Z",
+        )
+        .unwrap();
         let subs = s.subscription_list().unwrap();
         assert_eq!(subs.len(), 1);
-        assert_eq!(subs[0].types.as_deref(), Some(&["episode.ingested".to_string()][..]));
+        assert_eq!(
+            subs[0].types.as_deref(),
+            Some(&["episode.ingested".to_string()][..])
+        );
         assert!(s.subscription_delete("c1").unwrap());
-        assert!(!s.subscription_delete("c1").unwrap(), "second delete finds nothing");
+        assert!(
+            !s.subscription_delete("c1").unwrap(),
+            "second delete finds nothing"
+        );
         assert!(s.subscription_list().unwrap().is_empty());
     }
 

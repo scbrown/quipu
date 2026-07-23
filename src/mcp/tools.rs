@@ -334,22 +334,50 @@ fn scoped_entity_iris(
 /// (event-log P2). Actions: create / list / delete. An unknown action errors
 /// (the tool_shapes silent-fall-through lesson).
 pub fn tool_subscriptions(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let action = input.get("action").and_then(|v| v.as_str()).unwrap_or("list");
+    let action = input
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("list");
     match action {
         "create" => {
-            let consumer = input.get("consumer_id").and_then(|v| v.as_str())
+            let consumer = input
+                .get("consumer_id")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| Error::InvalidValue("missing 'consumer_id'".into()))?;
-            let url = input.get("webhook_url").and_then(|v| v.as_str())
+            let url = input
+                .get("webhook_url")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| Error::InvalidValue("missing 'webhook_url'".into()))?;
-            let types: Option<Vec<String>> = input.get("types").and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect());
-            let mode = input.get("mode").and_then(|v| v.as_str()).unwrap_or("realtime");
+            let types: Option<Vec<String>> =
+                input.get("types").and_then(|v| v.as_array()).map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect()
+                });
+            let mode = input
+                .get("mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("realtime");
             let ask = input.get("sparql_ask").and_then(|v| v.as_str());
-            let batch_size = input.get("batch_size").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
-            let batch_window = input.get("batch_window_s").and_then(|v| v.as_i64()).unwrap_or(30);
+            let batch_size = input
+                .get("batch_size")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(50) as usize;
+            let batch_window = input
+                .get("batch_window_s")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(30);
             let now = crate::time::now_iso();
-            let id = store.subscription_create(consumer, types.as_deref(), ask, mode,
-                                               url, batch_size, batch_window, &now)?;
+            let id = store.subscription_create(
+                consumer,
+                types.as_deref(),
+                ask,
+                mode,
+                url,
+                batch_size,
+                batch_window,
+                &now,
+            )?;
             Ok(serde_json::json!({"action": "created", "id": id, "consumer_id": consumer}))
         }
         "list" => {
@@ -364,7 +392,9 @@ pub fn tool_subscriptions(store: &Store, input: &JsonValue) -> Result<JsonValue>
             }))
         }
         "delete" => {
-            let consumer = input.get("consumer_id").and_then(|v| v.as_str())
+            let consumer = input
+                .get("consumer_id")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| Error::InvalidValue("missing 'consumer_id'".into()))?;
             let found = store.subscription_delete(consumer)?;
             Ok(serde_json::json!({"action": "deleted", "consumer_id": consumer, "found": found}))
@@ -574,12 +604,14 @@ pub fn tool_set(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         .ok_or_else(|| Error::InvalidValue("missing 'predicate' IRI parameter".into()))?;
     let predicate_id = store.intern(predicate_iri)?;
 
-    let value = super::json_to_value(
-        store,
-        input
-            .get("value")
-            .ok_or_else(|| Error::InvalidValue("missing 'value' parameter".into()))?,
-    )?;
+    let value_json = input
+        .get("value")
+        .ok_or_else(|| Error::InvalidValue("missing 'value' parameter".into()))?;
+    let value = super::json_to_value(store, value_json)?;
+    // {"str": ...} is a STATED literal intent — it disarms the bare-string
+    // IRI-shape heuristic (json_to_value collapses both spellings, so the
+    // distinction must be carried explicitly).
+    let explicit_str = value_json.get("str").and_then(serde_json::Value::as_str).is_some();
 
     let now = crate::time::now_iso();
     let timestamp = input
@@ -588,8 +620,14 @@ pub fn tool_set(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         .unwrap_or(&now);
     let actor = input.get("actor").and_then(|v| v.as_str());
 
-    let (tx_id, retracted, asserted) =
-        store.set_triple(entity_id, predicate_id, value, timestamp, actor)?;
+    let (tx_id, retracted, asserted) = store.set_triple(
+        entity_id,
+        predicate_id,
+        value,
+        timestamp,
+        actor,
+        explicit_str,
+    )?;
 
     Ok(serde_json::json!({
         "tx_id": tx_id,

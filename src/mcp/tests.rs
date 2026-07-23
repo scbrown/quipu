@@ -977,6 +977,88 @@ fn test_tool_set_bare_string_for_an_iri_edge_is_refused() {
     ));
 }
 
+/// URL-valued STRING literals are legitimate: a predicate that already holds
+/// Strs accepts an IRI-shaped bare string (the guard scopes to ref-only and
+/// empty predicates, same as retract_triples). Caught in production: the
+/// first real supersede batch — 60 traefik backend URLs — was refused by an
+/// over-broad guard that treated every IRI-shaped string as a mistake.
+#[test]
+fn test_tool_set_url_literal_on_str_predicate_allowed() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_reports_to(&mut store, &[]);
+
+    // Seed a Str-holding predicate (a template-ish placeholder, like the
+    // real defect this batch was fixing).
+    let first = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}backend"),
+            "value": {"str": "http://PLACEHOLDER:3000"}
+        }),
+    )
+    .unwrap();
+    assert_eq!(first["asserted"], 1);
+
+    // Superseding with a bare IRI-shaped string must now be ALLOWED — the
+    // predicate holds Strs, so a string is the right shape here.
+    let fixed = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}backend"),
+            "value": "http://192.0.2.7:3000"
+        }),
+    )
+    .unwrap();
+    assert_eq!(fixed["retracted"], 1);
+    assert_eq!(fixed["asserted"], 1);
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}backend> \"http://192.0.2.7:3000\"")
+    ));
+}
+
+/// {"str": ...} is a STATED literal intent — it must disarm the IRI-shape
+/// heuristic even on an EMPTY predicate, where a bare IRI-shaped string is
+/// still refused (first-write of a URL-valued literal must be expressible).
+#[test]
+fn test_tool_set_explicit_str_tag_is_an_escape_hatch() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_reports_to(&mut store, &[]);
+
+    // Bare IRI-shaped string on an EMPTY predicate: still the loud refusal.
+    let bare = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}externalUrl"),
+            "value": "http://192.0.2.9:8080"
+        }),
+    );
+    assert!(
+        bare.expect_err("bare IRI-shaped first-write must refuse")
+            .to_string()
+            .contains("string literal")
+    );
+
+    // The tagged spelling states the intent and goes through.
+    let tagged = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}externalUrl"),
+            "value": {"str": "http://192.0.2.9:8080"}
+        }),
+    )
+    .unwrap();
+    assert_eq!(tagged["asserted"], 1);
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}externalUrl> \"http://192.0.2.9:8080\"")
+    ));
+}
+
 /// /set on an unknown entity is refused (same rule as /retract): a typo'd IRI
 /// must not mint an unlabelled orphan node. A NEW predicate on an existing
 /// entity, by contrast, is a legitimate first write.
@@ -994,7 +1076,10 @@ fn test_tool_set_unknown_entity_refused_new_predicate_allowed() {
         }),
     );
     assert!(
-        missing.expect_err("unknown entity must refuse").to_string().contains("entity not found"),
+        missing
+            .expect_err("unknown entity must refuse")
+            .to_string()
+            .contains("entity not found"),
     );
 
     // First-time set of a brand-new predicate: asserted:1, retracted:0.
