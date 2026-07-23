@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.10] - 2026-07-23
+
+### Added
+
+- *(quipu_ask)* Entity-centric provenance queries entity_work + cochanged_with (quipu#37)([f47fc31](https://github.com/scbrown/quipu/commit/f47fc313e02a84c723240e0d6e5fa8c2466280ca))
+
 ## [0.3.9] - 2026-07-23
 
 ### Added
