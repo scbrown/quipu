@@ -1,7 +1,5 @@
 //! Pattern evaluation — BGP, triple patterns, variable binding, and join logic.
 
-use std::collections::HashMap;
-
 use spargebra::algebra::GraphPattern;
 use spargebra::algebra::OrderExpression;
 use spargebra::algebra::PropertyPathExpression;
@@ -24,6 +22,22 @@ pub fn eval_pattern(
     pattern: &GraphPattern,
     ctx: &TemporalContext,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
+    eval_pattern_seeded(store, pattern, ctx, &Bindings::new())
+}
+
+/// Evaluate a graph pattern SEEDED with pre-bound variables (`seed`), which
+/// initialise every leaf (BGP / property path) so evaluation is CONSTRAINED by
+/// them — the SPARQL EXISTS substitution semantics. A bound ?s makes a path
+/// traverse only from that ?s, not the whole graph (the unseeded
+/// per-outer-row re-eval held the store mutex O(n x inner_eval)). An empty seed
+/// reproduces the original unconstrained evaluation exactly. The deadline check
+/// stays here so seeded recursion is budget-bounded like the wrapper was.
+pub fn eval_pattern_seeded(
+    store: &Store,
+    pattern: &GraphPattern,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<(Vec<Bindings>, Vec<String>)> {
     // Deadline check between operators. The SQLite progress
     // handler stops a grinding statement; this stops the Rust-side plan —
     // every operator recurses through here, so a multi-join over huge
@@ -40,11 +54,11 @@ pub fn eval_pattern(
         });
     }
     match pattern {
-        GraphPattern::Bgp { patterns } => eval_bgp(store, patterns, ctx),
+        GraphPattern::Bgp { patterns } => eval_bgp(store, patterns, ctx, seed),
 
         GraphPattern::Join { left, right } => {
-            let (left_rows, left_vars) = eval_pattern(store, left, ctx)?;
-            let (right_rows, right_vars) = eval_pattern(store, right, ctx)?;
+            let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
+            let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
             let joined = join_rows(&left_rows, &right_rows, ctx)?;
             let mut vars = left_vars;
             for v in right_vars {
@@ -56,7 +70,7 @@ pub fn eval_pattern(
         }
 
         GraphPattern::Filter { expr, inner } => {
-            let (rows, vars) = eval_pattern(store, inner, ctx)?;
+            let (rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
             let mut filtered = Vec::with_capacity(rows.len());
             for (i, row) in rows.into_iter().enumerate() {
                 // A pure-Rust filter over pre-materialized rows touches
@@ -80,7 +94,7 @@ pub fn eval_pattern(
         }
 
         GraphPattern::Project { inner, variables } => {
-            let (rows, _) = eval_pattern(store, inner, ctx)?;
+            let (rows, _) = eval_pattern_seeded(store, inner, ctx, seed)?;
             let var_names: Vec<String> = variables.iter().map(|v| v.as_str().to_string()).collect();
             let projected: Vec<Bindings> = rows
                 .into_iter()
@@ -94,7 +108,7 @@ pub fn eval_pattern(
         }
 
         GraphPattern::Distinct { inner } => {
-            let (rows, vars) = eval_pattern(store, inner, ctx)?;
+            let (rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
             let mut seen = Vec::new();
             let mut unique = Vec::new();
             // `seen.contains` makes this loop quadratic in the row count —
@@ -115,7 +129,7 @@ pub fn eval_pattern(
             start,
             length,
         } => {
-            let (rows, vars) = eval_pattern(store, inner, ctx)?;
+            let (rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
             let sliced: Vec<Bindings> = match length {
                 Some(len) => rows.into_iter().skip(*start).take(*len).collect(),
                 None => rows.into_iter().skip(*start).collect(),
@@ -128,8 +142,8 @@ pub fn eval_pattern(
             right,
             expression,
         } => {
-            let (left_rows, left_vars) = eval_pattern(store, left, ctx)?;
-            let (right_rows, right_vars) = eval_pattern(store, right, ctx)?;
+            let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
+            let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
             let mut vars = left_vars;
             for v in &right_vars {
                 if !vars.contains(v) {
@@ -164,8 +178,8 @@ pub fn eval_pattern(
         }
 
         GraphPattern::Union { left, right } => {
-            let (mut left_rows, left_vars) = eval_pattern(store, left, ctx)?;
-            let (right_rows, right_vars) = eval_pattern(store, right, ctx)?;
+            let (mut left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
+            let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
             left_rows.extend(right_rows);
             let mut vars = left_vars;
             for v in right_vars {
@@ -177,7 +191,7 @@ pub fn eval_pattern(
         }
 
         GraphPattern::OrderBy { inner, expression } => {
-            let (mut rows, vars) = eval_pattern(store, inner, ctx)?;
+            let (mut rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
             rows.sort_by(|a, b| {
                 for ord_expr in expression {
                     let (expr, ascending) = match ord_expr {
@@ -197,14 +211,14 @@ pub fn eval_pattern(
             Ok((rows, vars))
         }
 
-        GraphPattern::Reduced { inner } => eval_pattern(store, inner, ctx),
+        GraphPattern::Reduced { inner } => eval_pattern_seeded(store, inner, ctx, seed),
 
         GraphPattern::Group {
             inner,
             variables,
             aggregates,
         } => {
-            let (rows, _) = eval_pattern(store, inner, ctx)?;
+            let (rows, _) = eval_pattern_seeded(store, inner, ctx, seed)?;
             let group_keys: Vec<String> =
                 variables.iter().map(|v| v.as_str().to_string()).collect();
             let agg_vars: Vec<String> = aggregates
@@ -259,7 +273,7 @@ pub fn eval_pattern(
             variable,
             expression,
         } => {
-            let (rows, mut vars) = eval_pattern(store, inner, ctx)?;
+            let (rows, mut vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
             let var_name = variable.as_str().to_string();
             let extended: Vec<Bindings> = rows
                 .into_iter()
@@ -280,7 +294,7 @@ pub fn eval_pattern(
             subject,
             path,
             object,
-        } => eval_path(store, subject, path, object, ctx),
+        } => eval_path(store, subject, path, object, ctx, seed),
 
         _ => Err(Error::InvalidValue(format!(
             "unsupported graph pattern: {pattern}"
@@ -295,12 +309,13 @@ fn eval_path(
     path: &PropertyPathExpression,
     object: &TermPattern,
     ctx: &TemporalContext,
+    seed: &Bindings,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
     use super::property_path::{eval_path_pattern, path_pattern_vars};
 
-    let seed = vec![HashMap::new()];
+    let seed_rows = vec![seed.clone()];
     let mut all_rows = Vec::new();
-    for existing in &seed {
+    for existing in &seed_rows {
         let rows = eval_path_pattern(store, subject, path, object, existing, ctx)?;
         all_rows.extend(rows);
     }
@@ -313,12 +328,13 @@ pub fn eval_bgp(
     store: &Store,
     patterns: &[TriplePattern],
     ctx: &TemporalContext,
+    seed: &Bindings,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
     if patterns.is_empty() {
-        return Ok((vec![HashMap::new()], vec![]));
+        return Ok((vec![seed.clone()], vec![]));
     }
 
-    let mut result_rows: Vec<Bindings> = vec![HashMap::new()];
+    let mut result_rows: Vec<Bindings> = vec![seed.clone()];
     let mut all_vars = Vec::new();
 
     for tp in patterns {

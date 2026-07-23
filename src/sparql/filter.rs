@@ -77,29 +77,19 @@ pub fn eval_filter(
         // rather than substituting, which is the standard definition and keeps
         // path/join evaluation untouched.
         Expression::Exists(inner) => {
-            let (inner_rows, _) = super::pattern::eval_pattern(store, inner, ctx)?;
-            Ok(inner_rows.iter().any(|cand| compatible(row, cand)))
+            // Seed the inner pattern with the current row so it is CONSTRAINED
+            // by the outer bindings (SPARQL substitution semantics) — a bound
+            // ?s makes a path traverse only from that ?s. The seeded result is
+            // already exactly the compatible solutions, so EXISTS is simply
+            // "did it produce a row" (replaces the unseeded
+            // per-row full re-eval that held the store mutex O(n x inner)).
+            let (inner_rows, _) = super::pattern::eval_pattern_seeded(store, inner, ctx, row)?;
+            Ok(!inner_rows.is_empty())
         }
         other => Err(Error::InvalidValue(format!(
             "unsupported FILTER expression: {other:?}"
         ))),
     }
-}
-
-/// Two solution mappings are COMPATIBLE (SPARQL §18.6) iff they agree on every
-/// variable bound in both. EXISTS uses this: the current row is the outer
-/// mapping, `cand` an inner-pattern solution; a match on the shared variables
-/// (e.g. the outer-bound ?s in a NOT-EXISTS reachability check) is what makes
-/// the inner solution "exist for this row".
-fn compatible(outer: &Bindings, cand: &Bindings) -> bool {
-    for (k, v) in outer {
-        if let Some(cv) = cand.get(k) {
-            if cv != v {
-                return false;
-            }
-        }
-    }
-    true
 }
 
 /// SPARQL effective boolean value for a bound value used directly as a FILTER.
