@@ -224,6 +224,7 @@ async fn main() {
         .route("/retract", post(retract))
         .route("/episode/retract", post(retract_episode))
         .route("/shapes", post(shapes))
+        .route("/subscriptions", post(subscriptions))
         .route("/propose", post(propose_schema_change))
         .route("/proposals", post(list_proposals))
         .route("/proposal/accept", post(accept_proposal))
@@ -325,6 +326,47 @@ async fn main() {
             },
         ))
         .with_state(state);
+
+    // Event push P2: the delivery worker. A 2s tick over deliver_tick with the
+    // real poster; each tick runs under spawn_blocking (SQLite + ureq are
+    // sync). Cursor semantics make every tick idempotent, so the loop needs no
+    // state of its own and a missed tick delays, never loses.
+    {
+        let push_store = state.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let store = push_store.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    let store = store.lock().unwrap();
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    let mut post = |url: &str, body: &serde_json::Value| -> bool {
+                        matches!(
+                            ureq::post(url)
+                                .set("Content-Type", "application/json")
+                                .timeout(std::time::Duration::from_secs(10))
+                                .send_string(&body.to_string()),
+                            Ok(r) if (200..300).contains(&r.status())
+                        )
+                    };
+                    match quipu::store::push::deliver_tick(&store, now, &mut post) {
+                        Ok(outcomes) => {
+                            for (sub, o) in outcomes {
+                                if let quipu::store::push::Delivery::Failed = o {
+                                    eprintln!("push: delivery to '{sub}' failed; will retry (cursor held)");
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("push: tick error: {e}"),
+                    }
+                })
+                .await;
+            }
+        });
+    }
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
 
@@ -640,6 +682,10 @@ ro_handler!(
 // aegis-e163: /shapes WRITES (tool_shapes -> store.load_shapes / remove_shapes),
 // so it is rw_handler!, not the ro_handler! it was mis-registered as.
 rw_handler!(shapes, quipu::tool_shapes);
+
+// Event push P2: subscription registry (create/list/delete via action, the
+// /shapes pattern — one POST route, one WRITE_ENDPOINTS entry).
+rw_handler!(subscriptions, quipu::tool_subscriptions);
 // Named-graph overlays (aegis-g1al / #36). aegis-e163: overlay_create WRITES the
 // graphs registry (through a `&self` method — hence it was wrongly ro_handler!),
 // so it is rw_handler! now. compose is a genuine read (no mutating call). write

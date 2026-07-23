@@ -330,6 +330,51 @@ fn scoped_entity_iris(
 }
 
 /// MCP tool: `quipu_shapes` -- Manage persistent SHACL shapes.
+/// MCP/HTTP tool: `quipu_subscriptions` — event-push subscription registry
+/// (event-log P2). Actions: create / list / delete. An unknown action errors
+/// (the tool_shapes silent-fall-through lesson).
+pub fn tool_subscriptions(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let action = input.get("action").and_then(|v| v.as_str()).unwrap_or("list");
+    match action {
+        "create" => {
+            let consumer = input.get("consumer_id").and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidValue("missing 'consumer_id'".into()))?;
+            let url = input.get("webhook_url").and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidValue("missing 'webhook_url'".into()))?;
+            let types: Option<Vec<String>> = input.get("types").and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect());
+            let mode = input.get("mode").and_then(|v| v.as_str()).unwrap_or("realtime");
+            let ask = input.get("sparql_ask").and_then(|v| v.as_str());
+            let batch_size = input.get("batch_size").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+            let batch_window = input.get("batch_window_s").and_then(|v| v.as_i64()).unwrap_or(30);
+            let now = crate::time::now_iso();
+            let id = store.subscription_create(consumer, types.as_deref(), ask, mode,
+                                               url, batch_size, batch_window, &now)?;
+            Ok(serde_json::json!({"action": "created", "id": id, "consumer_id": consumer}))
+        }
+        "list" => {
+            let subs = store.subscription_list()?;
+            Ok(serde_json::json!({
+                "count": subs.len(),
+                "subscriptions": subs.iter().map(|s| serde_json::json!({
+                    "id": s.id, "consumer_id": s.consumer_id, "types": s.types,
+                    "mode": s.mode, "webhook_url": s.webhook_url,
+                    "batch_size": s.batch_size, "batch_window_s": s.batch_window_s,
+                })).collect::<Vec<_>>()
+            }))
+        }
+        "delete" => {
+            let consumer = input.get("consumer_id").and_then(|v| v.as_str())
+                .ok_or_else(|| Error::InvalidValue("missing 'consumer_id'".into()))?;
+            let found = store.subscription_delete(consumer)?;
+            Ok(serde_json::json!({"action": "deleted", "consumer_id": consumer, "found": found}))
+        }
+        other => Err(Error::InvalidValue(format!(
+            "unknown subscriptions action '{other}' (expected: create, list, delete)"
+        ))),
+    }
+}
+
 pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let action = input
         .get("action")

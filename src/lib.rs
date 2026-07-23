@@ -81,7 +81,7 @@ pub use mcp::resolution::tool_resolve_entity;
 pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
     tool_cord, tool_episode, tool_hybrid_search, tool_retract, tool_retract_episode, tool_search,
-    tool_shapes, tool_unravel, tool_validate,
+    tool_shapes, tool_subscriptions, tool_unravel, tool_validate,
 };
 pub use mcp::{
     query_result, tool_cooccurrence, tool_definitions, tool_knot, tool_overlay_compose,

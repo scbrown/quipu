@@ -53,6 +53,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/overlay/write", // &mut handler -> store.overlay_write, returns a tx_id
     "/overlay/create", // ro_handler by signature, but writes the graphs registry
     "/events/commit", // durable consumer cursor upsert (event-log P1)
+    "/subscriptions", // push-subscription registry create/list/delete (event-log P2)
 ];
 
 /// The set of read endpoints: every registered route that does NOT mutate state.

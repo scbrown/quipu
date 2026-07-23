@@ -119,6 +119,21 @@ CREATE TABLE IF NOT EXISTS consumers (
     updated_at       TEXT
 );
 
+-- Event push subscriptions (event-log P2): who wants which events delivered
+-- where. Delivery cursors reuse the consumers table under "sub:<id>", so the
+-- pull and push APIs share one at-least-once offset semantics.
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    consumer_id   TEXT    NOT NULL UNIQUE,
+    types         TEXT,                 -- JSON array of event types; NULL = all
+    sparql_ask    TEXT,                 -- reserved; creation REFUSES it until evaluated
+    mode          TEXT    NOT NULL DEFAULT 'realtime',  -- realtime | batch
+    webhook_url   TEXT    NOT NULL,
+    batch_size    INTEGER NOT NULL DEFAULT 50,
+    batch_window_s INTEGER NOT NULL DEFAULT 30,
+    created_at    TEXT    NOT NULL
+);
+
 -- Schema-term first-sight registry (a hard requirement of the event-log P1
 -- spec): powers type.new / predicate.new — emitted exactly ONCE, the first
 -- time a node type or a predicate IRI is observed in the store. first_offset
