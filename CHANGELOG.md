@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.6] - 2026-07-23
+
+### Added
+
+- Transactions cursor + Policy assignsWorkflow([84de69f](https://github.com/scbrown/quipu/commit/84de69fd0e651c62e8810077d04faecfe94afab5))
+- Tree-sitter-tier policy catalog + Selector/Predicate congruence([356c1c2](https://github.com/scbrown/quipu/commit/356c1c20327cd2b08462ba49308e1b9ca81545ec))
+- Aegis:language on Selector for tree-sitter policy projection([2b2ed29](https://github.com/scbrown/quipu/commit/2b2ed29492a7fbe23beddd751b29b22fc2589585))
+
+### Documentation
+
+- Note where an operator registers hank's verdict-signing publicKey([305d824](https://github.com/scbrown/quipu/commit/305d824b0d727a5dc00f966b230343da6f55cf00))
+
 ## [0.3.5] - 2026-07-20
 
 ### Added
