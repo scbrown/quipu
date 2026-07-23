@@ -533,6 +533,73 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     }))
 }
 
+/// MCP tool: `quipu_set` -- Atomic single-call supersede.
+///
+/// Sets `(entity, predicate)` to exactly `value`: every current object on that
+/// predicate is retracted and the new value asserted in ONE transaction, so
+/// re-parenting (`reports_to` A -> B) is one call with no window where the
+/// predicate is empty and no way to end up multi-valued by forgetting the
+/// retract half.
+///
+/// Input: `{ "entity": "<iri>", "predicate": "<iri>", "value": <object>,
+///           "timestamp"?: "...", "actor"?: "..." }`.
+/// The value uses the same shape discipline as `/retract`:
+/// a bare string is a LITERAL; an edge must be `{"iri": "..."}`. A bare
+/// string aimed at a Ref-holding or IRI-shaped target is a loud error, not a
+/// mis-shaped write.
+///
+/// Output: `{ "tx_id", "retracted": N, "asserted": 0|1, "entity", "predicate" }`.
+/// Setting the already-sole-current value is an idempotent no-op
+/// (`tx_id: 0, retracted: 0, asserted: 0`).
+///
+/// SINGLE-VALUE semantics: ALL current objects are replaced. For
+/// add-without-remove, assert via `/knot`.
+///
+/// The entity must already exist (same rule as `/retract` — /set on a typo'd
+/// IRI must not mint an unlabelled orphan node). The predicate MAY be new:
+/// first-time `set` of a property is a legitimate write.
+pub fn tool_set(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    let entity_iri = input
+        .get("entity")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::InvalidValue("missing 'entity' IRI parameter".into()))?;
+
+    let entity_id = store
+        .lookup(entity_iri)?
+        .ok_or_else(|| Error::InvalidValue(format!("entity not found: {entity_iri}")))?;
+
+    let predicate_iri = input
+        .get("predicate")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::InvalidValue("missing 'predicate' IRI parameter".into()))?;
+    let predicate_id = store.intern(predicate_iri)?;
+
+    let value = super::json_to_value(
+        store,
+        input
+            .get("value")
+            .ok_or_else(|| Error::InvalidValue("missing 'value' parameter".into()))?,
+    )?;
+
+    let now = crate::time::now_iso();
+    let timestamp = input
+        .get("timestamp")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&now);
+    let actor = input.get("actor").and_then(|v| v.as_str());
+
+    let (tx_id, retracted, asserted) =
+        store.set_triple(entity_id, predicate_id, value, timestamp, actor)?;
+
+    Ok(serde_json::json!({
+        "tx_id": tx_id,
+        "retracted": retracted,
+        "asserted": asserted,
+        "entity": entity_iri,
+        "predicate": predicate_iri
+    }))
+}
+
 /// MCP tool: `quipu_retract_episode` -- Episode-scoped logical retraction (aegis-hxb).
 ///
 /// Retracts every currently-active fact contributed by an episode's ingest,

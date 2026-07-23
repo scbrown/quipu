@@ -814,6 +814,21 @@ pub fn tool_definitions() -> Vec<JsonValue> {
             }
         }),
         serde_json::json!({
+            "name": "quipu_set",
+            "description": "Atomically SET (entity, predicate) to exactly one value: retracts every current object on that predicate and asserts the new one in a single transaction. The supersede primitive — re-parenting (reports_to A -> B) is one call, with no empty-predicate window and no way to end up with two supervisors by forgetting the retract half. SINGLE-VALUE semantics: replaces ALL current objects; to add without removing, assert via quipu_knot.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "entity": { "type": "string", "description": "IRI of the entity (must exist)" },
+                    "predicate": { "type": "string", "description": "Predicate IRI to set (may be new)" },
+                    "value": { "description": "New object value. A bare string is a literal; use {\"iri\": \"...\"} for an edge, or {\"int\"|\"float\"|\"bool\": ...} / {\"value\", \"lang\"|\"datatype\"}. A bare string aimed at an IRI-valued predicate is refused loudly." },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the supersede" },
+                    "actor": { "type": "string", "description": "Who is performing the set" }
+                },
+                "required": ["entity", "predicate", "value"]
+            }
+        }),
+        serde_json::json!({
             "name": "quipu_retract_episode",
             "description": "Episode-scoped logical retraction: retract all currently-active facts an episode's ingest contributed (activity node, entities, edges, reified statements), via the bitemporal valid_to close path. Logical, not physical — time-travel history is preserved. Entities and other episodes' facts are untouched. Idempotent. Node IDENTITY is protected: by default (on_orphan=preserve) rdfs:label/rdf:type survive for any node that other episodes still reference, so retraction never leaves an unlabelled, untyped ghost. The response always reports identity_orphans.",
             "inputSchema": {

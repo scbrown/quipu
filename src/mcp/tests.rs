@@ -813,6 +813,208 @@ fn test_tool_retract_bare_string_for_an_iri_edge_is_refused() {
     ));
 }
 
+/// Seed a small org: a reports_to b, with c (and optionally more) available as
+/// re-parent targets. Shared by the /set acceptance tests.
+fn seed_reports_to(store: &mut Store, extra_edges: &[(&str, &str)]) {
+    let mut edges = vec![serde_json::json!(
+        {"source": "kprobe-a", "target": "kprobe-b", "relation": "reports_to"}
+    )];
+    for (s, t) in extra_edges {
+        edges.push(serde_json::json!({"source": s, "target": t, "relation": "reports_to"}));
+    }
+    tool_episode(
+        store,
+        &serde_json::json!({
+            "name": "ep-set-crew",
+            "timestamp": "2026-04-01T00:00:00Z",
+            "nodes": [
+                {"name": "kprobe-a", "type": "CrewMember"},
+                {"name": "kprobe-b", "type": "CrewMember"},
+                {"name": "kprobe-c", "type": "CrewMember"},
+                {"name": "kprobe-d", "type": "CrewMember"}
+            ],
+            "edges": edges
+        }),
+    )
+    .unwrap();
+}
+
+/// The bead's headline acceptance: /set re-parents reports_to from B to C in
+/// ONE call and ONE transaction; afterwards exactly one edge exists.
+#[test]
+fn test_tool_set_reparents_in_one_call_one_tx() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_reports_to(&mut store, &[]);
+    let tx_before = store.list_transactions().unwrap().len();
+
+    let result = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}reports_to"),
+            "value": {"iri": format!("{NS}kprobe-c")},
+            "timestamp": "2026-04-02T00:00:00Z"
+        }),
+    )
+    .unwrap();
+    assert_eq!(result["retracted"], 1);
+    assert_eq!(result["asserted"], 1);
+    assert!(result["tx_id"].as_i64().unwrap() > 0);
+
+    // Exactly one edge, and it is the new one.
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-c>")
+    ));
+    assert!(!ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")
+    ));
+
+    // ONE transaction carried both halves — no window with zero edges exists
+    // in the log, and a crash between "calls" is unrepresentable.
+    let tx_after = store.list_transactions().unwrap().len();
+    assert_eq!(
+        tx_after,
+        tx_before + 1,
+        "retract + assert must ride a single transaction"
+    );
+}
+
+/// SINGLE-VALUE semantics: an accidentally multi-valued predicate (two
+/// supervisors — the exact state forgetting the retract half creates) is
+/// repaired by one /set: ALL current objects replaced.
+#[test]
+fn test_tool_set_replaces_all_current_values() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_reports_to(&mut store, &[("kprobe-a", "kprobe-c")]);
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")
+    ));
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-c>")
+    ));
+
+    let result = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}reports_to"),
+            "value": {"iri": format!("{NS}kprobe-d")}
+        }),
+    )
+    .unwrap();
+    assert_eq!(result["retracted"], 2, "both stale supervisors retracted");
+    assert_eq!(result["asserted"], 1);
+
+    for gone in ["kprobe-b", "kprobe-c"] {
+        assert!(!ask(
+            &store,
+            &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}{gone}>")
+        ));
+    }
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-d>")
+    ));
+}
+
+/// Setting the already-sole-current value is an idempotent no-op: no
+/// transaction is written (a retract+reassert of the same value would churn
+/// the bitemporal history for nothing).
+#[test]
+fn test_tool_set_idempotent_noop() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_reports_to(&mut store, &[]);
+    let tx_before = store.list_transactions().unwrap().len();
+
+    let result = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}reports_to"),
+            "value": {"iri": format!("{NS}kprobe-b")}
+        }),
+    )
+    .unwrap();
+    assert_eq!(result["tx_id"], 0);
+    assert_eq!(result["retracted"], 0);
+    assert_eq!(result["asserted"], 0);
+    assert_eq!(store.list_transactions().unwrap().len(), tx_before);
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")
+    ));
+}
+
+/// The vqy9 footgun, write-side: a bare string aimed at an IRI edge must be a
+/// LOUD refusal — otherwise /set would assert a Str literal no traversal can
+/// follow, replacing a real edge with a mis-shaped one.
+#[test]
+fn test_tool_set_bare_string_for_an_iri_edge_is_refused() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_reports_to(&mut store, &[]);
+
+    let footgun = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}reports_to"),
+            "value": format!("{NS}kprobe-c")
+        }),
+    );
+    let err = footgun.expect_err("a bare-string object for an IRI edge must be refused");
+    assert!(
+        err.to_string().contains("string literal"),
+        "error must name the mismatch and teach the {{\"iri\"}} shape: {err}"
+    );
+    // Nothing was replaced or half-written: the original edge survives intact.
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}reports_to> <{NS}kprobe-b>")
+    ));
+}
+
+/// /set on an unknown entity is refused (same rule as /retract): a typo'd IRI
+/// must not mint an unlabelled orphan node. A NEW predicate on an existing
+/// entity, by contrast, is a legitimate first write.
+#[test]
+fn test_tool_set_unknown_entity_refused_new_predicate_allowed() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_reports_to(&mut store, &[]);
+
+    let missing = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-nonexistent"),
+            "predicate": format!("{NS}reports_to"),
+            "value": {"iri": format!("{NS}kprobe-b")}
+        }),
+    );
+    assert!(
+        missing.expect_err("unknown entity must refuse").to_string().contains("entity not found"),
+    );
+
+    // First-time set of a brand-new predicate: asserted:1, retracted:0.
+    let first = tool_set(
+        &mut store,
+        &serde_json::json!({
+            "entity": format!("{NS}kprobe-a"),
+            "predicate": format!("{NS}holds_badge"),
+            "value": "vault-7"
+        }),
+    )
+    .unwrap();
+    assert_eq!(first["retracted"], 0);
+    assert_eq!(first["asserted"], 1);
+    assert!(ask(
+        &store,
+        &format!("<{NS}kprobe-a> <{NS}holds_badge> \"vault-7\"")
+    ));
+}
+
 /// `get` returns the stored turtle byte-for-byte, and an unrecognized action is
 /// an ERROR rather than a silent fallback to `list`.
 ///
@@ -930,6 +1132,7 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_resolve_entity"));
     assert!(names.contains(&"quipu_episode"));
     assert!(names.contains(&"quipu_retract"));
+    assert!(names.contains(&"quipu_set"));
     assert!(names.contains(&"quipu_retract_episode"));
     assert!(names.contains(&"quipu_shapes"));
     assert!(names.contains(&"quipu_search_nodes"));
@@ -951,12 +1154,12 @@ fn test_tool_definitions() {
     // its handler (hq-8wd) — otherwise the call would always fail.
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 26);
+        assert_eq!(defs.len(), 27);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 25);
+        assert_eq!(defs.len(), 26);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 

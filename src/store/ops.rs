@@ -501,6 +501,86 @@ impl Store {
         Ok((tx_id, count))
     }
 
+    /// Set `(entity, predicate)` to exactly `value`: retract every current
+    /// object on that predicate and assert the new one, in ONE transaction
+    /// — the ergonomic follow-up to the bare-string-object fix.
+    ///
+    /// Re-parenting as retract-then-assert is two calls the caller must
+    /// sequence; forgetting the retract half leaves a MULTI-VALUED
+    /// `reports_to` — silently wrong in the opposite direction from the
+    /// silent-no-op vqy9 fixed. Single-valued predicates want a supersede
+    /// primitive, and atomicity has to come from the store: both halves ride
+    /// one `transact`, so no reader ever observes the predicate empty and a
+    /// crash cannot strand it half-done.
+    ///
+    /// SINGLE-VALUE semantics by design: ALL current objects are replaced,
+    /// however many there are (that is what "set" means — it is also the
+    /// repair for an accidentally multi-valued predicate). A caller wanting
+    /// add-without-remove asserts via `/knot` instead.
+    ///
+    /// Idempotent: setting the already-sole-current value is a no-op returning
+    /// `(0, 0, 0)` — no transaction is written, matching `retract_triples`'
+    /// `(0, 0)` convention for "nothing to do".
+    ///
+    /// Returns `(tx_id, retracted, asserted)`.
+    pub fn set_triple(
+        &mut self,
+        entity: i64,
+        predicate: i64,
+        value: Value,
+        timestamp: &str,
+        actor: Option<&str>,
+    ) -> Result<(i64, usize, usize)> {
+        let current: Vec<Fact> = self
+            .entity_facts(entity)?
+            .into_iter()
+            .filter(|f| f.attribute == predicate)
+            .collect();
+
+        // The vqy9 footgun, write-side: a bare string for an IRI-valued
+        // predicate would ASSERT a `Str` literal where every neighbour is a
+        // `Ref` — a mis-shaped edge that answers no traversal. Refuse the two
+        // unambiguous cases (predicate currently holds only Refs; or the
+        // string itself is IRI-shaped), same discipline as retract_triples.
+        if let Value::Str(s) = &value {
+            let holds_ref = current.iter().any(|f| matches!(f.value, Value::Ref(_)));
+            let holds_str = current.iter().any(|f| matches!(f.value, Value::Str(_)));
+            let looks_like_iri = s.contains("://") && !s.chars().any(char::is_whitespace);
+            if (holds_ref && !holds_str) || looks_like_iri {
+                let pred_iri = self.resolve(predicate)?;
+                return Err(Error::InvalidValue(format!(
+                    "set refused: object \"{s}\" is a string literal, but <{pred_iri}> \
+                     takes an IRI reference. Pass the object as {{\"iri\": \"{s}\"}} to \
+                     set the edge — a bare string would be stored as a literal that no \
+                     graph traversal can follow."
+                )));
+            }
+        }
+
+        let already_present = current.iter().any(|f| f.value == value);
+        let to_retract: Vec<Fact> = current.into_iter().filter(|f| f.value != value).collect();
+
+        if to_retract.is_empty() && already_present {
+            return Ok((0, 0, 0));
+        }
+
+        let mut datums = retraction_datums(&to_retract);
+        let retracted = datums.len();
+        let asserted = usize::from(!already_present);
+        if !already_present {
+            datums.push(Datum {
+                entity,
+                attribute: predicate,
+                value,
+                valid_from: timestamp.to_string(),
+                valid_to: None,
+                op: crate::types::Op::Assert,
+            });
+        }
+        let tx_id = self.transact(&datums, timestamp, actor, Some("set"))?;
+        Ok((tx_id, retracted, asserted))
+    }
+
     /// Episode-scoped logical retraction (aegis-hxb).
     ///
     /// Retract every currently-active asserted fact whose owning transaction was

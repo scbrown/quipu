@@ -223,6 +223,7 @@ async fn main() {
         .route("/episodes/complete", post(episodes_complete))
         .route("/impact", post(impact_analysis))
         .route("/retract", post(retract))
+        .route("/set", post(set_predicate))
         .route("/episode/retract", post(retract_episode))
         .route("/shapes", post(shapes))
         .route("/subscriptions", post(subscriptions))
@@ -752,6 +753,7 @@ rw_handler!(episode, quipu::tool_episode);
 rw_handler!(episodes_complete, quipu::tool_episodes_complete);
 rw_handler!(impact_analysis, quipu::tool_impact);
 rw_handler!(retract, quipu::tool_retract);
+rw_handler!(set_predicate, quipu::tool_set);
 rw_handler!(retract_episode, quipu::tool_retract_episode);
 
 async fn validate(

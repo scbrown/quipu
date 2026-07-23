@@ -40,6 +40,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/episode",
     "/episodes/complete",
     "/retract",
+    "/set",
     "/episode/retract",
     "/shapes",
     "/impact",
@@ -232,6 +233,7 @@ mod tests {
     fn write_endpoint_classification() {
         assert!(is_write_endpoint("/episode"));
         assert!(is_write_endpoint("/retract"));
+        assert!(is_write_endpoint("/set"));
         assert!(is_write_endpoint("/proposal/accept"));
         // aegis-2f4n: the three routes that were open under read-only mode and
         // bearer auth because WRITE_ENDPOINTS omitted them. Named so a regression
