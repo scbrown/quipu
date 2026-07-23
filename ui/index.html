@@ -224,6 +224,36 @@ main {
   background: var(--bg);
 }
 
+/* ── IRI row + deep links + node page ── */
+.iri-row { display: flex; align-items: center; gap: 6px; margin: 8px 0;
+  padding: 6px 8px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); font-family: var(--mono); font-size: 11px; }
+.iri-label { color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
+.iri-value { color: var(--node-host); overflow-wrap: anywhere; flex: 1;
+  text-decoration: none; }
+.iri-value:hover { text-decoration: underline; }
+.iri-copy { background: var(--bg-elevated); color: var(--text); border: 1px solid
+  var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer;
+  font-size: 11px; white-space: nowrap; }
+.iri-copy:hover { border-color: var(--accent); }
+.deep-links { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.deep-link { display: inline-block; padding: 3px 10px; border-radius: 12px;
+  background: var(--accent-dim); color: #fff; text-decoration: none;
+  font-size: 12px; }
+.deep-link:hover { background: var(--accent); }
+.node-page-link { color: var(--text-muted); font-size: 12px; cursor: pointer;
+  text-decoration: none; }
+.node-page-link:hover { color: var(--accent); }
+#node-page { display: none; position: fixed; inset: 0; z-index: 200;
+  background: var(--bg); overflow-y: auto; }
+.node-page-inner { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+.node-page-inner h2 { margin: 8px 0 4px; }
+.node-page-close { background: var(--bg-elevated); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 4px 12px; cursor: pointer; margin-bottom: 8px; }
+.node-page-close:hover { border-color: var(--accent); }
+.node-page-inner .rel-row { cursor: pointer; }
+
 #explorer .detail-panel {
   width: 320px;
   min-width: 240px;
@@ -1058,6 +1088,74 @@ function isRelationPred(pred) {
     && !pred.startsWith(PROV_NS);
 }
 
+// ── Deep-link registry ──
+// A node's rdf:type resolves to where that thing ACTUALLY lives — and the
+// mapping is GRAPH DATA, not code. The registry is loaded from the store:
+// entities of type <ns>DeepLinkTemplate carrying
+//     <ns>for_type      the rdf:type the template applies to (IRI)
+//     rdfs:label        the link's button text
+//     <ns>url_template  the URL pattern
+// Placeholders resolve from the target entity:
+//   {name}      local name of the IRI (last path segment, URI-decoded)
+//   {label}     rdfs:label (falls back to {name})
+//   {iri}       the full IRI, URL-encoded
+//   {fact:X}    the entity's <ns>X fact value (row is OMITTED if absent —
+//               a deep-link that cannot resolve honestly does not render)
+// Adding a type is asserting one small entity into the graph (e.g. via /knot);
+// no code, no deploy. Unknown types fall back to the IRI + node page, which
+// every node gets regardless. Deployment-specific hostnames therefore live in
+// the graph, never in this file.
+let DEEP_LINKS = {};   // shortIri(type) -> [{label, url}]
+
+async function loadDeepLinkRegistry() {
+  try {
+    const q = `SELECT ?t ?label ?tmpl WHERE {
+      ?s a <http://aegis.gastown.local/ontology/DeepLinkTemplate> ;
+         <http://aegis.gastown.local/ontology/for_type> ?t ;
+         <http://www.w3.org/2000/01/rdf-schema#label> ?label ;
+         <http://aegis.gastown.local/ontology/url_template> ?tmpl }`;
+    const rows = (await api('/query', { query: q })).rows || [];
+    const reg = {};
+    for (const r of rows) {
+      const g = k => (r[k] && r[k].value !== undefined) ? r[k].value : r[k];
+      const key = shortIri(String(g('t')));
+      (reg[key] = reg[key] || []).push({ label: String(g('label')), url: String(g('tmpl')) });
+    }
+    DEEP_LINKS = reg;
+  } catch (_) { /* no registry in the graph -> every node still gets IRI + page */ }
+}
+
+function localName(iri) {
+  try { return decodeURIComponent(String(iri).split('/').filter(Boolean).pop() || iri); }
+  catch (_) { return String(iri).split('/').filter(Boolean).pop() || iri; }
+}
+
+// Resolve the registry rows for an entity. Every {fact:X} must resolve or the
+// row is dropped — better no link than a 404 that teaches people not to click.
+function resolveDeepLinks(ent) {
+  const out = [];
+  const factVal = local => {
+    const f = (ent.facts || []).find(f => shortIri(f.predicate) === 'aegis:' + local
+                                       || shortIri(f.predicate) === local);
+    return f ? String(f.value) : null;
+  };
+  for (const t of (ent._types || [])) {
+    for (const row of (DEEP_LINKS[shortIri(t)] || [])) {
+      let url = row.url, ok = true;
+      url = url.replace(/\{name\}/g, encodeURIComponent(localName(ent.iri)))
+               .replace(/\{label\}/g, encodeURIComponent(ent._label || localName(ent.iri)))
+               .replace(/\{iri\}/g, encodeURIComponent(ent.iri));
+      url = url.replace(/\{fact:([A-Za-z_]+)\}/g, (_, k) => {
+        const v = factVal(k);
+        if (v === null) { ok = false; return ''; }
+        return v.startsWith('http') ? v : encodeURIComponent(v);
+      });
+      if (ok && url) out.push({ label: row.label, url });
+    }
+  }
+  return out;
+}
+
 // ── State ──
 const state = {
   entities: [],          // all entities (incl. episodes)
@@ -1175,6 +1273,13 @@ function navigate() {
   if (link) link.classList.add('active');
 
   if (hash === 'explorer' && !state.loaded) loadEntities();
+  if (!state._deepLinksLoaded) { state._deepLinksLoaded = true; loadDeepLinkRegistry(); }
+  // Dereferenced IRI: the server serves this UI at /entity/{iri}; open that
+  // node's page as soon as we know which node was asked for.
+  if (location.pathname.startsWith('/entity/') && !state._nodePageBooted) {
+    state._nodePageBooted = true;
+    openNodePage(decodeURIComponent(location.pathname.slice('/entity/'.length)));
+  }
   if (hash === 'timeline' && !state.timelineLoaded) loadEpisodes();
   if (hash === 'shapes') loadShapes();
   // CodeMirror renders blank when initialized in a hidden container; (re)init
@@ -1419,6 +1524,11 @@ function showDetail(ent) {
 
   let html = `<h3 title="${escapeHtml(ent.iri)}">${escapeHtml(ent._label)}</h3>`;
   html += `<div class="detail-sub">${typeBadges || '<span class="mini-type">untyped</span>'}</div>`;
+  // The IRI is first-class: visible, copyable, and dereferenceable (the server
+  // connegs /entity/{iri} — humans get this UI, machines get JSON-LD/turtle).
+  html += iriRowHtml(ent.iri);
+  html += deepLinkRowHtml(ent);
+  html += `<div class="detail-section"><a class="node-page-link" data-iri="${escapeHtml(ent.iri)}" href="/entity/${encodeURIComponent(ent.iri)}">⧉ Open full node page</a></div>`;
 
   if (relations.length || incoming.length) {
     html += `<div class="detail-section"><h4>Relations <span class="count">${relations.length + incoming.length}</span></h4>`;
@@ -1451,7 +1561,155 @@ function showDetail(ent) {
       if (tgt) selectEntity(tgt);
     };
   });
+  wireIriCopy(panel);
+  const pageLink = panel.querySelector('.node-page-link');
+  if (pageLink) pageLink.onclick = (e) => { e.preventDefault(); openNodePage(pageLink.dataset.iri); };
 }
+
+// ── IRI + deep-link fragments (shared by panel and node page) ──
+
+function iriRowHtml(iri) {
+  return `<div class="iri-row"><span class="iri-label">IRI</span>
+    <a class="iri-value" href="/entity/${encodeURIComponent(iri)}" title="dereference">${escapeHtml(iri)}</a>
+    <button class="iri-copy" data-iri="${escapeHtml(iri)}" title="copy IRI">⧉ copy</button></div>`;
+}
+
+function deepLinkRowHtml(ent) {
+  const links = resolveDeepLinks(ent);
+  if (!links.length) return '';
+  return `<div class="deep-links">` + links.map(l =>
+    `<a class="deep-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">↗ ${escapeHtml(l.label)}</a>`
+  ).join('') + `</div>`;
+}
+
+function wireIriCopy(rootEl) {
+  rootEl.querySelectorAll('.iri-copy').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      try { await navigator.clipboard.writeText(btn.dataset.iri); btn.textContent = '✓ copied'; }
+      catch (_) { window.prompt('Copy IRI:', btn.dataset.iri); }
+      setTimeout(() => { btn.textContent = '⧉ copy'; }, 1500);
+    };
+  });
+}
+
+// ── Full node page ──
+// A PAGE, not just the side panel: everything known about one node, at a
+// shareable URL (/entity/<iri> — the same path the server connegs, so the IRI
+// itself dereferences here for humans). Works for ANY iri, including ones
+// outside the currently-loaded graph slice: facts are fetched on demand.
+
+async function fetchEntityForPage(iri) {
+  const inState = state.byIri.get(iri);
+  if (inState) return inState;
+  // Not in the loaded slice — build an entity from two exact-IRI queries.
+  const q = async (query) => (await api('/query', { query })).rows || [];
+  const facts = (await q(`SELECT ?p ?o WHERE { <${iri}> ?p ?o }`)).map(r => ({
+    predicate: (r.p && r.p.value) || r.p, value: (r.o && (r.o.value ?? r.o)) ?? r.o,
+  }));
+  const types = facts.filter(f => f.predicate === RDF_TYPE).map(f => String(f.value));
+  const lbl = facts.find(f => String(f.predicate).endsWith('#label'));
+  return { iri, facts, _facts: facts, _types: types,
+           _type: types[0] || '', _label: lbl ? String(lbl.value) : localName(iri) };
+}
+
+async function fetchIncomingForPage(iri) {
+  const cached = state.incoming.get(iri);
+  if (cached) return cached;
+  try {
+    const rows = (await api('/query', { query: `SELECT ?s ?p WHERE { ?s ?p <${iri}> }` })).rows || [];
+    return rows.map(r => ({ source: (r.s && r.s.value) || r.s, predicate: (r.p && r.p.value) || r.p }))
+               .filter(r => r.predicate !== RDF_TYPE);
+  } catch (_) { return []; }
+}
+
+async function openNodePage(iri) {
+  let page = document.getElementById('node-page');
+  if (!page) {
+    page = document.createElement('div');
+    page.id = 'node-page';
+    document.body.appendChild(page);
+  }
+  page.innerHTML = `<div class="node-page-inner"><div class="empty-state"><span class="spinner"></span><p>Loading node…</p></div></div>`;
+  page.style.display = 'block';
+  if (location.pathname !== '/entity/' + encodeURIComponent(iri)) {
+    history.pushState({ nodePage: iri }, '', '/entity/' + encodeURIComponent(iri));
+  }
+  let ent, incoming;
+  try {
+    ent = await fetchEntityForPage(iri);
+    incoming = await fetchIncomingForPage(iri);
+  } catch (e) {
+    page.querySelector('.node-page-inner').innerHTML =
+      `<button class="node-page-close">← back</button><div class="empty-state"><p>Could not load ${escapeHtml(iri)}: ${escapeHtml(String(e))}</p></div>`;
+    page.querySelector('.node-page-close').onclick = closeNodePage;
+    return;
+  }
+  const facts = ent._facts || ent.facts || [];
+  const relations = [], attrs = [], provEps = [];
+  for (const f of facts) {
+    if (f.predicate === RDF_TYPE) continue;
+    if (String(f.predicate).startsWith(PROV_NS)) { provEps.push(f.value); continue; }
+    const isIriVal = typeof f.value === 'string' && /^https?:\/\//.test(f.value);
+    if (isRelationPred(f.predicate) && isIriVal) relations.push(f); else attrs.push(f);
+  }
+  const typeBadges = (ent._types || []).map(t =>
+    `<span class="mini-type" style="border-color:${typeColor(t)};color:${typeColor(t)}">${escapeHtml(shortIri(t))}</span>`).join(' ');
+  const relRow = (pred, otherIri, dir) => {
+    const known = state.byIri.get(otherIri);
+    const name = known ? known._label : localName(otherIri);
+    return `<div class="rel-row" data-iri="${escapeHtml(otherIri)}" title="${escapeHtml(otherIri)}">
+      <span class="rel-pred">${escapeHtml(shortIri(pred))}</span>
+      <span class="rel-arrow">${dir === 'out' ? '→' : '←'}</span>
+      <span class="rel-target">${escapeHtml(name)}</span></div>`;
+  };
+  let html = `<button class="node-page-close">← back</button>`;
+  html += `<h2 title="${escapeHtml(ent.iri)}">${escapeHtml(ent._label)}</h2>`;
+  html += `<div class="detail-sub">${typeBadges || '<span class="mini-type">untyped</span>'}</div>`;
+  html += iriRowHtml(ent.iri);
+  html += deepLinkRowHtml(ent);
+  if (relations.length || incoming.length) {
+    html += `<div class="detail-section"><h4>Relations <span class="count">${relations.length + incoming.length}</span></h4>`;
+    html += relations.map(f => relRow(f.predicate, f.value, 'out')).join('');
+    html += incoming.map(r => relRow(r.predicate, r.source, 'in')).join('');
+    html += `</div>`;
+  }
+  if (attrs.length) {
+    html += `<div class="detail-section"><h4>Attributes <span class="count">${attrs.length}</span></h4><table class="fact-table"><tbody>`;
+    for (const f of attrs) {
+      html += `<tr><td class="pred" title="${escapeHtml(String(f.predicate))}">${escapeHtml(shortIri(String(f.predicate)))}</td><td title="${escapeHtml(String(f.value))}">${escapeHtml(String(f.value))}</td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+  if (provEps.length) {
+    const uniq = [...new Set(provEps.map(String))];
+    html += `<div class="detail-section provenance"><h4>Provenance <span class="count">${uniq.length}</span> <span class="hint">how do we know this</span></h4>`;
+    html += `<div class="prov-list">` + uniq.map(i =>
+      `<div class="prov-ep" title="${escapeHtml(i)}">&#x1F4DC; ${escapeHtml(shortIri(i))}</div>`).join('') + `</div></div>`;
+  }
+  page.innerHTML = `<div class="node-page-inner">${html}</div>`;
+  page.querySelector('.node-page-close').onclick = closeNodePage;
+  wireIriCopy(page);
+  // Every relation navigates to ITS node page — the whole graph is walkable.
+  page.querySelectorAll('.rel-row').forEach(row => {
+    row.onclick = () => openNodePage(row.dataset.iri);
+  });
+}
+
+function closeNodePage() {
+  const page = document.getElementById('node-page');
+  if (page) page.style.display = 'none';
+  if (location.pathname.startsWith('/entity/')) history.pushState({}, '', '/');
+}
+
+window.addEventListener('popstate', () => {
+  if (location.pathname.startsWith('/entity/')) {
+    openNodePage(decodeURIComponent(location.pathname.slice('/entity/'.length)));
+  } else {
+    const page = document.getElementById('node-page');
+    if (page) page.style.display = 'none';
+  }
+});
 
 function nodeData(iri) {
   const e = state.byIri.get(iri);
