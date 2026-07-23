@@ -1,5 +1,15 @@
 # Federation
 
+> **Implementation status (2026-07-23, weaver):** 🟡 **Partial.** Built &
+> tested: the `GraphProvider` trait, `ProviderStatus`, `LocalProvider`, and
+> `FederatedProvider` (`query_all` with `_provider` tagging, `health_all`) in
+> `src/provider.rs`; the `[[quipu.federation.remotes]]` config schema parses in
+> `src/config.rs` and **warns loudly when set** (federation is unimplemented —
+> config.rs, with a test). **Gap:** no `RemoteProvider`, so the local+remote
+> headline is not real and `federation.remotes` is inert — tracked in
+> [quipu#47](https://github.com/scbrown/quipu/issues/47). Verified by grep
+> against `main` (fcf75c2). See the detailed banner below.
+
 > **Status: trait-only, not wired.** The `GraphProvider` trait and
 > `FederatedProvider` exist as library primitives, but quipu ships **no remote
 > provider** — only `LocalProvider`. Nothing constructs a `FederatedProvider` from
