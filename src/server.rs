@@ -231,6 +231,13 @@ async fn main() {
         .route("/validate", post(validate))
         .route("/episode", post(episode))
         .route("/search", post(search))
+        // Read-only resolution dry-run: "what would resolution
+        // say about this name?" WITHOUT writing. Before this route, the answer
+        // was observable only as a side effect of POST /episode — consumers
+        // (the graph-extract minting gate) had to reimplement the name matcher
+        // client-side and post-then-retract to see embedding matches: undo,
+        // not prevention.
+        .route("/resolve", post(resolve_probe))
         .route("/hybrid_search", post(hybrid_search))
         .route("/unified_search", post(unified_search))
         .route("/ask", post(ask))
@@ -762,6 +769,11 @@ ro_handler!(unified_search, quipu::tool_unified_search);
 ro_handler!(ask, quipu::tool_ask);
 ro_handler!(search_nodes, quipu::tool_search_nodes);
 ro_handler!(search_facts, quipu::tool_search_facts);
+// /resolve: genuine read — resolve_entity scans labels and runs a
+// vector search; its only compute is embedding the QUERY text (one short name,
+// tens of ms — not the episode-embed class), and it commits nothing. The
+// read-only claim is asserted by test, not just this comment.
+ro_handler!(resolve_probe, quipu::tool_resolve_entity);
 ro_handler!(
     graphiti_search_nodes,
     quipu::mcp::graphiti::tool_search_nodes

@@ -231,6 +231,67 @@ ex:Alice a ex:Person ;
     }
 
     #[test]
+    fn tool_resolve_entity_is_a_genuine_read_commits_nothing() {
+        use crate::vector::KnowledgeVectorStore;
+        // The /resolve route's whole reason to exist is asking
+        // "what would resolution say?" WITHOUT writing — before it, consumers
+        // had to POST an episode and retract to see embedding matches. And
+        // ro_handler! is a naming convention, not a type guarantee
+        //: a `&Store` can commit through interior mutability, so
+        // "read-only" must be asserted, not assumed.
+        let mut store = Store::open_in_memory().unwrap();
+        store.set_embedding_provider(Arc::new(DummyProvider));
+        store.embedding_config_mut().auto_embed = true;
+
+        let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:Alice a ex:Person ;
+    rdfs:label "Alice" .
+"#;
+        ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01",
+            None,
+            None,
+        )
+        .unwrap();
+
+        let tx_before = store.latest_tx_id().unwrap();
+        let vecs_before = store.vector_count().unwrap();
+
+        // The exact payload shape the HTTP route serves.
+        let out = crate::tool_resolve_entity(
+            &store,
+            &serde_json::json!({"name": "Alice", "threshold": 0.85, "top_k": 3}),
+        )
+        .unwrap();
+        assert_eq!(out["has_matches"], true);
+        assert!(out["count"].as_u64().unwrap() >= 1);
+        assert!(
+            out["candidates"][0]["iri"]
+                .as_str()
+                .unwrap()
+                .contains("Alice")
+        );
+
+        assert_eq!(
+            store.latest_tx_id().unwrap(),
+            tx_before,
+            "a resolution dry-run must not commit a transaction"
+        );
+        assert_eq!(
+            store.vector_count().unwrap(),
+            vecs_before,
+            "a resolution dry-run must not write vectors"
+        );
+    }
+
+    #[test]
     fn resolve_finds_similar_name_jaro_winkler() {
         let mut store = Store::open_in_memory().unwrap();
 

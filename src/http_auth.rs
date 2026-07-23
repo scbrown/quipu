@@ -102,6 +102,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/fragments",
     "/reconcile",
     "/preview/{iri}",
+    // Resolution dry-run: reads labels + vector store, writes
+    // nothing — the read-only twin of the resolution /episode performs.
+    "/resolve",
 ];
 
 /// Whether `path` is a write endpoint subject to auth / read-only policy.
