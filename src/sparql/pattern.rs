@@ -72,7 +72,7 @@ pub fn eval_pattern(
                         limit_ms: 0,
                     });
                 }
-                if eval_filter(store, expr, &row)? {
+                if eval_filter(store, expr, &row, ctx)? {
                     filtered.push(row);
                 }
             }
@@ -147,7 +147,7 @@ pub fn eval_pattern(
                     i += 1;
                     if let Some(merged) = merge_bindings(l, r) {
                         let passes = match expression.as_ref() {
-                            Some(e) => eval_filter(store, e, &merged)?,
+                            Some(e) => eval_filter(store, e, &merged, ctx)?,
                             None => true,
                         };
                         if passes {

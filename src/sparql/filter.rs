@@ -3,6 +3,8 @@
 use oxrdf::Literal;
 use spargebra::algebra::Expression;
 
+use super::TemporalContext;
+
 use crate::error::{Error, Result};
 use crate::namespace;
 use crate::store::Store;
@@ -16,7 +18,12 @@ use super::Bindings;
 /// Silently passing unknown expressions/builtins (the old `_ => true`) produced
 /// wrong results with no signal — a SPARQL `FILTER` is meant to constrain, so a
 /// construct we cannot evaluate must fail loudly, never match everything (hq-9hs).
-pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> Result<bool> {
+pub fn eval_filter(
+    store: &Store,
+    expr: &Expression,
+    row: &Bindings,
+    ctx: &TemporalContext,
+) -> Result<bool> {
     match expr {
         Expression::Equal(left, right) => Ok(
             match (eval_expr(store, left, row), eval_expr(store, right, row)) {
@@ -39,12 +46,12 @@ pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> Result<b
             o == std::cmp::Ordering::Less || o == std::cmp::Ordering::Equal
         })),
         Expression::And(left, right) => {
-            Ok(eval_filter(store, left, row)? && eval_filter(store, right, row)?)
+            Ok(eval_filter(store, left, row, ctx)? && eval_filter(store, right, row, ctx)?)
         }
         Expression::Or(left, right) => {
-            Ok(eval_filter(store, left, row)? || eval_filter(store, right, row)?)
+            Ok(eval_filter(store, left, row, ctx)? || eval_filter(store, right, row, ctx)?)
         }
-        Expression::Not(inner) => Ok(!eval_filter(store, inner, row)?),
+        Expression::Not(inner) => Ok(!eval_filter(store, inner, row, ctx)?),
         Expression::Bound(var) => Ok(row.contains_key(var.as_str())),
         Expression::FunctionCall(func, args) => eval_bool_function(store, func, args, row),
         // A bare variable/literal used directly as a FILTER takes its effective
@@ -60,10 +67,39 @@ pub fn eval_filter(store: &Store, expr: &Expression, row: &Bindings) -> Result<b
                 ))),
             }
         }
+        // EXISTS { pattern } (and NOT EXISTS via the Not arm above). The inner
+        // graph pattern is evaluated through the full pattern engine — so
+        // property paths, OPTIONAL, nested FILTERs etc. all work inside it
+        // (paths under NOT EXISTS were the specific gap this closes). SPARQL
+        // semantics: EXISTS is true for the current row iff some solution of
+        // the inner pattern is COMPATIBLE with it — agrees on every shared
+        // variable. We evaluate the inner pattern fresh and test compatibility
+        // rather than substituting, which is the standard definition and keeps
+        // path/join evaluation untouched.
+        Expression::Exists(inner) => {
+            let (inner_rows, _) = super::pattern::eval_pattern(store, inner, ctx)?;
+            Ok(inner_rows.iter().any(|cand| compatible(row, cand)))
+        }
         other => Err(Error::InvalidValue(format!(
             "unsupported FILTER expression: {other:?}"
         ))),
     }
+}
+
+/// Two solution mappings are COMPATIBLE (SPARQL §18.6) iff they agree on every
+/// variable bound in both. EXISTS uses this: the current row is the outer
+/// mapping, `cand` an inner-pattern solution; a match on the shared variables
+/// (e.g. the outer-bound ?s in a NOT-EXISTS reachability check) is what makes
+/// the inner solution "exist for this row".
+fn compatible(outer: &Bindings, cand: &Bindings) -> bool {
+    for (k, v) in outer {
+        if let Some(cv) = cand.get(k) {
+            if cv != v {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// SPARQL effective boolean value for a bound value used directly as a FILTER.

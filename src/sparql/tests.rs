@@ -1343,3 +1343,118 @@ fn expired_deadline_stops_pure_rust_join_loop() {
         "expected QueryTimeout, got: {err}"
     );
 }
+
+// ── FILTER EXISTS / NOT EXISTS, including property paths inside ──────────────
+// Before this, EXISTS hit the catch-all "unsupported FILTER expression" branch;
+// NOT EXISTS with a path (the natural not-reachable-via-alias detector) errored,
+// and a client defaulting the error's missing rows to empty read it as ALL-CLEAR.
+// Assertions bind the ?n NAME literal (Value::Str) rather than the subject IRI,
+// which is a dictionary-encoded Value::Ref(id) and cannot be string-matched.
+
+fn names(result: &QueryResult) -> Vec<String> {
+    let mut out: Vec<String> = result
+        .rows()
+        .iter()
+        .filter_map(|r| match r.get("n") {
+            Some(Value::Str(s)) => Some(s.clone()),
+            _ => None,
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+#[test]
+fn filter_exists_basic() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER EXISTS { ?s ex:knows ?x } }",
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice", "Bob"],
+        "alice+bob have knows, carol doesn't"
+    );
+}
+
+#[test]
+fn filter_not_exists_basic() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER NOT EXISTS { ?s ex:knows ?x } }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Carol"], "only carol lacks ex:knows");
+}
+
+#[test]
+fn filter_not_exists_with_property_path() {
+    // THE bead shape: a property path inside NOT EXISTS must evaluate, not error.
+    // alice<->bob form a ex:knows cycle; neither reaches carol. So "persons who
+    // canNOT reach a carol-prefixed node via ex:knows+" is {alice, bob}.
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE {
+           ?s ex:name ?n ; a ex:Person .
+           FILTER NOT EXISTS { ?s ex:knows+ ?c . FILTER(STRSTARTS(STR(?c), \"http://example.org/carol\")) }
+         }",
+    )
+    .expect("path under NOT EXISTS must evaluate, not error");
+    assert_eq!(
+        names(&result),
+        vec!["Alice", "Bob"],
+        "alice+bob cannot reach carol via knows+"
+    );
+}
+
+#[test]
+fn filter_exists_with_property_path_positive_control() {
+    // The negative control the bead demands: an EXISTS whose path DOES match, so a
+    // silently-empty engine result would show up as wrong, not as clean.
+    // alice reaches bob via ex:knows+; the prefix matches bob -> alice qualifies.
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE {
+           ?s ex:name ?n ; a ex:Person .
+           FILTER EXISTS { ?s ex:knows+ ?c . FILTER(STRSTARTS(STR(?c), \"http://example.org/bob\")) }
+         }",
+    )
+    .unwrap();
+    let got = names(&result);
+    assert!(
+        !got.is_empty(),
+        "EXISTS path must MATCH here (negative control): {got:?}"
+    );
+    assert!(
+        got.contains(&"Alice".to_string()),
+        "alice reaches bob: {got:?}"
+    );
+}
+
+#[test]
+fn filter_not_exists_compatible_mapping_binds_outer_var() {
+    // Compatible-mapping correctness: the inner ?s is the OUTER ?s, not "any
+    // subject that has knows". carol has no knows, so NOT EXISTS keeps carol even
+    // though alice/bob DO — the inner solution must be compatible with carol's row.
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER NOT EXISTS { ?s ex:knows ?x } }",
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Carol"],
+        "compatible-mapping: only carol"
+    );
+}
