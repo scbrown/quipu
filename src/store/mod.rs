@@ -450,6 +450,25 @@ impl Store {
         ))
     }
 
+    /// The latest committed transaction id (0 for an empty store).
+    ///
+    /// Cheap (indexed MAX on the rowid-keyed transactions table) and
+    /// monotonic, so callers can use it as a change-generation stamp for
+    /// caches of derived read-side data: rebuild when it moves, reuse when it
+    /// hasn't. Motivated by the spotlight reader-starvation incident, where
+    /// re-deriving the labeled-entity list under the store lock on every call
+    /// starved all readers.
+    pub fn latest_tx_id(&self) -> Result<i64> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COALESCE(MAX(id), 0) FROM transactions")?;
+        let mut rows = stmt.query([])?;
+        match rows.next()? {
+            Some(row) => Ok(row.get(0)?),
+            None => Ok(0),
+        }
+    }
+
     /// Retrieve a transaction by id.
     pub fn get_transaction(&self, tx_id: i64) -> Result<Option<crate::types::Transaction>> {
         let mut stmt = self

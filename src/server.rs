@@ -1061,6 +1061,22 @@ fn turtle_response(t: Vec<u8>) -> axum::response::Response {
         .into_response()
 }
 
+/// Generation-keyed cache of the labeled-entity list spotlight scans against.
+///
+/// The first deploy of the reader-starvation fix moved only the SCAN off the
+/// store lock and still starved readers — measured: the expensive half is the
+/// FETCH itself (full-label SPARQL + per-row IRI resolution, 2-3s at 11k+
+/// entities), not the scan. So the fetch result is cached and keyed on
+/// `Store::latest_tx_id()`: under a spotlight burst only the first call pays
+/// the fetch; the rest hold the store lock for one indexed MAX. Any write
+/// moves the generation and invalidates naturally.
+struct SpotlightCache {
+    generation: i64,
+    entities: Arc<Vec<semweb::LabeledEntity>>,
+}
+
+static SPOTLIGHT_CACHE: Mutex<Option<SpotlightCache>> = Mutex::new(None);
+
 async fn spotlight_handler(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
@@ -1074,11 +1090,25 @@ async fn spotlight_handler(
             .get("confidence")
             .and_then(serde_json::Value::as_f64)
             .unwrap_or(0.5);
-        // Same lock-scope split as spotlight_handler (reader-starvation fix): fetch
-        // under the lock, scan outside it.
+        // Reader-starvation fix, both halves: the store lock is held only for
+        // a generation check (indexed MAX) and — when the graph changed — one
+        // entity fetch that refills the cache; the O(entities × text) scan
+        // runs outside every lock.
         let entities = {
             let store = store.lock().unwrap();
-            semweb::fetch_labeled_entities(&store)?
+            let generation = store.latest_tx_id()?;
+            let mut cache = SPOTLIGHT_CACHE.lock().unwrap();
+            match cache.as_ref() {
+                Some(c) if c.generation == generation => c.entities.clone(),
+                _ => {
+                    let fresh = Arc::new(semweb::fetch_labeled_entities(&store)?);
+                    *cache = Some(SpotlightCache {
+                        generation,
+                        entities: fresh.clone(),
+                    });
+                    fresh
+                }
+            }
         };
         Ok(axum::Json(semweb::spotlight_over(&entities, text, confidence)))
     })
