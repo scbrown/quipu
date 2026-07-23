@@ -3,6 +3,8 @@
 
 use std::sync::{Arc, Mutex};
 
+use parking_lot::FairMutex;
+
 use axum::{
     Router,
     extract::{Path, Query, State},
@@ -13,7 +15,15 @@ use axum::{
 use quipu::{EmbeddingProvider, semweb};
 use serde_json::{Value as JsonValue, json};
 
-type SharedStore = Arc<Mutex<quipu::Store>>;
+/// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
+/// sustained stream of episode writers could re-acquire the lock ahead of
+/// readers indefinitely — during the mfg0 incident a `SELECT ... LIMIT 1`
+/// measured a 38.5s wait behind a write flood. FairMutex hands the lock to
+/// the longest waiter, bounding every request's wait to the queue ahead of
+/// it. (parking_lot's `lock()` has no poison Result — a panic while holding
+/// the lock simply unlocks, which is fine: Store keeps its invariants in
+/// SQLite transactions, not in Rust-visible state.)
+type SharedStore = Arc<FairMutex<quipu::Store>>;
 
 const UI_HTML: &str = include_str!("../ui/index.html");
 const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
@@ -118,8 +128,14 @@ async fn main() {
                 store.set_embedding_provider(Arc::new(provider));
                 store.embedding_config_mut().auto_embed = config.embedding.auto_embed;
                 store.embedding_config_mut().embed_batch_size = config.embedding.embed_batch_size;
+                // Server mode defers the write-path ONNX embed OUT of the
+                // store lock: an episode write held the global
+                // mutex ~10s while embedding under it, so a write flood
+                // starved every reader. Write handlers drain + finish via
+                // finish_deferred_embed. CLI/library keep the inline path.
+                store.set_defer_auto_embed(true);
                 eprintln!(
-                    "ONNX embedding provider loaded (dim={dim}, auto_embed={})",
+                    "ONNX embedding provider loaded (dim={dim}, auto_embed={}, deferred)",
                     config.embedding.auto_embed
                 );
             }
@@ -152,7 +168,7 @@ async fn main() {
         Err(e) => eprintln!("warning: verdict signing disabled -- {e}"),
     }
 
-    let state: SharedStore = Arc::new(Mutex::new(store));
+    let state: SharedStore = Arc::new(FairMutex::new(store));
     let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
@@ -190,7 +206,7 @@ async fn main() {
 
     if args.iter().any(|a| a == "--embed-backfill") {
         eprintln!("Running embedding backfill for all entities...");
-        let mut s = state.lock().unwrap();
+        let mut s = state.lock();
         match backfill_embeddings(&mut s) {
             Ok(count) => eprintln!("Backfill complete: {count} entities embedded"),
             Err(e) => eprintln!("Backfill error: {e}"),
@@ -351,7 +367,7 @@ async fn main() {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 let store = push_store.clone();
                 let _ = tokio::task::spawn_blocking(move || {
-                    let store = store.lock().unwrap();
+                    let store = store.lock();
                     let now = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .map(|d| d.as_secs() as i64)
@@ -434,7 +450,7 @@ async fn health() -> impl IntoResponse {
 /// which must never run on every scrape while holding the store mutex.
 async fn metrics_handler(State(store): State<SharedStore>) -> Result<impl IntoResponse, AppError> {
     let (entities, facts, predicates) = blocking(move || {
-        let store = store.lock().unwrap();
+        let store = store.lock();
         Ok(store.graph_counts()?)
     })
     .await?;
@@ -507,7 +523,7 @@ where
 
 async fn stats(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let store = store.lock().unwrap();
+        let store = store.lock();
         let result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
 
         let mut entities = std::collections::HashSet::new();
@@ -560,7 +576,7 @@ async fn query(
                 .collect();
             eprintln!("{} query start: {text}", quipu::time::now_iso());
         }
-        let store = store.lock().unwrap();
+        let store = store.lock();
         let started = std::time::Instant::now();
 
         let run = |store: &quipu::Store| -> Result<axum::response::Response, AppError> {
@@ -605,8 +621,15 @@ async fn knot(
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let mut store = store.lock().unwrap();
-        let result = quipu::tool_knot(&mut store, &input)?;
+        // Hand-written write handler: same drain discipline as rw_handler!.
+        let (result, work) = {
+            let mut st = store.lock();
+            let result = quipu::tool_knot(&mut st, &input)?;
+            (result, st.take_deferred_embed())
+        };
+        if let Some(work) = work {
+            finish_deferred_embed(&store, work)?;
+        }
         Ok(axum::Json(result))
     })
     .await
@@ -638,9 +661,29 @@ macro_rules! ro_handler {
             State(s): State<SharedStore>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
-            blocking(move || Ok(axum::Json($tool(&s.lock().unwrap(), &i)?))).await
+            blocking(move || Ok(axum::Json($tool(&s.lock(), &i)?))).await
         }
     };
+}
+
+/// Finish deferred auto-embed work drained from a write handler: run the
+/// multi-second ONNX `embed_batch` OUTSIDE the store lock, then
+/// relock briefly to write the vectors. Entities whose text changed in the
+/// unlocked window are skipped by `apply_deferred_embed` — the later writer's
+/// own embed pass owns them — so interleaving readers/writers between the two
+/// lock windows (the whole point of deferring) cannot regress an embedding.
+fn finish_deferred_embed(s: &SharedStore, work: quipu::DeferredEmbed) -> Result<(), AppError> {
+    if work.is_empty() {
+        return Ok(());
+    }
+    // Brief lock: clone the Arc provider, then DROP the guard.
+    let provider = { s.lock().embedding_provider() };
+    let Some(provider) = provider else {
+        return Ok(());
+    };
+    let embeddings = provider.embed_batch(&work.texts())?; // CPU work, LOCK-FREE
+    s.lock().apply_deferred_embed(&work, &embeddings)?;
+    Ok(())
 }
 
 macro_rules! rw_handler {
@@ -649,7 +692,22 @@ macro_rules! rw_handler {
             State(s): State<SharedStore>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
-            blocking(move || Ok(axum::Json($tool(&mut s.lock().unwrap(), &i)?))).await
+            blocking(move || {
+                // Phase 1 under the lock: the transaction itself (plus cheap
+                // embed-work collection). Phase 2 (ONNX embed) runs after the
+                // guard drops; phase 3 relocks to write vectors. See
+                // finish_deferred_embed.
+                let (out, work) = {
+                    let mut st = s.lock();
+                    let out = $tool(&mut st, &i)?;
+                    (out, st.take_deferred_embed())
+                };
+                if let Some(work) = work {
+                    finish_deferred_embed(&s, work)?;
+                }
+                Ok(axum::Json(out))
+            })
+            .await
         }
     };
 }
@@ -680,7 +738,7 @@ macro_rules! embed_handler {
                 if i.get("embedding").is_none() {
                     if let Some(text) = i.get("query").and_then(|v| v.as_str()).map(str::to_owned) {
                         // Brief lock: clone the Arc provider, then DROP the guard.
-                        let provider = { s.lock().unwrap().embedding_provider() };
+                        let provider = { s.lock().embedding_provider() };
                         if let Some(provider) = provider {
                             let vec = provider.embed_text(&text)?; // CPU work, LOCK-FREE
                             if let Some(obj) = i.as_object_mut() {
@@ -689,7 +747,7 @@ macro_rules! embed_handler {
                         }
                     }
                 }
-                Ok(axum::Json($tool(&s.lock().unwrap(), &i)?))
+                Ok(axum::Json($tool(&s.lock(), &i)?))
             })
             .await
         }
@@ -729,7 +787,7 @@ async fn policy_check(
     State(s): State<SharedStore>,
     axum::Json(i): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let result = quipu::tool_policy_check(&s.lock().unwrap(), &i)?;
+    let result = quipu::tool_policy_check(&s.lock(), &i)?;
     if let Some(outcome) = result.get("outcome").and_then(|v| v.as_str()) {
         quipu::metrics::metrics().observe_policy_outcome(outcome);
     }
@@ -743,8 +801,15 @@ async fn overlay_write(
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let mut store = store.lock().unwrap();
-        let result = quipu::tool_overlay_write(&mut store, &input)?;
+        // Hand-written write handler: same drain discipline as rw_handler!.
+        let (result, work) = {
+            let mut st = store.lock();
+            let result = quipu::tool_overlay_write(&mut st, &input)?;
+            (result, st.take_deferred_embed())
+        };
+        if let Some(work) = work {
+            finish_deferred_embed(&store, work)?;
+        }
         Ok(axum::Json(result))
     })
     .await
@@ -759,7 +824,7 @@ ro_handler!(report, quipu::tool_report);
 async fn report_get(State(s): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
         Ok(axum::Json(quipu::tool_report(
-            &s.lock().unwrap(),
+            &s.lock(),
             &serde_json::json!({}),
         )?))
     })
@@ -844,7 +909,7 @@ async fn embed_backfill(
     State(store): State<SharedStore>,
 ) -> std::result::Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let mut s = store.lock().unwrap();
+        let mut s = store.lock();
         match backfill_embeddings(&mut s) {
             Ok(n) => Ok(axum::Json(json!({"status": "ok", "entities_embedded": n}))),
             Err(e) => Ok(axum::Json(json!({"status": "error", "error": e}))),
@@ -862,7 +927,7 @@ async fn entity_history(
             .get("iri")
             .and_then(|v| v.as_str())
             .ok_or_else(|| quipu::Error::InvalidValue("missing 'iri' parameter".into()))?;
-        let store = store.lock().unwrap();
+        let store = store.lock();
         let eid = store
             .lookup(iri)?
             .ok_or_else(|| quipu::Error::InvalidValue(format!("entity not found: {iri}")))?;
@@ -913,7 +978,7 @@ async fn events_get(
     Query(p): Query<EventParams>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let store = store.lock().unwrap();
+        let store = store.lock();
         let committed: Option<i64> = match (&p.since, &p.consumer) {
             (None, Some(c)) => Some(store.consumer_committed(c)?),
             _ => None,
@@ -974,7 +1039,7 @@ async fn events_commit(
         if offset < 0 {
             return Err(quipu::Error::InvalidValue("offset must be >= 0".into()).into());
         }
-        let store = store.lock().unwrap();
+        let store = store.lock();
         let now = quipu::time::now_iso();
         store.commit_consumer(&consumer_id, offset, &now)?;
         Ok(axum::Json(json!({
@@ -990,7 +1055,7 @@ async fn transactions(
     Query(p): Query<TransactionParams>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let store = store.lock().unwrap();
+        let store = store.lock();
         // Cursor for pollers (Shantytown's event subscription): `?since=<tx>`
         // returns only newer transactions so a watermarked poll is O(new), not
         // O(whole log). No params -> the full log, preserving prior behaviour.
@@ -1031,7 +1096,7 @@ async fn entity_conneg(
     }
     blocking(move || {
         let decoded = semweb::decode_iri(&iri);
-        let store = store.lock().unwrap();
+        let store = store.lock();
         if json_ld {
             Ok(json_ld_response(semweb::entity_json_ld(&store, &decoded)?))
         } else {
@@ -1046,7 +1111,7 @@ async fn entity_json(
     Path(iri): Path<String>,
 ) -> Result<axum::response::Response, AppError> {
     blocking(move || {
-        let j = semweb::entity_json_ld(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+        let j = semweb::entity_json_ld(&store.lock(), &semweb::decode_iri(&iri))?;
         Ok(json_ld_response(j))
     })
     .await
@@ -1057,7 +1122,7 @@ async fn entity_turtle_suffix(
     Path(iri): Path<String>,
 ) -> Result<axum::response::Response, AppError> {
     blocking(move || {
-        let t = semweb::entity_turtle(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+        let t = semweb::entity_turtle(&store.lock(), &semweb::decode_iri(&iri))?;
         Ok(turtle_response(t))
     })
     .await
@@ -1120,7 +1185,7 @@ async fn spotlight_handler(
         // entity fetch that refills the cache; the O(entities × text) scan
         // runs outside every lock.
         let entities = {
-            let store = store.lock().unwrap();
+            let store = store.lock();
             let generation = store.latest_tx_id()?;
             let mut cache = SPOTLIGHT_CACHE.lock().unwrap();
             match cache.as_ref() {
@@ -1164,7 +1229,7 @@ async fn fragments_handler(
         page_size: p.page_size.unwrap_or(100).min(1000),
     };
     blocking(move || {
-        let result = semweb::fragments(&store.lock().unwrap(), &q)?;
+        let result = semweb::fragments(&store.lock(), &q)?;
         Ok((
             [
                 (axum::http::header::CONTENT_TYPE, "application/json"),
@@ -1189,7 +1254,7 @@ async fn reconcile_handler(
             .get("queries")
             .and_then(|v| v.as_object())
             .ok_or_else(|| quipu::Error::InvalidValue("'queries' must be an object".into()))?;
-        let store = store.lock().unwrap();
+        let store = store.lock();
         Ok(axum::Json(semweb::reconcile(&store, queries)?))
     })
     .await
@@ -1200,7 +1265,7 @@ async fn preview_handler(
     Path(iri): Path<String>,
 ) -> Result<axum::response::Response, AppError> {
     blocking(move || {
-        let html = semweb::preview_card(&store.lock().unwrap(), &semweb::decode_iri(&iri))?;
+        let html = semweb::preview_card(&store.lock(), &semweb::decode_iri(&iri))?;
         Ok((
             [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
             html,
@@ -1271,7 +1336,7 @@ mod tests {
     async fn concurrent_search_embeds_do_not_serialize_on_the_store_lock() {
         let mut store = Store::open_in_memory().unwrap();
         store.set_embedding_provider(Arc::new(SleepyProvider));
-        let shared: SharedStore = Arc::new(Mutex::new(store));
+        let shared: SharedStore = Arc::new(FairMutex::new(store));
 
         let call = || {
             let s = shared.clone();
@@ -1302,7 +1367,7 @@ mod tests {
     async fn precomputed_embedding_bypasses_the_provider() {
         let mut store = Store::open_in_memory().unwrap();
         store.set_embedding_provider(Arc::new(SleepyProvider)); // would sleep 200ms if consulted
-        let shared: SharedStore = Arc::new(Mutex::new(store));
+        let shared: SharedStore = Arc::new(FairMutex::new(store));
 
         let start = std::time::Instant::now();
         let r = search(

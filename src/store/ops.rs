@@ -299,14 +299,29 @@ impl Store {
             && let Some(provider) = &self.embedding_provider
         {
             let entity_ids = embedding::touched_entity_ids(datums);
-            embedding::auto_embed_entities(
-                self,
-                provider,
-                &entity_ids,
-                timestamp,
-                self.embedding_config.embed_batch_size,
-                datums,
-            )?;
+            if self.defer_auto_embed {
+                // Deferred path: do only the cheap parts here —
+                // close retired embeddings and build texts — and queue the
+                // multi-second ONNX embed for the caller to run OUTSIDE the
+                // store lock. An episode write's lock hold-time drops from
+                // ~seconds (embed under lock) to the transact itself.
+                let work = embedding::collect_embed_work(self, &entity_ids, timestamp, datums)?;
+                if !work.is_empty() {
+                    match &mut self.pending_embed {
+                        Some(pending) => pending.merge(work),
+                        None => self.pending_embed = Some(work),
+                    }
+                }
+            } else {
+                embedding::auto_embed_entities(
+                    self,
+                    provider,
+                    &entity_ids,
+                    timestamp,
+                    self.embedding_config.embed_batch_size,
+                    datums,
+                )?;
+            }
         }
 
         // Notify registered observers. Observers may call store.transact()

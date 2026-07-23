@@ -78,6 +78,17 @@ pub struct Store {
     /// atomically with the facts they describe. `RefCell` because the emit
     /// path runs under `&self`; single-connection Store is not `Sync`-shared.
     pub(crate) pending_write_events: std::cell::RefCell<Vec<PendingWriteEvent>>,
+    /// When true, auto-embed after a write COLLECTS work (texts + closes)
+    /// instead of running the multi-second ONNX embed inline under the
+    /// caller's lock; the caller drains via [`Store::take_deferred_embed`],
+    /// embeds lock-free, and writes back with [`Store::apply_deferred_embed`]
+    ///. Default false: the CLI and library inline path is
+    /// unchanged.
+    pub(crate) defer_auto_embed: bool,
+    /// Un-drained deferred embed work from committed transactions. The server
+    /// drains this after every write handler; work only accumulates here
+    /// within a single locked write section.
+    pub(crate) pending_embed: Option<crate::embedding::DeferredEmbed>,
 }
 
 /// An advisory event observed before a write and appended with it (P3).
@@ -193,9 +204,38 @@ impl Store {
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
             vector_delegate: None,
             local_vector_backend: None,
+            defer_auto_embed: false,
+            pending_embed: None,
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
         })
+    }
+
+    /// Defer auto-embedding: writes collect embed work instead of running the
+    /// ONNX embed under the caller's lock. The caller MUST drain with
+    /// [`Self::take_deferred_embed`] after each write and finish via
+    /// [`Self::apply_deferred_embed`], or new/changed entities silently get no
+    /// embeddings (the server's write handlers drain uniformly).
+    pub fn set_defer_auto_embed(&mut self, on: bool) {
+        self.defer_auto_embed = on;
+    }
+
+    /// Take any pending deferred-embed work (None when the last write touched
+    /// nothing embeddable, or deferral is off).
+    pub fn take_deferred_embed(&mut self) -> Option<crate::embedding::DeferredEmbed> {
+        self.pending_embed.take()
+    }
+
+    /// Write vectors computed outside the lock for previously-taken work.
+    /// Entities whose text changed since collection are skipped (a later
+    /// writer owns them — see `embedding::apply_deferred_embed`). Returns the
+    /// number written.
+    pub fn apply_deferred_embed(
+        &self,
+        work: &crate::embedding::DeferredEmbed,
+        embeddings: &[Vec<f32>],
+    ) -> Result<usize> {
+        crate::embedding::apply_deferred_embed(self, work, embeddings)
     }
 
     /// Attach an embedding provider for auto-embedding on write.

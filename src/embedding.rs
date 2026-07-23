@@ -133,23 +133,58 @@ pub(crate) fn touched_entity_ids(datums: &[Datum]) -> Vec<i64> {
     seen.into_iter().collect()
 }
 
-/// Auto-embed entities after a transaction.
+/// Embed work collected under the store lock, to be computed OUTSIDE it.
 ///
-/// For each entity:
-/// 1. Close any existing embedding (temporal retirement)
-/// 2. Build entity text from current facts
-/// 3. If text is non-empty, generate and store new embedding
-///
-/// Entities are processed in batches of `batch_size` for efficiency.
-/// Returns the number of entities embedded.
-pub(crate) fn auto_embed_entities(
+/// The ONNX embed of episode content is multi-second CPU work; running it
+/// while holding the global store mutex let a sustained write flood starve
+/// every reader (the mfg0 incident's write-side driver). The
+/// text a deferred embed was built from travels with the work so the apply
+/// step can detect staleness: if another transaction changed the entity in
+/// the window between collect and apply, the stale vector is SKIPPED — the
+/// later writer's own embed pass owns that entity now.
+#[derive(Debug)]
+pub struct DeferredEmbed {
+    /// `(entity_id, text-as-of-collect)` for each entity needing a vector.
+    items: Vec<(i64, String)>,
+    /// The originating transaction's timestamp; vectors carry it so the
+    /// deferred path stamps embeddings exactly as the inline path would.
+    timestamp: String,
+}
+
+impl DeferredEmbed {
+    /// The texts to embed, in item order — feed to
+    /// [`EmbeddingProvider::embed_batch`] outside the lock, then hand the
+    /// vectors to [`Store::apply_deferred_embed`](crate::Store::apply_deferred_embed).
+    #[must_use]
+    pub fn texts(&self) -> Vec<&str> {
+        self.items.iter().map(|(_, t)| t.as_str()).collect()
+    }
+
+    /// True when there is nothing to embed.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    /// Fold another batch of work into this one (multiple transactions before
+    /// a drain). Later items win on staleness anyway, so order is preserved
+    /// but not load-bearing.
+    pub(crate) fn merge(&mut self, mut other: DeferredEmbed) {
+        self.items.append(&mut other.items);
+        self.timestamp = other.timestamp;
+    }
+}
+
+/// Phase 1 of auto-embed, run UNDER the store lock: close retired embeddings
+/// (cheap SQLite writes) and build the texts to embed. The expensive
+/// `embed_batch` is deliberately NOT here — the caller runs it lock-free and
+/// then applies via [`apply_deferred_embed`].
+pub(crate) fn collect_embed_work(
     store: &Store,
-    provider: &Arc<dyn EmbeddingProvider>,
     entity_ids: &[i64],
     timestamp: &str,
-    batch_size: usize,
     datums: &[Datum],
-) -> Result<usize> {
+) -> Result<DeferredEmbed> {
     // Route vector writes through the configured backend (LanceDB, delegate,
     // or built-in SQLite) so auto-embed works with any vector backend.
     let vs = store.vector_store();
@@ -167,7 +202,7 @@ pub(crate) fn auto_embed_entities(
     }
 
     // Build texts for all touched entities.
-    let mut to_embed: Vec<(i64, String)> = Vec::new();
+    let mut items: Vec<(i64, String)> = Vec::new();
     for &eid in entity_ids {
         let text = build_entity_text(store, eid)?;
         if !text.is_empty() {
@@ -176,14 +211,68 @@ pub(crate) fn auto_embed_entities(
             if !retracted.contains(&eid) {
                 vs.close_embedding(eid, timestamp)?;
             }
-            to_embed.push((eid, text));
+            items.push((eid, text));
         }
     }
+
+    Ok(DeferredEmbed {
+        items,
+        timestamp: timestamp.to_string(),
+    })
+}
+
+/// Phase 3 of the deferred path, run under a fresh store lock: write the
+/// vectors computed outside it. STALENESS CHECK per entity: the current
+/// entity text is rebuilt and compared against the text the vector was
+/// computed from; on mismatch the vector is skipped — a later transaction
+/// touched the entity and its own embed pass (inline or deferred) owns the
+/// current state. Writing the stale vector anyway would silently regress the
+/// embedding to pre-update text.
+///
+/// Returns the number of embeddings written.
+pub(crate) fn apply_deferred_embed(
+    store: &Store,
+    work: &DeferredEmbed,
+    embeddings: &[Vec<f32>],
+) -> Result<usize> {
+    let vs = store.vector_store();
+    let mut written = 0;
+    for ((eid, text), emb) in work.items.iter().zip(embeddings.iter()) {
+        let current = build_entity_text(store, *eid)?;
+        if current != *text {
+            continue; // stale — a newer writer owns this entity's embedding
+        }
+        vs.embed_entity(*eid, text, emb, &work.timestamp)?;
+        written += 1;
+    }
+    Ok(written)
+}
+
+/// Auto-embed entities after a transaction (the INLINE path — collect, embed
+/// and write all under the caller's lock; the CLI and library default).
+///
+/// For each entity:
+/// 1. Close any existing embedding (temporal retirement)
+/// 2. Build entity text from current facts
+/// 3. If text is non-empty, generate and store new embedding
+///
+/// Entities are processed in batches of `batch_size` for efficiency.
+/// Returns the number of entities embedded.
+pub(crate) fn auto_embed_entities(
+    store: &Store,
+    provider: &Arc<dyn EmbeddingProvider>,
+    entity_ids: &[i64],
+    timestamp: &str,
+    batch_size: usize,
+    datums: &[Datum],
+) -> Result<usize> {
+    let work = collect_embed_work(store, entity_ids, timestamp, datums)?;
+    let vs = store.vector_store();
 
     let batch_sz = if batch_size == 0 { 32 } else { batch_size };
     let mut embedded = 0;
 
-    for chunk in to_embed.chunks(batch_sz) {
+    for chunk in work.items.chunks(batch_sz) {
         let texts: Vec<&str> = chunk.iter().map(|(_, t)| t.as_str()).collect();
         let embeddings = provider.embed_batch(&texts)?;
 
@@ -283,6 +372,130 @@ ex:bob rdfs:label "Bob" .
 
         // Both entities should have embeddings.
         assert_eq!(store.vector_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn deferred_embed_collects_under_lock_and_applies_after() {
+        // The deferred-embed server flow: with deferral on, a write COLLECTS embed
+        // work instead of running the (multi-second, in production) embed
+        // inline; the caller embeds outside the lock and applies. End state
+        // must equal the inline path's.
+        let mut store = Store::open_in_memory().unwrap();
+        store.set_embedding_provider(Arc::new(DummyProvider));
+        store.embedding_config_mut().auto_embed = true;
+        store.set_defer_auto_embed(true);
+
+        let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:alice rdfs:label "Alice" .
+ex:bob rdfs:label "Bob" .
+"#;
+        ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01",
+            None,
+            None,
+        )
+        .unwrap();
+
+        // Phase 1 done: nothing embedded yet, work is pending.
+        assert_eq!(
+            store.vector_count().unwrap(),
+            0,
+            "deferral must not embed under the write"
+        );
+        let work = store
+            .take_deferred_embed()
+            .expect("a write touching embeddable entities must queue work");
+        assert!(store.take_deferred_embed().is_none(), "take drains");
+        assert_eq!(work.texts().len(), 2);
+
+        // Phase 2 (lock-free in the server) + phase 3.
+        let provider: Arc<dyn EmbeddingProvider> = Arc::new(DummyProvider);
+        let embeddings = provider.embed_batch(&work.texts()).unwrap();
+        let written = store.apply_deferred_embed(&work, &embeddings).unwrap();
+        assert_eq!(written, 2);
+        assert_eq!(store.vector_count().unwrap(), 2);
+
+        // Same end state as the inline path (DummyProvider is deterministic
+        // on text, so equal text => equal vector).
+        let results = store.vector_search(&[0.0f32; 8], 10, None).unwrap();
+        let texts: Vec<&str> = results.iter().map(|r| r.text.as_str()).collect();
+        assert!(
+            texts.contains(&"Alice") && texts.contains(&"Bob"),
+            "{texts:?}"
+        );
+    }
+
+    #[test]
+    fn deferred_apply_skips_entities_changed_in_the_window() {
+        // The unlocked window means another transaction can touch the same
+        // entity between collect and apply. Applying the STALE vector anyway
+        // would regress the embedding to pre-update text; it must be skipped
+        // (the later writer's own work owns the entity).
+        let mut store = Store::open_in_memory().unwrap();
+        store.set_embedding_provider(Arc::new(DummyProvider));
+        store.embedding_config_mut().auto_embed = true;
+        store.set_defer_auto_embed(true);
+
+        let t1 = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:alice rdfs:label "Alice" .
+"#;
+        ingest_rdf(
+            &mut store,
+            t1.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01",
+            None,
+            None,
+        )
+        .unwrap();
+        let work1 = store.take_deferred_embed().unwrap();
+
+        // A second write updates the entity before work1 is applied.
+        let t2 = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:alice rdfs:label "Alice the Great" .
+"#;
+        ingest_rdf(
+            &mut store,
+            t2.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-02-01",
+            None,
+            None,
+        )
+        .unwrap();
+        let work2 = store.take_deferred_embed().unwrap();
+
+        let provider: Arc<dyn EmbeddingProvider> = Arc::new(DummyProvider);
+
+        // The CURRENT writer's work applies...
+        let emb2 = provider.embed_batch(&work2.texts()).unwrap();
+        assert_eq!(store.apply_deferred_embed(&work2, &emb2).unwrap(), 1);
+
+        // ...and the stale one is skipped, leaving the current embedding.
+        let emb1 = provider.embed_batch(&work1.texts()).unwrap();
+        assert_eq!(
+            store.apply_deferred_embed(&work1, &emb1).unwrap(),
+            0,
+            "stale work must not overwrite a newer embedding"
+        );
+        let results = store.vector_search(&[0.0f32; 8], 10, None).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].text, "Alice the Great");
     }
 
     #[test]

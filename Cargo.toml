@@ -47,6 +47,9 @@ path = "src/bin/seed_fixtures.rs"
 required-features = ["shacl"]
 
 [dependencies]
+# Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
+# writer stream can starve readers indefinitely (the mfg0 write-flood incident).
+parking_lot = "0.12"
 ureq = { version = "2", default-features = false }
 rusqlite = { version = "0.33", features = ["bundled", "hooks"] }
 thiserror = "2"

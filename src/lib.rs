@@ -51,7 +51,7 @@ pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
     KnowledgeRelevance, tool_context, tool_unified_search,
 };
-pub use embedding::{EmbeddingProvider, build_entity_text};
+pub use embedding::{DeferredEmbed, EmbeddingProvider, build_entity_text};
 pub use episode::{
     Episode, IngestResolutionOpts, IngestResult, episode_provenance, ingest_batch, ingest_episode,
     ingest_episode_with_resolution,
