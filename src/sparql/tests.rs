@@ -1583,7 +1583,144 @@ fn property_path_in_named_graph_fails_loud() {
     let err = query(&store, &q).unwrap_err();
     let msg = format!("{err}");
     assert!(
-        msg.contains("property paths inside a named GRAPH"),
+        msg.contains("property paths are only supported on the ROOT default graph"),
         "must fail loud rather than silently read the default graph; got: {msg}"
+    );
+}
+
+// --- FROM / FROM NAMED dataset selection + the `graph` query param (quipu #36) ---
+
+/// Root (g=0) + two named graphs t1, t2 — each carrying one `ex:p` fact with a
+/// distinct object, so dataset-selection tests can tell the graphs apart.
+fn test_store_two_graphs() -> (Store, String, String) {
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-04-04T00:00:00Z";
+    ingest_rdf(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:root ex:p \"R\" .\n".as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        ts,
+        None,
+        None,
+    )
+    .unwrap();
+    let p = store.intern("http://example.org/p").unwrap();
+    let g1_iri = "http://example.org/g/t1".to_string();
+    let g1 = store.overlay_create(&g1_iri, 0).unwrap();
+    let a = store.intern("http://example.org/a").unwrap();
+    store
+        .overlay_write(g1, Op::Assert, a, p, Value::Str("T1".into()), ts)
+        .unwrap();
+    let g2_iri = "http://example.org/g/t2".to_string();
+    let g2 = store.overlay_create(&g2_iri, 0).unwrap();
+    let b = store.intern("http://example.org/b").unwrap();
+    store
+        .overlay_write(g2, Op::Assert, b, p, Value::Str("T2".into()), ts)
+        .unwrap();
+    (store, g1_iri, g2_iri)
+}
+
+fn objs_of(store: &Store, r: &QueryResult) -> Vec<String> {
+    let mut v: Vec<String> = r
+        .rows()
+        .iter()
+        .map(|row| value_to_iri(store, row.get("o").unwrap()))
+        .collect();
+    v.sort();
+    v
+}
+
+#[test]
+fn from_makes_named_graph_the_default() {
+    let (store, g1, _g2) = test_store_two_graphs();
+    let q = format!("SELECT ?o FROM <{g1}> WHERE {{ ?s <http://example.org/p> ?o }}");
+    assert_eq!(
+        objs_of(&store, &query(&store, &q).unwrap()),
+        vec!["T1".to_string()],
+        "FROM <g1> makes g1 the default graph; ROOT is excluded"
+    );
+}
+
+#[test]
+fn from_union_merges_graphs() {
+    let (store, g1, g2) = test_store_two_graphs();
+    let q = format!(
+        "SELECT ?o FROM <{g1}> FROM <{g2}> WHERE {{ ?s <http://example.org/p> ?o }}"
+    );
+    assert_eq!(
+        objs_of(&store, &query(&store, &q).unwrap()),
+        vec!["T1".to_string(), "T2".to_string()],
+        "FROM union is the merge of g1 and g2; ROOT still excluded"
+    );
+}
+
+#[test]
+fn from_unknown_graph_is_empty_default() {
+    let (store, _g1, _g2) = test_store_two_graphs();
+    let q = "SELECT ?o FROM <http://example.org/g/nope> WHERE { ?s <http://example.org/p> ?o }";
+    assert!(
+        query(&store, q).unwrap().rows().is_empty(),
+        "an all-unknown FROM set is an empty default graph, not a ROOT fall-through"
+    );
+}
+
+#[test]
+fn from_named_restricts_graph_var() {
+    let (store, g1, _g2) = test_store_two_graphs();
+    let q = format!(
+        "SELECT ?g ?o FROM NAMED <{g1}> WHERE {{ GRAPH ?g {{ ?s <http://example.org/p> ?o }} }}"
+    );
+    let r = query(&store, &q).unwrap();
+    assert_eq!(
+        objs_of(&store, &r),
+        vec!["T1".to_string()],
+        "FROM NAMED restricts GRAPH ?g to g1 (t2 excluded)"
+    );
+    for row in r.rows() {
+        assert_eq!(value_to_iri(&store, row.get("g").unwrap()), g1);
+    }
+}
+
+#[test]
+fn from_without_from_named_deactivates_named_graphs() {
+    let (store, g1, _g2) = test_store_two_graphs();
+    let q = format!(
+        "SELECT ?g ?o FROM <{g1}> WHERE {{ GRAPH ?g {{ ?s <http://example.org/p> ?o }} }}"
+    );
+    assert!(
+        query(&store, &q).unwrap().rows().is_empty(),
+        "a dataset with FROM but no FROM NAMED activates no named graphs; GRAPH matches nothing"
+    );
+}
+
+#[test]
+fn graph_query_param_scopes_default_graph() {
+    // End-to-end through the REST/MCP entry point: {query, graph:<iri>}.
+    let (store, g1, _g2) = test_store_two_graphs();
+    let input = serde_json::json!({
+        "query": "SELECT ?o WHERE { ?s <http://example.org/p> ?o }",
+        "graph": g1,
+    });
+    let (result, _truncated) = crate::mcp::query_result(&store, &input).unwrap();
+    assert_eq!(
+        objs_of(&store, &result),
+        vec!["T1".to_string()],
+        "the `graph` param scopes the default graph to g1 without a FROM/GRAPH clause"
+    );
+}
+
+#[test]
+fn graph_query_param_unknown_iri_is_empty() {
+    let (store, _g1, _g2) = test_store_two_graphs();
+    let input = serde_json::json!({
+        "query": "SELECT ?o WHERE { ?s <http://example.org/p> ?o }",
+        "graph": "http://example.org/g/nope",
+    });
+    let (result, _truncated) = crate::mcp::query_result(&store, &input).unwrap();
+    assert!(
+        result.rows().is_empty(),
+        "an unknown graph param yields an empty default graph, never a ROOT fall-through"
     );
 }

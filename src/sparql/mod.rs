@@ -69,22 +69,48 @@ impl QueryResult {
 ///
 /// `g = 0` is the reserved ROOT / default committed graph. A SPARQL `GRAPH`
 /// clause re-scopes the patterns it encloses; without one, evaluation stays on
-/// the default graph (`DefaultRoot`), preserving the ROOT-only committed-read
-/// semantics (Decision 4). The scope is threaded through the pattern evaluator
-/// via [`TemporalContext`] and swapped (on a clone) when recursing into a
+/// the default graph, which the service seeds to `[0]` (ROOT-only committed
+/// reads, Decision 4) but a `FROM` clause (or the `graph` query param) can
+/// replace. The scope is threaded through the pattern evaluator via
+/// [`TemporalContext`] and swapped (on a clone) when recursing into a
 /// `GRAPH { … }` block.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GraphScope {
-    /// The default committed graph (`g = 0`). Current/legacy behaviour.
-    #[default]
-    DefaultRoot,
+    /// The default graph: facts whose `g` is in this set (the RDF merge of the
+    /// listed graphs). The service default is `[0]` (ROOT); `FROM <g…>` replaces
+    /// it with the union of those graphs, and an EMPTY set (e.g. `FROM NAMED`
+    /// with no `FROM`) matches nothing — never a silent fall-through.
+    Default(Vec<i64>),
     /// A single named graph by its interned graph id — `GRAPH <iri> { … }`.
     /// An unknown graph IRI resolves to an id that matches nothing (empty
     /// result), never a silent fall-through to the default graph.
     Named(i64),
-    /// Every named graph (`g <> 0`), binding `var` to each match's graph IRI —
-    /// `GRAPH ?g { … }`.
-    AnyNamed { var: String },
+    /// Named graphs binding `var` to each match's graph IRI — `GRAPH ?g { … }`.
+    /// `restrict` is `None` for every named graph (`g <> 0`), or the `FROM NAMED`
+    /// id set when the query restricts the active named graphs.
+    AnyNamed {
+        /// The `?g` variable name to bind.
+        var: String,
+        /// `FROM NAMED` restriction (interned ids), or `None` for all named graphs.
+        restrict: Option<Vec<i64>>,
+    },
+}
+
+impl Default for GraphScope {
+    /// ROOT-only committed default graph (`g = 0`).
+    fn default() -> Self {
+        GraphScope::Default(vec![0])
+    }
+}
+
+impl GraphScope {
+    /// True only for the plain ROOT default graph (`g = 0`) — the scope where
+    /// RDFS subclass inference and property paths are currently supported.
+    /// A `FROM`-redefined default graph, a named graph, or `GRAPH ?g` are all
+    /// outside it (those paths would otherwise silently read `g = 0`).
+    pub(crate) fn is_root_default(&self) -> bool {
+        matches!(self, GraphScope::Default(g) if g.as_slice() == [0])
+    }
 }
 
 /// Temporal context for time-travel SPARQL queries.
@@ -97,6 +123,11 @@ pub struct TemporalContext {
     /// Active graph scope for the patterns currently being evaluated (quipu
     /// #36). Defaults to the ROOT/default graph; a `GRAPH` clause re-scopes it.
     pub graph: GraphScope,
+    /// The `FROM NAMED` restriction for the whole query (interned graph ids),
+    /// set once at query entry (quipu #36). `None` = no `FROM NAMED`, so a
+    /// `GRAPH` clause may range over every named graph; `Some(set)` limits which
+    /// named graphs a `GRAPH ?g` / `GRAPH <iri>` can see.
+    pub named_dataset: Option<Vec<i64>>,
     /// Abort evaluation once this instant passes (None = derive from the
     /// store's `query_timeout_ms`; see [`query_temporal`]). Checked between
     /// operators in the pattern evaluator, INSIDE the pure-Rust join/merge
@@ -191,30 +222,83 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
 
 fn eval_parsed(store: &Store, parsed: Query, ctx: &TemporalContext) -> Result<QueryResult> {
     match parsed {
-        Query::Select { pattern, .. } => {
-            let (rows, vars) = pattern::eval_pattern(store, &pattern, ctx)?;
+        Query::Select {
+            pattern, dataset, ..
+        } => {
+            let ctx = apply_dataset(store, dataset.as_ref(), ctx)?;
+            let (rows, vars) = pattern::eval_pattern(store, &pattern, &ctx)?;
             Ok(QueryResult::Select {
                 variables: vars,
                 rows,
             })
         }
-        Query::Ask { pattern, .. } => {
-            let (rows, _) = pattern::eval_pattern(store, &pattern, ctx)?;
+        Query::Ask {
+            pattern, dataset, ..
+        } => {
+            let ctx = apply_dataset(store, dataset.as_ref(), ctx)?;
+            let (rows, _) = pattern::eval_pattern(store, &pattern, &ctx)?;
             Ok(QueryResult::Ask(!rows.is_empty()))
         }
         Query::Construct {
-            template, pattern, ..
+            template,
+            pattern,
+            dataset,
+            ..
         } => {
-            let (rows, _) = pattern::eval_pattern(store, &pattern, ctx)?;
+            let ctx = apply_dataset(store, dataset.as_ref(), ctx)?;
+            let (rows, _) = pattern::eval_pattern(store, &pattern, &ctx)?;
             let triples = eval_construct(store, &template, &rows)?;
             Ok(QueryResult::Graph(triples))
         }
-        Query::Describe { pattern, .. } => {
-            let (rows, _) = pattern::eval_pattern(store, &pattern, ctx)?;
+        Query::Describe {
+            pattern, dataset, ..
+        } => {
+            let ctx = apply_dataset(store, dataset.as_ref(), ctx)?;
+            let (rows, _) = pattern::eval_pattern(store, &pattern, &ctx)?;
             let triples = eval_describe(store, &rows)?;
             Ok(QueryResult::Graph(triples))
         }
     }
+}
+
+/// Resolve a query's `FROM` / `FROM NAMED` clauses into a graph-scoped context
+/// (quipu #36). With no dataset clause the caller's context is used unchanged
+/// (default graph = ROOT, or whatever the `graph` query param set). With a
+/// dataset:
+///
+/// - `FROM <g…>` sets the default graph to the union of those graphs (an unknown
+///   graph contributes nothing; an all-unknown / empty set is an empty default).
+/// - `FROM NAMED <g…>` restricts which named graphs a `GRAPH` clause can see;
+///   a dataset with `FROM` but no `FROM NAMED` activates NO named graphs (per
+///   SPARQL 1.1), so `GRAPH` matches nothing.
+fn apply_dataset(
+    store: &Store,
+    dataset: Option<&spargebra::algebra::QueryDataset>,
+    ctx: &TemporalContext,
+) -> Result<TemporalContext> {
+    let Some(ds) = dataset else {
+        return Ok(ctx.clone());
+    };
+    let resolve = |nodes: &[spargebra::term::NamedNode]| -> Result<Vec<i64>> {
+        let mut ids = Vec::new();
+        for nn in nodes {
+            if let Some(g) = store.lookup(nn.as_str())? {
+                ids.push(g);
+            }
+        }
+        Ok(ids)
+    };
+    let default_ids = resolve(&ds.default)?;
+    let named_ids = match &ds.named {
+        // FROM present, FROM NAMED absent -> no active named graphs.
+        None => Some(Vec::new()),
+        Some(list) => Some(resolve(list)?),
+    };
+    Ok(TemporalContext {
+        graph: GraphScope::Default(default_ids),
+        named_dataset: named_ids,
+        ..ctx.clone()
+    })
 }
 
 /// Instantiate a CONSTRUCT template with each row of bindings.

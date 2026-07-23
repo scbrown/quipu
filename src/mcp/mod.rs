@@ -59,12 +59,22 @@ pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bo
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::InvalidValue("missing 'query' parameter".into()))?;
 
+    // Optional `graph` param (quipu #36): scope the query's DEFAULT graph to a
+    // single named graph, without writing a `FROM`/`GRAPH` clause. Backward
+    // compatible when omitted (ROOT default). An unknown IRI scopes to an empty
+    // default graph (no rows) — never a silent fall-through to ROOT. A `FROM`
+    // clause in the query text overrides this (see `apply_dataset`).
+    let graph = match input.get("graph").and_then(|v| v.as_str()) {
+        None => sparql::GraphScope::default(),
+        Some(iri) => sparql::GraphScope::Default(vec![store.lookup(iri)?.unwrap_or(-1)]),
+    };
     let ctx = TemporalContext {
         valid_at: input
             .get("valid_at")
             .and_then(|v| v.as_str())
             .map(std::string::ToString::to_string),
         as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+        graph,
         ..Default::default()
     };
 

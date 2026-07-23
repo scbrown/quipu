@@ -298,10 +298,11 @@ pub fn eval_pattern_seeded(
             // quipu #36 follow-up: property paths are not yet graph-scoped (the
             // path scan reads g=0). Fail loud inside a named GRAPH rather than
             // silently returning default-graph results.
-            if ctx.graph != GraphScope::DefaultRoot {
+            if !ctx.graph.is_root_default() {
                 return Err(Error::InvalidValue(
-                    "property paths inside a named GRAPH are not yet supported \
-                     (quipu #36 follow-up); the path would read the default graph"
+                    "property paths are only supported on the ROOT default graph \
+                     (quipu #36 follow-up); inside a named GRAPH or a FROM-redefined \
+                     default graph the path would read the wrong graph"
                         .to_string(),
                 ));
             }
@@ -316,12 +317,21 @@ pub fn eval_pattern_seeded(
             let mut scoped = ctx.clone();
             scoped.graph = match name {
                 // Unknown graph IRI -> an id that matches nothing, never a
-                // silent fall-through to the default graph.
+                // silent fall-through. A FROM NAMED restriction that excludes
+                // this graph likewise makes it invisible (id -1).
                 NamedNodePattern::NamedNode(iri) => {
-                    GraphScope::Named(store.lookup(iri.as_str())?.unwrap_or(-1))
+                    let gid = store.lookup(iri.as_str())?.unwrap_or(-1);
+                    let visible = ctx
+                        .named_dataset
+                        .as_ref()
+                        .is_none_or(|set| set.contains(&gid));
+                    GraphScope::Named(if visible { gid } else { -1 })
                 }
+                // GRAPH ?g ranges the active named graphs — all of them, or the
+                // FROM NAMED restriction when the query set one.
                 NamedNodePattern::Variable(v) => GraphScope::AnyNamed {
                     var: v.as_str().to_string(),
+                    restrict: ctx.named_dataset.clone(),
                 },
             };
             let (rows, mut vars) = eval_pattern_seeded(store, inner, &scoped, seed)?;
@@ -398,6 +408,31 @@ pub fn eval_bgp(
     Ok((result_rows, all_vars))
 }
 
+/// Build a graph-membership SQL condition over `facts.g`, pushing the ids as
+/// bound params (quipu #36). An EMPTY set yields `0 = 1` — match nothing, never
+/// a silent fall-through (e.g. a `FROM NAMED` with no `FROM` has an empty
+/// default graph). A single id yields `g = ?N`; several yield `g IN (…)`.
+fn sql_graph_in(
+    gids: &[i64],
+    sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
+) -> String {
+    if gids.is_empty() {
+        return "0 = 1".to_string();
+    }
+    let placeholders: Vec<String> = gids
+        .iter()
+        .map(|gid| {
+            sql_params.push(Box::new(*gid));
+            format!("?{}", sql_params.len())
+        })
+        .collect();
+    if placeholders.len() == 1 {
+        format!("g = {}", placeholders[0])
+    } else {
+        format!("g IN ({})", placeholders.join(", "))
+    }
+}
+
 /// Evaluate a single triple pattern against the store, extending existing bindings.
 pub fn eval_triple_pattern(
     store: &Store,
@@ -409,7 +444,7 @@ pub fn eval_triple_pattern(
     // subclass expansion reads g=0 via rdfs.rs, so inside a named GRAPH a
     // `?s a ?C` pattern is matched LITERALLY (export wants a graph's own
     // triples, not cross-graph inference).
-    if matches!(ctx.graph, GraphScope::DefaultRoot)
+    if ctx.graph.is_root_default()
         && is_rdf_type_pattern(tp)
         && let TermPattern::NamedNode(class_node) = &tp.object
     {
@@ -452,13 +487,13 @@ pub fn eval_triple_pattern(
 
     // Temporal filtering.
     conditions.push("op = 1".to_string());
-    // Graph scope (quipu #36). Default: committed reads are ROOT-scoped (g=0),
-    // never an all-graph union (Decision 4). A `GRAPH <iri>` clause scopes to
-    // that one graph; `GRAPH ?g` ranges over every named graph (g<>0) and binds
+    // Graph scope (quipu #36). `Default` matches the default-graph set (service
+    // default [0], or a FROM union); `Named` scopes to one graph; `AnyNamed`
+    // ranges the active named graphs (all g<>0, or a FROM NAMED set) and binds
     // the graph variable per row (below).
     let bind_graph_var: Option<String> = match &ctx.graph {
-        GraphScope::DefaultRoot => {
-            conditions.push("g = 0".to_string());
+        GraphScope::Default(gids) => {
+            conditions.push(sql_graph_in(gids, &mut sql_params));
             None
         }
         GraphScope::Named(gid) => {
@@ -466,11 +501,18 @@ pub fn eval_triple_pattern(
             sql_params.push(Box::new(*gid));
             None
         }
-        GraphScope::AnyNamed { var } => {
-            conditions.push("g <> 0".to_string());
+        GraphScope::AnyNamed { var, restrict } => {
+            match restrict {
+                None => conditions.push("g <> 0".to_string()),
+                Some(ids) => conditions.push(sql_graph_in(ids, &mut sql_params)),
+            }
             Some(var.clone())
         }
     };
+    // Only `GRAPH ?g` (AnyNamed) needs `g` projected — to bind ?g. The others
+    // keep DISTINCT on (e,a,v), so a triple present in several graphs of a FROM
+    // union collapses to ONE solution (default-graph merge), not one per graph.
+    let want_g = bind_graph_var.is_some();
     if let Some(vt) = &ctx.valid_at {
         conditions.push(format!("valid_from <= ?{}", sql_params.len() + 1));
         sql_params.push(Box::new(vt.clone()));
@@ -496,9 +538,14 @@ pub fn eval_triple_pattern(
     // current (op=1, valid_to NULL) rows; without DISTINCT the BGP yields one
     // binding per duplicate, which multiplies under joins/OPTIONAL and inflates
     // COUNT (GH#13). DISTINCT collapses them to one solution per current triple.
-    // `g` is selected so `GRAPH ?g` can bind the graph variable per row; for the
-    // default/Named scopes g is constant and does not change the DISTINCT result.
-    let sql = format!("SELECT DISTINCT e, a, v, g FROM facts{where_clause}");
+    // `g` is projected only for `GRAPH ?g` (to bind ?g per row); for the default
+    // and single-named scopes it is omitted so DISTINCT collapses cross-graph
+    // duplicates in a FROM union.
+    let sql = if want_g {
+        format!("SELECT DISTINCT e, a, v, g FROM facts{where_clause}")
+    } else {
+        format!("SELECT DISTINCT e, a, v FROM facts{where_clause}")
+    };
     let mut stmt = store.prepare(&sql)?;
 
     let param_refs: Vec<&dyn rusqlite::types::ToSql> =
@@ -511,7 +558,7 @@ pub fn eval_triple_pattern(
         let a_id: i64 = row.get(1)?;
         let v_bytes: Vec<u8> = row.get(2)?;
         let v = Value::from_bytes(&v_bytes)?;
-        let g_id: i64 = row.get(3)?;
+        let g_id: Option<i64> = if want_g { Some(row.get(3)?) } else { None };
 
         let mut new_bindings = bindings.clone();
         let mut compatible = true;
@@ -576,11 +623,11 @@ pub fn eval_triple_pattern(
         // Bind the graph variable for `GRAPH ?g { … }` (quipu #36): ?g resolves
         // to the graph's IRI (g is the interned id of that IRI). Same ?g across
         // a BGP is enforced by the join in eval_bgp via bind_var compatibility.
-        if let Some(g_var) = &bind_graph_var {
+        if let (Some(g_var), Some(gid)) = (&bind_graph_var, g_id) {
             // g is the interned term id of the graph IRI (schema.rs), and this
-            // branch only runs for named graphs (g<>0), so g_id is always a
+            // branch only runs for named graphs (g<>0), so gid is always a
             // valid term id — bind ?g to it directly as a ref.
-            if !bind_var(&mut new_bindings, g_var, Value::Ref(g_id), &mut compatible) {
+            if !bind_var(&mut new_bindings, g_var, Value::Ref(gid), &mut compatible) {
                 continue;
             }
         }
