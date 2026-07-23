@@ -1,5 +1,11 @@
 # Graph Projection
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented.** `src/graph.rs` —
+> `project`, `in_degree`, `connected_components` (Kosaraju SCC), and `shortest_path`
+> (A*), each matching the documented algorithm and JSON output, dispatched by the
+> `quipu_project` MCP tool. (PageRank/PPR + Louvain also ride this Projection API — see
+> `docs/design/pagerank.md`.) Verified by grep.
+
 Quipu can materialize its fact store into an in-memory directed graph
 (via [petgraph](https://crates.io/crates/petgraph)) for running graph
 algorithms that aren't expressible in SPARQL.

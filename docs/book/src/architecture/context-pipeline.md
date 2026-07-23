@@ -1,5 +1,12 @@
 # Context Pipeline
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented.** `src/context/mod.rs`
+> — `ContextPipeline`/`ContextPipelineConfig` (defaults `max_entities:20`,
+> `expand_links:true`, `link_depth:1`), `KnowledgeContext`/`KnowledgeEntity`, the
+> `Direct`/`Linked`/`Semantic` relevance enum (Semantic from the hybrid vector path), and
+> `query()`. Exposed as the `quipu_context` MCP tool and the `/context` REST route.
+> Verified by grep.
+
 The context pipeline blends knowledge graph facts with code context,
 producing unified results for agent consumption. It's the integration
 surface between Quipu and Bobbin.

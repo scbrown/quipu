@@ -1,5 +1,14 @@
 # Performant edit hooks for policy
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Phase A implemented** (Phase B
+> is hank-side, separate/blocked). Verified by mechanism: the quipu pre-commit policy
+> gate is `src/governance/guard.rs` (`PolicyGuard::build` + `evaluate_write`), invoked
+> on the write path via `stage_and_guard` (`src/store/ops.rs`) and runtime-gated by
+> `[quipu.governance] enforce_on_write` (`src/store/mod.rs`, `src/config.rs`); the
+> read-only `quipu_policy_check` MCP/REST call also exists. Phase B (hank-side
+> structural-policy projection) is a separate system, blocked on hank↔quipu wiring —
+> outside quipu's code.
+
 Status: **in progress** — the quipu write-path gate (Phase A below) is being
 implemented under this design. The hank-side projection (Phase B) is
 tracked in the backlog and blocked on the Phase-4 hank↔quipu wiring.

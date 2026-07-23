@@ -1,5 +1,18 @@
 # LanceDB Vector Backend
 
+> **Implementation status (2026-07-23, kelly):** 🟡 **Code-complete but inert in the
+> shipped binaries.** The backend is fully built and trait-conformant:
+> `LanceVectorStore` behind `#[cfg(feature="lancedb")]` (`src/vector_lance.rs`)
+> implementing all 5 `KnowledgeVectorStore` methods with `only_if()` predicate
+> pushdown; the `VectorSearchDelegate` wrapper; and the `quipu migrate-vectors` command
+> (`src/migration.rs`). **Gap:** neither `quipu` nor `quipu-server` ever activates it —
+> `Store::vector_store()` only selects LanceDB via `local_vector_backend`, and
+> `set_local_vector_backend` has **zero callers in-repo** (embedder-only). The
+> `vector.backend = "lancedb"` config knob is set-but-not-read (`unwired_warnings()`
+> warns so). So the doc's "enable LanceDB → add the feature flag" compiles the backend
+> but does NOT route any standalone-binary query to it; SQLite remains the only backend
+> a running quipu queries. It is an embedder-installed path (e.g. Bobbin).
+
 Quipu supports two vector storage backends: the default SQLite backend and
 an optional LanceDB backend for production workloads. Both implement the
 `KnowledgeVectorStore` trait.

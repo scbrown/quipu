@@ -1,5 +1,15 @@
 # EAVT Fact Log
 
+> **Implementation status (2026-07-23, kelly):** 🟡 **Implemented, but the schema
+> tables below have drifted.** Core is real and shipped: `facts`/`terms`/`transactions`
+> with the `idx_eavt`/`idx_aevt`/`idx_vaet`/`idx_tx` indexes, bitemporal
+> `valid_from`/`valid_to`, current-state `op=1 AND valid_to IS NULL`, and the term
+> dictionary (`src/schema.rs`, `src/store/mod.rs`). **Drift, three items:** the real
+> `facts` table also has a **`g` (graph) column + `idx_geav`** (named-graph support),
+> absent from the doc's `CREATE TABLE`; the `op` discriminant also has **2 = Tombstone**
+> (doc shows only 1/0); and the value-encoding table omits **tag 6 = Lang** and **tag 7
+> = Typed** (`src/types.rs`). Update the schema + value-tag tables to match.
+
 The core of Quipu is an immutable, bitemporal fact log stored in SQLite.
 Every fact is an append-only entry that is never deleted, only superseded.
 

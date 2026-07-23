@@ -1,5 +1,13 @@
 # Quipu UI: Knowledge Graph Visualization & Exploration
 
+> **Implementation status (2026-07-23, kelly):** 🟡 **Partial.** The UI ships and is
+> served at `/` (`src/server.rs` `UI_HTML` / `COMPONENTS_JS` from `ui/index.html` +
+> `ui/quipu-components.js`), with **5 of the 8** specced web components built:
+> `<quipu-entity>`, `<quipu-graph>`, `<quipu-schema>`, `<quipu-sparql>`,
+> `<quipu-timeline>`. **Gap:** `<quipu-context>`, `<quipu-mapping>`, and
+> `<quipu-search>` are specced but not implemented (verified by grep of
+> `ui/quipu-components.js`).
+
 > Quipu owns its visual identity. Bobbin enables it — doesn't reimagine it.
 
 ## Status

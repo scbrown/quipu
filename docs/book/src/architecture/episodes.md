@@ -1,5 +1,12 @@
 # Episode Ingestion
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented.** `src/episode/mod.rs`
+> — `ingest_episode`, `ingest_episode_with_resolution`, `ingest_batch`, the `Episode`
+> struct with `group_id`/`shapes`, `prov:Activity`/`prov:wasGeneratedBy` provenance, and
+> edge-`confidence` reification (bare triple when absent; `rdf:Statement` + `quipu:confidence`
+> for enum/numeric grades — tested in `src/episode/tests.rs`). SHACL episode + persistent
+> shape gates and the `quipu episode` CLI are wired. Verified by grep + tests.
+
 Episodes are the structured write path for agent-extracted knowledge.
 When an agent observes something -- a deploy, an incident, a configuration
 change -- it packages that knowledge as an episode with typed nodes and edges.

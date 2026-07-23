@@ -1,5 +1,14 @@
 # SPARQL Engine
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented** (code is AHEAD of
+> this doc). SELECT/ASK/CONSTRUCT/DESCRIBE, BGP/JOIN/UNION/OPTIONAL/FILTER/BIND,
+> DISTINCT/ORDER/LIMIT/GROUP/HAVING, aggregates (COUNT/SUM/AVG/MIN/MAX/SAMPLE/
+> GROUP_CONCAT), FILTER builtins, RDFS subclass inference, and bitemporal current-state
+> filtering are all live (`src/sparql/`). Note the doc UNDER-claims: it marks
+> "Property paths: Planned," but they are fully implemented in
+> `src/sparql/property_path.rs` (Reverse/Sequence/Alternative/ZeroOrMore/OneOrMore) —
+> update that line.
+
 Quipu includes a custom SPARQL evaluator that compiles queries directly
 against the SQLite fact log. No separate triple store or graph database
 is needed.

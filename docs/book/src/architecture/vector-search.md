@@ -1,5 +1,16 @@
 # Vector Search
 
+> **Implementation status (2026-07-23, kelly):** 🟡 **Implemented (SQLite); LanceDB
+> framing overstated.** The SQLite backend is fully shipped — `vectors` table,
+> brute-force cosine, `embed_entity`/`vector_search(query, k, valid_at)`, bitemporal
+> exclusion, `VectorMatch`, plus real hybrid search (`tool_hybrid_search`,
+> `/hybrid_search`, oversample-and-post-filter) in `src/vector.rs`/`src/mcp/`. **Gap:**
+> the doc presents LanceDB as a runtime-selectable "optional backend" for ANN +
+> predicate pushdown, but it is **inert in the shipped binaries**: `vector.backend =
+> "lancedb"` is set-but-not-read (`src/config.rs` `unwired_warnings()` warns so), and
+> the only activation path, `Store::set_local_vector_backend`, has zero callers in-repo
+> — it is embedder-only. See `lancedb.md` (also 🟡).
+
 Quipu stores vector embeddings alongside facts and supports cosine
 similarity search with temporal awareness. Two backends are available:
 the default SQLite backend (brute-force) and an optional

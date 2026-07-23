@@ -1,5 +1,11 @@
 # Test Fixtures: Seed Data for UI Development and Demos
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented.** All deliverables
+> present: `test-fixtures/{test-shapes.ttl, test-episodes.json, test-embed.html}` (plus
+> `seed-{agents,infra,knowledge}.ttl`), the `src/bin/seed_fixtures.rs` seed binary, and
+> the `just seed` / `just serve-fixtures` recipes (`justfile`). Verified by directory
+> listing + justfile grep.
+
 Status: accepted
 Author: owen
 Bead: qp-4ky

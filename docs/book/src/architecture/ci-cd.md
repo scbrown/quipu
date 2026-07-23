@@ -1,5 +1,12 @@
 # CI/CD and Releases
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented.** `.github/workflows/ci.yml`
+> has the 6 documented jobs (`fmt`, `clippy` matrix, `test` feature-matrix, `build`,
+> `check` = pre-commit, `lint-markdown`); `release.yml` uses `release-plz-action@v0.5`;
+> `docs.yml` builds the mdBook and deploys to Pages. `release-plz.toml`, `cliff.toml`,
+> `.pre-commit-config.yaml`, and `justfile` all present. (A `changelog-check.yml`
+> guard now exists too — additive.) Verified by reading the workflows.
+
 Quipu uses GitHub Actions for continuous integration and release-plz for
 automated versioning and changelog generation.
 

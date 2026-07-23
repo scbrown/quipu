@@ -1,5 +1,12 @@
 # SHACL Validation
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented.** `src/shacl.rs`
+> (backed by `rudof_lib`, a default feature) provides `Validator::from_turtle`/
+> `validate`/`validate_or_reject` and `ValidationFeedback`/`ValidationIssue` exactly as
+> documented; write-time enforcement is wired via `[quipu.shacl] validate_on_write`
+> (`src/config.rs` → `src/server.rs`), with `/shapes` and `/validate` REST routes. No
+> gaps found.
+
 Quipu enforces strict schema at write time via
 [SHACL](https://www.w3.org/TR/shacl/) (Shapes Constraint Language),
 powered by [rudof](https://github.com/rudof-project/rudof).

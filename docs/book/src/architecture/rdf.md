@@ -1,5 +1,15 @@
 # RDF Data Model
 
+> **Implementation status (2026-07-23, kelly):** 🟡 **Implemented, but one section is
+> stale.** The capability is shipped: `ingest_rdf` / `export_rdf` for all 6 formats
+> (Turtle, N-Triples, N-Quads, RDF/XML, JSON-LD, TriG) via oxrdfio, blank-node
+> round-trip, and XSD→`Value` mapping (`src/rdf.rs`, `src/types.rs`). **Drift:** the
+> "Language Tags" section (and its type-mapping row) is OBSOLETE — it claims
+> `rdf:langString` is stored as `Value::Str("text@lang")` and re-split on `@`, but the
+> code uses a dedicated `Value::Lang { lexical, lang }` variant (`src/types.rs`,
+> tag 6); reconstructing a lang tag by splitting a `Str` on `@` was a fixed bug. Update
+> that section to `Value::Lang`.
+
 Quipu bridges standard RDF types with the EAVT fact log via the `rdf` module.
 This layer handles conversion between oxrdf types and the integer-encoded
 term dictionary.

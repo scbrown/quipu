@@ -1,5 +1,16 @@
 # Quipu: AI-Native Knowledge Graph — Vision
 
+> **Implementation status (2026-07-23, kelly):** 🟡 **North-star; substantially
+> realized.** This is the aspirational vision, not a single deliverable — read the
+> "DRAFT — not implementation" line below as "this doc is an exploration," NOT "quipu
+> isn't built." Its resolved architecture is shipped: SQLite EAVT fact log, a custom
+> SPARQL 1.1 evaluator, RDFS + SHACL, vector search (SQLite default; LanceDB optional
+> **but inert in the shipped binaries** — embedder-only), graph projection with
+> PageRank/Louvain, the stratified-datalog reasoner, entity resolution, episode
+> retraction, and `speculate()` counterfactuals — all in `src/`. Federation is partial
+> (trait-only). For granular per-feature status see the design docs in `docs/design/`
+> and `docs/book/src/architecture/`, each now carrying its own status block.
+
 > Created: 2026-04-04, crew/braino session (aegis-6ct6)
 > Status: DRAFT — exploration bead, not implementation
 
