@@ -11,7 +11,7 @@
 > temporal / counterfactual PR. The remaining phases are tracked for follow-up
 > (design-open per the Open Questions below — persist-by-default and per-predicate
 > weights), so filed as a tracked task rather than implemented unilaterally.
-
+>
 > Status: **Delivered (Phases 1–2: in_degree, PageRank/PPR, Louvain); Phase 3 write-back unbuilt** · Origin: agent (strider), prompted by Stiwi ·
 > Date: 2026-06-21
 >

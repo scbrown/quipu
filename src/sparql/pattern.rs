@@ -412,10 +412,7 @@ pub fn eval_bgp(
 /// bound params (quipu #36). An EMPTY set yields `0 = 1` — match nothing, never
 /// a silent fall-through (e.g. a `FROM NAMED` with no `FROM` has an empty
 /// default graph). A single id yields `g = ?N`; several yield `g IN (…)`.
-fn sql_graph_in(
-    gids: &[i64],
-    sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
-) -> String {
+fn sql_graph_in(gids: &[i64], sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>) -> String {
     if gids.is_empty() {
         return "0 = 1".to_string();
     }

@@ -234,7 +234,11 @@ pub fn ingest_rdf_to_graph(
 ///
 /// Supported output formats: Turtle, N-Triples, N-Quads, RDF/XML, `TriG`.
 /// Serialize a set of facts to an RDF document (shared by the exporters).
-fn serialize_facts(store: &Store, facts: &[crate::types::Fact], format: RdfFormat) -> Result<Vec<u8>> {
+fn serialize_facts(
+    store: &Store,
+    facts: &[crate::types::Fact],
+    format: RdfFormat,
+) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     let mut serializer = RdfSerializer::from_format(format).for_writer(&mut buf);
 
@@ -812,8 +816,7 @@ ex:s ex:greeting "hello"@en ;
         let (store, g_iri) = store_with_named_graph();
 
         // The named-graph slice: only its own triple.
-        let (bytes, count) =
-            export_rdf_subset(&store, RdfFormat::NTriples, Some(g_iri)).unwrap();
+        let (bytes, count) = export_rdf_subset(&store, RdfFormat::NTriples, Some(g_iri)).unwrap();
         let doc = String::from_utf8(bytes).unwrap();
         assert_eq!(count, 1);
         assert!(doc.contains("http://example.org/a"));
@@ -838,8 +841,12 @@ ex:s ex:greeting "hello"@en ;
     fn export_subset_unknown_graph_errors() {
         let (store, _g) = store_with_named_graph();
         assert!(
-            export_rdf_subset(&store, RdfFormat::NTriples, Some("http://example.org/g/nope"))
-                .is_err(),
+            export_rdf_subset(
+                &store,
+                RdfFormat::NTriples,
+                Some("http://example.org/g/nope")
+            )
+            .is_err(),
             "a targeted export of a non-existent graph is an error, not an empty success"
         );
     }

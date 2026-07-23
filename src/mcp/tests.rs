@@ -2850,12 +2850,19 @@ fn test_tool_export_named_graph_subset() {
     assert_eq!(out["triples"], 1);
     assert_eq!(out["graph"], g_iri);
     assert!(
-        out["rdf"].as_str().unwrap().contains("http://example.org/a"),
+        out["rdf"]
+            .as_str()
+            .unwrap()
+            .contains("http://example.org/a"),
         "exported RDF carries the graph's triple"
     );
 
     // Unknown graph -> error (not an empty success).
     assert!(
-        tool_export(&store, &serde_json::json!({ "graph": "http://example.org/g/nope" })).is_err()
+        tool_export(
+            &store,
+            &serde_json::json!({ "graph": "http://example.org/g/nope" })
+        )
+        .is_err()
     );
 }

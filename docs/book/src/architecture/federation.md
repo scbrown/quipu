@@ -9,7 +9,7 @@
 > headline is not real and `federation.remotes` is inert — tracked in
 > [quipu#47](https://github.com/scbrown/quipu/issues/47). Verified by grep
 > against `main` (fcf75c2). See the detailed banner below.
-
+>
 > **Status: trait-only, not wired.** The `GraphProvider` trait and
 > `FederatedProvider` exist as library primitives, but quipu ships **no remote
 > provider** — only `LocalProvider`. Nothing constructs a `FederatedProvider` from

@@ -1492,7 +1492,14 @@ fn test_store_named_graph() -> (Store, String) {
     let a_p = store.intern("http://example.org/p").unwrap();
     let v_y = store.intern("http://example.org/y").unwrap();
     store
-        .overlay_write(g, Op::Assert, e_alice, a_name, Value::Str("t1-alice".into()), ts)
+        .overlay_write(
+            g,
+            Op::Assert,
+            e_alice,
+            a_name,
+            Value::Str("t1-alice".into()),
+            ts,
+        )
         .unwrap();
     store
         .overlay_write(g, Op::Assert, e_x, a_p, Value::Ref(v_y), ts)
@@ -1510,7 +1517,11 @@ fn graph_iri_scopes_to_named_graph() {
         .iter()
         .map(|r| value_to_iri(&store, r.get("o").unwrap()))
         .collect();
-    assert_eq!(result.rows().len(), 2, "exactly the named graph's two triples");
+    assert_eq!(
+        result.rows().len(),
+        2,
+        "exactly the named graph's two triples"
+    );
     assert!(objs.contains(&"t1-alice".to_string()));
     assert!(objs.contains(&"http://example.org/y".to_string()));
     assert!(
@@ -1523,7 +1534,11 @@ fn graph_iri_scopes_to_named_graph() {
 fn graph_var_binds_named_graph_iri() {
     let (store, g_iri) = test_store_named_graph();
     let result = query(&store, "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s ?p ?o } }").unwrap();
-    assert_eq!(result.rows().len(), 2, "GRAPH ?g ranges the named graphs only");
+    assert_eq!(
+        result.rows().len(),
+        2,
+        "GRAPH ?g ranges the named graphs only"
+    );
     for r in result.rows() {
         assert_eq!(
             value_to_iri(&store, r.get("g").unwrap()),
@@ -1551,7 +1566,10 @@ fn default_query_excludes_named_graphs() {
         .iter()
         .map(|r| value_to_iri(&store, r.get("o").unwrap()))
         .collect();
-    assert!(objs.contains(&"root-alice".to_string()), "root fact present");
+    assert!(
+        objs.contains(&"root-alice".to_string()),
+        "root fact present"
+    );
     assert!(
         !objs.contains(&"t1-alice".to_string()),
         "a named-graph fact must NOT leak into the default-graph query"
@@ -1646,9 +1664,7 @@ fn from_makes_named_graph_the_default() {
 #[test]
 fn from_union_merges_graphs() {
     let (store, g1, g2) = test_store_two_graphs();
-    let q = format!(
-        "SELECT ?o FROM <{g1}> FROM <{g2}> WHERE {{ ?s <http://example.org/p> ?o }}"
-    );
+    let q = format!("SELECT ?o FROM <{g1}> FROM <{g2}> WHERE {{ ?s <http://example.org/p> ?o }}");
     assert_eq!(
         objs_of(&store, &query(&store, &q).unwrap()),
         vec!["T1".to_string(), "T2".to_string()],
@@ -1686,9 +1702,8 @@ fn from_named_restricts_graph_var() {
 #[test]
 fn from_without_from_named_deactivates_named_graphs() {
     let (store, g1, _g2) = test_store_two_graphs();
-    let q = format!(
-        "SELECT ?g ?o FROM <{g1}> WHERE {{ GRAPH ?g {{ ?s <http://example.org/p> ?o }} }}"
-    );
+    let q =
+        format!("SELECT ?g ?o FROM <{g1}> WHERE {{ GRAPH ?g {{ ?s <http://example.org/p> ?o }} }}");
     assert!(
         query(&store, &q).unwrap().rows().is_empty(),
         "a dataset with FROM but no FROM NAMED activates no named graphs; GRAPH matches nothing"

@@ -353,7 +353,9 @@ pub fn cmd_export(args: &[String], db_path: &str) {
     };
 
     let exported = match graph {
-        Some(iri) => quipu::export_rdf_subset(&store, rdf_format, Some(iri)).map(|(bytes, _)| bytes),
+        Some(iri) => {
+            quipu::export_rdf_subset(&store, rdf_format, Some(iri)).map(|(bytes, _)| bytes)
+        }
         None => quipu::export_rdf(&store, rdf_format),
     };
     match exported {
