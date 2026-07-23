@@ -77,3 +77,11 @@ docs cmd="build":
         check)    just docs lint && just docs build ;;
         *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check" ;;
     esac
+
+# === Release ===
+
+# Verify the newest CHANGELOG.md section documents every commit git-cliff
+# attributes to the release — catches release-plz's commit mis-selection
+#. Run before merging any release-plz PR.
+changelog-verify *args:
+    ./scripts/verify-changelog.sh {{args}}

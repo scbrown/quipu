@@ -1,0 +1,31 @@
+name: Changelog check
+
+# Gate against release-plz's changelog commit mis-selection.
+# release-plz has documented only the newest few commits of a multi-commit release
+# (v0.3.6: 4 of 17) and, separately, dumped full history for an empty release
+# (v0.3.7). git-cliff with this repo's cliff.toml is correct; this job regenerates
+# the correct delta and fails a release PR whose CHANGELOG section is missing
+# commits — so a bad changelog cannot be merged unnoticed (v0.3.5's was).
+on:
+  pull_request:
+    paths:
+      - CHANGELOG.md
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify changelog completeness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags: the verifier ranges over v<prev>..HEAD
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Verify newest CHANGELOG section is complete
+        run: ./scripts/verify-changelog.sh
