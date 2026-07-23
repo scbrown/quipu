@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.8] - 2026-07-23
+
+### Added
+
+- *(events)* P1 event log + pull API + consumer registry([a81b3e7](https://github.com/scbrown/quipu/commit/a81b3e763070d095150e33070a0a6d3f757bc5ad))
+- *(server)* Prometheus /metrics — request counts, per-endpoint latency, policy outcomes, graph gauges([415de52](https://github.com/scbrown/quipu/commit/415de52b72c15e06c8801ad0601b470307908be3))
+- *(shacl)* Quipu:onViolation emit|reject — violations as events without gating the write (event P3)([d2a8d69](https://github.com/scbrown/quipu/commit/d2a8d690be1f5ee6ac75e008a32512fee5057327))
+- *(shapes)* Declare Metric — scraped series are first-class nodes (schema-gate ruling)([994064c](https://github.com/scbrown/quipu/commit/994064c12f4eb563416ebc4f63836bbb00a3e689))
+- *(shapes)* Wire the relationship constraints — 15 targeted, 4 held on measured blockers([d6f41d9](https://github.com/scbrown/quipu/commit/d6f41d98fdc0bea4183066c91d71cf0c47e1bb40))
+- *(shapes)* Vt9m — 23 legacy classes legitimized, class hierarchy declared, synonym classes retired([8e66b22](https://github.com/scbrown/quipu/commit/8e66b226d2045c1d4bd44a32e77afb71fb7792d4))
+
+### Fixed
+
+- *(server)* Raise the request body limit to 64MB — axum's 2MB default 413s real code-graph promotions([d1025bd](https://github.com/scbrown/quipu/commit/d1025bd96cd55bab8307ba80c0557af9c38ebc71))
+- *(shapes)* Target ContainsShape so provenance can actually fire([5da7d5f](https://github.com/scbrown/quipu/commit/5da7d5f205b5aaa6f6302aec89fd8794ad65af2e))
+
+### Testing
+
+- *(events)* Prove retraction EMITS — the reported P1 gap did not exist([a2774fb](https://github.com/scbrown/quipu/commit/a2774fb5bf50c8ed207f88f7cabffa678f58b4a6))
+
 ## [0.3.7] - 2026-07-23
 
 ### Added
