@@ -29,7 +29,7 @@ pub fn eval_pattern(
 /// initialise every leaf (BGP / property path) so evaluation is CONSTRAINED by
 /// them — the SPARQL EXISTS substitution semantics. A bound ?s makes a path
 /// traverse only from that ?s, not the whole graph (the unseeded
-/// per-outer-row re-eval held the store mutex O(n x inner_eval)). An empty seed
+/// per-outer-row re-eval held the store mutex O(n x `inner_eval`)). An empty seed
 /// reproduces the original unconstrained evaluation exactly. The deadline check
 /// stays here so seeded recursion is budget-bounded like the wrapper was.
 pub fn eval_pattern_seeded(
