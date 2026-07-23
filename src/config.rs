@@ -35,6 +35,16 @@ pub struct SearchConfig {
     /// Server-side ceiling on rows returned by a SPARQL query, bounding
     /// unbounded (LIMIT-less) scans (default: 10000).
     pub max_sparql_rows: usize,
+
+    /// Wall-clock budget for a single SPARQL query, in milliseconds
+    /// (default: 30000; 0 disables). Enforced INSIDE evaluation — a `SQLite`
+    /// progress handler interrupts a grinding `sqlite3_step`, and the pattern
+    /// evaluator checks the deadline between operators — so a runaway query
+    /// stops burning and releases the store lock instead of holding it for its
+    /// full runtime (the observed wedge: one unbound
+    /// `FILTER(CONTAINS(...))` scan ground >15min while every store request
+    /// serialized behind it).
+    pub query_timeout_ms: u64,
 }
 
 impl Default for SearchConfig {
@@ -44,6 +54,7 @@ impl Default for SearchConfig {
             max_limit: 1000,
             oversample_factor: DEFAULT_OVERSAMPLE_FACTOR,
             max_sparql_rows: 10_000,
+            query_timeout_ms: 30_000,
         }
     }
 }
@@ -570,9 +581,13 @@ url = "http://quipu.example:3030"
 [quipu.embedding]
 auto_embed = true
 embed_batch_size = 64
+
+[quipu.search]
+query_timeout_ms = 5000
 "#;
         let file: ConfigFile = toml::from_str(toml_str).unwrap();
         let cfg = file.quipu;
+        assert_eq!(cfg.search.query_timeout_ms, 5000);
         assert_eq!(cfg.store_path, PathBuf::from("/data/quipu.db"));
         assert!(cfg.server.enabled);
         assert_eq!(cfg.server.bind, "0.0.0.0:8080");

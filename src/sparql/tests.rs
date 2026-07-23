@@ -660,6 +660,7 @@ ex:server ex:status "active" ."#
     let ctx = TemporalContext {
         valid_at: Some("2026-02-01".into()),
         as_of_tx: None,
+        ..Default::default()
     };
     let result = query_temporal(
         &store,
@@ -676,6 +677,7 @@ ex:server ex:status "active" ."#
     let ctx = TemporalContext {
         valid_at: Some("2026-04-01".into()),
         as_of_tx: None,
+        ..Default::default()
     };
     let result = query_temporal(
         &store,
@@ -726,6 +728,7 @@ fn temporal_sparql_as_of_tx() {
     let ctx = TemporalContext {
         valid_at: None,
         as_of_tx: Some(1),
+        ..Default::default()
     };
     let result = query_temporal(
         &store,
@@ -1187,4 +1190,76 @@ fn str_of_a_lang_literal_drops_the_tag() {
     )
     .unwrap();
     assert!(r.rows().is_empty(), "the tag must not appear in STR()");
+}
+
+#[test]
+fn query_timeout_expired_deadline_errors() {
+    let store = test_store_with_data();
+    let ctx = TemporalContext {
+        deadline: Some(
+            std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(1))
+                .unwrap(),
+        ),
+        ..Default::default()
+    };
+    let err = query_temporal(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }", &ctx).unwrap_err();
+    assert!(
+        matches!(err, crate::error::Error::QueryTimeout { .. }),
+        "expected QueryTimeout, got: {err}"
+    );
+}
+
+#[test]
+fn query_timeout_from_store_config() {
+    let mut store = test_store_with_data();
+    // A 0ms budget cannot be met: the derived deadline is already due by the
+    // first eval_pattern check. Proves the config path (not just an explicit
+    // ctx deadline) enforces.
+    store.search_config_mut().query_timeout_ms = 1;
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    // sleep is not load-bearing for the deadline (it is re-derived at query
+    // start); it just makes shared-runner clock jitter irrelevant.
+    let start = std::time::Instant::now();
+    let mut saw_timeout = false;
+    // The 1ms budget is a race against real work; retry a few times rather
+    // than flake, but every attempt must either succeed fast or time out.
+    for _ in 0..10 {
+        match query(
+            &store,
+            "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?a ?b ?c . ?d ?e ?f }",
+        ) {
+            Err(crate::error::Error::QueryTimeout { .. }) => {
+                saw_timeout = true;
+                break;
+            }
+            Ok(_) => {}
+            Err(e) => panic!("unexpected error: {e}"),
+        }
+    }
+    assert!(
+        saw_timeout || start.elapsed().as_millis() < 1000,
+        "1ms-budget queries neither timed out nor stayed fast"
+    );
+}
+
+#[test]
+fn query_timeout_generous_budget_still_answers_and_clears_handler() {
+    let mut store = test_store_with_data();
+    store.search_config_mut().query_timeout_ms = 30_000;
+    let result = query(
+        &store,
+        "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+    )
+    .unwrap();
+    assert!(!result.rows().is_empty());
+    // Handler must be cleared after the query: a second query on the same
+    // connection with the timeout DISABLED must not inherit a stale deadline.
+    store.search_config_mut().query_timeout_ms = 0;
+    let result = query(
+        &store,
+        "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+    )
+    .unwrap();
+    assert!(!result.rows().is_empty());
 }

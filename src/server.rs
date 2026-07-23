@@ -284,6 +284,26 @@ async fn main() {
         // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
         // preflight (GH#5). Built above from the configured allowlist.
         .layer(cors)
+        // Request log, outermost so every request (including CORS preflights
+        // and auth rejections) leaves a trace. Until this existed, server.log
+        // was startup banners only, and a wedged instance left NOTHING to RCA
+        // from — the whole incident was reconstructed from gdb.
+        // stderr on purpose: stdout is block-buffered under systemd, stderr is
+        // not, and the journal timestamps every line itself.
+        .layer(axum::middleware::from_fn(
+            |req: axum::extract::Request, next: axum::middleware::Next| async move {
+                let method = req.method().clone();
+                let path = req.uri().path().to_string();
+                let started = std::time::Instant::now();
+                let resp = next.run(req).await;
+                eprintln!(
+                    "req {method} {path} -> {} in {}ms",
+                    resp.status().as_u16(),
+                    started.elapsed().as_millis()
+                );
+                resp
+            },
+        ))
         .with_state(state);
 
     eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
@@ -430,20 +450,41 @@ async fn query(
 
     blocking(move || {
         let store = store.lock().unwrap();
+        let started = std::time::Instant::now();
 
-        if let Some(fmt) = quipu::w3c::negotiate(&accept) {
-            let (result, _truncated) = quipu::query_result(&store, &input)?;
-            if let Some((content_type, body)) = quipu::w3c::serialize(&store, &result, fmt)? {
-                return Ok(
-                    ([(axum::http::header::CONTENT_TYPE, content_type)], body).into_response()
-                );
+        let run = |store: &quipu::Store| -> Result<axum::response::Response, AppError> {
+            if let Some(fmt) = quipu::w3c::negotiate(&accept) {
+                let (result, _truncated) = quipu::query_result(store, &input)?;
+                if let Some((content_type, body)) = quipu::w3c::serialize(store, &result, fmt)? {
+                    return Ok(
+                        ([(axum::http::header::CONTENT_TYPE, content_type)], body).into_response()
+                    );
+                }
+                // Format did not fit the result variant (e.g. text/turtle for a SELECT);
+                // fall through to the default shape rather than erroring.
             }
-            // Format did not fit the result variant (e.g. text/turtle for a SELECT);
-            // fall through to the default shape rather than erroring.
-        }
 
-        let result = quipu::tool_query(&store, &input)?;
-        Ok(axum::Json(result).into_response())
+            let result = quipu::tool_query(store, &input)?;
+            Ok(axum::Json(result).into_response())
+        };
+
+        let result = run(&store);
+        // The request line above has method+status+duration; only a slow or
+        // failed query earns its TEXT in the log — that is the one thing the
+        // next wedge RCA needs and the one thing the middleware cannot
+        // see (the body is consumed by then).
+        let elapsed_ms = started.elapsed().as_millis();
+        if elapsed_ms > 1_000 || result.is_err() {
+            let text: String = input
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("<no query field>")
+                .chars()
+                .take(300)
+                .collect();
+            eprintln!("query {}ms: {text}", elapsed_ms);
+        }
+        result
     })
     .await
 }
@@ -922,6 +963,10 @@ impl IntoResponse for AppError {
         // request — surface it as 403 so callers can distinguish it.
         let status = match &self.0 {
             quipu::Error::PolicyDenied(_) => StatusCode::FORBIDDEN,
+            // A query that ran out of budget is neither malformed nor a server
+            // fault — 408 lets a caller distinguish "narrow your query" from
+            // both.
+            quipu::Error::QueryTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             _ => StatusCode::BAD_REQUEST,
         };
         let body = json!({ "error": self.0.to_string() });

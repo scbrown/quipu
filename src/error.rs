@@ -26,6 +26,13 @@ pub enum Error {
     #[error("policy denied: {0}")]
     PolicyDenied(String),
 
+    #[error(
+        "query timeout: exceeded {limit_ms}ms (ran {elapsed_ms}ms) — narrow the query \
+         (exact-IRI or rdfs:label lookups, not FILTER(CONTAINS(...)) over unbound patterns) \
+         or raise [quipu.search] query_timeout_ms"
+    )]
+    QueryTimeout { elapsed_ms: u128, limit_ms: u128 },
+
     #[error("store error: {0}")]
     Store(String),
 

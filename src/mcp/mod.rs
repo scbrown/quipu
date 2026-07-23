@@ -65,6 +65,7 @@ pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bo
             .and_then(|v| v.as_str())
             .map(std::string::ToString::to_string),
         as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+        ..Default::default()
     };
 
     let result = sparql::query_temporal(store, query_str, &ctx)?;
@@ -365,6 +366,7 @@ pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> 
             .and_then(JsonValue::as_str)
             .map(std::string::ToString::to_string),
         as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+        ..Default::default()
     };
 
     let bound_claim = claim.replace("$target", &format!("<{target}>"));
@@ -476,6 +478,7 @@ pub fn tool_cooccurrence(store: &Store, input: &JsonValue) -> Result<JsonValue> 
             .and_then(JsonValue::as_str)
             .map(std::string::ToString::to_string),
         as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+        ..Default::default()
     };
     let result = sparql::query_temporal(store, &query, &ctx)?;
 

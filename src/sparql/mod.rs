@@ -72,6 +72,11 @@ pub struct TemporalContext {
     pub valid_at: Option<String>,
     /// Maximum transaction id to consider (None = all).
     pub as_of_tx: Option<i64>,
+    /// Abort evaluation once this instant passes (None = derive from the
+    /// store's `query_timeout_ms`; see [`query_temporal`]). Checked between
+    /// operators in the pattern evaluator and, via a `SQLite` progress
+    /// handler, inside long-running `sqlite3_step` calls.
+    pub deadline: Option<std::time::Instant>,
 }
 
 /// Execute a SPARQL query against the store (current state).
@@ -79,12 +84,74 @@ pub fn query(store: &Store, sparql: &str) -> Result<QueryResult> {
     query_temporal(store, sparql, &TemporalContext::default())
 }
 
+/// Clears the `SQLite` progress handler on drop, so an early return or error
+/// cannot leave a stale deadline interrupting the NEXT query on this
+/// connection.
+struct ProgressGuard<'a> {
+    conn: &'a rusqlite::Connection,
+}
+
+impl<'a> ProgressGuard<'a> {
+    /// ~4096 VM instructions between checks: coarse enough to be free on
+    /// healthy queries, fine enough to stop a grinding scan within
+    /// milliseconds of the deadline.
+    fn install(conn: &'a rusqlite::Connection, deadline: std::time::Instant) -> Self {
+        conn.progress_handler(4096, Some(move || std::time::Instant::now() >= deadline));
+        Self { conn }
+    }
+}
+
+impl Drop for ProgressGuard<'_> {
+    fn drop(&mut self) {
+        self.conn.progress_handler(0, None::<fn() -> bool>);
+    }
+}
+
 /// Execute a SPARQL query with temporal context (time-travel).
+///
+/// Enforces the store's query budget (`[quipu.search] query_timeout_ms`): unless `ctx.deadline` is already set by the caller, a deadline
+/// is derived from the store config, a `SQLite` progress handler interrupts
+/// statement execution past it, and the evaluator checks it between operators.
+/// Past-deadline failures surface as [`Error::QueryTimeout`], not whatever
+/// error the interrupt happened to produce.
+///
+/// The progress handler is installed per top-level query on the store's one
+/// connection; a nested `query_temporal` without its own deadline runs under
+/// the outer query's handler and budget, which is the intended accounting.
 pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Result<QueryResult> {
     let parsed = SparqlParser::new()
         .parse_query(sparql)
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 
+    let started = std::time::Instant::now();
+    let deadline = ctx.deadline.or_else(|| {
+        let limit_ms = store.search_config().query_timeout_ms;
+        (limit_ms > 0).then(|| started + std::time::Duration::from_millis(limit_ms))
+    });
+    let ctx = TemporalContext {
+        deadline,
+        ..ctx.clone()
+    };
+    let _guard = deadline.map(|dl| ProgressGuard::install(&store.conn, dl));
+
+    let result = eval_parsed(store, parsed, &ctx);
+    match result {
+        // Any failure past the deadline is reported as the timeout it is: the
+        // proximate error (a SQLITE_INTERRUPT, or the evaluator's own check)
+        // is just the mechanism that stopped the query.
+        Err(_) if deadline.is_some_and(|dl| std::time::Instant::now() >= dl) => {
+            Err(Error::QueryTimeout {
+                elapsed_ms: started.elapsed().as_millis(),
+                limit_ms: deadline
+                    .map(|dl| dl.saturating_duration_since(started).as_millis())
+                    .unwrap_or_default(),
+            })
+        }
+        other => other,
+    }
+}
+
+fn eval_parsed(store: &Store, parsed: Query, ctx: &TemporalContext) -> Result<QueryResult> {
     match parsed {
         Query::Select { pattern, .. } => {
             let (rows, vars) = pattern::eval_pattern(store, &pattern, ctx)?;

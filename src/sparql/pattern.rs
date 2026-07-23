@@ -24,6 +24,21 @@ pub fn eval_pattern(
     pattern: &GraphPattern,
     ctx: &TemporalContext,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
+    // Deadline check between operators. The SQLite progress
+    // handler stops a grinding statement; this stops the Rust-side plan —
+    // every operator recurses through here, so a multi-join over huge
+    // intermediate rows cannot outlive the budget by more than one operator.
+    // The zeros are placeholders: `query_temporal` rewrites any past-deadline
+    // failure with the real elapsed/limit.
+    if ctx
+        .deadline
+        .is_some_and(|dl| std::time::Instant::now() >= dl)
+    {
+        return Err(crate::error::Error::QueryTimeout {
+            elapsed_ms: 0,
+            limit_ms: 0,
+        });
+    }
     match pattern {
         GraphPattern::Bgp { patterns } => eval_bgp(store, patterns, ctx),
 
@@ -43,7 +58,20 @@ pub fn eval_pattern(
         GraphPattern::Filter { expr, inner } => {
             let (rows, vars) = eval_pattern(store, inner, ctx)?;
             let mut filtered = Vec::with_capacity(rows.len());
-            for row in rows {
+            for (i, row) in rows.into_iter().enumerate() {
+                // A pure-Rust filter over pre-materialized rows touches
+                // neither SQLite (no progress handler) nor another operator
+                // (no entry check) — poll the deadline in-loop, cheaply.
+                if i % 1024 == 0
+                    && ctx
+                        .deadline
+                        .is_some_and(|dl| std::time::Instant::now() >= dl)
+                {
+                    return Err(crate::error::Error::QueryTimeout {
+                        elapsed_ms: 0,
+                        limit_ms: 0,
+                    });
+                }
                 if eval_filter(store, expr, &row)? {
                     filtered.push(row);
                 }

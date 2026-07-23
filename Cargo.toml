@@ -47,7 +47,7 @@ path = "src/bin/seed_fixtures.rs"
 required-features = ["shacl"]
 
 [dependencies]
-rusqlite = { version = "0.33", features = ["bundled"] }
+rusqlite = { version = "0.33", features = ["bundled", "hooks"] }
 thiserror = "2"
 oxrdf = "0.3"
 oxttl = "0.2"

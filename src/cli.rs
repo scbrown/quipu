@@ -170,7 +170,11 @@ pub fn cmd_query(args: &[String], db_path: &str) {
         }
     };
 
-    let ctx = quipu::TemporalContext { valid_at, as_of_tx };
+    let ctx = quipu::TemporalContext {
+        valid_at,
+        as_of_tx,
+        ..Default::default()
+    };
 
     run_query_temporal(&store, sparql, &ctx);
 }
