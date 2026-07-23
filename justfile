@@ -29,6 +29,13 @@ check:
 build:
     cargo build
 
+# Build + deploy quipu-server with the fail-loud feature gate. Use THIS, never a
+# bare `cargo build`, to ship the server: quipu-server has required-features and
+# a plain build silently skips it, shipping a stale binary. Override targets via
+# env (INSTALL_TARGETS, SERVICE, HEALTH_URL, BUILD_DIR); NO_DEPLOY=1 to gate only.
+deploy-server:
+    bash scripts/build-deploy-server.sh
+
 # Run tests
 test *args="":
     cargo test {{args}}
