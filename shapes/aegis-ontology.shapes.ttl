@@ -314,6 +314,38 @@ aegis:CrewMemberShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
+        # Non-live CrewMembers (ruled 2026-07-23, teyk residue 1): a node that
+        # is historically a crew member but must NOT appear in live-agent
+        # projections carries crewStatus. ABSENCE means live/active — chosen
+        # for its failure asymmetry: forgetting to mark someone retired shows
+        # a stale card (visible, annoying); the inverse convention would hide
+        # a live agent (invisible, dangerous — that is how a live agent
+        # vanished from st during the teyk retract). "retired" = was real
+        # (strider, walker); "never-instantiated" = typed by directive/context
+        # episodes but no such process ever ran on this host (mayor — a card
+        # for it recreates the black-hole dispatch target).
+        sh:path aegis:crewStatus ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ("retired" "never-instantiated") ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+# ── ResponsibilityDomain ─────────────────────────────────────────
+#
+# An area of standing responsibility a crew member owns (iac, comms,
+# security-signoff) — abstract, not a service or host. Minted 2026-07-23
+# (teyk residue 3): the ownership facts malcolm->iac, ellie->comms,
+# sentinel->security-signoff previously hung off UNTYPED nodes whose only
+# typing arrived incidentally and was lost in a retract. Naming rule:
+# bare kebab (guide 1b, unlisted-kind rule -> this row).
+
+aegis:ResponsibilityDomainShape a sh:NodeShape ;
+    sh:targetClass aegis:ResponsibilityDomain ;
+    sh:property [
         sh:path rdfs:label ;
         sh:minCount 1 ;
     ] .
