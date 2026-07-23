@@ -11,6 +11,7 @@
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix quipu:  <http://quipu.dev/ontology/> .
 @prefix aegis:  <http://aegis.gastown.local/ontology/> .
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1100,21 +1101,37 @@ aegis:ClaudeCodeHookShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
-# ═════���══════════════════════════════════════��══════════════════════
-# Relationship Constraints
+# ═══════════════════════════════════════════════════════════════════
+# Relationship Constraints — WIRED 2026-07-23 (was: inert by construction)
 # ═══════════════════════════════════════════════════════════════════
 #
-# These PropertyShapes constrain relationship edges to valid
-# domain/range combinations.
+# Every shape below is TARGETED (sh:targetSubjectsOf) and annotated
+# quipu:onViolation "emit" — on a binary with event P3, violations become
+# shacl.violation events without gating the write; on the current deployed
+# binary the annotation is inert and enforcement is reject, which is SAFE
+# because every wired shape was measured at ZERO live violations first
+# (ranges widened to cover legitimate emergent usage; three data-bug edges
+# repaired; the un-wireable four held below).
 #
-# ⚠ INERT BY CONSTRUCTION — these PropertyShapes have no target and are
-# referenced by no NodeShape, so SHACL never evaluates them. They are
-# documentation, not rules. Wiring them up requires reconciling their
-# ranges against live data first (aegis-1y3q follow-up). Do not assume
-# any relationship/range constraint below is enforced.
+# RANGE WIDENINGS, each from measurement of live usage (not guesswork):
+#   member_of    += AnsibleGroup (declared-layer host groups, 40 edges), Skill
+#   committed_to += GitRepository, Repo (the class-name drift family, vt9m)
+#   authored_by  += Polecat (historical polecat-era authors)
+#   triggered_by += GitCommit (bead provenance), CLI (tool-invoked scripts)
+#
+# STILL UNWIRED — HELD, with the measured blocker for each (fmt5-class
+# semantic-migration work, not range tweaks):
+#   runs_on       12/118 mixed: direction-inverted edges (container runs_on app)
+#                 + substrate usage (X runs_on ZFSDataset)
+#   managed_by    23/35 multi-sense: directive-governs (should be applies_to,
+#                 inverted) + component-of (should be part_of) alongside the
+#                 canonical person/role senses
+#   implements    7/27 multi-sense: code-implements-service, doc-implements-design
+#   configured_in 9/13 direction-drift: config-file -> consumer (inverted from
+#                 the canonical "thing configured_in file")
 
-# runs_on: service/container → infrastructure host
 aegis:RunsOnShape a sh:PropertyShape ;
+    # HELD — see section header. No target on purpose.
     sh:path aegis:runs_on ;
     sh:or (
         [ sh:class aegis:ProxmoxNode ]
@@ -1122,95 +1139,108 @@ aegis:RunsOnShape a sh:PropertyShape ;
         [ sh:class aegis:LXCContainer ]
     ) .
 
-# depends_on: any entity → any entity
-aegis:DependsOnShape a sh:PropertyShape ;
-    sh:path aegis:depends_on .
-
-# connects_to: any entity → any entity (network/API)
-aegis:ConnectsToShape a sh:PropertyShape ;
-    sh:path aegis:connects_to .
-
-# managed_by: entity → CrewMember or Person
 aegis:ManagedByShape a sh:PropertyShape ;
+    # HELD — see section header. No target on purpose.
     sh:path aegis:managed_by ;
-    sh:or (
-        [ sh:class aegis:CrewMember ]
-        [ sh:class aegis:Person ]
-    ) .
+    sh:or ( [ sh:class aegis:CrewMember ] [ sh:class aegis:Person ] ) .
 
-# member_of: entity → Rig or group
-aegis:MemberOfShape a sh:PropertyShape ;
-    sh:path aegis:member_of ;
-    sh:class aegis:Rig .
-
-# reports_to: CrewMember → CrewMember
-aegis:ReportsToShape a sh:PropertyShape ;
-    sh:path aegis:reports_to ;
-    sh:class aegis:CrewMember .
-
-# backs_up: storage → entity
-aegis:BacksUpShape a sh:PropertyShape ;
-    sh:path aegis:backs_up .
-
-# routes_to: ReverseProxyRoute → service
-aegis:RoutesToShape a sh:PropertyShape ;
-    sh:path aegis:routes_to .
-
-# monitors: monitoring service → entity
-aegis:MonitorsShape a sh:PropertyShape ;
-    sh:path aegis:monitors .
-
-# applies_to: Directive/DecisionRecord → entity
-aegis:AppliesToShape a sh:PropertyShape ;
-    sh:path aegis:applies_to .
-
-# derived_from: provenance link
-aegis:DerivedFromShape a sh:PropertyShape ;
-    sh:path aegis:derived_from .
-
-# deployed_on: temporal deployment (value is dateTime)
-aegis:DeployedOnShape a sh:PropertyShape ;
-    sh:path aegis:deployed_on ;
-    sh:datatype xsd:dateTime .
-
-# owns: Person → entity (domain ownership)
-aegis:OwnsShape a sh:PropertyShape ;
-    sh:path aegis:owns .
-
-# committed_to: GitCommit → GitRepo
-aegis:CommittedToShape a sh:PropertyShape ;
-    sh:path aegis:committed_to ;
-    sh:class aegis:GitRepo .
-
-# authored_by: GitCommit/Bead → Person/CrewMember
-aegis:AuthoredByShape a sh:PropertyShape ;
-    sh:path aegis:authored_by ;
-    sh:or (
-        [ sh:class aegis:Person ]
-        [ sh:class aegis:CrewMember ]
-    ) .
-
-# modifies: GitCommit → entity
-aegis:ModifiesShape a sh:PropertyShape ;
-    sh:path aegis:modifies .
-
-# implements: GitCommit → Bead
 aegis:ImplementsShape a sh:PropertyShape ;
+    # HELD — see section header. No target on purpose.
     sh:path aegis:implements ;
     sh:class aegis:Bead .
 
-# triggered_by: entity → CronJob/Script
-aegis:TriggeredByShape a sh:PropertyShape ;
-    sh:path aegis:triggered_by ;
-    sh:or (
-        [ sh:class aegis:CronJob ]
-        [ sh:class aegis:Script ]
-    ) .
-
-# configured_in: entity → ConfigFile/AnsibleRole
 aegis:ConfiguredInShape a sh:PropertyShape ;
+    # HELD — see section header. No target on purpose.
     sh:path aegis:configured_in ;
-    sh:or (
-        [ sh:class aegis:ConfigFile ]
-        [ sh:class aegis:AnsibleRole ]
-    ) .
+    sh:or ( [ sh:class aegis:ConfigFile ] [ sh:class aegis:AnsibleRole ] ) .
+
+aegis:MemberOfShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:member_of ;
+    sh:property [
+        sh:path aegis:member_of ;
+        sh:or ( [ sh:class aegis:Rig ] [ sh:class aegis:AnsibleGroup ] [ sh:class aegis:Skill ] ) ;
+    ] .
+
+aegis:ReportsToShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:reports_to ;
+    sh:property [ sh:path aegis:reports_to ; sh:class aegis:CrewMember ; ] .
+
+aegis:CommittedToShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:committed_to ;
+    sh:property [
+        sh:path aegis:committed_to ;
+        sh:or ( [ sh:class aegis:GitRepo ] [ sh:class aegis:GitRepository ] [ sh:class aegis:Repo ] ) ;
+    ] .
+
+aegis:AuthoredByShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:authored_by ;
+    sh:property [
+        sh:path aegis:authored_by ;
+        sh:or ( [ sh:class aegis:Person ] [ sh:class aegis:CrewMember ] [ sh:class aegis:Polecat ] ) ;
+    ] .
+
+aegis:TriggeredByShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:triggered_by ;
+    sh:property [
+        sh:path aegis:triggered_by ;
+        sh:or ( [ sh:class aegis:CronJob ] [ sh:class aegis:Script ] [ sh:class aegis:GitCommit ] [ sh:class aegis:CLI ] ) ;
+    ] .
+
+# The ten structure-only relationship guards: objects must be IRIs (an entity
+# edge to a literal is a typo'd fact that reads like a fact — measured zero
+# live literals on all ten before wiring, so these are true-and-armed).
+aegis:DependsOnShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:depends_on ;
+    sh:property [ sh:path aegis:depends_on ; sh:nodeKind sh:IRI ; ] .
+
+aegis:ConnectsToShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:connects_to ;
+    sh:property [ sh:path aegis:connects_to ; sh:nodeKind sh:IRI ; ] .
+
+aegis:BacksUpShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:backs_up ;
+    sh:property [ sh:path aegis:backs_up ; sh:nodeKind sh:IRI ; ] .
+
+aegis:RoutesToShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:routes_to ;
+    sh:property [ sh:path aegis:routes_to ; sh:nodeKind sh:IRI ; ] .
+
+aegis:MonitorsShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:monitors ;
+    sh:property [ sh:path aegis:monitors ; sh:nodeKind sh:IRI ; ] .
+
+aegis:AppliesToShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:applies_to ;
+    sh:property [ sh:path aegis:applies_to ; sh:nodeKind sh:IRI ; ] .
+
+aegis:DerivedFromShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:derived_from ;
+    sh:property [ sh:path aegis:derived_from ; sh:nodeKind sh:IRI ; ] .
+
+aegis:DeployedOnShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:deployed_on ;
+    sh:property [ sh:path aegis:deployed_on ; sh:nodeKind sh:IRI ; ] .
+
+aegis:OwnsShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:owns ;
+    sh:property [ sh:path aegis:owns ; sh:nodeKind sh:IRI ; ] .
+
+aegis:ModifiesShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:modifies ;
+    sh:property [ sh:path aegis:modifies ; sh:nodeKind sh:IRI ; ] .
+
