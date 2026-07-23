@@ -59,7 +59,7 @@ for row in result.rows() {
 | GROUP BY | Supported | `GROUP BY ?type` |
 | HAVING | Supported | `HAVING(COUNT(?s) > 2)` |
 | EXTEND (BIND) | Supported | Computed variables |
-| Property paths | Supported | Reverse `^`, Sequence `/`, Alternative `|`, `*`, `+` (`src/sparql/property_path.rs`) |
+| Property paths | Supported | Reverse `^`, Sequence `/`, Alternative `\|`, `*`, `+` (`src/sparql/property_path.rs`) |
 
 ### Aggregates
 
