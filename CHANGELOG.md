@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.7] - 2026-07-23
+
+### Added
+
+- *(sparql)* Query wall-clock budget enforced inside evaluation + request logging([e002a07](https://github.com/scbrown/quipu/commit/e002a07c06c95173f25ab01595105b457d83f112))
+
 ## [0.3.6] - 2026-07-23
 
 ### Added
