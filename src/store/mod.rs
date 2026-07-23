@@ -484,9 +484,9 @@ impl Store {
         let mut rows = stmt.query([])?;
         let row = rows.next()?.expect("aggregate always returns one row");
         Ok((
-            row.get::<_, i64>(0)? as u64,
-            row.get::<_, i64>(1)? as u64,
-            row.get::<_, i64>(2)? as u64,
+            u64::try_from(row.get::<_, i64>(0)?).unwrap_or(0),
+            u64::try_from(row.get::<_, i64>(1)?).unwrap_or(0),
+            u64::try_from(row.get::<_, i64>(2)?).unwrap_or(0),
         ))
     }
 

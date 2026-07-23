@@ -141,7 +141,7 @@ pub fn check_eval_budget(
     {
         return Err(crate::error::Error::QueryComplexity { limit: cap });
     }
-    if i % BUDGET_POLL_STRIDE == 0
+    if i.is_multiple_of(BUDGET_POLL_STRIDE)
         && ctx
             .deadline
             .is_some_and(|dl| std::time::Instant::now() >= dl)

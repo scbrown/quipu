@@ -91,7 +91,7 @@ pub fn fetch_labeled_entities(store: &Store) -> Result<Vec<LabeledEntity>> {
 ///
 /// Composition of [`fetch_labeled_entities`] + [`spotlight_over`]. Handlers
 /// should call the two halves separately so the scan runs outside the store
-/// lock (see fetch_labeled_entities docs); this form stays for callers that already hold no lock.
+/// lock (see `fetch_labeled_entities` docs); this form stays for callers that already hold no lock.
 pub fn spotlight(store: &Store, text: &str, confidence: f64) -> Result<JsonValue> {
     let entities = fetch_labeled_entities(store)?;
     Ok(spotlight_over(&entities, text, confidence))

@@ -30,7 +30,7 @@ pub struct Subscription {
     pub types: Option<Vec<String>>,
     /// `realtime` or `batch`.
     pub mode: String,
-    /// Where matching events are POSTed.
+    /// Where matching events are `POST`ed.
     pub webhook_url: String,
     /// Batch mode: deliver when this many events are pending…
     pub batch_size: usize,
@@ -43,6 +43,7 @@ impl Store {
     /// field is reserved but nothing evaluates it yet, and a filter that is
     /// stored-but-ignored would deliver events the subscriber asked to
     /// exclude (the silent-enforcement-gap class).
+    #[allow(clippy::too_many_arguments)] // registry insert mirrors the table's columns
     pub fn subscription_create(
         &self,
         consumer_id: &str,
@@ -100,7 +101,7 @@ impl Store {
                 types: types_json.and_then(|t| serde_json::from_str::<Vec<String>>(&t).ok()),
                 mode: r.get(3)?,
                 webhook_url: r.get(4)?,
-                batch_size: r.get::<_, i64>(5)? as usize,
+                batch_size: usize::try_from(r.get::<_, i64>(5)?).unwrap_or(0),
                 batch_window_s: r.get(6)?,
             })
         })?;
@@ -120,7 +121,7 @@ impl Store {
 /// One delivery attempt's outcome, for the tick report.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Delivery {
-    /// POSTed and 2xx-acknowledged `n` events; cursor advanced to `to`.
+    /// `POST`ed and 2xx-acknowledged `n` events; cursor advanced to `to`.
     Delivered { n: usize, to: i64 },
     /// Nothing matching pending (or batch not yet due).
     Nothing,
@@ -132,8 +133,8 @@ pub enum Delivery {
 /// (never read from a clock here) and `post` is the HTTP poster — both
 /// injected so tests are deterministic. Returns per-subscription outcomes.
 ///
-/// Batch semantics: deliver when pending >= batch_size, OR when the oldest
-/// pending event has waited >= batch_window_s (tracked via the event `ts`
+/// Batch semantics: deliver when pending >= `batch_size`, OR when the oldest
+/// pending event has waited >= `batch_window_s` (tracked via the event `ts`
 /// against `now_epoch_s`); otherwise hold. Realtime delivers whatever is
 /// pending each tick. Both cap a single POST at 500 events; the cursor
 /// advance makes the remainder next tick's work.
@@ -162,10 +163,10 @@ pub fn deliver_tick(
                 continue;
             }
         }
-        let last = events.last().map(|e| e.offset).unwrap_or(since);
+        let last = events.last().map_or(since, |e| e.offset);
         let payload = serde_json::json!({
             "subscription": sub.consumer_id,
-            "events": events.iter().map(|e| e.to_json()).collect::<Vec<_>>(),
+            "events": events.iter().map(super::events::EventRow::to_json).collect::<Vec<_>>(),
         });
         if post(&sub.webhook_url, &payload) {
             // Advance ONLY on acknowledged delivery: at-least-once.

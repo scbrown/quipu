@@ -332,7 +332,7 @@ fn scoped_entity_iris(
 /// MCP tool: `quipu_shapes` -- Manage persistent SHACL shapes.
 /// MCP/HTTP tool: `quipu_subscriptions` — event-push subscription registry
 /// (event-log P2). Actions: create / list / delete. An unknown action errors
-/// (the tool_shapes silent-fall-through lesson).
+/// (the `tool_shapes` silent-fall-through lesson).
 pub fn tool_subscriptions(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let action = input
         .get("action")
@@ -361,11 +361,11 @@ pub fn tool_subscriptions(store: &Store, input: &JsonValue) -> Result<JsonValue>
             let ask = input.get("sparql_ask").and_then(|v| v.as_str());
             let batch_size = input
                 .get("batch_size")
-                .and_then(|v| v.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .unwrap_or(50) as usize;
             let batch_window = input
                 .get("batch_window_s")
-                .and_then(|v| v.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(30);
             let now = crate::time::now_iso();
             let id = store.subscription_create(

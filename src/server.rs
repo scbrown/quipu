@@ -18,11 +18,11 @@ use serde_json::{Value as JsonValue, json};
 /// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
 /// sustained stream of episode writers could re-acquire the lock ahead of
 /// readers indefinitely — during the mfg0 incident a `SELECT ... LIMIT 1`
-/// measured a 38.5s wait behind a write flood. FairMutex hands the lock to
+/// measured a 38.5s wait behind a write flood. `FairMutex` hands the lock to
 /// the longest waiter, bounding every request's wait to the queue ahead of
-/// it. (parking_lot's `lock()` has no poison Result — a panic while holding
+/// it. (`parking_lot`'s `lock()` has no poison Result — a panic while holding
 /// the lock simply unlocks, which is fine: Store keeps its invariants in
-/// SQLite transactions, not in Rust-visible state.)
+/// `SQLite` transactions, not in Rust-visible state.)
 type SharedStore = Arc<FairMutex<quipu::Store>>;
 
 const UI_HTML: &str = include_str!("../ui/index.html");
@@ -150,9 +150,10 @@ async fn main() {
 
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
-    let signing_key_path = std::env::var("QUIPU_SIGNING_KEY")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::path::Path::new(".quipu").join("verifier.pk8"));
+    let signing_key_path = std::env::var("QUIPU_SIGNING_KEY").map_or_else(
+        |_| std::path::Path::new(".quipu").join("verifier.pk8"),
+        std::path::PathBuf::from,
+    );
     match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
         Ok(id) => {
             eprintln!(
@@ -370,8 +371,7 @@ async fn main() {
                     let store = store.lock();
                     let now = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs() as i64)
-                        .unwrap_or(0);
+                        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
                     let mut post = |url: &str, body: &serde_json::Value| -> bool {
                         matches!(
                             ureq::post(url)
@@ -609,7 +609,7 @@ async fn query(
                 .chars()
                 .take(300)
                 .collect();
-            eprintln!("query {}ms: {text}", elapsed_ms);
+            eprintln!("query {elapsed_ms}ms: {text}");
         }
         result
     })
@@ -628,7 +628,7 @@ async fn knot(
             (result, st.take_deferred_embed())
         };
         if let Some(work) = work {
-            finish_deferred_embed(&store, work)?;
+            finish_deferred_embed(&store, &work)?;
         }
         Ok(axum::Json(result))
     })
@@ -672,7 +672,7 @@ macro_rules! ro_handler {
 /// unlocked window are skipped by `apply_deferred_embed` — the later writer's
 /// own embed pass owns them — so interleaving readers/writers between the two
 /// lock windows (the whole point of deferring) cannot regress an embedding.
-fn finish_deferred_embed(s: &SharedStore, work: quipu::DeferredEmbed) -> Result<(), AppError> {
+fn finish_deferred_embed(s: &SharedStore, work: &quipu::DeferredEmbed) -> Result<(), AppError> {
     if work.is_empty() {
         return Ok(());
     }
@@ -682,7 +682,7 @@ fn finish_deferred_embed(s: &SharedStore, work: quipu::DeferredEmbed) -> Result<
         return Ok(());
     };
     let embeddings = provider.embed_batch(&work.texts())?; // CPU work, LOCK-FREE
-    s.lock().apply_deferred_embed(&work, &embeddings)?;
+    s.lock().apply_deferred_embed(work, &embeddings)?;
     Ok(())
 }
 
@@ -703,7 +703,7 @@ macro_rules! rw_handler {
                     (out, st.take_deferred_embed())
                 };
                 if let Some(work) = work {
-                    finish_deferred_embed(&s, work)?;
+                    finish_deferred_embed(&s, &work)?;
                 }
                 Ok(axum::Json(out))
             })
@@ -808,7 +808,7 @@ async fn overlay_write(
             (result, st.take_deferred_embed())
         };
         if let Some(work) = work {
-            finish_deferred_embed(&store, work)?;
+            finish_deferred_embed(&store, &work)?;
         }
         Ok(axum::Json(result))
     })
@@ -964,7 +964,7 @@ struct EventParams {
     limit: Option<i64>,
     /// Comma-separated event types (e.g. `edge.added,type.new`).
     types: Option<String>,
-    /// Filter to a single group_id (episode grouping, e.g. `aegis-ontology`).
+    /// Filter to a single `group_id` (episode grouping, e.g. `aegis-ontology`).
     group: Option<String>,
     /// Resume from this consumer's durable committed offset.
     consumer: Option<String>,
@@ -984,7 +984,7 @@ async fn events_get(
             _ => None,
         };
         let since = p.since.unwrap_or_else(|| committed.unwrap_or(0));
-        let limit = p.limit.unwrap_or(100).clamp(1, 10_000) as usize;
+        let limit = usize::try_from(p.limit.unwrap_or(100).clamp(1, 10_000)).unwrap_or(100);
         let types: Option<Vec<String>> = p.types.as_deref().map(|t| {
             t.split(',')
                 .map(str::trim)

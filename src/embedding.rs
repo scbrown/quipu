@@ -176,7 +176,7 @@ impl DeferredEmbed {
 }
 
 /// Phase 1 of auto-embed, run UNDER the store lock: close retired embeddings
-/// (cheap SQLite writes) and build the texts to embed. The expensive
+/// (cheap `SQLite` writes) and build the texts to embed. The expensive
 /// `embed_batch` is deliberately NOT here — the caller runs it lock-free and
 /// then applies via [`apply_deferred_embed`].
 pub(crate) fn collect_embed_work(
