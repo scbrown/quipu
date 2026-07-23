@@ -65,6 +65,28 @@ impl QueryResult {
     }
 }
 
+/// Which graph(s) a pattern is evaluated against (quipu #36).
+///
+/// `g = 0` is the reserved ROOT / default committed graph. A SPARQL `GRAPH`
+/// clause re-scopes the patterns it encloses; without one, evaluation stays on
+/// the default graph (`DefaultRoot`), preserving the ROOT-only committed-read
+/// semantics (Decision 4). The scope is threaded through the pattern evaluator
+/// via [`TemporalContext`] and swapped (on a clone) when recursing into a
+/// `GRAPH { … }` block.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum GraphScope {
+    /// The default committed graph (`g = 0`). Current/legacy behaviour.
+    #[default]
+    DefaultRoot,
+    /// A single named graph by its interned graph id — `GRAPH <iri> { … }`.
+    /// An unknown graph IRI resolves to an id that matches nothing (empty
+    /// result), never a silent fall-through to the default graph.
+    Named(i64),
+    /// Every named graph (`g <> 0`), binding `var` to each match's graph IRI —
+    /// `GRAPH ?g { … }`.
+    AnyNamed { var: String },
+}
+
 /// Temporal context for time-travel SPARQL queries.
 #[derive(Debug, Clone, Default)]
 pub struct TemporalContext {
@@ -72,6 +94,9 @@ pub struct TemporalContext {
     pub valid_at: Option<String>,
     /// Maximum transaction id to consider (None = all).
     pub as_of_tx: Option<i64>,
+    /// Active graph scope for the patterns currently being evaluated (quipu
+    /// #36). Defaults to the ROOT/default graph; a `GRAPH` clause re-scopes it.
+    pub graph: GraphScope,
     /// Abort evaluation once this instant passes (None = derive from the
     /// store's `query_timeout_ms`; see [`query_temporal`]). Checked between
     /// operators in the pattern evaluator, INSIDE the pure-Rust join/merge

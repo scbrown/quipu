@@ -1458,3 +1458,132 @@ fn filter_not_exists_compatible_mapping_binds_outer_var() {
         "compatible-mapping: only carol"
     );
 }
+
+// --- Named-graph (quad) SPARQL scoping (quipu #36) ---
+// The store side of #36 (the `g` column + overlay writes) shipped earlier;
+// these cover the SPARQL read surface added on top: `GRAPH <iri>` and
+// `GRAPH ?g` scoping, the foundation for subset-export / federation.
+
+/// Root (g=0) holds one triple via ingest; a named graph <…/g/t1> holds two via
+/// the overlay write path. Lets the GRAPH tests assert scoping both directions.
+fn test_store_named_graph() -> (Store, String) {
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-04-04T00:00:00Z";
+
+    // Default graph (g=0): ex:alice ex:name "root-alice".
+    ingest_rdf(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:alice ex:name \"root-alice\" .\n".as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        ts,
+        None,
+        None,
+    )
+    .unwrap();
+
+    // Named graph <…/g/t1>: ex:alice ex:name "t1-alice" ; ex:x ex:p ex:y .
+    let g_iri = "http://example.org/g/t1".to_string();
+    let g = store.overlay_create(&g_iri, 0).unwrap();
+    let e_alice = store.intern("http://example.org/alice").unwrap();
+    let a_name = store.intern("http://example.org/name").unwrap();
+    let e_x = store.intern("http://example.org/x").unwrap();
+    let a_p = store.intern("http://example.org/p").unwrap();
+    let v_y = store.intern("http://example.org/y").unwrap();
+    store
+        .overlay_write(g, Op::Assert, e_alice, a_name, Value::Str("t1-alice".into()), ts)
+        .unwrap();
+    store
+        .overlay_write(g, Op::Assert, e_x, a_p, Value::Ref(v_y), ts)
+        .unwrap();
+    (store, g_iri)
+}
+
+#[test]
+fn graph_iri_scopes_to_named_graph() {
+    let (store, g_iri) = test_store_named_graph();
+    let q = format!("SELECT ?s ?p ?o WHERE {{ GRAPH <{g_iri}> {{ ?s ?p ?o }} }}");
+    let result = query(&store, &q).unwrap();
+    let objs: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|r| value_to_iri(&store, r.get("o").unwrap()))
+        .collect();
+    assert_eq!(result.rows().len(), 2, "exactly the named graph's two triples");
+    assert!(objs.contains(&"t1-alice".to_string()));
+    assert!(objs.contains(&"http://example.org/y".to_string()));
+    assert!(
+        !objs.contains(&"root-alice".to_string()),
+        "the default (root) graph must be excluded"
+    );
+}
+
+#[test]
+fn graph_var_binds_named_graph_iri() {
+    let (store, g_iri) = test_store_named_graph();
+    let result = query(&store, "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s ?p ?o } }").unwrap();
+    assert_eq!(result.rows().len(), 2, "GRAPH ?g ranges the named graphs only");
+    for r in result.rows() {
+        assert_eq!(
+            value_to_iri(&store, r.get("g").unwrap()),
+            g_iri,
+            "?g binds the named graph's IRI"
+        );
+    }
+    let objs: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|r| value_to_iri(&store, r.get("o").unwrap()))
+        .collect();
+    assert!(
+        !objs.contains(&"root-alice".to_string()),
+        "GRAPH ?g must not range over the default graph (g=0)"
+    );
+}
+
+#[test]
+fn default_query_excludes_named_graphs() {
+    let (store, _g) = test_store_named_graph();
+    let result = query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").unwrap();
+    let objs: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|r| value_to_iri(&store, r.get("o").unwrap()))
+        .collect();
+    assert!(objs.contains(&"root-alice".to_string()), "root fact present");
+    assert!(
+        !objs.contains(&"t1-alice".to_string()),
+        "a named-graph fact must NOT leak into the default-graph query"
+    );
+    assert!(!objs.contains(&"http://example.org/y".to_string()));
+}
+
+#[test]
+fn graph_unknown_iri_is_empty_not_default() {
+    let (store, _g) = test_store_named_graph();
+    let result = query(
+        &store,
+        "SELECT ?s WHERE { GRAPH <http://example.org/g/nope> { ?s ?p ?o } }",
+    )
+    .unwrap();
+    assert_eq!(
+        result.rows().len(),
+        0,
+        "an unknown graph IRI yields no rows, never a fall-through to the default graph"
+    );
+}
+
+#[test]
+fn property_path_in_named_graph_fails_loud() {
+    let (store, g_iri) = test_store_named_graph();
+    let q = format!(
+        "SELECT ?o WHERE {{ GRAPH <{g_iri}> {{ <http://example.org/x> <http://example.org/p>+ ?o }} }}"
+    );
+    let err = query(&store, &q).unwrap_err();
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("property paths inside a named GRAPH"),
+        "must fail loud rather than silently read the default graph; got: {msg}"
+    );
+}
