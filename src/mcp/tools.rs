@@ -611,7 +611,10 @@ pub fn tool_set(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     // {"str": ...} is a STATED literal intent — it disarms the bare-string
     // IRI-shape heuristic (json_to_value collapses both spellings, so the
     // distinction must be carried explicitly).
-    let explicit_str = value_json.get("str").and_then(serde_json::Value::as_str).is_some();
+    let explicit_str = value_json
+        .get("str")
+        .and_then(serde_json::Value::as_str)
+        .is_some();
 
     let now = crate::time::now_iso();
     let timestamp = input
