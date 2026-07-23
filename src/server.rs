@@ -528,27 +528,56 @@ where
     }
 }
 
+/// Generation-keyed cache of the /stats aggregate (facts/entities/predicates).
+///
+/// /stats full-scans every triple (`SELECT ?s ?p ?o`) and builds distinct
+/// subject/predicate sets — ~1.0s at 152k triples, paid on EVERY call, which
+/// matters when a monitor polls it. The aggregate is cached and
+/// keyed on `Store::latest_tx_id()`, the same pattern as SpotlightCache: under
+/// polling only the first call after a write pays the scan; the rest hold the
+/// store lock for one indexed MAX. Any write moves the generation and
+/// invalidates naturally, so the counts are exact, never stale.
+struct StatsCache {
+    generation: i64,
+    value: Arc<JsonValue>,
+}
+
+static STATS_CACHE: Mutex<Option<StatsCache>> = Mutex::new(None);
+
 async fn stats(State(store): State<SharedStore>) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let store = store.lock();
-        let result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
-
-        let mut entities = std::collections::HashSet::new();
-        let mut predicates = std::collections::HashSet::new();
-        for row in result.rows() {
-            if let Some(quipu::Value::Ref(id)) = row.get("s") {
-                entities.insert(*id);
+        let value = {
+            let store = store.lock();
+            let generation = store.latest_tx_id()?;
+            let mut cache = STATS_CACHE.lock().unwrap();
+            match cache.as_ref() {
+                Some(c) if c.generation == generation => c.value.clone(),
+                _ => {
+                    let result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
+                    let mut entities = std::collections::HashSet::new();
+                    let mut predicates = std::collections::HashSet::new();
+                    for row in result.rows() {
+                        if let Some(quipu::Value::Ref(id)) = row.get("s") {
+                            entities.insert(*id);
+                        }
+                        if let Some(quipu::Value::Ref(id)) = row.get("p") {
+                            predicates.insert(*id);
+                        }
+                    }
+                    let fresh = Arc::new(json!({
+                        "facts": result.rows().len(),
+                        "entities": entities.len(),
+                        "predicates": predicates.len()
+                    }));
+                    *cache = Some(StatsCache {
+                        generation,
+                        value: fresh.clone(),
+                    });
+                    fresh
+                }
             }
-            if let Some(quipu::Value::Ref(id)) = row.get("p") {
-                predicates.insert(*id);
-            }
-        }
-
-        Ok(axum::Json(json!({
-            "facts": result.rows().len(),
-            "entities": entities.len(),
-            "predicates": predicates.len()
-        })))
+        };
+        Ok(axum::Json((*value).clone()))
     })
     .await
 }
@@ -1391,6 +1420,65 @@ mod tests {
         assert!(
             start.elapsed() < std::time::Duration::from_millis(150),
             "the sleepy provider was consulted despite a pre-computed embedding"
+        );
+    }
+
+    /// /stats returns the generation-keyed cache when Store::latest_tx_id()
+    /// is unchanged, and recomputes when it moves (a write). Both paths are proven by
+    /// poisoning STATS_CACHE at a matching vs a stale generation — matching returns the
+    /// poison (so the scan was skipped), stale is ignored and the true stats recomputed —
+    /// which needs no triple-insert plumbing and is fully deterministic.
+    #[tokio::test]
+    async fn stats_uses_generation_cache_and_invalidates_on_write() {
+        let store = Store::open_in_memory().unwrap();
+        let shared: SharedStore = Arc::new(FairMutex::new(store));
+
+        // Baseline on the empty store (facts == 0), at the current generation.
+        *STATS_CACHE.lock().unwrap() = None;
+        let base = stats(State(shared.clone()))
+            .await
+            .ok()
+            .expect("stats handler should succeed")
+            .0;
+        assert_eq!(
+            base["facts"].as_u64().unwrap(),
+            0,
+            "empty store has 0 facts"
+        );
+        let cur_gen = shared.lock().latest_tx_id().unwrap();
+
+        // Cache HIT: poison at the CURRENT generation. The handler must return the
+        // poison — proving it read the cache and did NOT re-scan (a scan would give 0).
+        *STATS_CACHE.lock().unwrap() = Some(StatsCache {
+            generation: cur_gen,
+            value: Arc::new(json!({ "facts": 42, "entities": 7, "predicates": 3 })),
+        });
+        let hit = stats(State(shared.clone()))
+            .await
+            .ok()
+            .expect("stats handler should succeed")
+            .0;
+        assert_eq!(
+            hit["facts"].as_u64().unwrap(),
+            42,
+            "matching generation must return the cached aggregate, not re-scan"
+        );
+
+        // INVALIDATION: poison at a STALE generation, exactly as a write leaves the
+        // cache. The handler must ignore it and recompute the true (empty) stats.
+        *STATS_CACHE.lock().unwrap() = Some(StatsCache {
+            generation: cur_gen - 1,
+            value: Arc::new(json!({ "facts": 42, "entities": 7, "predicates": 3 })),
+        });
+        let fresh = stats(State(shared.clone()))
+            .await
+            .ok()
+            .expect("stats handler should succeed")
+            .0;
+        assert_eq!(
+            fresh["facts"].as_u64().unwrap(),
+            0,
+            "a stale generation must be ignored and the stats recomputed"
         );
     }
 }
