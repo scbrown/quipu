@@ -1272,13 +1272,21 @@ function navigate() {
   if (view) view.classList.add('active');
   if (link) link.classList.add('active');
 
-  if (hash === 'explorer' && !state.loaded) loadEntities();
-  if (!state._deepLinksLoaded) { state._deepLinksLoaded = true; loadDeepLinkRegistry(); }
-  // Dereferenced IRI: the server serves this UI at /entity/{iri}; open that
-  // node's page as soon as we know which node was asked for.
-  if (location.pathname.startsWith('/entity/') && !state._nodePageBooted) {
+  // Dereferenced IRI: open that node's page FIRST. Its two exact-IRI queries
+  // are cheap, but the store serializes on one mutex — fired after the big
+  // /cord entity load they queue behind it and the page sits on "Loading
+  // node..." for the whole load. Node page first, explorer bulk load after.
+  const entityBoot = location.pathname.startsWith('/entity/') && !state._nodePageBooted;
+  if (entityBoot) {
     state._nodePageBooted = true;
-    openNodePage(decodeURIComponent(location.pathname.slice('/entity/'.length)));
+    const iri = decodeURIComponent(location.pathname.slice('/entity/'.length));
+    openNodePage(iri).finally(() => {
+      if (hash === 'explorer' && !state.loaded) loadEntities();
+      if (!state._deepLinksLoaded) { state._deepLinksLoaded = true; loadDeepLinkRegistry(); }
+    });
+  } else {
+    if (hash === 'explorer' && !state.loaded) loadEntities();
+    if (!state._deepLinksLoaded) { state._deepLinksLoaded = true; loadDeepLinkRegistry(); }
   }
   if (hash === 'timeline' && !state.timelineLoaded) loadEpisodes();
   if (hash === 'shapes') loadShapes();
