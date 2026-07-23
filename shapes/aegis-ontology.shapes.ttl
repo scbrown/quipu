@@ -202,6 +202,14 @@ aegis:ReverseProxyRouteShape a sh:NodeShape ;
         sh:path aegis:backend ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+        # VALUE QUALITY, not mere presence — the first such constraint here.
+        # 60 of 61 backend facts were once UNEXPANDED JINJA ("http://{{ ... }}"):
+        # the ingest read the ansible TEMPLATE and stored the placeholder as the
+        # service address, and every count/coverage check read green. A backend
+        # must be a concrete address; any brace means a template leaked through.
+        # (minCount deliberately still absent: 61/63 coverage — 2 routes carry
+        # no backend, so requiring it needs those triaged first, and I1 amended.)
+        sh:pattern "^https?://[^{]+$" ;
     ] ;
     sh:property [
         sh:path rdfs:label ;
