@@ -36,6 +36,14 @@
 # touches the union of their entities. Range is a Bead; domain (epic vs bead) is
 # left open — an epic is just a Bead with children in the aegis model.
 
+# TARGETED so the shape can actually fire: without a target an
+# unreferenced PropertyShape validates nothing — this file's only shape was
+# "valid" by construction, vacuously, from the day it loaded. targetSubjectsOf
+# binds every node that ASSERTS a contains edge, and nothing else: measured 0
+# such subjects live on 2026-07-23, so this arms the rule without adding a
+# single violation. The first contains edge with a non-Bead object now fails
+# instead of passing silently.
 aegis:ContainsShape a sh:PropertyShape ;
+    sh:targetSubjectsOf aegis:contains ;
     sh:path aegis:contains ;
     sh:class aegis:Bead .
