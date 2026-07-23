@@ -1032,6 +1032,19 @@ aegis:FailurePatternShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# Metric — RULED IN (the schema-gate call the proposal asked for): a scraped
+# series is a first-class node because "which metrics exist but drive no rule?"
+# is a standing operational question that wants to be queryable — proven by the
+# zombie-series / noise-buried-outage incidents, where the WRONG answer to that
+# question hid a 66-day outage. Label-only contract, per the R1/R2 ruling (no
+# required scalar the emitters do not produce).
+aegis:MetricShape a sh:NodeShape ;
+    sh:targetClass aegis:Metric ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ── SoftwareVersion ──────────────────────────────────────────────
 #
 # A specific released version of a piece of software, so an incident can point
