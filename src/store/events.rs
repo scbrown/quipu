@@ -700,4 +700,48 @@ mod tests {
         }
         let _ = std::fs::remove_file(&path);
     }
+
+    /// The retract paths (`retract_entity` / `retract_triples`) route through
+    /// `transact`, so retractions EMIT — this was mis-reported as a gap when the
+    /// event log first landed, and this test is the correction: claim by
+    /// mechanism, not by memory of the code.
+    #[test]
+    fn retraction_emits_edge_retracted() {
+        let mut store = Store::open_in_memory().unwrap();
+        let e = ep(
+            "ev-retract",
+            vec![node("svc-a", "Service"), node("host-b", "Host")],
+            vec![edge("svc-a", "runs_on", "host-b")],
+        );
+        ingest_episode(&mut store, &e, "2026-07-23T00:00:00Z", DEFAULT_BASE_NS).unwrap();
+        let mark = store.latest_event_offset().unwrap();
+
+        // Retract everything on svc-a (label, type, description, the edge).
+        let svc_a = store
+            .lookup(&format!("{DEFAULT_BASE_NS}svc-a"))
+            .unwrap()
+            .expect("svc-a interned");
+        let (tx, n) = store
+            .retract_entity(svc_a, None, "2026-07-23T01:00:00Z", None)
+            .unwrap();
+        assert!(tx > 0 && n > 0, "retraction must be a real tx");
+
+        let evs = store.events_after(mark, 1000, None, None).unwrap();
+        assert!(!evs.is_empty(), "retraction must emit events");
+        assert!(evs.iter().all(|e| e.tx_id == tx));
+        let retracted: Vec<_> = evs
+            .iter()
+            .filter(|e| e.event_type == "edge.retracted")
+            .collect();
+        assert!(
+            retracted.iter().any(|e| e.payload.contains("runs_on")),
+            "the runs_on edge retraction must be an edge.retracted event; got {retracted:?}"
+        );
+        // svc-a existed before the retraction tx -> entity.updated, not .added.
+        assert!(evs.iter().any(
+            |e| e.event_type == "entity.updated" && e.subject.as_deref().unwrap_or("").contains("svc-a")
+        ));
+        // And no phantom episode.ingested from a non-episode source.
+        assert!(!evs.iter().any(|e| e.event_type == "episode.ingested"));
+    }
 }
