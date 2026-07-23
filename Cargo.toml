@@ -1,6 +1,6 @@
 [package]
 name = "quipu"
-version = "0.3.10"
+version = "0.3.11"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
