@@ -33,6 +33,13 @@ pub enum Error {
     )]
     QueryTimeout { elapsed_ms: u128, limit_ms: u128 },
 
+    #[error(
+        "query complexity limit: an intermediate join result exceeded {limit} rows — \
+         this query's joins explode (unbound patterns multiplying against each other). \
+         Add more selective triple patterns or raise [quipu.search] max_join_rows"
+    )]
+    QueryComplexity { limit: usize },
+
     #[error("store error: {0}")]
     Store(String),
 

@@ -1263,3 +1263,83 @@ fn query_timeout_generous_budget_still_answers_and_clears_handler() {
     .unwrap();
     assert!(!result.rows().is_empty());
 }
+
+#[test]
+fn join_row_cap_aborts_exploding_cross_join() {
+    let mut store = test_store_with_data();
+    // Disable the wall clock so the cap is what fires: the point of the cap
+    // is stopping an explosion long before the timeout would.
+    store.search_config_mut().query_timeout_ms = 0;
+    store.search_config_mut().max_join_rows = 10;
+    // Three unbound patterns cross-multiply: |facts|^3 intermediate rows —
+    // the exact shape of the exploded join that wedged evaluation while
+    // holding the store mutex (the row cap must abort it, not the clock).
+    let err = query(
+        &store,
+        "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?a ?b ?c . ?d ?e ?f }",
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, crate::error::Error::QueryComplexity { limit: 10 }),
+        "expected QueryComplexity naming the limit, got: {err}"
+    );
+    // The error text must NAME the limit and the knob — that is what makes a
+    // 4xx actionable instead of mysterious.
+    let msg = err.to_string();
+    assert!(msg.contains("10"), "limit missing from message: {msg}");
+    assert!(
+        msg.contains("max_join_rows"),
+        "knob missing from message: {msg}"
+    );
+}
+
+#[test]
+fn join_row_cap_leaves_normal_queries_alone() {
+    let mut store = test_store_with_data();
+    store.search_config_mut().max_join_rows = 1_000_000;
+    let result = query(
+        &store,
+        "SELECT ?name WHERE { ?s a <http://example.org/Person> . ?s <http://example.org/name> ?name }",
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 2, "Alice and Bob expected");
+}
+
+#[test]
+fn join_row_cap_zero_disables() {
+    let mut store = test_store_with_data();
+    store.search_config_mut().query_timeout_ms = 0;
+    store.search_config_mut().max_join_rows = 0;
+    // Small store: the full cross join is tiny; with the cap disabled it
+    // must complete rather than error.
+    let result = query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?a ?b ?c }").unwrap();
+    assert!(!result.rows().is_empty());
+}
+
+#[test]
+fn expired_deadline_stops_pure_rust_join_loop() {
+    let mut store = test_store_with_data();
+    // Cap disabled: force the DEADLINE to be what stops the join loop. The
+    // expired deadline is only checked inside eval loops (the between-operator
+    // check would also catch it — but pattern evaluation must not survive to a
+    // second operator either way; mfg0 proved the loops are where CPU goes).
+    store.search_config_mut().max_join_rows = 0;
+    let ctx = TemporalContext {
+        deadline: Some(
+            std::time::Instant::now()
+                .checked_sub(std::time::Duration::from_secs(1))
+                .unwrap(),
+        ),
+        ..Default::default()
+    };
+    let err = query_temporal(
+        &store,
+        "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?a ?b ?c . ?d ?e ?f }",
+        &ctx,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(err, crate::error::Error::QueryTimeout { .. }),
+        "expected QueryTimeout, got: {err}"
+    );
+}

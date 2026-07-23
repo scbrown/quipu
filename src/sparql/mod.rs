@@ -74,9 +74,17 @@ pub struct TemporalContext {
     pub as_of_tx: Option<i64>,
     /// Abort evaluation once this instant passes (None = derive from the
     /// store's `query_timeout_ms`; see [`query_temporal`]). Checked between
-    /// operators in the pattern evaluator and, via a `SQLite` progress
-    /// handler, inside long-running `sqlite3_step` calls.
+    /// operators in the pattern evaluator, INSIDE the pure-Rust join/merge
+    /// loops (the mfg0 wedge: an exploded join cloned binding tables at 100%
+    /// CPU for hours without touching either of the other two checks), and,
+    /// via a `SQLite` progress handler, inside long-running `sqlite3_step`
+    /// calls.
     pub deadline: Option<std::time::Instant>,
+    /// Abort evaluation when an intermediate binding set exceeds this many
+    /// rows (None = derive from the store's `max_join_rows`; 0 there
+    /// disables). A join explosion is stopped the moment it is recognizable
+    /// instead of burning the whole wall-clock budget at 100% CPU.
+    pub row_cap: Option<usize>,
 }
 
 /// Execute a SPARQL query against the store (current state).
@@ -128,8 +136,13 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         let limit_ms = store.search_config().query_timeout_ms;
         (limit_ms > 0).then(|| started + std::time::Duration::from_millis(limit_ms))
     });
+    let row_cap = ctx.row_cap.or_else(|| {
+        let cap = store.search_config().max_join_rows;
+        (cap > 0).then_some(cap)
+    });
     let ctx = TemporalContext {
         deadline,
+        row_cap,
         ..ctx.clone()
     };
     let _guard = deadline.map(|dl| ProgressGuard::install(&store.conn, dl));

@@ -45,7 +45,7 @@ pub fn eval_pattern(
         GraphPattern::Join { left, right } => {
             let (left_rows, left_vars) = eval_pattern(store, left, ctx)?;
             let (right_rows, right_vars) = eval_pattern(store, right, ctx)?;
-            let joined = join_rows(&left_rows, &right_rows);
+            let joined = join_rows(&left_rows, &right_rows, ctx)?;
             let mut vars = left_vars;
             for v in right_vars {
                 if !vars.contains(&v) {
@@ -97,7 +97,11 @@ pub fn eval_pattern(
             let (rows, vars) = eval_pattern(store, inner, ctx)?;
             let mut seen = Vec::new();
             let mut unique = Vec::new();
-            for row in rows {
+            // `seen.contains` makes this loop quadratic in the row count —
+            // over a large (row-cap-sized) input it is another pure-Rust burn
+            // neither the SQLite handler nor the operator check can see.
+            for (i, row) in rows.into_iter().enumerate() {
+                super::pattern_util::check_eval_budget(ctx, i, unique.len())?;
                 if !seen.contains(&row) {
                     seen.push(row.clone());
                     unique.push(row);
@@ -133,9 +137,14 @@ pub fn eval_pattern(
                 }
             }
             let mut results = Vec::new();
+            // Same nested join loop as `join_rows` — same budget enforcement,
+            // for the same reason (OPTIONAL explodes exactly like Join).
+            let mut i = 0usize;
             for l in &left_rows {
                 let mut matched = false;
                 for r in &right_rows {
+                    super::pattern_util::check_eval_budget(ctx, i, results.len())?;
+                    i += 1;
                     if let Some(merged) = merge_bindings(l, r) {
                         let passes = match expression.as_ref() {
                             Some(e) => eval_filter(store, e, &merged)?,
@@ -314,7 +323,11 @@ pub fn eval_bgp(
 
     for tp in patterns {
         let mut new_rows = Vec::new();
-        for existing in &result_rows {
+        for (i, existing) in result_rows.iter().enumerate() {
+            // BGP accumulation multiplies row counts pattern-by-pattern —
+            // the SQLite handler interrupts a grinding statement, but the
+            // row-count explosion itself is only visible here.
+            super::pattern_util::check_eval_budget(ctx, i, new_rows.len())?;
             let matches = eval_triple_pattern(store, tp, existing, ctx)?;
             new_rows.extend(matches);
         }

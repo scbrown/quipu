@@ -312,6 +312,16 @@ async fn main() {
                     .extensions()
                     .get::<axum::extract::MatchedPath>()
                     .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
+                // Log at START with an id, then again at completion. The
+                // request that never completes is exactly the one an RCA
+                // needs, and completion-only logging guarantees it is the one
+                // missing from the log (the mfg0 wedge left NO trace of the
+                // killer query). The id ties the two lines together across
+                // interleaved requests; the inline timestamp survives
+                // plain-file stderr redirects where no journald stamps lines.
+                static REQ_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                let id = REQ_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                eprintln!("{} req#{id} {method} {path} ...", quipu::time::now_iso());
                 let started = std::time::Instant::now();
                 let resp = next.run(req).await;
                 let status = resp.status().as_u16();
@@ -321,7 +331,8 @@ async fn main() {
                     started.elapsed().as_secs_f64(),
                 );
                 eprintln!(
-                    "req {method} {path} -> {status} in {}ms",
+                    "{} req#{id} {method} {path} -> {status} in {}ms",
+                    quipu::time::now_iso(),
                     started.elapsed().as_millis()
                 );
                 resp
@@ -535,6 +546,20 @@ async fn query(
         .to_string();
 
     blocking(move || {
+        // Query TEXT at START, before taking the store lock: the query that
+        // never completes — or never gets the mutex — must still be on the
+        // record. Completion-only text logging is how the mfg0 killer query
+        // stayed invisible for its entire ~4h burn.
+        {
+            let text: String = input
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("<no query field>")
+                .chars()
+                .take(300)
+                .collect();
+            eprintln!("{} query start: {text}", quipu::time::now_iso());
+        }
         let store = store.lock().unwrap();
         let started = std::time::Instant::now();
 
@@ -1110,7 +1135,9 @@ async fn spotlight_handler(
                 }
             }
         };
-        Ok(axum::Json(semweb::spotlight_over(&entities, text, confidence)))
+        Ok(axum::Json(semweb::spotlight_over(
+            &entities, text, confidence,
+        )))
     })
     .await
 }
@@ -1201,6 +1228,11 @@ impl IntoResponse for AppError {
             // fault — 408 lets a caller distinguish "narrow your query" from
             // both.
             quipu::Error::QueryTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            // A join explosion is a property of the QUERY (its error names the
+            // limit and how to fix the query) — 422: well-formed, unprocessable
+            // as written. Distinct from 408 so dashboards can tell "slow" from
+            // "explodes".
+            quipu::Error::QueryComplexity { .. } => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::BAD_REQUEST,
         };
         let body = json!({ "error": self.0.to_string() });

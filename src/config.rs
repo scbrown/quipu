@@ -45,6 +45,15 @@ pub struct SearchConfig {
     /// `FILTER(CONTAINS(...))` scan ground >15min while every store request
     /// serialized behind it).
     pub query_timeout_ms: u64,
+
+    /// Ceiling on INTERMEDIATE binding rows during SPARQL evaluation
+    /// (default: 1,000,000; 0 disables). The wall-clock budget alone is not
+    /// enough: an exploding join burns its whole timeout at 100% CPU while
+    /// holding the store lock before it aborts. This cap stops the explosion
+    /// as soon as it is *recognizable* — a join or BGP accumulation whose
+    /// output exceeds the cap aborts immediately with a complexity error
+    /// naming the limit, usually within milliseconds of going quadratic.
+    pub max_join_rows: usize,
 }
 
 impl Default for SearchConfig {
@@ -55,6 +64,7 @@ impl Default for SearchConfig {
             oversample_factor: DEFAULT_OVERSAMPLE_FACTOR,
             max_sparql_rows: 10_000,
             query_timeout_ms: 30_000,
+            max_join_rows: 1_000_000,
         }
     }
 }

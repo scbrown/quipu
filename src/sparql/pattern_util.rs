@@ -8,6 +8,8 @@ use crate::error::Result;
 use crate::store::Store;
 use crate::types::Value;
 
+use super::TemporalContext;
+
 pub type Bindings = HashMap<String, Value>;
 
 /// Try to bind a variable. Returns false if incompatible with existing binding.
@@ -111,17 +113,67 @@ pub fn triple_pattern_vars(tp: &TriplePattern) -> Vec<String> {
     vars
 }
 
-/// Join two sets of bindings on shared variables.
-pub fn join_rows(left: &[Bindings], right: &[Bindings]) -> Vec<Bindings> {
+/// How many pure-Rust loop iterations between deadline polls. Row-cap checks
+/// are a usize compare and run every iteration; `Instant::now()` is the only
+/// cost worth amortizing.
+pub const BUDGET_POLL_STRIDE: usize = 1024;
+
+/// Enforce the evaluation budget from inside a pure-Rust loop.
+///
+/// The mfg0 wedge: `merge_bindings` cloned exploded binding tables at 100%
+/// CPU for ~4 hours while holding the store mutex — the `SQLite` progress
+/// handler never fired (no `SQLite` in the loop) and the between-operator
+/// check never ran (control never left the join). Any loop that can grow
+/// with the product of its inputs must call this.
+///
+/// `produced` is checked against the row cap on every call; the deadline is
+/// polled only when `i` is a multiple of [`BUDGET_POLL_STRIDE`]. The zero
+/// timeout fields are placeholders `query_temporal` rewrites with real
+/// elapsed/limit values.
+#[inline]
+pub fn check_eval_budget(
+    ctx: &TemporalContext,
+    i: usize,
+    produced: usize,
+) -> crate::error::Result<()> {
+    if let Some(cap) = ctx.row_cap
+        && produced > cap
+    {
+        return Err(crate::error::Error::QueryComplexity { limit: cap });
+    }
+    if i % BUDGET_POLL_STRIDE == 0
+        && ctx
+            .deadline
+            .is_some_and(|dl| std::time::Instant::now() >= dl)
+    {
+        return Err(crate::error::Error::QueryTimeout {
+            elapsed_ms: 0,
+            limit_ms: 0,
+        });
+    }
+    Ok(())
+}
+
+/// Join two sets of bindings on shared variables, under the evaluation
+/// budget: the nested loop is exactly where a join explodes, so the budget is
+/// enforced here and not merely around the call.
+pub fn join_rows(
+    left: &[Bindings],
+    right: &[Bindings],
+    ctx: &TemporalContext,
+) -> crate::error::Result<Vec<Bindings>> {
     let mut results = Vec::new();
+    let mut i = 0usize;
     for l in left {
         for r in right {
+            check_eval_budget(ctx, i, results.len())?;
+            i += 1;
             if let Some(merged) = merge_bindings(l, r) {
                 results.push(merged);
             }
         }
     }
-    results
+    Ok(results)
 }
 
 /// Merge two binding rows. Returns None if they conflict on shared variables.
