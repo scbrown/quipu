@@ -1145,8 +1145,8 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 
 - Leptos: <https://leptos.dev>
 - Trunk: <https://trunkrs.dev>
-- wasm-bindgen: <https://rustwasm.github.io/wasm-bindgen/>
-- wasm-pack: <https://rustwasm.github.io/wasm-pack/>
+- wasm-bindgen: <https://wasm-bindgen.github.io/wasm-bindgen/>
+- wasm-pack: <https://drager.github.io/wasm-pack/>
 
 ### SPARQL & Query
 
@@ -1165,9 +1165,9 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 - Schema.org: <https://schema.org/SoftwareSourceCode>
 - Wikidata Query Service: <https://query.wikidata.org>
 - SOLID: <https://solidproject.org>
-- Drupal RDF module: <https://www.drupal.org/docs/core-modules-and-themes/core-modules/rdf-module>
+- Drupal RDF module: <https://www.drupal.org/project/rdf>
 
 ### Testing
 
 - Playwright: <https://playwright.dev>
-- wasm-bindgen-test: <https://rustwasm.github.io/wasm-bindgen/wasm-bindgen-test/>
+- wasm-bindgen-test: <https://wasm-bindgen.github.io/wasm-bindgen/wasm-bindgen-test/>
