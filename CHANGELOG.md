@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.9] - 2026-07-23
+
+### Added
+
+- *(events)* P2 push delivery — subscription registry + webhook worker (realtime + batched)([5b79b8a](https://github.com/scbrown/quipu/commit/5b79b8ae2ec794d9437ff578019002a8d0da6072))
+- *(ui)* Node page + first-class IRI + graph-driven deep-links for every node([8d1e2dd](https://github.com/scbrown/quipu/commit/8d1e2dd5bbcd4f9d69bed1b8985ff0060a306cbf))
+- *(store)* /set — atomic single-call replace/supersede for a predicate([2df3e2f](https://github.com/scbrown/quipu/commit/2df3e2fe1ba51f676ae9bf77e63efa3b87c85301))
+- *(shapes)* I5/I6/I7 — vocabulary drift gate, both directions + live census([2399786](https://github.com/scbrown/quipu/commit/23997862756dd71c6cbcc60f0cdf78c007c52c8e))
+- *(shapes)* Backend must be a concrete address — first VALUE-QUALITY constraint([0ee60b7](https://github.com/scbrown/quipu/commit/0ee60b70face3f9bf8ab8e720aaad3d512cfb7b2))
+- *(shapes)* Declare the Commit kind — hundreds of promotion-emitted entities were unvalidated([f740025](https://github.com/scbrown/quipu/commit/f740025985276d0548d6428f807d7f645b3ae6ea))
+- *(sparql)* Evaluation budget enforced INSIDE join/merge loops + intermediate row cap([400da45](https://github.com/scbrown/quipu/commit/400da4537ef6e6177a31735b6fde640f6ea0d5b7))
+- *(shapes)* CrewStatus convention (retired/never-instantiated) + ResponsibilityDomain class([323d7b2](https://github.com/scbrown/quipu/commit/323d7b21fcb1330e351fc22ecd3bc05674132d12))
+- *(server)* Read-only /resolve route — resolution dry-run without writing([4b43896](https://github.com/scbrown/quipu/commit/4b438969fa24442ac248ef068b3450f37644e2c5))
+- *(sparql)* Evaluate FILTER (NOT) EXISTS, incl. property paths inside([57a100a](https://github.com/scbrown/quipu/commit/57a100af9b2fe1903417abb99e8a60edd3ddfc50))
+
+### Fixed
+
+- *(server)* Clone the store handle before the router consumes it — shacl,onnx build was broken by the push worker([ea15b18](https://github.com/scbrown/quipu/commit/ea15b18571197a7f9eac046190aada36050318e9))
+- *(ui)* Node page renders immediately — incoming edges patch in async (object-bound scan is ~30s on a large store, LIMIT 100 bounded, slice-indexed when loaded)([9d2a062](https://github.com/scbrown/quipu/commit/9d2a062bb6851b013e7a238d7ce787bfdd3c38df))
+- *(ui)* Boot the node page BEFORE the bulk entity load — exact-IRI queries otherwise queue behind /cord on the store mutex([09f205b](https://github.com/scbrown/quipu/commit/09f205b1e3b71e724de9a5a24a28ced9c8298d81))
+- *(ui)* Load the deep-link registry with the node page, not after it([db103a8](https://github.com/scbrown/quipu/commit/db103a828ea716e7614e49048cf917067179a657))
+- *(ui)* A failed deep-link-registry load retries instead of latching empty for the session([6c78b76](https://github.com/scbrown/quipu/commit/6c78b766fa7100d48b6dc2c7d9972fcebc2eed37))
+- *(ui)* Node-page fetch phase gets a deadline + one retry — a request fired mid-restart hangs a timeout-less fetch forever([a6f04d7](https://github.com/scbrown/quipu/commit/a6f04d7e3e8f96b56290c1f49582941bd38fd6c6))
+- *(ui)* Hash-set at init re-entered navigate() and fired /cord in parallel with the node page's queries — the store mutex then starves them; track the boot promise and defer the bulk load, and popstate no longer re-opens the same page([b190dfe](https://github.com/scbrown/quipu/commit/b190dfe58561682029b6af58f1247cc3b7201c62))
+- *(ui)* Keep the entity graph readable now that the code plane is 75% of the store([f1414b8](https://github.com/scbrown/quipu/commit/f1414b816fee8b815babd04bde8dcdca76dd4d30))
+- *(ui)* Cap 1-hop expansion — a modest type filter can pull thousands of neighbours([c59f37f](https://github.com/scbrown/quipu/commit/c59f37ffe5cca541c6021b30c9c37f50091bced6))
+- *(set)* Scope the bare-string guard to ref-only/empty predicates; {"str"} states literal intent([d099019](https://github.com/scbrown/quipu/commit/d099019f36de2f3daad73d4a814d74a8b6187946))
+- *(server)* Spotlight scan runs OUTSIDE the store lock — reader starvation fix([ea97a95](https://github.com/scbrown/quipu/commit/ea97a954fc92dc954732fcbeef10ee7401eaec23))
+- *(server)* Cache the spotlight entity list keyed on store generation([e9ecfaa](https://github.com/scbrown/quipu/commit/e9ecfaaf276d9ad6f8071ffffaba9fbfff21a605))
+- *(server)* Episode auto-embed runs OUTSIDE the store lock + fair mutex([f67c7d6](https://github.com/scbrown/quipu/commit/f67c7d6ff0ab244b600e446ad96e3ff79414bac2))
+
+### Miscellaneous
+
+- *(clippy)* Satisfy the new stable clippy (1.96) lints — unbreak CI([65f3965](https://github.com/scbrown/quipu/commit/65f39654c6611fe7b8270c7a5278d4de609550c7))
+- Normalize trailing newlines in aegis-ontology.shapes.ttl (end-of-file-fixer)([129c2fe](https://github.com/scbrown/quipu/commit/129c2feb374e37e6b59bb7c899969f6a75d1b13a))
+- *(clippy)* Backtick inner_eval in eval_pattern_seeded doc — unbreak CI([ab126ca](https://github.com/scbrown/quipu/commit/ab126caf268008f67a170e90efb461487aa5d0c6))
+
+### Perf
+
+- *(sparql)* Seed EXISTS inner eval with the outer row — no per-row full re-eval([17dfed8](https://github.com/scbrown/quipu/commit/17dfed8122b516428e035525eba3d99d0a4b720e))
+- *(server)* Cache /stats behind a generation key so polling is O(1)([406c0a2](https://github.com/scbrown/quipu/commit/406c0a29e593c06d9134728c859a9a904644c1d6))
+
+### Style
+
+- Rustfmt drift in mcp/tools.rs (pre-existing; found by cargo fmt --check)([2dddf34](https://github.com/scbrown/quipu/commit/2dddf3497a236581b7679bc23a91ec20f20f7599))
+
 ## [0.3.8] - 2026-07-23
 
 ### Added
