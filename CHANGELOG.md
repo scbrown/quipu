@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.6] - 2026-07-23
+
+### Added
+
+- *(governance)* Enforce action-boundary policies on the write path([a0bddd7](https://github.com/scbrown/quipu/commit/a0bddd7d23329d092e31a4a3f9fdcfd56d62f8df))
+- *(governance)* Fail closed on require-approval/escalate at the write gate([ea5f667](https://github.com/scbrown/quipu/commit/ea5f667068cb98deeb7ed9b99baf79927f1ff0a2))
+- Transactions cursor + Policy assignsWorkflow([84de69f](https://github.com/scbrown/quipu/commit/84de69fd0e651c62e8810077d04faecfe94afab5))
+- Tree-sitter-tier policy catalog + Selector/Predicate congruence([356c1c2](https://github.com/scbrown/quipu/commit/356c1c20327cd2b08462ba49308e1b9ca81545ec))
+- Aegis:language on Selector for tree-sitter policy projection([2b2ed29](https://github.com/scbrown/quipu/commit/2b2ed29492a7fbe23beddd751b29b22fc2589585))
+- *(ui)* Default graph shows named entities + relations, not episodes([9a1ccc6](https://github.com/scbrown/quipu/commit/9a1ccc658278122e22f6ac6354533bf902334801))
+
+### Changed
+
+- *(governance)* Split guard tests into guard_tests.rs([30d87c2](https://github.com/scbrown/quipu/commit/30d87c22d77274fbef02870d12dd84f547d8b22e))
+
+### Documentation
+
+- *(retract)* Document on_orphan and the identity-accounting response; test refuse at the tool level([a22530b](https://github.com/scbrown/quipu/commit/a22530bff1d142f63104521f557685e9109d07c5))
+- Correct 6 reference-doc drifts and remove 3 dead pub items; pin the tool count([8e02316](https://github.com/scbrown/quipu/commit/8e02316234719d495f73bd3505aa35deaaac8bbe))
+- Note where an operator registers hank's verdict-signing publicKey([305d824](https://github.com/scbrown/quipu/commit/305d824b0d727a5dc00f966b230343da6f55cf00))
+
+### Fixed
+
+- *(reason)* --reactive must refuse loudly without its feature, and the feature must compile([0ba069d](https://github.com/scbrown/quipu/commit/0ba069de15a85b234b9c9abe8cb89db528cd5cfc))
+- *(retract)* A bare-string object for an IRI edge is refused, not a silent no-op([466634c](https://github.com/scbrown/quipu/commit/466634c8b47c108a767a45d73fe86fcd096e6770))
+- *(retract)* A bare IRI-shaped string errors even when there is no fact to compare, and document the {iri} contract([9a25f16](https://github.com/scbrown/quipu/commit/9a25f1659306447d91bb2f3c3e76a855a7522056))
+
+### Miscellaneous
+
+- Bring repo into compliance with current stable rustfmt + clippy([bb8f0e0](https://github.com/scbrown/quipu/commit/bb8f0e0546020142d08e7d92561fad8b9343f9c3))
+- *(docs)* Blank lines around headings/fences in homelab example([8cac704](https://github.com/scbrown/quipu/commit/8cac70495d6ce3852c4fe8f1bea8d30dd8660c23))
+
+### Perf
+
+- *(search)* Scoped /search drives from the selective pattern, and every store handler runs off the reactor([694d570](https://github.com/scbrown/quipu/commit/694d570ee49e71897bcfc57ec987860e5a233f74))
+- *(search)* Embed the query OUTSIDE the store lock so concurrent searches do not serialize([ffa75a6](https://github.com/scbrown/quipu/commit/ffa75a6049e7b18443e188b26e5cd7a76770e51e))
+
 ## [0.3.5] - 2026-07-20
 
 ### Added
