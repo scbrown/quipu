@@ -261,6 +261,58 @@ pub const CATALOG: &[NamedQuery] = &[
             },
         ],
     },
+    // ── Provenance-based work-item co-occurrence, ENTITY-centric (quipu#37) ──
+    // The work-item→work-item direction is `quipu_cooccurrence` (bitemporal);
+    // these two are the entity-centric queries #37 named, surfaced in the
+    // self-describing catalog per the issue's "use quipu_ask, not a bespoke
+    // tool" guidance. Deterministic set-overlap over the provenance chain
+    // `Bead <-aegis:implements- GitCommit -aegis:modifies-> entity`; NOT a
+    // statistical mine (that stays in Bobbin). Returns nothing until Hank's
+    // Phase-4 promotion (#18/FR-19) populates the modifies/implements edges —
+    // the query layer lands first per #37. (Catalog queries are non-temporal;
+    // for "as of <date>" use quipu_cooccurrence.)
+    NamedQuery {
+        name: "entity_work",
+        description: "Work-items (beads) and commits that touched a code entity — the auditable 'what work touched this' provenance query (quipu#37).",
+        template: "PREFIX a: <http://aegis.gastown.local/ontology/> SELECT DISTINCT ?commit ?bead WHERE { ?commit a:modifies <{entity}> . ?commit a:implements ?bead } LIMIT {limit}",
+        params: &[
+            ParamSpec {
+                name: "entity",
+                kind: ParamKind::Iri,
+                required: true,
+                default: None,
+                description: "IRI of the CodeModule/CodeSymbol to trace.",
+            },
+            ParamSpec {
+                name: "limit",
+                kind: ParamKind::Int,
+                required: false,
+                default: Some("100"),
+                description: "Maximum (commit, bead) pairs to return.",
+            },
+        ],
+    },
+    NamedQuery {
+        name: "cochanged_with",
+        description: "Code entities that share a touching work-item with the given entity, ranked by shared-work-item count — deterministic provenance co-change, complementary to Bobbin's statistical co-change (quipu#37).",
+        template: "PREFIX a: <http://aegis.gastown.local/ontology/> SELECT ?other (COUNT(DISTINCT ?bead) AS ?shared_workitems) WHERE { ?cA a:modifies <{entity}> . ?cA a:implements ?bead . ?cB a:implements ?bead . ?cB a:modifies ?other . FILTER(?other != <{entity}>) } GROUP BY ?other ORDER BY DESC(?shared_workitems) LIMIT {limit}",
+        params: &[
+            ParamSpec {
+                name: "entity",
+                kind: ParamKind::Iri,
+                required: true,
+                default: None,
+                description: "IRI of the CodeModule/CodeSymbol to find co-changed entities for.",
+            },
+            ParamSpec {
+                name: "limit",
+                kind: ParamKind::Int,
+                required: false,
+                default: Some("50"),
+                description: "Maximum co-changed entities to return.",
+            },
+        ],
+    },
 ];
 
 /// Render the full catalog as JSON for discovery.

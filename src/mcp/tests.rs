@@ -2477,6 +2477,79 @@ fn test_cooccurrence_deterministic_set_overlap() {
 }
 
 #[test]
+fn test_entity_centric_provenance_named_queries() {
+    // quipu#37 entity-centric side: entity_work (what work touched an entity)
+    // and cochanged_with (entities sharing a touching work-item), via the same
+    // Bead <-implements- GitCommit -modifies-> entity provenance chain, served
+    // through the quipu_ask named-query catalog.
+    let mut store = Store::open_in_memory().unwrap();
+    // c1 implements beadT, touches E1+E2; c2 implements beadX, touches E1;
+    // c3 implements beadY, touches E9. So via beadT/E1, E1 co-changes with E2
+    // (same commit c1) and — through shared beadT? no — via shared work-items:
+    // E1 and E2 share beadT (c1); E1 and E1 excluded; E9 shares nothing with E1.
+    let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
+        a:c1 a a:GitCommit ; a:implements a:beadT ; a:modifies a:E1, a:E2 .\n\
+        a:c2 a a:GitCommit ; a:implements a:beadX ; a:modifies a:E1 .\n\
+        a:c3 a a:GitCommit ; a:implements a:beadY ; a:modifies a:E9 .\n";
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // entity_work(E1): commits c1 and c2 touched E1, implementing beadT and beadX.
+    let ew = crate::tool_ask(
+        &store,
+        &serde_json::json!({
+            "name": "entity_work",
+            "params": { "entity": "http://aegis.gastown.local/ontology/E1" }
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        ew["count"], 2,
+        "E1 touched by two commit/bead pairs: {ew:#?}"
+    );
+    let beads: std::collections::HashSet<String> = ew["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["bead"].as_str().unwrap().to_string())
+        .collect();
+    assert!(beads.contains("http://aegis.gastown.local/ontology/beadT"));
+    assert!(beads.contains("http://aegis.gastown.local/ontology/beadX"));
+
+    // cochanged_with(E1): E2 shares beadT with E1 (both via c1). E9 shares nothing.
+    let cc = crate::tool_ask(
+        &store,
+        &serde_json::json!({
+            "name": "cochanged_with",
+            "params": { "entity": "http://aegis.gastown.local/ontology/E1" }
+        }),
+    )
+    .unwrap();
+    assert_eq!(cc["count"], 1, "only E2 co-changes with E1: {cc:#?}");
+    let row = &cc["rows"].as_array().unwrap()[0];
+    assert_eq!(row["other"], "http://aegis.gastown.local/ontology/E2");
+    assert_eq!(row["shared_workitems"], 1);
+
+    // Injection guard inherited from the catalog's Iri param validation.
+    let bad = crate::tool_ask(
+        &store,
+        &serde_json::json!({
+            "name": "cochanged_with",
+            "params": { "entity": "x> } INSERT {" }
+        }),
+    );
+    assert!(bad.is_err(), "malformed IRI must be rejected");
+}
+
+#[test]
 fn test_policy_check_committed_tier_evaluation() {
     // The loom's committed-tier eval: a Policy claim (ASK) over the graph of
     // record yields a Verdict {satisfied|unsatisfied|unknown}, reproducibly.
