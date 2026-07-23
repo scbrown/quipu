@@ -41,14 +41,21 @@ pub fn decode_iri(iri: &str) -> String {
 }
 
 /// An entity with label and type for matching operations.
-struct LabeledEntity {
+pub struct LabeledEntity {
     iri: String,
     label: String,
     entity_type: String,
 }
 
 /// Fetch all entities with labels from the store.
-fn fetch_labeled_entities(store: &Store) -> Result<Vec<LabeledEntity>> {
+///
+/// Public so callers can run this (cheap, O(entities) row copy) under the
+/// store lock and then run [`spotlight_over`] (expensive, O(entities × text)
+/// substring scan) OUTSIDE it — measured in production: with both under the one store
+/// mutex, a burst of spotlight calls from a 2s-timeout client starved every
+/// reader on the server for minutes (abandoned requests keep executing under
+/// a sync mutex, so client timeouts amplify instead of shedding load).
+pub fn fetch_labeled_entities(store: &Store) -> Result<Vec<LabeledEntity>> {
     let result = crate::sparql_query(
         store,
         "SELECT ?s ?label ?type WHERE { \
@@ -81,12 +88,22 @@ fn fetch_labeled_entities(store: &Store) -> Result<Vec<LabeledEntity>> {
 }
 
 /// Annotate text with entity mentions from the knowledge graph.
+///
+/// Composition of [`fetch_labeled_entities`] + [`spotlight_over`]. Handlers
+/// should call the two halves separately so the scan runs outside the store
+/// lock (see fetch_labeled_entities docs); this form stays for callers that already hold no lock.
 pub fn spotlight(store: &Store, text: &str, confidence: f64) -> Result<JsonValue> {
     let entities = fetch_labeled_entities(store)?;
+    Ok(spotlight_over(&entities, text, confidence))
+}
+
+/// The scan half of spotlight: annotate `text` against an already-fetched
+/// entity list. Touches no store — safe to run without any lock held.
+pub fn spotlight_over(entities: &[LabeledEntity], text: &str, confidence: f64) -> JsonValue {
     let text_lower = text.to_lowercase();
     let mut annotations = Vec::new();
 
-    for entity in &entities {
+    for entity in entities {
         let label_lower = entity.label.to_lowercase();
         let iri_short = short_name(&entity.iri).to_lowercase();
         let entity_type_short = if entity.entity_type.is_empty() {
@@ -129,7 +146,7 @@ pub fn spotlight(store: &Store, text: &str, confidence: f64) -> Result<JsonValue
     });
     annotations.dedup_by(|a, b| a["offset"] == b["offset"] && a["iri"] == b["iri"]);
 
-    Ok(json!({ "text": text, "annotations": annotations }))
+    json!({ "text": text, "annotations": annotations })
 }
 
 /// Query parameters for the TPF endpoint.

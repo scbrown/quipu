@@ -1074,8 +1074,13 @@ async fn spotlight_handler(
             .get("confidence")
             .and_then(serde_json::Value::as_f64)
             .unwrap_or(0.5);
-        let store = store.lock().unwrap();
-        Ok(axum::Json(semweb::spotlight(&store, text, confidence)?))
+        // Same lock-scope split as spotlight_handler (reader-starvation fix): fetch
+        // under the lock, scan outside it.
+        let entities = {
+            let store = store.lock().unwrap();
+            semweb::fetch_labeled_entities(&store)?
+        };
+        Ok(axum::Json(semweb::spotlight_over(&entities, text, confidence)))
     })
     .await
 }
