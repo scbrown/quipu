@@ -1926,20 +1926,39 @@ function renderGraph() {
   // neighbours keep a filtered type's relations visible); for a CAPPED view the
   // graph is the seed-to-seed core — hub neighbourhoods would re-inflate it
   // past readability.
-  for (const e of state.domainEntities) {
-    for (const f of e._facts) {
-      if (!isRelationPred(f.predicate)) continue;
-      if (typeof f.value !== 'string' || !state.byIri.has(f.value)) continue;
-      if (state.byIri.get(f.value)._isEpisode) continue;
-      if (capped ? !(seeds.has(e.iri) && seeds.has(f.value))
-                 : !(seeds.has(e.iri) || seeds.has(f.value))) continue;
-      const key = e.iri + '|' + f.predicate + '|' + f.value;
-      if (edgeSeen.has(key)) continue;
-      edgeSeen.add(key);
-      nodeIds.add(e.iri);
-      nodeIds.add(f.value);
-      edges.push({ data: { source: e.iri, target: f.value, label: shortIri(f.predicate) } });
+  const collectEdges = (seedOnly) => {
+    edges.length = 0;
+    edgeSeen.clear();
+    nodeIds.clear();
+    for (const iri of seeds) nodeIds.add(iri);
+    for (const e of state.domainEntities) {
+      for (const f of e._facts) {
+        if (!isRelationPred(f.predicate)) continue;
+        if (typeof f.value !== 'string' || !state.byIri.has(f.value)) continue;
+        if (state.byIri.get(f.value)._isEpisode) continue;
+        if (seedOnly ? !(seeds.has(e.iri) && seeds.has(f.value))
+                     : !(seeds.has(e.iri) || seeds.has(f.value))) continue;
+        const key = e.iri + '|' + f.predicate + '|' + f.value;
+        if (edgeSeen.has(key)) continue;
+        edgeSeen.add(key);
+        nodeIds.add(e.iri);
+        nodeIds.add(f.value);
+        edges.push({ data: { source: e.iri, target: f.value, label: shortIri(f.predicate) } });
+      }
     }
+  };
+  collectEdges(capped);
+  // 1-hop expansion can blow a modest seed set past readability (250 code
+  // modules pull ~3,000 symbols). If it does, fall back to the seed-only core
+  // and say so — never silently draw soup.
+  const EXPANSION_LIMIT = 800;
+  if (!capped && nodeIds.size > EXPANSION_LIMIT) {
+    collectEdges(true);
+    const note = document.createElement('div');
+    note.id = 'graph-note';
+    note.className = 'graph-note';
+    note.textContent = `Neighbours hidden: expanding ${seeds.size} entities pulled in ${'>'}${EXPANSION_LIMIT} nodes — showing relations within the selection only`;
+    document.querySelector('#explorer .graph-area').appendChild(note);
   }
 
   const nodes = [...nodeIds].map(nodeData);
