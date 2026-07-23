@@ -1046,6 +1046,118 @@ aegis:MetricShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ═══ vt9m: legitimized legacy classes (label-only per the R1/R2 contract) ═══
+# Each was minted before the closed vocabulary existed, audited 2026-07-23,
+# and EARNED declaration: real distinct semantics, live instances, active use.
+# Synonym classes were NOT declared — their instances retype to canonicals
+# (PrometheusAlert->AlertRule, ConfigArtifact->ConfigFile, Repo/GitRepository->
+# GitRepo, Hook->ClaudeCodeHook, and the abstract parents Host/Service are
+# never emitted on instances).
+aegis:AlertRuleShape a sh:NodeShape ;
+    sh:targetClass aegis:AlertRule ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:InternalIdentifierPatternShape a sh:NodeShape ;
+    sh:targetClass aegis:InternalIdentifierPattern ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:ConfigSettingShape a sh:NodeShape ;
+    sh:targetClass aegis:ConfigSetting ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:SecurityFindingShape a sh:NodeShape ;
+    sh:targetClass aegis:SecurityFinding ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:WorkstreamShape a sh:NodeShape ;
+    sh:targetClass aegis:Workstream ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:DesignPrincipleShape a sh:NodeShape ;
+    sh:targetClass aegis:DesignPrinciple ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:FeatureShape a sh:NodeShape ;
+    sh:targetClass aegis:Feature ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:RequirementShape a sh:NodeShape ;
+    sh:targetClass aegis:Requirement ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:LimitationShape a sh:NodeShape ;
+    sh:targetClass aegis:Limitation ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:MonitoringProbeShape a sh:NodeShape ;
+    sh:targetClass aegis:MonitoringProbe ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:SSHKeyShape a sh:NodeShape ;
+    sh:targetClass aegis:SSHKey ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:NFSExportShape a sh:NodeShape ;
+    sh:targetClass aegis:NFSExport ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:APIEndpointShape a sh:NodeShape ;
+    sh:targetClass aegis:APIEndpoint ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:SystemdTimerShape a sh:NodeShape ;
+    sh:targetClass aegis:SystemdTimer ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:DockerContainerShape a sh:NodeShape ;
+    sh:targetClass aegis:DockerContainer ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:CIWorkflowShape a sh:NodeShape ;
+    sh:targetClass aegis:CIWorkflow ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:PushgatewayJobShape a sh:NodeShape ;
+    sh:targetClass aegis:PushgatewayJob ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:RemoteHostShape a sh:NodeShape ;
+    sh:targetClass aegis:RemoteHost ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:FailureModeShape a sh:NodeShape ;
+    sh:targetClass aegis:FailureMode ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:OperationalFactShape a sh:NodeShape ;
+    sh:targetClass aegis:OperationalFact ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:MLModelShape a sh:NodeShape ;
+    sh:targetClass aegis:MLModel ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:DataCorpusShape a sh:NodeShape ;
+    sh:targetClass aegis:DataCorpus ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:TraefikRouteShape a sh:NodeShape ;
+    sh:targetClass aegis:TraefikRoute ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+# ═══ vt9m: the declared class hierarchy (also asserted as graph data) ═══
+# Abstract parents Host and Service exist ONLY as query targets via the
+# hierarchy — never emit them on an instance (guide §2).
+aegis:ProxmoxNode rdfs:subClassOf aegis:Host .
+aegis:BareMetalHost rdfs:subClassOf aegis:Host .
+aegis:LXCContainer rdfs:subClassOf aegis:Host .
+aegis:SystemdService rdfs:subClassOf aegis:Service .
+aegis:WebApplication rdfs:subClassOf aegis:Service .
+aegis:DatabaseService rdfs:subClassOf aegis:Service .
+aegis:SearchService rdfs:subClassOf aegis:Service .
+aegis:ClaudeCodeHook rdfs:subClassOf aegis:Script .
+aegis:AlertRule rdfs:subClassOf aegis:Directive .
+
 # ── SoftwareVersion ──────────────────────────────────────────────
 #
 # A specific released version of a piece of software, so an incident can point
