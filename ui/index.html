@@ -1614,10 +1614,13 @@ async function fetchEntityForPage(iri) {
 }
 
 async function fetchIncomingForPage(iri) {
-  const cached = state.incoming.get(iri);
-  if (cached) return cached;
+  // The loaded graph slice already indexes incoming edges — instant. The
+  // object-bound SPARQL fallback is a full scan (~30s on the live store), so
+  // it is bounded, used only when the slice cannot answer, and the page never
+  // BLOCKS on it (the caller renders first, patches incoming in when ready).
+  if (state.loaded) return state.incoming.get(iri) || [];
   try {
-    const rows = (await api('/query', { query: `SELECT ?s ?p WHERE { ?s ?p <${iri}> }` })).rows || [];
+    const rows = (await api('/query', { query: `SELECT ?s ?p WHERE { ?s ?p <${iri}> } LIMIT 100` })).rows || [];
     return rows.map(r => ({ source: (r.s && r.s.value) || r.s, predicate: (r.p && r.p.value) || r.p }))
                .filter(r => r.predicate !== RDF_TYPE);
   } catch (_) { return []; }
@@ -1638,13 +1641,25 @@ async function openNodePage(iri) {
   let ent, incoming;
   try {
     ent = await fetchEntityForPage(iri);
-    incoming = await fetchIncomingForPage(iri);
+    // Render NOW with what we have; incoming edges patch in when they arrive
+    // (they may come from a slow bounded scan when the graph slice isn't
+    // loaded yet — the page must not sit on "Loading node…" for that).
+    incoming = state.loaded ? (state.incoming.get(iri) || []) : [];
+    fetchIncomingForPage(iri).then(inc => {
+      if (inc.length > incoming.length && document.getElementById('node-page').style.display !== 'none') {
+        renderNodePageContent(page, ent, inc);
+      }
+    });
   } catch (e) {
     page.querySelector('.node-page-inner').innerHTML =
       `<button class="node-page-close">← back</button><div class="empty-state"><p>Could not load ${escapeHtml(iri)}: ${escapeHtml(String(e))}</p></div>`;
     page.querySelector('.node-page-close').onclick = closeNodePage;
     return;
   }
+  renderNodePageContent(page, ent, incoming);
+}
+
+function renderNodePageContent(page, ent, incoming) {
   const facts = ent._facts || ent.facts || [];
   const relations = [], attrs = [], provEps = [];
   for (const f of facts) {
