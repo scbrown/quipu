@@ -1,5 +1,17 @@
 # PageRank & Personalized PageRank — Specification
 
+> **Implementation status (2026-07-23, kelly):** 🟡 **Partial** — verified by
+> mechanism. **Built:** the `page_rank` primitive + `PageRankConfig` and Personalized
+> PR (`src/graph.rs`); `tool_project` `pagerank`/`ppr` exposure (MCP algorithm enum
+> `src/mcp/mod.rs`, REST `/project`, CLI); and Louvain community detection *with*
+> bitemporal `quipu:memberOfCommunity` persistence (`src/graph.rs` `louvain` /
+> `persist_communities`, both-outcomes tested). **Unbuilt:** Phase 3 PageRank
+> write-back — Louvain persists but PageRank has no `quipu:pageRank` persist; Phase 4
+> PPR re-ranking of `tool_impact` / the context pipeline (no `rank_by_ppr`); Phase 5
+> temporal / counterfactual PR. The remaining phases are tracked for follow-up
+> (design-open per the Open Questions below — persist-by-default and per-predicate
+> weights), so filed as a tracked task rather than implemented unilaterally.
+
 > Status: **Delivered (Phases 1–2: in_degree, PageRank/PPR, Louvain); Phase 3 write-back unbuilt** · Origin: agent (strider), prompted by Stiwi ·
 > Date: 2026-06-21
 >

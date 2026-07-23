@@ -1,5 +1,13 @@
 # Entity Resolution
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented** — verified by
+> mechanism. The resolver lives in `src/resolution.rs` (embedding + Jaro-Winkler
+> canonical-name matching, merge/dedup by IRI, `top_k`); config `[quipu.resolution]`
+> is parsed and applied (`src/config.rs`, wired in `src/server.rs` main); episode
+> ingest returns `resolution_hints` (`src/episode/mod.rs`); the `quipu_resolve_entity`
+> MCP tool and `strict_mode` / `quipu:distinctFrom` are present (`src/mcp/tools.rs`).
+> All of it was exercised live in production during this sweep.
+
 Entity resolution prevents duplicate entities from fragmenting the knowledge graph.
 When an agent asserts a fact about a new entity, the resolver checks whether a similar
 entity already exists and returns hints to the caller.

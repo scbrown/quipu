@@ -1,5 +1,14 @@
 # Design: Group Isolation / Multi-Tenant Partitioning
 
+> **Implementation status (2026-07-23, kelly):** ⬜ **Planned — deliberately deferred
+> (YAGNI); not a gap to fill.** The keeper gate decided NOT to build true isolation.
+> Verified the live state still matches the doc: `group_id` is a flat provenance
+> label and the `group_ids` search filter is best-effort post-hoc
+> (`src/mcp/graphiti.rs` `passes_filters`) — no per-fact group column, no
+> storage-layer enforcement. Building it now would violate the gate, so this stays ⬜
+> by decision: no implementation, and no issue filed (a "please build it" issue would
+> contradict the deferral).
+
 **Status:** **Decided — deferred (YAGNI)** by keeper gate (hq-2u3, ian,
 2026-06-27). Do **not** build true group isolation now; this doc is the
 retained blueprint for if/when the gate flips. Quipu is today a single shared

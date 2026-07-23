@@ -1,7 +1,19 @@
 # Quipu Reasoner — Incremental Datalog on the Bitemporal Fact Log
 
+> **Implementation status (2026-07-23, kelly):** ✅ **Implemented** — the
+> "DRAFT — design, not implementation" line below is STALE and is corrected here.
+> Verified by mechanism: the full engine is `src/reasoner/` (parse → ast → compile →
+> stratify → evaluate, all with tests). Capability (1) **inference** is the stratified
+> Datalog engine there; (3) **counterfactual** is `Store::speculate` (`src/store/ops.rs`)
+> + `speculate_remove` (`src/impact.rs`), exposed via CLI `quipu reason`
+> (`src/cli.rs`) and MCP (`src/mcp/impact.rs`); (4) **incremental cascade** is
+> `ReactiveReasoner` (`src/reasoner/reactive.rs`), an opt-in `reactive-reasoner`
+> feature (`--reactive` errors loudly without it). Capability (2) reachability
+> pre-existed (SPARQL paths + RDFS). Residual, minor: reactive is non-default by
+> design, and there is no REST `/reason` route (CLI + MCP + library only).
+
 > Created: 2026-04-06
-> Status: DRAFT — design, not implementation
+> Status: IMPLEMENTED (2026-07-23; the DRAFT note is superseded — see the status block above)
 > Related: [vision.md](./vision.md) (Killer Feature #3, Open Decision D)
 
 ## One-Line
