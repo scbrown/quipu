@@ -213,7 +213,7 @@ COMMANDS:
     quipu ontology load|list|remove [--db <path>]
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
     quipu repl [--db <path>]
-    quipu export [--format ntriples|turtle] [--db <path>]
+    quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 

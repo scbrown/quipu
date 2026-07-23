@@ -103,7 +103,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — a `GraphProvider` trait for multi-source queries. Trait-only today: quipu ships a `LocalProvider` but no remote provider, so remote federation is not yet available from the CLI/server, and `federation.remotes` config is inert.
-- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 26 MCP tools for agent integration (27 with the `owl` feature).
+- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 27 MCP tools for agent integration (28 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. CI runs fmt, clippy, tests, and markdown lint on every push.
 
@@ -218,7 +218,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
               │                │                │
         ┌─────┴─────┐   ┌─────┴─────┐   ┌──────┴──────┐
         │ MCP Tools  │   │ REST API  │   │  Rust API   │
-        │ (26 tools) │   │ + Web UI  │   │  (crate)    │
+        │ (27 tools) │   │ + Web UI  │   │  (crate)    │
         └─────┬─────┘   └─────┬─────┘   └──────┬──────┘
               └────────────────┼────────────────┘
                                │
@@ -246,7 +246,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
 Quipu is designed as a [Bobbin](https://github.com/scbrown/bobbin) subsystem.
 Bobbin holds the thread (code context); Quipu ties knots of structured meaning into it.
 
-When running as a Bobbin subsystem, agents get 26 MCP tools (27 with the
+When running as a Bobbin subsystem, agents get 27 MCP tools (28 with the
 `owl` feature). The two most
 commonly used for knowledge-aware context:
 
@@ -345,7 +345,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Web UI | ✅ | Explorer, workbench, timeline, schema |
 | Web components | ✅ | Embeddable `<quipu-*>` elements |
 | Semantic Web APIs | ✅ | Spotlight, TPF, OpenRefine reconciliation |
-| MCP tools (26; 27 with `owl`) | ✅ | Agent integration |
+| MCP tools (27; 28 with `owl`) | ✅ | Agent integration |
 | Python bindings | 🔜 | Planned |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |

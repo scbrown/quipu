@@ -225,6 +225,7 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/metrics", get(metrics_handler))
         .route("/query", post(query))
+        .route("/export", post(export))
         .route("/knot", post(knot))
         .route("/cord", post(cord))
         .route("/unravel", post(unravel))
@@ -648,6 +649,37 @@ async fn query(
             eprintln!("query {elapsed_ms}ms: {text}");
         }
         result
+    })
+    .await
+}
+
+/// POST /export — subset export (quipu #36): serialize one named graph's (or the
+/// ROOT default's) facts to RDF so a consumer can pull a scoped slice.
+/// Body: `{ "graph": "<iri>"?, "format": "turtle"|"ntriples"? }`. Returns the
+/// RDF document with the matching content-type; an unknown graph IRI -> 400.
+async fn export(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::response::Response, AppError> {
+    blocking(move || {
+        let format_str = input
+            .get("format")
+            .and_then(|v| v.as_str())
+            .unwrap_or("turtle");
+        let (format, content_type) = match format_str {
+            "turtle" | "ttl" => (oxrdfio::RdfFormat::Turtle, "text/turtle"),
+            "ntriples" | "nt" => (oxrdfio::RdfFormat::NTriples, "application/n-triples"),
+            other => {
+                return Err(quipu::Error::InvalidValue(format!(
+                    "unknown export format: {other} (try: turtle, ntriples)"
+                ))
+                .into());
+            }
+        };
+        let graph = input.get("graph").and_then(|v| v.as_str());
+        let store = store.lock();
+        let (bytes, _count) = quipu::export_rdf_subset(&store, format, graph)?;
+        Ok(([(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response())
     })
     .await
 }

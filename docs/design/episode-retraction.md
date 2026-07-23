@@ -7,7 +7,7 @@
 > `src/http_auth.rs` write-endpoints); the `tool_retract_episode` MCP tool
 > (`src/mcp/tools.rs`); the `identity_orphans` report + default `preserve` policy are
 > all live. Exercised in production during this sweep.
-
+>
 > Created: 2026-06-29
 > Status: IMPLEMENTED (aegis-hxb); identity-preservation contract added 2026-07-19 (aegis-arup)
 > Related: [vision.md](./vision.md), [../book/src/architecture/episodes.md](../book/src/architecture/episodes.md)

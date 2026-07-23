@@ -59,12 +59,22 @@ pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bo
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::InvalidValue("missing 'query' parameter".into()))?;
 
+    // Optional `graph` param (quipu #36): scope the query's DEFAULT graph to a
+    // single named graph, without writing a `FROM`/`GRAPH` clause. Backward
+    // compatible when omitted (ROOT default). An unknown IRI scopes to an empty
+    // default graph (no rows) — never a silent fall-through to ROOT. A `FROM`
+    // clause in the query text overrides this (see `apply_dataset`).
+    let graph = match input.get("graph").and_then(|v| v.as_str()) {
+        None => sparql::GraphScope::default(),
+        Some(iri) => sparql::GraphScope::Default(vec![store.lookup(iri)?.unwrap_or(-1)]),
+    };
     let ctx = TemporalContext {
         valid_at: input
             .get("valid_at")
             .and_then(|v| v.as_str())
             .map(std::string::ToString::to_string),
         as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+        graph,
         ..Default::default()
     };
 
@@ -640,6 +650,41 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     }
 }
 
+/// MCP tool: `quipu_export` -- pull a scoped SUBSET of the graph as RDF (quipu
+/// #36). This is the "export a named-graph slice" primitive that federation
+/// builds on. It exports one graph's OWN facts — the same scope a
+/// `GRAPH <iri> { … }` read sees — not a composed overlay view.
+///
+/// Input: `{ "graph": "<iri>"?, "format": "turtle"|"ntriples"? }`. `graph`
+/// omitted -> the ROOT default graph (`g = 0`); an unknown graph IRI is an
+/// error. Output: `{ "rdf": "<document>", "format": "turtle",
+/// "graph": "<iri>"|null, "triples": N }`.
+pub fn tool_export(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let format_str = input
+        .get("format")
+        .and_then(|v| v.as_str())
+        .unwrap_or("turtle");
+    let format = match format_str {
+        "turtle" | "ttl" => oxrdfio::RdfFormat::Turtle,
+        "ntriples" | "nt" => oxrdfio::RdfFormat::NTriples,
+        other => {
+            return Err(Error::InvalidValue(format!(
+                "unknown export format: {other} (try: turtle, ntriples)"
+            )));
+        }
+    };
+    let graph = input.get("graph").and_then(|v| v.as_str());
+    let (bytes, triples) = crate::export_rdf_subset(store, format, graph)?;
+    let rdf = String::from_utf8(bytes)
+        .map_err(|e| Error::InvalidValue(format!("export produced non-UTF8 RDF: {e}")))?;
+    Ok(serde_json::json!({
+        "rdf": rdf,
+        "format": format_str,
+        "graph": graph,
+        "triples": triples,
+    }))
+}
+
 /// MCP tool: `quipu_knot` -- Assert facts with optional SHACL validation.
 ///
 /// Input: `{ "turtle": "<data>", "timestamp": "...", "actor": "...",
@@ -733,6 +778,17 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "tx": { "type": "integer", "description": "Maximum transaction ID to consider. Omit for all transactions." }
                 },
                 "required": ["query"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_export",
+            "description": "Export a scoped SUBSET of the graph as RDF: one named graph's facts (quipu #36), or the ROOT default graph when 'graph' is omitted. The 'pull a scoped slice' primitive for subset-export and federation.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "graph": { "type": "string", "description": "Named-graph IRI to export. Omit for the ROOT/default graph. Unknown IRI is an error." },
+                    "format": { "type": "string", "enum": ["turtle", "ntriples"], "description": "RDF serialization (default: turtle)." }
+                }
             }
         }),
         serde_json::json!({

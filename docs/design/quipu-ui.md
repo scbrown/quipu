@@ -7,7 +7,7 @@
 > `<quipu-timeline>`. **Gap:** `<quipu-context>`, `<quipu-mapping>`, and
 > `<quipu-search>` are specced but not implemented (verified by grep of
 > `ui/quipu-components.js`).
-
+>
 > Quipu owns its visual identity. Bobbin enables it — doesn't reimagine it.
 
 ## Status

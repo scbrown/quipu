@@ -335,6 +335,15 @@ pub fn cmd_export(args: &[String], db_path: &str) {
         }
     };
 
+    // Subset export (quipu #36): `--graph <iri>` pulls one named graph's slice
+    // (or the ROOT default when omitted, which matches the pre-subset behaviour
+    // ONLY when there are no named graphs; with named graphs present, no --graph
+    // still exports every graph flattened, as before).
+    let graph = args
+        .windows(2)
+        .find(|w| w[0] == "--graph")
+        .map(|w| w[1].as_str());
+
     let store = match quipu::Store::open(db_path) {
         Ok(s) => s,
         Err(e) => {
@@ -343,7 +352,13 @@ pub fn cmd_export(args: &[String], db_path: &str) {
         }
     };
 
-    match quipu::export_rdf(&store, rdf_format) {
+    let exported = match graph {
+        Some(iri) => {
+            quipu::export_rdf_subset(&store, rdf_format, Some(iri)).map(|(bytes, _)| bytes)
+        }
+        None => quipu::export_rdf(&store, rdf_format),
+    };
+    match exported {
         Ok(bytes) => {
             io::stdout().write_all(&bytes).unwrap();
         }

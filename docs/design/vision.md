@@ -10,7 +10,7 @@
 > retraction, and `speculate()` counterfactuals — all in `src/`. Federation is partial
 > (trait-only). For granular per-feature status see the design docs in `docs/design/`
 > and `docs/book/src/architecture/`, each now carrying its own status block.
-
+>
 > Created: 2026-04-04, crew/braino session (aegis-6ct6)
 > Status: DRAFT — exploration bead, not implementation
 

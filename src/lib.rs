@@ -84,9 +84,9 @@ pub use mcp::tools::{
     tool_set, tool_shapes, tool_subscriptions, tool_unravel, tool_validate,
 };
 pub use mcp::{
-    query_result, tool_cooccurrence, tool_definitions, tool_knot, tool_overlay_compose,
-    tool_overlay_create, tool_overlay_write, tool_policy_check, tool_query, tool_verdict_verify,
-    tool_verifier_authorized, value_to_json,
+    query_result, tool_cooccurrence, tool_definitions, tool_export, tool_knot,
+    tool_overlay_compose, tool_overlay_create, tool_overlay_write, tool_policy_check, tool_query,
+    tool_verdict_verify, tool_verifier_authorized, value_to_json,
 };
 #[cfg(feature = "lancedb")]
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
@@ -96,7 +96,7 @@ pub use onnx_embedder::OnnxEmbeddingProvider;
 pub use owl::{MaterializeReport, Ontology, OwlViolation};
 pub use proposal::{NewProposal, Proposal, ProposalKind, ProposalStatus};
 pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
-pub use rdf::{export_rdf, ingest_rdf};
+pub use rdf::{export_rdf, export_rdf_subset, ingest_rdf};
 #[cfg(feature = "reactive-reasoner")]
 pub use reasoner::reactive::ReactiveReasoner;
 pub use reconcile::{

@@ -1237,14 +1237,16 @@ fn test_tool_definitions() {
 
     // quipu_load_ontology is only advertised when the `owl` feature compiles in
     // its handler (hq-8wd) — otherwise the call would always fail.
+    // quipu_export subset export (quipu #36) brings the base to 27.
+    assert!(names.contains(&"quipu_export"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 27);
+        assert_eq!(defs.len(), 28);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 26);
+        assert_eq!(defs.len(), 27);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 
@@ -2823,5 +2825,44 @@ fn triple_retraction_can_name_a_typed_literal() {
         left[0]["o"],
         serde_json::json!("2026-07-15"),
         "plain string survives"
+    );
+}
+
+#[test]
+fn test_tool_export_named_graph_subset() {
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-04-04T00:00:00Z";
+    let g_iri = "http://example.org/g/t1";
+    let g = store.overlay_create(g_iri, 0).unwrap();
+    let a = store.intern("http://example.org/a").unwrap();
+    let p = store.intern("http://example.org/p").unwrap();
+    let y = store.intern("http://example.org/y").unwrap();
+    store
+        .overlay_write(g, Op::Assert, a, p, Value::Ref(y), ts)
+        .unwrap();
+
+    let out = tool_export(
+        &store,
+        &serde_json::json!({ "graph": g_iri, "format": "ntriples" }),
+    )
+    .unwrap();
+    assert_eq!(out["triples"], 1);
+    assert_eq!(out["graph"], g_iri);
+    assert!(
+        out["rdf"]
+            .as_str()
+            .unwrap()
+            .contains("http://example.org/a"),
+        "exported RDF carries the graph's triple"
+    );
+
+    // Unknown graph -> error (not an empty success).
+    assert!(
+        tool_export(
+            &store,
+            &serde_json::json!({ "graph": "http://example.org/g/nope" })
+        )
+        .is_err()
     );
 }
