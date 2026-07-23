@@ -71,6 +71,23 @@ pub struct Store {
     /// `transact()`. Feature-gated behind `reactive-reasoner`.
     #[cfg(feature = "reactive-reasoner")]
     pub(crate) observers: Vec<Arc<dyn TransactObserver>>,
+    /// Advisory events queued by the CURRENT write's pre-validation (event
+    /// P3: `quipu:onViolation "emit"` shapes, event-based design §5/§7). Drained by
+    /// `emit_events` INSIDE the write's savepoint, so they commit or roll back
+    /// atomically with the facts they describe. `RefCell` because the emit
+    /// path runs under `&self`; single-connection Store is not `Sync`-shared.
+    pub(crate) pending_write_events: std::cell::RefCell<Vec<PendingWriteEvent>>,
+}
+
+/// An advisory event observed before a write and appended with it (P3).
+#[derive(Debug, Clone)]
+pub struct PendingWriteEvent {
+    /// Event type, e.g. `shacl.violation`.
+    pub event_type: String,
+    /// The subject entity IRI (e.g. the violating focus node).
+    pub subject: Option<String>,
+    /// Structured detail (shape, message, component, path, severity).
+    pub payload: serde_json::Value,
 }
 
 /// A summary of what changed in a committed transaction.
@@ -132,6 +149,19 @@ pub struct AsOf {
 }
 
 impl Store {
+    /// Queue an advisory event to ride the NEXT write's savepoint (event P3).
+    /// Cleared by the write (commit or not); callers on an aborted path should
+    /// call [`Store::clear_pending_write_events`] so nothing leaks forward.
+    pub fn queue_write_event(&self, ev: PendingWriteEvent) {
+        self.pending_write_events.borrow_mut().push(ev);
+    }
+
+    /// Drop any queued advisory events (abort-path hygiene).
+    pub fn clear_pending_write_events(&self) {
+        self.pending_write_events.borrow_mut().clear();
+    }
+
+
     /// Open (or create) a Quipu store at the given path.
     pub fn open(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
@@ -158,6 +188,7 @@ impl Store {
             search_config: SearchConfig::default(),
             shacl_config: ShaclConfig::default(),
             governance_config: GovernanceConfig::default(),
+            pending_write_events: std::cell::RefCell::new(Vec::new()),
             policy_registry: None,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
             vector_delegate: None,

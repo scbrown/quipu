@@ -215,10 +215,36 @@ pub fn ingest_episode(
         // Persistently-loaded shapes, when write-validation is enabled (hq-c6s).
         // Without this, stored shapes only gate the `knot` path and episode
         // writes go unvalidated — undermining quipu's "start strict" thesis.
+        //
+        // Event P3 (event-based design §5/§7): shapes route by their
+        // `quipu:onViolation` annotation. DEFAULT REJECT — unannotated shapes
+        // gate the tx exactly as before (decided, design §9.3). A shape annotated
+        // `"emit"` observes instead: its violations become `shacl.violation`
+        // events appended INSIDE the write's savepoint, and the write commits.
         if store.shacl_config().validate_on_write
             && let Some(stored) = store.get_combined_shapes()?
         {
-            shacl_validate_or_reject(&stored, &turtle)?;
+            let split = shacl::split_shapes_by_policy(&stored);
+            shacl_validate_or_reject(&split.reject, &turtle)?;
+            if split.has_emit {
+                let feedback = shacl::validate_shapes(&split.emit, &turtle)?;
+                if !feedback.conforms {
+                    for issue in &feedback.results {
+                        store.queue_write_event(crate::store::PendingWriteEvent {
+                            event_type: "shacl.violation".to_string(),
+                            subject: Some(issue.focus_node.clone()),
+                            payload: serde_json::json!({
+                                "shape": issue.source_shape,
+                                "message": issue.message,
+                                "component": issue.component,
+                                "path": issue.path,
+                                "severity": issue.severity,
+                                "mode": "emit",
+                            }),
+                        });
+                    }
+                }
+            }
         }
     }
 

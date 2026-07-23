@@ -96,8 +96,13 @@ impl Store {
         source: Option<&str>,
         graph: i64,
     ) -> Result<()> {
-        // ROOT-graph commits only (see module docs).
-        if graph != 0 || (asserts.is_empty() && retracts.is_empty()) {
+        // Take the advisory queue FIRST so it never leaks into a later tx —
+        // even when this tx emits no semantic events (early returns below).
+        let pending = std::mem::take(&mut *self.pending_write_events.borrow_mut());
+
+        // ROOT-graph commits only (see module docs). Advisory events follow the
+        // same rule: an overlay write discards them (compose-only staging).
+        if graph != 0 || (asserts.is_empty() && retracts.is_empty() && pending.is_empty()) {
             return Ok(());
         }
 
@@ -270,6 +275,14 @@ impl Store {
                 });
                 insert_event(self, event_type, Some(&subject), &payload)?;
             }
+        }
+
+        // Event P3: advisory events observed during pre-write validation
+        // (`quipu:onViolation "emit"` shapes). Appended INSIDE the savepoint,
+        // after the semantic events, carrying this tx's id/timestamp/group —
+        // a rolled-back write takes its violation observations with it.
+        for ev in &pending {
+            insert_event(self, &ev.event_type, ev.subject.as_deref(), &ev.payload)?;
         }
 
         Ok(())
@@ -743,5 +756,128 @@ mod tests {
         ));
         // And no phantom episode.ingested from a non-episode source.
         assert!(!evs.iter().any(|e| e.event_type == "episode.ingested"));
+    }
+
+    /// ACCEPTANCE (event P3): the four onViolation routing cases.
+    /// Shapes: HARD (unannotated -> reject) requires rdfs:label on aegis:Thing;
+    /// SOFT (quipu:onViolation "emit") requires aegis:size on aegis:Widget.
+    #[cfg(feature = "shacl")]
+    mod on_violation {
+        use super::*;
+
+        const SHAPES: &str = r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix quipu: <http://quipu.dev/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+aegis:HardStatusShape a sh:NodeShape ;
+    sh:targetClass aegis:Thing ;
+    sh:property [ sh:path aegis:status ; sh:minCount 1 ] .
+
+aegis:SoftSizeShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetClass aegis:Widget ;
+    sh:property [ sh:path aegis:size ; sh:minCount 1 ] .
+"#;
+
+        fn store_with_shapes() -> Store {
+            let mut store = Store::open_in_memory().unwrap();
+            store.load_shapes("p3-test", SHAPES, "2026-07-23T00:00:00Z").unwrap();
+            store.shacl_config_mut().validate_on_write = true;
+            store
+        }
+
+        fn shacl_events(store: &Store) -> Vec<EventRow> {
+            all_events(store)
+                .into_iter()
+                .filter(|e| e.event_type == "shacl.violation")
+                .collect()
+        }
+
+        /// An emit-shape violation: the write COMMITS and the event is in the
+        /// log, inside the same tx (its tx_id equals the episode's).
+        #[test]
+        fn emit_shape_violation_commits_and_emits_event() {
+            let mut store = store_with_shapes();
+            // A Widget without aegis:size -> violates SoftSizeShape only.
+            // (Node descriptions give every node an rdfs:comment; the episode
+            // writer always emits rdfs:label from the node name, satisfying
+            // HardLabelShape.)
+            let episode = ep("p3-emit", vec![node("widget-1", "Widget")], vec![]);
+            let (tx, count) =
+                ingest_episode(&mut store, &episode, "2026-07-23T00:00:01Z", DEFAULT_BASE_NS)
+                    .expect("emit-mode violation must NOT gate the write");
+            assert!(tx > 0 && count > 0, "write committed");
+            let evs = shacl_events(&store);
+            assert_eq!(evs.len(), 1, "exactly one shacl.violation event");
+            let ev = &evs[0];
+            assert_eq!(ev.tx_id, tx, "event rides the episode's own tx");
+            assert!(ev.subject.as_deref().unwrap_or("").contains("widget-1"));
+            let payload: serde_json::Value = serde_json::from_str(&ev.payload).unwrap();
+            assert_eq!(payload["mode"], "emit");
+            assert!(payload["message"].as_str().unwrap_or("").contains("MinCount"));
+        }
+
+        /// A reject-shape violation: hard error, NO write, NO event — including
+        /// no shacl.violation from the emit pass (the tx never happens).
+        #[test]
+        fn reject_shape_violation_rejects_with_no_event_and_no_write() {
+            let mut store = store_with_shapes();
+            // A Thing WITHOUT aegis:status violates HardStatusShape (default
+            // reject). Constructible through the writer: plain typed node, no
+            // properties.
+            let episode = ep("p3-reject", vec![node("thing-1", "Thing")], vec![]);
+            let before = store.latest_event_offset().unwrap();
+            let result =
+                ingest_episode(&mut store, &episode, "2026-07-23T00:00:02Z", DEFAULT_BASE_NS);
+            assert!(result.is_err(), "reject shape must gate the write");
+            assert_eq!(
+                store.latest_event_offset().unwrap(),
+                before,
+                "no events of any kind from a rejected write"
+            );
+            assert!(shacl_events(&store).is_empty());
+        }
+
+        /// A conforming write with emit shapes loaded: no violation events.
+        #[test]
+        fn conforming_write_emits_nothing() {
+            let mut store = store_with_shapes();
+            let mut n = node("widget-2", "Widget");
+            n.properties = Some(
+                [("size".to_string(), serde_json::json!("large"))]
+                    .into_iter()
+                    .collect(),
+            );
+            let episode = ep("p3-clean", vec![n], vec![]);
+            let (tx, _) =
+                ingest_episode(&mut store, &episode, "2026-07-23T00:00:03Z", DEFAULT_BASE_NS)
+                    .unwrap();
+            assert!(tx > 0);
+            assert!(shacl_events(&store).is_empty(), "conforming write emits no shacl events");
+        }
+
+        /// Abort-path hygiene: queued advisory events from a failed write must
+        /// not leak into the next successful one.
+        #[test]
+        fn pending_events_do_not_leak_across_writes() {
+            let mut store = store_with_shapes();
+            // Queue directly (as the gate would), then fail nothing — just
+            // clear, then do a clean write and assert zero shacl events.
+            store.queue_write_event(crate::store::PendingWriteEvent {
+                event_type: "shacl.violation".into(),
+                subject: Some("ghost".into()),
+                payload: serde_json::json!({}),
+            });
+            store.clear_pending_write_events();
+            let episode = ep("p3-noleak", vec![node("plain", "Widget")], vec![]);
+            // plain Widget lacks size -> ONE legitimate event from THIS write;
+            // the cleared ghost must not appear.
+            ingest_episode(&mut store, &episode, "2026-07-23T00:00:04Z", DEFAULT_BASE_NS)
+                .unwrap();
+            let evs = shacl_events(&store);
+            assert_eq!(evs.len(), 1);
+            assert!(!evs[0].subject.as_deref().unwrap_or("").contains("ghost"));
+        }
     }
 }

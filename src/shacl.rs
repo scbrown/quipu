@@ -338,6 +338,158 @@ ex:alice a ex:Person .
     }
 }
 
+/// The result of routing a combined shapes document by `quipu:onViolation`.
+///
+/// Event-based P3 (design §5/§7): a shape annotated `quipu:onViolation
+/// "emit"` observes violations as `shacl.violation` events WITHOUT gating the
+/// write; every other shape (unannotated, or annotated `"reject"`) keeps the
+/// hard-gate semantics. DEFAULT REJECT is decided (design §9.3) — a shape opts
+/// INTO emit, never out of reject by omission.
+#[derive(Debug, Clone)]
+pub struct ShapesSplit {
+    /// Shapes that gate the transaction (hard reject on violation).
+    pub reject: String,
+    /// Shapes whose violations become events; empty when nothing is annotated.
+    pub emit: String,
+    /// Whether any emit-annotated shape was found (spares a validator run).
+    pub has_emit: bool,
+}
+
+/// Split a Turtle shapes document into reject-mode and emit-mode documents by
+/// the `quipu:onViolation` annotation on each top-level shape block.
+///
+/// TEXTUAL, BY DESIGN, WITH ITS LIMITS STATED: this splits on the house style
+/// used by every shape set this deployment loads — top-level statements of the
+/// form `<subject> a sh:NodeShape ; … .` with inline `[ … ]` property shapes,
+/// where a statement ends with `.` at bracket depth 0 at end-of-line. It does
+/// not implement a full Turtle parser; a shapes document in a different style
+/// routes conservatively (unrecognised content stays in the REJECT document,
+/// which preserves the default-reject contract — never the other way around).
+/// Prefix lines are replicated into both documents so each stands alone; the
+/// emit document must declare the `quipu:` prefix itself, exactly as it must
+/// declare `sh:`.
+pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
+    let mut prefixes = String::new();
+    let mut blocks: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut depth: i32 = 0;
+
+    for line in shapes_turtle.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("@prefix") || trimmed.to_lowercase().starts_with("prefix ") {
+            prefixes.push_str(line);
+            prefixes.push('\n');
+            continue;
+        }
+        // Comments and blank lines between blocks belong to no block.
+        if current.is_empty() && (trimmed.is_empty() || trimmed.starts_with('#')) {
+            continue;
+        }
+        current.push_str(line);
+        current.push('\n');
+        // Track bracket depth outside comments (house style has no strings
+        // containing brackets; a `#` starts a comment for the rest of the line).
+        let code = match line.find('#') {
+            Some(i) => &line[..i],
+            None => line,
+        };
+        for ch in code.chars() {
+            match ch {
+                '[' | '(' => depth += 1,
+                ']' | ')' => depth -= 1,
+                _ => {}
+            }
+        }
+        if depth == 0 && code.trim_end().ends_with('.') {
+            blocks.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.trim().is_empty() {
+        // Unterminated trailing content: conservative — reject document.
+        blocks.push(current);
+    }
+
+    let mut reject = prefixes.clone();
+    let mut emit = prefixes;
+    let mut has_emit = false;
+    for block in blocks {
+        let is_emit = block.contains("quipu:onViolation")
+            && block
+                .split("quipu:onViolation")
+                .nth(1)
+                .is_some_and(|rest| rest.trim_start().starts_with("\"emit\""));
+        if is_emit {
+            emit.push_str(&block);
+            emit.push('\n');
+            has_emit = true;
+        } else {
+            reject.push_str(&block);
+            reject.push('\n');
+        }
+    }
+    ShapesSplit {
+        reject,
+        emit,
+        has_emit,
+    }
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+
+    const SHAPES: &str = r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix quipu: <http://quipu.dev/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+aegis:HardShape a sh:NodeShape ;
+    sh:targetClass aegis:Thing ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ] .
+
+aegis:SoftShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetClass aegis:Widget ;
+    sh:property [ sh:path aegis:size ; sh:minCount 1 ] .
+"#;
+
+    #[test]
+    fn routes_emit_annotated_block_and_keeps_default_reject() {
+        let split = split_shapes_by_policy(SHAPES);
+        assert!(split.has_emit);
+        assert!(split.reject.contains("HardShape"));
+        assert!(!split.reject.contains("SoftShape"));
+        assert!(split.emit.contains("SoftShape"));
+        assert!(!split.emit.contains("HardShape"));
+        // Both documents carry the prefixes and PARSE as shapes.
+        for doc in [&split.reject, &split.emit] {
+            assert!(doc.contains("@prefix sh:"));
+            validate_shapes(doc, "@prefix ex: <http://example.org/> .\n").unwrap();
+        }
+    }
+
+    #[test]
+    fn explicit_reject_annotation_stays_reject() {
+        let shapes = SHAPES.replace("\"emit\"", "\"reject\"");
+        let split = split_shapes_by_policy(&shapes);
+        assert!(!split.has_emit);
+        assert!(split.reject.contains("SoftShape"));
+    }
+
+    #[test]
+    fn unannotated_document_is_pure_reject_and_byte_stable_semantics() {
+        let shapes = SHAPES
+            .lines()
+            .filter(|l| !l.contains("quipu:onViolation"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let split = split_shapes_by_policy(&shapes);
+        assert!(!split.has_emit);
+        assert!(split.reject.contains("HardShape") && split.reject.contains("SoftShape"));
+        assert!(split.emit.trim_end().ends_with('.') || !split.emit.contains("Shape"));
+    }
+}
+
 #[cfg(test)]
 #[path = "code_entity_tests.rs"]
 mod code_entity_tests;
