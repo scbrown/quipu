@@ -153,6 +153,7 @@ async fn main() {
     }
 
     let state: SharedStore = Arc::new(Mutex::new(store));
+    let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
     // in quipu::http_auth (unit-tested); this only wires it into axum.
@@ -332,7 +333,7 @@ async fn main() {
     // sync). Cursor semantics make every tick idempotent, so the loop needs no
     // state of its own and a missed tick delays, never loses.
     {
-        let push_store = state.clone();
+        let push_store = push_store_outer;
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
