@@ -1648,6 +1648,9 @@ async function openNodePage(iri) {
   }
   let ent, incoming;
   try {
+    // The deep-link registry is one cheap exact-type query; the page's links
+    // depend on it, so it loads WITH the page, not after.
+    if (!state._deepLinksLoaded) { state._deepLinksLoaded = true; await loadDeepLinkRegistry(); }
     ent = await fetchEntityForPage(iri);
     // Render NOW with what we have; incoming edges patch in when they arrive
     // (they may come from a slow bounded scan when the graph slice isn't
