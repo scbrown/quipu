@@ -102,6 +102,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/fragments",
     "/reconcile",
     "/preview/{iri}",
+    // Subset export (quipu #36): serializes one named graph's (or ROOT's) facts
+    // to RDF. Pure read.
+    "/export",
     // Resolution dry-run: reads labels + vector store, writes
     // nothing — the read-only twin of the resolution /episode performs.
     "/resolve",

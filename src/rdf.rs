@@ -233,12 +233,12 @@ pub fn ingest_rdf_to_graph(
 /// Serialize current facts as RDF in the specified format.
 ///
 /// Supported output formats: Turtle, N-Triples, N-Quads, RDF/XML, `TriG`.
-pub fn export_rdf(store: &Store, format: RdfFormat) -> Result<Vec<u8>> {
-    let facts = store.current_facts()?;
+/// Serialize a set of facts to an RDF document (shared by the exporters).
+fn serialize_facts(store: &Store, facts: &[crate::types::Fact], format: RdfFormat) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     let mut serializer = RdfSerializer::from_format(format).for_writer(&mut buf);
 
-    for fact in &facts {
+    for fact in facts {
         let subject = id_to_subject(store, fact.entity)?;
         let predicate = id_to_predicate(store, fact.attribute)?;
         let object = value_to_term(store, &fact.value)?;
@@ -257,6 +257,35 @@ pub fn export_rdf(store: &Store, format: RdfFormat) -> Result<Vec<u8>> {
         .finish()
         .map_err(|e| Error::InvalidValue(format!("RDF serialization finish error: {e}")))?;
     Ok(buf)
+}
+
+/// Export EVERY current fact across all graphs, flattened to triples.
+pub fn export_rdf(store: &Store, format: RdfFormat) -> Result<Vec<u8>> {
+    let facts = store.current_facts()?;
+    serialize_facts(store, &facts, format)
+}
+
+/// Export a SUBSET — the current facts of one named graph, or the ROOT/default
+/// graph (quipu #36). This is the "pull a scoped slice" primitive that
+/// subset-export and, above it, federation build on. `graph` is the graph's IRI;
+/// `None` exports the ROOT default graph (`g = 0`). An unknown graph IRI is an
+/// error (a targeted export of a graph that does not exist is a caller mistake,
+/// not an empty success). The slice is a graph's OWN facts — the same scope a
+/// `GRAPH <iri> { … }` read sees.
+pub fn export_rdf_subset(
+    store: &Store,
+    format: RdfFormat,
+    graph: Option<&str>,
+) -> Result<(Vec<u8>, usize)> {
+    let g = match graph {
+        None => 0,
+        Some(iri) => store
+            .lookup(iri)?
+            .ok_or_else(|| Error::InvalidValue(format!("unknown graph: {iri}")))?,
+    };
+    let facts = store.current_facts_in_graph(g)?;
+    let count = facts.len();
+    Ok((serialize_facts(store, &facts, format)?, count))
 }
 
 #[cfg(test)]
@@ -749,5 +778,93 @@ ex:s ex:greeting "hello"@en ;
                 "round trip: {v:?}"
             );
         }
+    }
+
+    // --- Subset export (quipu #36) ------------------------------------------
+
+    fn store_with_named_graph() -> (Store, &'static str) {
+        use crate::types::{Op, Value};
+        let mut store = Store::open_in_memory().unwrap();
+        let ts = "2026-04-04T00:00:00Z";
+        ingest_rdf(
+            &mut store,
+            "@prefix ex: <http://example.org/> .\nex:root ex:p \"ROOTVAL\" .\n".as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            ts,
+            None,
+            None,
+        )
+        .unwrap();
+        let g_iri = "http://example.org/g/t1";
+        let g = store.overlay_create(g_iri, 0).unwrap();
+        let a = store.intern("http://example.org/a").unwrap();
+        let p = store.intern("http://example.org/p").unwrap();
+        let y = store.intern("http://example.org/y").unwrap();
+        store
+            .overlay_write(g, Op::Assert, a, p, Value::Ref(y), ts)
+            .unwrap();
+        (store, g_iri)
+    }
+
+    #[test]
+    fn export_subset_scopes_to_named_graph() {
+        let (store, g_iri) = store_with_named_graph();
+
+        // The named-graph slice: only its own triple.
+        let (bytes, count) =
+            export_rdf_subset(&store, RdfFormat::NTriples, Some(g_iri)).unwrap();
+        let doc = String::from_utf8(bytes).unwrap();
+        assert_eq!(count, 1);
+        assert!(doc.contains("http://example.org/a"));
+        assert!(doc.contains("http://example.org/y"));
+        assert!(
+            !doc.contains("ROOTVAL"),
+            "the ROOT graph must be excluded from a named-graph subset: {doc}"
+        );
+
+        // The ROOT default (graph omitted): only ROOT.
+        let (rbytes, rcount) = export_rdf_subset(&store, RdfFormat::NTriples, None).unwrap();
+        let rdoc = String::from_utf8(rbytes).unwrap();
+        assert_eq!(rcount, 1);
+        assert!(rdoc.contains("ROOTVAL"));
+        assert!(
+            !rdoc.contains("http://example.org/a"),
+            "the named graph must be excluded from the ROOT export"
+        );
+    }
+
+    #[test]
+    fn export_subset_unknown_graph_errors() {
+        let (store, _g) = store_with_named_graph();
+        assert!(
+            export_rdf_subset(&store, RdfFormat::NTriples, Some("http://example.org/g/nope"))
+                .is_err(),
+            "a targeted export of a non-existent graph is an error, not an empty success"
+        );
+    }
+
+    #[test]
+    fn export_subset_round_trips() {
+        let (store, g_iri) = store_with_named_graph();
+        // Export the slice, re-ingest it into a fresh store's ROOT, get it back.
+        let (bytes, _) = export_rdf_subset(&store, RdfFormat::Turtle, Some(g_iri)).unwrap();
+        let mut store2 = Store::open_in_memory().unwrap();
+        ingest_rdf(
+            &mut store2,
+            bytes.as_slice(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let facts = store2.current_facts().unwrap();
+        assert_eq!(
+            facts.len(),
+            1,
+            "the exported slice re-ingests to exactly its triples"
+        );
     }
 }
