@@ -126,3 +126,53 @@ bobbin:BundleShape a sh:NodeShape ;
             [ sh:class bobbin:Section ]
         ) ;
     ] .
+
+# ── Commit ─────────────────────────────────────────────────────
+#
+# A git commit emitted by the promotion path (bobbin → quipu). Hundreds of live
+# Commit entities were invisible to validation until this shape: no shape file
+# declared the kind. Constraints are reconciled to what the emitter ACTUALLY
+# writes — measured over a live sample (never require a predicate the emitter
+# does not emit). Required set = present on every sampled commit and single-
+# valued; touches/references are optional object properties (0..N IRIs).
+
+bobbin:CommitShape a sh:NodeShape ;
+    sh:targetClass bobbin:Commit ;
+    sh:property [
+        sh:path bobbin:sha ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:author ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:in_repo ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:comment ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:touches ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path bobbin:references ;
+        sh:nodeKind sh:IRI ;
+    ] .
