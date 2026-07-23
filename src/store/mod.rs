@@ -400,6 +400,21 @@ impl Store {
         }
     }
 
+    /// Cheap graph-size counts for the /metrics gauges: (entities, facts,
+    /// predicates) over LIVE root-graph facts — the same liveness predicate the
+    /// query layer uses (`op = 1 AND g = 0 AND valid_to IS NULL`). One SQL
+    /// aggregate pass; deliberately NOT the /stats full result-set scan, which
+    /// is far too expensive to run on every Prometheus scrape.
+    pub fn graph_counts(&self) -> Result<(u64, u64, u64)> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(DISTINCT e), COUNT(*), COUNT(DISTINCT a) FROM facts \
+             WHERE op = 1 AND g = 0 AND valid_to IS NULL",
+        )?;
+        let mut rows = stmt.query([])?;
+        let row = rows.next()?.expect("aggregate always returns one row");
+        Ok((row.get::<_, i64>(0)? as u64, row.get::<_, i64>(1)? as u64, row.get::<_, i64>(2)? as u64))
+    }
+
     /// Retrieve a transaction by id.
     pub fn get_transaction(&self, tx_id: i64) -> Result<Option<crate::types::Transaction>> {
         let mut stmt = self

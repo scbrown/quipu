@@ -67,6 +67,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/health",
     "/version",
     "/stats",
+    // Prometheus scrape: renders in-memory counters + one SQL COUNT aggregate.
+    // Reads the store, mutates nothing.
+    "/metrics",
     "/query",
     "/cord",
     "/unravel",

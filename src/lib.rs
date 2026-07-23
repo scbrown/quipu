@@ -13,6 +13,7 @@ pub mod graph;
 pub mod http_auth;
 pub mod impact;
 pub mod mcp;
+pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
 pub mod namespace;

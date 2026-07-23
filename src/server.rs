@@ -205,6 +205,7 @@ async fn main() {
         .route("/health", get(health))
         .route("/version", get(version))
         .route("/stats", get(stats))
+        .route("/metrics", get(metrics_handler))
         .route("/query", post(query))
         .route("/knot", post(knot))
         .route("/cord", post(cord))
@@ -302,11 +303,22 @@ async fn main() {
             |req: axum::extract::Request, next: axum::middleware::Next| async move {
                 let method = req.method().clone();
                 let path = req.uri().path().to_string();
+                // The ROUTE TEMPLATE (`/entity/{iri}`), not the raw path, so
+                // metric label cardinality stays bounded. Absent for 404s.
+                let endpoint = req
+                    .extensions()
+                    .get::<axum::extract::MatchedPath>()
+                    .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
                 let started = std::time::Instant::now();
                 let resp = next.run(req).await;
+                let status = resp.status().as_u16();
+                quipu::metrics::metrics().observe_request(
+                    &endpoint,
+                    status,
+                    started.elapsed().as_secs_f64(),
+                );
                 eprintln!(
-                    "req {method} {path} -> {} in {}ms",
-                    resp.status().as_u16(),
+                    "req {method} {path} -> {status} in {}ms",
                     started.elapsed().as_millis()
                 );
                 resp
@@ -357,6 +369,26 @@ async fn components_js() -> impl IntoResponse {
 
 async fn health() -> impl IntoResponse {
     axum::Json(json!({"status": "ok"}))
+}
+
+/// Prometheus scrape endpoint (usage measurement). Counters come from the
+/// request middleware and the policy handler; graph-size gauges are computed
+/// here with one cheap SQL aggregate — deliberately NOT /stats' full scan,
+/// which must never run on every scrape while holding the store mutex.
+async fn metrics_handler(State(store): State<SharedStore>) -> Result<impl IntoResponse, AppError> {
+    let (entities, facts, predicates) = blocking(move || {
+        let store = store.lock().unwrap();
+        Ok(store.graph_counts()?)
+    })
+    .await?;
+    let body = quipu::metrics::metrics().render(entities, facts, predicates);
+    Ok((
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
+        body,
+    ))
 }
 
 /// What build is actually running (aegis-odnr).
@@ -615,7 +647,19 @@ rw_handler!(shapes, quipu::tool_shapes);
 rw_handler!(overlay_create, quipu::tool_overlay_create);
 ro_handler!(overlay_compose, quipu::tool_overlay_compose);
 ro_handler!(cooccurrence, quipu::tool_cooccurrence);
-ro_handler!(policy_check, quipu::tool_policy_check);
+// policy_check is the one read handler with its own counter: the metric uses
+// /policy/check's OWN outcome vocabulary (satisfied|unsatisfied|unknown) —
+// never a block/warn tiering, which is the caller's downstream mapping.
+async fn policy_check(
+    State(s): State<SharedStore>,
+    axum::Json(i): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let result = quipu::tool_policy_check(&s.lock().unwrap(), &i)?;
+    if let Some(outcome) = result.get("outcome").and_then(|v| v.as_str()) {
+        quipu::metrics::metrics().observe_policy_outcome(outcome);
+    }
+    Ok(axum::Json(result))
+}
 ro_handler!(verifier_authorized, quipu::tool_verifier_authorized);
 ro_handler!(verdict_verify, quipu::tool_verdict_verify);
 
