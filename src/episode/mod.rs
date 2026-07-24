@@ -506,25 +506,42 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
             " ;\n    prov:wasGeneratedBy aegis:episode_{ep_local}"
         ));
 
-        // Optional properties as typed literals.
+        // Optional properties as typed literals. A JSON ARRAY yields one triple
+        // per element — the natural RDF reading, and exactly what the /knot+Turtle
+        // path's `a "x", "y" .` already does. Previously the array arm was a
+        // silent no-op, so a multi-valued property (e.g. a CrewRole trait axis
+        // that is MULTI by design) declared as a JSON array turned into a SILENTLY
+        // incomplete node with a 200 response. Scalars are unchanged
+        // (byte-identical output).
         if let Some(props) = &node.properties {
+            // Object term for a SCALAR json value; None for array/object/null.
+            let scalar_term = |v: &serde_json::Value| -> Option<String> {
+                match v {
+                    serde_json::Value::String(s) => Some(format!("\"{}\"", escape_turtle(s))),
+                    serde_json::Value::Number(n) => n
+                        .as_i64()
+                        .map(|i| format!("\"{i}\"^^xsd:integer"))
+                        .or_else(|| n.as_f64().map(|f| format!("\"{f}\"^^xsd:double"))),
+                    serde_json::Value::Bool(b) => Some(format!("\"{b}\"^^xsd:boolean")),
+                    _ => None,
+                }
+            };
             for (key, val) in props {
                 let pred = sanitize_iri_local(key);
                 match val {
-                    serde_json::Value::String(s) => {
-                        ttl.push_str(&format!(" ;\n    aegis:{pred} \"{}\"", escape_turtle(s)));
-                    }
-                    serde_json::Value::Number(n) => {
-                        if let Some(i) = n.as_i64() {
-                            ttl.push_str(&format!(" ;\n    aegis:{pred} \"{i}\"^^xsd:integer"));
-                        } else if let Some(f) = n.as_f64() {
-                            ttl.push_str(&format!(" ;\n    aegis:{pred} \"{f}\"^^xsd:double"));
+                    // one triple per scalar element — multi-valued predicate preserved
+                    serde_json::Value::Array(elems) => {
+                        for elem in elems {
+                            if let Some(term) = scalar_term(elem) {
+                                ttl.push_str(&format!(" ;\n    aegis:{pred} {term}"));
+                            }
                         }
                     }
-                    serde_json::Value::Bool(b) => {
-                        ttl.push_str(&format!(" ;\n    aegis:{pred} \"{b}\"^^xsd:boolean"));
+                    _ => {
+                        if let Some(term) = scalar_term(val) {
+                            ttl.push_str(&format!(" ;\n    aegis:{pred} {term}"));
+                        }
                     }
-                    _ => {} // skip arrays/objects/null
                 }
             }
         }

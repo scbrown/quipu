@@ -251,6 +251,43 @@ fn node_properties_become_triples() {
 }
 
 #[test]
+fn array_valued_node_property_yields_one_triple_per_element() {
+    // Regression guard: a JSON array in node properties was silently DROPPED
+    // (no-op final match arm) while returning success — turning a multi-valued
+    // trait into a silently incomplete role. It must now emit one triple per
+    // element, matching what the Turtle path does for `a "x", "y" .`.
+    let ep = parse_episode(
+        r#"{
+        "name": "arr-test",
+        "nodes": [
+            {
+                "name": "worker",
+                "type": "CrewRole",
+                "properties": {
+                    "traitScope": "domain-scoped",
+                    "traitWorkIntake": ["self-directed", "escalations-only"]
+                }
+            }
+        ],
+        "edges": []
+    }"#,
+    );
+
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    // both array elements present as their own object term (multi-value preserved)
+    assert!(ttl.contains("aegis:traitWorkIntake \"self-directed\""),
+            "first array element missing:\n{ttl}");
+    assert!(ttl.contains("aegis:traitWorkIntake \"escalations-only\""),
+            "second array element missing (the exact z5mw3 silent-drop):\n{ttl}");
+    // the scalar sibling on the same node still survives unchanged
+    assert!(ttl.contains("aegis:traitScope \"domain-scoped\""),
+            "scalar property regressed:\n{ttl}");
+    // exactly two triples for the multi-valued predicate, not a joined blob
+    assert_eq!(ttl.matches("aegis:traitWorkIntake ").count(), 2,
+               "expected 2 traitWorkIntake triples:\n{ttl}");
+}
+
+#[test]
 fn sanitize_iri_local_handles_special_chars() {
     assert_eq!(sanitize_iri_local("ct-205"), "ct-205");
     assert_eq!(sanitize_iri_local("hello world"), "hello_world");
