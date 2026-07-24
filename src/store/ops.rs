@@ -147,6 +147,9 @@ impl Store {
                 // A write that defined or amended a policy makes the cached
                 // registry stale.
                 self.invalidate_policy_registry_if_governance(datums)?;
+                // Memory telemetry (memory telemetry): count the commit and sample RSS
+                // so a burst-export spike is captured at the write that caused it.
+                crate::metrics::metrics().observe_write(datums.len() as u64);
                 Ok(tx_id)
             }
             Err(e) => {

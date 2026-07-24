@@ -21,7 +21,28 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
+
+/// Current process (resident, virtual) memory in bytes, from `/proc/self/statm`
+/// on Linux; `(0, 0)` elsewhere. `statm` fields are in pages; on the x86_64
+/// Linux quipu runs on the page size is 4096. Cheap in-kernel read — safe to
+/// call at scrape time and after each write (memory telemetry: the balloon was
+/// invisible because NO memory metric existed).
+#[must_use]
+pub fn process_memory() -> (u64, u64) {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(statm) = std::fs::read_to_string("/proc/self/statm") {
+            let mut it = statm.split_whitespace();
+            let vsz_pages: u64 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+            let rss_pages: u64 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+            const PAGE: u64 = 4096;
+            return (rss_pages * PAGE, vsz_pages * PAGE);
+        }
+    }
+    (0, 0)
+}
 
 /// Upper bounds (seconds) of the duration histogram buckets; +Inf is implicit.
 const BUCKETS: [f64; 8] = [0.005, 0.025, 0.1, 0.5, 1.0, 2.5, 10.0, 30.0];
@@ -41,6 +62,12 @@ pub struct Metrics {
     durations: Mutex<BTreeMap<String, Hist>>,
     /// /policy/check outcome -> count.
     policy: Mutex<BTreeMap<String, u64>>,
+    /// Total datums committed to the store — correlates an RSS rise with the
+    /// write volume that drove it (memory telemetry).
+    facts_written: AtomicU64,
+    /// High-water-mark RSS in bytes, sampled after each write and at scrape.
+    /// A 15s scrape can miss the peak of a burst export; this catches it.
+    peak_rss_bytes: AtomicU64,
 }
 
 /// The process-wide registry.
@@ -68,6 +95,19 @@ impl Metrics {
         }
         h.sum += seconds;
         h.total += 1;
+    }
+
+    /// Record `n` datums committed, and sample RSS into the high-water mark so
+    /// a burst export's peak is captured even between 15s scrapes (memory telemetry).
+    pub fn observe_write(&self, n: u64) {
+        self.facts_written.fetch_add(n, Ordering::Relaxed);
+        self.sample_rss();
+    }
+
+    /// Update the RSS high-water mark from the current process RSS.
+    pub fn sample_rss(&self) {
+        let (rss, _vsz) = process_memory();
+        self.peak_rss_bytes.fetch_max(rss, Ordering::Relaxed);
     }
 
     /// Record one /policy/check evaluation by its own outcome vocabulary.
@@ -156,6 +196,38 @@ impl Metrics {
         );
         let _ = writeln!(out, "quipu_graph_predicates {predicates}");
 
+        // Memory (memory telemetry): the balloon that OOM-killed the service was
+        // invisible because no memory metric existed. RSS/VSZ are read fresh at
+        // scrape; the peak is the high-water mark since start, which catches a
+        // burst-export spike a coarse scrape would miss.
+        let (rss, vsz) = process_memory();
+        self.peak_rss_bytes.fetch_max(rss, Ordering::Relaxed);
+        let peak = self.peak_rss_bytes.load(Ordering::Relaxed);
+        out.push_str(
+            "# HELP process_resident_memory_bytes Resident set size of the quipu-server process.\n\
+             # TYPE process_resident_memory_bytes gauge\n",
+        );
+        let _ = writeln!(out, "process_resident_memory_bytes {rss}");
+        out.push_str(
+            "# HELP process_virtual_memory_bytes Virtual memory size of the quipu-server process.\n\
+             # TYPE process_virtual_memory_bytes gauge\n",
+        );
+        let _ = writeln!(out, "process_virtual_memory_bytes {vsz}");
+        out.push_str(
+            "# HELP quipu_process_peak_rss_bytes High-water-mark RSS since start, sampled after each write.\n\
+             # TYPE quipu_process_peak_rss_bytes gauge\n",
+        );
+        let _ = writeln!(out, "quipu_process_peak_rss_bytes {peak}");
+        out.push_str(
+            "# HELP quipu_facts_written_total Datums committed to the store (correlates RSS with write volume).\n\
+             # TYPE quipu_facts_written_total counter\n",
+        );
+        let _ = writeln!(
+            out,
+            "quipu_facts_written_total {}",
+            self.facts_written.load(Ordering::Relaxed)
+        );
+
         out
     }
 }
@@ -207,5 +279,23 @@ mod tests {
         m.observe_request("/od\"d\\path", 200, 0.01);
         let text = m.render(0, 0, 0);
         assert!(text.contains("endpoint=\"/od\\\"d\\\\path\""));
+    }
+
+    #[test]
+    fn memory_metrics_render_and_count_writes() {
+        let m = Metrics::default();
+        m.observe_write(5);
+        m.observe_write(3);
+        let text = m.render(0, 0, 0);
+        assert!(text.contains("quipu_facts_written_total 8"));
+        assert!(text.contains("process_resident_memory_bytes"));
+        assert!(text.contains("process_virtual_memory_bytes"));
+        assert!(text.contains("quipu_process_peak_rss_bytes"));
+        // On the Linux target quipu runs on, RSS must be readable and non-zero.
+        #[cfg(target_os = "linux")]
+        {
+            let (rss, vsz) = process_memory();
+            assert!(rss > 0 && vsz >= rss, "RSS/VSZ readable from /proc/self/statm");
+        }
     }
 }
