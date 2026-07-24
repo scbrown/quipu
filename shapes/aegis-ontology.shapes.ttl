@@ -431,6 +431,61 @@ aegis:CrewRoleShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── TraitValue — precedence for the SINGLE-VALUED CrewRole axes ──
+#
+# THE PROBLEM. A CrewRole's MULTI axes (traitWorkIntake, traitCoordination)
+# compose by set-union — unambiguous. The SINGLE-valued axes (traitAttachment,
+# traitScope, traitLifecycle, traitAuthority) do NOT: when a member stacks roles
+# that disagree, e.g. keeper(scope=domain-scoped, authority=veto-in-scope) +
+# worker(scope=single-task, authority=none), nothing in the data says which wins.
+# The prior design prose said "most-specific/most-privileged wins" — but prose is not
+# computable, so every admin would hardcode a tie-break, which is the closed-enum
+# problem reappearing one layer up (the exact thing composable roles killed).
+#
+# THE RULE. Each single-valued axis has a TOTAL ORDER over its values, declared
+# as DATA (one aegis:TraitValue per (axis,value) with an integer aegis:precedence).
+# The effective value for a member = the value with the MAX precedence across the
+# member's roles on that axis. Set as data, NOT as sh:in list position — implicit
+# ordering inside a validation construct is invisible to a reader and silently
+# reorderable (called out on the bead as the thing NOT to do).
+#
+# WHY MAX IS RIGHT PER AXIS (each is a genuine ladder, not an arbitrary pick):
+#   attachment  rooted > reports-to > unattached  — ANY attached role makes the
+#     member attached; unattached only wins when ALL roles are unattached, which
+#     is exactly the condition that legitimately skips the tier.py reports-to check.
+#   scope       fleet-wide > domain-scoped > single-task — broadest reach a member
+#     holds is real reach; an administrator who also holds a single-task role is
+#     still fleet-wide.
+#   authority   veto-in-scope > gate > none — most-privileged authority the member
+#     holds is the one it can exercise.
+#   lifecycle   persistent > ephemeral — a member with any persistent role persists.
+#
+# NOTE this shapes the value-ranking rows; the MULTI axes need no TraitValue rows
+# (set-union has no tie to break). Only rdfs:label required, per invariant I1.
+
+aegis:TraitValueShape a sh:NodeShape ;
+    sh:targetClass aegis:TraitValue ;
+    sh:property [
+        sh:path aegis:axis ;
+        sh:datatype xsd:string ;
+        sh:in ( "attachment" "scope" "authority" "lifecycle" ) ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:traitValue ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:precedence ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ── Polecat ──────────────���───────────────────────────────────────
 #
 # A worker agent dispatched to execute a formula.
