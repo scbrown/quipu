@@ -299,9 +299,18 @@ aegis:RigShape a sh:NodeShape ;
 aegis:CrewMemberShape a sh:NodeShape ;
     sh:targetClass aegis:CrewMember ;
     sh:property [
+        # SUPERSEDED by aegis:hasRole. Kept for the migration
+        # window: role was one closed enum value doubling as tree-position.
+        # Drop only once every member carries hasRole.
         sh:path aegis:role ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # The role SET — no maxCount on purpose. A member stacks several
+        # (arnold: worker + keeper + escalation-target).
+        sh:path aegis:hasRole ;
+        sh:class aegis:CrewRole ;
     ] ;
     sh:property [
         sh:path aegis:tier ;
@@ -345,6 +354,78 @@ aegis:CrewMemberShape a sh:NodeShape ;
 
 aegis:ResponsibilityDomainShape a sh:NodeShape ;
     sh:targetClass aegis:ResponsibilityDomain ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+# ── CrewRole ─────────────────────────────────────────────────────
+#
+# A composable trait-preset a CrewMember can hold. NOT an
+# aegis:AnsibleRole — that is an IaC role, a different plane entirely.
+#
+# WHY A CLASS AND NOT MORE ENUM VALUES: st's tier.py carries
+# VALID_ROLES = worker|lead|administrator, where role IS tree-position. The
+# crew already runs roles that cannot be said in that enum — an advisor is
+# UNATTACHED (no reports_to, no reportees) and so fails tier.py's reports-to
+# validation outright; a keeper is domain-scoped with an in-domain veto; and
+# a member holds SEVERAL at once (arnold ran worker + keeper + escalation-
+# target). So a role is a named preset over six orthogonal axes, and a
+# member's effective traits are the UNION across the roles it holds
+# (single-valued axes: most-specific wins; multi-valued: set-union).
+#
+# The axes are prefixed `trait` on purpose. aegis:authority is already the
+# Stiwi-authority of an aegis:Directive and aegis:roleName is already the
+# name of an aegis:AnsibleRole; reusing either would conflate two planes in
+# one predicate and quietly poison `?x aegis:roleName ?n` for both.
+#
+# Parameters that vary PER MEMBER — which domain a keeper owns, which lead a
+# worker reports to — stay on the CrewMember (aegis:domain, aegis:reports_to)
+# and never on the role, so a role stays reusable across members.
+#
+# Only rdfs:label is required, per I1: a sh:minCount must follow a proven
+# emitter, never precede one. crewRoleName is the machine slug st carries in
+# ST_ROLES, and stays optional until something demonstrably emits it.
+
+aegis:CrewRoleShape a sh:NodeShape ;
+    sh:targetClass aegis:CrewRole ;
+    sh:property [
+        sh:path aegis:crewRoleName ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Is it in the tree at all? `unattached` is what makes an advisor
+        # legal — the admin skips the reports-to rules entirely for it.
+        sh:path aegis:traitAttachment ;
+        sh:in ( "rooted" "reports-to" "unattached" ) ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # MULTI on purpose — a worker is dispatched AND self-directed.
+        sh:path aegis:traitWorkIntake ;
+        sh:in ( "dispatched" "self-directed" "consulted" "escalations-only" "none" ) ;
+    ] ;
+    sh:property [
+        # MULTI on purpose — a lead absorbs AND dispatches.
+        sh:path aegis:traitCoordination ;
+        sh:in ( "absorbs" "dispatches" "neither" ) ;
+    ] ;
+    sh:property [
+        sh:path aegis:traitScope ;
+        sh:in ( "fleet-wide" "domain-scoped" "single-task" ) ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:traitLifecycle ;
+        sh:in ( "persistent" "ephemeral" ) ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:traitAuthority ;
+        sh:in ( "veto-in-scope" "gate" "none" ) ;
+        sh:maxCount 1 ;
+    ] ;
     sh:property [
         sh:path rdfs:label ;
         sh:minCount 1 ;
@@ -1318,6 +1399,16 @@ aegis:ReportsToShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
     sh:targetSubjectsOf aegis:reports_to ;
     sh:property [ sh:path aegis:reports_to ; sh:class aegis:CrewMember ; ] .
+
+# WIRED at birth: measured 0 live aegis:hasRole edges and 0
+# aegis:CrewRole instances before wiring, so the zero-violations precondition
+# in the section header holds trivially. Wiring a predicate on the day it is
+# minted is the only moment that precondition is free — after usage accretes
+# it costs a migration, which is how the four HELD shapes above got stuck.
+aegis:HasRoleShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:hasRole ;
+    sh:property [ sh:path aegis:hasRole ; sh:class aegis:CrewRole ; ] .
 
 aegis:CommittedToShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
