@@ -142,30 +142,32 @@ impl KnowledgeVectorStore for Store {
         limit: usize,
         valid_at: Option<&str>,
     ) -> Result<Vec<VectorMatch>> {
+        // Score WITHOUT loading the `text` column. This is a
+        // brute-force scan over EVERY vector; for a ~150k-entity store the text
+        // of every entity dwarfs the vectors, and the old code materialized a
+        // `VectorMatch { text, .. }` for ALL of them before truncating to top-K —
+        // holding the whole store's text in RAM per search (the measured ~12GB
+        // glibc-retained balloon). Keep only (entity_id, score) while scanning
+        // (~16B/row); the embedding blob is transient per row; text + validity
+        // are fetched below for just the `limit` survivors.
         let sql = if valid_at.is_some() {
-            "SELECT entity_id, text, embedding, valid_from, valid_to FROM vectors \
+            "SELECT entity_id, embedding FROM vectors \
              WHERE valid_from <= ?1 AND (valid_to IS NULL OR valid_to > ?1)"
         } else {
-            "SELECT entity_id, text, embedding, valid_from, valid_to FROM vectors \
-             WHERE valid_to IS NULL"
+            "SELECT entity_id, embedding FROM vectors WHERE valid_to IS NULL"
         };
 
         let mut stmt = self.conn.prepare(sql)?;
-
-        let rows = if let Some(vt) = valid_at {
+        let mut rows = if let Some(vt) = valid_at {
             stmt.query(params![vt])?
         } else {
             stmt.query([])?
         };
 
-        let mut matches = Vec::new();
-        let mut rows = rows;
+        let mut scored: Vec<(i64, f64)> = Vec::new();
         while let Some(row) = rows.next()? {
             let entity_id: i64 = row.get(0)?;
-            let text: String = row.get(1)?;
-            let blob: Vec<u8> = row.get(2)?;
-            let valid_from: String = row.get(3)?;
-            let valid_to: Option<String> = row.get(4)?;
+            let blob: Vec<u8> = row.get(1)?;
 
             let stored = bytes_to_f32_slice(&blob);
             // Fail loud on a dimension mismatch instead of silently scoring 0.0
@@ -182,24 +184,45 @@ impl KnowledgeVectorStore for Store {
                     stored.len()
                 )));
             }
-            let score = cosine_similarity(query_embedding, &stored);
-
-            matches.push(VectorMatch {
-                entity_id,
-                text,
-                score,
-                valid_from,
-                valid_to,
-            });
+            scored.push((entity_id, cosine_similarity(query_embedding, &stored)));
         }
 
         // Sort by score descending, take top N.
-        matches.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        matches.truncate(limit);
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+
+        // Fetch text + validity for the survivors only (same validity filter, so
+        // the row scored is the row read back).
+        let text_sql = if valid_at.is_some() {
+            "SELECT text, valid_from, valid_to FROM vectors \
+             WHERE entity_id = ?1 AND valid_from <= ?2 AND (valid_to IS NULL OR valid_to > ?2) LIMIT 1"
+        } else {
+            "SELECT text, valid_from, valid_to FROM vectors \
+             WHERE entity_id = ?1 AND valid_to IS NULL LIMIT 1"
+        };
+        let mut text_stmt = self.conn.prepare(text_sql)?;
+        let mut matches = Vec::with_capacity(scored.len());
+        for (entity_id, score) in scored {
+            let row = if let Some(vt) = valid_at {
+                text_stmt.query_row(params![entity_id, vt], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<String>>(2)?))
+                })
+            } else {
+                text_stmt.query_row(params![entity_id], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<String>>(2)?))
+                })
+            };
+            // A vector removed between the two queries is simply skipped.
+            if let Ok((text, valid_from, valid_to)) = row {
+                matches.push(VectorMatch {
+                    entity_id,
+                    text,
+                    score,
+                    valid_from,
+                    valid_to,
+                });
+            }
+        }
         Ok(matches)
     }
 
