@@ -1229,9 +1229,20 @@ aegis:MetricShape a sh:NodeShape ;
 # (PrometheusAlert->AlertRule, ConfigArtifact->ConfigFile, Repo/GitRepository->
 # GitRepo, Hook->ClaudeCodeHook, and the abstract parents Host/Service are
 # never emitted on instances).
+# AlertRule carries the optional properties a Prometheus-style rule actually has.
+# These were proposed as a separate PrometheusAlertRule class; that class is a
+# synonym (see the retype list above) so the class was declined and the PROPERTIES
+# adopted here instead — the useful part of that proposal was never the new name.
+# guardsProducer is the one that earns its keep: it turns "which producer must
+# exist for this rule to fire" from a comment in a template into a graph question,
+# which is what makes an absent()-guard rule auditable.
 aegis:AlertRuleShape a sh:NodeShape ;
     sh:targetClass aegis:AlertRule ;
-    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path aegis:alertExpr ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:severity ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:keeper ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:guardsProducer ; sh:nodeKind sh:IRI ; ] .
 
 aegis:InternalIdentifierPatternShape a sh:NodeShape ;
     sh:targetClass aegis:InternalIdentifierPattern ;
