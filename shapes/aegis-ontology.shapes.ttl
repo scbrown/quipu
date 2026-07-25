@@ -1321,6 +1321,42 @@ aegis:TraefikRouteShape a sh:NodeShape ;
     sh:targetClass aegis:TraefikRoute ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
 
+# ── ExternalService ──────────────────────────────────────────────
+#
+# A third-party service we CONSUME but do not operate: MusicBrainz, ListenBrainz,
+# Discogs, Spotify. Modelled because consuming one carries obligations we need to
+# be able to query (rate limits enforced by blocking, contact-carrying User-Agent
+# requirements, optional tokens that only raise a quota).
+#
+# DELIBERATELY NOT rdfs:subClassOf aegis:Service. The Service hierarchy answers
+# "what do we RUN" — every existing child (SystemdService, WebApplication,
+# DatabaseService, SearchService) is something we operate. Filing consumed
+# third-party dependencies under it would silently inflate every "our services"
+# query with things we neither run nor can fix. This is not hypothetical: because
+# a constant-IRI type query resolves subclasses, `?s a aegis:Service` already
+# returns ~6x the directly-asserted count, and every child added widens that gap
+# for every caller. We do not add a fifth child to widen it further.
+# If a "everything we depend on, ours or not" query is ever wanted, it wants its
+# own parent, not a reuse of this one.
+
+aegis:ExternalServiceShape a sh:NodeShape ;
+    sh:targetClass aegis:ExternalService ;
+    sh:property [
+        sh:path aegis:externalUrl ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:comment ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+    ] .
+
 # ═══ vt9m: the declared class hierarchy (also asserted as graph data) ═══
 # Abstract parents Host and Service exist ONLY as query targets via the
 # hierarchy — never emit them on an instance (guide §2).
