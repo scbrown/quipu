@@ -4,7 +4,10 @@
 //! before allowing it into the fact log. Returns structured feedback on failures
 //! so agents can fix and retry.
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::io::Read;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use rudof_lib::{
     RDFFormat, ReaderMode, Rudof, RudofConfig, ShaclFormat, ShaclValidationMode, ShapesGraphSource,
@@ -52,14 +55,22 @@ pub struct ValidationIssue {
 }
 
 /// A SHACL validator that holds loaded shapes and validates data against them.
+///
+/// The parsed shapes graph is retained (behind a `Mutex`, because rudof needs
+/// `&mut` to validate) and REUSED across `validate` calls. Previously this type
+/// kept only the shapes *string*: `from_turtle` parsed the shapes and
+/// threw the parse away, then every `validate` re-parsed them. With the real
+/// aegis shape sets (86 KB) that was ~19 ms of parsing done twice on every
+/// single write, and it dominated validation cost — see `examples/shacl_cost.rs`.
 pub struct Validator {
     shapes_turtle: String,
+    /// Rudof instance with `shapes_turtle` already read into its SHACL schema.
+    rudof: Mutex<Rudof>,
 }
 
 impl Validator {
     /// Create a new validator from SHACL shapes in Turtle format.
     pub fn from_turtle(shapes: &str) -> Result<Self> {
-        // Verify the shapes parse by loading them into rudof.
         let mut rudof = RudofConfig::default_config()
             .map_err(|e| Error::InvalidValue(format!("rudof config error: {e}")))
             .and_then(|cfg| {
@@ -77,7 +88,14 @@ impl Validator {
             .map_err(|e| Error::InvalidValue(format!("SHACL parse error: {e}")))?;
         Ok(Self {
             shapes_turtle: shapes.to_string(),
+            rudof: Mutex::new(rudof),
         })
+    }
+
+    /// The shapes this validator was built from.
+    #[must_use]
+    pub fn shapes_turtle(&self) -> &str {
+        &self.shapes_turtle
     }
 
     /// Load shapes from a reader.
@@ -93,23 +111,13 @@ impl Validator {
     ///
     /// Returns structured feedback. If `conforms` is true, the data is valid.
     pub fn validate(&self, data: &[u8]) -> Result<ValidationFeedback> {
-        let mut rudof = RudofConfig::default_config()
-            .map_err(|e| Error::InvalidValue(format!("rudof config error: {e}")))
-            .and_then(|cfg| {
-                Rudof::new(&cfg).map_err(|e| Error::InvalidValue(format!("rudof init error: {e}")))
-            })?;
-
-        // Load shapes.
-        let mut shapes_reader = self.shapes_turtle.as_bytes();
-        rudof
-            .read_shacl(
-                &mut shapes_reader,
-                "shapes",
-                Some(&ShaclFormat::Turtle),
-                None,
-                None,
-            )
-            .map_err(|e| Error::InvalidValue(format!("SHACL load error: {e}")))?;
+        // Reuse the already-parsed shapes graph. `read_data` below is called
+        // with merge=None (=false), which replaces the RDF data outright, so a
+        // reused instance carries no data from a previous validation.
+        let mut rudof = self
+            .rudof
+            .lock()
+            .map_err(|e| Error::InvalidValue(format!("shapes lock poisoned: {e}")))?;
 
         // Load data.
         let mut data_reader = data;
@@ -183,11 +191,65 @@ impl Validator {
     }
 }
 
+/// Process-wide cache of parsed shape graphs, keyed by a hash of the shapes
+/// Turtle. The stored shapes change rarely (a `/shapes` load) while writes are
+/// continuous, so without this every write re-parses the same 86 KB of shapes.
+///
+/// Bounded: the key space is "distinct shape sets in use", normally 1. The cap
+/// exists so a caller passing per-request inline shapes (`/knot` accepts them)
+/// cannot grow this without limit.
+type ValidatorCache = Mutex<HashMap<u64, Arc<Validator>>>;
+
+const VALIDATOR_CACHE_CAP: usize = 16;
+
+fn validator_cache() -> &'static ValidatorCache {
+    static CACHE: OnceLock<ValidatorCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn shapes_key(shapes_turtle: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    shapes_turtle.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Get a validator for these shapes, parsing them only on a cache miss.
+///
+/// On a hash collision between two *different* shape sets the cached validator
+/// would be wrong, so the stored shapes are compared before reuse.
+pub fn cached_validator(shapes_turtle: &str) -> Result<Arc<Validator>> {
+    let key = shapes_key(shapes_turtle);
+    {
+        let cache = validator_cache()
+            .lock()
+            .map_err(|e| Error::InvalidValue(format!("validator cache poisoned: {e}")))?;
+        if let Some(v) = cache.get(&key)
+            && v.shapes_turtle() == shapes_turtle
+        {
+            return Ok(Arc::clone(v));
+        }
+    }
+
+    // Parse outside the lock: it is the expensive step, and holding the cache
+    // lock across it would serialise every concurrent write behind one parse.
+    let validator = Arc::new(Validator::from_turtle(shapes_turtle)?);
+
+    let mut cache = validator_cache()
+        .lock()
+        .map_err(|e| Error::InvalidValue(format!("validator cache poisoned: {e}")))?;
+    if cache.len() >= VALIDATOR_CACHE_CAP {
+        cache.clear();
+    }
+    cache.insert(key, Arc::clone(&validator));
+    Ok(validator)
+}
+
 /// Convenience: validate proposed data against shapes, both as Turtle strings.
 ///
-/// Returns structured feedback for agent consumption.
+/// Returns structured feedback for agent consumption. The parsed shapes graph
+/// is cached across calls — see `cached_validator`.
 pub fn validate_shapes(shapes_turtle: &str, data_turtle: &str) -> Result<ValidationFeedback> {
-    let validator = Validator::from_turtle(shapes_turtle)?;
+    let validator = cached_validator(shapes_turtle)?;
     validator.validate(data_turtle.as_bytes())
 }
 
@@ -290,6 +352,110 @@ ex:alice a ex:Person ;
         // Two names but sh:maxCount is 1
         let feedback = validate_shapes(PERSON_SHAPE, data).unwrap();
         assert!(!feedback.conforms, "expected too many names to fail");
+    }
+
+    /// A second, DIFFERENT shape set — used to prove the cache keys correctly
+    /// and does not serve one shape set's validator for another's write.
+    const ANIMAL_SHAPE: &str = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+ex:AnimalShape a sh:NodeShape ;
+    sh:targetClass ex:Animal ;
+    sh:property [
+        sh:path ex:species ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+    ] .
+"#;
+
+    /// The cache must not turn a violating write into an accepted one. The
+    /// FIRST call parses and caches; every later call takes the warm path, and
+    /// that is the path a running server spends ~all its time on — so rejection
+    /// has to hold there, not just on the cold call.
+    #[test]
+    fn cached_validator_still_rejects_on_warm_path() {
+        let bad = r#"
+@prefix ex: <http://example.org/> .
+ex:bob a ex:Person .
+"#;
+        // 5 consecutive calls: #1 cold, #2.. warm. All must reject.
+        for i in 0..5 {
+            let feedback = validate_shapes(PERSON_SHAPE, bad).unwrap();
+            assert!(
+                !feedback.conforms,
+                "violating write accepted on call {} (warm-path regression)",
+                i + 1
+            );
+            assert!(
+                feedback.violations > 0,
+                "no violations reported on call {}",
+                i + 1
+            );
+        }
+    }
+
+    /// Data from a previous validation must not leak into the next one. The
+    /// reused rudof instance keeps its shapes but `read_data` replaces the data
+    /// graph; if that ever stopped holding, a conforming write could be failed
+    /// by a PREVIOUS write's violation, or vice versa.
+    #[test]
+    fn cached_validator_does_not_leak_data_between_writes() {
+        let bad = "@prefix ex: <http://example.org/> .\nex:bob a ex:Person .\n";
+        let good =
+            "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .\n";
+
+        // Interleave: a violation must not poison the following clean write,
+        // and a clean write must not mask the following violation.
+        for _ in 0..3 {
+            assert!(!validate_shapes(PERSON_SHAPE, bad).unwrap().conforms);
+            let clean = validate_shapes(PERSON_SHAPE, good).unwrap();
+            assert!(clean.conforms, "clean write failed after a violating one");
+            assert_eq!(
+                clean.violations, 0,
+                "violations leaked from a previous write"
+            );
+        }
+    }
+
+    /// Two different shape sets must get two different validators. A cache keyed
+    /// only by hash, or one that ignored the stored shapes, could serve the
+    /// wrong schema and silently validate against the wrong contract.
+    #[test]
+    fn cache_does_not_confuse_distinct_shape_sets() {
+        // Conforms to PERSON_SHAPE, and is irrelevant to ANIMAL_SHAPE.
+        let person =
+            "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .\n";
+        // Violates ANIMAL_SHAPE (no ex:species), untargeted by PERSON_SHAPE.
+        let animal = "@prefix ex: <http://example.org/> .\nex:rex a ex:Animal .\n";
+
+        for _ in 0..3 {
+            assert!(
+                validate_shapes(PERSON_SHAPE, person).unwrap().conforms,
+                "person data should conform to the person shapes"
+            );
+            assert!(
+                !validate_shapes(ANIMAL_SHAPE, animal).unwrap().conforms,
+                "animal violation missed — wrong shape set served from cache"
+            );
+            // The animal data is untargeted by the person shapes, so it conforms
+            // there; if the cache served ANIMAL_SHAPE here this would fail.
+            assert!(
+                validate_shapes(PERSON_SHAPE, animal).unwrap().conforms,
+                "person shapes should not target ex:Animal"
+            );
+        }
+    }
+
+    /// The cached validator must retain the exact shapes it was built from, so
+    /// a hash collision cannot silently serve a different shape set.
+    #[test]
+    fn cached_validator_retains_its_shapes() {
+        let v = cached_validator(PERSON_SHAPE).unwrap();
+        assert_eq!(v.shapes_turtle(), PERSON_SHAPE);
+        let v2 = cached_validator(PERSON_SHAPE).unwrap();
+        assert!(Arc::ptr_eq(&v, &v2), "second call should hit the cache");
     }
 
     #[test]
