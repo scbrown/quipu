@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.12] - 2026-07-28
+
+### Added
+
+- *(sparql)* Named-graph query scoping — GRAPH <iri> / GRAPH ?g (#36) (#49)([dda3ee8](https://github.com/scbrown/quipu/commit/dda3ee82e7e4e3f06058413dabe8ce59e85ed6ea))
+- *(metrics)* Process memory telemetry — RSS/VSZ/peak + facts-written([876bbdd](https://github.com/scbrown/quipu/commit/876bbdd259445ab85d93e99f957a3624e091e411))
+- *(shapes)* Aegis:CrewRole + CrewMember.hasRole — role becomes a trait-set([b7ff07a](https://github.com/scbrown/quipu/commit/b7ff07a714350fb4b30d12e033602f80c00ded86))
+- *(shapes)* TraitValue precedence — resolves the composable-role single-valued axes([c1dc430](https://github.com/scbrown/quipu/commit/c1dc430699a90865ae734a71d8700b352cb09053))
+- *(shapes)* Aegis:ExternalService — consumed third-party dependencies([e6bc8ad](https://github.com/scbrown/quipu/commit/e6bc8adf9d449896e70f10ad585d91f16728ae26))
+- *(shapes)* AlertRule carries alertExpr, severity, keeper, guardsProducer([d603b79](https://github.com/scbrown/quipu/commit/d603b794dfeed0e348337ae0da366a17820981bf))
+
+### Fixed
+
+- *(vector)* Brute-force search no longer loads ALL entity text into RAM([a2309cf](https://github.com/scbrown/quipu/commit/a2309cfd756a55c0e5500076be062bbaa0f09486))
+- *(episode)* Emit one triple per array element instead of silently dropping it([74be82c](https://github.com/scbrown/quipu/commit/74be82c882c6902597d742c6bde7b502478e6c4a))
+
+### Perf
+
+- *(shacl)* Cache the parsed shapes graph — validation was parsing 86KB twice per write([face36e](https://github.com/scbrown/quipu/commit/face36e3889c7d754b28ca8e58788150b1aae8a1))
+
 ## [0.3.11] - 2026-07-23
 
 ### Miscellaneous
