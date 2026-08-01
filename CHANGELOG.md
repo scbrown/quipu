@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.15] - 2026-08-01
+
+### Added
+
+- *(ui)* Draw the graph on canvas from one /graph payload([7a634b6](https://github.com/scbrown/quipu/commit/7a634b6dcba8d8965a42ac864898dc5a13726256))
+
+### CI/CD
+
+- Ship release binaries built from a `full` feature bundle([51adae0](https://github.com/scbrown/quipu/commit/51adae020f32b6c185587ead7f8a20f54ad90ff6))
+
+### Documentation
+
+- *(ui)* Fictional demo graph, and tidy the node-link layout([dd8463b](https://github.com/scbrown/quipu/commit/dd8463b0d545ec32f0637b4531b4dee7e7058ae1))
+- Fix the Pages artifact path and publish the orphaned pages([5975328](https://github.com/scbrown/quipu/commit/5975328bddb2feb36c15fa08756bae98d5a23da2))
+
 ## [0.3.14] - 2026-08-01
 
 ### Fixed
