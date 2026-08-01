@@ -7,7 +7,7 @@
 //! Result: validation time is FLAT in delta size and dominated by a fixed
 //! per-write parse of the shapes graph — see the commit that added this.
 //!
-//! Run: cargo run --release --example shacl_cost --features shacl
+//! Run: `cargo run --release --example shacl_cost --features shacl`
 
 use std::time::Instant;
 

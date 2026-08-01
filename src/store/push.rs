@@ -236,7 +236,7 @@ mod tests {
         ingest_episode(store, &ep, "2026-07-23T00:00:00Z", DEFAULT_BASE_NS).unwrap();
     }
 
-    /// ACCEPTANCE: matching events POSTed in offset order; cursor advances.
+    /// ACCEPTANCE: matching events `POSTed` in offset order; cursor advances.
     #[test]
     fn realtime_delivers_in_offset_order() {
         let mut s = store();
@@ -362,7 +362,7 @@ mod tests {
         );
     }
 
-    /// A sparql_ask filter is refused loudly, not stored-and-ignored.
+    /// A `sparql_ask` filter is refused loudly, not stored-and-ignored.
     #[test]
     fn sparql_ask_refused_until_evaluated() {
         let s = store();

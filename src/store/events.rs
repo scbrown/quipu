@@ -430,7 +430,7 @@ mod tests {
     }
 
     /// ACCEPTANCE: ingest -> episode.ingested + one edge.added per edge,
-    /// offsets strictly monotonic, tx_id matches the episode's tx.
+    /// offsets strictly monotonic, `tx_id` matches the episode's tx.
     #[test]
     fn ingest_emits_episode_and_edges_in_commit_order() {
         let mut store = Store::open_in_memory().unwrap();
@@ -476,9 +476,8 @@ mod tests {
         );
 
         // Brand-new store: both node types announced exactly once each.
-        assert_eq!(
+        assert!(
             of("type.new") >= 2,
-            true,
             "Service + Host (+ episode activity type)"
         );
         assert!(of("predicate.new") > 0);
@@ -488,7 +487,7 @@ mod tests {
     /// ACCEPTANCE (P1 spec): a brand-new type+predicate emits
     /// type.new AND predicate.new ONCE; re-ingesting the same type emits NO
     /// duplicate type.new; an edge on a PRE-EXISTING entity carries
-    /// subject_preexisting=true.
+    /// `subject_preexisting=true`.
     #[test]
     fn schema_events_fire_once_and_preexisting_is_flagged() {
         let mut store = Store::open_in_memory().unwrap();
@@ -796,7 +795,7 @@ aegis:SoftSizeShape a sh:NodeShape ;
         }
 
         /// An emit-shape violation: the write COMMITS and the event is in the
-        /// log, inside the same tx (its tx_id equals the episode's).
+        /// log, inside the same tx (its `tx_id` equals the episode's).
         #[test]
         fn emit_shape_violation_commits_and_emits_event() {
             let mut store = store_with_shapes();

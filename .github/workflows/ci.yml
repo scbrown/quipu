@@ -45,7 +45,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-clippy-${{ matrix.name }}-
             ${{ runner.os }}-cargo-
-      - run: cargo clippy ${{ matrix.flags }} -- -D warnings -A missing-docs
+      # --all-targets covers tests, examples and benches. Without it an
+      # example could reference feature-gated APIs and only fail in the
+      # `test` job, which is exactly how examples/shacl_cost.rs broke the
+      # --no-default-features build.
+      - run: cargo clippy ${{ matrix.flags }} --all-targets -- -D warnings -A missing-docs
 
   test:
     name: Test (${{ matrix.name }})

@@ -813,7 +813,7 @@ fn test_tool_retract_bare_string_for_an_iri_edge_is_refused() {
     ));
 }
 
-/// Seed a small org: a reports_to b, with c (and optionally more) available as
+/// Seed a small org: a `reports_to` b, with c (and optionally more) available as
 /// re-parent targets. Shared by the /set acceptance tests.
 fn seed_reports_to(store: &mut Store, extra_edges: &[(&str, &str)]) {
     let mut edges = vec![serde_json::json!(
@@ -839,7 +839,7 @@ fn seed_reports_to(store: &mut Store, extra_edges: &[(&str, &str)]) {
     .unwrap();
 }
 
-/// The bead's headline acceptance: /set re-parents reports_to from B to C in
+/// The bead's headline acceptance: /set re-parents `reports_to` from B to C in
 /// ONE call and ONE transaction; afterwards exactly one edge exists.
 #[test]
 fn test_tool_set_reparents_in_one_call_one_tx() {
@@ -979,7 +979,7 @@ fn test_tool_set_bare_string_for_an_iri_edge_is_refused() {
 
 /// URL-valued STRING literals are legitimate: a predicate that already holds
 /// Strs accepts an IRI-shaped bare string (the guard scopes to ref-only and
-/// empty predicates, same as retract_triples). Caught in production: the
+/// empty predicates, same as `retract_triples`). Caught in production: the
 /// first real supersede batch — 60 traefik backend URLs — was refused by an
 /// over-broad guard that treated every IRI-shaped string as a mistake.
 #[test]
@@ -1554,7 +1554,7 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 fn test_extract_type_filter_simple() {
     let sparql = "SELECT ?s WHERE { ?s a <http://example.org/Person> }";
-    let filter = super::tools::extract_type_filter(sparql);
+    let filter = super::tools::search::extract_type_filter(sparql);
     assert_eq!(
         filter,
         Some("entity_type = 'http://example.org/Person'".into())
@@ -1564,7 +1564,7 @@ fn test_extract_type_filter_simple() {
 #[test]
 fn test_extract_type_filter_rdf_type() {
     let sparql = "SELECT ?s WHERE { ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Bot> }";
-    let filter = super::tools::extract_type_filter(sparql);
+    let filter = super::tools::search::extract_type_filter(sparql);
     assert_eq!(
         filter,
         Some("entity_type = 'http://example.org/Bot'".into())
@@ -1575,14 +1575,14 @@ fn test_extract_type_filter_rdf_type() {
 fn test_extract_type_filter_complex_returns_none() {
     // FILTER makes this too complex for pushdown
     let sparql = "SELECT ?s WHERE { ?s a <http://example.org/Person> . FILTER(?s != <http://example.org/bob>) }";
-    let filter = super::tools::extract_type_filter(sparql);
+    let filter = super::tools::search::extract_type_filter(sparql);
     assert!(filter.is_none());
 }
 
 #[test]
 fn test_extract_type_filter_no_type_returns_none() {
     let sparql = "SELECT ?s WHERE { ?s <http://example.org/name> \"Alice\" }";
-    let filter = super::tools::extract_type_filter(sparql);
+    let filter = super::tools::search::extract_type_filter(sparql);
     assert!(filter.is_none());
 }
 

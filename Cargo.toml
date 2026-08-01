@@ -46,6 +46,14 @@ name = "seed-fixtures"
 path = "src/bin/seed_fixtures.rs"
 required-features = ["shacl"]
 
+# The example calls `quipu::validate_shapes`, which is gated behind `shacl`.
+# `cargo test` builds examples, so without this the `--no-default-features` CI
+# job failed to compile an example that can never work in that configuration.
+[[example]]
+name = "shacl_cost"
+path = "examples/shacl_cost.rs"
+required-features = ["shacl"]
+
 [dependencies]
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
