@@ -42,7 +42,7 @@ const OTHER_COLOR = '#8892a4';
 const OTHER_SHAPE = 'circle';
 
 const SURFACE = '#16213e';
-const EDGE_COLOR = 'rgba(150, 161, 184, 0.55)';
+const EDGE_COLOR = 'rgba(150, 161, 184, 0.38)';
 const EDGE_COLOR_HL = '#e0e0e0';
 const TEXT = '#e0e0e0';
 const TEXT_MUTED = '#8892a4';
@@ -208,7 +208,7 @@ export class GraphCanvas {
     }
 
     // Spring attraction along edges.
-    const k = 0.055 * this.alpha;
+    const k = 0.09 * this.alpha;
     for (const e of this.edges) {
       const a = nodes[e.s], b = nodes[e.t];
       if (!a || !b) continue;
@@ -233,6 +233,60 @@ export class GraphCanvas {
       if (node.fixed) { node.vx = 0; node.vy = 0; continue; }
       node.x += (node.vx *= 0.82);
       node.y += (node.vy *= 0.82);
+    }
+
+    this._separate(nodes);
+  }
+
+  /** Push overlapping nodes apart.
+   *
+   * Repulsion alone does not prevent overlap — it falls off with distance and
+   * an edge pulling two hubs together beats it at close range, so nodes end up
+   * piled on their neighbours and the view reads as a smear rather than a
+   * graph. This is a hard positional constraint applied after integration.
+   *
+   * Uses a uniform grid rather than the quadtree: the interaction radius is
+   * bounded by the largest node, so each node only needs its own cell and the
+   * eight around it — O(n) with a small constant.
+   */
+  _separate(nodes) {
+    let maxR = 0;
+    for (const n of nodes) if (n.r > maxR) maxR = n.r;
+    const pad = 5;
+    const cell = (maxR + pad) * 2;
+    const grid = new Map();
+    const key = (cx, cy) => cx + ',' + cy;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      const k = key(Math.floor(n.x / cell), Math.floor(n.y / cell));
+      const bucket = grid.get(k);
+      if (bucket) bucket.push(i); else grid.set(k, [i]);
+    }
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      const cx = Math.floor(a.x / cell), cy = Math.floor(a.y / cell);
+      for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        for (let gy = cy - 1; gy <= cy + 1; gy++) {
+          const bucket = grid.get(key(gx, gy));
+          if (!bucket) continue;
+          for (const j of bucket) {
+            if (j <= i) continue;           // each pair once
+            const b = nodes[j];
+            const min = a.r + b.r + pad;
+            let dx = b.x - a.x, dy = b.y - a.y;
+            let d2 = dx * dx + dy * dy;
+            if (d2 >= min * min) continue;
+            let d = Math.sqrt(d2);
+            if (d < 1e-6) {                 // exactly coincident: nudge apart
+              dx = (i % 2 ? 1 : -1) * 0.5; dy = 0.5; d = Math.hypot(dx, dy);
+            }
+            const push = (min - d) / d / 2;
+            const ox = dx * push, oy = dy * push;
+            if (!a.fixed) { a.x -= ox; a.y -= oy; }
+            if (!b.fixed) { b.x += ox; b.y += oy; }
+          }
+        }
+      }
     }
   }
 

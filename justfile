@@ -59,6 +59,13 @@ seed:
 serve-fixtures:
     cargo run --bin quipu-server --features shacl,onnx -- --db test-fixtures/test-store.db
 
+# Load the fictional demo graph and serve the explorer on localhost:3030.
+# This is the dataset behind the README screenshot — see examples/demo-graph.
+demo:
+    rm -f /tmp/quipu-demo.db
+    cargo run --bin quipu --features shacl -- knot examples/demo-graph/demo.ttl --db /tmp/quipu-demo.db
+    cargo run --bin quipu-server --features full -- --db /tmp/quipu-demo.db
+
 # === Documentation ===
 
 # Documentation management: just docs <cmd>

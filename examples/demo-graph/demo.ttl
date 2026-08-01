@@ -1,0 +1,124 @@
+# A small, entirely fictional platform graph — the dataset behind the README
+# screenshot and the `just demo` quick tour.
+#
+# Everything here lives under example.org, the domain RFC 2606 reserves for
+# documentation, so nothing in this file can be mistaken for a real deployment.
+# That matters: screenshots bake text into pixels, where the repo's
+# internal-identifier guard (tests/no_internal_identifiers.rs) cannot read it.
+#
+# The shape is deliberately layered rather than random — endpoints route to
+# services, services depend on services, persist to stores, run on clusters,
+# are owned by teams, and are documented and monitored. A graph with structure
+# is what a graph view is FOR; a random one just looks like a hairball.
+
+@prefix ex:   <http://example.org/demo/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ── Teams ────────────────────────────────────────────────────────────────
+ex:team-storefront a ex:Team ; rdfs:label "Storefront" .
+ex:team-payments   a ex:Team ; rdfs:label "Payments" .
+ex:team-platform   a ex:Team ; rdfs:label "Platform" .
+
+# ── Clusters ─────────────────────────────────────────────────────────────
+ex:cluster-edge  a ex:Cluster ; rdfs:label "edge" ; ex:region "eu-west" .
+ex:cluster-core  a ex:Cluster ; rdfs:label "core" ; ex:region "eu-west" .
+ex:cluster-batch a ex:Cluster ; rdfs:label "batch" ; ex:region "us-east" .
+
+# ── Datastores ───────────────────────────────────────────────────────────
+ex:orders-db     a ex:Datastore ; rdfs:label "orders-db"     ; ex:engine "postgres" ; ex:runsOn ex:cluster-core .
+ex:catalog-db    a ex:Datastore ; rdfs:label "catalog-db"    ; ex:engine "postgres" ; ex:runsOn ex:cluster-core .
+ex:session-cache a ex:Datastore ; rdfs:label "session-cache" ; ex:engine "redis"    ; ex:runsOn ex:cluster-edge .
+ex:event-log     a ex:Datastore ; rdfs:label "event-log"     ; ex:engine "kafka"    ; ex:runsOn ex:cluster-batch .
+
+# ── Services ─────────────────────────────────────────────────────────────
+ex:gateway a ex:Service ; rdfs:label "gateway" ;
+    ex:runsOn ex:cluster-edge ; ex:ownedBy ex:team-platform ;
+    ex:dependsOn ex:storefront-api , ex:auth ;
+    ex:persistsTo ex:session-cache .
+
+ex:auth a ex:Service ; rdfs:label "auth" ;
+    ex:runsOn ex:cluster-edge ; ex:ownedBy ex:team-platform ;
+    ex:persistsTo ex:session-cache .
+
+ex:storefront-api a ex:Service ; rdfs:label "storefront-api" ;
+    ex:runsOn ex:cluster-core ; ex:ownedBy ex:team-storefront ;
+    ex:dependsOn ex:catalog , ex:cart , ex:search ;
+    ex:persistsTo ex:catalog-db .
+
+ex:catalog a ex:Service ; rdfs:label "catalog" ;
+    ex:runsOn ex:cluster-core ; ex:ownedBy ex:team-storefront ;
+    ex:persistsTo ex:catalog-db .
+
+ex:search a ex:Service ; rdfs:label "search" ;
+    ex:runsOn ex:cluster-core ; ex:ownedBy ex:team-storefront ;
+    ex:dependsOn ex:catalog .
+
+ex:cart a ex:Service ; rdfs:label "cart" ;
+    ex:runsOn ex:cluster-core ; ex:ownedBy ex:team-storefront ;
+    ex:dependsOn ex:checkout ; ex:persistsTo ex:session-cache .
+
+ex:checkout a ex:Service ; rdfs:label "checkout" ;
+    ex:runsOn ex:cluster-core ; ex:ownedBy ex:team-payments ;
+    ex:dependsOn ex:payments , ex:inventory ;
+    ex:persistsTo ex:orders-db .
+
+ex:payments a ex:Service ; rdfs:label "payments" ;
+    ex:runsOn ex:cluster-core ; ex:ownedBy ex:team-payments ;
+    ex:dependsOn ex:ledger ; ex:persistsTo ex:orders-db .
+
+ex:ledger a ex:Service ; rdfs:label "ledger" ;
+    ex:runsOn ex:cluster-core ; ex:ownedBy ex:team-payments ;
+    ex:persistsTo ex:orders-db .
+
+ex:inventory a ex:Service ; rdfs:label "inventory" ;
+    ex:runsOn ex:cluster-core ; ex:ownedBy ex:team-storefront ;
+    ex:persistsTo ex:catalog-db .
+
+ex:notifier a ex:Service ; rdfs:label "notifier" ;
+    ex:runsOn ex:cluster-batch ; ex:ownedBy ex:team-platform ;
+    ex:dependsOn ex:ledger ; ex:persistsTo ex:event-log .
+
+ex:reindexer a ex:Service ; rdfs:label "reindexer" ;
+    ex:runsOn ex:cluster-batch ; ex:ownedBy ex:team-storefront ;
+    ex:dependsOn ex:catalog ; ex:persistsTo ex:event-log .
+
+# ── Public endpoints ─────────────────────────────────────────────────────
+ex:route-shop     a ex:Endpoint ; rdfs:label "/shop"     ; ex:routesTo ex:gateway .
+ex:route-checkout a ex:Endpoint ; rdfs:label "/checkout" ; ex:routesTo ex:gateway .
+ex:route-search   a ex:Endpoint ; rdfs:label "/search"   ; ex:routesTo ex:gateway .
+ex:route-account  a ex:Endpoint ; rdfs:label "/account"  ; ex:routesTo ex:auth .
+
+# ── Shared libraries ─────────────────────────────────────────────────────
+ex:lib-httpkit a ex:Library ; rdfs:label "httpkit" ; ex:version "3.1.0" .
+ex:lib-tracing a ex:Library ; rdfs:label "tracing" ; ex:version "0.9.2" .
+ex:lib-money   a ex:Library ; rdfs:label "money"   ; ex:version "1.4.0" .
+
+ex:gateway        ex:uses ex:lib-httpkit , ex:lib-tracing .
+ex:storefront-api ex:uses ex:lib-httpkit , ex:lib-tracing .
+ex:checkout       ex:uses ex:lib-httpkit , ex:lib-money .
+ex:payments       ex:uses ex:lib-money , ex:lib-tracing .
+ex:ledger         ex:uses ex:lib-money .
+ex:search         ex:uses ex:lib-httpkit .
+
+# ── Runbooks ─────────────────────────────────────────────────────────────
+ex:rb-checkout-5xx a ex:Runbook ; rdfs:label "checkout 5xx" ; ex:documents ex:checkout .
+ex:rb-payment-lag  a ex:Runbook ; rdfs:label "payment lag"  ; ex:documents ex:payments .
+ex:rb-cache-evict  a ex:Runbook ; rdfs:label "cache evictions" ; ex:documents ex:session-cache .
+ex:rb-reindex      a ex:Runbook ; rdfs:label "reindex stall" ; ex:documents ex:reindexer .
+
+# ── Alerts ───────────────────────────────────────────────────────────────
+ex:alert-checkout-errors a ex:Alert ; rdfs:label "checkout errors" ;
+    ex:severity "critical" ; ex:monitors ex:checkout ; ex:resolvedBy ex:rb-checkout-5xx .
+ex:alert-ledger-lag a ex:Alert ; rdfs:label "ledger lag" ;
+    ex:severity "warning" ; ex:monitors ex:ledger ; ex:resolvedBy ex:rb-payment-lag .
+ex:alert-cache-miss a ex:Alert ; rdfs:label "cache miss rate" ;
+    ex:severity "warning" ; ex:monitors ex:session-cache ; ex:resolvedBy ex:rb-cache-evict .
+ex:alert-index-stall a ex:Alert ; rdfs:label "index stall" ;
+    ex:severity "warning" ; ex:monitors ex:reindexer ; ex:resolvedBy ex:rb-reindex .
+
+# Deliberately has NO resolvedBy. Every real estate has an alert nobody has
+# written a runbook for yet, and it is the thing worth querying for — an
+# example query whose answer is always empty teaches nothing.
+ex:alert-queue-depth a ex:Alert ; rdfs:label "queue depth" ;
+    ex:severity "warning" ; ex:monitors ex:notifier .

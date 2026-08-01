@@ -25,7 +25,8 @@ A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Incan knotted-string recor
 </p>
 
 <p align="center">
-  <em>The built-in explorer at <code>/ui</code> — the whole graph in one request, drawn on canvas.</em>
+  <em>The built-in explorer at <code>/ui</code> — the whole graph in one request, drawn on canvas.<br/>
+  Run it yourself with <code>just demo</code> (<a href="examples/demo-graph/">examples/demo-graph</a>).</em>
 </p>
 
 ```text
