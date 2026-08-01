@@ -8,9 +8,10 @@
 > Verified by mechanism (`src/sparql/pattern.rs`, `src/sparql/mod.rs::apply_dataset`,
 > `src/mcp/mod.rs::query_result`) + 13 tests; full lib suite green.
 > **Remaining:** property paths and RDFS inference are ROOT-default-only (they
-> **fail loud** elsewhere); SHACL shape targeting / reasoner rule scope across
-> graphs is unspecified; the write side stays on the overlay path + `/episode`
-> `graph` field (no `graph` param on `/knot` yet). These keep this 🟡.
+> **fail loud** elsewhere); the write side stays on the overlay path +
+> `/episode` `graph` field (no `graph` param on `/knot` yet). These keep this 🟡.
+> **§6–§7 are now designed and not yet built** — including a live cross-graph
+> defect in `Store::current_facts()` (§7.1) that should be fixed first.
 
 **Status:** **Partial — the subset-export / federation foundation.** Named-graph
 support is what lets a consumer *partition* the store into first-class subgraphs
@@ -100,20 +101,156 @@ There is deliberately **no** `graph` param on `/knot` yet — arbitrary writes t
 named committed branch would bypass the committed/overlay class invariant; the
 overlay path is the sanctioned route.
 
-## 6. Scope boundaries / follow-ups (honest)
+## 6. Graph-scoping the traversal reads (designed, not yet built)
 
-- **Property paths** (`?s :p+ ?o`) and **RDFS subclass inference** are supported
-  **only on the ROOT default graph**. Inside a named `GRAPH`, or over a
-  `FROM`-redefined default graph, they would read the wrong graph, so they
-  **fail loud** rather than silently returning ROOT results. (`?s a ?C` inside a
-  named graph matches *literally* — an export wants a graph's own triples, not
-  cross-graph inference.)
-- **SHACL shape targeting** and **reasoner rule scope** across graphs are not yet
-  specified — shapes/rules currently operate on the committed default graph.
-- The event log (#… P1) emits for **ROOT-graph commits only**; overlay writes are
+Property paths and RDFS inference currently **fail loud** outside the ROOT
+default graph. That was the right stopgap — silently reading `g = 0` from
+inside a `GRAPH <iri>` block returns another graph's data — but it leaves
+`GRAPH <iri> { ?s :dependsOn+ ?o }` unanswerable, which is precisely the query
+Hank's per-branch worlds need.
+
+### 6.1 What is actually hardcoded
+
+Three call sites pin `g = 0` in SQL rather than taking it from the evaluation
+context:
+
+| Site | Line | Read |
+|---|---|---|
+| `sparql/property_path.rs` | `126`, `278`, `331` | path steps, `e`/`v` scans |
+| `sparql/rdfs.rs` | `46` | `rdfs:subClassOf` closure |
+| `sparql/rdfs.rs` | `103` | type-pattern expansion |
+
+`TemporalContext.graph` already carries the answer at every one of these call
+sites — `GraphScope` is threaded through `eval_pattern_seeded` and reaches both
+modules. The work is to *use* it, not to plumb it.
+
+### 6.2 Decision — paths and inference are single-graph, never cross-graph
+
+A path or a subclass closure evaluates **entirely within one graph**: the same
+`GraphScope` that bounds the enclosing BGP bounds every intermediate step.
+
+- `GraphScope::Default(gids)` — reuse `sql_graph_in(gids)` (already written for
+  BGP scoping in `sparql/triple.rs`) in place of the `g = 0` literal. A `FROM`
+  union then traverses the merged graph, which is the RDF-merge semantics §4
+  already commits to.
+- `GraphScope::Named(gid)` — `g = ?gid` at every step.
+- `GraphScope::AnyNamed` — **stays refused.** A path under `GRAPH ?g` would have
+  to bind `?g` consistently across steps of unknown length; the natural reading
+  ("the whole path lies in one graph") requires either a per-graph re-evaluation
+  loop or a `?g` join column threaded through the transitive closure. Neither is
+  worth building before a caller asks. The refusal keeps its current shape:
+  an explicit error, never a silent ROOT read.
+
+The rule to state once and hold to: **a path never crosses a graph boundary.**
+Half a path in a tenant overlay and half in ROOT is not a fact either graph
+asserts, and permitting it would make an overlay able to forge reachability in
+its parent.
+
+### 6.3 Subclass inference is deliberately *not* symmetric with paths
+
+An ontology (`rdfs:subClassOf`) is normally asserted once, in ROOT, while
+instance data lives in a branch or overlay. Scoping the closure to the *current*
+graph means `?s a ex:Person` inside a named graph stops matching an `ex:Engineer`
+whose superclass edge lives in ROOT — which reads as a regression, not a fix.
+
+So the two halves scope differently, and the asymmetry is the design:
+
+- **Instance matching** (`?s a ?C`) is scoped to the current graph.
+- **The subclass closure** (`collect_class_and_subclasses`) reads the
+  **schema graph**, which defaults to ROOT and does not follow the data scope.
+
+This preserves today's behaviour for the ROOT case exactly, and makes the named
+graph case do the useful thing (branch instances, shared ontology). It is also
+reversible: if a branch ever needs to *override* the ontology, the schema graph
+becomes the union `{current, ROOT}` with the nearest definition winning — the
+same nearest-overlay-wins rule §3 already uses for facts.
+
+An explicit `GRAPH <iri> { ?s a ?C }` where the caller wants literal, un-inferred
+matching keeps that today via §5's export semantics; the escape hatch is
+`FROM <iri>` with no schema graph, which we spell out when the flag exists.
+
+### 6.4 Acceptance
+
+- [ ] `GRAPH <iri> { ?s :p+ ?o }` traverses only `<iri>`; a path that would need
+      a ROOT edge to complete yields no row
+- [ ] `FROM <a> <b>` traverses the merge of `a` and `b`
+- [ ] `GRAPH ?g { ?s :p+ ?o }` still errors, with a message naming §6.2
+- [ ] `?s a ex:Person` inside a named graph matches instances in that graph via
+      a subclass edge asserted in ROOT
+- [ ] An overlay cannot make a path appear in its committed parent
+
+## 7. SHACL and reasoner scope (designed, not yet built)
+
+### 7.1 The bug this uncovers
+
+`Store::current_facts()` filters `op = 1 AND valid_to IS NULL` and **nothing
+else** — it has no `g` predicate, so it returns facts from *every* graph. Since
+overlays write into the same `facts` table, every caller of it is already
+cross-graph today:
+
+| Caller | Consequence |
+|---|---|
+| `reasoner/evaluate.rs:316` | rules derive from overlay facts and write conclusions to ROOT |
+| `graph.rs:55,754,1114` | PageRank / centrality counts every tenant's overlay |
+| `rdf.rs:268` | full export leaks overlay facts into a ROOT dump |
+| `owl_parse.rs:128,145` | ontology parse sees overlay class axioms |
+| `reconcile/mod.rs:233` | entity resolution matches across tenants |
+
+This is the same class of defect as #53 — silent, and each layer looks healthy.
+It is not hypothetical: it is live the moment a second graph exists. **This
+should be fixed ahead of the rest of §7**, and it is small: `current_facts()`
+gains a ROOT filter, and callers that genuinely want a specific graph use the
+already-existing `current_facts_in_graph(g)`.
+
+Naming it precisely: `current_facts()` becomes `current_facts()` = ROOT-scoped
+(matching the §4 default-graph decision that committed reads are ROOT-scoped),
+with `current_facts_all_graphs()` added only if a caller is found that wants the
+old behaviour. None currently does.
+
+### 7.2 SHACL shape targeting
+
+Validation takes a serialized Turtle payload, not a store handle
+(`Validator::validate(&self, data: &[u8])`), so shape *targeting* is already
+graph-agnostic — whatever the caller serializes is what gets validated. The
+decision is therefore about the **write gate**, not the validator:
+
+- `validate_on_write` validates **the delta being written, against the shapes
+  loaded in ROOT**, regardless of which graph is being written.
+- Shapes are ontology, and by §6.3 ontology lives in ROOT. An overlay cannot
+  weaken its parent's constraints by asserting laxer shapes into itself.
+- A future per-branch shape set would compose ROOT ∪ branch with the branch
+  only able to *add* constraints, never remove — but there is no caller yet, so
+  it is not built.
+
+### 7.3 Reasoner rule scope
+
+- A ruleset **ranges over exactly one graph and writes conclusions back into
+  that same graph.** Cross-graph derivation is refused for the §6.2 reason: a
+  conclusion derived from overlay premises does not belong to ROOT.
+- `evaluate(store, ruleset, timestamp)` gains a graph parameter defaulting to
+  ROOT, so existing callers are unchanged.
+- Derived facts stay tagged `reasoner:<rule-id>` as today; the graph is the
+  additional coordinate, so retracting a branch drops its derivations with it.
+
+### 7.4 Acceptance
+
+- [ ] `current_facts()` is ROOT-scoped; a store with an overlay returns the same
+      facts it returned before the overlay existed
+- [ ] PageRank, export, OWL parse and reconcile are unaffected by overlay content
+- [ ] A ruleset run against a branch writes its conclusions into that branch
+- [ ] An overlay asserting a laxer shape does not relax validation of its parent
+- [ ] Each of the five `current_facts()` callers above has a graph-scoping test
+
+## 8. Scope boundaries / follow-ups (honest)
+
+- **Write-side `graph` param on `/knot`** stays deferred: arbitrary writes to a
+  named committed branch would bypass the committed/overlay class invariant. The
+  overlay path and `/episode`'s `graph` field are the sanctioned routes.
+- The event log (P1) emits for **ROOT-graph commits only**; overlay writes are
   transient compose-only staging and do not emit.
+- Property paths under `GRAPH ?g` remain refused (§6.2).
 
-## 7. Related
+## 9. Related
 
 - [group-isolation.md](group-isolation.md) — multi-tenant partitioning; named
   graphs are the storage substrate it would build on if the deferral flips.
