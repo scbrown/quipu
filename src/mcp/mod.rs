@@ -1097,6 +1097,18 @@ pub fn tool_definitions() -> Vec<JsonValue> {
             }
         }),
         serde_json::json!({
+            "name": "quipu_graph",
+            "description": "Project the knowledge graph into a render-ready node-link payload in ONE response: nodes (iri, label, rdf:type, degree), edges as [source_index, target_index, predicate] into that node array, and a type census ordered by prevalence. Excludes prov:Activity episodes and rdf/rdfs/prov scaffolding predicates by default so the domain graph is not buried in provenance. Nodes are ranked by degree and capped; the response states what was dropped.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "limit": { "type": "integer", "description": "Max nodes to return, ranked by degree (default: 250, hard max: 2000)" },
+                    "type": { "type": "string", "description": "Restrict to nodes of this rdf:type IRI (edges are scoped to the filtered set too)" },
+                    "include_episodes": { "type": "boolean", "description": "Include prov:Activity episode nodes (default: false)" }
+                }
+            }
+        }),
+        serde_json::json!({
             "name": "quipu_project",
             "description": "Project the knowledge graph and run a graph algorithm over it: stats (node/edge counts), in_degree (most-referenced entities), pagerank/ppr (global or personalized PageRank from seed entities), components (weakly-connected components), louvain (modularity community detection), or shortest_path. Optionally restrict the projection to a node type or predicate. Read-only by default; louvain with persist:true writes quipu:memberOfCommunity facts (superseding any prior derivation).",
             "inputSchema": {

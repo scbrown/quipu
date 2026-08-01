@@ -1,19 +1,17 @@
 //! Quipu REST API server — HTTP interface to the knowledge graph.
 //! Usage: `quipu-server [--db <path>] [--bind <addr>]`
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use parking_lot::FairMutex;
 
 use axum::{
     Router,
-    extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{Html, IntoResponse},
+    http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
 };
-use quipu::{EmbeddingProvider, semweb};
-use serde_json::{Value as JsonValue, json};
+use quipu::EmbeddingProvider;
 
 /// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
 /// sustained stream of episode writers could re-acquire the lock ahead of
@@ -27,6 +25,7 @@ type SharedStore = Arc<FairMutex<quipu::Store>>;
 
 const UI_HTML: &str = include_str!("../ui/index.html");
 const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
+const GRAPH_CANVAS_JS: &str = include_str!("../ui/graph-canvas.js");
 
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
@@ -42,7 +41,7 @@ mod tests;
 mod tools;
 
 use base::{
-    AppError, blocking, components_js, export, health, knot, metrics_handler, query, stats, ui,
+    components_js, export, graph_canvas_js, health, knot, metrics_handler, query, stats, ui,
     version,
 };
 use entity::{
@@ -52,11 +51,11 @@ use entity::{
 };
 use tools::{
     accept_proposal, ask, context, cooccurrence, cord, embed_backfill, episode, episodes_complete,
-    graphiti_search_nodes, hybrid_search, impact_analysis, list_proposals, overlay_compose,
-    overlay_create, overlay_write, policy_check, project_graph, propose_schema_change,
-    reject_proposal, report, report_get, resolve_probe, retract, retract_episode, search,
-    search_facts, search_nodes, set_predicate, shapes, subscriptions, unified_search, unravel,
-    validate, verdict_verify, verifier_authorized,
+    graph_view, graphiti_search_nodes, hybrid_search, impact_analysis, list_proposals,
+    overlay_compose, overlay_create, overlay_write, policy_check, project_graph,
+    propose_schema_change, reject_proposal, report, report_get, resolve_probe, retract,
+    retract_episode, search, search_facts, search_nodes, set_predicate, shapes, subscriptions,
+    unified_search, unravel, validate, verdict_verify, verifier_authorized,
 };
 
 #[tokio::main]
@@ -265,6 +264,7 @@ async fn main() {
         .route("/", get(ui))
         .route("/ui", get(ui))
         .route("/quipu-components.js", get(components_js))
+        .route("/graph-canvas.js", get(graph_canvas_js))
         // Core API
         .route("/health", get(health))
         .route("/version", get(version))
@@ -274,6 +274,7 @@ async fn main() {
         .route("/export", post(export))
         .route("/knot", post(knot))
         .route("/cord", post(cord))
+        .route("/graph", post(graph_view))
         .route("/unravel", post(unravel))
         .route("/validate", post(validate))
         .route("/episode", post(episode))

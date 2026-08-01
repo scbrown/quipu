@@ -20,6 +20,14 @@ A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Incan knotted-string recor
 
 ## See It In Action
 
+<p align="center">
+  <img src="assets/graph-explorer.png" width="900" alt="Quipu's graph explorer: a force-directed node-link view of an infrastructure knowledge graph, with a type filter sidebar, an entity list, and a legend pairing each entity type with a colour and a shape"/>
+</p>
+
+<p align="center">
+  <em>The built-in explorer at <code>/ui</code> — the whole graph in one request, drawn on canvas.</em>
+</p>
+
 ```text
 $ quipu knot infrastructure.ttl --shapes aegis-schema.ttl --db ops.db
 Ingested 847 triples in transaction 1 (SHACL: 0 violations)
@@ -81,7 +89,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 - **Immutable bitemporal fact log** — every fact has transaction time and valid time. Time-travel to any point. Full audit trail. Contradiction detection.
 - **RDF data model** — IRIs, blank nodes, typed literals via oxrdf. Import/export Turtle, N-Triples, JSON-LD, RDF/XML.
-- **SPARQL 1.1** — SELECT, ASK, CONSTRUCT, DESCRIBE. BGP, JOIN, UNION, FILTER, OPTIONAL, ORDER BY, GROUP BY, aggregates, HAVING, RDFS subclass inference.
+- **SPARQL 1.1** — SELECT, ASK, CONSTRUCT, DESCRIBE. BGP, JOIN, UNION, FILTER, OPTIONAL, VALUES, ORDER BY, GROUP BY, aggregates, HAVING, property paths, `IN`/`NOT IN`, RDFS subclass inference, and named-graph scoping (`GRAPH`, `FROM`, `FROM NAMED`).
 - **SHACL validation** — strict schema enforcement at write time. Structured feedback with severity, focus node, component, path, and message.
 
 **🤖 AI-Native Features**
@@ -103,7 +111,8 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — a `GraphProvider` trait for multi-source queries. Trait-only today: quipu ships a `LocalProvider` but no remote provider, so remote federation is not yet available from the CLI/server, and `federation.remotes` config is inert.
-- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 27 MCP tools for agent integration (28 with the `owl` feature).
+- **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.
+- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 28 MCP tools for agent integration (29 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. CI runs fmt, clippy, tests, and markdown lint on every push.
 
@@ -218,7 +227,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
               │                │                │
         ┌─────┴─────┐   ┌─────┴─────┐   ┌──────┴──────┐
         │ MCP Tools  │   │ REST API  │   │  Rust API   │
-        │ (27 tools) │   │ + Web UI  │   │  (crate)    │
+        │ (28 tools) │   │ + Web UI  │   │  (crate)    │
         └─────┬─────┘   └─────┬─────┘   └──────┬──────┘
               └────────────────┼────────────────┘
                                │
@@ -246,7 +255,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
 Quipu is designed as a [Bobbin](https://github.com/scbrown/bobbin) subsystem.
 Bobbin holds the thread (code context); Quipu ties knots of structured meaning into it.
 
-When running as a Bobbin subsystem, agents get 27 MCP tools (28 with the
+When running as a Bobbin subsystem, agents get 28 MCP tools (29 with the
 `owl` feature). The two most
 commonly used for knowledge-aware context:
 
@@ -311,11 +320,13 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | ORDER BY, GROUP BY, HAVING | ✅ | |
 | Aggregates (COUNT, SUM, AVG, MIN, MAX) | ✅ | |
 | BIND / Extend | ✅ | |
-| Property paths | ✅ | |
+| Property paths | ✅ | ROOT default graph only; fails loud inside a named `GRAPH` |
+| `VALUES` inline relations | ✅ | Multi-column and `UNDEF` |
+| `FILTER ... IN` / `NOT IN` | ✅ | |
 | Temporal queries (valid_at, as_of_tx) | ✅ | |
 | RDFS subclass inference | ✅ | |
 | SPARQL UPDATE | 🔜 | Planned |
-| Named graphs | 🔜 | Planned |
+| Named graphs (`GRAPH`/`FROM`/`FROM NAMED`) | ✅ | Query side; writes go via overlays or `/episode`. See [named-graphs.md](docs/design/named-graphs.md) |
 | Full SPARQL federation (SERVICE) | 🔜 | Planned |
 | **Schema & Validation** | | |
 | SHACL write-time validation | ✅ | Optional `shacl` feature |
@@ -343,9 +354,10 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | CLI (`quipu`) | ✅ | knot, read, repl, episode, impact, reason |
 | REST API (`quipu-server`) | ✅ | Axum-based |
 | Web UI | ✅ | Explorer, workbench, timeline, schema |
+| Graph explorer | ✅ | Canvas + Barnes-Hut layout, one `POST /graph` payload, no CDN |
 | Web components | ✅ | Embeddable `<quipu-*>` elements |
 | Semantic Web APIs | ✅ | Spotlight, TPF, OpenRefine reconciliation |
-| MCP tools (27; 28 with `owl`) | ✅ | Agent integration |
+| MCP tools (28; 29 with `owl`) | ✅ | Agent integration |
 | Python bindings | 🔜 | Planned |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |

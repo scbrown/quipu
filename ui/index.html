@@ -853,6 +853,15 @@ pre.json-result {
 /* min-width:0 lets the flex child shrink so the detail panel stays on-screen
    when it opens (otherwise the canvas' intrinsic width pushes it off). */
 #explorer .graph-area { position: relative; min-width: 0; }
+#graph-canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.graph-tooltip {
+  position: absolute; pointer-events: none; display: none; z-index: 20;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 6px 9px; font-size: 11px; color: var(--text); max-width: 260px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.45);
+}
+.graph-tooltip .tt-type { color: var(--text-muted); display: block; margin-top: 2px; }
+.graph-legend .legend-shape { width: 11px; height: 11px; flex-shrink: 0; }
 .graph-overlay {
   position: absolute;
   inset: 0;
@@ -999,7 +1008,8 @@ pre.json-result {
       <div class="entity-list" id="entity-list"></div>
     </div>
     <div class="graph-area">
-      <div id="cy"></div>
+      <canvas id="graph-canvas"></canvas>
+      <div id="graph-tooltip" class="graph-tooltip"></div>
     </div>
     <div class="detail-panel" id="detail-panel">
       <h3 id="detail-title"></h3>
@@ -1101,7 +1111,12 @@ LIMIT 25</textarea>
   </section>
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.4/cytoscape.min.js"></script>
+<script type="module">
+  // Local module, not a CDN: the graph must render on an air-gapped deploy.
+  import { GraphCanvas } from '/graph-canvas.js';
+  window.GraphCanvas = GraphCanvas;
+  window.dispatchEvent(new Event('graph-canvas-ready'));
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sparql/sparql.min.js"></script>
 <script>
@@ -1272,40 +1287,36 @@ function shortIri(iri) {
 // Stable, high-contrast palette. Each entity family gets its own hue so the
 // graph is readable at a glance; unknown types fall back to a hashed hue rather
 // than all collapsing to one gray.
-const TYPE_PALETTE = [
-  '#4cc9f0', '#4ecca3', '#f7a072', '#c77dff', '#ffd166',
-  '#ef476f', '#06d6a0', '#118ab2', '#f78c6b', '#8338ec',
-  '#3a86ff', '#fb5607', '#ff006e', '#8ac926', '#00bbf9',
+// ── Type palette ──
+// A validated eight-slot categorical palette (see ui/graph-canvas.js for the
+// hexes and the validation note). Slots are assigned ONCE from the store-wide
+// type census, ranked by prevalence, so a type keeps its colour no matter which
+// filter is active — colour follows the entity, never its rank in the current
+// view. A ninth type folds into a neutral "Other" slot; hues are NEVER cycled,
+// because a repeated hue means two types that look identical.
+const SLOT_COLORS = [
+  '#3987e5', '#d95926', '#199e70', '#c98500',
+  '#d55181', '#008300', '#9085e9', '#e66767',
 ];
-function hashHue(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return TYPE_PALETTE[h % TYPE_PALETTE.length];
+const OTHER_COLOR = '#8892a4';
+const PROV_COLOR = '#5a5a7a';
+
+// typeIri -> slot index, or -1 for the folded "Other" slot. Rebuilt only when
+// the store's type census changes (i.e. on load), never on filter.
+function buildTypeSlots(counts) {
+  const ranked = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+    .map(([iri]) => iri);
+  const m = new Map();
+  ranked.forEach((iri, i) => m.set(iri, i < SLOT_COLORS.length ? i : -1));
+  return m;
 }
-// Curated colors for the common ontology families (keeps related types coherent).
-const TYPE_COLORS = {
-  lxccontainer: '#4cc9f0', dockercontainer: '#4cc9f0', proxmoxnode: '#118ab2',
-  baremetalhost: '#118ab2', physicalhost: '#118ab2',
-  webapplication: '#4ecca3', systemdservice: '#06d6a0', databaseservice: '#8ac926',
-  reverseproxyroute: '#ffd166', traefikroute: '#ffd166', nginxvhost: '#ffd166',
-  invalidroute: '#ef476f', metricsendpoint: '#00bbf9',
-  crewmember: '#f7a072', rig: '#f78c6b',
-  bead: '#c77dff', directive: '#8338ec', decisionrecord: '#8338ec', designdoc: '#8338ec',
-  gitrepository: '#3a86ff', configfile: '#ffca3a', cli: '#a0a0d0',
-};
+
 function typeColor(typeIri) {
-  // Literal hex, never a CSS var — cytoscape styles don't resolve var() and
-  // warn on every node (124 console warnings per load, untyped nodes uncolored).
-  if (!typeIri) return '#8892a4';
-  if (typeIri === PROV_ACTIVITY) return '#5a5a7a';
-  const s = shortIri(typeIri).toLowerCase();
-  if (TYPE_COLORS[s]) return TYPE_COLORS[s];
-  // fuzzy fallbacks
-  if (s.includes('host') || s.includes('node') || s.includes('container')) return '#4cc9f0';
-  if (s.includes('service') || s.includes('app') || s.includes('web')) return '#4ecca3';
-  if (s.includes('route') || s.includes('proxy')) return '#ffd166';
-  if (s.includes('person') || s.includes('crew') || s.includes('member')) return '#f7a072';
-  return hashHue(s);
+  if (!typeIri) return OTHER_COLOR;
+  if (typeIri === PROV_ACTIVITY) return PROV_COLOR;
+  const slot = state.typeSlots ? state.typeSlots.get(typeIri) : undefined;
+  return slot >= 0 ? SLOT_COLORS[slot] : OTHER_COLOR;
 }
 
 // Best display name for an entity: its rdfs:label if it is a real literal,
@@ -1492,6 +1503,8 @@ function computeTypeCounts() {
     state.types.add(t);
     state.typeCounts.set(t, (state.typeCounts.get(t) || 0) + 1);
   }
+  // Store-wide ranking; stable across every filter (see buildTypeSlots).
+  state.typeSlots = buildTypeSlots(state.typeCounts);
 }
 
 // True when the active type filter selects a code-plane type — the one case
@@ -1609,22 +1622,16 @@ function renderEntityList() {
   }
 }
 
-function selectEntity(ent) {
+function selectEntity(ent, opts = {}) {
   state.selectedEntity = ent.iri;
   renderEntityList();
   showDetail(ent);
 
-  if (state.cy) {
-    // The panel opening shrinks the graph area; let cytoscape re-measure.
-    state.cy.resize();
-    state.cy.elements().removeClass('highlighted');
-    const node = state.cy.getElementById(ent.iri);
-    if (node.length) {
-      node.addClass('highlighted');
-      node.connectedEdges().addClass('highlighted');
-      node.neighborhood().nodes().addClass('highlighted');
-      state.cy.animate({ center: { eles: node }, duration: 300 });
-    }
+  // A click that came FROM the canvas already has the node selected; re-centring
+  // it would yank the view out from under the pointer.
+  if (graphCanvas && !opts.fromCanvas) {
+    graphCanvas.resize();
+    graphCanvas.focusIri(ent.iri);
   }
 }
 
@@ -1897,184 +1904,132 @@ function nodeData(iri) {
 // canvas space goes to nodes that have them, not to whatever loaded first.
 const GRAPH_SEED_CAP = 250;
 
-function renderGraph() {
-  // Seeds = the entities currently shown in the list (type filter + search).
-  let allSeeds = filteredEntities();
-  const capped = allSeeds.length > GRAPH_SEED_CAP;
-  if (capped) {
-    allSeeds = [...allSeeds].sort((a, b) =>
-      (state.degree.get(b.iri) || 0) - (state.degree.get(a.iri) || 0));
+// ── Graph rendering ──
+// The node-link view is drawn by ui/graph-canvas.js from ONE /graph payload.
+// Everything the old client-side pipeline did — relation detection, episode
+// exclusion, degree ranking, capping — now happens server-side, so this
+// function fetches and hands over rather than deriving anything.
+let graphCanvas = null;
+
+// The renderer is an ES module, so it is deferred and can lose the race with
+// the first render. Await it rather than silently drawing nothing.
+function graphCanvasReady() {
+  if (window.GraphCanvas) return Promise.resolve(true);
+  return new Promise(resolve => {
+    const done = () => resolve(!!window.GraphCanvas);
+    window.addEventListener('graph-canvas-ready', done, { once: true });
+    setTimeout(done, 5000);   // never hang the view on a failed module load
+  });
+}
+
+function ensureGraphCanvas() {
+  if (graphCanvas) return graphCanvas;
+  const el = document.getElementById('graph-canvas');
+  if (!el || !window.GraphCanvas) return null;
+  graphCanvas = new window.GraphCanvas(el, {
+    onSelect: (nd) => {
+      const ent = state.byIri.get(nd.iri);
+      if (ent) selectEntity(ent, { fromCanvas: true });
+    },
+  });
+  window.__gc = graphCanvas;   // handle for tests and console debugging
+  const tip = document.getElementById('graph-tooltip');
+  graphCanvas.onHover = (nd, ev) => {
+    if (!nd || !ev) { tip.style.display = 'none'; return; }
+    tip.innerHTML = `<strong>${escapeHtml(nd.label)}</strong>` +
+      (nd.type ? `<span class="tt-type">${escapeHtml(shortIri(nd.type))}</span>` : '') +
+      `<span class="tt-type">${nd.deg} relation${nd.deg === 1 ? '' : 's'}</span>`;
+    tip.style.display = 'block';
+    // Flip the tooltip before it runs off the right/bottom edge.
+    const area = tip.parentElement.getBoundingClientRect();
+    const x = ev.offsetX + 14, y = ev.offsetY + 14;
+    tip.style.left = (x + tip.offsetWidth > area.width ? x - tip.offsetWidth - 28 : x) + 'px';
+    tip.style.top  = (y + tip.offsetHeight > area.height ? y - tip.offsetHeight - 28 : y) + 'px';
+  };
+  return graphCanvas;
+}
+
+async function renderGraph() {
+  await graphCanvasReady();
+  const gc = ensureGraphCanvas();
+  if (!gc) {
+    setGraphOverlay('<div class="empty-state"><div class="icon">&#x26A0;</div><p>Graph renderer failed to load.</p></div>');
+    return;
   }
-  const seeds = new Set(allSeeds.slice(0, GRAPH_SEED_CAP).map(e => e.iri));
+  const body = { limit: GRAPH_SEED_CAP };
+  if (state.activeType) body.type = state.activeType;
+
+  setGraphOverlay('<div class="empty-state"><span class="spinner"></span><p>Loading graph…</p></div>');
+  let payload;
+  try {
+    payload = await api('/graph', body);
+  } catch (e) {
+    setGraphOverlay(`<div class="empty-state"><div class="icon">&#x26A0;</div><p>Failed to load graph: ${escapeHtml(e.message)}</p></div>`);
+    return;
+  }
+
   const noteEl = document.getElementById('graph-note');
   if (noteEl) noteEl.remove();
-  if (capped) {
-    const note = document.createElement('div');
-    note.id = 'graph-note';
-    note.className = 'graph-note';
-    note.textContent = `Drawing the ${GRAPH_SEED_CAP} most-connected of ${allSeeds.length.toLocaleString()} entities — narrow with search or a type filter to see the rest`;
-    document.querySelector('#explorer .graph-area').appendChild(note);
-  }
-  const nodeIds = new Set(seeds);   // isolated seeds still appear
-  const edges = [];
-  const edgeSeen = new Set();
 
-  // Edges are DOMAIN RELATIONS only (runs_on, routes_to, depends_on, …) — never
-  // rdf:type, rdfs:* or prov:* — so the graph shows the entity-relation model,
-  // not the provenance/episode scaffolding that used to bury it. For a narrow
-  // selection an edge is included when either endpoint is a seed (1-hop
-  // neighbours keep a filtered type's relations visible); for a CAPPED view the
-  // graph is the seed-to-seed core — hub neighbourhoods would re-inflate it
-  // past readability.
-  const collectEdges = (seedOnly) => {
-    edges.length = 0;
-    edgeSeen.clear();
-    nodeIds.clear();
-    for (const iri of seeds) nodeIds.add(iri);
-    for (const e of state.domainEntities) {
-      for (const f of e._facts) {
-        if (!isRelationPred(f.predicate)) continue;
-        if (typeof f.value !== 'string' || !state.byIri.has(f.value)) continue;
-        if (state.byIri.get(f.value)._isEpisode) continue;
-        if (seedOnly ? !(seeds.has(e.iri) && seeds.has(f.value))
-                     : !(seeds.has(e.iri) || seeds.has(f.value))) continue;
-        const key = e.iri + '|' + f.predicate + '|' + f.value;
-        if (edgeSeen.has(key)) continue;
-        edgeSeen.add(key);
-        nodeIds.add(e.iri);
-        nodeIds.add(f.value);
-        edges.push({ data: { source: e.iri, target: f.value, label: shortIri(f.predicate) } });
-      }
-    }
-  };
-  collectEdges(capped);
-  // 1-hop expansion can blow a modest seed set past readability (250 code
-  // modules pull ~3,000 symbols). If it does, fall back to the seed-only core
-  // and say so — never silently draw soup.
-  const EXPANSION_LIMIT = 800;
-  if (!capped && nodeIds.size > EXPANSION_LIMIT) {
-    collectEdges(true);
-    const note = document.createElement('div');
-    note.id = 'graph-note';
-    note.className = 'graph-note';
-    note.textContent = `Neighbours hidden: expanding ${seeds.size} entities pulled in ${'>'}${EXPANSION_LIMIT} nodes — showing relations within the selection only`;
-    document.querySelector('#explorer .graph-area').appendChild(note);
-  }
-
-  const nodes = [...nodeIds].map(nodeData);
-
-  // Honest empty state — a blank canvas reads as "broken".
-  if (nodes.length === 0) {
-    if (state.cy) { state.cy.destroy(); state.cy = null; }
+  if (!payload.nodes || payload.nodes.length === 0) {
     setGraphOverlay(`<div class="empty-state"><div class="icon">&#x1F50D;</div><p>${
-      state.domainEntities.length === 0
-        ? 'No entities in the graph yet.'
-        : 'No entities match this filter.'}</p></div>`);
+      state.domainEntities.length === 0 ? 'No entities in the graph yet.' : 'No entities match this filter.'}</p></div>`);
     return;
   }
   setGraphOverlay(null);
+  gc.setData(payload, state.typeSlots || new Map());
 
-  if (state.cy) state.cy.destroy();
-
-  state.cy = cytoscape({
-    container: document.getElementById('cy'),
-    elements: { nodes, edges },
-    style: [
-      {
-        selector: 'node',
-        style: {
-          'label': 'data(label)',
-          'background-color': 'data(color)',
-          'color': '#e0e0e0',
-          'font-size': '10px',
-          'text-valign': 'bottom',
-          'text-margin-y': 4,
-          'width': 24,
-          'height': 24,
-          'border-width': 1,
-          'border-color': '#2a2a4a',
-          'text-max-width': '80px',
-          'text-wrap': 'ellipsis',
-        }
-      },
-      {
-        selector: 'node.highlighted',
-        style: {
-          'border-width': 3,
-          'border-color': '#e94560',
-          'width': 32,
-          'height': 32,
-        }
-      },
-      {
-        selector: 'edge',
-        style: {
-          'width': 1,
-          'line-color': '#2a2a4a',
-          'target-arrow-color': '#2a2a4a',
-          'target-arrow-shape': 'triangle',
-          'arrow-scale': 0.6,
-          'curve-style': 'bezier',
-          'label': 'data(label)',
-          'font-size': '7px',
-          'color': '#8892a4',
-          'text-rotation': 'autorotate',
-          'text-margin-y': -8,
-        }
-      },
-      {
-        selector: 'edge.highlighted',
-        style: {
-          'width': 2,
-          'line-color': '#e94560',
-          'target-arrow-color': '#e94560',
-        }
-      },
-    ],
-    layout: {
-      // Force-directed (cose) reveals structure; fall back to a hierarchical
-      // layout only for very large graphs — never the unreadable grid (GH#6).
-      // The seed cap keeps node counts in cose range for every default view.
-      name: nodes.length > 800 ? 'breadthfirst' : 'cose',
-      animate: false,
-      // Spread nodes further apart as the graph grows so large views stay legible.
-      nodeRepulsion: function() { return nodes.length > 200 ? 16000 : 8000; },
-      idealEdgeLength: function() { return nodes.length > 200 ? 160 : 120; },
-      nodeDimensionsIncludeLabels: true,
-    },
-    minZoom: 0.1,
-    maxZoom: 4,
-  });
-
-  state.cy.on('tap', 'node', function(evt) {
-    const nodeId = evt.target.id();
-    const ent = state.byIri.get(nodeId);
-    if (ent) selectEntity(ent);
-  });
-
-  renderLegend(nodes);
+  // Never a silent cap — say what was left out (no-silent-caps).
+  const t = payload.truncated || {};
+  if (t.of > t.shown) {
+    const note = document.createElement('div');
+    note.id = 'graph-note';
+    note.className = 'graph-note';
+    note.textContent = `Drawing the ${t.shown} most-connected of ${t.of.toLocaleString()} entities — narrow with search or a type filter to see the rest`;
+    document.querySelector('#explorer .graph-area').appendChild(note);
+  }
+  renderLegend(gc.legend());
 }
 
-// Build a color legend from the entity types currently on the canvas.
-function renderLegend(nodes) {
+// Legend for the type palette. Identity is (colour, shape) — never colour
+// alone — so it stays readable for a colour-blind reader; the swatch shows
+// both. Types past the eight-slot palette fold into one neutral "Other" row
+// rather than repeating a hue.
+function renderLegend(entries) {
   const area = document.querySelector('#explorer .graph-area');
   let legend = document.getElementById('graph-legend');
-  const typesShown = new Map();
-  for (const n of nodes) {
-    const t = n.data.type;
-    if (!t) continue;
-    if (!typesShown.has(t)) typesShown.set(t, n.data.color);
-  }
-  if (typesShown.size === 0) { if (legend) legend.remove(); return; }
+  if (!entries || entries.length === 0) { if (legend) legend.remove(); return; }
   if (!legend) {
     legend = document.createElement('details');
     legend.id = 'graph-legend';
     legend.className = 'graph-legend';
+    legend.open = true;
     area.appendChild(legend);
   }
-  legend.innerHTML = `<summary>Legend (${typesShown.size} types)</summary>` + [...typesShown.entries()]
-    .map(([t, c]) => `<div class="legend-row"><span class="legend-dot" style="background:${c}"></span>${escapeHtml(shortIri(t))}</div>`)
-    .join('');
+  const shown = entries.filter(e => !e.folded);
+  const folded = entries.filter(e => e.folded);
+  const rows = shown.map(e =>
+    `<div class="legend-row">${legendSwatch(e.color, e.shape)}${escapeHtml(e.label)} <span style="opacity:.6">${e.count}</span></div>`);
+  if (folded.length) {
+    const n = folded.reduce((a, e) => a + e.count, 0);
+    rows.push(`<div class="legend-row">${legendSwatch('#8892a4', 'circle')}Other (${folded.length} types) <span style="opacity:.6">${n}</span></div>`);
+  }
+  legend.innerHTML = `<summary>Types (${entries.length})</summary>` + rows.join('');
+}
+
+// Inline SVG mark matching the canvas shape for this slot.
+function legendSwatch(color, shape) {
+  const p = {
+    circle: '<circle cx="5.5" cy="5.5" r="4.5"/>',
+    square: '<rect x="1" y="1" width="9" height="9"/>',
+    diamond: '<path d="M5.5 0.5 10.5 5.5 5.5 10.5 0.5 5.5Z"/>',
+    triangle: '<path d="M5.5 0.5 10.5 10 0.5 10Z"/>',
+    'triangle-down': '<path d="M5.5 10.5 0.5 1 10.5 1Z"/>',
+    hexagon: '<path d="M3 0.8 8 0.8 10.5 5.5 8 10.2 3 10.2 0.5 5.5Z"/>',
+    plus: '<path d="M3.9 0.4h3.2v3.1h3.5v3.1H7.1v3.4H3.9V6.6H0.4V3.5h3.5Z"/>',
+    ring: '<path d="M5.5 1a4.5 4.5 0 1 0 0 9 4.5 4.5 0 1 0 0-9Zm0 2.6a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 1 1 0-3.8Z" fill-rule="evenodd"/>',
+  }[shape] || '<circle cx="5.5" cy="5.5" r="4.5"/>';
+  return `<svg class="legend-shape" viewBox="0 0 11 11" fill="${color}" aria-hidden="true">${p}</svg>`;
 }
 
 document.getElementById('entity-search').addEventListener('input', () => {

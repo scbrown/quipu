@@ -114,6 +114,7 @@ macro_rules! embed_handler {
 }
 
 ro_handler!(cord, quipu::tool_cord);
+ro_handler!(graph_view, quipu::tool_graph_view);
 ro_handler!(unravel, quipu::tool_unravel);
 embed_handler!(search, quipu::tool_search);
 embed_handler!(hybrid_search, quipu::tool_hybrid_search);

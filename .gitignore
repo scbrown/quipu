@@ -26,8 +26,12 @@ docs/book/book/
 quipu-ui/dist/
 quipu-ui/target/
 
-# Test fixtures (generated)
+# Test fixtures (generated). The -wal/-shm siblings carry the same data as the
+# store itself, so they are ignored too — running the server against the fixture
+# leaves them behind, and only the .db was covered (cf. the data/*.db note below).
 test-fixtures/test-store.db
+test-fixtures/*.db-wal
+test-fixtures/*.db-shm
 
 # Gas Town (added by gt)
 .runtime/

@@ -10,6 +10,7 @@ pub mod episode;
 pub mod error;
 pub mod governance;
 pub mod graph;
+pub mod graph_view;
 pub mod http_auth;
 pub mod impact;
 pub mod mcp;
@@ -68,6 +69,7 @@ pub use graph::{
     Communities, PageRankConfig, ProjectedGraph, louvain, page_rank, persist_communities, project,
     tool_project,
 };
+pub use graph_view::tool_graph_view;
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;

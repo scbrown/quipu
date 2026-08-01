@@ -273,6 +273,35 @@ curl -s localhost:3030/report -X POST \
   -d '{"hubs": 5, "surprises": 5, "questions": 6}'
 ```
 
+### `POST /graph`
+
+Render-ready node-link projection — the single payload the web UI draws from.
+
+```bash
+curl -s localhost:3030/graph -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 250}'
+```
+
+Body: optional `limit` (nodes, ranked by degree; default 250, max 2000),
+`type` (restrict to one `rdf:type` IRI), `include_episodes` (default `false`).
+
+```json
+{
+  "nodes": [{"iri": "…", "label": "kota", "type": "…/ProxmoxNode", "deg": 8}],
+  "edges": [[0, 10, "managed_by"]],
+  "types": [{"iri": "…", "label": "SystemdService", "count": 15}],
+  "truncated": {"shown": 250, "of": 1180},
+  "stats": {"nodes": 250, "edges": 612}
+}
+```
+
+`edges` address nodes by **index** into `nodes`, not by IRI — an IRI averages
+~45 bytes and would otherwise repeat at both ends of every edge. `prov:Activity`
+episodes and `rdf`/`rdfs`/`prov` scaffolding predicates are excluded by default
+so the domain graph is not buried in provenance. `truncated` always states what
+was dropped rather than silently capping.
+
 ### `POST /context`
 
 Knowledge context pipeline.

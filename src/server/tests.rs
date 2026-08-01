@@ -83,9 +83,9 @@ async fn precomputed_embedding_bypasses_the_provider() {
     );
 }
 
-/// /stats returns the generation-keyed cache when Store::latest_tx_id()
+/// /stats returns the generation-keyed cache when `Store::latest_tx_id()`
 /// is unchanged, and recomputes when it moves (a write). Both paths are proven by
-/// poisoning STATS_CACHE at a matching vs a stale generation — matching returns the
+/// poisoning `STATS_CACHE` at a matching vs a stale generation — matching returns the
 /// poison (so the scan was skipped), stale is ignored and the true stats recomputed —
 /// which needs no triple-insert plumbing and is fully deterministic.
 #[tokio::test]

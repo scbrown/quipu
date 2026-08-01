@@ -30,6 +30,10 @@ jobs:
             flags: "--no-default-features"
           - name: shacl
             flags: "--features shacl"
+          # quipu-server has required-features = ["shacl", "onnx"], so neither
+          # job above ever built it — the binary was completely unlinted.
+          - name: shacl-onnx
+            flags: "--features shacl,onnx"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

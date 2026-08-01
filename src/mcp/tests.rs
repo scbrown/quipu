@@ -1237,16 +1237,18 @@ fn test_tool_definitions() {
 
     // quipu_load_ontology is only advertised when the `owl` feature compiles in
     // its handler (hq-8wd) — otherwise the call would always fail.
-    // quipu_export subset export (quipu #36) brings the base to 27.
+    // quipu_export (#36) then quipu_graph (render-ready node-link projection)
+    // bring the base to 28.
     assert!(names.contains(&"quipu_export"));
+    assert!(names.contains(&"quipu_graph"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 28);
+        assert_eq!(defs.len(), 29);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 27);
+        assert_eq!(defs.len(), 28);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 

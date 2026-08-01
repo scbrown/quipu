@@ -15,7 +15,7 @@ use axum::{
 use serde_json::{Value as JsonValue, json};
 
 use super::tools::finish_deferred_embed;
-use super::{COMPONENTS_JS, SharedStore, UI_HTML};
+use super::{COMPONENTS_JS, GRAPH_CANVAS_JS, SharedStore, UI_HTML};
 
 pub(crate) async fn ui() -> Html<&'static str> {
     Html(UI_HTML)
@@ -25,6 +25,13 @@ pub(crate) async fn components_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript")],
         COMPONENTS_JS,
+    )
+}
+
+pub(crate) async fn graph_canvas_js() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/javascript")],
+        GRAPH_CANVAS_JS,
     )
 }
 
@@ -116,7 +123,7 @@ where
 /// /stats full-scans every triple (`SELECT ?s ?p ?o`) and builds distinct
 /// subject/predicate sets — ~1.0s at 152k triples, paid on EVERY call, which
 /// matters when a monitor polls it. The aggregate is cached and
-/// keyed on `Store::latest_tx_id()`, the same pattern as SpotlightCache: under
+/// keyed on `Store::latest_tx_id()`, the same pattern as `SpotlightCache`: under
 /// polling only the first call after a write pays the scan; the rest hold the
 /// store lock for one indexed MAX. Any write moves the generation and
 /// invalidates naturally, so the counts are exact, never stale.

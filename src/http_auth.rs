@@ -66,6 +66,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/",
     "/ui",
     "/quipu-components.js",
+    "/graph-canvas.js",
     "/health",
     "/version",
     "/stats",
@@ -74,6 +75,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/metrics",
     "/query",
     "/cord",
+    // Render-ready node-link projection for the UI. Reads the fact log only.
+    "/graph",
     "/unravel",
     "/validate",
     "/search",

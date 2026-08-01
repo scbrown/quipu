@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     response::{Html, IntoResponse},
 };
 use serde_json::{Value as JsonValue, json};
