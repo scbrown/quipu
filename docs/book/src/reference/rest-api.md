@@ -196,6 +196,50 @@ retracted facts), and the identity accounting — `on_orphan` (the policy applie
 > crew identity (hq-otm) land, retraction should be gated to an authorized
 > principal, not merely the same token that permits assertion.
 
+### `POST /resolve`
+
+Ask what entity resolution *would* say about a name, without writing anything.
+
+Returns the same candidate list the ingest path computes, so "is this a duplicate
+of something we already have?" can be answered **before** minting the entity.
+
+```bash
+curl -s localhost:3030/resolve -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"name": "example-service", "properties": {"type": "DatabaseService"}}'
+
+# {"candidates":[{"iri":"http://example.org/ontology/example-service",
+#                "score":0.9,"matched_on":"canonical_name:jaro_winkler:0.90"}],
+#  "count":1,"has_matches":true}
+```
+
+`name` is required. `properties` (object), `top_k` and `threshold` are optional;
+`top_k` and `threshold` default to `[quipu.resolution]` config, so this route and
+the ingest path agree by construction rather than by convention.
+
+Both matchers run: Jaro-Winkler over `rdfs:label` (`matched_on:
+canonical_name:jaro_winkler:<score>`) **and** vector similarity when an embedding
+provider is configured (`matched_on: embedding:<score>`). The embedding half is
+the reason a client-side name check is not a substitute.
+
+Notes:
+
+- **It does not write — and that is guaranteed by a test, not by the type.** The
+  handler takes a `&Store`, but do not read that as a read-only capability:
+  `Store` writes through `&self` methods via interior mutability, so a `&Store`
+  handler *can* commit. Several routes registered the same way do write, which is
+  why `/overlay/create` sits in `WRITE_ENDPOINTS` despite its signature. What
+  actually holds this route read-only is the explicit assertion in
+  `tool_resolve_entity_is_a_genuine_read_commits_nothing`.
+- **It is not a write endpoint** (absent from `http_auth::WRITE_ENDPOINTS`), so it
+  needs no bearer token and answers normally on a `read_only = true` server —
+  where `POST /episode` returns 403.
+- **It does not require `[quipu.resolution].enabled`.** Resolution being off
+  disables the *ingest-time* hints; this route still answers.
+- Not to be confused with `POST /reconcile` — the W3C Reconciliation API, which
+  has its own substring scoring on a 0-100 scale and does not consult embeddings.
+  (It is routed but undocumented here, as are `/spotlight` and `/fragments`.)
+
 ### `POST /shapes`
 
 Manage persistent SHACL shapes.
