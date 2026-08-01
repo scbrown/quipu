@@ -38,7 +38,11 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/book/book/html
+          # `docs/book/book`, not `docs/book/book/html`: mdbook nests output
+          # under a per-renderer directory only when SEVERAL renderers are
+          # registered. book.toml used to register linkcheck as a second one,
+          # which is why the old path had /html on it.
+          path: docs/book/book
 
   deploy:
     name: Deploy to GitHub Pages

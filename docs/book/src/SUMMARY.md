@@ -35,6 +35,19 @@
 - [Reasoner](reference/reasoner.md)
 - [Rust API](reference/api.md)
 
+# Architecture
+
+- [EAVT Fact Log](architecture/eavt.md)
+- [RDF Data Model](architecture/rdf.md)
+- [SPARQL Engine](architecture/sparql.md)
+- [SHACL Validation](architecture/shacl.md)
+- [Episode Ingestion](architecture/episodes.md)
+- [Vector Search](architecture/vector-search.md)
+- [LanceDB Vector Backend](architecture/lancedb.md)
+- [Context Pipeline](architecture/context-pipeline.md)
+- [Graph Projection](architecture/graph-projection.md)
+- [Federation](architecture/federation.md)
+
 # Recipes
 
 - [Impact Analysis](recipes/impact-analysis.md)

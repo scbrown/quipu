@@ -23,6 +23,9 @@ site-url = "/quipu/"
 [output.html.search]
 enable = true
 
-[output.linkcheck]
-warning-policy = "warn"
-optional = true
+# NO [output.linkcheck]. mdbook-linkcheck 0.7.7 cannot parse the RenderContext
+# that mdbook 0.5.x emits ("missing field `sections`") and exits non-zero, and
+# `optional = true` only forgives a MISSING binary — not a failing one. So the
+# stanza was inert purely because CI never installed the tool, and would have
+# hard-failed `mdbook build` for anyone who did. Re-add it only once
+# mdbook-linkcheck supports the mdbook version pinned here.

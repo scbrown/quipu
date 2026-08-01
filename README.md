@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-1.85+-orange.svg" alt="Rust 1.85+"/></a>
-  <a href="docs/book/src/SUMMARY.md"><img src="https://img.shields.io/badge/docs-mdbook-green.svg" alt="Documentation"/></a>
+  <a href="https://scbrown.github.io/quipu/"><img src="https://img.shields.io/badge/docs-mdbook-green.svg" alt="Documentation"/></a>
 </p>
 
 > *Cords are entities. Knots are facts. Colors are types. Agents are the readers.* 🧶
@@ -293,15 +293,19 @@ enabling hybrid queries that span both domains.
 
 ## 📖 Documentation
 
-Full documentation is available as an mdbook:
+**📚 [scbrown.github.io/quipu](https://scbrown.github.io/quipu/)** — the full book,
+published from `main` on every docs change.
+
+Or build it locally:
 
 ```bash
-# Build and serve locally
-cargo install mdbook
+cargo install mdbook mdbook-mermaid
 mdbook serve docs/book
 ```
 
-See [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md) for the table of contents.
+The table of contents lives in [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md).
+Design notes that are not part of the book (named graphs, federation, the
+reasoner) are in [docs/design/](docs/design/).
 
 ## 📋 Feature Matrix
 
