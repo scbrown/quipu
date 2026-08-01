@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.14] - 2026-08-01
+
+### Fixed
+
+- *(store)* Scope the committed read path to ROOT (#56)([e3e13c6](https://github.com/scbrown/quipu/commit/e3e13c64f206a296dfb01bc446834e4461ebee36))
+
 ## [0.3.13] - 2026-08-01
 
 ### Added
