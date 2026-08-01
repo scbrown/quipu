@@ -878,7 +878,7 @@ impl Store {
         let as_object = Value::Ref(entity).to_bytes();
         let mut stmt = self.conn.prepare(
             "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
-             WHERE f.op = 1 AND f.valid_to IS NULL \
+             WHERE f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
                AND (f.e = ?1 OR f.v = ?2) \
                AND (t.source IS NULL OR t.source <> ?3) \
              LIMIT 1",
@@ -898,7 +898,7 @@ impl Store {
         };
         let mut stmt = self.conn.prepare(
             "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
-             WHERE f.op = 1 AND f.valid_to IS NULL \
+             WHERE f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
                AND f.e = ?1 AND f.a = ?2 \
                AND (t.source IS NULL OR t.source <> ?3) \
              LIMIT 1",
@@ -908,14 +908,16 @@ impl Store {
 
     // -- Read path --
 
-    /// Return the current state: all asserted facts not yet retracted.
+    /// Return the current state: ROOT's asserted facts not yet retracted.
+    ///
+    /// **ROOT-scoped** (quipu #56). This filtered `op`/`valid_to` and nothing
+    /// else, so once overlays existed it spanned every tenant's graph — the
+    /// reasoner derived from overlay premises, `PageRank` counted them, and a
+    /// full export leaked them into a ROOT dump. Committed reads are
+    /// ROOT-scoped (Decision 4); use [`Store::current_facts_in_graph`] to read
+    /// a specific graph.
     pub fn current_facts(&self) -> Result<Vec<Fact>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
-             WHERE op = 1 AND valid_to IS NULL \
-             ORDER BY e, a",
-        )?;
-        Self::collect_facts(&mut stmt, params![])
+        self.current_facts_in_graph(crate::schema::ROOT_GRAPH)
     }
 
     /// Current asserted facts in ONE graph (quipu #36 subset export). `g = 0` is
@@ -931,20 +933,32 @@ impl Store {
         Self::collect_facts(&mut stmt, params![g])
     }
 
-    /// Return facts for a specific entity (current state).
+    /// Return ROOT's facts for a specific entity (current state).
+    ///
+    /// **ROOT-scoped** (quipu #56). This is the selection `retract_triples`
+    /// runs before committing retraction datums to ROOT, so a cross-graph read
+    /// here meant a `/retract` could retract another graph's facts *into* ROOT
+    /// — the exact "a retraction in graph A does not touch graph B" invariant
+    /// #36 claims.
     pub fn entity_facts(&self, entity: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
-             WHERE e = ?1 AND op = 1 AND valid_to IS NULL \
+             WHERE e = ?1 AND op = 1 AND valid_to IS NULL AND g = ?2 \
              ORDER BY a",
         )?;
-        Self::collect_facts(&mut stmt, params![entity])
+        Self::collect_facts(&mut stmt, params![entity, crate::schema::ROOT_GRAPH])
     }
 
-    /// Time-travel query: return facts as they were at a given point.
+    /// Time-travel query: return ROOT's facts as they were at a given point.
+    ///
+    /// **ROOT-scoped** (quipu #56) — time travel scopes *within* a graph
+    /// (`docs/design/named-graphs.md` §1).
     pub fn facts_as_of(&self, as_of: &AsOf) -> Result<Vec<Fact>> {
-        let mut sql =
-            String::from("SELECT e, a, v, tx, valid_from, valid_to, op FROM facts WHERE op = 1");
+        // `g = 0` is a literal, not a bound param, so it cannot disturb the
+        // positional ?1/?2 indices the tx/valid_at clauses below depend on.
+        let mut sql = String::from(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts WHERE op = 1 AND g = 0",
+        );
         if as_of.tx.is_some() {
             sql.push_str(" AND tx <= ?1");
         }
@@ -966,7 +980,10 @@ impl Store {
     }
 
     /// Detect contradictions: overlapping valid-time intervals for the same
-    /// entity+attribute pair.
+    /// entity+attribute pair, **within ROOT** (quipu #56).
+    ///
+    /// Un-scoped, an overlay asserting a different value for an entity+attribute
+    /// would read as a contradiction in its committed parent.
     pub fn detect_contradictions(&self, entity: i64, attribute: i64) -> Result<Vec<(Fact, Fact)>> {
         let mut stmt = self.conn.prepare(
             "SELECT f1.e, f1.a, f1.v, f1.tx, f1.valid_from, f1.valid_to, f1.op, \
@@ -975,6 +992,7 @@ impl Store {
              JOIN facts f2 ON f1.e = f2.e AND f1.a = f2.a \
              WHERE f1.e = ?1 AND f1.a = ?2 \
                AND f1.op = 1 AND f2.op = 1 \
+               AND f1.g = 0 AND f2.g = 0 \
                AND f1.rowid < f2.rowid \
                AND f1.v != f2.v \
                AND f1.valid_from < COALESCE(f2.valid_to, '9999-12-31') \
@@ -1013,10 +1031,10 @@ impl Store {
     pub fn entity_history(&self, entity: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
-             WHERE e = ?1 \
+             WHERE e = ?1 AND g = ?2 \
              ORDER BY tx, a",
         )?;
-        Self::collect_facts(&mut stmt, params![entity])
+        Self::collect_facts(&mut stmt, params![entity, crate::schema::ROOT_GRAPH])
     }
 
     /// List all transactions ordered by id.
@@ -1066,10 +1084,13 @@ impl Store {
     pub fn attribute_history(&self, entity: i64, attribute: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
-             WHERE e = ?1 AND a = ?2 \
+             WHERE e = ?1 AND a = ?2 AND g = ?3 \
              ORDER BY tx",
         )?;
-        Self::collect_facts(&mut stmt, params![entity, attribute])
+        Self::collect_facts(
+            &mut stmt,
+            params![entity, attribute, crate::schema::ROOT_GRAPH],
+        )
     }
 
     // -- Internal --

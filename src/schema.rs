@@ -1,3 +1,11 @@
+/// The reserved ROOT / default committed graph (quipu #36).
+///
+/// Term ids are rowids and always `>= 1`, so `0` can never collide with a named
+/// graph's id. Committed reads are ROOT-scoped by default (Decision 4, see
+/// `docs/design/named-graphs.md` §4) — a read that omits this predicate spans
+/// every tenant overlay, which is the defect quipu #56 fixed.
+pub const ROOT_GRAPH: i64 = 0;
+
 /// SQL statements for initialising the Quipu fact log schema.
 pub const INIT_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS terms (

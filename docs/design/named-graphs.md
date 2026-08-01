@@ -10,8 +10,9 @@
 > **Remaining:** property paths and RDFS inference are ROOT-default-only (they
 > **fail loud** elsewhere); the write side stays on the overlay path +
 > `/episode` `graph` field (no `graph` param on `/knot` yet). These keep this 🟡.
-> **§6–§7 are now designed and not yet built** — including a live cross-graph
-> defect in `Store::current_facts()` (§7.1) that should be fixed first.
+> **§6 is designed and not yet built.** §7's cross-graph defect (§7.1) is
+> **fixed** — quipu #56 ROOT-scoped the whole committed read path; the reasoner
+> and SHACL scoping decisions in §7.2–§7.3 remain to build.
 
 **Status:** **Partial — the subset-export / federation foundation.** Named-graph
 support is what lets a consumer *partition* the store into first-class subgraphs
@@ -181,7 +182,7 @@ matching keeps that today via §5's export semantics; the escape hatch is
 
 ## 7. SHACL and reasoner scope (designed, not yet built)
 
-### 7.1 The bug this uncovers
+### 7.1 The bug this uncovered — ✅ fixed (quipu #56)
 
 `Store::current_facts()` filters `op = 1 AND valid_to IS NULL` and **nothing
 else** — it has no `g` predicate, so it returns facts from *every* graph. Since
@@ -197,15 +198,25 @@ cross-graph today:
 | `reconcile/mod.rs:233` | entity resolution matches across tenants |
 
 This is the same class of defect as #53 — silent, and each layer looks healthy.
-It is not hypothetical: it is live the moment a second graph exists. **This
-should be fixed ahead of the rest of §7**, and it is small: `current_facts()`
-gains a ROOT filter, and callers that genuinely want a specific graph use the
-already-existing `current_facts_in_graph(g)`.
+It was live the moment a second graph existed.
 
-Naming it precisely: `current_facts()` becomes `current_facts()` = ROOT-scoped
-(matching the §4 default-graph decision that committed reads are ROOT-scoped),
-with `current_facts_all_graphs()` added only if a caller is found that wants the
-old behaviour. None currently does.
+Fixing it turned up a **write**-path case worse than the read leak:
+`retract_triples` selects via `entity_facts(entity)` and then commits the
+retraction datums with `transact(...)`, which writes to ROOT. Un-scoped, a
+`/retract` on an entity that also had overlay facts generated retractions for
+*another graph's* facts and wrote them into ROOT — exactly the "a retraction in
+graph A does not touch graph B" invariant #36 claims to hold.
+
+**Resolution (#56):** the whole shared committed read path is ROOT-scoped —
+`current_facts`, `entity_facts`, `facts_as_of`, `entity_history`,
+`attribute_history`, `detect_contradictions`, and the `has_surviving_*` orphan
+guards. `schema::ROOT_GRAPH` replaces the inline `0`. Callers wanting a specific
+graph use `current_facts_in_graph(g)`; no caller wanted the old cross-graph
+behaviour, so no `*_all_graphs` variant was added.
+
+`overlays.rs` is unaffected — it carries its own graph-aware SQL and never went
+through these functions. That is asserted by a regression test, and each of the
+seven scoping tests fails without the fix.
 
 ### 7.2 SHACL shape targeting
 
@@ -234,12 +245,14 @@ decision is therefore about the **write gate**, not the validator:
 
 ### 7.4 Acceptance
 
-- [ ] `current_facts()` is ROOT-scoped; a store with an overlay returns the same
-      facts it returned before the overlay existed
-- [ ] PageRank, export, OWL parse and reconcile are unaffected by overlay content
+- [x] `current_facts()` is ROOT-scoped; a store with an overlay returns the same
+      facts it returned before the overlay existed (#56)
+- [x] A ROOT retraction does not touch an overlay's facts (#56)
+- [x] The half-ghost guard does not count overlay facts as survivors (#56)
+- [x] Time travel and contradiction detection are ROOT-scoped (#56)
+- [x] Overlay compose still sees the overlay (regression guard, #56)
 - [ ] A ruleset run against a branch writes its conclusions into that branch
 - [ ] An overlay asserting a laxer shape does not relax validation of its parent
-- [ ] Each of the five `current_facts()` callers above has a graph-scoping test
 
 ## 8. Scope boundaries / follow-ups (honest)
 

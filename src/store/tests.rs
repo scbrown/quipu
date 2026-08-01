@@ -1736,3 +1736,222 @@ fn retract_refuses_to_orphan_the_last_type() {
         "retracting an entity whole removes identity AND references — no ghost"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Committed reads are ROOT-scoped (quipu #56)
+//
+// Every one of these fails without the `g` predicate on the shared read path.
+// They were invisible before because every other fixture is ROOT-only, so the
+// cross-graph reads were correct by accident.
+// ---------------------------------------------------------------------------
+
+/// ROOT holds one fact; a tenant overlay asserts another on the same entity.
+/// Returns `(store, entity, root_attr, overlay_attr)`.
+fn store_with_tenant_overlay() -> (Store, i64, i64, i64) {
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://ex/svc").unwrap();
+    let root_attr = store.intern("http://ex/root-attr").unwrap();
+    let ov_attr = store.intern("http://ex/overlay-attr").unwrap();
+
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: root_attr,
+                value: Value::Str("ROOT".into()),
+                valid_from: "2026-01-01T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    let ov = store.overlay_create("http://ex/graph/tenant-1", 0).unwrap();
+    store
+        .overlay_write(
+            ov,
+            Op::Assert,
+            e,
+            ov_attr,
+            Value::Str("TENANT".into()),
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+
+    (store, e, root_attr, ov_attr)
+}
+
+#[test]
+fn current_facts_is_root_scoped() {
+    // The headline of #56: the reasoner, PageRank, export, OWL parse and
+    // reconcile all read through this. Un-scoped it returned 2.
+    let (store, _e, root_attr, _ov) = store_with_tenant_overlay();
+    let facts = store.current_facts().unwrap();
+    assert_eq!(
+        facts.len(),
+        1,
+        "current_facts must not see the tenant overlay: {facts:?}"
+    );
+    assert_eq!(facts[0].attribute, root_attr);
+}
+
+#[test]
+fn entity_facts_is_root_scoped() {
+    let (store, e, root_attr, _ov) = store_with_tenant_overlay();
+    let facts = store.entity_facts(e).unwrap();
+    assert_eq!(facts.len(), 1, "entity_facts must not see the overlay");
+    assert_eq!(facts[0].attribute, root_attr);
+}
+
+#[test]
+fn retraction_in_root_does_not_touch_an_overlay() {
+    // #36's stated invariant, which did not hold: retract_triples selected via
+    // the cross-graph entity_facts and then committed the datums to ROOT, so
+    // retracting the entity whole produced retractions for the OVERLAY's fact
+    // and wrote them into ROOT.
+    let (mut store, e, _root_attr, ov_attr) = store_with_tenant_overlay();
+
+    let (_tx, count) = store
+        .retract_triples(e, None, None, "2026-01-03T00:00:00Z", None, true)
+        .unwrap();
+    assert_eq!(count, 1, "only ROOT's single fact is retractable from ROOT");
+
+    // The overlay's own fact is untouched in its own graph.
+    let ov_g = store.lookup("http://ex/graph/tenant-1").unwrap().unwrap();
+    let ov_facts = store.current_facts_in_graph(ov_g).unwrap();
+    assert!(
+        ov_facts.iter().any(|f| f.attribute == ov_attr),
+        "the overlay's fact must survive a ROOT retraction: {ov_facts:?}"
+    );
+}
+
+#[test]
+fn half_ghost_guard_does_not_count_overlay_facts_as_survivors() {
+    // The last-rdf:type guard refuses to strip a type while OTHER facts on the
+    // entity survive. Un-scoped, a tenant overlay's fact counted as a survivor,
+    // so an overlay could block a legitimate ROOT retraction.
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://ex/svc").unwrap();
+    let type_id = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    let ov_attr = store.intern("http://ex/overlay-attr").unwrap();
+
+    // ROOT holds ONLY the rdf:type, so retracting it leaves no ghost.
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: type_id,
+                value: Value::Str("http://ex/Service".into()),
+                valid_from: "2026-01-01T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    let ov = store.overlay_create("http://ex/graph/tenant-1", 0).unwrap();
+    store
+        .overlay_write(
+            ov,
+            Op::Assert,
+            e,
+            ov_attr,
+            Value::Str("TENANT".into()),
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+
+    let (_tx, count) = store
+        .retract_triples(e, Some(type_id), None, "2026-01-03T00:00:00Z", None, false)
+        .expect("no ROOT fact survives, so this is not a half-ghost");
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn entity_history_is_root_scoped() {
+    let (store, e, _root_attr, _ov) = store_with_tenant_overlay();
+    let hist = store.entity_history(e).unwrap();
+    assert_eq!(
+        hist.len(),
+        1,
+        "history is per-graph; the overlay write is not ROOT history: {hist:?}"
+    );
+}
+
+#[test]
+fn facts_as_of_is_root_scoped() {
+    let (store, _e, _root_attr, _ov) = store_with_tenant_overlay();
+    let facts = store
+        .facts_as_of(&AsOf {
+            tx: None,
+            valid_at: Some("2026-06-01T00:00:00Z".into()),
+        })
+        .unwrap();
+    assert_eq!(
+        facts.len(),
+        1,
+        "time travel scopes within a graph (named-graphs.md §1): {facts:?}"
+    );
+}
+
+#[test]
+fn contradiction_detection_is_root_scoped() {
+    // An overlay asserting a different value for the same (e, a) is an
+    // override, not a contradiction in its committed parent.
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://ex/svc").unwrap();
+    let a = store.intern("http://ex/status").unwrap();
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("up".into()),
+                valid_from: "2026-01-01T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    let ov = store.overlay_create("http://ex/graph/tenant-1", 0).unwrap();
+    store
+        .overlay_write(
+            ov,
+            Op::Assert,
+            e,
+            a,
+            Value::Str("down".into()),
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+
+    let pairs = store.detect_contradictions(e, a).unwrap();
+    assert!(
+        pairs.is_empty(),
+        "an overlay override is not a ROOT contradiction: {pairs:?}"
+    );
+}
+
+#[test]
+fn compose_view_still_sees_the_overlay() {
+    // The regression guard for the fix: overlays.rs carries its own
+    // graph-aware SQL, so ROOT-scoping the shared read path must not blind it.
+    let (store, _e, root_attr, ov_attr) = store_with_tenant_overlay();
+    let ov_g = store.lookup("http://ex/graph/tenant-1").unwrap().unwrap();
+    let view = store.compose_view(ov_g).unwrap();
+    let attrs: std::collections::BTreeSet<i64> = view.iter().map(|f| f.attribute).collect();
+    assert!(attrs.contains(&ov_attr), "overlay assert present in view");
+    assert!(
+        attrs.contains(&root_attr),
+        "root fact falls through to view"
+    );
+}
