@@ -70,6 +70,38 @@ pub struct KnowledgeSummary {
     pub total_facts: usize,
     pub direct_hits: usize,
     pub linked_additions: usize,
+    /// Whether semantic retrieval could have contributed at all (quipu #53).
+    pub embeddings: EmbeddingStatus,
+}
+
+/// Whether the store can answer semantically, reported alongside every context
+/// response (quipu #53).
+///
+/// Without this, an empty `entities` list is ambiguous: it reads as "nothing in
+/// the graph matched" when the real cause may be that no provider is attached,
+/// or that the graph was loaded with `quipu knot` (which does not embed) and so
+/// holds no vectors. Both are silent at every other layer, so the answer has to
+/// travel with the result rather than sit in a log the caller cannot see.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EmbeddingStatus {
+    /// An `EmbeddingProvider` is attached to the store.
+    pub configured: bool,
+    /// How many entities currently carry an embedding. Zero with
+    /// `configured: true` means the store was never embedded — run
+    /// `quipu-server --embed-backfill`.
+    pub embedded_entities: usize,
+}
+
+impl EmbeddingStatus {
+    /// Read the store's current embedding capability.
+    fn of(store: &Store) -> Self {
+        Self {
+            configured: store.embedding_provider().is_some(),
+            // A count failure is itself "we cannot show any vectors", so it
+            // reports zero rather than failing the whole context request.
+            embedded_entities: store.vector_store().vector_count().unwrap_or(0),
+        }
+    }
 }
 
 /// Configuration for the context pipeline.
@@ -247,6 +279,7 @@ impl<'a> ContextPipeline<'a> {
                 total_facts,
                 direct_hits: direct_count,
                 linked_additions: linked_count,
+                embeddings: EmbeddingStatus::of(self.store),
             },
         })
     }

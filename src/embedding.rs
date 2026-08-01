@@ -36,6 +36,30 @@ pub trait EmbeddingProvider: Send + Sync {
     fn dimension(&self) -> usize;
 }
 
+/// What to configure when no [`EmbeddingProvider`] is attached (quipu #53).
+///
+/// "No embedding provider configured" on its own sent a user through the
+/// `--features onnx` rebuild, the model download and the config file one at a
+/// time, because the error named none of them. Every site that discovers a
+/// missing provider appends this, so the fix is in the message rather than in
+/// the reader's head.
+pub const NO_PROVIDER_HELP: &str = "\
+no embedding provider configured — semantic search is unavailable.
+
+Building with `--features onnx` supplies the ONNX RUNTIME only; it does not
+supply a model. A provider needs BOTH model files on disk AND the paths to
+them in `.bobbin/config.toml`:
+
+    [quipu.embedding]
+    auto_embed = true
+    model_path = \"models/all-MiniLM-L6-v2/onnx/model.onnx\"
+    tokenizer_path = \"models/all-MiniLM-L6-v2/tokenizer.json\"
+    dimension = 384
+
+Note that `quipu knot` does NOT embed — only `/episode` writes auto-embed.
+Run `quipu-server --embed-backfill` once after knotting to embed a store
+loaded from Turtle. See docs/book/src/concepts/embeddings.md.";
+
 /// Build embeddable text for an entity from its current facts.
 ///
 /// Text is constructed in priority order:

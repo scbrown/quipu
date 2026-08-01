@@ -140,6 +140,12 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
 | `valid_at` | No | Temporal filter |
+
+Requires an embedding provider when called with `query` and no `embedding`;
+without one it errors naming the missing `[quipu.embedding]` configuration.
+The response carries an `embeddings` block (`configured`, `embedded_entities`)
+so zero results are distinguishable from an unembedded store — see
+[Embeddings and Semantic Search](../concepts/embeddings.md).
 | `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label, **not** an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope) |
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
 
@@ -156,6 +162,12 @@ optional.
 | `sparql` | No | SPARQL pre-filter query (enables predicate pushdown) |
 | `limit` | No | Max results (default: 10) |
 | `valid_at` | No | Temporal filter |
+
+Requires an embedding provider when called with `query` and no `embedding`;
+without one it errors naming the missing `[quipu.embedding]` configuration.
+The response carries an `embeddings` block (`configured`, `embedded_entities`)
+so zero results are distinguishable from an unembedded store — see
+[Embeddings and Semantic Search](../concepts/embeddings.md).
 
 ### `quipu_project`
 
@@ -187,6 +199,9 @@ Unified knowledge context pipeline.
 | `query` | Yes | Search query string |
 | `max_entities` | No | Max entities (default from pipeline config) |
 | `expand_links` | No | Follow relationships to linked entities |
+
+The `summary` includes an `embeddings` block (`configured`,
+`embedded_entities`) reporting whether semantic retrieval was possible.
 
 ### `quipu_report`
 

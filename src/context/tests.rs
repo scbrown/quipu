@@ -314,3 +314,93 @@ fn unified_search_no_provider_falls_back_to_text_only() {
     let result = tool_unified_search(&store, &input).unwrap();
     assert!(result["count"].as_u64().unwrap() >= 1);
 }
+
+// ---------------------------------------------------------------------------
+// Embedding status on the retrieval path (quipu #53)
+// ---------------------------------------------------------------------------
+
+/// THE silent-empty path: `quipu knot` (Turtle ingest) does not embed, so a
+/// store loaded that way holds no vectors and semantic retrieval can return
+/// nothing at all. Before #53 that was indistinguishable from "no match".
+#[test]
+fn knot_then_context_reports_that_nothing_is_embedded() {
+    // Exactly what `quipu knot alphax.ttl` does: ingest Turtle, no embedding.
+    let store = setup_test_store();
+    let ctx = ContextPipeline::new(&store, ContextPipelineConfig::default())
+        .query("facility that improves economy")
+        .unwrap();
+
+    assert!(
+        ctx.entities.is_empty(),
+        "the semantic query matches nothing lexically — the empty case under test"
+    );
+    assert!(
+        !ctx.summary.embeddings.configured,
+        "no provider is attached to a knotted store"
+    );
+    assert_eq!(
+        ctx.summary.embeddings.embedded_entities, 0,
+        "knot writes facts but never embeddings, so a caller can tell \
+         'never embedded' from 'no match'"
+    );
+}
+
+#[test]
+fn context_reports_configured_provider() {
+    let mut store = setup_test_store();
+    store.set_embedding_provider(Arc::new(TestEmbedder));
+    let ctx = ContextPipeline::new(&store, ContextPipelineConfig::default())
+        .query("traefik")
+        .unwrap();
+
+    assert!(
+        ctx.summary.embeddings.configured,
+        "an attached provider is reported as configured"
+    );
+    assert!(
+        !ctx.entities.is_empty(),
+        "lexical retrieval still works without any vectors"
+    );
+}
+
+#[test]
+fn tool_context_exposes_embedding_status() {
+    let store = setup_test_store();
+    let result = tool_context(&store, &serde_json::json!({"query": "nothing here"})).unwrap();
+
+    let embeddings = &result["summary"]["embeddings"];
+    assert_eq!(
+        embeddings["configured"].as_bool(),
+        Some(false),
+        "/context must answer 'was semantic retrieval even possible' in the response body"
+    );
+    assert_eq!(embeddings["embedded_entities"].as_u64(), Some(0));
+}
+
+#[test]
+fn hybrid_search_without_provider_names_the_missing_config() {
+    let store = setup_test_store();
+    let err =
+        crate::mcp::tools::tool_hybrid_search(&store, &serde_json::json!({"query": "traefik"}))
+            .expect_err("no provider is attached, and no embedding was supplied");
+    let msg = err.to_string();
+
+    // The point of #53: the error has to name what to configure, not merely
+    // state that something is unconfigured.
+    assert!(
+        msg.contains("[quipu.embedding]"),
+        "names the config block: {msg}"
+    );
+    assert!(
+        msg.contains("model_path"),
+        "names the model path key: {msg}"
+    );
+    assert!(
+        msg.contains("tokenizer_path"),
+        "names the tokenizer path key: {msg}"
+    );
+    assert!(
+        msg.contains("RUNTIME"),
+        "distinguishes the ONNX runtime from a model: {msg}"
+    );
+}

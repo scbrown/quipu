@@ -207,10 +207,25 @@ async fn main() {
 
     if args.iter().any(|a| a == "--embed-backfill") {
         eprintln!("Running embedding backfill for all entities...");
-        let mut s = state.lock();
-        match backfill_embeddings(&mut s) {
+        let outcome = {
+            let mut s = state.lock();
+            backfill_embeddings(&mut s)
+        };
+        match outcome {
             Ok(count) => eprintln!("Backfill complete: {count} entities embedded"),
-            Err(e) => eprintln!("Backfill error: {e}"),
+            // The flag is an EXPLICIT request for a capability. Serving on
+            // without it produced a healthy-looking process whose semantic
+            // search silently returned nothing (quipu #53) — the operator
+            // asked for embeddings, so failing to provide them is fatal, not
+            // a line of log noise scrolled past at boot.
+            Err(e) => {
+                eprintln!("error: --embed-backfill failed: {e}");
+                eprintln!(
+                    "refusing to start without the capability that was explicitly requested; \
+                     drop --embed-backfill to start anyway"
+                );
+                std::process::exit(1);
+            }
         }
     }
 
@@ -931,9 +946,7 @@ async fn validate(
 }
 
 fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Result<usize, String> {
-    let provider = store
-        .embedding_provider()
-        .ok_or("No embedding provider configured")?;
+    let provider = store.embedding_provider().ok_or(quipu::NO_PROVIDER_HELP)?;
     let result = quipu::sparql_query(store, "SELECT DISTINCT ?s WHERE { ?s ?p ?o }")
         .map_err(|e| format!("{e}"))?;
     let entity_ids: Vec<i64> = result

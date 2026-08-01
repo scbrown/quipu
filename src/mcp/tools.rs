@@ -852,11 +852,10 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
     let embedding = match (explicit_embedding, query_text) {
         (Some(emb), _) => emb,
         (None, Some(text)) => store.embed_query(text)?.ok_or_else(|| {
-            Error::InvalidValue(
-                "no embedding provider configured; supply a pre-computed 'embedding' or \
-                 attach an EmbeddingProvider to the store"
-                    .into(),
-            )
+            Error::InvalidValue(format!(
+                "{}\n\nAlternatively, supply a pre-computed 'embedding' array.",
+                crate::embedding::NO_PROVIDER_HELP
+            ))
         })?,
         (None, None) => {
             return Err(Error::InvalidValue(
@@ -945,5 +944,12 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
         "count": results.len(),
         "sparql_candidates": candidate_iris.as_ref().map(std::vec::Vec::len),
         "pushdown_filter": pushdown,
+        // quipu #53: zero results with `embedded_entities: 0` means the store
+        // was never embedded (e.g. loaded with `quipu knot`, which does not
+        // embed) — not that nothing matched.
+        "embeddings": {
+            "configured": store.embedding_provider().is_some(),
+            "embedded_entities": store.vector_store().vector_count().unwrap_or(0),
+        },
     }))
 }

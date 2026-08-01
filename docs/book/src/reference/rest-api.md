@@ -283,6 +283,18 @@ curl -s localhost:3030/context -X POST \
   -d '{"query": "traefik", "max_entities": 10}'
 ```
 
+The `summary` carries an `embeddings` block reporting whether semantic
+retrieval was possible at all, so an empty `entities` list is not ambiguous:
+
+```json
+"embeddings": { "configured": true, "embedded_entities": 2579 }
+```
+
+`configured: false` means no embedding provider is attached;
+`embedded_entities: 0` with `configured: true` means the store was never
+embedded (`quipu knot` does not embed — run a backfill). See
+[Embeddings and Semantic Search](../concepts/embeddings.md).
+
 ### `POST /unified_search`
 
 Unified knowledge search (text + optional vector); results tagged
@@ -356,7 +368,10 @@ List transactions in the store.
 
 ### `POST /embed_backfill`
 
-Backfill embeddings for entities that lack them.
+Backfill embeddings for entities that lack them. Returns
+`{"status": "error", ...}` when no embedding provider is configured; the
+`--embed-backfill` startup flag instead exits non-zero rather than serving
+without the capability it was asked for.
 
 ### `GET /preview/{iri}`
 

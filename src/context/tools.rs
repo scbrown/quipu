@@ -134,7 +134,10 @@ pub fn tool_unified_search(store: &Store, input: &serde_json::Value) -> Result<s
             "total_entities": ctx.summary.total_entities,
             "total_facts": ctx.summary.total_facts,
             "direct_hits": ctx.summary.direct_hits,
-            "linked_additions": ctx.summary.linked_additions
+            "linked_additions": ctx.summary.linked_additions,
+            // quipu #53: tells a caller with zero results whether semantic
+            // retrieval was even possible, without reading the server log.
+            "embeddings": ctx.summary.embeddings
         }
     }))
 }
