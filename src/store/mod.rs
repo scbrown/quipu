@@ -104,7 +104,7 @@ pub struct PendingWriteEvent {
 
 /// A summary of what changed in a committed transaction.
 ///
-/// Built by [`Store::transact`] after the SQLite commit succeeds and
+/// Built by [`Store::transact`] after the `SQLite` commit succeeds and
 /// delivered to every registered [`TransactObserver`]. Observers can
 /// inspect which facts were asserted or retracted and decide whether to
 /// react (e.g. re-derive affected rules).

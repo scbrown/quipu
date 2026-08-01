@@ -123,7 +123,7 @@ pub(super) fn transitive_closure(pairs: &[(String, String)]) -> HashMap<String, 
     result
 }
 
-/// Collect all (entity, class_id) pairs from rdf:type facts.
+/// Collect all (entity, `class_id`) pairs from rdf:type facts.
 pub(super) fn collect_type_facts(store: &Store, rdf_type_id: i64) -> Result<Vec<(i64, i64)>> {
     let facts = store.current_facts()?;
     let mut type_facts = Vec::new();

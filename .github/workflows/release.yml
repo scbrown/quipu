@@ -3,6 +3,14 @@ name: Release
 on:
   push:
     branches: [main]
+  # Manual re-run of the artifact build for an existing tag, e.g. when a
+  # release job failed after the tag was already pushed. Skips release-plz.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to attach binaries to (e.g. v0.3.15)"
+        required: true
+        type: string
 
 permissions:
   pull-requests: write
@@ -12,6 +20,9 @@ jobs:
   release-plz:
     name: Release-plz
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      releases_created: ${{ steps.release-plz.outputs.releases_created }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,6 +31,158 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: MarcoIeni/release-plz-action@v0.5
+        id: release-plz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # Attach release binaries built with the `full` feature bundle (Cargo.toml):
+  # every feature the shipped binaries can actually use. NOT `--all-features` —
+  # that would pull in lancedb, a backend the binaries cannot select.
+  #
+  # This runs as a job in the same workflow rather than on `release: published`
+  # or a `v*` tag push, because release-plz creates both using GITHUB_TOKEN, and
+  # GitHub deliberately does not re-trigger workflows from token-authored
+  # releases or tag pushes — those triggers would simply never fire.
+  artifacts:
+    name: Binaries (${{ matrix.target }})
+    needs: release-plz
+    # `always()` so the manual path (which skips release-plz entirely) still
+    # runs; the rest of the condition is the real gate.
+    if: >-
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       needs.release-plz.outputs.releases_created == 'true')
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            # NOT ubuntu-latest on purpose: the newest image links against a
+            # glibc most deployment hosts do not have yet, and the binary then
+            # fails at exec with a GLIBC_2.xx error. Build against the oldest
+            # image still supported so the artifact runs in more places.
+            runner: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-${{ matrix.target }}-
+
+      # --locked so the artifact is built from the committed lockfile, not
+      # whatever resolves that morning. seed-fixtures is a dev tool and is
+      # deliberately not shipped.
+      - name: Build (full feature bundle)
+        run: |
+          cargo build --release --locked --features full \
+            --target ${{ matrix.target }} \
+            --bin quipu --bin quipu-server
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            # release-plz has already bumped and committed Cargo.toml in the
+            # commit this run is building, and tags it as v<version>. Deriving
+            # the tag from the manifest avoids depending on the shape of the
+            # action's `releases` JSON output, which is undocumented.
+            VERSION="$(cargo metadata --no-deps --format-version 1 \
+              | jq -r '.packages[] | select(.name == "quipu") | .version')"
+            TAG="v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: ${TAG}"
+
+      - name: Package
+        id: package
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          NAME="quipu-${TAG}-${TARGET}"
+          mkdir -p "dist/${NAME}"
+          cp "target/${TARGET}/release/quipu" "dist/${NAME}/"
+          cp "target/${TARGET}/release/quipu-server" "dist/${NAME}/"
+          cp README.md LICENSE "dist/${NAME}/"
+
+          # The binaries carry every feature, and two of them have runtime
+          # requirements the archive itself cannot satisfy. Saying so here is
+          # the difference between "semantic search is off" and a silent empty
+          # result (cf. quipu #53).
+          cat > "dist/${NAME}/FEATURES.txt" <<'EOF'
+          Built with the `full` feature bundle:
+            shacl, owl, onnx, reactive-reasoner
+
+          NOT included: lancedb. That backend is reachable only by an embedder
+          via Store::set_local_vector_backend -- the CLI and server cannot select
+          it from config -- so shipping it would add a large build dependency for
+          a capability these binaries do not expose.
+
+          One feature needs something at RUNTIME that this archive cannot ship:
+
+            onnx - links the ONNX Runtime dynamically (ort "load-dynamic"), so
+                   libonnxruntime.so must be on the loader path before any
+                   embedding or semantic search works. Without it everything else
+                   runs normally and embeddings report that no provider is
+                   configured. You also need model files plus a
+                   [quipu.embedding] block in .bobbin/config.toml -- see
+                   docs/book/src/concepts/embeddings.md.
+
+          Everything else -- SPARQL, SHACL, the reasoner, the REST API and the
+          web UI -- works from these binaries with no extra runtime deps.
+          EOF
+
+          tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
+          ( cd dist && sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256" )
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          ls -la dist
+
+      - name: Smoke-test the built binaries
+        run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release"
+          # --version must not touch disk (aegis-j0nq), so this is safe and it
+          # proves the artifact actually executes on a clean runner.
+          "${BIN}/quipu" --version
+          "${BIN}/quipu-server" --version
+          # A real round trip: ingest a triple and read it back.
+          TMP="$(mktemp -d)"
+          printf '@prefix ex: <http://example.org/> .\nex:a a ex:T ; ex:rel ex:b .\n' > "${TMP}/t.ttl"
+          "${BIN}/quipu" knot "${TMP}/t.ttl" --db "${TMP}/smoke.db"
+          "${BIN}/quipu" stats --db "${TMP}/smoke.db"
+
+      - name: Upload to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          NAME: ${{ steps.package.outputs.name }}
+        run: |
+          set -euo pipefail
+          # Fail loudly rather than silently producing an artifact nobody can
+          # find: if the tag has no release, something upstream went wrong.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::no GitHub release found for tag ${TAG}"
+            exit 1
+          fi
+          gh release upload "$TAG" \
+            "dist/${NAME}.tar.gz" \
+            "dist/${NAME}.tar.gz.sha256" \
+            --clobber

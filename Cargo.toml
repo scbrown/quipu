@@ -95,6 +95,17 @@ lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
 onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
 reactive-reasoner = []
 
+# What the shipped release binaries are built with — every feature the binaries
+# can actually USE. Named here rather than spelled out in the workflows so CI
+# and the release build cannot drift apart.
+#
+# Deliberately EXCLUDES `lancedb`: the CLI and server cannot select that backend
+# from config (it is reachable only by an embedder via
+# `Store::set_local_vector_backend`), so shipping it would add a protoc build
+# dependency and the whole datafusion tree for a capability the binaries do not
+# expose. `--all-features` is therefore NOT what a release is built with.
+full = ["shacl", "owl", "onnx", "reactive-reasoner"]
+
 [lints.rust]
 unsafe_code = "deny"
 unused_must_use = "deny"

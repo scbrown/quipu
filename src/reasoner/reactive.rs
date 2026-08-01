@@ -43,7 +43,7 @@ pub struct ReactiveReasoner {
 /// Cumulative statistics for reactive evaluations.
 #[derive(Debug, Clone, Default)]
 pub struct ReactiveStats {
-    /// Number of times after_commit fired and found work.
+    /// Number of times `after_commit` fired and found work.
     pub triggers: usize,
     /// Total facts asserted across all reactive evaluations.
     pub total_asserted: usize,
@@ -106,10 +106,10 @@ impl ReactiveReasoner {
 impl TransactObserver for ReactiveReasoner {
     fn after_commit(&self, store: &mut Store, delta: &Delta) -> crate::error::Result<()> {
         // Skip our own output to avoid infinite recursion.
-        if let Some(src) = &delta.source {
-            if src.starts_with("reasoner:") {
-                return Ok(());
-            }
+        if let Some(src) = &delta.source
+            && src.starts_with("reasoner:")
+        {
+            return Ok(());
         }
 
         // Collect predicate IRIs that were touched in this delta.
@@ -376,7 +376,7 @@ ex:r2 a rule:Rule ; rule:id "R2" ;
         // R1 (index 0) produces h, which R2 (index 1) consumes
         assert_eq!(deps.get(&0).unwrap(), &[1]);
         // R2 produces g, nothing consumes it
-        assert!(deps.get(&1).is_none());
+        assert!(!deps.contains_key(&1));
     }
 
     #[test]

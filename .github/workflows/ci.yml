@@ -30,10 +30,12 @@ jobs:
             flags: "--no-default-features"
           - name: shacl
             flags: "--features shacl"
-          # quipu-server has required-features = ["shacl", "onnx"], so neither
-          # job above ever built it — the binary was completely unlinted.
-          - name: shacl-onnx
-            flags: "--features shacl,onnx"
+          # The `full` bundle (Cargo.toml) is what releases ship, and it is a
+          # superset of shacl+onnx. Before it existed NOTHING linted quipu-server
+          # (required-features shacl+onnx) nor the owl / reactive-reasoner code —
+          # adding it turned up 11 findings on first run.
+          - name: full
+            flags: "--features full"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -96,6 +98,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
       - run: cargo build
+
+  # The release workflow ships binaries built with the `full` bundle. Without
+  # this job an onnx-gated break would first appear during a release, which is
+  # the worst possible place to find it.
+  build-full:
+    name: Build (full bundle)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-full-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-full-
+      - run: cargo build --locked --features full --bin quipu --bin quipu-server
 
   check:
     name: Pre-commit checks

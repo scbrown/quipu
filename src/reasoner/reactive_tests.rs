@@ -1,6 +1,6 @@
 //! Integration tests for the reactive reasoner (Phase 3).
 //!
-//! These exercise the TransactObserver path: register a ReactiveReasoner
+//! These exercise the `TransactObserver` path: register a `ReactiveReasoner`
 //! on a store, transact base facts, and verify that derived facts appear
 //! automatically without a separate `evaluate()` call.
 
@@ -18,9 +18,8 @@ const TS: &str = "2026-04-07T00:00:00Z";
 /// Count facts whose attribute matches `predicate` and whose transaction
 /// source matches `source`.
 fn count_derived(store: &Store, predicate: &str, source: &str) -> usize {
-    let attr = match store.lookup(predicate).unwrap() {
-        Some(id) => id,
-        None => return 0,
+    let Some(attr) = store.lookup(predicate).unwrap() else {
+        return 0;
     };
     let mut stmt = store
         .conn
@@ -39,9 +38,8 @@ fn count_derived(store: &Store, predicate: &str, source: &str) -> usize {
 
 /// Count all current facts for a given predicate (any source).
 fn count_facts_for_pred(store: &Store, predicate: &str) -> usize {
-    let attr = match store.lookup(predicate).unwrap() {
-        Some(id) => id,
-        None => return 0,
+    let Some(attr) = store.lookup(predicate).unwrap() else {
+        return 0;
     };
     let mut stmt = store
         .conn
