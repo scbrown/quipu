@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// Current process (resident, virtual) memory in bytes, from `/proc/self/statm`
-/// on Linux; `(0, 0)` elsewhere. `statm` fields are in pages; on the x86_64
+/// on Linux; `(0, 0)` elsewhere. `statm` fields are in pages; on the `x86_64`
 /// Linux quipu runs on the page size is 4096. Cheap in-kernel read — safe to
 /// call at scrape time and after each write (memory telemetry: the balloon was
 /// invisible because NO memory metric existed).
@@ -295,7 +295,10 @@ mod tests {
         #[cfg(target_os = "linux")]
         {
             let (rss, vsz) = process_memory();
-            assert!(rss > 0 && vsz >= rss, "RSS/VSZ readable from /proc/self/statm");
+            assert!(
+                rss > 0 && vsz >= rss,
+                "RSS/VSZ readable from /proc/self/statm"
+            );
         }
     }
 }

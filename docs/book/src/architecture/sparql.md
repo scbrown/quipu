@@ -59,6 +59,7 @@ for row in result.rows() {
 | GROUP BY | Supported | `GROUP BY ?type` |
 | HAVING | Supported | `HAVING(COUNT(?s) > 2)` |
 | EXTEND (BIND) | Supported | Computed variables |
+| VALUES | Supported | `VALUES ?x { "a" "b" }`, multi-column, `UNDEF` (`src/sparql/values.rs`) |
 | Property paths | Supported | Reverse `^`, Sequence `/`, Alternative `\|`, `*`, `+` (`src/sparql/property_path.rs`) |
 
 ### Aggregates
@@ -82,6 +83,7 @@ for row in result.rows() {
 | CONTAINS | `CONTAINS(STR(?s), "traefik")` |
 | LCASE / STR | `LCASE(STR(?name))` |
 | isIRI | `FILTER(isIRI(?o))` |
+| IN / NOT IN | `FILTER(?name IN ("Alice", "Bob"))` |
 
 ### RDFS Inference
 

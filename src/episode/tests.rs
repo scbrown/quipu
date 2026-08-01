@@ -275,16 +275,25 @@ fn array_valued_node_property_yields_one_triple_per_element() {
 
     let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
     // both array elements present as their own object term (multi-value preserved)
-    assert!(ttl.contains("aegis:traitWorkIntake \"self-directed\""),
-            "first array element missing:\n{ttl}");
-    assert!(ttl.contains("aegis:traitWorkIntake \"escalations-only\""),
-            "second array element missing (the exact z5mw3 silent-drop):\n{ttl}");
+    assert!(
+        ttl.contains("aegis:traitWorkIntake \"self-directed\""),
+        "first array element missing:\n{ttl}"
+    );
+    assert!(
+        ttl.contains("aegis:traitWorkIntake \"escalations-only\""),
+        "second array element missing (the exact z5mw3 silent-drop):\n{ttl}"
+    );
     // the scalar sibling on the same node still survives unchanged
-    assert!(ttl.contains("aegis:traitScope \"domain-scoped\""),
-            "scalar property regressed:\n{ttl}");
+    assert!(
+        ttl.contains("aegis:traitScope \"domain-scoped\""),
+        "scalar property regressed:\n{ttl}"
+    );
     // exactly two triples for the multi-valued predicate, not a joined blob
-    assert_eq!(ttl.matches("aegis:traitWorkIntake ").count(), 2,
-               "expected 2 traitWorkIntake triples:\n{ttl}");
+    assert_eq!(
+        ttl.matches("aegis:traitWorkIntake ").count(),
+        2,
+        "expected 2 traitWorkIntake triples:\n{ttl}"
+    );
 }
 
 #[test]

@@ -1739,3 +1739,297 @@ fn graph_query_param_unknown_iri_is_empty() {
         "an unknown graph param yields an empty default graph, never a ROOT fall-through"
     );
 }
+
+// ---------------------------------------------------------------------------
+// VALUES — inline relations (quipu #51)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn values_single_variable_constrains() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE {
+             VALUES ?n { "Alice" "Carol" }
+             ?s ex:name ?n
+           }"#,
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice", "Carol"],
+        "VALUES restricts to the listed candidates"
+    );
+}
+
+#[test]
+fn values_candidate_matching_nothing_yields_no_rows() {
+    // The no-op check (cf. #12): a VALUES that names only absent values must
+    // return ZERO rows, never fall through to every row.
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE {
+             VALUES ?n { "Nobody" }
+             ?s ex:name ?n
+           }"#,
+    )
+    .unwrap();
+    assert!(result.rows().is_empty(), "no name matches \"Nobody\"");
+}
+
+#[test]
+fn values_joins_with_bgp_in_either_order() {
+    let store = test_store_with_data();
+    let before = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE { VALUES ?n { "Bob" } ?s ex:name ?n }"#,
+    )
+    .unwrap();
+    let after = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE { ?s ex:name ?n VALUES ?n { "Bob" } }"#,
+    )
+    .unwrap();
+    assert_eq!(names(&before), vec!["Bob"]);
+    assert_eq!(
+        names(&before),
+        names(&after),
+        "VALUES before and after the BGP are the same join"
+    );
+}
+
+#[test]
+fn values_binds_iris() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE {
+           VALUES ?s { ex:alice ex:carol }
+           ?s ex:name ?n
+         }",
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice", "Carol"],
+        "an IRI in VALUES resolves to the interned term and joins on the subject"
+    );
+}
+
+#[test]
+fn values_unknown_iri_yields_no_rows() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE {
+           VALUES ?s { ex:nobody }
+           ?s ex:name ?n
+         }",
+    )
+    .unwrap();
+    assert!(
+        result.rows().is_empty(),
+        "an IRI absent from the dictionary matches nothing"
+    );
+}
+
+#[test]
+fn values_multi_variable_binds_both() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE {
+             VALUES (?s ?n) { (ex:alice "Alice") (ex:bob "Carol") }
+             ?s ex:name ?n
+           }"#,
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice"],
+        "both columns must agree: (ex:bob, \"Carol\") is not a fact"
+    );
+}
+
+#[test]
+fn values_undef_leaves_variable_unbound() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE {
+             VALUES (?s ?n) { (ex:alice UNDEF) }
+             ?s ex:name ?n
+           }"#,
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice"],
+        "UNDEF leaves ?n free, so the BGP binds it rather than the row erroring"
+    );
+}
+
+#[test]
+fn values_undef_is_not_bound() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?x WHERE {
+           VALUES ?x { UNDEF }
+           FILTER(!BOUND(?x))
+         }",
+    )
+    .unwrap();
+    assert_eq!(
+        result.rows().len(),
+        1,
+        "UNDEF is an unbound variable, not a sentinel value"
+    );
+}
+
+#[test]
+fn values_empty_table_yields_no_rows() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE {
+             VALUES ?n { }
+             ?s ex:name ?n
+           }"#,
+    )
+    .unwrap();
+    assert!(
+        result.rows().is_empty(),
+        "an empty VALUES is the empty relation — zero rows, not every row"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// FILTER IN / NOT IN (quipu #52)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn filter_in_constrains() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE {
+             ?s ex:name ?n
+             FILTER(?n IN ("Alice", "Bob"))
+           }"#,
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Alice", "Bob"]);
+}
+
+#[test]
+fn filter_in_matching_nothing_yields_no_rows() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE {
+             ?s ex:name ?n
+             FILTER(?n IN ("Nobody", "Nothing"))
+           }"#,
+    )
+    .unwrap();
+    assert!(
+        result.rows().is_empty(),
+        "IN must constrain, never pass everything through"
+    );
+}
+
+#[test]
+fn filter_not_in_excludes() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+           SELECT ?n WHERE {
+             ?s ex:name ?n
+             FILTER(?n NOT IN ("Alice", "Bob"))
+           }"#,
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Carol"]);
+}
+
+#[test]
+fn filter_in_empty_list_is_false() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n FILTER(?n IN ()) }",
+    )
+    .unwrap();
+    assert!(result.rows().is_empty(), "IN () is false for every row");
+}
+
+#[test]
+fn filter_not_in_empty_list_is_true() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n FILTER(?n NOT IN ()) }",
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice", "Bob", "Carol"],
+        "NOT IN () is true for every row"
+    );
+}
+
+#[test]
+fn filter_in_over_iris() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE {
+           ?s ex:name ?n
+           FILTER(?s IN (ex:alice, ex:carol))
+         }",
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice", "Carol"],
+        "IN works over IRIs, not only strings"
+    );
+}
+
+#[test]
+fn filter_in_over_numeric_literals() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE {
+           ?s ex:name ?n .
+           ?s ex:age ?age
+           FILTER(?age IN (25, 35))
+         }",
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Bob", "Carol"],
+        "IN works over numeric literals"
+    );
+}

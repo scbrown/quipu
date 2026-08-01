@@ -205,11 +205,19 @@ impl KnowledgeVectorStore for Store {
         for (entity_id, score) in scored {
             let row = if let Some(vt) = valid_at {
                 text_stmt.query_row(params![entity_id, vt], |r| {
-                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<String>>(2)?))
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                    ))
                 })
             } else {
                 text_stmt.query_row(params![entity_id], |r| {
-                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<String>>(2)?))
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                    ))
                 })
             };
             // A vector removed between the two queries is simply skipped.

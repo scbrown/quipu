@@ -2,8 +2,8 @@
 //!
 //! Parses SPARQL via spargebra, then evaluates against the `SQLite` fact store.
 //! Supports: SELECT, ASK, CONSTRUCT, DESCRIBE with BGP, JOIN, UNION, FILTER,
-//! OPTIONAL (`LeftJoin`), ORDER BY, GROUP BY, aggregates, HAVING, EXTEND, RDFS
-//! subclass inference, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
+//! OPTIONAL (`LeftJoin`), VALUES, ORDER BY, GROUP BY, aggregates, HAVING,
+//! EXTEND, RDFS subclass inference, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
 pub mod filter;
@@ -13,6 +13,8 @@ pub mod property_path;
 pub mod rdfs;
 #[cfg(test)]
 mod tests;
+pub mod triple;
+pub mod values;
 
 use std::collections::HashMap;
 

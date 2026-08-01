@@ -1,9 +1,13 @@
-//! Pattern evaluation — BGP, triple patterns, variable binding, and join logic.
+//! SPARQL algebra evaluation — joins, FILTER, projection, GRAPH scoping.
+//!
+//! The leaf of the evaluator (BGP and single-triple-pattern matching against
+//! the fact store) lives in [`super::triple`]; this module is the algebra over
+//! the rows those leaves produce.
 
 use spargebra::algebra::GraphPattern;
 use spargebra::algebra::OrderExpression;
 use spargebra::algebra::PropertyPathExpression;
-use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
+use spargebra::term::{NamedNodePattern, TermPattern};
 
 use crate::error::{Error, Result};
 use crate::store::Store;
@@ -11,9 +15,8 @@ use crate::types::Value;
 
 use super::aggregate::eval_aggregate;
 use super::filter::eval_filter;
-use super::rdfs::{
-    collect_class_and_subclasses, eval_type_pattern_with_subclasses, is_rdf_type_pattern,
-};
+use super::triple::eval_bgp as eval_bgp_inner;
+use super::values::eval_values;
 use super::{Bindings, GraphScope, TemporalContext};
 
 /// Evaluate a graph pattern, returning rows and the variable names encountered.
@@ -54,7 +57,15 @@ pub fn eval_pattern_seeded(
         });
     }
     match pattern {
-        GraphPattern::Bgp { patterns } => eval_bgp(store, patterns, ctx, seed),
+        GraphPattern::Bgp { patterns } => eval_bgp_inner(store, patterns, ctx, seed),
+
+        // quipu #51: `VALUES` is an inline relation — a literal table of rows.
+        // It is a leaf like a BGP, so it merges with the seed and joins with
+        // the surrounding group through the ordinary Join/LeftJoin arms.
+        GraphPattern::Values {
+            variables,
+            bindings,
+        } => eval_values(store, variables, bindings, seed),
 
         GraphPattern::Join { left, right } => {
             let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
@@ -371,274 +382,10 @@ fn eval_path(
     Ok((all_rows, vars))
 }
 
-/// Evaluate a basic graph pattern -- a set of triple patterns.
-pub fn eval_bgp(
-    store: &Store,
-    patterns: &[TriplePattern],
-    ctx: &TemporalContext,
-    seed: &Bindings,
-) -> Result<(Vec<Bindings>, Vec<String>)> {
-    if patterns.is_empty() {
-        return Ok((vec![seed.clone()], vec![]));
-    }
-
-    let mut result_rows: Vec<Bindings> = vec![seed.clone()];
-    let mut all_vars = Vec::new();
-
-    for tp in patterns {
-        let mut new_rows = Vec::new();
-        for (i, existing) in result_rows.iter().enumerate() {
-            // BGP accumulation multiplies row counts pattern-by-pattern —
-            // the SQLite handler interrupts a grinding statement, but the
-            // row-count explosion itself is only visible here.
-            super::pattern_util::check_eval_budget(ctx, i, new_rows.len())?;
-            let matches = eval_triple_pattern(store, tp, existing, ctx)?;
-            new_rows.extend(matches);
-        }
-        result_rows = new_rows;
-
-        // Track variables.
-        for var in triple_pattern_vars(tp) {
-            if !all_vars.contains(&var) {
-                all_vars.push(var);
-            }
-        }
-    }
-
-    Ok((result_rows, all_vars))
-}
-
-/// Build a graph-membership SQL condition over `facts.g`, pushing the ids as
-/// bound params (quipu #36). An EMPTY set yields `0 = 1` — match nothing, never
-/// a silent fall-through (e.g. a `FROM NAMED` with no `FROM` has an empty
-/// default graph). A single id yields `g = ?N`; several yield `g IN (…)`.
-fn sql_graph_in(gids: &[i64], sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>) -> String {
-    if gids.is_empty() {
-        return "0 = 1".to_string();
-    }
-    let placeholders: Vec<String> = gids
-        .iter()
-        .map(|gid| {
-            sql_params.push(Box::new(*gid));
-            format!("?{}", sql_params.len())
-        })
-        .collect();
-    if placeholders.len() == 1 {
-        format!("g = {}", placeholders[0])
-    } else {
-        format!("g IN ({})", placeholders.join(", "))
-    }
-}
-
-/// Evaluate a single triple pattern against the store, extending existing bindings.
-pub fn eval_triple_pattern(
-    store: &Store,
-    tp: &TriplePattern,
-    bindings: &Bindings,
-    ctx: &TemporalContext,
-) -> Result<Vec<Bindings>> {
-    // RDFS type-hierarchy expansion. Only on the default graph (quipu #36):
-    // subclass expansion reads g=0 via rdfs.rs, so inside a named GRAPH a
-    // `?s a ?C` pattern is matched LITERALLY (export wants a graph's own
-    // triples, not cross-graph inference).
-    if ctx.graph.is_root_default()
-        && is_rdf_type_pattern(tp)
-        && let TermPattern::NamedNode(class_node) = &tp.object
-    {
-        let class_ids = collect_class_and_subclasses(store, class_node.as_str())?;
-        if !class_ids.is_empty() {
-            return eval_type_pattern_with_subclasses(store, tp, bindings, &class_ids, ctx);
-        }
-    }
-
-    // Build SQL query with conditions based on bound values.
-    let mut conditions = Vec::new();
-    let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-
-    // Subject
-    if let Some(iri) = resolve_subject_pattern(&tp.subject, bindings) {
-        if let Some(id) = store.lookup(&iri)? {
-            conditions.push(format!("e = ?{}", sql_params.len() + 1));
-            sql_params.push(Box::new(id));
-        } else {
-            return Ok(vec![]); // IRI not in dictionary -> no matches
-        }
-    }
-
-    // Predicate
-    if let Some(iri) = resolve_predicate_pattern(&tp.predicate, bindings) {
-        if let Some(id) = store.lookup(&iri)? {
-            conditions.push(format!("a = ?{}", sql_params.len() + 1));
-            sql_params.push(Box::new(id));
-        } else {
-            return Ok(vec![]);
-        }
-    }
-
-    // Object (only if it's a concrete value, not a variable)
-    if let Some(value) = resolve_object_pattern(store, &tp.object, bindings)? {
-        let bytes = value.to_bytes();
-        conditions.push(format!("v = ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(bytes));
-    }
-
-    // Temporal filtering.
-    conditions.push("op = 1".to_string());
-    // Graph scope (quipu #36). `Default` matches the default-graph set (service
-    // default [0], or a FROM union); `Named` scopes to one graph; `AnyNamed`
-    // ranges the active named graphs (all g<>0, or a FROM NAMED set) and binds
-    // the graph variable per row (below).
-    let bind_graph_var: Option<String> = match &ctx.graph {
-        GraphScope::Default(gids) => {
-            conditions.push(sql_graph_in(gids, &mut sql_params));
-            None
-        }
-        GraphScope::Named(gid) => {
-            conditions.push(format!("g = ?{}", sql_params.len() + 1));
-            sql_params.push(Box::new(*gid));
-            None
-        }
-        GraphScope::AnyNamed { var, restrict } => {
-            match restrict {
-                None => conditions.push("g <> 0".to_string()),
-                Some(ids) => conditions.push(sql_graph_in(ids, &mut sql_params)),
-            }
-            Some(var.clone())
-        }
-    };
-    // Only `GRAPH ?g` (AnyNamed) needs `g` projected — to bind ?g. The others
-    // keep DISTINCT on (e,a,v), so a triple present in several graphs of a FROM
-    // union collapses to ONE solution (default-graph merge), not one per graph.
-    let want_g = bind_graph_var.is_some();
-    if let Some(vt) = &ctx.valid_at {
-        conditions.push(format!("valid_from <= ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(vt.clone()));
-        conditions.push(format!(
-            "(valid_to IS NULL OR valid_to > ?{})",
-            sql_params.len()
-        ));
-    } else {
-        conditions.push("valid_to IS NULL".to_string());
-    }
-    if let Some(tx) = ctx.as_of_tx {
-        conditions.push(format!("tx <= ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(tx));
-    }
-
-    let where_clause = if conditions.is_empty() {
-        String::new()
-    } else {
-        format!(" WHERE {}", conditions.join(" AND "))
-    };
-
-    // DISTINCT: a (e,a,v) triple re-asserted across transactions leaves multiple
-    // current (op=1, valid_to NULL) rows; without DISTINCT the BGP yields one
-    // binding per duplicate, which multiplies under joins/OPTIONAL and inflates
-    // COUNT (GH#13). DISTINCT collapses them to one solution per current triple.
-    // `g` is projected only for `GRAPH ?g` (to bind ?g per row); for the default
-    // and single-named scopes it is omitted so DISTINCT collapses cross-graph
-    // duplicates in a FROM union.
-    let sql = if want_g {
-        format!("SELECT DISTINCT e, a, v, g FROM facts{where_clause}")
-    } else {
-        format!("SELECT DISTINCT e, a, v FROM facts{where_clause}")
-    };
-    let mut stmt = store.prepare(&sql)?;
-
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-        sql_params.iter().map(std::convert::AsRef::as_ref).collect();
-    let mut rows = stmt.query(param_refs.as_slice())?;
-
-    let mut results = Vec::new();
-    while let Some(row) = rows.next()? {
-        let e_id: i64 = row.get(0)?;
-        let a_id: i64 = row.get(1)?;
-        let v_bytes: Vec<u8> = row.get(2)?;
-        let v = Value::from_bytes(&v_bytes)?;
-        let g_id: Option<i64> = if want_g { Some(row.get(3)?) } else { None };
-
-        let mut new_bindings = bindings.clone();
-        let mut compatible = true;
-
-        // Bind subject variable (or blank node used as join variable).
-        match &tp.subject {
-            TermPattern::Variable(var) => {
-                let e_iri = store.resolve(e_id)?;
-                let e_val = if e_iri.starts_with("_:") {
-                    Value::Str(e_iri)
-                } else if let Some(term_id) = store.lookup(&e_iri)? {
-                    Value::Ref(term_id)
-                } else {
-                    Value::Str(e_iri)
-                };
-                if !bind_var(&mut new_bindings, var.as_str(), e_val, &mut compatible) {
-                    continue;
-                }
-            }
-            TermPattern::BlankNode(b) => {
-                let e_iri = store.resolve(e_id)?;
-                let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
-                    Value::Ref(term_id)
-                } else {
-                    Value::Str(e_iri)
-                };
-                if !bind_var(&mut new_bindings, b.as_str(), e_val, &mut compatible) {
-                    continue;
-                }
-            }
-            _ => {}
-        }
-
-        // Bind predicate variable.
-        if let NamedNodePattern::Variable(var) = &tp.predicate {
-            let a_iri = store.resolve(a_id)?;
-            let a_val = if let Some(term_id) = store.lookup(&a_iri)? {
-                Value::Ref(term_id)
-            } else {
-                Value::Str(a_iri)
-            };
-            if !bind_var(&mut new_bindings, var.as_str(), a_val, &mut compatible) {
-                continue;
-            }
-        }
-
-        // Bind object variable (or blank node used as join variable).
-        match &tp.object {
-            TermPattern::Variable(var) => {
-                if !bind_var(&mut new_bindings, var.as_str(), v, &mut compatible) {
-                    continue;
-                }
-            }
-            TermPattern::BlankNode(b)
-                if !bind_var(&mut new_bindings, b.as_str(), v, &mut compatible) =>
-            {
-                continue;
-            }
-            _ => {}
-        }
-
-        // Bind the graph variable for `GRAPH ?g { … }` (quipu #36): ?g resolves
-        // to the graph's IRI (g is the interned id of that IRI). Same ?g across
-        // a BGP is enforced by the join in eval_bgp via bind_var compatibility.
-        if let (Some(g_var), Some(gid)) = (&bind_graph_var, g_id) {
-            // g is the interned term id of the graph IRI (schema.rs), and this
-            // branch only runs for named graphs (g<>0), so gid is always a
-            // valid term id — bind ?g to it directly as a ref.
-            if !bind_var(&mut new_bindings, g_var, Value::Ref(gid), &mut compatible) {
-                continue;
-            }
-        }
-
-        if compatible {
-            results.push(new_bindings);
-        }
-    }
-
-    Ok(results)
-}
-
 // Re-export from pattern_util for callers that import from pattern.
 pub use super::pattern_util::{
     bind_var, join_rows, merge_bindings, resolve_object_pattern, resolve_predicate_pattern,
     resolve_subject_pattern, triple_pattern_vars,
 };
+// Re-export the store-facing leaf so `pattern::eval_bgp` keeps resolving.
+pub use super::triple::{eval_bgp, eval_triple_pattern};
