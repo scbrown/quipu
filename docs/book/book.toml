@@ -17,7 +17,11 @@ preferred-dark-theme = "coal"
 git-repository-url = "https://github.com/scbrown/quipu"
 edit-url-template = "https://github.com/scbrown/quipu/edit/main/docs/book/{path}"
 additional-css = ["custom/css/custom.css"]
-additional-js = ["custom/js/mermaid-init.js"]
+# Order matters: the library must load before the initialiser that calls
+# mermaid.initialize(). Both come from `mdbook-mermaid install docs/book`;
+# mermaid-init.js additionally carries a local patch for mdbook 0.5.x theme-button
+# ids (see the header in that file) — re-running the installer reverts it.
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
 site-url = "/quipu/"
 
 [output.html.search]

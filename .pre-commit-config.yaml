@@ -9,6 +9,11 @@ repos:
         types: [json]
       - id: check-merge-conflict
       - id: check-added-large-files
+        # mermaid.min.js is a ~2.6MB vendored library written by
+        # `mdbook-mermaid install`; the book needs it committed to render
+        # diagrams (and to work offline under `mdbook serve`). Excluded by exact
+        # path so the 500KB guard stays tight for everything else.
+        exclude: ^docs/book/mermaid\.min\.js$
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.17.2
