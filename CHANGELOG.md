@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.13] - 2026-08-01
+
+### Added
+
+- *(sparql)* VALUES and FILTER IN / NOT IN (#51, #52)([0576868](https://github.com/scbrown/quipu/commit/0576868ba9a3bf4b560942dde50df33115207cee))
+
+### Fixed
+
+- *(embedding)* Name the missing config instead of failing silently (#53)([5465b58](https://github.com/scbrown/quipu/commit/5465b5858e380e4c27a2c245d42a81198f3b1936))
+- *(lint)* Unbreak CI and split the files this repo's own limit rejects([ecab46f](https://github.com/scbrown/quipu/commit/ecab46f96d139f392a09df27b3bfad22bb9b2133))
+
 ## [0.3.12] - 2026-07-28
 
 ### Added
