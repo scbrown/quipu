@@ -2033,3 +2033,152 @@ fn filter_in_over_numeric_literals() {
         "IN works over numeric literals"
     );
 }
+
+// --- the type-inference asymmetry, announced --------------------------------
+
+/// The fixture the whole defect lives on: a type WITH subclasses and a leaf type
+/// without, so the marker can be shown to fire on one and stay silent on the other.
+fn inference_store() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = r#"
+@prefix ex: <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:WebApplication rdfs:subClassOf ex:Service .
+ex:SearchService rdfs:subClassOf ex:Service .
+
+ex:svc1 a ex:Service .
+ex:svc2 a ex:WebApplication .
+ex:svc3 a ex:SearchService .
+ex:t1 a ex:Tool .
+ex:t2 a ex:Tool .
+"#;
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-04-04T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store
+}
+
+#[test]
+fn the_two_forms_disagree_and_both_are_right() {
+    // The defect in two numbers. `?s a <T>` is expanded over rdfs:subClassOf;
+    // `?s a ?t . FILTER(?t = <T>)` is matched literally. Both are legitimate —
+    // asserted-only is the basis for a vocabulary census, inferred for blast
+    // radius — so this asserts the DIVERGENCE, not a preferred answer.
+    let store = inference_store();
+    let inferred = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query":
+            "PREFIX ex: <http://example.org/> \
+             SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ex:Service }"}),
+    )
+    .unwrap();
+    let asserted = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query":
+            "PREFIX ex: <http://example.org/> \
+             SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?t . FILTER(?t = ex:Service) }"}),
+    )
+    .unwrap();
+    assert_eq!(inferred["rows"][0]["n"], 3, "constant form includes subclasses");
+    assert_eq!(asserted["rows"][0]["n"], 1, "variable form is asserted-only");
+}
+
+#[test]
+fn inference_is_announced_when_it_widened_the_answer() {
+    // The fix. Before this, the two counts above were indistinguishable in the
+    // response: same syntax shape, both HTTP 200, both plausible. Four readers
+    // took the wrong one in the wild; one sized a governance decision several
+    // times too large and CONCEALED an ungoverned subclass behind the inflated
+    // parent count.
+    let store = inference_store();
+    let out = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query":
+            "PREFIX ex: <http://example.org/> \
+             SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ex:Service }"}),
+    )
+    .unwrap();
+    assert_eq!(out["inference"]["applied"], true);
+    let expanded = &out["inference"]["expandedTypes"][0];
+    assert_eq!(expanded["type"], "http://example.org/Service");
+    // The subclasses are NAMED: "inference happened" is not actionable on its
+    // own — the reader needs to see that Service swallowed SearchService.
+    let subs: Vec<String> = expanded["subclasses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect();
+    assert!(subs.contains(&"http://example.org/WebApplication".to_string()));
+    assert!(subs.contains(&"http://example.org/SearchService".to_string()));
+}
+
+#[test]
+fn the_marker_is_absent_when_nothing_was_inferred() {
+    // The field's PRESENCE is the signal, so it must not appear on ordinary
+    // responses. Three controls: the asserted-only form, a leaf type with no
+    // subclasses, and a query with no type pattern at all.
+    let store = inference_store();
+    for q in [
+        "PREFIX ex: <http://example.org/> \
+         SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?t . FILTER(?t = ex:Service) }",
+        "PREFIX ex: <http://example.org/> \
+         SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ex:Tool }",
+        "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1",
+    ] {
+        let out = crate::mcp::tool_query(&store, &serde_json::json!({ "query": q })).unwrap();
+        assert!(
+            out.get("inference").is_none(),
+            "marker must be ABSENT for a non-inferred answer, got {out} for {q}"
+        );
+    }
+}
+
+#[test]
+fn a_leaf_type_is_the_control_that_proves_the_marker_is_specific() {
+    // Tool has no subclasses, so both forms agree AND no marker is emitted. If
+    // this ever diverges, the marker is firing on something other than subclass
+    // expansion and the whole signal is untrustworthy.
+    let store = inference_store();
+    let inferred = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query":
+            "PREFIX ex: <http://example.org/> \
+             SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ex:Tool }"}),
+    )
+    .unwrap();
+    let asserted = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query":
+            "PREFIX ex: <http://example.org/> \
+             SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?t . FILTER(?t = ex:Tool) }"}),
+    )
+    .unwrap();
+    assert_eq!(inferred["rows"][0]["n"], asserted["rows"][0]["n"]);
+    assert!(inferred.get("inference").is_none());
+}
+
+#[test]
+fn the_explicit_path_form_matches_the_constant_form() {
+    // Item #2 of the ruling: a caller who WANTS inference can say so. Already
+    // supported; pinned so it stays that way, and so the equality is on record
+    // as the proof that the constant form's extra rows are subclass expansion
+    // and nothing else.
+    let store = inference_store();
+    let path = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query":
+            "PREFIX ex: <http://example.org/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
+             SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a/rdfs:subClassOf* ex:Service }"}),
+    )
+    .unwrap();
+    assert_eq!(path["rows"][0]["n"], 3);
+}

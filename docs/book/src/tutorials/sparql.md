@@ -331,6 +331,61 @@ This returns **all six** services — including traefik, grafana, and nginx
 (which are typed as `hw:WebApp`). Quipu follows `rdfs:subClassOf` edges
 automatically, so you query at the level you care about.
 
+### The asymmetry: two forms, two numbers, both correct
+
+Expansion applies when the type is a **constant IRI**. It does **not** apply
+when the type is a **variable** — that form is matched literally:
+
+```sparql
+# INFERRED — includes hw:WebApp instances
+SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a hw:Service }
+
+# ASSERTED ONLY — only things literally typed hw:Service
+SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?t . FILTER(?t = hw:Service) }
+```
+
+Those two queries express what looks like the same constraint and return
+different counts. **Neither is wrong**, and you need both:
+
+| Question | Form |
+|---|---|
+| "what depends on X", blast radius, impact | constant IRI (inferred) |
+| vocabulary census, governance gating, "who emits the wrong type" | variable + `FILTER` (asserted) |
+
+To ask for inference explicitly — recommended when the distinction matters to
+your reader — use the path form, which is equivalent to the constant form:
+
+```sparql
+SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a/rdfs:subClassOf* hw:Service }
+```
+
+### How to tell which one you got
+
+Ambiguity here is expensive: both queries return HTTP 200 and both counts are
+individually plausible, so a number answering the *other* question does not look
+wrong. Quipu therefore **announces expansion in the response** whenever it
+widened a type constant:
+
+```json
+{
+  "count": 6,
+  "inference": {
+    "applied": true,
+    "expandedTypes": [
+      {"type": "http://example.org/homelab/Service",
+       "subclasses": ["http://example.org/homelab/WebApp"]}
+    ]
+  }
+}
+```
+
+The field is **absent** when nothing was inferred, so its presence is the
+signal. The subclasses are named because "inference happened" is not actionable
+on its own — you need to see *which* types were folded in to know whether the
+count is the one you wanted. A type with no subclasses is never reported: both
+forms agree there, which also makes a leaf type a useful control when you are
+checking this behaviour yourself.
+
 ## 10. Property Paths
 
 SPARQL 1.1 property paths let you traverse edges without binding

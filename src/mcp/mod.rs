@@ -20,7 +20,7 @@ use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
 use crate::resolution::EntityCandidate;
-use crate::sparql::{self, QueryResult, TemporalContext};
+use crate::sparql::{self, QueryResult, TemporalContext, rdfs};
 use crate::store::Store;
 use crate::types::Value;
 
@@ -54,29 +54,7 @@ pub(crate) fn resolution_hints_json(hints: &[(String, Vec<EntityCandidate>)]) ->
 /// `max_sparql_rows` ceiling (hq-gkd) from one place — a LIMIT-less query cannot
 /// dump the whole fact log to either serializer.
 pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bool)> {
-    let query_str = input
-        .get("query")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::InvalidValue("missing 'query' parameter".into()))?;
-
-    // Optional `graph` param (quipu #36): scope the query's DEFAULT graph to a
-    // single named graph, without writing a `FROM`/`GRAPH` clause. Backward
-    // compatible when omitted (ROOT default). An unknown IRI scopes to an empty
-    // default graph (no rows) — never a silent fall-through to ROOT. A `FROM`
-    // clause in the query text overrides this (see `apply_dataset`).
-    let graph = match input.get("graph").and_then(|v| v.as_str()) {
-        None => sparql::GraphScope::default(),
-        Some(iri) => sparql::GraphScope::Default(vec![store.lookup(iri)?.unwrap_or(-1)]),
-    };
-    let ctx = TemporalContext {
-        valid_at: input
-            .get("valid_at")
-            .and_then(|v| v.as_str())
-            .map(std::string::ToString::to_string),
-        as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
-        graph,
-        ..Default::default()
-    };
+    let (query_str, ctx) = query_context(store, input)?;
 
     let result = sparql::query_temporal(store, query_str, &ctx)?;
     let max_rows = store.search_config().max_sparql_rows;
@@ -101,6 +79,88 @@ pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bo
         }
         QueryResult::Ask(value) => (QueryResult::Ask(value), false),
     })
+}
+
+/// The query string and the temporal/graph context a `/query` request implies.
+///
+/// Factored out so the executor and the inference marker
+/// ([`query_inference`]) derive their context from ONE place. The marker is
+/// gated on graph scope — a type pattern inside a named graph is matched
+/// literally and is NOT expanded — so a second, drifting copy of this
+/// derivation could annotate a result with inference that never happened, which
+/// is a worse failure than the silence it was added to fix.
+fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, TemporalContext)> {
+    let query_str = input
+        .get("query")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| Error::InvalidValue("missing 'query' parameter".into()))?;
+
+    // Optional `graph` param (quipu #36): scope the query's DEFAULT graph to a
+    // single named graph, without writing a `FROM`/`GRAPH` clause. Backward
+    // compatible when omitted (ROOT default). An unknown IRI scopes to an empty
+    // default graph (no rows) — never a silent fall-through to ROOT. A `FROM`
+    // clause in the query text overrides this (see `apply_dataset`).
+    let graph = match input.get("graph").and_then(|v| v.as_str()) {
+        None => sparql::GraphScope::default(),
+        Some(iri) => sparql::GraphScope::Default(vec![store.lookup(iri)?.unwrap_or(-1)]),
+    };
+    Ok((
+        query_str,
+        TemporalContext {
+            valid_at: input
+                .get("valid_at")
+                .and_then(|v| v.as_str())
+                .map(std::string::ToString::to_string),
+            as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+            graph,
+            ..Default::default()
+        },
+    ))
+}
+
+/// Which type constants in this request were widened by subclass inference.
+///
+/// Empty when the answer is asserted-only, which is the common case — the field
+/// is omitted entirely from the response then, so a reader who sees it knows it
+/// means something. See [`crate::sparql::rdfs::expanded_types`] for why a count
+/// that looks fine can be answering the other question.
+pub fn query_inference(store: &Store, input: &JsonValue) -> Result<Vec<rdfs::ExpandedType>> {
+    let (query_str, ctx) = query_context(store, input)?;
+    Ok(rdfs::expanded_types(store, query_str, &ctx))
+}
+
+/// Attach the inference marker to a response, when there is one to attach.
+///
+/// `applied` is always true when the key is present — the field exists to say
+/// "this count is INFERRED, not asserted", and a permanent `applied: false` on
+/// every ordinary response is noise that trains readers to skip the field.
+/// `expandedTypes` names what was folded in, because "inference happened" is not
+/// actionable on its own: the reader needs to know that `Service` swallowed
+/// `SearchService` to spot that the number is not the one they wanted.
+fn add_inference(out: &mut JsonValue, expanded: &[rdfs::ExpandedType]) {
+    if expanded.is_empty() {
+        return;
+    }
+    let types: Vec<JsonValue> = expanded
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "type": e.type_iri,
+                "subclasses": e.subclasses,
+            })
+        })
+        .collect();
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert(
+            "inference".to_string(),
+            serde_json::json!({
+                "applied": true,
+                "expandedTypes": types,
+                "note": "rdfs:subClassOf expansion widened a type constant. For \
+asserted-only counts use the variable form: ?s a ?t . FILTER(?t = <Type>)",
+            }),
+        );
+    }
 }
 
 /// Parse a JSON object-position value into a stored `Value`. Accepts a bare
@@ -608,6 +668,10 @@ pub fn tool_overlay_compose(store: &Store, input: &JsonValue) -> Result<JsonValu
 /// Output depends on query form.
 pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let (result, truncated) = query_result(store, input)?;
+    // Announce subclass inference when it widened the answer. Omitted entirely
+    // when it did not, so the field's PRESENCE is the signal — a marker that
+    // appears on every response is one readers stop seeing.
+    let inferred = query_inference(store, input).unwrap_or_default();
 
     match result {
         QueryResult::Select { variables, rows } => {
@@ -622,12 +686,14 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 })
                 .collect();
 
-            Ok(serde_json::json!({
+            let mut out = serde_json::json!({
                 "variables": variables,
                 "rows": json_rows,
                 "count": json_rows.len(),
                 "truncated": truncated
-            }))
+            });
+            add_inference(&mut out, &inferred);
+            Ok(out)
         }
         QueryResult::Ask(result) => Ok(serde_json::json!({ "result": result })),
         QueryResult::Graph(triples) => {
