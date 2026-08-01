@@ -35,12 +35,48 @@ pub(crate) fn finish_deferred_embed(
     if work.is_empty() {
         return Ok(());
     }
-    // Brief lock: clone the Arc provider, then DROP the guard.
-    let provider = { s.lock().embedding_provider() };
+    // Brief lock: clone the Arc provider and read the batch bound, then DROP
+    // the guard.
+    let (provider, batch_size) = {
+        let st = s.lock();
+        (
+            st.embedding_provider(),
+            st.embedding_config().embed_batch_size,
+        )
+    };
     let Some(provider) = provider else {
         return Ok(());
     };
-    let embeddings = provider.embed_batch(&work.texts())?; // CPU work, LOCK-FREE
+    // CHUNK the ONNX call. One embed_batch(N) builds a single
+    // [N, seq_len, dim] tensor and, far more expensively, N sequences' worth of
+    // ONNX Runtime internal attention activations — and ORT's arena allocator
+    // NEVER returns that memory to the OS. So an unbounded N set a permanent
+    // RSS high-water mark proportional to the entities one drain touched.
+    //
+    // MEASURED (all-MiniLM-L6-v2, seq 256, intra_threads 1, the deployed
+    // config): ~7.4 MB of retained arena PER TEXT, linear in N and never
+    // released — 2048 texts in one call cost +15.1 GB that five subsequent
+    // single-text calls did not shrink. The same 2048 texts in chunks of 32
+    // cost +492 MB and plateaued flat from the 512th text on. That is the whole
+    // bug: the high-water is set by the LARGEST SINGLE BATCH, not by total
+    // volume, so bounding the batch bounds resident memory in store size.
+    //
+    // This path is the reason the bound was missing in practice: every other
+    // embed path already chunks (`auto_embed_entities` by embed_batch_size,
+    // `backfill_embeddings` by 32). Only the deferred path — the one the SERVER
+    // uses for every write — passed the whole work set straight through, and it
+    // MERGES across transactions before draining, so the batch grew without
+    // limit. In production that ballooned quipu-server from 350 MB to 5.83 GB
+    // on a single drain and held it there for hours.
+    let batch_size = if batch_size == 0 { 32 } else { batch_size };
+    let texts = work.texts();
+    let mut embeddings = Vec::with_capacity(texts.len());
+    for chunk in texts.chunks(batch_size) {
+        // CPU work, LOCK-FREE.
+        embeddings.extend(provider.embed_batch(chunk)?);
+    }
+    // apply_deferred_embed still receives every vector in item order, so its
+    // per-entity staleness check is unchanged by the chunking.
     s.lock().apply_deferred_embed(work, &embeddings)?;
     Ok(())
 }

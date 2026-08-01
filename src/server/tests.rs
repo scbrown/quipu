@@ -141,3 +141,110 @@ async fn stats_uses_generation_cache_and_invalidates_on_write() {
         "a stale generation must be ignored and the stats recomputed"
     );
 }
+
+/// A provider that RECORDS the size of every batch it is handed, so the
+/// chunking bound is observable rather than assumed.
+struct RecordingProvider {
+    batches: Arc<parking_lot::Mutex<Vec<usize>>>,
+}
+impl EmbeddingProvider for RecordingProvider {
+    fn embed_text(&self, _text: &str) -> quipu::Result<Vec<f32>> {
+        self.batches.lock().push(1);
+        Ok(vec![0.1f32; 8])
+    }
+    fn embed_batch(&self, texts: &[&str]) -> quipu::Result<Vec<Vec<f32>>> {
+        self.batches.lock().push(texts.len());
+        Ok(texts.iter().map(|_| vec![0.1f32; 8]).collect())
+    }
+    fn dimension(&self) -> usize {
+        8
+    }
+}
+
+/// `finish_deferred_embed` must CHUNK the ONNX call by `embed_batch_size`,
+/// never hand the whole drained work set to one `embed_batch`.
+///
+/// Why this is a memory bug and not a throughput nit: one `embed_batch(N)`
+/// builds N sequences' worth of ONNX Runtime attention activations, and ORT's
+/// arena allocator never returns that memory to the OS. Measured on the
+/// deployed model/config (all-MiniLM-L6-v2, seq 256, `intra_threads` 1): ~7.4 MB
+/// retained PER TEXT, linear in N — 2048 texts in one call cost +15.1 GB that
+/// later small calls did not reclaim, while the same 2048 texts in chunks of 32
+/// cost +492 MB and plateaued flat. The resident high-water is set by the
+/// LARGEST SINGLE BATCH, so this bound is what keeps RSS O(batch) instead of
+/// O(entities touched). In production the unbounded path took quipu-server from
+/// 350 MB to 5.83 GB on one drain and held it there.
+///
+/// The deferred path also MERGES work across transactions before draining, so
+/// without this bound the batch grows with write volume, not just per-write
+/// fan-out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn deferred_embed_chunks_the_onnx_call_by_batch_size() {
+    use quipu::KnowledgeVectorStore as _;
+
+    let batches: Arc<parking_lot::Mutex<Vec<usize>>> = Arc::new(parking_lot::Mutex::new(vec![]));
+
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(RecordingProvider {
+        batches: batches.clone(),
+    }));
+    store.embedding_config_mut().auto_embed = true;
+    store.embedding_config_mut().embed_batch_size = 8;
+    store.embedding_config_mut().dimension = 8;
+    store.set_defer_auto_embed(true);
+
+    // 50 embeddable entities in one write -> one drained work set of 50.
+    let mut turtle = String::from("@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n");
+    for i in 0..50 {
+        turtle.push_str(&format!(
+            "<http://example.org/e{i}> rdfs:label \"Entity {i}\" .\n"
+        ));
+    }
+    quipu::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let work = store
+        .take_deferred_embed()
+        .expect("a write touching 50 embeddable entities must queue work");
+    assert_eq!(work.texts().len(), 50, "all 50 entities should be queued");
+
+    let shared: SharedStore = Arc::new(FairMutex::new(store));
+    // AppError deliberately has no Debug impl, so assert rather than expect().
+    assert!(
+        super::tools::finish_deferred_embed(&shared, &work).is_ok(),
+        "deferred embed should succeed"
+    );
+
+    let seen = batches.lock().clone();
+    assert!(!seen.is_empty(), "the provider was never called");
+
+    // THE BOUND: no single ONNX call may exceed embed_batch_size. Pre-fix this
+    // is a single call of 50 and the assert fails.
+    let largest = *seen.iter().max().unwrap();
+    assert!(
+        largest <= 8,
+        "finish_deferred_embed handed ONNX a batch of {largest} against embed_batch_size=8 \
+         (call sizes {seen:?}) — the unbounded embed_batch is back, and with it an RSS \
+         high-water proportional to the entities one drain touched"
+    );
+
+    // And chunking must not LOSE work: every entity still gets embedded.
+    assert_eq!(
+        seen.iter().sum::<usize>(),
+        50,
+        "chunking dropped or duplicated texts (call sizes {seen:?})"
+    );
+    assert_eq!(
+        shared.lock().vector_count().unwrap(),
+        50,
+        "every queued entity should end up with a vector"
+    );
+}
