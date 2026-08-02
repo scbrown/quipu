@@ -1,4 +1,23 @@
 [workspace]
+# Determine the current version from OUR git tags, not from crates.io.
+#
+# Without this, release-plz resolves the baseline by downloading the crate named
+# `quipu` from crates.io — and that name belongs to somebody else's project (a
+# post-quantum crypto codec, 11 versions, currently 0.10.0). Nothing it downloads
+# matches this source, so it fell back to the root commit and emitted release PRs
+# whose CHANGELOG section was the entire project history (#42, #59, #61) or a lone
+# unresolvable `[0000000]` placeholder (#60, #62). `publish = false` stops us
+# publishing; it did NOT stop that lookup.
+#
+# Reproduced and fixed locally against the exact pinned release-plz (0.3.160)
+# before landing, rather than by argument:
+#
+#   without git_only:  "Downloaded quipu v0.10.0" -> section = [0000000] placeholder
+#   with git_only:     no registry call; compares target/package/quipu-0.3.17
+#                      taken from our own tag -> correct feat/fix section
+#
+# `git_only` and `publish` must not both be true; publish is false below.
+git_only = true
 changelog_config = "cliff.toml"
 publish = false
 git_release_enable = true
