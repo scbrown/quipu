@@ -2,8 +2,14 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # Same vendored file as the large-files exclusion below, same reason, and
+      # it needs excluding here TOO: these two hooks REWRITE what they inspect,
+      # so on every run they "fixed" `mermaid.min.js` and exited 1 with "files
+      # were modified by this hook". That is why CI went red — see below.
       - id: trailing-whitespace
+        exclude: ^docs/book/mermaid\.min\.js$
       - id: end-of-file-fixer
+        exclude: ^docs/book/mermaid\.min\.js$
       - id: check-yaml
       - id: check-json
         types: [json]

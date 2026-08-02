@@ -147,6 +147,23 @@ pub fn expanded_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<
 fn type_constants(query: &spargebra::Query) -> Vec<String> {
     use spargebra::algebra::GraphPattern;
 
+    // The wildcard arm below is DELIBERATE and must stay a wildcard.
+    //
+    // `GraphPattern`'s variant set depends on which spargebra features are
+    // enabled, so the set differs per build: under `--no-default-features` the
+    // wildcard covers exactly one variant (`Values`) and clippy's
+    // `match_wildcard_for_single_variants` fires, while richer feature
+    // combinations leave several. Naming the variant explicitly to satisfy the
+    // lint would make the match NON-EXHAUSTIVE on every other leg — trading a
+    // lint on one build for a compile error on the rest.
+    //
+    // What the wildcard actually absorbs is patterns that carry no triple
+    // patterns to walk (`VALUES` supplies inline data). The residual risk is
+    // real and worth stating: a FUTURE spargebra variant that does contain type
+    // constants would be silently skipped, and this function would under-report
+    // rather than fail. It is allowed to under-report — see this function's
+    // contract above: a missing marker, never a wrong one.
+    #[allow(clippy::match_wildcard_for_single_variants)]
     fn walk(p: &GraphPattern, out: &mut Vec<String>) {
         match p {
             GraphPattern::Bgp { patterns } => {
