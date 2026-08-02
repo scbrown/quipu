@@ -54,6 +54,14 @@ jobs:
       # So the real fix is to stop release-plz resolving its baseline against a
       # stranger's crate. Until then the `verify-changelog` job below is what keeps a
       # bad section from being merged, and it is the part that is proven to work.
+      #
+      # ⚠ EXPECT `Verify changelog` TO BE RED, AND DO NOT "FIX" IT BY LOOSENING IT.
+      # EVERY release PR release-plz generates here is defective — measured on four in
+      # a row (#59 full-history dump, #60 missing 1 commit, #61 dump then missing 1,
+      # #62 missing 2). The red is that known defect, not a new regression, and it
+      # clears only when the section is corrected by hand or the cause above is fixed.
+      # `Release-plz` and `Verify changelog` are deliberately separate jobs so this
+      # failure cannot be misread as the release itself having failed.
       - uses: MarcoIeni/release-plz-action@v0.5
         id: release
         env:

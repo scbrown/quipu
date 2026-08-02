@@ -13,11 +13,17 @@ name: Changelog check
 #   da2c856a  author github-actions[bot]  ->  action_required   (dark)
 #   853994ef  author scbrown              ->  success           (ran, and passed)
 #
-# So a human commit onto a release PR's branch un-darkens it. That matters because
-# release-plz's commit selection is unreliable here anyway (it omitted a real commit
-# from both #60 and #61), so a human already has to correct the section by hand —
-# and this check runs on exactly that push, before merge. It is a real gate again,
-# just not an unattended one.
+# So a human commit onto a release PR's branch un-darkens it, and this check then
+# runs before merge. It is a real gate again, just not an unattended one.
+#
+# ⚠ BUT A HAND-CORRECTION IS NOT DURABLE — CORRECT AND MERGE IN ONE SITTING.
+# release-plz ABANDONS a branch it did not write. Measured: I corrected #61's section
+# by hand at 15:23Z; on the next push to main it closed #61 (15:40:56Z) and opened #62
+# on a fresh branch three seconds later, with the defective section back. The fix was
+# discarded silently. #60 survived only because it was merged before the next push.
+#
+# Do not leave a corrected release PR sitting. Correct it, confirm this check is
+# green, merge. Otherwise the next push to main throws the correction away.
 #
 # An earlier version of this note said the darkness was "unfixable from the repo
 # side, it needs the Actions approval setting changed". That was WRONG, and wrong in
