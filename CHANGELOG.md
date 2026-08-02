@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [0.3.18] - 2026-08-02
 
-### Miscellaneous
+### Reverted
 
-- Update Cargo.toml dependencies([0000000](https://github.com/scbrown/quipu/commit/0000000))
+- *(ci)* The release-pr/release reorder did not fix the changelog dump([792a9a2](https://github.com/scbrown/quipu/commit/792a9a29427f2a7b6bbe9812cbf5b11dffd8aa32))
 
 ## [0.3.17] - 2026-08-02
 
