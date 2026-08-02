@@ -1,18 +1,31 @@
 name: Changelog check
 
-# ⚠ THIS WORKFLOW DOES NOT RUN ON RELEASE PRs, AND NEVER HAS. Do not read its
-# status — or its absence — as evidence a release PR is clean.
+# ⚠ THIS WORKFLOW IS DARK WHILE A RELEASE PR'S HEAD COMMIT IS BOT-AUTHORED. Do not
+# read its status — or its absence — as evidence a release PR is clean.
 #
-# Measured 2026-08-02: all 33 runs of this workflow, every one on a `release-plz-*`
-# branch, are `action_required` with 0s duration. Release PRs are authored by
-# `app/github-actions`, and workflow runs on bot-authored PRs wait for a human to
-# approve them. Nobody ever did, so this gate has never once executed on the PRs it
-# exists to gate, while three bad changelogs shipped past it.
+# Measured 2026-08-02: the first 33 runs of this workflow, every one on a
+# `release-plz-*` branch, were `action_required` with 0s duration — never executed,
+# while three bad changelogs shipped past it.
 #
-# The copy that actually protects releases is the `verify-changelog` job in
-# release.yml, which runs on `push` to main — an untriggered gate is not a gate.
-# This file is kept because it still covers HUMAN PRs touching CHANGELOG.md, where
-# the approval gate does not apply.
+# The gate keys on the HEAD COMMIT'S AUTHOR, not the PR's author. Measured as a
+# controlled A/B on one branch, minutes apart:
+#
+#   da2c856a  author github-actions[bot]  ->  action_required   (dark)
+#   853994ef  author scbrown              ->  success           (ran, and passed)
+#
+# So a human commit onto a release PR's branch un-darkens it. That matters because
+# release-plz's commit selection is unreliable here anyway (it omitted a real commit
+# from both #60 and #61), so a human already has to correct the section by hand —
+# and this check runs on exactly that push, before merge. It is a real gate again,
+# just not an unattended one.
+#
+# An earlier version of this note said the darkness was "unfixable from the repo
+# side, it needs the Actions approval setting changed". That was WRONG, and wrong in
+# the direction that stops you looking. Corrected once the A/B above was measured.
+#
+# The unattended copy is the `verify-changelog` job in release.yml, which runs on
+# `push` to main and needs no approval. Keep both: that one always runs, this one
+# covers the pre-merge moment on the PR itself.
 #
 # Gate against release-plz's changelog commit mis-selection.
 # release-plz has documented only the newest few commits of a multi-commit release
