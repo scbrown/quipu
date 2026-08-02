@@ -18,6 +18,11 @@
 #   SERVICE     systemd unit to restart        (default: quipu; empty = skip)
 #   HEALTH_URL  post-deploy check base         (default: http://localhost:3030)
 #   NO_DEPLOY=1 build + gate only, do not install/restart
+#   QUIPU_AUTH_TOKEN  bearer for the /shapes gate (that route needs auth to LIST)
+#   QUIPU_TOKEN_FILE  file to read the bearer from, if the env var is unset
+#   SHAPES_CHECK_ONLY=1  run ONLY the shapes gate against HEALTH_URL and exit;
+#                        neither builds nor deploys, so both of its branches are
+#                        exercisable without a deploy
 #
 set -euo pipefail
 
@@ -41,6 +46,47 @@ SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
 say() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31mDEPLOY ABORTED: %s\033[0m\n' "$*" >&2; exit 1; }
+
+check_shapes() {
+  local token body code count
+  token="${QUIPU_AUTH_TOKEN:-}"
+  if [ -z "$token" ] && [ -n "${QUIPU_TOKEN_FILE:-}" ] && [ -r "$QUIPU_TOKEN_FILE" ]; then
+    token=$(cat "$QUIPU_TOKEN_FILE")
+  fi
+
+  body=$(mktemp)
+  code=$(curl -s -m 8 -o "$body" -w '%{http_code}' \
+    -X POST -H 'Content-Type: application/json' \
+    ${token:+-H "Authorization: Bearer $token"} \
+    -d '{"action":"list"}' "$HEALTH_URL/shapes" || echo 000)
+
+  case "$code" in
+    200) : ;;
+    401|403)
+      rm -f "$body"
+      die "shapes gate could not AUTHENTICATE to $HEALTH_URL/shapes (HTTP $code) — /shapes needs a bearer even to list. This says NOTHING about whether shapes are loaded. The binary IS installed and the service IS serving (the gates above passed); only this last check did not run. Set QUIPU_AUTH_TOKEN (or QUIPU_TOKEN_FILE) and re-run to complete it." ;;
+    000)
+      rm -f "$body"
+      die "shapes gate got no response from $HEALTH_URL/shapes (timeout/connection). The service answered /health and /version moments ago, so investigate before assuming shapes are gone." ;;
+    *)
+      rm -f "$body"
+      die "shapes gate got HTTP $code from $HEALTH_URL/shapes — unexpected; not treating it as a shapes count." ;;
+  esac
+
+  count=$(grep -o '"count":[0-9]*' "$body" | head -1 | cut -d: -f2)
+  rm -f "$body"
+  [ -n "$count" ] \
+    || die "shapes gate got HTTP 200 but no \"count\" field — the response shape changed; this gate is no longer measuring what it claims."
+  [ "$count" -ge 1 ] \
+    || die "shacl is compiled in but ZERO shapes are loaded — validation is a no-op. Load shapes and re-run, or the /shapes count>0 invariant is broken."
+  echo "shapes loaded: count=$count — SHACL is actually validating."
+}
+
+if [ "${SHAPES_CHECK_ONLY:-0}" = 1 ]; then
+  say "shapes gate only, against $HEALTH_URL"
+  check_shapes
+  exit 0
+fi
 
 cd "$BUILD_DIR"
 ARTIFACT="target/release/$BIN"
@@ -132,11 +178,26 @@ fi
 # shacl DOING ANYTHING. Shapes must be LOADED, or every validation is a silent
 # pass. The deploy path loads them; this asserts it stuck (and
 # catches the redeploy-wiped-shapes case). ──
-shapes=$(curl -s -m 8 -X POST -H 'Content-Type: application/json' \
-  -d '{"action":"list"}' "$HEALTH_URL/shapes" || true)
-count=$(echo "$shapes" | grep -o '"count":[0-9]*' | head -1 | cut -d: -f2)
-[ "${count:-0}" -ge 1 ] \
-  || die "shacl is compiled in but ZERO shapes are loaded — validation is a no-op. Load shapes and re-run, or the /shapes count>0 invariant is broken."
-echo "shapes loaded: count=$count — SHACL is actually validating."
+#
+# /shapes REQUIRES A BEARER EVEN TO LIST — unlike /health, /version, /query and
+# /search, which stay open. This gate predates that auth change and sent no
+# token, so it read the 401 body as "no count field", defaulted count to 0, and
+# aborted with "ZERO shapes are loaded" — a SHACL outage that was not happening,
+# reported by the one check meant to prove SHACL was fine.
+#
+# The damage is in the ORDERING: this gate runs AFTER install and restart, so
+# every deploy since the auth change installed correctly, restarted correctly,
+# then announced DEPLOY ABORTED. An operator who believes it either rolls back a
+# good deploy or goes hunting a SHACL failure that does not exist. A check that
+# cannot authenticate must say SO — it must never report the thing it failed to
+# measure as broken.
+#
+# Token: $QUIPU_AUTH_TOKEN, or the file at $QUIPU_TOKEN_FILE if set.
+#
+# Run JUST this gate — against any server, without building or deploying — with
+# SHAPES_CHECK_ONLY=1. A gate that fires only at the end of a deploy is a gate
+# nobody can exercise, which is how this one stayed wrong: both of its branches
+# are now runnable in a second.
+check_shapes
 
 say "DEPLOY OK — $BIN built with $FEATURES, gated at build + binary + runtime + shapes."
