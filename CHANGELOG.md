@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.17] - 2026-08-02
+
+### Fixed
+
+- *(ci)* The changelog guard never ran, and could not have failed if it had([7e3e503](https://github.com/scbrown/quipu/commit/7e3e5033da2149bda01903f8bd381319aa959514))
+- *(ci)* Narrow the changelog exemption that let real commits go undocumented([d272576](https://github.com/scbrown/quipu/commit/d272576bafd742456bcbcec0ac06e74d3e635662))
+
 ## [0.3.16] - 2026-08-02
 
 ### Added
