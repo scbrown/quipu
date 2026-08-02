@@ -2087,8 +2087,14 @@ fn the_two_forms_disagree_and_both_are_right() {
              SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?t . FILTER(?t = ex:Service) }"}),
     )
     .unwrap();
-    assert_eq!(inferred["rows"][0]["n"], 3, "constant form includes subclasses");
-    assert_eq!(asserted["rows"][0]["n"], 1, "variable form is asserted-only");
+    assert_eq!(
+        inferred["rows"][0]["n"], 3,
+        "constant form includes subclasses"
+    );
+    assert_eq!(
+        asserted["rows"][0]["n"], 1,
+        "variable form is asserted-only"
+    );
 }
 
 #[test]

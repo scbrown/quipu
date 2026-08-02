@@ -419,7 +419,7 @@ If you request a W3C shape with `Accept`
 `text/turtle`), the body is fixed by spec and has nowhere to put the marker.
 It travels as a response header instead, naming the widened type constants:
 
-```
+```http
 x-quipu-inference: http://example.org/homelab/Service
 ```
 

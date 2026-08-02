@@ -174,7 +174,7 @@ fn add_inference(out: &mut JsonValue, expanded: &[rdfs::ExpandedType]) {
                 // "counts" would be wrong on the two shapes this marker now also
                 // reaches: an ASK returns a boolean and CONSTRUCT returns triples.
                 "note": "rdfs:subClassOf expansion widened a type constant. For an \
-asserted-only answer use the variable form: ?s a ?t . FILTER(?t = <Type>)",
+            asserted-only answer use the variable form: ?s a ?t . FILTER(?t = <Type>)",
             }),
         );
     }

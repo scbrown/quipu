@@ -223,10 +223,7 @@ pub(crate) async fn query(
                     if let Some(types) = quipu::inference_header(&inferred)
                         && let Ok(v) = axum::http::HeaderValue::from_str(&types)
                     {
-                        headers.insert(
-                            axum::http::HeaderName::from_static("x-quipu-inference"),
-                            v,
-                        );
+                        headers.insert(axum::http::HeaderName::from_static("x-quipu-inference"), v);
                     }
                     return Ok((headers, body).into_response());
                 }
