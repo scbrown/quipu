@@ -30,37 +30,32 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # These two steps are SPLIT, and the order is the point — do not collapse
-      # them back into one `release-plz-action` step with no `command`.
+      # DO NOT split this into ordered `command: release` / `command: release-pr`
+      # steps to fix the full-history changelog dump. That was tried on 2026-08-02
+      # and MEASURED NOT TO WORK — recorded here so the next person does not spend
+      # the afternoon rediscovering it.
       #
-      # Unspecified, the action runs `release-pr` FIRST and `release` second (see
-      # its action.yml). On the push that merges a release PR, the manifest already
-      # says the new version but its tag does not exist yet — so `release-pr` ran
-      # with no baseline for the current version, took the root commit as its start,
-      # and proposed a next version whose CHANGELOG section was the ENTIRE project
-      # history. Measured on #59: the PR was created at 14:36:27Z and the v0.3.16
-      # tag at 14:36:28Z, one second later, in this same run.
+      # The plausible story was: the action (given no `command`) runs `release-pr`
+      # before `release`, so on a release-merge push the just-bumped version has no
+      # tag yet and `release-pr` has no baseline. Splitting so the tag lands first
+      # should fix it. It did not. With the split live, v0.3.17 was tagged at
+      # 15:07:28Z and the next release PR (#61) was opened at 15:10:00Z — two and a
+      # half minutes AFTER the tag existed — and it was still a 259-line dump of the
+      # entire project history. Tag presence is not the variable.
       #
-      # It looked intermittent only because a later push to main regenerates the PR
-      # once the tag exists, quietly repairing it. It survives whenever a release is
-      # the last thing to land — which is exactly when someone is likely to merge it.
-      # Three occurrences: v0.3.5, #42/v0.3.7, #59/v0.3.17.
+      # What the run log actually shows is `downloading packages from cargo registry
+      # crates.io` followed by `determining next version for quipu 0.3.17`:
+      # release-plz takes its baseline from the PUBLISHED CRATE, not from git. The
+      # `quipu` name on crates.io belongs to an unrelated post-quantum crypto library
+      # (11 versions, max 0.10.0, different author), so nothing it downloads matches
+      # this source and it walks back to the root commit. `publish = false` in
+      # release-plz.toml stops us publishing; it does not stop that lookup.
       #
-      # Tagging first gives `release-pr` the baseline it needs.
-      - name: Publish the release for the version already in the manifest
-        uses: MarcoIeni/release-plz-action@v0.5
+      # So the real fix is to stop release-plz resolving its baseline against a
+      # stranger's crate. Until then the `verify-changelog` job below is what keeps a
+      # bad section from being merged, and it is the part that is proven to work.
+      - uses: MarcoIeni/release-plz-action@v0.5
         id: release
-        with:
-          command: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - name: Open/update the next release PR (now that the tag exists)
-        uses: MarcoIeni/release-plz-action@v0.5
-        id: release-pr
-        with:
-          command: release-pr
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
