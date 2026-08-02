@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.16] - 2026-08-02
+
+### Added
+
+- *(sparql)* Announce rdfs:subClassOf inference in the query response([531098f](https://github.com/scbrown/quipu/commit/531098f6f6a3f90df25864804aef08987faa989e))
+- *(shapes)* Shape SearchService, and catch the gap no count can see([c21c61d](https://github.com/scbrown/quipu/commit/c21c61dd4d89b0f96d131638f0fb758c29d15cb5))
+- *(sparql)* Carry the subclass-inference marker on ASK, CONSTRUCT and the W3C shapes([f44afc9](https://github.com/scbrown/quipu/commit/f44afc918a54d7e2cc6ea3a59ae82f2876fe2c16))
+
+### Fixed
+
+- *(embed)* Chunk the deferred ONNX embed — unbounded batch pinned GBs of arena([64c49f7](https://github.com/scbrown/quipu/commit/64c49f7480af0f4dd4c51c25c6d1973d37e03f83))
+- *(deploy)* The shapes gate's own failure path reported "HTTP 000000"([95f3319](https://github.com/scbrown/quipu/commit/95f3319298c6c636402ac48f06f751a02f6484d1))
+- *(ci)* Green the Format and Markdown-lint legs on main([1be0d65](https://github.com/scbrown/quipu/commit/1be0d658ca6da217bf6afc1767c5e60048499e3c))
+- *(ci)* Green the last two legs — a vendored file two hooks rewrote, and a feature-dependent wildcard([14ea79f](https://github.com/scbrown/quipu/commit/14ea79fd7db73cde37689552dc115be450965288))
+
 ## [0.3.15] - 2026-08-01
 
 ### Added
