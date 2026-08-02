@@ -386,6 +386,49 @@ count is the one you wanted. A type with no subclasses is never reported: both
 forms agree there, which also makes a leaf type a useful control when you are
 checking this behaviour yourself.
 
+#### Every result shape carries it — including ASK
+
+The marker is not a SELECT feature. `ASK` is the shape most in need of it:
+
+```sparql
+ASK { hw:postgres a hw:Service }     # -> {"result": true, "inference": {...}}
+```
+
+`hw:postgres` may be asserted **only** as `hw:DatabaseService` — nothing in the
+graph says it is a `hw:Service` — and this still answers `true`, because
+expansion widened the question. A boolean gives you no number to look at twice,
+so without the marker an inferred `true` is byte-for-byte identical to an
+asserted one. `CONSTRUCT`/`DESCRIBE` carry it too, and there it matters for a
+further reason: the triples you get back are inference-widened, and a
+materialised graph is easy to write down somewhere and re-read later as fact.
+
+**What the marker claims.** It says expansion was applied *to the query*. It does
+**not** say the answer depended on it — a marked `ASK` can be `true` about a
+directly-asserted fact that needed no inference at all. Read a marked `true` as
+"this was the wide question", not as "this true is inferred". To settle whether
+the inference mattered, ask the asserted form:
+
+```sparql
+SELECT ?t WHERE { hw:postgres a ?t }    # what is it ACTUALLY typed as?
+```
+
+#### Standard result formats: the marker moves to a header
+
+If you request a W3C shape with `Accept`
+(`application/sparql-results+json`, `application/sparql-results+xml`,
+`text/turtle`), the body is fixed by spec and has nowhere to put the marker.
+It travels as a response header instead, naming the widened type constants:
+
+```
+x-quipu-inference: http://example.org/homelab/Service
+```
+
+Same rule: the header is **absent** when nothing was inferred. The body is
+untouched and stays conformant, so a standard parser is unaffected — but a
+client that ignores headers gets no signal, which is a reason to prefer the
+default JSON shape when the distinction matters. Full `expandedTypes` detail is
+one `Accept`-free request away.
+
 ## 10. Property Paths
 
 SPARQL 1.1 property paths let you traverse edges without binding

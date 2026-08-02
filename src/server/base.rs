@@ -211,9 +211,24 @@ pub(crate) async fn query(
             if let Some(fmt) = quipu::w3c::negotiate(&accept) {
                 let (result, _truncated) = quipu::query_result(store, &input)?;
                 if let Some((content_type, body)) = quipu::w3c::serialize(store, &result, fmt)? {
-                    return Ok(
-                        ([(axum::http::header::CONTENT_TYPE, content_type)], body).into_response()
-                    );
+                    // The spec shapes have nowhere to carry the subclass-inference
+                    // marker, so it rides a header instead of being dropped. Without
+                    // this, one Accept header reopens the exact silence the marker
+                    // closes on the bespoke shape — for SELECT as much as for ASK.
+                    let mut headers = HeaderMap::new();
+                    if let Ok(ct) = axum::http::HeaderValue::from_str(content_type) {
+                        headers.insert(axum::http::header::CONTENT_TYPE, ct);
+                    }
+                    let inferred = quipu::query_inference(store, &input).unwrap_or_default();
+                    if let Some(types) = quipu::inference_header(&inferred)
+                        && let Ok(v) = axum::http::HeaderValue::from_str(&types)
+                    {
+                        headers.insert(
+                            axum::http::HeaderName::from_static("x-quipu-inference"),
+                            v,
+                        );
+                    }
+                    return Ok((headers, body).into_response());
                 }
                 // Format did not fit the result variant (e.g. text/turtle for a SELECT);
                 // fall through to the default shape rather than erroring.

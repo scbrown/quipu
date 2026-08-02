@@ -132,11 +132,26 @@ pub fn query_inference(store: &Store, input: &JsonValue) -> Result<Vec<rdfs::Exp
 /// Attach the inference marker to a response, when there is one to attach.
 ///
 /// `applied` is always true when the key is present — the field exists to say
-/// "this count is INFERRED, not asserted", and a permanent `applied: false` on
+/// "this answer is INFERRED, not asserted", and a permanent `applied: false` on
 /// every ordinary response is noise that trains readers to skip the field.
 /// `expandedTypes` names what was folded in, because "inference happened" is not
 /// actionable on its own: the reader needs to know that `Service` swallowed
-/// `SearchService` to spot that the number is not the one they wanted.
+/// `SearchService` to spot that the answer is not the one they wanted.
+///
+/// Attached to EVERY result shape `/query` can return — SELECT rows, an ASK
+/// boolean, CONSTRUCT/DESCRIBE triples. Instrumenting only the shape whose
+/// defect was reported would leave the identical silence one query keyword away,
+/// which is the failure this marker exists to end.
+///
+/// # What the marker claims, and what it does not
+///
+/// It says expansion WAS APPLIED to the query — a fact about the query. It does
+/// NOT say the extra classes changed the answer: a marked ASK can be `true` on a
+/// directly-asserted fact that needed no inference at all. That limit is the
+/// same on SELECT, but it is worth stating out loud here because a bare boolean
+/// invites less scrutiny than a count does — a reader must not read a marked
+/// `true` as "this true is inferred". Establishing contribution means running
+/// the query a second time without expansion; the marker deliberately does not.
 fn add_inference(out: &mut JsonValue, expanded: &[rdfs::ExpandedType]) {
     if expanded.is_empty() {
         return;
@@ -156,11 +171,40 @@ fn add_inference(out: &mut JsonValue, expanded: &[rdfs::ExpandedType]) {
             serde_json::json!({
                 "applied": true,
                 "expandedTypes": types,
-                "note": "rdfs:subClassOf expansion widened a type constant. For \
-asserted-only counts use the variable form: ?s a ?t . FILTER(?t = <Type>)",
+                // "counts" would be wrong on the two shapes this marker now also
+                // reaches: an ASK returns a boolean and CONSTRUCT returns triples.
+                "note": "rdfs:subClassOf expansion widened a type constant. For an \
+asserted-only answer use the variable form: ?s a ?t . FILTER(?t = <Type>)",
             }),
         );
     }
+}
+
+/// The inference marker as an HTTP header value, or `None` when nothing was
+/// inferred.
+///
+/// The W3C-negotiated response shapes (`application/sparql-results+json|xml`,
+/// `text/turtle`) are fixed by spec: there is no place in a `{"head":{},
+/// "boolean":true}` document or a Turtle graph to put a marker without emitting
+/// something that is no longer the format the caller asked for. So on that path
+/// the signal goes out of band, in a header, where it annotates the response
+/// without touching the body a conformant parser will read.
+///
+/// Names only the widened type constants, not their subclass sets — a header is
+/// a bounded place and the parents are enough to know the answer is not
+/// asserted-only. The full `expandedTypes` detail is one Accept-free request
+/// away, in the bespoke JSON shape.
+pub fn inference_header(expanded: &[rdfs::ExpandedType]) -> Option<String> {
+    if expanded.is_empty() {
+        return None;
+    }
+    Some(
+        expanded
+            .iter()
+            .map(|e| e.type_iri.as_str())
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
 }
 
 /// Parse a JSON object-position value into a stored `Value`. Accepts a bare
@@ -695,7 +739,17 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             add_inference(&mut out, &inferred);
             Ok(out)
         }
-        QueryResult::Ask(result) => Ok(serde_json::json!({ "result": result })),
+        QueryResult::Ask(result) => {
+            // The highest-risk shape to leave silent, and the last one that was.
+            // `ASK { <x> a <Service> }` is the natural way to ask "is x a
+            // Service?", and it answered an inference-widened question with a
+            // bare `true` — identical, byte for byte, to the `true` of a fact
+            // asserted outright. There is no number here to look at twice, so
+            // the marker is the only thing that can distinguish the two worlds.
+            let mut out = serde_json::json!({ "result": result });
+            add_inference(&mut out, &inferred);
+            Ok(out)
+        }
         QueryResult::Graph(triples) => {
             let json_triples: Vec<JsonValue> = triples
                 .iter()
@@ -707,11 +761,17 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                     })
                 })
                 .collect();
-            Ok(serde_json::json!({
+            // CONSTRUCT/DESCRIBE: expansion adds SUBJECTS to the constructed
+            // graph, so the emitted triples are inference-widened exactly as a
+            // SELECT's rows are — and a materialised graph is likelier than a
+            // count to be written somewhere and re-read later as fact.
+            let mut out = serde_json::json!({
                 "triples": json_triples,
                 "count": json_triples.len(),
                 "truncated": truncated
-            }))
+            });
+            add_inference(&mut out, &inferred);
+            Ok(out)
         }
     }
 }
