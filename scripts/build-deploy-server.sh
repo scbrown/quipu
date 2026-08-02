@@ -55,10 +55,18 @@ check_shapes() {
   fi
 
   body=$(mktemp)
+  # `-w '%{http_code}'` ALREADY prints 000 when the request never completes, so a
+  # `|| echo 000` fallback CONCATENATES with it and yields "000000" — which then
+  # falls through to the catch-all branch and reports a nonsense status. Observed.
+  # Take curl's word, and normalise anything that is not three digits.
   code=$(curl -s -m 8 -o "$body" -w '%{http_code}' \
     -X POST -H 'Content-Type: application/json' \
     ${token:+-H "Authorization: Bearer $token"} \
-    -d '{"action":"list"}' "$HEALTH_URL/shapes" || echo 000)
+    -d '{"action":"list"}' "$HEALTH_URL/shapes") || true
+  case "$code" in
+    [0-9][0-9][0-9]) : ;;
+    *) code=000 ;;
+  esac
 
   case "$code" in
     200) : ;;

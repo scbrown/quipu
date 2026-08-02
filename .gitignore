@@ -59,3 +59,8 @@ data/*.db-wal
 data/*.db-shm
 data/*.log
 .quipu/
+
+# Local tool sidecar: index/hook telemetry, rewritten on every run.
+# Tracking it made the tree permanently dirty, so every build reported
+# git_dirty:true and the flag stopped meaning anything.
+.bobbin/
