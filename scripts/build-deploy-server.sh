@@ -23,7 +23,27 @@
 #   SHAPES_CHECK_ONLY=1  run ONLY the shapes gate against HEALTH_URL and exit;
 #                        neither builds nor deploys, so both of its branches are
 #                        exercisable without a deploy
+#   DEPLOY_ACTOR  WHO is deploying — REQUIRED to install (see below)
+#   DEPLOY_LOG    attribution log path         (default: /var/log/quipu-deploy.log)
 #
+# ── WHY DEPLOY_ACTOR IS REQUIRED, AND WHY IT REFUSES ──
+# Every agent on this fleet reaches the deploy target as the SAME root over the
+# SAME ssh key from ONE host. The deployer's identity is therefore not in the
+# ssh session, the sudo record, or any system log — no log on the box can name
+# a deployer, and none ever will unless the caller asserts it.
+#
+# Measured cost of that gap, once: answering "who deployed?" took a whole-crew
+# per-agent transcript sieve plus a content search, excluding 14 of 24 candidate
+# windows by mechanism. One line in a log answers it instantly. Worse, that
+# forensic route worked BY COINCIDENCE — it depended on every agent happening to
+# run on one host with readable transcripts. Move one agent off-host and the
+# same question becomes unanswerable, with no warning that the capability was
+# ever lost.
+#
+# So this REFUSES rather than defaulting. "unknown" is the value the field would
+# take on every unattributed deploy, so a log that accepts it reproduces the
+# exact blind spot while looking like it fixed it. The refusal costs one env
+# var; an unattributable deploy costs the next incident.
 set -euo pipefail
 
 BIN=quipu-server
@@ -46,6 +66,55 @@ SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
 say() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
 die() { printf '\n\033[1;31mDEPLOY ABORTED: %s\033[0m\n' "$*" >&2; exit 1; }
+
+DEPLOY_LOG="${DEPLOY_LOG:-/var/log/quipu-deploy.log}"
+DEPLOY_ACTOR="${DEPLOY_ACTOR:-${SHANTY_AGENT:-${GT_CREW:-}}}"
+
+# The placeholders are REJECTED BY NAME, because each is a value the shared-root
+# deploy path hands you for free — and a free value is the one that ends up in
+# the log. `whoami` on the target is literally "root" for every agent, so
+# accepting it would log a fact that is true, useless, and identical for all 19.
+case "$(printf '%s' "${DEPLOY_ACTOR:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+  ''|unknown|none|null|root|nobody|-|n/a|na|tbd|agent|crew|user)
+    DEPLOY_ACTOR="" ;;
+esac
+
+require_actor() {
+  [ -n "$DEPLOY_ACTOR" ] && return 0
+  die "DEPLOY_ACTOR is not set (or names nobody in particular).
+
+  This deploy would mutate a shared host that CANNOT tell agents apart: every
+  agent arrives as the same root over the same key, so nothing downstream —
+  not sshd, not sudo, not the journal — can record who you are. If this
+  install lands unattributed, the next 'who deployed?' is answered by sieving
+  transcripts, or not at all.
+
+  Say who you are, then re-run:
+      DEPLOY_ACTOR=<your-agent-name> $0
+  \$SHANTY_AGENT / \$GT_CREW are used automatically when set, so an agent
+  session normally needs nothing. Placeholders (unknown, root, none, ...) are
+  rejected on purpose: they are what the shared path gives you for free, and
+  logging one is the same blind spot with a timestamp on it."
+}
+
+# ONE LINE PER EVENT, APPEND-ONLY, WRITTEN AS IT HAPPENS. Fields are k=v so the
+# log stays greppable without a parser. Note this is called at INSTALL time and
+# again after verification rather than once at the end: the install is the
+# moment the shared host is MUTATED, and a deploy that clobbers someone and then
+# dies at a later gate is exactly the forensic case — a single line written only
+# on success would omit precisely the deploys worth attributing.
+deploy_log() {
+  local line
+  line="$(date -u +%Y-%m-%dT%H:%M:%SZ) actor=$DEPLOY_ACTOR from=$(hostname 2>/dev/null || echo '?') pid=$$ $*"
+  if ! printf '%s\n' "$line" | $SUDO tee -a "$DEPLOY_LOG" >/dev/null 2>&1; then
+    # NEVER FATAL, ALWAYS LOUD. Refusing the deploy because the audit line
+    # could not be written would take a working deploy path down over its
+    # seatbelt; staying quiet would leave a silent hole in the one record this
+    # whole change exists to create. So: say so, on stderr, and carry on.
+    printf '\033[1;33mWARN: could not append to %s — this deploy is UNLOGGED: %s\033[0m\n' \
+      "$DEPLOY_LOG" "$line" >&2
+  fi
+}
 
 check_shapes() {
   local token body code count
@@ -95,6 +164,13 @@ if [ "${SHAPES_CHECK_ONLY:-0}" = 1 ]; then
   check_shapes
   exit 0
 fi
+
+# REFUSE BEFORE THE BUILD, NOT AT THE INSTALL. The build is minutes; failing a
+# one-env-var precondition after it is how a gate earns a wrapper that presets
+# the variable to something meaningless just to stop the nagging. Only when this
+# run will actually install: NO_DEPLOY builds and mutates nothing, so demanding
+# an identity for it would be friction with no audit value.
+[ "${NO_DEPLOY:-0}" = 1 ] || require_actor
 
 cd "$BUILD_DIR"
 ARTIFACT="target/release/$BIN"
@@ -146,10 +222,20 @@ if [ "${NO_DEPLOY:-0}" = 1 ]; then
 fi
 
 # ── deploy: back up each target, then install ──
+# The tree's OWN dirty flag is recorded, not just the sha: a build from a dirty
+# tree is not reproducible from its sha, and "dirty" was the fact that told
+# a past incident that the install had bypassed this script entirely. Recording
+# also gives a second, independent reading to set against what /version claims,
+# it here also gives a second, independent reading to set against what /version
+# claims — a discrepancy currently open against this deployment.
+built_dirty=no
+[ -n "$(git status --porcelain 2>/dev/null)" ] && built_dirty=yes
+
 for dest in $INSTALL_TARGETS; do
   [ -f "$dest" ] && $SUDO cp -p "$dest" "$dest.bak-$(date +%Y%m%d%H%M%S)"
   $SUDO install -m 755 "$ARTIFACT" "$dest"
   echo "installed -> $dest"
+  deploy_log "event=install dest=$dest built_sha=${built_head:-?} dirty=$built_dirty bin_sha256=${new_sha:0:16}"
 done
 
 if [ -n "$SERVICE" ]; then
@@ -168,7 +254,20 @@ ver=$(curl -s -m 8 "$HEALTH_URL/version")
 grep -q '"onnx":true'  <<<"$ver" || die "/version does not report onnx enabled — the deployed binary is not the feature build. Running: $ver"
 grep -q '"shacl":true' <<<"$ver" || die "/version does not report shacl enabled — the deployed binary is not the feature build. Running: $ver"
 sha_running=$(echo "$ver" | grep -o '"git_sha":"[a-f0-9]*"' | cut -d'"' -f4)
+dirty_running=$(echo "$ver" | grep -o '"git_dirty":[a-z]*' | cut -d: -f2)
 echo "running: sha=${sha_running:0:8} features onnx+shacl confirmed, health 200."
+
+# LOG WHAT IS SERVING — and log it HERE, BEFORE gate 3.5 can abort.
+# The shipped sha and the SERVED sha are different facts, and recording only the
+# first is worse than useless: a box has been observed whose tree read
+# 4aba263+clean while /version reported f44afc9+dirty, so a log saying "deployed
+# 4aba263" would have been confidently misleading.
+#
+# The ordering is the load-bearing part. Gate 3.5 EXITS when the served sha is
+# not the built one, and that is precisely the case worth having on disk — a
+# deploy that did not take, or someone else's binary already serving. Logging
+# after the gate would record only the deploys that went fine.
+deploy_log "event=serving sha=${sha_running:-unreadable} dirty=${dirty_running:-?} built_sha=${built_head:-?} health=$code"
 
 # ── FAIL-LOUD GATE 3.5: the RUNNING binary is the code we just built ──
 # The definitive anti-stale check and the direct heir of the original bug (a
