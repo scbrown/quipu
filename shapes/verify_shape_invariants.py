@@ -55,6 +55,28 @@ WHY EACH INVARIANT EXISTS — each is a bug that actually happened:
       is legitimate — but the report is printed loud and last, so it cannot
       be scrolled past unseen.
 
+  I8  (--live) No ABSTRACT parent is asserted directly on an instance. An
+      abstract parent is DERIVED, not listed: a class used as the object of
+      rdfs:subClassOf that has no sh:targetClass of its own (today: Service,
+      Host). I7 cannot see this — the parent IS declared, just not shaped —
+      and neither can any coverage count, because a constant-IRI type query
+      resolves subclasses and returns the node whether it was typed with the
+      parent or the child. So `?s a aegis:Service` reports a node as covered
+      while nothing validates it; the gap is invisible from every angle that
+      counts (aegis-19gip, where it was reported as 346 ungoverned Service
+      nodes, then re-measured to 61 asserted, of which 26 carried no other
+      type at all — those 26 are governed by nothing whatsoever).
+
+      Judgement, on the record: Service and Host stay abstract and UNSHAPED.
+      Shaping them would bless the catch-all — the bare nodes are misfiled,
+      not under-described (a source checkout and a network appliance typed
+      Host; a dashboard typed Service), and a shape on the parent would
+      target every child by inference for no gain. The fix is retyping.
+      REPORTS rather than fails, for the reason I1 gives: this check may only
+      assert what live data already satisfies, and today it does not. Flip it
+      to a failure the moment the direct-assertion count reaches zero — that
+      is what stops the backlog being silently re-grown.
+
 The three lists compared here drift INDEPENDENTLY — that is the disease. A
 generator can come later; this check stays either way, because the first
 hand-edit of a generated table re-opens the same hole, silently.
@@ -118,6 +140,34 @@ def targetclasses(ttl_text):
         elif pfx in ns_prefixes:
             out.add(local)
     return out
+
+
+def subclass_parents(ttl_text):
+    """Every aegis-namespace LOCAL NAME used as the OBJECT of rdfs:subClassOf.
+    Same prefix-resolution rule as targetclasses() — and the same trap, since
+    governance.ttl declares three of these under its own bindings."""
+    prefixes = dict(re.findall(r"@prefix\s+([A-Za-z][\w-]*):\s+<([^>]+)>", ttl_text))
+    ns_prefixes = {p for p, ns in prefixes.items() if ns == AEGIS_NS}
+    out = set()
+    for pfx, local, full in re.findall(
+        r"rdfs:subClassOf\s+(?:([A-Za-z][\w-]*):([A-Za-z_]+)|<([^>]+)>)", ttl_text
+    ):
+        if full:
+            if full.startswith(AEGIS_NS):
+                out.add(full[len(AEGIS_NS):])
+        elif pfx in ns_prefixes:
+            out.add(local)
+    return out
+
+
+def abstract_parents(parents, declared):
+    """Parents with no sh:targetClass anywhere — DERIVED, never listed.
+
+    A hand-maintained list of abstract classes is the stale audit table I4
+    forbids, one abstraction up. Deriving it means shaping a parent is the
+    single act that retires it from this check, and adding a parent enrols
+    it automatically."""
+    return parents - declared
 
 
 def doc_kinds(path, section_res, leading_only=False):
@@ -305,8 +355,32 @@ def main():
             )
         else:
             print(f"I7 live kinds all declared .................. ok ({len(in_use)} in use)")
+
+        # I8 — an ABSTRACT parent must not be asserted directly on an instance.
+        parents = set()
+        for ttl in SHAPES.parent.glob("*.ttl"):
+            parents |= subclass_parents(ttl.read_text())
+        abstract = abstract_parents(parents, declared)
+        # in_use is the ASSERTED count: live_kinds() asks `?s a ?c` with ?c a
+        # VARIABLE, which quipu does NOT expand over subClassOf. The constant
+        # form would return the children too and every abstract parent would
+        # look catastrophically violated (aegis-6h45e).
+        direct = {k: in_use[k] for k in sorted(abstract) if in_use.get(k)}
+        if direct:
+            reports.append(
+                f"I8 ABSTRACT-PARENT ASSERTED DIRECTLY: {len(direct)} of {len(abstract)} "
+                f"abstract parent(s) carry direct assertions ({sum(direct.values())} entities):\n      "
+                + "\n      ".join(f"{k}: {n}" for k, n in sorted(direct.items(), key=lambda kv: -kv[1]))
+                + "\n      These classes have children but no shape of their own, so a node typed"
+                "\n      with the PARENT is governed by nothing while reading as covered — the"
+                "\n      inference-expanded count includes it either way. Retype each to the"
+                "\n      concrete child, or shape the parent (which retires it from this check)."
+            )
+        elif abstract:
+            print(f"I8 abstract parents never asserted .......... ok ({len(abstract)} abstract)")
     else:
         print("I7 live<->declared .......................... SKIPPED (no --live)")
+        print("I8 abstract-parent assertion ................ SKIPPED (no --live)")
 
     if reports:
         print("\n" + "=" * 66)
@@ -397,6 +471,35 @@ def selftest():
     if undeclared != {"GhostKind": 3}:
         fails.append("I7-negative: the live-but-undeclared kind was not isolated")
 
+    # I8: subclass_parents() resolves any aegis-bound prefix and full IRIs, and
+    # must pick up the OBJECT of subClassOf, never the subject.
+    sub_ttl = (
+        "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n"
+        f"@prefix gov: <{AEGIS_NS}> .\n"
+        "@prefix other: <http://example.org/> .\n"
+        "gov:WebApplication rdfs:subClassOf gov:Service .\n"
+        f"gov:ProxmoxNode rdfs:subClassOf <{AEGIS_NS}Host> .\n"
+        "gov:Thing rdfs:subClassOf other:Foreign .\n"
+    )
+    got = subclass_parents(sub_ttl)
+    if got != {"Service", "Host"}:
+        fails.append(f"I8 subclass_parents wrong (subject leaked / prefix missed): {sorted(got)}")
+
+    # I8 negative: a parent with children but NO shape is abstract and, if
+    # asserted, must surface. Positive: shaping the parent retires it.
+    parents, shaped = {"Service", "Host", "Directive"}, {"Directive", "WebApplication"}
+    abstract = abstract_parents(parents, shaped)
+    if abstract != {"Service", "Host"}:
+        fails.append(f"I8-derive: abstract set wrong: {sorted(abstract)}")
+    counts = {"Service": 61, "Host": 16, "Directive": 157, "WebApplication": 107}
+    direct = {k: counts[k] for k in sorted(abstract) if counts.get(k)}
+    if direct != {"Service": 61, "Host": 16}:
+        fails.append(f"I8-negative: asserted abstract parents not isolated: {direct}")
+    if {k: 0 for k in abstract if 0}:
+        fails.append("I8-positive: a zero-assertion abstract parent was reported")
+    if abstract_parents(parents, shaped | {"Service", "Host"}):
+        fails.append("I8-positive: shaping a parent did not retire it from the check")
+
     if fails:
         print("SELFTEST FAILED:", file=sys.stderr)
         for f in fails:
@@ -404,7 +507,8 @@ def selftest():
         return 1
     print("SELFTEST PASSED: I5/I6 fail on unshaped documented kinds, pass on "
           "agreement, report shapes-only kinds, scope to the vocabulary "
-          "section; I7 isolates live-but-undeclared kinds.")
+          "section; I7 isolates live-but-undeclared kinds; I8 derives the "
+          "abstract set, isolates asserted parents, and is retired by shaping.")
     return 0
 
 

@@ -166,6 +166,31 @@ aegis:DatabaseServiceShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── SearchService ────────────────────────────────────────────────
+#
+# A search/indexing service (bobbin). Declared rdfs:subClassOf
+# aegis:Service like its three siblings above, but it was the ONLY
+# declared subclass — of any parent — with no sh:targetClass
+# (aegis-19gip). It stayed invisible because the inference-expanded
+# Service count swallowed it: asking `?s a aegis:Service` returns it
+# already, so coverage looked complete from every angle that counted
+# the parent. Its siblings are shaped; a declared child that is not
+# is unshaped emission by the I5 rule, one level down.
+#
+# Optional-only beyond rdfs:label, per I1: aegis:indexes is emitted
+# on the live instance, aegis:externalUrl is not universal.
+
+aegis:SearchServiceShape a sh:NodeShape ;
+    sh:targetClass aegis:SearchService ;
+    sh:property [
+        sh:path aegis:indexes ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ── ZFSDataset ─────────────────────────────────────���─────────────
 #
 # A ZFS dataset for storage.
