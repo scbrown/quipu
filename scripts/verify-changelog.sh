@@ -85,12 +85,23 @@ actual="$(printf '%s\n' "$newest_section" | grep -oE '\[[0-9a-f]{7}\]' | tr -d '
 
 missing="$(comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true)"
 # Drop release-MECHANICS commits from "missing": they are not release CONTENT and
-# cannot be required to appear in the changelog. A commit that TOUCHES CHANGELOG.md
-# is changelog maintenance (release-plz's own "chore: release vX", or a hand splice
-# like the manual fb1cfea splice) — it documents the release, it is not documented BY it.
+# cannot be required to appear in the changelog (release-plz's own "chore: release
+# vX", or a hand splice like fb1cfea) — they document the release, they are not
+# documented BY it.
+#
+# The test is "touches ONLY release-mechanics files", NOT "touches CHANGELOG.md".
+# The looser form exempted any commit that happened to also edit the changelog, so a
+# substantive commit that did both stopped being required and could go undocumented
+# with the guard still green. Observed live on #60: a fix(ci) commit that also
+# touched CHANGELOG.md was dropped from the required set, and the section
+# release-plz generated for it documents nothing but an unresolvable placeholder.
+MECHANICS_RE='^(CHANGELOG\.md|Cargo\.toml|Cargo\.lock)$'
 missing="$(printf '%s\n' "$missing" | while read -r h; do
   [[ -z "$h" ]] && continue
-  git show --name-only --format= "$h" 2>/dev/null | grep -qx 'CHANGELOG.md' && continue
+  files="$(git show --name-only --format= "$h" 2>/dev/null | grep -c . || true)"
+  mech="$(git show --name-only --format= "$h" 2>/dev/null | grep -cE "$MECHANICS_RE" || true)"
+  # Every file it touched is release mechanics, and it touched at least one.
+  if [[ "$files" -gt 0 && "$files" -eq "$mech" ]]; then continue; fi
   echo "$h"
 done)"
 

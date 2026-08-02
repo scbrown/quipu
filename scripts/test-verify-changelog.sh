@@ -106,6 +106,34 @@ read -r d a b c <<<"$(make_repo)"
   entry "$b"; entry "$c"; entry "0000000"; } > "$d/CHANGELOG.md"
 check "unresolvable placeholder hash is ignored" 0 "none missing, none extra" "$d"
 
+# 6. A substantive commit that ALSO edits CHANGELOG.md is still release CONTENT and
+#    must still be documented. The exemption used to be "touches CHANGELOG.md",
+#    which let exactly this commit stop being required — seen live on #60.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  echo x > src.txt
+  printf '# Changelog\n\nnote\n' > CHANGELOG.md
+  git add -A && git commit -qm "fix: real work that also edits the changelog"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"     # e deliberately omitted
+check "substantive commit touching CHANGELOG.md is still required" 1 "$e" "$d"
+
+# 7. ...but a pure release-mechanics commit (CHANGELOG/Cargo only) is still exempt,
+#    or every release would fail on release-plz's own commit.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  printf '# Changelog\n\nnote\n' > CHANGELOG.md
+  printf '[package]\nversion = "1.1.0"\n' > Cargo.toml
+  git add -A && git commit -qm "chore: release v1.1.0"
+) >/dev/null 2>&1
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
+check "pure release-mechanics commit stays exempt" 0 "none missing, none extra" "$d"
+
 echo
 echo "  ${pass} passed, ${fail} failed"
 [[ "$fail" -eq 0 ]]
