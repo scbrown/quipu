@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     outputs:
-      releases_created: ${{ steps.release-plz.outputs.releases_created }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,11 +30,97 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: MarcoIeni/release-plz-action@v0.5
-        id: release-plz
+      # These two steps are SPLIT, and the order is the point — do not collapse
+      # them back into one `release-plz-action` step with no `command`.
+      #
+      # Unspecified, the action runs `release-pr` FIRST and `release` second (see
+      # its action.yml). On the push that merges a release PR, the manifest already
+      # says the new version but its tag does not exist yet — so `release-pr` ran
+      # with no baseline for the current version, took the root commit as its start,
+      # and proposed a next version whose CHANGELOG section was the ENTIRE project
+      # history. Measured on #59: the PR was created at 14:36:27Z and the v0.3.16
+      # tag at 14:36:28Z, one second later, in this same run.
+      #
+      # It looked intermittent only because a later push to main regenerates the PR
+      # once the tag exists, quietly repairing it. It survives whenever a release is
+      # the last thing to land — which is exactly when someone is likely to merge it.
+      # Three occurrences: v0.3.5, #42/v0.3.7, #59/v0.3.17.
+      #
+      # Tagging first gives `release-pr` the baseline it needs.
+      - name: Publish the release for the version already in the manifest
+        uses: MarcoIeni/release-plz-action@v0.5
+        id: release
+        with:
+          command: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Open/update the next release PR (now that the tag exists)
+        uses: MarcoIeni/release-plz-action@v0.5
+        id: release-pr
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # The changelog guard, on a trigger that actually fires.
+  #
+  # `changelog-check.yml` runs this same script on `pull_request`, and it has NEVER
+  # EXECUTED: all 33 of its runs, every one on a `release-plz-*` branch, are
+  # `action_required` with 0s duration. Release PRs are authored by
+  # `app/github-actions`, and workflow runs on bot-authored PRs sit unapproved until
+  # a human clicks. So the guard reported nothing, was never green or red, and the
+  # bug it was written for shipped three times underneath it.
+  #
+  # `push` to main is not gated that way, so this copy runs. Keep the pull_request
+  # one — it covers human PRs that touch CHANGELOG.md — but this is the one that
+  # actually protects releases.
+  verify-changelog:
+    name: Verify changelog
+    needs: release-plz
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags: the verifier ranges over v<prev>..HEAD
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      # The guard shipped able to fail in only one direction. Prove it can still
+      # fail in both BEFORE trusting either verdict below — a check that cannot
+      # fail reads exactly like a check that passed.
+      - name: Self-test the guard (both directions)
+        run: ./scripts/test-verify-changelog.sh
+
+      - name: Verify the newest section on main
+        run: ./scripts/verify-changelog.sh
+
+      # The pending release PR is the artifact that actually gets merged, and it is
+      # regenerated on every push — so it is worth re-checking every push, not just
+      # at creation.
+      - name: Verify the pending release PR, if there is one
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BR="$(gh pr list --state open --json headRefName \
+                  --jq '[.[] | select(.headRefName | startswith("release-plz"))][0].headRefName // ""')"
+          if [ -z "$BR" ]; then
+            echo "No open release PR — nothing to verify."
+            exit 0
+          fi
+          echo "Verifying pending release PR branch: ${BR}"
+          git fetch --quiet origin "${BR}:refs/remotes/origin/${BR}" || {
+            echo "::warning::could not fetch ${BR}"; exit 0; }
+          ./scripts/verify-changelog.sh --at "refs/remotes/origin/${BR}"
 
   # Attach release binaries built with the `full` feature bundle (Cargo.toml):
   # every feature the shipped binaries can actually use. NOT `--all-features` —

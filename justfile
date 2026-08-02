@@ -87,8 +87,13 @@ docs cmd="build":
 
 # === Release ===
 
-# Verify the newest CHANGELOG.md section documents every commit git-cliff
-# attributes to the release — catches release-plz's commit mis-selection
-#. Run before merging any release-plz PR.
+# Verify the newest CHANGELOG.md section matches git-cliff EXACTLY — no commit
+# missing, and none that belongs to another release. Catches both shapes of
+# release-plz's commit mis-selection. Run before merging any release-plz PR.
 changelog-verify *args:
     ./scripts/verify-changelog.sh {{args}}
+
+# Prove changelog-verify can still fail in BOTH directions. It shipped able to
+# fail in only one, and passed a section holding 221 commits against 1 expected.
+changelog-verify-test:
+    ./scripts/test-verify-changelog.sh

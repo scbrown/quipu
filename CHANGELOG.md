@@ -9,13 +9,23 @@ All notable changes to this project will be documented in this file.
 - *(sparql)* Announce rdfs:subClassOf inference in the query response([531098f](https://github.com/scbrown/quipu/commit/531098f6f6a3f90df25864804aef08987faa989e))
 - *(shapes)* Shape SearchService, and catch the gap no count can see([c21c61d](https://github.com/scbrown/quipu/commit/c21c61dd4d89b0f96d131638f0fb758c29d15cb5))
 - *(sparql)* Carry the subclass-inference marker on ASK, CONSTRUCT and the W3C shapes([f44afc9](https://github.com/scbrown/quipu/commit/f44afc918a54d7e2cc6ea3a59ae82f2876fe2c16))
+- *(deploy)* Refuse to deploy anonymously, and log who + what is SERVING([ca2d0a0](https://github.com/scbrown/quipu/commit/ca2d0a05a1d877ae1ac83ec35f8792faf4a3dd51))
+
+### Documentation
+
+- *(rest-api)* Document POST /resolve([d2d32fc](https://github.com/scbrown/quipu/commit/d2d32fc6ca9f23348d414b1d49073827b60677e4))
 
 ### Fixed
 
 - *(embed)* Chunk the deferred ONNX embed — unbounded batch pinned GBs of arena([64c49f7](https://github.com/scbrown/quipu/commit/64c49f7480af0f4dd4c51c25c6d1973d37e03f83))
+- *(deploy)* The shapes gate reported a SHACL outage it had merely failed to authenticate to([ca55655](https://github.com/scbrown/quipu/commit/ca55655b0f31d2ad403a136565b3485f50f965b6))
 - *(deploy)* The shapes gate's own failure path reported "HTTP 000000"([95f3319](https://github.com/scbrown/quipu/commit/95f3319298c6c636402ac48f06f751a02f6484d1))
 - *(ci)* Green the Format and Markdown-lint legs on main([1be0d65](https://github.com/scbrown/quipu/commit/1be0d658ca6da217bf6afc1767c5e60048499e3c))
 - *(ci)* Green the last two legs — a vendored file two hooks rewrote, and a feature-dependent wildcard([14ea79f](https://github.com/scbrown/quipu/commit/14ea79fd7db73cde37689552dc115be450965288))
+
+### Miscellaneous
+
+- Untrack the tool telemetry sidecar that made every build report git_dirty([4aba263](https://github.com/scbrown/quipu/commit/4aba263d4bb2c9b20da133f3ee3530b38d8ee354))
 
 ## [0.3.15] - 2026-08-01
 

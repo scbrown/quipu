@@ -1,5 +1,19 @@
 name: Changelog check
 
+# ⚠ THIS WORKFLOW DOES NOT RUN ON RELEASE PRs, AND NEVER HAS. Do not read its
+# status — or its absence — as evidence a release PR is clean.
+#
+# Measured 2026-08-02: all 33 runs of this workflow, every one on a `release-plz-*`
+# branch, are `action_required` with 0s duration. Release PRs are authored by
+# `app/github-actions`, and workflow runs on bot-authored PRs wait for a human to
+# approve them. Nobody ever did, so this gate has never once executed on the PRs it
+# exists to gate, while three bad changelogs shipped past it.
+#
+# The copy that actually protects releases is the `verify-changelog` job in
+# release.yml, which runs on `push` to main — an untriggered gate is not a gate.
+# This file is kept because it still covers HUMAN PRs touching CHANGELOG.md, where
+# the approval gate does not apply.
+#
 # Gate against release-plz's changelog commit mis-selection.
 # release-plz has documented only the newest few commits of a multi-commit release
 # (v0.3.6: 4 of 17) and, separately, dumped full history for an empty release

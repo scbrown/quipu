@@ -73,10 +73,15 @@ fi
 
 # Expected commits = git-cliff over the range with the repo's config (the source of
 # truth). Extract the 7-char hashes it renders; drop the release commit itself.
+# `|| true`: an EMPTY result is a meaningful answer here, not an error — it is what
+# "this release contains nothing" looks like, which is precisely the case worth
+# catching. Without it, grep's exit 1 under `pipefail` aborted the whole script at
+# this assignment, so the empty-delta release exited 1 printing NOTHING — an outcome
+# indistinguishable from a crash, and one no reader could act on.
 expected="$(git-cliff --config "$CLIFF_CONFIG" "$range" 2>/dev/null \
-  | grep -oE '\[[0-9a-f]{7}\]' | tr -d '[]' | sort -u)"
+  | grep -oE '\[[0-9a-f]{7}\]' | tr -d '[]' | sort -u || true)"
 # Actual = hashes present in the newest CHANGELOG section.
-actual="$(printf '%s\n' "$newest_section" | grep -oE '\[[0-9a-f]{7}\]' | tr -d '[]' | sort -u)"
+actual="$(printf '%s\n' "$newest_section" | grep -oE '\[[0-9a-f]{7}\]' | tr -d '[]' | sort -u || true)"
 
 missing="$(comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true)"
 # Drop release-MECHANICS commits from "missing": they are not release CONTENT and
@@ -89,19 +94,59 @@ missing="$(printf '%s\n' "$missing" | while read -r h; do
   echo "$h"
 done)"
 
+# EXTRA = documented here but NOT attributed to this release by git-cliff. This is
+# the OTHER direction, and it is the one that has actually bitten: release-plz's
+# full-history dump (v0.3.7 in #42, v0.3.17 in #59) puts every commit in the project
+# under one heading. Checking only `missing` cannot see it — a section with 220
+# commits too many satisfies "nothing is missing" and passed clean, printing the
+# 1-vs-221 discrepancy on its own summary line before returning OK. A guard that
+# fails safe in one direction and is silently blind in the other is worse than no
+# guard, because the green check is read as verification.
+extra="$(comm -13 <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true)"
+# Keep only hashes that resolve to a real commit. git-cliff renders a literal
+# [0000000] for synthetic entries it cannot attribute (v0.3.11 has one, for
+# "Update Cargo.toml dependencies"). That is changelog noise, not a commit
+# documented under the wrong version, and counting it here would fail a release
+# for a defect that does not exist.
+extra="$(printf '%s\n' "$extra" | while read -r h; do
+  [[ -z "$h" ]] && continue
+  # `if`, not `&&`: a non-resolving hash makes git exit 128, and under `set -e`
+  # that status escapes the loop and kills the script instead of skipping the line.
+  if git cat-file -e "${h}^{commit}" 2>/dev/null; then echo "$h"; fi
+done)"
+
 exp_n="$(grep -c . <<<"$expected" || true)"
 act_n="$(grep -c . <<<"$actual" || true)"
 mis_n="$(grep -c . <<<"$missing" || true)"
+ext_n="$(grep -c . <<<"$extra" || true)"
 
 echo "changelog-verify: version ${newest_ver}, range ${range}"
-echo "  git-cliff commits: ${exp_n} · documented in CHANGELOG: ${act_n} · missing: ${mis_n}"
+echo "  git-cliff commits: ${exp_n} · documented in CHANGELOG: ${act_n} · missing: ${mis_n} · extra: ${ext_n}"
+rc=0
 if [[ "$mis_n" -gt 0 ]]; then
   echo "FAIL — the newest CHANGELOG section is missing commits git-cliff attributes to this release:" >&2
   while read -r h; do [[ -n "$h" ]] && echo "  - $h $(git log -1 --format='%s' "$h" 2>/dev/null)"; done <<<"$missing" >&2
+  rc=1
+fi
+if [[ "$ext_n" -gt 0 ]]; then
+  echo "FAIL — the ${newest_ver} section documents ${ext_n} commit(s) that do not belong to this release" >&2
+  echo "       (git-cliff attributes only ${exp_n} commit(s) to ${range}):" >&2
+  while read -r h; do [[ -n "$h" ]] && echo "  - $h $(git log -1 --format='%s' "$h" 2>/dev/null)"; done \
+    <<<"$(printf '%s\n' "$extra" | head -10)" >&2
+  [[ "$ext_n" -gt 10 ]] && echo "  ... and $((ext_n - 10)) more" >&2
+  # The signature of the full-history dump: nothing to release, everything documented.
+  if [[ "$exp_n" -eq 0 ]]; then
+    echo "" >&2
+    echo "NOTE: git-cliff attributes NO commits to this range — there is nothing to release." >&2
+    echo "      A release PR proposing ${newest_ver} over an empty delta should be CLOSED, not merged." >&2
+  fi
+  rc=1
+fi
+if [[ "$rc" -ne 0 ]]; then
   echo "" >&2
   echo "Fix: regenerate with the tool that is correct here —" >&2
   echo "  git-cliff --config ${CLIFF_CONFIG} ${range}" >&2
-  echo "and splice its output into the ${newest_ver} section" >&2
+  echo "and replace the ${newest_ver} section with its output" >&2
   exit 1
 fi
-echo "OK — every git-cliff commit for ${newest_ver} is documented."
+echo "OK — the ${newest_ver} section matches git-cliff exactly (${exp_n} commit(s), none missing, none extra)."
