@@ -17,6 +17,7 @@ pub mod inventory;
 pub mod placement;
 pub mod replay;
 pub mod router;
+pub mod tree;
 pub mod verdict_facts;
 
 pub use guard::{PolicyRegistry, is_governance_write};

@@ -13,6 +13,7 @@
 use quipu::governance::audit::{self, Report, Severity};
 use quipu::governance::inventory;
 use quipu::governance::replay;
+use quipu::governance::tree;
 
 /// Run a checker: `audit <trace.jsonl>` against a trace, `audit inventory`
 /// against the dispatch graph, `audit replay <trace.jsonl>` for promotion
@@ -20,8 +21,8 @@ use quipu::governance::replay;
 pub fn cmd_audit(args: &[String], db_path: &str) {
     let Some(subject) = args.get(2).filter(|a| !a.starts_with("--")) else {
         eprintln!(
-            "usage: quipu audit <trace.jsonl>|inventory|replay <trace.jsonl> \
-             [--json] [--db <path>]"
+            "usage: quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>|\
+             tree <trace.jsonl> [--json] [--db <path>]"
         );
         std::process::exit(1);
     };
@@ -32,6 +33,10 @@ pub fn cmd_audit(args: &[String], db_path: &str) {
 
     if subject == "replay" {
         cmd_replay(args, &store);
+        return;
+    }
+    if subject == "tree" {
+        cmd_tree(args);
         return;
     }
 
@@ -189,5 +194,56 @@ fn cmd_replay(args: &[String], store: &quipu::Store) {
     println!();
     for rule in &report.rules {
         println!("{}", rule.line());
+    }
+}
+
+/// `quipu audit tree <trace.jsonl>` — the dispatch forest, reassembled from
+/// principal chains.
+///
+/// Needs no store: the tree is a property of the trace alone. Exits 0 always —
+/// a shape is not a verdict, and the findings that ARE verdicts (a laundered
+/// chain, a partial tuple) belong to `quipu audit <trace>`.
+fn cmd_tree(args: &[String]) {
+    let Some(path) = args.get(3).filter(|a| !a.starts_with("--")) else {
+        eprintln!("usage: quipu audit tree <trace.jsonl> [--json]");
+        std::process::exit(1);
+    };
+    let jsonl = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error reading {path}: {e}");
+        std::process::exit(1);
+    });
+    let (forest, unreadable) = tree::build_jsonl(&jsonl);
+
+    if args.iter().any(|a| a == "--json") {
+        println!(
+            "{}",
+            serde_json::json!({
+                "summary": forest.summary(),
+                "records": forest.records,
+                "unreadable": unreadable,
+                "unattributed": forest.unattributed,
+                "implied": forest.implied().iter().map(|n| n.path.clone()).collect::<Vec<_>>(),
+                "collapsed": forest.collapsed().iter().map(|n| n.path.clone()).collect::<Vec<_>>(),
+                "tree": forest.render(),
+            })
+        );
+        return;
+    }
+    println!("{} ({unreadable} line(s) unreadable)", forest.summary());
+    if forest.roots.is_empty() {
+        return;
+    }
+    println!();
+    for line in forest.render() {
+        println!("{line}");
+    }
+    for node in forest.collapsed() {
+        println!(
+            "\nNOTE {}: {} records on one node. Separate dispatches of the same \
+             principal by the same caller are indistinguishable in a \
+             reconstructed tree.",
+            node.path.join(" → "),
+            node.records.len()
+        );
     }
 }

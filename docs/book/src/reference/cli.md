@@ -302,3 +302,33 @@ false-positive *candidates* and never false positives — a block is wrong only 
 the action was legitimate, and no record carries that judgement. And it bounds no
 false negatives at all: actions a rule let through without firing look exactly
 like actions it correctly approved.
+
+### `quipu audit tree <trace.jsonl>`
+
+Reassemble the dispatch forest from the principal chains a trace carries.
+
+```bash
+quipu audit tree trace.jsonl
+quipu audit tree trace.jsonl --json
+```
+
+Needs no store — the tree is a property of the trace alone — and exits `0`
+always. A shape is not a verdict; the findings that *are* verdicts (a laundered
+chain, a partial attribution tuple) belong to `quipu audit <trace>`.
+
+SARC §9.5's **attribution dilution** is what this addresses: an orchestrator
+dispatches, a worker acts, and a flat record cannot say which link was
+answerable. The trace this stack emits is a **sequence**, so the tree here is
+*reconstructed* rather than structural, and the output says so in three places:
+
+- **Unattributed records are not placed.** A record with no chain is counted and
+  left out. Attaching it to whichever root happened to be first would invent an
+  answer to the question the tree exists to answer.
+- **Implied dispatch nodes are flagged.** A chain `[orchestrator, worker]` proves
+  an orchestrator exists; it does not prove the orchestrator's own actions are in
+  this window. "This agent did nothing" and "this agent's actions were not
+  recorded" are different facts and only one is good news.
+- **Collapsed nodes get a note.** Two separate dispatches of the same worker by
+  the same caller produce the same chain and land on one node. Not an error — one
+  agent legitimately does many things — but the reader must not be told the tree
+  is unambiguous when it is not.
