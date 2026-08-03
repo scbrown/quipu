@@ -161,6 +161,11 @@ Every view is built on the semantic web patterns from the previous section:
 
 The primary view. A force-directed graph of entities and relationships.
 
+> A 3D successor to this section — same `/graph` payload, same palette, but
+> with derived and stable placement instead of a force layout — is specified in
+> [`datalinks-3d.md`](./datalinks-3d.md), and one of its four modes ships at
+> `/#datalinks`. It sits beside this view rather than replacing it.
+
 **Layout**: Full-viewport graph with a collapsible sidebar.
 
 **Interactions**:
