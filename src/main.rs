@@ -12,10 +12,12 @@
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
 //!   quipu stats [--db <path>]            Show store statistics
+//!   quipu audit <trace.jsonl> [--json] [--db <path>]  Check a trace against Σ
 //!
 //! Aliases: load=knot, query=read
 
 mod cli;
+mod cli_audit;
 mod cli_commands;
 mod cli_propose;
 
@@ -64,6 +66,7 @@ fn main() {
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
         "propose" => cli_propose::cmd_propose(&args, db_path),
+        "audit" => cli_audit::cmd_audit(&args, db_path),
         "ontology" => cmd_ontology(&args, db_path),
         "validate" => cli_commands::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
@@ -215,6 +218,7 @@ COMMANDS:
     quipu repl [--db <path>]
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
+    quipu audit <trace.jsonl> [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
 OPTIONS:

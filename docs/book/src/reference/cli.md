@@ -172,3 +172,49 @@ quipu repl --db my.db
 ```
 
 Type SPARQL queries at the prompt. Use `:quit` or `:q` to exit.
+
+### `quipu audit <trace.jsonl>`
+
+Check an enforcement trace against the constraint specification in the store —
+SARC's `T ⊨ Σ`.
+
+```bash
+quipu audit ~/.local/state/hank/metrics.jsonl --db my.db
+quipu audit trace.jsonl --json --db my.db
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | off | Emit the full report as one JSON object instead of readable lines |
+
+**Exit code `1` when the trace contradicts the spec, `0` otherwise** — so a CI
+job can gate on it without parsing anything.
+
+Four passes run over every record: **coverage** (is every constraint the trace
+cites actually in Σ, and does every refusal name one), **placement** (was each
+constraint evaluated at a point its class can be enforced at, and does the
+record agree with Σ about its class), **outcome** (does the response taken match
+the one declared, at the recorded mode), and **attribution** (does the record say
+who is answerable). Every pass is a comparison between two declared values; none
+of them calls a model.
+
+Findings come in two severities and only one of them fails the gate:
+
+- **violation** — the trace *contradicts* Σ. A soft constraint that blocked, a
+  declared `deny` that only warned under `enforce`, a record whose declared
+  principal chain disagrees with the process that ran.
+- **incompleteness** — the trace does not say *enough* to decide. No principal
+  chain, no declared class, a constraint Σ declares that this window never
+  exercised.
+
+Incompleteness never changes the exit code. A checker that failed the build over
+a missing `planner` would be switched off within a week, and then the violations
+would stop being caught too.
+
+Two limits worth stating before reading a `T ⊨ Σ` result as reassurance. Coverage
+is checked in the direction quipu can decide — nothing is cited that Σ does not
+define — because the other direction, *was every constraint that applied
+evaluated*, means re-running the selector against the file as it stood, and quipu
+has neither the file nor the parser. And the report counts lines it could not
+read rather than skipping them, so `N line(s) unreadable` is always part of the
+summary: conformance over a window that was only partly read is not conformance.

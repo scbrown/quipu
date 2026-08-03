@@ -9,6 +9,8 @@
 //!
 //! See `docs/design/policy-edit-hooks.md`.
 
+pub mod audit;
+pub mod audit_spec;
 pub mod authority;
 pub mod guard;
 pub mod placement;

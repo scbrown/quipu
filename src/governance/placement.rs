@@ -66,7 +66,12 @@ const ESCALATION_POINTS: &[&str] = &["PAG", "PAA"];
 
 /// The permitted points for a class, or `None` if the class is unknown (which
 /// the shape's `sh:in` has already rejected — this is belt and braces).
-fn points_for(class: &str) -> Option<&'static [&'static str]> {
+///
+/// Crate-visible because the audit checker applies the SAME table to what a
+/// trace recorded. Two copies of SARC Table 3 would eventually disagree, and
+/// the disagreement would be between the definition-time check and the
+/// audit-time one — the two places that must not.
+pub(crate) fn points_for(class: &str) -> Option<&'static [&'static str]> {
     match class {
         "hard" => Some(HARD_POINTS),
         "soft" => Some(SOFT_POINTS),
