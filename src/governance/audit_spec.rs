@@ -26,6 +26,10 @@ pub struct Constraint {
     pub point: Option<String>,
     /// The declared response.
     pub effect: Option<String>,
+    /// The layer the policy CLAIMS it is enforced at (SARC I6). A claim — the
+    /// trace records the layer that actually evaluated it, and the placement
+    /// pass compares the two.
+    pub hosted_at_layer: Option<String>,
 }
 
 /// The constraint an evaluation cites, keyed by the id the trace carries.
@@ -41,12 +45,13 @@ pub fn load(store: &Store) -> Result<Spec> {
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-         SELECT ?p ?label ?class ?point ?effect WHERE {{ \
+         SELECT ?p ?label ?class ?point ?effect ?layer WHERE {{ \
             ?p a a:Policy ; a:boundary \"action\" . \
             OPTIONAL {{ ?p rdfs:label ?label }} \
             OPTIONAL {{ ?p a:constraintClass ?class }} \
             OPTIONAL {{ ?p a:verificationPoint ?point }} \
             OPTIONAL {{ ?p a:effect ?effect }} \
+            OPTIONAL {{ ?p a:hostedAtLayer ?layer }} \
          }}"
     );
     let QueryResult::Select { rows, .. } = sparql::query(store, &q)? else {
@@ -71,6 +76,7 @@ pub fn load(store: &Store) -> Result<Spec> {
         merge(&mut entry.class, text(store, row.get("class")));
         merge(&mut entry.point, text(store, row.get("point")));
         merge(&mut entry.effect, text(store, row.get("effect")));
+        merge(&mut entry.hosted_at_layer, text(store, row.get("layer")));
     }
     Ok(spec)
 }

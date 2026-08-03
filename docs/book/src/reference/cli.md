@@ -192,11 +192,18 @@ job can gate on it without parsing anything.
 
 Four passes run over every record: **coverage** (is every constraint the trace
 cites actually in Σ, and does every refusal name one), **placement** (was each
-constraint evaluated at a point its class can be enforced at, and does the
-record agree with Σ about its class), **outcome** (does the response taken match
-the one declared, at the recorded mode), and **attribution** (does the record say
-who is answerable). Every pass is a comparison between two declared values; none
-of them calls a model.
+constraint evaluated at a point its class can be enforced at, does the record
+agree with Σ about its class, and does the layer that actually evaluated it match
+the `aegis:hostedAtLayer` the policy claims — SARC I6), **outcome** (does the
+response taken match the one declared, at the recorded mode), and
+**attribution** (does the record say who is answerable). Every pass is a
+comparison between two declared values; none of them calls a model.
+
+The I6 check is one-directional. A policy claiming `"tool"` while a hook in the
+agent's own loop evaluated it is a violation — it reads as enforced somewhere an
+agent cannot route around while being enforced somewhere an agent can. A policy
+claiming `"orchestration"` while something stronger enforced it is silent:
+understating your own robustness misleads nobody in a direction that costs them.
 
 Findings come in two severities and only one of them fails the gate:
 

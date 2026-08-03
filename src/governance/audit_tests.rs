@@ -14,6 +14,7 @@ fn constraint(id: &str, class: &str, point: &str, effect: &str) -> Constraint {
         class: Some(class.to_string()),
         point: Some(point.to_string()),
         effect: Some(effect.to_string()),
+        hosted_at_layer: None,
     }
 }
 
@@ -45,6 +46,7 @@ fn evaluation(id: &str, class: &str, point: &str, outcome: &str, response: &str)
         id: id.into(),
         class: Some(class.into()),
         verification_point: Some(point.into()),
+        hosted_at: None,
         outcome: Some(outcome.into()),
         response: Some(response.into()),
     }
@@ -606,4 +608,93 @@ fn check_jsonl_catches_the_drift_it_exists_for() {
     let report = check_jsonl(&store, jsonl).unwrap();
     assert!(!report.conforms(), "{:#?}", report.discrepancies);
     assert!(report.summary().contains("T ⊭ Σ"), "{}", report.summary());
+}
+
+// ── I6: the claimed hosting layer against the recorded one ───────────────────
+
+/// A record whose single evaluation carries a recorded hosting layer.
+fn hosted(id: &str, layer: &str) -> TraceRecord {
+    let mut e = evaluation(id, "hard", "PAG", "satisfied", "no-action");
+    e.hosted_at = Some(layer.into());
+    record("enforce", "allow", e)
+}
+
+fn with_layer(id: &str, layer: &str) -> Constraint {
+    let mut c = constraint(id, "hard", "PAG", "deny");
+    c.hosted_at_layer = Some(layer.into());
+    c
+}
+
+#[test]
+fn a_policy_claiming_a_layer_stronger_than_the_one_that_ran_it_is_a_violation() {
+    // The I6 failure: it reads as enforced somewhere an agent cannot route
+    // around while being enforced somewhere an agent can.
+    let spec = spec_of(&[with_layer("secrets-guard", "tool")]);
+    let report = run(&spec, &[hosted("secrets-guard", "orchestration")]);
+    let found = violations(&report, Pass::Placement);
+    assert!(
+        found.iter().any(|d| d.detail.contains("route around")),
+        "{:#?}",
+        report.discrepancies
+    );
+    assert!(found[0].detail.contains("and be right"), "names the remedy");
+}
+
+#[test]
+fn the_control_an_honest_layer_claim_is_silent() {
+    let spec = spec_of(&[with_layer("p", "orchestration")]);
+    let report = run(&spec, &[hosted("p", "orchestration")]);
+    assert!(
+        violations(&report, Pass::Placement).is_empty(),
+        "{:#?}",
+        report.discrepancies
+    );
+}
+
+#[test]
+fn an_understated_layer_claim_is_silent() {
+    // The asymmetry: declaring weaker than the truth understates a constraint's
+    // own robustness and misleads nobody in a direction that costs them.
+    let spec = spec_of(&[with_layer("p", "orchestration")]);
+    let report = run(&spec, &[hosted("p", "policy")]);
+    assert!(
+        violations(&report, Pass::Placement).is_empty(),
+        "{:#?}",
+        report.discrepancies
+    );
+}
+
+#[test]
+fn i6_is_undecidable_when_either_half_is_missing() {
+    // A claim with no record, or a record with no claim, says nothing. Reporting
+    // either as a violation would flag every pre-I6 policy in the catalog.
+    let spec = spec_of(&[with_layer("p", "tool")]);
+    let no_record = run(
+        &spec,
+        &[record(
+            "enforce",
+            "allow",
+            evaluation("p", "hard", "PAG", "satisfied", "no-action"),
+        )],
+    );
+    assert!(violations(&no_record, Pass::Placement).is_empty());
+
+    let spec = spec_of(&[constraint("p", "hard", "PAG", "deny")]);
+    let no_claim = run(&spec, &[hosted("p", "orchestration")]);
+    assert!(violations(&no_claim, Pass::Placement).is_empty());
+}
+
+#[test]
+fn an_unknown_layer_is_undecidable_not_a_violation() {
+    let spec = spec_of(&[with_layer("p", "prompt")]);
+    let report = run(&spec, &[hosted("p", "orchestration")]);
+    assert!(violations(&report, Pass::Placement).is_empty());
+    assert!(
+        report
+            .of(Severity::Incompleteness)
+            .iter()
+            .any(|d| d.detail.contains("cannot be decided")),
+        "{:#?}",
+        report.discrepancies
+    );
 }

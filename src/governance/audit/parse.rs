@@ -25,6 +25,11 @@ pub struct Evaluation {
     /// The point the runtime believed it was evaluated at.
     #[serde(default)]
     pub verification_point: Option<String>,
+    /// The layer that ACTUALLY evaluated it, as the runtime recorded it — not
+    /// the layer the policy claimed. The difference is the whole of the I6
+    /// check.
+    #[serde(default)]
+    pub hosted_at: Option<String>,
     /// `satisfied` | `unsatisfied` | `unknown`.
     #[serde(default)]
     pub outcome: Option<String>,

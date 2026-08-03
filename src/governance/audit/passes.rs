@@ -18,6 +18,17 @@ const OUTCOMES: &[&str] = &["satisfied", "unsatisfied", "unknown"];
 /// Responses a trace may record.
 const RESPONSES: &[&str] = &["blocked", "warned", "logged", "escalated", "no-action"];
 
+/// Hosting layers, ordered by how hard they are for an agent to route around
+/// (SARC I6). `orchestration` is a hook in the agent's own loop; `policy` is
+/// outside the agent process entirely. There is no `prompt`: a constraint the
+/// model can be talked out of is what I6 forbids, so the vocabulary omits it.
+const LAYERS: &[&str] = &["orchestration", "tool", "policy"];
+
+/// How robust a layer is, or `None` if it is not one of ours.
+fn robustness(layer: &str) -> Option<usize> {
+    LAYERS.iter().position(|l| *l == layer)
+}
+
 fn finding(
     pass: Pass,
     severity: Severity,
@@ -195,6 +206,13 @@ fn placement_of(spec: &Spec, index: usize, evaluation: &Evaluation, report: &mut
         constraint.class.as_deref(),
         report,
     );
+    hosting(
+        index,
+        id,
+        evaluation.hosted_at.as_deref(),
+        constraint,
+        report,
+    );
     drift(
         index,
         id,
@@ -203,6 +221,60 @@ fn placement_of(spec: &Spec, index: usize, evaluation: &Evaluation, report: &mut
         constraint.point.as_deref(),
         report,
     );
+}
+
+/// SARC I6, checked against the record rather than against itself.
+///
+/// The policy declares a hosting layer; the runtime records the layer that
+/// actually evaluated the constraint. When the claim is the *more robust* of the
+/// two, the policy is overclaiming its own reach — it reads as enforced
+/// somewhere an agent cannot route around while being enforced somewhere an
+/// agent can.
+///
+/// One-directional, deliberately. Declaring a *weaker* layer than the truth
+/// understates a constraint's own robustness and misleads nobody in a direction
+/// that costs them. Flagging both would double the report and halve the signal.
+fn hosting(
+    index: usize,
+    id: &str,
+    recorded: Option<&str>,
+    constraint: &Constraint,
+    report: &mut Report,
+) {
+    let (Some(recorded), Some(declared)) = (recorded, constraint.hosted_at_layer.as_deref()) else {
+        return;
+    };
+    let (Some(actual_rank), Some(declared_rank)) = (robustness(recorded), robustness(declared))
+    else {
+        report.discrepancies.push(finding(
+            Pass::Placement,
+            Severity::Incompleteness,
+            Some(index),
+            Some(id),
+            format!(
+                "'{id}' names a hosting layer this checker does not know \
+                 (declared \"{declared}\", recorded \"{recorded}\"), so I6 \
+                 cannot be decided for it."
+            ),
+        ));
+        return;
+    };
+    if declared_rank <= actual_rank {
+        return;
+    }
+    report.discrepancies.push(finding(
+        Pass::Placement,
+        Severity::Violation,
+        Some(index),
+        Some(id),
+        format!(
+            "'{id}' declares aegis:hostedAtLayer \"{declared}\" but was evaluated \
+             at the \"{recorded}\" layer, which an agent can route around by \
+             taking a different path to the same effect (I6). The claim is \
+             stronger than the placement: move the enforcement to \"{declared}\", \
+             or declare \"{recorded}\" and be right."
+        ),
+    ));
 }
 
 fn drift(
