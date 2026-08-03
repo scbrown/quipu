@@ -293,7 +293,7 @@ Status: ☐ open · ☑ done (this change).
      unit cases over `Placement::violation` and liveness cases through
      `Store::transact`, plus the flag-off control that makes the rejection
      attributable to this check rather than to something else on the write path.
-- **Q-SARC-VOCAB** ☐ Describe the `aegis:` vocabulary, not only constrain it.
+- **Q-SARC-VOCAB** ☑ Describe the `aegis:` vocabulary, not only constrain it.
   `shapes/*.ttl` carried **zero** `rdfs:domain` / `rdfs:range` / `rdf:Property` /
   `owl:*Property` declarations before Q-SARC-CLASS: every term was defined
   implicitly by the shapes constraining it, which states validity and not
@@ -321,6 +321,26 @@ Status: ☐ open · ☑ done (this change).
   consumers already committed to: conversational authoring over the catalog, and
   aligning `aegis:` against an external vocabulary (ontology matching takes
   property descriptions as its primary signal and there are none).
+
+  **As built.** The other 39 governance-plane properties are described, and
+  `governance_plane_properties_are_all_described` holds it closed over every
+  `sh:path` in `governance.ttl` — with a non-vacuity floor, since an extractor
+  that silently found nothing would otherwise pass over an empty set.
+  `materialising_the_declarations_types_the_shipped_catalog_correctly` runs the
+  reasoner over the shipped catalog and asserts no Selector or Predicate became a
+  Policy; verified by mutation, because materialisation is the risk.
+
+  Two things came out differently. **`aegis:gate` carries two meanings** — a
+  Predicate's applicability condition, and the gate that produced an
+  `aegis:Decision` — and the declaration records that rather than picking one,
+  with a test asserting it still does. A reader who meets only one of the two
+  will write code assuming it is the only one.
+
+  And the scope is the **governance plane only**. The ~100 estate properties in
+  `aegis-ontology.shapes.ttl` (`hostname`, `rig`, `park`, `plexId`) are excluded
+  by name in both the file and the test: their intended subjects are not all
+  obvious from their shapes, and asserting domains by guess *materialises wrong
+  `rdf:type`s* rather than merely documenting badly. That batch is its own bead.
 
 - **Q-SARC-ER** ☑ Escalation router (`src/governance/router.rs`):
   `aegis:OperatorGroup` with an M/M/c capacity model, a DecisionRequest queue,
@@ -387,16 +407,99 @@ Status: ☐ open · ☑ done (this change).
   naming the chain, the graph and what is held; the same write lands with the
   flag off; an unattributed write is untouched.
 
-- **Q-SARC-AUDIT** ☐ `quipu_audit_check(Σ, T)` (`src/governance/audit.rs`): the
+- **Q-SARC-AUDIT** ☑ `quipu_audit_check(Σ, T)` (`src/governance/audit.rs`): the
   four correspondence passes — coverage, class-placement compatibility, outcome
   consistency, attribution completeness — returning a structured discrepancy
   report. Deterministic and never an LLM call. *AC:* a trace whose verdict
   response differs from the policy's declared response is reported, naming the
   action, the constraint, and the violated condition.
 
+  Three things came out of building it that the bead did not anticipate.
+
+  1. **Two severities, and they must not be collapsed.** A *violation* is the
+     trace contradicting Σ; an *incompleteness* is the trace not saying enough to
+     decide. Report everything as a violation and an operator learns to ignore
+     the output; report everything as an incompleteness and a soft constraint
+     blocking an edit reads as a formatting note. Only violations set the exit
+     code.
+  2. **The outcome pass has to be mode-aware.** `advise` has a declared ceiling,
+     so a hard `deny` that only warned is correct under `advise` and a violation
+     under `enforce`. A mode-blind check would have to be wrong about one of
+     those two records.
+  3. **Coverage is only half-decidable here.** Asking whether every constraint
+     that *applied* was evaluated means re-running the selector against the file
+     as it stood, and quipu has neither. What ships is the converse direction
+     (nothing cited that Σ does not define) plus vacuity, and the module doc says
+     so — a checker reporting "coverage: pass" while testing something weaker
+     would be the more dangerous artifact.
+
+- **Q-SARC-INVENTORY** ☑ The dispatch-graph inventory for I7
+  (`src/governance/inventory.rs`, `shapes/dispatch-inventory.ttl`). Enforcement
+  completeness is a property of the dispatch graph, and hank's
+  `work-scoped-governance.md` §"What this cannot reach" stated it as prose —
+  which goes stale the first time a harness adds a tool, with nothing to notice.
+  As `aegis:ToolClass` facts, a new ungoverned class is a failing check.
+
+  The distinction the bead exists for: an executable class traversing nothing
+  with **no stated reason** is an unknown hole (violation); the same class with
+  an `aegis:ungovernedReason` is an **acknowledged bypass surface**
+  (incompleteness). Neither is governed, and the checker never reports one as the
+  other. Plus the cross-check the other way — a constraint placed at a point no
+  executable class traverses can never fire. *AC:* the shipped inventory passes
+  its own check while still reporting all seven of its ungoverned surfaces; an
+  empty inventory is an incompleteness, never a pass.
+
+- **Q-SARC-REPLAY** ☑ Promotion readiness from a recorded window
+  (`src/governance/replay.rs`). Five gates per rule: liveness, both-outcomes,
+  in-spec, recoverability, and new-blocks (not a gate — the number the operator
+  is deciding about). Recoverability walks the trace in **order**: a target
+  cleared *before* its refusal proves nothing, and counting it would make every
+  rule that ever allowed anything look recoverable.
+
+  Three limits ride in the summary rather than a footnote, because a promotion
+  number read without them is read as a safety claim: it measures only traffic
+  that happened; it counts false-positive *candidates* and never false positives
+  (labelling one needs a human); and it bounds no false negatives at all. So θ is
+  **calibratable, not calibrated**. *AC:* a two-sided live rule reports no
+  objecting gate; a rule that only ever failed does not.
+
+- **Q-SARC-TREE** ☑ The attribution tree (`src/governance/tree.rs`), reassembled
+  from principal chains. The trace is emitted as a **sequence**, so this is
+  reconstruction, and the output says so three ways: unattributed records are not
+  placed (attaching one to whichever root came first would invent the answer),
+  implied dispatch nodes are flagged ("did nothing" ≠ "was not recorded"), and
+  collapsed nodes get a note (two dispatches of the same worker by the same
+  caller are indistinguishable). *AC:* the summary always states "the trace is a
+  sequence, not a tree".
+
+- **Q-SARC-INHERIT** ☑ Constraint laundering under delegation
+  (`src/governance/inheritance.rs`), plus `aegis:inheritedByDelegates` and
+  `aegis:onUndecidable` — which admits only `"escalate"`, the same shape as
+  `onTimeout` admitting only `"deny"`. That is the decidability rescue: evaluate
+  at the deepest layer where the constraint still decides, or hand it to a human.
+
+  Two severities again, for the same reason. A constraint that **decided on a
+  target** and is absent from a deeper action on the *same* target is a violation
+  — it proved it could decide there. One evaluated at a dispatch node and never
+  in its subtree is an incompleteness: might be laundering, might be a selector
+  that matched nothing deeper, and the record cannot tell. *AC:* `is_below` is a
+  strict prefix test, so a sibling branch and a return to a shallower chain are
+  both silent.
+
+- **Q-SARC-TRUST** ☑ Trust boundaries on imported state:
+  `aegis:importsUntrustedState` / `aegis:untrustedOrigin` on the `ToolClass`,
+  because the tool class is the thing that actually imports. Reported whether or
+  not the class is governed — `governedAt` says its own *actions* traverse a
+  point and says nothing about what it *returned*.
+
+  **Not closed:** nothing evaluates imported content. A trust *predicate* over
+  sub-agent responses needs a producer that records them, which no part of this
+  stack does; building the predicate without one would ship it dark. The boundary
+  is declared and reported on every run, and that is the whole claim.
+
 ### hank
 
-- **H-SARC-I6** ☐ Check `aegis:hostedAtLayer` against reality at the projection
+- **H-SARC-I6** ☑ Check `aegis:hostedAtLayer` against reality at the projection
   seam. The field is declared and unconsumed: nothing compares it to where a
   constraint is ACTUALLY evaluated, so a policy may claim `"tool"` — the layer an
   agent cannot route around — while being enforced solely by hank's

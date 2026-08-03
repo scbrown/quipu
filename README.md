@@ -156,6 +156,11 @@ cargo build --release
 quipu knot data.ttl --db my.db
 quipu read "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10" --db my.db
 quipu repl --db my.db
+
+# Governance: check an agent's enforcement trace against the policy set
+quipu audit trace.jsonl --db my.db          # T ⊨ Σ — exits 1 on a violation
+quipu audit inventory --db my.db            # which tool classes are ungoverned
+quipu audit replay trace.jsonl --db my.db   # advise → enforce readiness, per rule
 ```
 
 ### 🌐 REST API & Web UI
@@ -305,7 +310,11 @@ mdbook serve docs/book
 
 The table of contents lives in [docs/book/src/SUMMARY.md](docs/book/src/SUMMARY.md).
 Design notes that are not part of the book (named graphs, federation, the
-reasoner) are in [docs/design/](docs/design/).
+reasoner, the governance backlog) are in [docs/design/](docs/design/). The
+governance plane's own map — what SARC asks for, what is built, and what each
+phase did *not* close — lives in hank's book under
+[SARC Conformance](https://scbrown.github.io/hank/design/sarc-conformance.html),
+because the two repos implement it jointly.
 
 ## 📋 Feature Matrix
 
@@ -339,6 +348,19 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Aegis ontology shapes | ✅ | Infrastructure entities |
 | Code entity shapes | ✅ | CodeModule, CodeSymbol, etc. |
 | OWL reasoning | ✅ | Optional `owl` feature |
+| **Governance ([SARC](docs/book/src/reference/cli.md#quipu-audit-tracejsonl) conformance)** | | |
+| `aegis:Policy` write-time gate | ✅ | Class-aware effects, evaluated before commit |
+| Constraint metadata (class, verification point, θ, τ_rev) | ✅ | `shapes/governance.ttl` |
+| Class ↔ placement conformance | ✅ | Refused at write; a soft constraint cannot be placed at the gate |
+| Signed verdicts (ed25519) | ✅ | Evidence-hash-bound, verified against a human-authored root of trust |
+| Escalation router with a bounded window | ✅ | Default-deny past `τ_rev`; records the request, does not deliver it |
+| Authority intersection over named graphs | ✅ | Off by default; a delegate can only narrow |
+| `T ⊨ Σ` audit checker | ✅ | `quipu audit`; four passes, deterministic, never an LLM call |
+| Dispatch-graph inventory (I7) | ✅ | `quipu audit inventory`; ungoverned classes are data, not prose |
+| Replay / promotion readiness | ✅ | `quipu audit replay`; counts blocks, cannot label false positives |
+| Attribution tree, constraint inheritance | ✅ | `quipu audit tree` / `inheritance` — reconstructed from principal chains |
+| Trust predicate over imported state | 🔜 | The boundary is declared and reported; nothing evaluates the content |
+| Escalation queue metrics (`W_q < τ_rev`) | 🔜 | Needs a server behind the queue; unmeasured today |
 | **AI-Native** | | |
 | Episode ingestion (Graphiti-compatible) | ✅ | Typed nodes, edges, provenance |
 | SQLite vector search (cosine) | ✅ | Default backend |
@@ -356,7 +378,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Incremental truth maintenance | 🔜 | Planned (Phase 5) |
 | **Interfaces** | | |
 | Rust crate (embed) | ✅ | |
-| CLI (`quipu`) | ✅ | knot, read, repl, episode, impact, reason |
+| CLI (`quipu`) | ✅ | knot, read, repl, episode, impact, reason, audit |
 | REST API (`quipu-server`) | ✅ | Axum-based |
 | Web UI | ✅ | Explorer, workbench, timeline, schema |
 | Graph explorer | ✅ | Canvas + Barnes-Hut layout, one `POST /graph` payload, no CDN |
