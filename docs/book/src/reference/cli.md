@@ -218,3 +218,43 @@ evaluated*, means re-running the selector against the file as it stood, and quip
 has neither the file nor the parser. And the report counts lines it could not
 read rather than skipping them, so `N line(s) unreadable` is always part of the
 summary: conformance over a window that was only partly read is not conformance.
+
+### `quipu audit inventory`
+
+Check the **dispatch graph** rather than a trace — SARC I7, enforcement
+completeness.
+
+```bash
+quipu audit inventory --db my.db
+quipu knot shapes/dispatch-inventory.ttl --db my.db   # load the shipped seed first
+```
+
+I7 is a property of the dispatch graph, not of any one constraint: a harness
+exposes N classes of tool call, and completeness is the question of whether every
+class that can change state passes through a point where a constraint could stop
+it. `aegis:ToolClass` declares each class, whether it is `executable`, and which
+`governedAt` points it traverses.
+
+Findings, in the same two severities:
+
+- **violation** — an executable class that traverses no enforcement point and has
+  no `aegis:ungovernedReason`. An unknown hole.
+- **incompleteness** — an executable class that traverses nothing but says
+  *why*: an **acknowledged bypass surface**. Reported on every run, because a
+  bypass surface an operator has stopped seeing is one they have stopped
+  weighing. Also: a class that does not declare `aegis:executable`, since whether
+  it needs a point is then undecidable.
+- **violation**, the other direction — a constraint in Σ placed at a point no
+  declared executable class traverses. It reads as governance in the catalog and
+  can never fire in the deployment.
+
+An empty inventory is reported as an incompleteness, never as a pass: an unwritten
+dispatch graph is not an empty one.
+
+`shapes/dispatch-inventory.ttl` ships the seed for this stack — the edit path and
+quipu's own write gate as governed, reads as non-executable, and Bash, `Task`, CI
+pipelines, cron, remote shells, a sibling session's VCS index and a hostile agent
+as acknowledged surfaces with where each is enforced instead. Nothing derives it
+from the harness's actual tool registry, so it can drift from reality the way a
+prose list does; the difference is that a drifted declaration is a wrong answer
+to a question something asks rather than a paragraph nobody re-reads.

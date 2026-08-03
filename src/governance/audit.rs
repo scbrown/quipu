@@ -72,6 +72,10 @@ pub enum Pass {
     Outcome,
     /// Who is answerable.
     Attribution,
+    /// Whether every executable tool class traverses an enforcement point.
+    /// Runs over the dispatch graph rather than over a trace, so its findings
+    /// carry no record index — see [`super::inventory`].
+    Inventory,
 }
 
 impl Pass {
@@ -83,6 +87,7 @@ impl Pass {
             Pass::Placement => "placement",
             Pass::Outcome => "outcome",
             Pass::Attribution => "attribution",
+            Pass::Inventory => "inventory",
         }
     }
 }

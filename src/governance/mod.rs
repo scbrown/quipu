@@ -13,6 +13,7 @@ pub mod audit;
 pub mod audit_spec;
 pub mod authority;
 pub mod guard;
+pub mod inventory;
 pub mod placement;
 pub mod router;
 pub mod verdict_facts;

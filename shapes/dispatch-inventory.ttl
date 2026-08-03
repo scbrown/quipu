@@ -1,0 +1,130 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# The dispatch graph, as data — SARC I7.
+#
+# Every class of action this stack can dispatch, and whether it traverses a
+# point where a constraint could stop it. `quipu audit inventory` checks it.
+#
+# Seeded from hank's `docs/work-scoped-governance.md` §"What this cannot reach",
+# which was an honest list and also prose: prose goes stale the first time a
+# harness adds a tool, and nothing recomputes. Here, a new ungoverned class is a
+# failing check rather than an omission nobody sees.
+#
+# TWO THINGS THIS FILE IS NOT.
+#
+# It is not a claim that the governed classes are governed WELL — only that they
+# pass a point where a constraint can be evaluated. Whether the right constraint
+# exists there is what the trace check answers.
+#
+# And it is not automatically true. Nothing derives it from the harness's actual
+# tool registry, so it is a declaration that can drift from reality exactly the
+# way the prose did. The difference is that a drifted declaration is a wrong
+# answer to a question something asks, rather than a paragraph nobody re-reads.
+# Keeping it honest is a review obligation, and saying so here is part of it.
+
+# ── Governed: the edit path ────────────────────────────────────────
+
+<http://aegis.gastown.local/tool/edit> a aegis:ToolClass ;
+    rdfs:label "Edit" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable true ;
+    aegis:governedAt "PAG" ;
+    aegis:governedAt "PAA" ;
+    rdfs:comment "PreToolUse fires `hank hook pre-edit` before the edit lands; PostToolUse fires the auditor after it does." .
+
+<http://aegis.gastown.local/tool/write> a aegis:ToolClass ;
+    rdfs:label "Write" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable true ;
+    aegis:governedAt "PAG" ;
+    aegis:governedAt "PAA" ;
+    rdfs:comment "Same matcher as Edit — `Edit|Write|MultiEdit`." .
+
+<http://aegis.gastown.local/tool/multiedit> a aegis:ToolClass ;
+    rdfs:label "MultiEdit" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable true ;
+    aegis:governedAt "PAG" ;
+    aegis:governedAt "PAA" ;
+    rdfs:comment "Same matcher as Edit." .
+
+<http://aegis.gastown.local/tool/quipu-transact> a aegis:ToolClass ;
+    rdfs:label "quipu-transact" ;
+    aegis:dispatchedBy "quipu" ;
+    aegis:executable true ;
+    aegis:governedAt "policy_layer" ;
+    rdfs:comment "Every write through Store::transact traverses the write gate: placement validation, write policies, and graph authority." .
+
+# ── Read-only: no enforcement point needed ─────────────────────────
+
+<http://aegis.gastown.local/tool/read> a aegis:ToolClass ;
+    rdfs:label "Read" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable false ;
+    rdfs:comment "Reads change no state. Demanding a point here would bury the real gaps under the ordinary case." .
+
+<http://aegis.gastown.local/tool/grep> a aegis:ToolClass ;
+    rdfs:label "Grep" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable false .
+
+<http://aegis.gastown.local/tool/glob> a aegis:ToolClass ;
+    rdfs:label "Glob" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable false .
+
+# ── Acknowledged bypass surfaces ───────────────────────────────────
+# Executable, traversing nothing, and somebody has said why. Still ungoverned —
+# the checker reports every one of these on every run, because a bypass surface
+# an operator has stopped seeing is one they have stopped weighing.
+
+<http://aegis.gastown.local/tool/bash> a aegis:ToolClass ;
+    rdfs:label "Bash" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable true ;
+    aegis:ungovernedReason "the pre-bash hook is deliberately record-only: the guard sees one command string and cannot decide what the N processes it spawns will touch" ;
+    aegis:enforcedInsteadAt "the tool layer inside the invoked program, and destination-side credentials" .
+
+<http://aegis.gastown.local/tool/task> a aegis:ToolClass ;
+    rdfs:label "Task" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable true ;
+    aegis:ungovernedReason "a sub-agent dispatch is not itself a state change, but the actions inside it are — and its own hook invocations are recorded as a flat sequence, so the subtree is reconstructible from the principal chain rather than structural" ;
+    aegis:enforcedInsteadAt "the sub-agent's own PAG, narrowed by authority intersection along the principal chain" .
+
+<http://aegis.gastown.local/tool/ci-pipeline> a aegis:ToolClass ;
+    rdfs:label "ci-pipeline" ;
+    aegis:dispatchedBy "ci-runner" ;
+    aegis:executable true ;
+    aegis:ungovernedReason "the runner executes the workflow — no agent, no session, no hook to fire" ;
+    aegis:enforcedInsteadAt "repo-side checks and branch protection" .
+
+<http://aegis.gastown.local/tool/scheduled-job> a aegis:ToolClass ;
+    rdfs:label "scheduled-job" ;
+    aegis:dispatchedBy "cron" ;
+    aegis:executable true ;
+    aegis:ungovernedReason "cron, timers and scheduled jobs have no agent session in the loop" ;
+    aegis:enforcedInsteadAt "the unit level, or the invoked script itself" .
+
+<http://aegis.gastown.local/tool/remote-shell> a aegis:ToolClass ;
+    rdfs:label "remote-shell" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable true ;
+    aegis:ungovernedReason "the guard sees one command string, not the N commands it triggers on the far side" ;
+    aegis:enforcedInsteadAt "a remote forced-command, or a lock at the destination" .
+
+<http://aegis.gastown.local/tool/sibling-vcs-index> a aegis:ToolClass ;
+    rdfs:label "sibling-vcs-index" ;
+    aegis:dispatchedBy "another-session" ;
+    aegis:executable true ;
+    aegis:ungovernedReason "another process touches your staging area; nothing in this session's dispatch graph is involved" ;
+    aegis:enforcedInsteadAt "a VCS hook" .
+
+<http://aegis.gastown.local/tool/hostile-agent> a aegis:ToolClass ;
+    rdfs:label "hostile-agent" ;
+    aegis:dispatchedBy "any" ;
+    aegis:executable true ;
+    aegis:ungovernedReason "an agent that can edit its own guard is outside what an agent-side hook can enforce, by construction — origin-side stamping is complementary to destination-side credentials, never a substitute" ;
+    aegis:enforcedInsteadAt "per-agent credentials at the destination" .

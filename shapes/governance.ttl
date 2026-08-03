@@ -706,3 +706,73 @@ aegis:PrincipalShape a sh:NodeShape ;
         sh:path aegis:authorityOver ;
         sh:datatype xsd:string ;
     ] .
+
+# ── ToolClass ──────────────────────────────────────────────────────
+# One class of dispatchable action, and whether it traverses an enforcement
+# point. This is SARC I7 made into DATA.
+#
+# I7 is a property of the *dispatch graph*, not of any one constraint: an agent
+# harness exposes N classes of tool call, and enforcement completeness is the
+# question of whether every class that can change state passes through a point
+# where a constraint could stop it. Prose cannot answer that — a list in a design
+# doc goes stale the first time a harness adds a tool, and nothing notices.
+#
+# `ungovernedReason` is the important field. An executable class with no
+# `governedAt` and no reason is an unknown hole; the same class with a stated
+# reason is an ACKNOWLEDGED bypass surface, which is a different thing an
+# operator can weigh. Neither is "governed", and the checker never reports one as
+# the other.
+
+aegis:ToolClassShape a sh:NodeShape ;
+    sh:targetClass aegis:ToolClass ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Who dispatches it — the harness, the daemon, a CI runner. Two classes
+        # with the same name under different dispatchers are different classes,
+        # because only one of them may traverse a hook.
+        sh:path aegis:dispatchedBy ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Whether invoking it can change state. A read-only class needs no
+        # enforcement point, and demanding one would bury the real gaps.
+        sh:path aegis:executable ;
+        sh:datatype xsd:boolean ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Enforcement points this class actually traverses. Repeatable — a tool
+        # call can pass a pre-action gate and a post-action auditor both. Same
+        # vocabulary as aegis:verificationPoint, deliberately: a constraint
+        # placed at a point no class traverses can never fire, and that is only
+        # checkable if the two enums are one enum.
+        sh:path aegis:governedAt ;
+        sh:datatype xsd:string ;
+        sh:in ( "PAG" "ATM" "PAA" "tool_layer" "policy_layer" ) ;
+    ] ;
+    sh:property [
+        # Why an executable class traverses nothing. Required in practice by the
+        # inventory check rather than by minCount here, because the requirement
+        # is conditional on `executable true` and `governedAt` being absent —
+        # which SHACL can express only with sh:not/sh:or gymnastics that would
+        # obscure what the rule is.
+        sh:path aegis:ungovernedReason ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Where enforcement must happen instead, when it cannot happen here.
+        # An acknowledged bypass surface with no stated alternative is a note
+        # that something is unhandled; with one, it is a design.
+        sh:path aegis:enforcedInsteadAt ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
