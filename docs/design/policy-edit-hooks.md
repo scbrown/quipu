@@ -143,6 +143,26 @@ could allow what quipu would deny. This leans on hank freshness-serving (FR-3)
 so a verdict can declare whether the registry it used was fresh or stale, and on
 the hank↔quipu dep being wired (commented out today). See the backlog.
 
+## SARC conformance
+
+The Phase A/B split above is one half of a larger picture. Besanson's SARC
+framework (arXiv:2605.07728) names four enforcement points in an agent loop —
+Pre-Action Gate, Action-Time Monitor, Post-Action Auditor, Escalation Router —
+and eight invariants whose joint effect is a *decidable audit*: given a
+specification Σ and a trace T, an auditor can mechanically check `T ⊨ Σ`.
+
+Measured against that, quipu's write gate and hank's pre-edit hook together are
+a solid PAG and a solid policy-layer reference monitor, and the signed
+`aegis:Verdict` + `VerifierRegistration` machinery is ahead of SARC's own
+prototype. The gaps are specific: the constraint object is under-declared (no
+class, no operating point, no reversibility window), there is no PAA, no ATM,
+no escalation router, and nothing checks correspondence.
+
+The gap analysis and build order live in hank's book, at
+`docs/book/src/design/sarc-conformance.md` — the same cross-repo citation style
+this document already uses. The quipu-side work it implies is listed as
+`Q-SARC-*` in the backlog below.
+
 ## Backlog (beads)
 
 Each entry: rationale + acceptance criteria. `Q-*` = quipu, `H-*` = hank.
@@ -182,6 +202,31 @@ Status: ☐ open · ☑ done (this change).
 - **Q-VERDICT-PERSIST** ☐ Persist the write-gate verdict as a signed, bitemporal
   Verdict fact (reuse `signing.rs`). *AC:* every enforced decision is auditable
   and replayable, not just an accept/reject.
+- **Q-SARC-CLASS** ☐ Complete the constraint object in `shapes/governance.ttl`:
+  `constraintClass ∈ {hard,soft,escalation}`, `verificationPoint ∈
+  {PAG,ATM,PAA,tool_layer,policy_layer}`, `hostedAtLayer` (no `"prompt"` value —
+  I6 unrepresentable by construction), an `OperatingPoint` node shape,
+  `reversibilityWindowSeconds` + `onTimeout "deny"`, `latencyBudgetMs`,
+  `sourceType`, and `"throttle"` in the `effect` enum. Backfill
+  `shapes/policies/treesitter.ttl`. *AC:* an action-boundary policy missing a
+  class is rejected at write; the shipped catalog still conforms.
+- **Q-SARC-PLACEMENT** ☐ Class↔placement conformance pass
+  (`src/governance/placement.rs`), run at definition time: hard ⇒ PAG/ATM/tool/
+  policy, soft ⇒ ATM/PAA, escalation ⇒ PAG/PAA and must declare τ_rev. *AC:* a
+  soft constraint declared at PAG, or an escalation without τ_rev, fails
+  validation.
+- **Q-SARC-ER** ☐ Escalation router (`src/governance/router.rs`):
+  `aegis:OperatorGroup` with an M/M/c capacity model, a DecisionRequest queue,
+  hold-until-τ_rev, default-deny on timeout, and re-validation of an
+  operator-modified action. *AC:* `require-approval` suspends and routes rather
+  than failing closed with no channel; an unserviced escalation denies at τ_rev
+  and says so.
+- **Q-SARC-AUDIT** ☐ `quipu_audit_check(Σ, T)` (`src/governance/audit.rs`): the
+  four correspondence passes — coverage, class-placement compatibility, outcome
+  consistency, attribution completeness — returning a structured discrepancy
+  report. Deterministic and never an LLM call. *AC:* a trace whose verdict
+  response differs from the policy's declared response is reported, naming the
+  action, the constraint, and the violated condition.
 
 ### hank
 
