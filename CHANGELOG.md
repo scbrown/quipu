@@ -34,6 +34,8 @@ All notable changes to this project will be documented in this file.
 
 - *(release)* Take the version baseline from our git tags, not a stranger's crate([fbfe1b5](https://github.com/scbrown/quipu/commit/fbfe1b57cf1f88220498b26794278439a22072a9))
 - *(governance)* Enforce the safety enums on the write path, and describe the vocabulary([bc1ffaa](https://github.com/scbrown/quipu/commit/bc1ffaab089c666f602dac007db0bc0c57599580))
+- *(changelog)* Regenerate the 0.3.18 section — release-plz dropped 8 commits([babb13a](https://github.com/scbrown/quipu/commit/babb13ae28adbbc10e8c6625562e73df79ffeaff))
+- *(clippy)* Inline the format arg CI's --all-targets clippy rejected([8562c30](https://github.com/scbrown/quipu/commit/8562c30ed89c7b3a697df34e44841b7bdfa9e0a4))
 
 ### Miscellaneous
 
