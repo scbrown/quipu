@@ -238,7 +238,7 @@ fn a_record_that_disagrees_with_the_spec_about_a_class_is_a_violation() {
     )];
     let report = run(&spec, &trace);
     let found = violations(&report, Pass::Placement);
-    assert_eq!(found.len(), 2, "class AND point drift: {:#?}", found);
+    assert_eq!(found.len(), 2, "class AND point drift: {found:#?}");
     assert!(found[0].detail.contains("stale projection"));
 }
 
