@@ -164,13 +164,13 @@ aegis:forPolicy a owl:DatatypeProperty ;
     rdfs:label "for policy" ;
     rdfs:domain aegis:DecisionRequest ;
     rdfs:range xsd:string ;
-    rdfs:comment "The policy whose escalation opened this request." .
+    rdfs:comment "The policy whose escalation opened this request. Recorded on the request rather than inferred from the evidence hash, so an operator can see WHAT rule they are being asked to rule on without recomputing anything." .
 
 aegis:forTarget a owl:DatatypeProperty ;
     rdfs:label "for target" ;
     rdfs:domain aegis:DecisionRequest ;
     rdfs:range xsd:string ;
-    rdfs:comment "The entity whose write was suspended awaiting a human ruling." .
+    rdfs:comment "The entity whose write was suspended awaiting a human ruling. Together with aegis:forPolicy this is the whole subject of the request, and the pair is exactly what the evidence hash binds an approval to." .
 
 aegis:expiresAt a owl:DatatypeProperty ;
     rdfs:label "expires at" ;
@@ -201,3 +201,252 @@ aegis:afterHours a owl:DatatypeProperty ;
     rdfs:domain aegis:OperatorGroup ;
     rdfs:range xsd:string ;
     rdfs:comment "What happens outside declared hours: \"deny\", or \"defer_within_window\". There is deliberately no allow: an after-hours ALLOW is the default-allow-under-load SARC §5.3 names as the opposite of oversight, and it is left unrepresentable for the same reason onTimeout is." .
+
+# ═══════════════════════════════════════════════════════════════════
+# Q-SARC-VOCAB — the rest of the GOVERNANCE PLANE's vocabulary.
+#
+# Scope: every aegis: property that shapes/governance.ttl or
+# shapes/dispatch-inventory.ttl constrains. `governance_plane_properties_are_all_
+# described` in src/owl_vocab_tests.rs holds this closed: constraining a
+# governance property without describing it fails the build.
+#
+# NOT in scope, and named rather than quietly skipped: the ~100 infrastructure
+# and estate properties in shapes/aegis-ontology.shapes.ttl (hostname, rig,
+# park, plexId…). They predate this work, their intended subjects are not all
+# obvious from their shapes, and sweeping them in would mean asserting domains
+# by guess — which materialises wrong rdf:types rather than merely documenting
+# badly. That batch is its own change.
+#
+# DOMAINS ARE THE EXCEPTION HERE, NOT THE RULE. rdfs:domain is an inference the
+# reasoner materialises, so it is asserted only where the property's name could
+# not reasonably belong to anything else. Generic names — `by`, `on`, `to`,
+# `actor`, `name`, `reference` — get range and comment only, and several
+# properties are genuinely shared across classes (aegis:tier is on Selector,
+# Predicate AND Verdict), where a domain would be simply wrong.
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Policy composition ─────────────────────────────────────────────
+
+aegis:boundary a owl:DatatypeProperty ;
+    rdfs:label "boundary" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Whether this constraint governs a dispatched ACTION (\"action\") or a state CHANGE (\"transition\"). The coarse split; aegis:verificationPoint is the fine placement within it. Only action-boundary policies have an enforcement point a trace record can traverse, which is why the placement check and the audit checker both scope to them." .
+
+aegis:effect a owl:DatatypeProperty ;
+    rdfs:label "effect" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The RESPONSE when this constraint fires: \"allow\", \"warn\", \"require-approval\", \"deny\", \"escalate\", \"record\" or \"throttle\". Distinct from aegis:constraintClass, which is what kind of bound it IS. A hard constraint declaring \"warn\" is a contradiction the class exists to make visible." .
+
+aegis:targets a owl:DatatypeProperty ;
+    rdfs:label "targets" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The class of entity this policy applies to, as an IRI string. What a policy is ABOUT, as opposed to what evidence decides it (aegis:claim, aegis:selector, aegis:predicate)." .
+
+aegis:claim a owl:DatatypeProperty ;
+    rdfs:label "claim" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A SPARQL ASK whose truth is the thing asserted. On a Policy it is the predicate that decides compliance; on an Artifact it is what the artifact asserts about itself. No rdfs:domain: the word means the same thing in both places and asserting either class would materialise the wrong one." .
+
+aegis:selector a owl:ObjectProperty ;
+    rdfs:label "selector" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range aegis:Selector ;
+    rdfs:comment "Which sites this policy examines — the WHERE half of a structural constraint. Separate from the predicate so a selector can be reused across policies that judge the same sites differently." .
+
+aegis:predicate a owl:ObjectProperty ;
+    rdfs:label "predicate" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range aegis:Predicate ;
+    rdfs:comment "What must be true at the selected sites — the WHAT half. SARC's `pred` field, and the only part of a constraint whose language is deliberately unconstrained: the audit checker is predicate-language-agnostic by design." .
+
+aegis:assignsWorkflow a owl:ObjectProperty ;
+    rdfs:label "assigns workflow" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range aegis:Workflow ;
+    rdfs:comment "The workflow a \"require-approval\" or \"escalate\" effect routes to. Declaring the route on the constraint is what separates an escalation from a refusal: a policy that escalates without naming where is a denial with extra words." .
+
+# ── Selector and Predicate — the evidence atoms ────────────────────
+
+aegis:name a owl:DatatypeProperty ;
+    rdfs:label "name" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A short human handle for an evidence atom. No rdfs:domain: Selector and Predicate both carry it, and the name is far too generic to materialise a type from." .
+
+aegis:evidenceSource a owl:DatatypeProperty ;
+    rdfs:label "evidence source" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The concrete artifact that produces the evidence — a tree-sitter `.scm` query on a Selector, a regex on a Predicate. Named `evidenceSource` rather than `query` or `pattern` because the point is provenance: an evaluator must be able to say WHERE a fact came from, not only what it was." .
+
+aegis:language a owl:DatatypeProperty ;
+    rdfs:label "language" ;
+    rdfs:domain aegis:Selector ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The programming language whose grammar this selector's query is written against. A selector without one cannot be matched to a file, and hank skips it rather than guessing from an extension." .
+
+aegis:matchType a owl:DatatypeProperty ;
+    rdfs:label "match type" ;
+    rdfs:domain aegis:Predicate ;
+    rdfs:range xsd:string ;
+    rdfs:comment "How the predicate's evidence is read: \"must-match\", \"must-not-match\", or \"must-exist\". `must-exist` is the one that cannot be evaluated over an edit fragment — it is a question about the whole subject — which is why it belongs at the post-action point." .
+
+aegis:gate a owl:DatatypeProperty ;
+    rdfs:label "gate" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A secondary condition narrowing when the check applies. NB this property is used in TWO senses in this vocabulary — a Predicate's applicability gate, and the gate that produced an aegis:Decision — which is why it carries no rdfs:domain. Two meanings under one name is a defect worth recording rather than hiding; splitting them is a vocabulary change with a migration behind it." .
+
+aegis:tier a owl:DatatypeProperty ;
+    rdfs:label "tier" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "How precise the evidence behind a fact is: \"live\", \"lsp\", \"tree-sitter\", \"committed\" or \"attested\". Carried by Selector, Predicate AND Verdict, so no rdfs:domain. Every fact this stack serves is tagged, and a tree-sitter approximation is never presented as LSP-precise." .
+
+# ── Verdict and the root of trust ──────────────────────────────────
+
+aegis:predicateId a owl:DatatypeProperty ;
+    rdfs:label "predicate id" ;
+    rdfs:domain aegis:Verdict ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Which predicate this verdict is about, by id. The verdict names the check rather than embedding it, so a re-run against a changed predicate is visibly a different verdict." .
+
+aegis:targetRef a owl:DatatypeProperty ;
+    rdfs:label "target ref" ;
+    rdfs:domain aegis:Verdict ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What the verdict was rendered about — the entity, file or symbol judged. Recorded separately from the evidence hash: the target says WHICH thing, the hash pins WHAT STATE of it was seen." .
+
+aegis:outcome a owl:DatatypeProperty ;
+    rdfs:label "outcome" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What was concluded. Three-valued on a Verdict — \"satisfied\", \"unsatisfied\", \"unknown\" — where \"unknown\" is NOT a soft \"unsatisfied\": a check that could not run has told you nothing, and collapsing the two is how an unevaluated constraint reads as a passing one. On a Decision the values are \"approve\", \"reject\" and \"changes\". No rdfs:domain, since both classes carry it." .
+
+aegis:evidenceHash a owl:DatatypeProperty ;
+    rdfs:label "evidence hash" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A digest of exactly what was judged, binding an attestation to its content. Change what was checked and the hash changes, so the old verdict or approval no longer applies — this is the approve-then-sneak-in-changes defence, and Verdict, Decision and DecisionRequest all use the same one rather than three mechanisms." .
+
+aegis:verifier a owl:DatatypeProperty ;
+    rdfs:label "verifier" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Who rendered the verdict, as a key id. Carried by both Verdict and VerifierRegistration — on the first it is a claim, on the second it is the registration that makes the claim checkable — so no rdfs:domain." .
+
+aegis:signature a owl:DatatypeProperty ;
+    rdfs:label "signature" ;
+    rdfs:domain aegis:Verdict ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The ed25519 signature over the verdict's canonical form. What makes a verdict an ATTESTATION rather than a claim: a reader verifies it against a human-authored VerifierRegistration instead of trusting the process that wrote it." .
+
+aegis:freshness a owl:DatatypeProperty ;
+    rdfs:label "freshness" ;
+    rdfs:domain aegis:Verdict ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Whether the policy set behind this verdict was current when it was computed: \"fresh\" or \"stale\". Only two values, so a runtime with a third internal state must map it to the conservative one — the reading that cannot overstate." .
+
+aegis:confidence a owl:DatatypeProperty ;
+    rdfs:label "confidence" ;
+    rdfs:domain aegis:Verdict ;
+    rdfs:range xsd:string ;
+    rdfs:comment "How much weight the verdict's evidence bears, as an input to adaptive response. Distinct from aegis:tier, which says what KIND of evidence it was; the same tier can carry different confidence depending on how much of the subject the check could see." .
+
+aegis:attests a owl:DatatypeProperty ;
+    rdfs:label "attests" ;
+    rdfs:domain aegis:VerifierRegistration ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What this registration vouches for — which verifier's signatures a reader should accept. Human-authored, and the root of trust: nothing in the automated path may mint one, or the chain verifies only against itself." .
+
+aegis:publicKey a owl:DatatypeProperty ;
+    rdfs:label "public key" ;
+    rdfs:domain aegis:VerifierRegistration ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The ed25519 public key a verifier's signatures check against. Human-authored, and the reason a verdict is an attestation rather than a claim: nothing in the automated path may write one." .
+
+aegis:by a owl:DatatypeProperty ;
+    rdfs:label "by" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Who made a decision. Range and comment only — `by` is far too generic a name to materialise a type from, whatever this vocabulary happens to use it for today." .
+
+# ── Workflow, Step, Artifact, PlanStep ─────────────────────────────
+
+aegis:hasStep a owl:ObjectProperty ;
+    rdfs:label "has step" ;
+    rdfs:domain aegis:Workflow ;
+    rdfs:range aegis:Step ;
+    rdfs:comment "A step belonging to this workflow. The only structural link between a workflow and its steps: a Step with no workflow pointing at it is unreachable, and nothing else in the vocabulary would notice." .
+
+aegis:produces a owl:ObjectProperty ;
+    rdfs:label "produces" ;
+    rdfs:range aegis:Artifact ;
+    rdfs:comment "An artifact this step yields. No rdfs:domain: `produces` is a relation many things in an estate can hold." .
+
+aegis:requires a owl:ObjectProperty ;
+    rdfs:label "requires" ;
+    rdfs:range aegis:Artifact ;
+    rdfs:comment "An artifact this step needs before it can run. No rdfs:domain, for the same reason as aegis:produces." .
+
+aegis:gatedBy a owl:ObjectProperty ;
+    rdfs:label "gated by" ;
+    rdfs:range aegis:Policy ;
+    rdfs:comment "A policy that must be satisfied before this step proceeds. Ranged at Policy but undomained: a policy can gate more than a workflow step." .
+
+aegis:actor a owl:DatatypeProperty ;
+    rdfs:label "actor" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Who or what performs a step — an agent id, a role, a team. A string rather than a reference to a Principal, because a workflow definition names roles that need not exist as entities yet. Generic name, so no domain." .
+
+aegis:on a owl:DatatypeProperty ;
+    rdfs:label "on" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The event a transition fires on. About as generic a name as this vocabulary contains, so range and comment only." .
+
+aegis:to a owl:ObjectProperty ;
+    rdfs:label "to" ;
+    rdfs:range aegis:Step ;
+    rdfs:comment "The step a transition leads to. Together with aegis:on — the event — this is the whole of a transition: what happened, and where it goes next." .
+
+aegis:reference a owl:DatatypeProperty ;
+    rdfs:label "reference" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A pointer to where an artifact actually lives — a path, a URL, a commit. Deliberately opaque: the graph records that an artifact is referenced somewhere resolvable without becoming a second copy of it." .
+
+aegis:references a owl:ObjectProperty ;
+    rdfs:label "references" ;
+    rdfs:range aegis:CodeSymbol ;
+    rdfs:comment "A code symbol a plan step names. What makes a plan checkable against structure rather than against prose." .
+
+aegis:inStep a owl:ObjectProperty ;
+    rdfs:label "in step" ;
+    rdfs:range aegis:Step ;
+    rdfs:comment "The workflow step a plan step belongs to. What lets a concrete plan be checked against the workflow it claims to be executing, rather than only against itself." .
+
+# ── Dispatch inventory (SARC I7) ───────────────────────────────────
+
+aegis:dispatchedBy a owl:DatatypeProperty ;
+    rdfs:label "dispatched by" ;
+    rdfs:domain aegis:ToolClass ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What dispatches this class of action — a harness, a daemon, a CI runner. Two classes with the same name under different dispatchers are different classes, because only one of them may traverse a hook." .
+
+aegis:executable a owl:DatatypeProperty ;
+    rdfs:label "executable" ;
+    rdfs:domain aegis:ToolClass ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether invoking this class can change state. A read-only class needs no enforcement point, and demanding one would bury the real gaps under the ordinary case. An ABSENT value is not false: whether the class needs a point is then undecidable, and the inventory check says so rather than assuming safety." .
+
+aegis:governedAt a owl:DatatypeProperty ;
+    rdfs:label "governed at" ;
+    rdfs:domain aegis:ToolClass ;
+    rdfs:range xsd:string ;
+    rdfs:comment "An enforcement point this class actually traverses; repeatable, since a tool call can pass a pre-action gate and a post-action auditor both. Same value space as aegis:verificationPoint deliberately — a constraint placed at a point no class traverses can never fire, and that is only checkable if the two are one enum." .
+
+aegis:ungovernedReason a owl:DatatypeProperty ;
+    rdfs:label "ungoverned reason" ;
+    rdfs:domain aegis:ToolClass ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Why an executable class traverses no enforcement point. The field that separates an ACKNOWLEDGED bypass surface from an unknown hole — both are ungoverned, and only one of them is a decision somebody made. The inventory check reports the two differently and never as each other." .
+
+aegis:enforcedInsteadAt a owl:DatatypeProperty ;
+    rdfs:label "enforced instead at" ;
+    rdfs:domain aegis:ToolClass ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Where enforcement happens for a class that cannot be governed here — a VCS hook, branch protection, destination-side credentials. An acknowledged bypass surface with no stated alternative is a note that something is unhandled; with one, it is a design." .

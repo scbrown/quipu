@@ -449,3 +449,240 @@ fn domains_are_declared_only_where_the_subject_is_unambiguous() {
         .unwrap();
     assert!(block.contains("rdfs:domain aegis:Policy"));
 }
+
+// ── Q-SARC-VOCAB: the whole governance plane, held closed ────────────────────
+
+const DISPATCH_INVENTORY_SHAPES: &str = include_str!("../shapes/governance.ttl");
+
+/// Every `aegis:` property a shape file constrains via `sh:path`.
+fn constrained_properties(shapes: &str) -> Vec<String> {
+    let mut out: Vec<String> = shapes
+        .split("sh:path aegis:")
+        .skip(1)
+        .filter_map(|rest| {
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            (!name.is_empty()).then_some(name)
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Whether a declaration block ASSERTS an `rdfs:domain`.
+///
+/// Matches the predicate at the start of a line, not the substring: several
+/// comments say "so no rdfs:domain" in prose, and a naive `contains` reads those
+/// as the very declaration they are explaining the absence of.
+fn declares_domain(block: &str) -> bool {
+    block
+        .lines()
+        .any(|l| l.trim_start().starts_with("rdfs:domain "))
+}
+
+/// The declaration block for `aegis:<property>`, or `None` if undeclared.
+fn declaration(property: &str) -> Option<&'static str> {
+    AEGIS_PROPERTIES
+        .split(&format!("aegis:{property} a owl:"))
+        .nth(1)?
+        .split(" .\n")
+        .next()
+}
+
+#[test]
+fn governance_plane_properties_are_all_described() {
+    // The generalisation the SARC-field list above could not give: adding a
+    // constrained property to the governance shapes without describing it fails
+    // the build. A shape says what is VALID and never what a term MEANS, and the
+    // authoring surface — an agent composing a policy over this catalog — reads
+    // the second, not the first.
+    //
+    // Scope is the governance plane, deliberately. The estate ontology in
+    // shapes/aegis-ontology.shapes.ttl is ~100 more properties whose intended
+    // subjects are not all obvious from their shapes; sweeping them in would
+    // mean asserting domains by guess, and a wrong domain MATERIALISES a wrong
+    // rdf:type rather than merely documenting badly. Named here so the omission
+    // is a scope decision rather than something nobody noticed.
+    let mut undescribed: Vec<String> = Vec::new();
+    for property in constrained_properties(SHAPES) {
+        if declaration(&property).is_none() {
+            undescribed.push(property);
+        }
+    }
+    assert!(
+        undescribed.is_empty(),
+        "constrained by shapes/governance.ttl but not DECLARED in \
+         shapes/aegis-properties.ttl: {undescribed:?}. Add each with a range, an \
+         rdfs:comment saying what it MEANS, and a domain only if the name could \
+         not reasonably belong to another class."
+    );
+    // Non-vacuity: if the extractor silently found nothing, the assertion above
+    // would pass over an empty set and this test would be checking air.
+    assert!(
+        constrained_properties(SHAPES).len() > 40,
+        "the property extractor found suspiciously few properties"
+    );
+    assert_eq!(
+        DISPATCH_INVENTORY_SHAPES, SHAPES,
+        "the ToolClass shape lives in governance.ttl; if it moves, widen this test"
+    );
+}
+
+/// The `rdfs:comment` text of a declaration block, with escaped quotes intact.
+///
+/// Taken to the END of the block rather than to the next `"`, because several
+/// comments quote enum values (`\"PAG\"`) and stopping at the first quote would
+/// measure a fragment.
+fn comment_of(block: &str) -> &str {
+    block
+        .split("rdfs:comment \"")
+        .nth(1)
+        .unwrap_or("")
+        .trim_end()
+        .trim_end_matches('"')
+}
+
+#[test]
+fn every_description_says_more_than_its_own_label() {
+    // A comment that restates the label documents nothing, and would satisfy the
+    // test above while leaving the gap exactly where it was. The floor is low on
+    // purpose — this is a check against empty gestures, not a word count.
+    for property in constrained_properties(SHAPES) {
+        let Some(block) = declaration(&property) else {
+            continue;
+        };
+        assert!(
+            block.contains("rdfs:comment"),
+            "aegis:{property} must carry an rdfs:comment saying what it MEANS"
+        );
+        let comment = comment_of(block);
+        let label = block
+            .split("rdfs:label \"")
+            .nth(1)
+            .unwrap_or("")
+            .split('"')
+            .next()
+            .unwrap_or("");
+        assert!(
+            !comment.trim_end_matches('.').eq_ignore_ascii_case(label),
+            "aegis:{property}'s comment is its label restated"
+        );
+        assert!(
+            comment.len() >= 80,
+            "aegis:{property}'s comment is too short to be saying anything a \
+             reader could not get from the name: {comment:?}"
+        );
+    }
+}
+
+#[test]
+fn a_property_shared_across_classes_carries_no_domain() {
+    // rdfs:domain is materialised. `aegis:tier` is on Selector, Predicate AND
+    // Verdict, and `aegis:outcome` on Verdict AND Decision — a domain on either
+    // would assert a type that is wrong two thirds of the time.
+    for shared in [
+        "tier",
+        "outcome",
+        "evidenceHash",
+        "verifier",
+        "name",
+        "claim",
+    ] {
+        let block = declaration(shared).unwrap_or_else(|| panic!("aegis:{shared} is undeclared"));
+        assert!(
+            !declares_domain(block),
+            "aegis:{shared} is carried by more than one class; a domain would \
+             materialise a wrong rdf:type"
+        );
+    }
+}
+
+#[test]
+fn the_two_meanings_of_gate_are_recorded_rather_than_hidden() {
+    // `aegis:gate` is a Predicate's applicability condition AND the gate that
+    // produced a Decision. That is a defect in the vocabulary; the declaration
+    // has to say so, because a reader who meets only one of the two will write
+    // code assuming it is the only one.
+    let block = declaration("gate").expect("aegis:gate is declared");
+    assert!(
+        block.contains("TWO senses") || block.contains("two senses"),
+        "aegis:gate's comment must record that the name carries two meanings"
+    );
+    assert!(!declares_domain(block), "and therefore carry no domain");
+}
+
+#[cfg(feature = "owl")]
+#[test]
+fn materialising_the_declarations_types_the_shipped_catalog_correctly() {
+    // THE RISK THIS BATCH CARRIES. rdfs:domain is not documentation — quipu's
+    // reasoner materialises it, so declaring `aegis:effect rdfs:domain
+    // aegis:Policy` asserts `?x a aegis:Policy` for every subject holding an
+    // effect. Get one domain wrong and the placement check starts demanding a
+    // verification point of a Selector.
+    //
+    // So the test is not "do the axioms parse" — it is "run them over the
+    // SHIPPED catalog and check what they inferred".
+    use crate::store::Store;
+    const TS: &str = "2026-01-01T00:00:00Z";
+    const CATALOG: &str = include_str!("../shapes/policies/treesitter.ttl");
+
+    let mut store = Store::open_in_memory().unwrap();
+    crate::ingest_rdf(
+        &mut store,
+        CATALOG.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        TS,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let ontology = crate::owl::Ontology::from_turtle(AEGIS_PROPERTIES).unwrap();
+    ontology.materialize(&mut store, TS).unwrap();
+
+    let ns = crate::namespace::DEFAULT_BASE_NS;
+    let typed = |class: &str| {
+        let q = format!("PREFIX a: <{ns}> SELECT ?s WHERE {{ ?s a a:{class} }}");
+        match crate::sparql::query(&store, &q).unwrap() {
+            crate::sparql::QueryResult::Select { rows, .. } => rows.len(),
+            _ => 0,
+        }
+    };
+
+    // Selectors and Predicates must NOT have become Policies. They carry
+    // aegis:name, aegis:evidenceSource and aegis:tier — three properties
+    // deliberately left undomained — and if any of those had picked up a domain
+    // by tidiness, every evidence atom in the catalog would now be a Policy and
+    // the placement check would start demanding a verification point of it.
+    let q = format!("PREFIX a: <{ns}> SELECT ?s WHERE {{ ?s a a:Selector . ?s a a:Policy }}");
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(&store, &q).unwrap()
+    else {
+        panic!("expected a SELECT result");
+    };
+    assert!(
+        rows.is_empty(),
+        "materialisation typed {} Selector(s) as Policies — a domain was \
+         asserted on a property that more than one class carries",
+        rows.len()
+    );
+
+    // ... and the same for Predicates, which carry a different overlapping set.
+    let q = format!("PREFIX a: <{ns}> SELECT ?s WHERE {{ ?s a a:Predicate . ?s a a:Policy }}");
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(&store, &q).unwrap()
+    else {
+        panic!("expected a SELECT result");
+    };
+    assert!(rows.is_empty(), "a Predicate was materialised as a Policy");
+
+    // NON-VACUITY: the run has to have inferred something, or the two assertions
+    // above pass over an empty graph and prove nothing about the axioms.
+    assert!(
+        typed("Selector") > 0 && typed("Predicate") > 0 && typed("Policy") > 0,
+        "the shipped catalog must hold policies AND evidence atoms for this \
+         test to be measuring anything"
+    );
+}
