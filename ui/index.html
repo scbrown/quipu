@@ -117,6 +117,46 @@ main {
 
 .view.active { display: flex; }
 
+/* ── Datalinks (3D) ── */
+#datalinks { flex-direction: row; overflow: hidden; }
+.dl-stage { position: relative; flex: 1; min-width: 0; background: var(--bg-surface); }
+.dl-stage canvas { display: block; width: 100%; height: 100%; }
+.dl-hint {
+  position: absolute; left: 12px; bottom: 10px; z-index: 2;
+  font-size: 11px; color: var(--text-muted); pointer-events: none;
+  font-family: var(--mono, monospace);
+}
+.dl-legend {
+  position: absolute; left: 12px; top: 12px; z-index: 2;
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: 11px; pointer-events: none;
+}
+.dl-legend span { display: flex; align-items: center; gap: 6px; }
+.dl-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.dl-empty {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; color: var(--text-muted); background: var(--bg-surface);
+}
+.dl-entry {
+  width: 380px; flex: none; overflow: auto;
+  border-left: 1px solid var(--bg-elevated); padding: 16px;
+  background: var(--bg);
+}
+.dl-entry h3 { margin: 0 0 2px; font-size: 15px; }
+.dl-entry-type { font-size: 11px; color: var(--text-muted); margin-bottom: 12px; }
+.dl-entry-empty { color: var(--text-muted); font-size: 13px; }
+.dl-prose {
+  font-size: 13px; line-height: 1.5; margin: 0 0 14px;
+  padding: 10px; border-left: 2px solid var(--accent); background: var(--bg-surface);
+}
+.dl-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
+.dl-links h4 {
+  margin: 12px 0 5px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted);
+}
+.dl-links a { display: block; padding: 3px 0; font-size: 13px; cursor: pointer; }
+
 /* ── Explorer ── */
 #explorer {
   flex-direction: row;
@@ -992,6 +1032,7 @@ pre.json-result {
 
 <nav id="main-nav">
   <a href="#explorer">Explorer</a>
+  <a href="#datalinks">Datalinks</a>
   <a href="#workbench">Workbench</a>
   <a href="#timeline">Timeline</a>
   <a href="#shapes">Shapes</a>
@@ -1017,6 +1058,18 @@ pre.json-result {
         <thead><tr><th>Predicate</th><th>Value</th></tr></thead>
         <tbody id="detail-facts"></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- ── Datalinks (3D) ── -->
+  <section id="datalinks" class="view">
+    <div class="dl-stage" id="dl-stage">
+      <div class="dl-hint">drag rotate · shift-drag height · wheel zoom · click select · [ ] prev/next prerequisite</div>
+      <div class="dl-legend" id="dl-legend"></div>
+      <div class="dl-empty" id="dl-empty"><span class="spinner"></span><p>Loading lattice…</p></div>
+    </div>
+    <div class="dl-entry" id="dl-entry">
+      <div class="dl-entry-empty">Select a node to read its entry.</div>
     </div>
   </section>
 
@@ -1114,7 +1167,9 @@ LIMIT 25</textarea>
 <script type="module">
   // Local module, not a CDN: the graph must render on an air-gapped deploy.
   import { GraphCanvas } from '/graph-canvas.js';
+  import { Datalinks } from '/datalinks.js';
   window.GraphCanvas = GraphCanvas;
+  window.Datalinks = Datalinks;
   window.dispatchEvent(new Event('graph-canvas-ready'));
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
@@ -1360,6 +1415,9 @@ function navigate() {
     if (state._nodePageBoot) state._nodePageBoot.finally(kickExplorer);
     else kickExplorer();
   }
+  // WebGL sizes to a zero-height container, so the view must be visible before
+  // the renderer is constructed — build it on first navigation, not at boot.
+  if (hash === 'datalinks') loadDatalinks();
   if (hash === 'timeline' && !state.timelineLoaded) loadEpisodes();
   if (hash === 'shapes') loadShapes();
   // CodeMirror renders blank when initialized in a hidden container; (re)init
@@ -1371,6 +1429,180 @@ function navigate() {
 }
 
 window.addEventListener('hashchange', navigate);
+
+// ── Datalinks (3D) ──
+//
+// One /graph payload gives the DAG; one SPARQL query adds the prose and the
+// aiWeight compass when the store happens to hold SMAC datalinks. Neither the
+// compass nor the prose is required — against any other graph this degrades to
+// a ranked lattice with plain entity detail.
+const DL_ENRICH = ['effectText', 'ruleTier', 'abbrev',
+  'aiWeightGrowth', 'aiWeightTech', 'aiWeightWealth', 'aiWeightPower'];
+
+async function loadDatalinks() {
+  // navigate() runs more than once at boot; the awaits below make a second
+  // entry racy, so claim the slot before yielding or two renderers stack up.
+  if (state.datalinks || state.dlBooting) return;
+  state.dlBooting = true;
+  const stage = document.getElementById('dl-stage');
+  const empty = document.getElementById('dl-empty');
+  try {
+    // Same deferred-module race the explorer has: await the bridge, or the
+    // first navigation draws nothing.
+    await graphCanvasReady();
+    if (!window.Datalinks) throw new Error('3D module failed to load');
+    const payload = await api('/graph', { limit: 2000 });
+    if (!payload.nodes || !payload.nodes.length) {
+      empty.innerHTML = '<p>No entities to render.</p>';
+      return;
+    }
+    const dl = new window.Datalinks(stage, { onSelect: renderDatalinkEntry });
+    state.datalinks = dl;
+    dl.setData(payload);
+    empty.style.display = 'none';
+    renderDatalinkLegend(dl);
+    loadDatalinkEnrichment(dl);
+    resolveSpinePredicate(payload);
+  } catch (err) {
+    empty.innerHTML = `<p>Could not load: ${escapeHtml(err.message)}</p>`;
+  } finally {
+    state.dlBooting = false;
+  }
+}
+
+/**
+ * Find the full IRI of the graph's dominant relation — the "spine".
+ *
+ * PPR runs over a projection built from ALL reference-valued facts, which for
+ * this store includes rdf:type and sourcedFrom. Those are not drawn, so an
+ * unfiltered PPR both scores invisible nodes and leaks rank through edges the
+ * user cannot see. Restricting the projection to the spine makes the re-light
+ * mean what the picture shows. /graph already did the filtering, so take the
+ * dominant predicate from the payload and resolve its IRI by suffix.
+ */
+async function resolveSpinePredicate(payload) {
+  const counts = new Map();
+  for (const [, , pred] of payload.edges || []) {
+    counts.set(pred, (counts.get(pred) || 0) + 1);
+  }
+  if (!counts.size) return;
+  const [short] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  try {
+    const res = await api('/query', {
+      query: 'SELECT ?p (COUNT(*) AS ?n) WHERE { ?s ?p ?o . FILTER(isIRI(?o)) }'
+        + ' GROUP BY ?p ORDER BY DESC(?n) LIMIT 50',
+    });
+    const hit = (res.rows || []).find(r => String(r.p).split(/[/#]/).pop() === short);
+    if (hit) state.dlSpine = hit.p;
+  } catch { /* unfiltered PPR is still better than none */ }
+}
+
+/** Optional pass: SMAC prose + compass weights, keyed by IRI. */
+async function loadDatalinkEnrichment(dl) {
+  const values = DL_ENRICH.map(p => `<http://neuralamplifier.local/ontology/smac/${p}>`).join(' ');
+  const query = `SELECT ?s ?p ?o WHERE { ?s ?p ?o . VALUES ?p { ${values} } }`;
+  try {
+    const res = await api('/query', { query });
+    if (!res.rows || !res.rows.length) return;
+    const byIri = new Map();
+    for (const row of res.rows) {
+      const [s, p, o] = row;
+      if (!byIri.has(s)) byIri.set(s, {});
+      byIri.get(s)[String(p).split('/').pop()] = o;
+    }
+    dl.setEnrichment(byIri);
+    renderDatalinkLegend(dl);
+  } catch { /* enrichment is optional — a non-SMAC store simply has none */ }
+}
+
+function renderDatalinkLegend(dl) {
+  document.getElementById('dl-legend').innerHTML = dl.legend()
+    .map(r => `<span><i style="background:${r.color}"></i>${escapeHtml(shortIri(r.label))} <em style="color:var(--text-muted)">${r.count}</em></span>`)
+    .join('');
+}
+
+/**
+ * Render the selected entry, then re-light the lattice by personalized
+ * PageRank seeded on it — importance relative to where you are standing,
+ * not global importance.
+ */
+function renderDatalinkEntry(node) {
+  const dl = state.datalinks;
+  const { requires, unlocks } = dl.linksOf(node);
+  const extra = node.extra || {};
+  const link = n =>
+    `<a data-dl="${escapeHtml(n.iri)}">${escapeHtml(shortIri(n.label || n.iri))}</a>`;
+
+  const parts = [
+    `<h3>${escapeHtml(node.label || shortIri(node.iri))}</h3>`,
+    `<div class="dl-entry-type">${escapeHtml(shortIri(node.type || '—'))} · rank ${node.rank} · degree ${node.deg || 0}</div>`,
+  ];
+  if (extra.effectText) parts.push(`<p class="dl-prose">${escapeHtml(extra.effectText)}</p>`);
+  const meta = [];
+  if (extra.ruleTier) meta.push(`tier: ${escapeHtml(extra.ruleTier)}`);
+  if (extra.abbrev) meta.push(`abbrev: ${escapeHtml(extra.abbrev)}`);
+  if (meta.length) parts.push(`<div class="dl-meta">${meta.join(' · ')}</div>`);
+
+  parts.push('<div class="dl-links">');
+  if (requires.length) {
+    parts.push('<h4>Requires</h4>', ...requires.map(r => link(r.node)));
+  }
+  if (unlocks.length) {
+    parts.push('<h4>Unlocks</h4>', ...unlocks.map(r => link(r.node)));
+  }
+  parts.push('</div>');
+
+  const panel = document.getElementById('dl-entry');
+  panel.innerHTML = parts.join('');
+  panel.querySelectorAll('a[data-dl]').forEach(a => {
+    a.onclick = () => dl.select(a.getAttribute('data-dl'));
+  });
+  state.dlLinks = requires.concat(unlocks).map(r => r.node.iri);
+  relightDatalinks(node.iri);
+}
+
+/** Personalized PageRank from the selected node; falls back to flat colour. */
+async function relightDatalinks(iri) {
+  const dl = state.datalinks;
+  try {
+    const body = { algorithm: 'ppr', seeds: [iri], limit: 2000 };
+    if (state.dlSpine) body.predicate = state.dlSpine;
+    const res = await api('/project', body);
+    const ranked = (res.results || [])
+      .filter(r => r.entity && Number(r.score) > 0)
+      .sort((a, b) => a.score - b.score);
+    if (!ranked.length) { dl.setImportance(null); return; }
+    // Percentile, not score/max. PPR mass concentrates hard on the seed, so
+    // dividing by the maximum leaves the entire reachable set within a few
+    // percent of black — the picture reads as "everything went dark" instead
+    // of showing which ancestry matters. Ranking spreads the reachable set
+    // across the whole brightness range; unreached nodes stay at the floor.
+    const scores = new Map();
+    ranked.forEach((row, i) => {
+      scores.set(row.entity, (i + 1) / ranked.length);
+    });
+    dl.setImportance(scores);
+  } catch {
+    dl.setImportance(null);
+  }
+}
+
+// [ and ] walk the selected node's prerequisite/unlock links without the mouse.
+document.addEventListener('keydown', (e) => {
+  if (location.hash.slice(1) !== 'datalinks' || !state.datalinks) return;
+  if (e.target.matches('input, textarea, .CodeMirror textarea')) return;
+  const links = state.dlLinks || [];
+  if (!links.length) return;
+  if (e.key === '[') {
+    state.dlCursor = (state.dlCursor - 1 + links.length) % links.length;
+  } else if (e.key === ']') {
+    state.dlCursor = ((state.dlCursor ?? -1) + 1) % links.length;
+  } else {
+    return;
+  }
+  e.preventDefault();
+  state.datalinks.select(links[state.dlCursor]);
+});
 
 // ── Health & Stats ──
 async function checkHealth() {

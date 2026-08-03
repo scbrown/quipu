@@ -15,11 +15,14 @@ repos:
         types: [json]
       - id: check-merge-conflict
       - id: check-added-large-files
-        # mermaid.min.js is a ~2.6MB vendored library written by
-        # `mdbook-mermaid install`; the book needs it committed to render
-        # diagrams (and to work offline under `mdbook serve`). Excluded by exact
-        # path so the 500KB guard stays tight for everything else.
-        exclude: ^docs/book/mermaid\.min\.js$
+        # Two vendored libraries must be committed to work offline, and both are
+        # excluded by EXACT path so the 500KB guard stays tight for everything
+        # else. mermaid.min.js (~2.6MB) is written by `mdbook-mermaid install`;
+        # the book needs it to render diagrams under `mdbook serve`.
+        # three.module.min.js (~672KB) backs the 3D Datalinks view, which is
+        # bound by the same no-CDN rule as the 2D graph — see
+        # docs/design/datalinks-3d.md §Air-gap.
+        exclude: ^(docs/book/mermaid\.min\.js|ui/vendor/three\.module\.min\.js)$
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.17.2

@@ -26,6 +26,10 @@ type SharedStore = Arc<FairMutex<quipu::Store>>;
 const UI_HTML: &str = include_str!("../ui/index.html");
 const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
 const GRAPH_CANVAS_JS: &str = include_str!("../ui/graph-canvas.js");
+const DATALINKS_JS: &str = include_str!("../ui/datalinks.js");
+// Vendored, not fetched: the UI must render on an air-gapped deploy, so the
+// only 3D dependency ships in the binary like every other UI asset.
+const THREE_JS: &str = include_str!("../ui/vendor/three.module.min.js");
 
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
@@ -41,8 +45,8 @@ mod tests;
 mod tools;
 
 use base::{
-    components_js, export, graph_canvas_js, health, knot, metrics_handler, query, stats, ui,
-    version,
+    components_js, datalinks_js, export, graph_canvas_js, health, knot, metrics_handler, query,
+    stats, three_js, ui, version,
 };
 use entity::{
     entity_conneg, entity_history, entity_html, entity_json, entity_turtle_suffix, events_commit,
@@ -265,6 +269,8 @@ async fn main() {
         .route("/ui", get(ui))
         .route("/quipu-components.js", get(components_js))
         .route("/graph-canvas.js", get(graph_canvas_js))
+        .route("/datalinks.js", get(datalinks_js))
+        .route("/vendor/three.module.min.js", get(three_js))
         // Core API
         .route("/health", get(health))
         .route("/version", get(version))

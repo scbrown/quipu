@@ -248,3 +248,71 @@ async fn deferred_embed_chunks_the_onnx_call_by_batch_size() {
         "every queued entity should end up with a vector"
     );
 }
+
+/// Every local JS module the UI imports must be a registered route AND
+/// reachable without a bearer token, or the page dead-ends on a blank view.
+///
+/// Both halves of this bit me while wiring the 3D Datalinks view: the module
+/// resolves at build time via `include_str!`, so a missing `.route()` or a
+/// missing `http_auth` allowlist entry compiles clean and only shows up as an
+/// empty canvas at runtime. Parsing the HTML keeps the check honest — adding an
+/// import without serving it now fails here instead of in a browser.
+#[test]
+fn every_ui_module_import_is_a_served_public_route() {
+    let html = super::UI_HTML;
+    let mut imports: Vec<&str> = Vec::new();
+    for line in html.lines() {
+        // `from '/path.js'` (ES import) and `src="/path.js"` (classic script).
+        for (open, close) in [("from '", '\''), ("src=\"", '"')] {
+            if let Some(idx) = line.find(open) {
+                let rest = &line[idx + open.len()..];
+                if let Some(end) = rest.find(close) {
+                    let path = &rest[..end];
+                    // Only local absolute paths; CDN scripts are not ours to serve.
+                    if path.starts_with('/') {
+                        imports.push(path);
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        imports.len() >= 2,
+        "found {} local module imports in ui/index.html — the parse likely broke",
+        imports.len()
+    );
+
+    let served = quipu::http_auth::READ_ENDPOINTS;
+    let mut missing = Vec::new();
+    for path in &imports {
+        if !served.contains(path) {
+            missing.push(*path);
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "ui/index.html imports these local modules, but they are not in \
+         READ_ENDPOINTS so they are either unrouted or behind auth: {missing:?}"
+    );
+}
+
+/// The 3D dependency is vendored, never fetched: an air-gapped deploy has to
+/// render. Guards both that the vendored file is really three.js and that the
+/// UI never reaches for a CDN to get it.
+#[test]
+fn three_js_is_vendored_and_never_fetched() {
+    assert!(
+        super::THREE_JS.contains("Three.js Authors")
+            && super::THREE_JS.contains("SPDX-License-Identifier: MIT"),
+        "ui/vendor/three.module.min.js is missing the three.js MIT header — \
+         either it is not three.js, or the licence banner was stripped"
+    );
+    for module in [super::DATALINKS_JS, super::UI_HTML] {
+        for host in ["unpkg.com", "cdn.jsdelivr.net", "cdn.skypack.dev"] {
+            assert!(
+                !module.contains(&format!("{host}/three")),
+                "the 3D view must not load three.js from {host} — it is vendored"
+            );
+        }
+    }
+}

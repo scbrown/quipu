@@ -66,6 +66,24 @@ demo:
     cargo run --bin quipu --features shacl -- knot examples/demo-graph/demo.ttl --db /tmp/quipu-demo.db
     cargo run --bin quipu-server --features full -- --db /tmp/quipu-demo.db
 
+# Load the SMAC datalinks tech tree and serve the 3D Datalinks view.
+# The graph lives in NeuralAmplifier (scbrown/NeuralAmplifier), which owns and
+# regenerates it — point `datalinks` at a checkout rather than vendoring a copy.
+# Then open http://localhost:3030/#datalinks
+datalinks graph="../NeuralAmplifier/datalinks/thinker/alphax.ttl":
+    rm -f /tmp/quipu-datalinks.db
+    cargo run --bin quipu --features shacl -- knot {{graph}} --db /tmp/quipu-datalinks.db
+    cargo run --bin quipu-server --features full -- --db /tmp/quipu-datalinks.db
+
+# Ingest the sibling repos as code + doc entities, then serve them.
+# Produces CodeModule / CodeSymbol / Document / Section against the
+# shapes/code-entities.ttl vocabulary, validated on load.
+ingest-repos +repos="../quipu ../hank ../NeuralAmplifier ../thinker":
+    ./scripts/ingest-repos.py {{repos}} -o /tmp/quipu-code.ttl
+    rm -f /tmp/quipu-code.db
+    cargo run --bin quipu --features shacl -- knot /tmp/quipu-code.ttl --db /tmp/quipu-code.db
+    cargo run --bin quipu-server --features full -- --db /tmp/quipu-code.db
+
 # === Documentation ===
 
 # Documentation management: just docs <cmd>

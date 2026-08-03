@@ -15,7 +15,7 @@ use axum::{
 use serde_json::{Value as JsonValue, json};
 
 use super::tools::finish_deferred_embed;
-use super::{COMPONENTS_JS, GRAPH_CANVAS_JS, SharedStore, UI_HTML};
+use super::{COMPONENTS_JS, DATALINKS_JS, GRAPH_CANVAS_JS, SharedStore, THREE_JS, UI_HTML};
 
 pub(crate) async fn ui() -> Html<&'static str> {
     Html(UI_HTML)
@@ -32,6 +32,20 @@ pub(crate) async fn graph_canvas_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript")],
         GRAPH_CANVAS_JS,
+    )
+}
+
+pub(crate) async fn datalinks_js() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/javascript")],
+        DATALINKS_JS,
+    )
+}
+
+pub(crate) async fn three_js() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/javascript")],
+        THREE_JS,
     )
 }
 

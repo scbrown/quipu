@@ -67,6 +67,10 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/ui",
     "/quipu-components.js",
     "/graph-canvas.js",
+    "/datalinks.js",
+    // Vendored three.js for the 3D Datalinks view. A static asset, like the
+    // other UI files — served unauthenticated so the page loads.
+    "/vendor/three.module.min.js",
     "/health",
     "/version",
     "/stats",
