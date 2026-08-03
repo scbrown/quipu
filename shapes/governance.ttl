@@ -565,3 +565,108 @@ aegis:DecisionShape a sh:NodeShape ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Escalation Router (Q-SARC-ER) — bounded human oversight.
+#
+# SARC I4: "escalation without a bound is not human oversight; it is deferred
+# autonomy." Before this, `require-approval` and `escalate` failed closed at the
+# write gate with NO CHANNEL to grant approval — a refusal an operator could not
+# act on, which is a worse control than an honest advisory.
+#
+# The router is ASYNCHRONOUS by design. A write gate is synchronous and cannot
+# hold a transaction open while a human decides; nothing here blocks a process.
+# What it does is make the refusal actionable: the attempt mints a
+# DecisionRequest naming what was refused and who can rule on it, a human signs
+# an aegis:Decision, and the next attempt succeeds. The "hold" is the agent
+# retrying, not the engine waiting.
+# ═══════════════════════════════════════════════════════════════════
+
+# ── OperatorGroup ──────────────────────────────────────────────────
+# WHO can rule, and what their capacity is. The capacity model is part of the
+# SPECIFICATION rather than an unstated operational assumption: SARC §5.3 makes
+# `W_q < τ_rev` a measurable property of an M/M/c queue, and a queue whose
+# parameters are undeclared cannot be measured against a window.
+
+aegis:OperatorGroupShape a sh:NodeShape ;
+    sh:targetClass aegis:OperatorGroup ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Servers in the M/M/c sense — how many operators can rule in parallel.
+        sh:path aegis:operatorCount ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Mean service time per decision, seconds. With operatorCount this is
+        # enough to compute the expected wait and compare it to a constraint's
+        # reversibility window.
+        sh:path aegis:meanServiceSeconds ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # What happens outside declared hours. Only "deny" and
+        # "defer_within_window" are expressible: an after-hours mode that
+        # ALLOWED would be the default-allow-under-load SARC §5.3 names as the
+        # opposite of oversight, and it is left unrepresentable for the same
+        # reason `onTimeout` is.
+        sh:path aegis:afterHours ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "deny" "defer_within_window" ) ;
+    ] .
+
+# ── DecisionRequest ────────────────────────────────────────────────
+# One suspended action awaiting a ruling. Minted by the router when an
+# escalation fires, and the thing that turns "denied" into "denied, and here is
+# how to un-deny it".
+#
+# `expiresAt` is derived from the constraint's reversibility window, so a
+# request that nobody services becomes a DENIAL at a declared time rather than
+# sitting open forever. That is the whole of I4.
+
+aegis:DecisionRequestShape a sh:NodeShape ;
+    sh:targetClass aegis:DecisionRequest ;
+    sh:property [
+        # The policy that escalated.
+        sh:path aegis:forPolicy ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # The entity whose write was suspended.
+        sh:path aegis:forTarget ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:routedTo ;
+        sh:class aegis:OperatorGroup ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Unix seconds after which an unserviced request is DENIED. Required:
+        # a request with no expiry is the unbounded escalation I4 forbids.
+        sh:path aegis:expiresAt ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Content binding, so an approval cannot survive a change to what it
+        # approved. Same discipline as a Verdict's.
+        sh:path aegis:evidenceHash ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .

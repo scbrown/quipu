@@ -57,6 +57,11 @@ pub struct Store {
     /// verdict written inside that savepoint would go with it — losing exactly
     /// the record worth keeping. Drained after the savepoint resolves.
     pub(crate) pending_verdicts: Vec<crate::governance::verdict_facts::PendingVerdict>,
+    /// `DecisionRequest`s the escalation router decided to open. Staged for the
+    /// same reason the verdicts are: the refusal that opens one also rolls the
+    /// savepoint back, and a request written in place would vanish with it —
+    /// leaving a refusal with nothing for an operator to act on.
+    pub(crate) pending_requests: Vec<crate::governance::router::PendingRequest>,
     /// True while the store is writing verdict facts. The gate honours it and
     /// skips: a policy targeting `aegis:Verdict` would otherwise deny the
     /// verdict recording its own denial.
@@ -211,6 +216,7 @@ impl Store {
             pending_write_events: std::cell::RefCell::new(Vec::new()),
             policy_registry: None,
             pending_verdicts: Vec::new(),
+            pending_requests: Vec::new(),
             recording_verdicts: false,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
             vector_delegate: None,
@@ -332,8 +338,10 @@ impl Store {
         // restore it afterwards. Evaluation never mutates the registry.
         let registry = self.policy_registry.take().expect("registry just built");
         let mut verdicts = Vec::new();
-        let result = registry.evaluate_write(self, datums, graph, &mut verdicts);
+        let mut requests = Vec::new();
+        let result = registry.evaluate_write(self, datums, graph, &mut verdicts, &mut requests);
         self.policy_registry = Some(registry);
+        self.pending_requests = requests;
         // STAGED, not written. The caller writes them after the savepoint
         // resolves — a denial rolls back, and a verdict written inside that
         // savepoint would be rolled back with it.
@@ -349,6 +357,7 @@ impl Store {
     /// successful write into a failed one, nor a denial into a different error
     /// than the policy's.
     pub(crate) fn flush_pending_verdicts(&mut self, timestamp: &str) {
+        self.flush_pending_requests(timestamp);
         let pending = std::mem::take(&mut self.pending_verdicts);
         if pending.is_empty() || self.recording_verdicts {
             return;
@@ -370,6 +379,41 @@ impl Store {
             timestamp,
             Some("quipu"),
             Some("write-gate verdict"),
+        );
+        self.recording_verdicts = false;
+    }
+
+    /// Write the `DecisionRequest`s the router staged, after the savepoint has
+    /// resolved. Same ordering, same reason, as the verdicts.
+    fn flush_pending_requests(&mut self, timestamp: &str) {
+        let pending = std::mem::take(&mut self.pending_requests);
+        if pending.is_empty() || self.recording_verdicts {
+            return;
+        }
+        let mut datums = Vec::new();
+        for request in &pending {
+            match crate::governance::router::mint_request(
+                self,
+                &request.policy_iri,
+                &request.target_iri,
+                None,
+                request.window_secs,
+                request.now,
+                timestamp,
+            ) {
+                Ok(mut d) => datums.append(&mut d),
+                Err(_) => return,
+            }
+        }
+        if datums.is_empty() {
+            return;
+        }
+        self.recording_verdicts = true;
+        let _ = self.transact(
+            &datums,
+            timestamp,
+            Some("quipu"),
+            Some("escalation request"),
         );
         self.recording_verdicts = false;
     }

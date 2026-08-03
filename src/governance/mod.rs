@@ -11,6 +11,7 @@
 
 pub mod guard;
 pub mod placement;
+pub mod router;
 pub mod verdict_facts;
 
 pub use guard::{PolicyRegistry, is_governance_write};

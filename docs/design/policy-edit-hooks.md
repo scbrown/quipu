@@ -322,12 +322,43 @@ Status: ☐ open · ☑ done (this change).
   aligning `aegis:` against an external vocabulary (ontology matching takes
   property descriptions as its primary signal and there are none).
 
-- **Q-SARC-ER** ☐ Escalation router (`src/governance/router.rs`):
+- **Q-SARC-ER** ☑ Escalation router (`src/governance/router.rs`):
   `aegis:OperatorGroup` with an M/M/c capacity model, a DecisionRequest queue,
   hold-until-τ_rev, default-deny on timeout, and re-validation of an
   operator-modified action. *AC:* `require-approval` suspends and routes rather
   than failing closed with no channel; an unserviced escalation denies at τ_rev
   and says so.
+
+  **Asynchronous, and the docs say so.** A write gate is synchronous and cannot
+  hold a transaction open while a human decides — that would turn an approval
+  gate into a lock on the store. The refused attempt MINTS a `DecisionRequest`
+  naming the policy, target, evidence hash and `expiresAt`; a human signs an
+  `aegis:Decision` bound to the same hash; the NEXT attempt succeeds. The "hold"
+  is the agent retrying, not the engine waiting.
+
+  Same staging problem as the verdicts, same answer: the refusal that opens a
+  request also rolls the savepoint back, so requests are staged on the `Store`
+  and flushed afterwards. A request written in place would vanish with the
+  rollback, leaving an operator a refusal with nothing to act on — the exact
+  state the router exists to end.
+
+  Four calls worth keeping:
+
+  - **Only an approval permits.** `Pending` and `Expired` are both refusals.
+    Reading either as a pass is the default-allow-under-load failure.
+  - **A rejection outranks an approval** when both are bound to one evidence
+    hash. Two humans disagreeing is not a state to resolve by row order, and the
+    safe reading of a disagreement about permitting something is "no".
+  - **A retry updates the same request** — the IRI derives from the evidence, so
+    an agent retrying every few seconds does not bury the queue in duplicates.
+  - **A zero window expires immediately** rather than defaulting. The placement
+    check requires τ_rev on an escalation at definition time, so reaching the
+    router without one means that check was off; inventing a bound would be
+    inventing exactly what I4 requires be declared.
+
+  Not built, and not implied: no scheduler, no notification. `routedTo` records
+  WHICH group should rule; delivering to them is a consumer of this record.
+  Claiming otherwise would be the dashboard anti-pattern with extra steps.
 - **Q-SARC-AUDIT** ☐ `quipu_audit_check(Σ, T)` (`src/governance/audit.rs`): the
   four correspondence passes — coverage, class-placement compatibility, outcome
   consistency, attribution completeness — returning a structured discrepancy

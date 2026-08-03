@@ -38,6 +38,12 @@ struct CompiledPolicy {
     /// Optional `aegis:evidenceProbe` ASK ("does the evidence exist yet?"). When
     /// present and false, the outcome is `unknown` and the write is NOT blocked.
     evidence_probe: Option<String>,
+    /// `aegis:reversibilityWindowSeconds`, for an escalating effect. The
+    /// placement check requires it on an escalation-class policy at definition
+    /// time, so a missing one here means that check was off — and the router
+    /// treats a zero window as already expired rather than inventing a bound
+    /// SARC I4 requires be declared.
+    reversibility_window: Option<i64>,
 }
 
 /// The active `boundary:"action"` policies, indexed by target-type IRI for a
@@ -55,10 +61,11 @@ impl PolicyRegistry {
     pub fn build(store: &Store) -> Result<Self> {
         let q = format!(
             "PREFIX a: <{DEFAULT_BASE_NS}> \
-             SELECT ?p ?t ?c ?e ?probe WHERE {{ \
+             SELECT ?p ?t ?c ?e ?probe ?window WHERE {{ \
                 ?p a a:Policy ; a:targets ?t ; a:claim ?c ; a:boundary \"action\" . \
                 OPTIONAL {{ ?p a:effect ?e }} \
                 OPTIONAL {{ ?p a:evidenceProbe ?probe }} \
+                OPTIONAL {{ ?p a:reversibilityWindowSeconds ?window }} \
              }}"
         );
         let mut by_type: HashMap<String, Vec<CompiledPolicy>> = HashMap::new();
@@ -72,6 +79,11 @@ impl PolicyRegistry {
                 };
                 let effect = str_of(row.get("e")).unwrap_or_else(|| "deny".to_string());
                 let evidence_probe = str_of(row.get("probe"));
+                let reversibility_window = match row.get("window") {
+                    Some(Value::Int(i)) => Some(*i),
+                    Some(Value::Str(s)) => s.parse().ok(),
+                    _ => None,
+                };
                 by_type
                     .entry(target_type_iri.clone())
                     .or_default()
@@ -81,6 +93,7 @@ impl PolicyRegistry {
                         claim,
                         effect,
                         evidence_probe,
+                        reversibility_window,
                     });
             }
         }
@@ -96,6 +109,7 @@ impl PolicyRegistry {
         datums: &[Datum],
         graph: i64,
         verdicts: &mut Vec<super::verdict_facts::PendingVerdict>,
+        requests: &mut Vec<super::router::PendingRequest>,
     ) -> Result<()> {
         if self.by_type.is_empty() {
             return Ok(());
@@ -127,7 +141,7 @@ impl PolicyRegistry {
                     }
                 };
                 for policy in policies {
-                    evaluate_one(store, &eiri, policy, verdicts)?;
+                    evaluate_one(store, &eiri, policy, verdicts, requests)?;
                 }
             }
         }
@@ -164,15 +178,23 @@ fn entity_type_iris(
 
 /// Whether an effect blocks the write at the action boundary.
 ///
-/// Blocking effects fail **closed**: `deny` outright, and
-/// `require-approval`/`escalate` because a write that needs a human decision
-/// cannot proceed through a seam that has no channel to grant one. Recording the
-/// pending decision and routing it to the workflow layer is a follow-up
-/// (Q-APPROVAL-followup); until then the honest behaviour is to refuse the write
-/// rather than let a `require-approval` policy pass silently. `allow`, `warn`,
-/// and `record` are advisory and never block.
+/// `deny` blocks outright. `require-approval` and `escalate` block too, but they
+/// now block THROUGH THE ROUTER (`super::router`): the refusal mints a
+/// `DecisionRequest` naming what would un-refuse it and when the absence of a
+/// ruling becomes a denial, and an approval bound to the same evidence lets the
+/// next attempt through. Before that channel existed they failed closed with no
+/// way forward, which is a refusal an operator cannot act on.
+///
+/// `allow`, `warn`, `record` and `throttle` are advisory and never block here.
+/// `throttle` is the soft-class PAA response and has no meaning at a write gate
+/// that cannot act on a successor.
 fn effect_blocks(effect: &str) -> bool {
     matches!(effect, "deny" | "require-approval" | "escalate")
+}
+
+/// Whether an effect routes to a human rather than refusing outright.
+fn effect_escalates(effect: &str) -> bool {
+    matches!(effect, "require-approval" | "escalate")
 }
 
 /// Evaluate a single policy against a single target entity. A non-blocking
@@ -182,6 +204,7 @@ fn evaluate_one(
     entity_iri: &str,
     policy: &CompiledPolicy,
     verdicts: &mut Vec<super::verdict_facts::PendingVerdict>,
+    requests: &mut Vec<super::router::PendingRequest>,
 ) -> Result<()> {
     if !effect_blocks(&policy.effect) {
         return Ok(());
@@ -213,14 +236,56 @@ fn evaluate_one(
     let bound_claim = policy.claim.replace("$target", &target);
     if run_ask(store, &bound_claim)? {
         stage("satisfied");
-        Ok(())
-    } else {
-        stage("unsatisfied");
-        Err(Error::PolicyDenied(format!(
-            "'{entity_iri}' blocked by policy '{}' (effect '{}', target type '{}'): claim unsatisfied",
-            policy.policy_iri, policy.effect, policy.target_type_iri
-        )))
+        return Ok(());
     }
+    stage("unsatisfied");
+
+    // An escalating effect consults the router before refusing. A standing
+    // approval bound to this evidence lets the write through — that is the
+    // channel `require-approval` never had, and the reason it is no longer a
+    // dead end.
+    if effect_escalates(&policy.effect) {
+        let now = now_secs();
+        if let Some(ruling) = super::router::resolve(store, &policy.policy_iri, entity_iri, now)? {
+            if ruling.permits() {
+                return Ok(());
+            }
+            return Err(Error::PolicyDenied(format!(
+                "'{entity_iri}' blocked by policy '{}': {}",
+                policy.policy_iri,
+                ruling.reason(&policy.policy_iri, entity_iri)
+            )));
+        }
+        // No request yet: this attempt is what opens one. The request itself is
+        // staged rather than written here — the gate runs inside the savepoint
+        // this refusal is about to roll back, so a request written now would
+        // vanish with it. Same ordering problem, same answer, as the verdicts.
+        requests.push(super::router::PendingRequest {
+            policy_iri: policy.policy_iri.clone(),
+            target_iri: entity_iri.to_string(),
+            window_secs: policy.reversibility_window.unwrap_or(0),
+            now,
+        });
+        return Err(Error::PolicyDenied(format!(
+            "'{entity_iri}' needs a human decision under policy '{}'. A \
+             DecisionRequest has been opened; have an authorized operator record \
+             an aegis:Decision with outcome \"approve\" bound to its \
+             evidenceHash, then retry.",
+            policy.policy_iri
+        )));
+    }
+
+    Err(Error::PolicyDenied(format!(
+        "'{entity_iri}' blocked by policy '{}' (effect '{}', target type '{}'): claim unsatisfied",
+        policy.policy_iri, policy.effect, policy.target_type_iri
+    )))
+}
+
+/// Unix seconds, or 0 before the epoch.
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
 /// Run a SPARQL ASK and return its boolean, erroring if the query is not an ASK.
