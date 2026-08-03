@@ -211,7 +211,43 @@ the tarball directly.
 | `src/server/base.rs` | The two asset handlers |
 | `src/http_auth.rs` | Both paths on the unauthenticated read allowlist |
 | `scripts/ingest-repos.py` | Repo → Turtle for CodeModule / CodeSymbol / Document / Section |
-| `justfile` | `just datalinks`, `just ingest-repos` |
+| `scripts/export-datalinks.sh` | Bakes a graph to static JSON for the Pages demo |
+| `docs/book/src/datalinks/` | The published demo: page + committed `graph.json` |
+| `justfile` | `just datalinks`, `just ingest-repos`, `just docs-assets`, `just docs-data` |
+
+## The published demo
+
+The view ships twice from one module. `ui/datalinks.js` imports its
+dependencies **relatively** (`./graph-canvas.js`, `./vendor/three.module.min.js`),
+so the same file resolves correctly whether it is served from the binary at `/`
+or from `/quipu/datalinks/` on GitHub Pages. No build step, no bundler, no
+second copy of the renderer.
+
+Pages already deploys the mdBook from `docs/book/book`, so the demo is *inside*
+that build rather than a competing `deploy-pages` job fighting for the same
+environment. mdBook copies non-markdown files in `src/` verbatim, which is what
+puts the page at `/quipu/datalinks/`.
+
+Two things differ from the served UI, both forced by there being no Quipu
+behind a static host:
+
+- **The graph is baked.** `scripts/export-datalinks.sh` captures `POST /graph`
+  and the enrichment query from a *real* server rather than re-deriving the
+  projection, because `graph_view.rs` owns the predicate filtering, degree
+  ranking and index-addressing, and a hand-rolled copy would drift from what
+  the served UI shows. The result is committed so the Pages build never needs
+  Rust.
+- **PPR runs in the browser.** A direct port of `page_rank` in `src/graph.rs` —
+  same damping (0.85), iteration cap (100), L1 tolerance (1e-6), and
+  dangling-mass redistribution to the restart vector — so the demo lights up
+  the way the real one does. At 374 nodes it converges in well under a frame.
+
+The renderer's runtime assets are **copied**, not committed twice: `ui/` owns
+them, `just docs-assets` stages them, and they are gitignored under
+`docs/book/src/datalinks/`. CI runs the same copy and then asserts every
+expected file landed in the book output, so the page cannot silently ship
+without its renderer. The docs workflow triggers on `ui/**` as well as
+`docs/**`, or the published demo would go stale whenever the renderer changed.
 
 ## The ingest
 

@@ -89,12 +89,26 @@ ingest-repos +repos="../quipu ../hank ../NeuralAmplifier ../thinker":
 # Documentation management: just docs <cmd>
 # Commands: build, serve, lint, fix, fmt, vale, check
 
+# Stage the 3D Datalinks demo's runtime assets into the book source.
+# COPIED, not committed twice: ui/ owns these files and the demo is a second
+# deployment of the same module. mdbook copies non-markdown files in src/
+# verbatim, so they land at /quipu/datalinks/. Gitignored — regenerate with
+# this recipe (`just docs build` runs it for you).
+docs-assets:
+    mkdir -p docs/book/src/datalinks/vendor
+    cp ui/datalinks.js ui/graph-canvas.js docs/book/src/datalinks/
+    cp ui/vendor/three.module.min.js docs/book/src/datalinks/vendor/
+
+# Regenerate the demo's baked graph payload. Needs a NeuralAmplifier checkout.
+docs-data graph="../NeuralAmplifier/datalinks/thinker/alphax.ttl":
+    ./scripts/export-datalinks.sh {{graph}}
+
 docs cmd="build":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{cmd}}" in
-        build)    mdbook build docs/book ;;
-        serve)    mdbook serve docs/book --open ;;
+        build)    just docs-assets && mdbook build docs/book ;;
+        serve)    just docs-assets && mdbook serve docs/book --open ;;
         lint)     npx markdownlint-cli2 "docs/book/src/**/*.md" "README.md" "CONTRIBUTING.md" ;;
         fix)      npx markdownlint-cli2 --fix "docs/book/src/**/*.md" "README.md" "CONTRIBUTING.md" ;;
         fmt)      npx prettier --write "docs/book/src/**/*.md" --prose-wrap preserve ;;

@@ -64,3 +64,9 @@ data/*.log
 # Tracking it made the tree permanently dirty, so every build reported
 # git_dirty:true and the flag stopped meaning anything.
 .bobbin/
+
+# Copies of ui/ assets staged into the book by `just docs-assets`. Source of
+# truth is ui/; committing them here would be a second copy that can drift.
+docs/book/src/datalinks/datalinks.js
+docs/book/src/datalinks/graph-canvas.js
+docs/book/src/datalinks/vendor/

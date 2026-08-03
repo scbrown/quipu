@@ -23,11 +23,15 @@
  * colour-blind reader; in 3D the shape channel becomes geometry.
  */
 
-import * as THREE from '/vendor/three.module.min.js';
+// RELATIVE, not absolute. Served from the binary these resolve to
+// /vendor/three.module.min.js and /graph-canvas.js as before; copied into the
+// static demo under docs/book/src/datalinks/ they resolve beside this file.
+// One module, two deployments, no build step.
+import * as THREE from './vendor/three.module.min.js';
 import {
   GRAPH_SLOT_COLORS as SLOT_COLORS,
   GRAPH_OTHER_COLOR as OTHER_COLOR,
-} from '/graph-canvas.js';
+} from './graph-canvas.js';
 
 const SURFACE = 0x16213e;
 

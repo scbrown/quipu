@@ -1,5 +1,8 @@
 name: Docs
 
+# The two path lists are duplicated on purpose: GitHub Actions does not
+# support YAML anchors in workflow files, so an alias here would not expand.
+# Keep them identical.
 on:
   pull_request:
     paths:
@@ -7,6 +10,10 @@ on:
       - 'README.md'
       - 'CONTRIBUTING.md'
       - '.github/workflows/docs.yml'
+      # The 3D Datalinks demo is published from ui/ sources, staged into the
+      # book by `just docs-assets`. Without this the page silently goes stale
+      # whenever the renderer changes.
+      - 'ui/**'
   push:
     branches: [main]
     paths:
@@ -14,6 +21,7 @@ on:
       - 'README.md'
       - 'CONTRIBUTING.md'
       - '.github/workflows/docs.yml'
+      - 'ui/**'
   workflow_dispatch:
 
 permissions:
@@ -31,8 +39,26 @@ jobs:
         with:
           tool: mdbook,mdbook-mermaid
 
+      # Same copy `just docs-assets` does locally, inlined so the workflow does
+      # not need `just`. Keep the two in step — the demo's graph.json IS
+      # committed (the Pages build must not need Rust), but its runtime assets
+      # are not, because ui/ owns them.
+      - name: Stage Datalinks demo assets
+        run: |
+          mkdir -p docs/book/src/datalinks/vendor
+          cp ui/datalinks.js ui/graph-canvas.js docs/book/src/datalinks/
+          cp ui/vendor/three.module.min.js docs/book/src/datalinks/vendor/
+
       - name: Build book
         run: mdbook build docs/book
+
+      - name: Verify the demo was published
+        run: |
+          for f in index.html graph.json datalinks.js graph-canvas.js \
+                   vendor/three.module.min.js; do
+            test -s "docs/book/book/datalinks/$f" \
+              || { echo "missing from book output: datalinks/$f"; exit 1; }
+          done
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'

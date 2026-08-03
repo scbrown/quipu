@@ -7,6 +7,14 @@ recording system. Cords are entities, knots are facts, colors are types, and
 trained readers interpret the structure. Quipu brings this philosophy to modern
 knowledge graphs: strict structure, enforced by AI agents.
 
+## See it
+
+**[Datalinks — a 3D explorer, live in your browser](datalinks/)**, over Alpha
+Centauri's technology tree: 374 entities, 329 prerequisite edges, 17 ranks.
+Height is longest-path depth, so position is derived and stable rather than
+emergent. Select a node and the lattice re-lights by personalized PageRank
+seeded on it. No server — the graph is a baked Quipu export.
+
 ## What is Quipu?
 
 An embeddable Rust library and server for building knowledge graphs with:
