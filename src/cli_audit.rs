@@ -12,18 +12,28 @@
 
 use quipu::governance::audit::{self, Report, Severity};
 use quipu::governance::inventory;
+use quipu::governance::replay;
 
 /// Run a checker: `audit <trace.jsonl>` against a trace, `audit inventory`
-/// against the dispatch graph.
+/// against the dispatch graph, `audit replay <trace.jsonl>` for promotion
+/// readiness.
 pub fn cmd_audit(args: &[String], db_path: &str) {
     let Some(subject) = args.get(2).filter(|a| !a.starts_with("--")) else {
-        eprintln!("usage: quipu audit <trace.jsonl>|inventory [--json] [--db <path>]");
+        eprintln!(
+            "usage: quipu audit <trace.jsonl>|inventory|replay <trace.jsonl> \
+             [--json] [--db <path>]"
+        );
         std::process::exit(1);
     };
     let store = quipu::Store::open(db_path).unwrap_or_else(|e| {
         eprintln!("error opening store: {e}");
         std::process::exit(1);
     });
+
+    if subject == "replay" {
+        cmd_replay(args, &store);
+        return;
+    }
 
     let report = if subject == "inventory" {
         inventory::check(&store).unwrap_or_else(|e| {
@@ -117,4 +127,67 @@ fn as_json(report: &Report, headline: &str) -> String {
         "findings": findings,
     })
     .to_string()
+}
+
+/// `quipu audit replay <trace.jsonl>` — what a recorded window says about
+/// promoting each rule from advise to enforce.
+///
+/// Exits 0 whatever it finds. Replay reports readiness, and readiness is a
+/// judgement an operator makes: failing a build because a rule has not yet
+/// fired would turn "we have not measured this" into "this is broken", which
+/// are different states and need different responses.
+fn cmd_replay(args: &[String], store: &quipu::Store) {
+    let Some(path) = args.get(3).filter(|a| !a.starts_with("--")) else {
+        eprintln!("usage: quipu audit replay <trace.jsonl> [--json] [--db <path>]");
+        std::process::exit(1);
+    };
+    let jsonl = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error reading {path}: {e}");
+        std::process::exit(1);
+    });
+    let report = replay::replay_jsonl(store, &jsonl).unwrap_or_else(|e| {
+        eprintln!("error replaying trace: {e}");
+        std::process::exit(1);
+    });
+
+    if args.iter().any(|a| a == "--json") {
+        let rules: Vec<serde_json::Value> = report
+            .rules
+            .iter()
+            .map(|r| {
+                serde_json::json!({
+                    "id": r.id,
+                    "in_spec": r.in_spec,
+                    "evaluated": r.evaluated,
+                    "satisfied": r.satisfied,
+                    "unsatisfied": r.unsatisfied,
+                    "blocked": r.blocked,
+                    "advisory": r.advisory,
+                    "would_block": r.would_block,
+                    "new_blocks": r.new_blocks(),
+                    "targets": r.targets,
+                    "recovered": r.recovered,
+                    "blocker": r.blocker(),
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "summary": report.summary(),
+                "records": report.records,
+                "unreadable": report.unreadable,
+                "rules": rules,
+            })
+        );
+        return;
+    }
+    println!("{}", report.summary());
+    if report.rules.is_empty() {
+        return;
+    }
+    println!();
+    for rule in &report.rules {
+        println!("{}", rule.line());
+    }
 }

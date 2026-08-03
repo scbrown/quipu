@@ -265,3 +265,40 @@ as acknowledged surfaces with where each is enforced instead. Nothing derives it
 from the harness's actual tool registry, so it can drift from reality the way a
 prose list does; the difference is that a drifted declaration is a wrong answer
 to a question something asks rather than a paragraph nobody re-reads.
+
+### `quipu audit replay <trace.jsonl>`
+
+Re-check a recorded window against the **current** Σ and report what promoting
+each rule from `advise` to `enforce` would do.
+
+```bash
+quipu audit replay ~/.local/state/hank/metrics.jsonl --db my.db
+quipu audit replay trace.jsonl --json --db my.db
+```
+
+Exits `0` whatever it finds. Replay reports *readiness*, and readiness is a
+judgement an operator makes: failing a build because a rule has not yet fired
+would turn "we have not measured this" into "this is broken", which are different
+states needing different responses.
+
+Per rule, five gates — each a reason not to promote:
+
+| gate | what it asks | why it blocks promotion |
+|---|---|---|
+| liveness | did it ever fire? | a rule promoted without firing has been tested by nothing |
+| both outcomes | did it record `satisfied` *and* `unsatisfied`? | a one-sided check is vacuous or universal, and neither is distinguishable from broken |
+| in spec | is it in Σ at all? | a rule enforcing outside the specification has nothing to be promoted *to* |
+| recoverability | after a refusal, did work on that target ever succeed? | a rule nobody has got past is an outage with a reason attached |
+| new blocks | how many more actions would `enforce` refuse? | not a gate — the number the operator is actually deciding about |
+
+Nothing is re-evaluated. The predicate needed the file as it stood and that file
+is gone, so this is deterministic arithmetic over records rather than a
+simulation.
+
+**Three limits, printed with every summary rather than kept in a footnote.** It
+measures only traffic that happened, so a rule that would block a kind of edit
+nobody attempted shows zero new blocks and is not therefore safe. It counts
+false-positive *candidates* and never false positives — a block is wrong only if
+the action was legitimate, and no record carries that judgement. And it bounds no
+false negatives at all: actions a rule let through without firing look exactly
+like actions it correctly approved.

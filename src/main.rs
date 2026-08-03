@@ -12,7 +12,7 @@
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
 //!   quipu stats [--db <path>]            Show store statistics
-//!   quipu audit <trace.jsonl> [--json] [--db <path>]  Check a trace against Σ
+//!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!
 //! Aliases: load=knot, query=read
 
@@ -218,7 +218,7 @@ COMMANDS:
     quipu repl [--db <path>]
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
-    quipu audit <trace.jsonl> [--json] [--db <path>]
+    quipu audit <trace.jsonl>|inventory|replay <trace.jsonl> [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
 OPTIONS:

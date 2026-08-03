@@ -15,6 +15,7 @@ pub mod authority;
 pub mod guard;
 pub mod inventory;
 pub mod placement;
+pub mod replay;
 pub mod router;
 pub mod verdict_facts;
 

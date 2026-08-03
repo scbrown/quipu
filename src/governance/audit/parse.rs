@@ -53,6 +53,11 @@ pub struct TraceRecord {
     /// The enforcement mode the decision was made under.
     #[serde(default)]
     pub mode: Option<String>,
+    /// The file the action was about, when the runtime was configured to record
+    /// it. The only per-record subject the spool carries, and what lets replay
+    /// ask whether a refusal was ever escaped.
+    #[serde(default)]
+    pub path: Option<String>,
     /// The constraints evaluated, with their outcomes and responses.
     #[serde(default)]
     pub constraints: Vec<Evaluation>,
