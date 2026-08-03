@@ -10,5 +10,7 @@
 //! See `docs/design/policy-edit-hooks.md`.
 
 pub mod guard;
+pub mod placement;
 
 pub use guard::{PolicyRegistry, is_governance_write};
+pub use placement::validate_write as validate_placement;

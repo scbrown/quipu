@@ -193,6 +193,132 @@ fn treesitter_policy_catalog_conforms() {
     );
 }
 
+// ── SARC constraint metadata (SARC arXiv:2605.07728 §3.1, §4.2) ──────────────
+
+/// Every SARC field the shape types, on one policy, so the happy path is a
+/// single readable fixture the rejection tests can perturb.
+fn sarc_policy(extra: &str) -> String {
+    format!(
+        "{NS}\n\
+         aegis:op a aegis:OperatingPoint ; aegis:kind \"exact_predicate\" ; \
+             aegis:falsePositiveTolerance 0.0 ; aegis:falseNegativeTolerance 0.0 .\n\
+         aegis:p a aegis:Policy ; rdfs:label \"p\" ; aegis:targets \"CodeModule\" ; \
+             aegis:claim \"c\" ; aegis:boundary \"action\" ; aegis:effect \"deny\" ; \
+             aegis:constraintClass \"hard\" ; aegis:verificationPoint \"PAG\" ; \
+             aegis:hostedAtLayer \"tool\" ; aegis:sourceType \"regulatory\" ; \
+             aegis:operatingPoint aegis:op ; aegis:latencyBudgetMs 5 {extra} .\n"
+    )
+}
+
+#[test]
+fn a_policy_carrying_the_full_sarc_constraint_object_conforms() {
+    let fb = validate_shapes(SHAPES, &sarc_policy("")).unwrap();
+    assert!(fb.conforms, "{:#?}", fb.results);
+}
+
+#[test]
+fn constraint_class_out_of_enum_is_rejected() {
+    let data = sarc_policy("").replace("\"hard\"", "\"catastrophic\"");
+    assert!(
+        !validate_shapes(SHAPES, &data).unwrap().conforms,
+        "a constraintClass outside {{hard,soft,escalation}} must be rejected"
+    );
+}
+
+#[test]
+fn verification_point_out_of_enum_is_rejected() {
+    let data = sarc_policy("").replace("\"PAG\"", "\"vibes\"");
+    assert!(!validate_shapes(SHAPES, &data).unwrap().conforms);
+}
+
+#[test]
+fn the_prompt_layer_is_not_a_hostable_layer() {
+    // SARC I6, made unrepresentable rather than merely discouraged: a hard
+    // constraint hosted only at the prompt layer is an aspiration, and the
+    // vocabulary declines to express it.
+    let data = sarc_policy("").replace("\"tool\"", "\"prompt\"");
+    assert!(
+        !validate_shapes(SHAPES, &data).unwrap().conforms,
+        "hostedAtLayer must have no \"prompt\" value"
+    );
+}
+
+#[test]
+fn on_timeout_admits_only_deny() {
+    // SARC §5.3: default-allow under operator unavailability turns an
+    // escalation into a no-op exactly when load makes it matter. The one-value
+    // enum is the point.
+    let ok = sarc_policy("; aegis:onTimeout \"deny\"");
+    assert!(validate_shapes(SHAPES, &ok).unwrap().conforms);
+    let bad = sarc_policy("; aegis:onTimeout \"allow\"");
+    assert!(
+        !validate_shapes(SHAPES, &bad).unwrap().conforms,
+        "onTimeout \"allow\" must be unrepresentable"
+    );
+}
+
+#[test]
+fn throttle_is_an_effect() {
+    // The soft-class PAA response (SARC §4.2, Table 3). Absent from the enum,
+    // a soft constraint has only warn/record — it can say something happened
+    // and cannot change what happens next.
+    let data = sarc_policy("").replace("\"deny\"", "\"throttle\"");
+    assert!(validate_shapes(SHAPES, &data).unwrap().conforms);
+}
+
+#[test]
+fn operating_point_requires_a_kind_and_types_its_tolerances() {
+    let no_kind = format!("{NS}\naegis:op a aegis:OperatingPoint ; aegis:threshold 0.5 .\n");
+    assert!(
+        !validate_shapes(SHAPES, &no_kind).unwrap().conforms,
+        "an operating point with no kind is not a calibration, it is a number"
+    );
+    let bad_kind = format!("{NS}\naegis:op a aegis:OperatingPoint ; aegis:kind \"eyeballed\" .\n");
+    assert!(!validate_shapes(SHAPES, &bad_kind).unwrap().conforms);
+}
+
+#[test]
+fn policy_operating_point_must_point_at_an_operating_point() {
+    let data = format!(
+        "{NS}\n\
+         aegis:notop a aegis:Selector ; aegis:name \"s\" ; aegis:evidenceSource \"x\" .\n\
+         aegis:p a aegis:Policy ; rdfs:label \"p\" ; aegis:targets \"T\" ; aegis:claim \"c\" ; \
+             aegis:operatingPoint aegis:notop .\n"
+    );
+    assert!(!validate_shapes(SHAPES, &data).unwrap().conforms);
+}
+
+#[test]
+fn the_shipped_catalog_declares_a_class_and_a_placement_for_every_action_policy() {
+    // The catalog is what Hank projects. A policy in it that carries no class
+    // projects as an unplaced constraint, which is the state this whole change
+    // exists to make impossible — so assert on the shipped file, not a fixture.
+    for (policy, class, point) in [
+        ("policy_no_ticket_in_comment", "hard", "PAG"),
+        ("policy_todo_needs_ticket", "soft", "PAA"),
+    ] {
+        let block = TREESITTER_CATALOG
+            .split(&format!("aegis:{policy} a aegis:Policy"))
+            .nth(1)
+            .unwrap_or_else(|| panic!("catalog no longer defines {policy}"))
+            .split(" .\n")
+            .next()
+            .unwrap();
+        assert!(
+            block.contains(&format!("aegis:constraintClass \"{class}\"")),
+            "{policy} must declare constraintClass \"{class}\""
+        );
+        assert!(
+            block.contains(&format!("aegis:verificationPoint \"{point}\"")),
+            "{policy} must declare verificationPoint \"{point}\""
+        );
+        assert!(
+            block.contains("aegis:operatingPoint"),
+            "{policy} must declare an operating point (SARC I2)"
+        );
+    }
+}
+
 #[test]
 fn a_policy_may_name_a_selector_and_predicate() {
     // The additive congruence link: a structural policy composes its two atoms.

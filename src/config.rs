@@ -105,6 +105,21 @@ pub struct GovernanceConfig {
     /// in, mirroring `shacl.validate_on_write`. See
     /// `docs/design/policy-edit-hooks.md`.
     pub enforce_on_write: bool,
+
+    /// Validate SARC class↔placement conformance when a write DEFINES or
+    /// AMENDS an `aegis:Policy` (`src/governance/placement.rs`). Rejects a
+    /// hard constraint declared at the Post-Action Auditor, an action-boundary
+    /// policy with no class, an escalation with no reversibility window, and
+    /// the rest of Table 3.
+    ///
+    /// Independent of [`Self::enforce_on_write`], which governs *evaluation* of
+    /// policies on every write; this governs *definition* of them, and runs
+    /// only on governance writes. Default false — opt in, mirroring
+    /// `shacl.validate_on_write`. Note the consequence of leaving it off with
+    /// `enforce_on_write` on: a constraint whose class and enforcement point
+    /// disagree will be accepted and then evaluated somewhere it cannot do its
+    /// job, and nothing will say so.
+    pub validate_placement: bool,
 }
 
 /// Vector storage backend selection.

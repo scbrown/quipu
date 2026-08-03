@@ -216,7 +216,7 @@ Status: ☐ open · ☑ done (this change).
 - **Q-VERDICT-PERSIST** ☐ Persist the write-gate verdict as a signed, bitemporal
   Verdict fact (reuse `signing.rs`). *AC:* every enforced decision is auditable
   and replayable, not just an accept/reject.
-- **Q-SARC-CLASS** ☐ Complete the constraint object in `shapes/governance.ttl`:
+- **Q-SARC-CLASS** ☑ Complete the constraint object in `shapes/governance.ttl`:
   `constraintClass ∈ {hard,soft,escalation}`, `verificationPoint ∈
   {PAG,ATM,PAA,tool_layer,policy_layer}`, `hostedAtLayer` (no `"prompt"` value —
   I6 unrepresentable by construction), an `OperatingPoint` node shape,
@@ -224,11 +224,33 @@ Status: ☐ open · ☑ done (this change).
   `sourceType`, and `"throttle"` in the `effect` enum. Backfill
   `shapes/policies/treesitter.ttl`. *AC:* an action-boundary policy missing a
   class is rejected at write; the shipped catalog still conforms.
-- **Q-SARC-PLACEMENT** ☐ Class↔placement conformance pass
+- **Q-SARC-PLACEMENT** ☑ Class↔placement conformance pass
   (`src/governance/placement.rs`), run at definition time: hard ⇒ PAG/ATM/tool/
   policy, soft ⇒ ATM/PAA, escalation ⇒ PAG/PAA and must declare τ_rev. *AC:* a
   soft constraint declared at PAG, or an escalation without τ_rev, fails
   validation.
+
+  Gated by `[quipu.governance] validate_placement`, default **false** —
+  independent of `enforce_on_write`, which governs *evaluation* of policies
+  where this governs *definition* of them. It runs inside the same savepoint as
+  the write gate and returns `PolicyDenied`, so a refused definition leaves the
+  store byte-identical.
+
+  Two things surfaced while building it, both worth carrying forward:
+
+  1. **Multi-valued fields are refused, not resolved.** Asserting
+     `constraintClass "hard"` over an existing `"soft"` leaves BOTH facts
+     active — assertion is not replacement. The first implementation read the
+     last row and silently picked one, which would have let a re-class land
+     while the old placement still validated. A policy with two classes is
+     refused as ambiguous, and the message says to retract the stale value in
+     the same transaction. `a_clean_re_placement_retracting_the_old_value_lands`
+     is the recoverability half: refusing ambiguity is only safe if there is a
+     way to legitimately move a policy.
+  2. **The rules are pure but the tests are not.** `placement_tests.rs` has both
+     unit cases over `Placement::violation` and liveness cases through
+     `Store::transact`, plus the flag-off control that makes the rejection
+     attributable to this check rather than to something else on the write path.
 - **Q-SARC-ER** ☐ Escalation router (`src/governance/router.rs`):
   `aegis:OperatorGroup` with an M/M/c capacity model, a DecisionRequest queue,
   hold-until-τ_rev, default-deny on timeout, and re-validation of an

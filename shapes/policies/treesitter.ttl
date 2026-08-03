@@ -43,6 +43,14 @@ aegis:pred_todo_has_ticket a aegis:Predicate ;
     aegis:gate "\\bTODO\\b" ;
     aegis:tier "tree-sitter" .
 
+aegis:op_todo_has_ticket a aegis:OperatingPoint ;
+    aegis:kind "exact_predicate" ;
+    # A regex over a parsed comment: no classifier, so no score to threshold.
+    # The residual error is a tree-sitter misparse, which the `tier` already
+    # declares — it is not an FP rate this predicate can trade against.
+    aegis:falsePositiveTolerance 0.0 ;
+    aegis:falseNegativeTolerance 0.0 .
+
 aegis:policy_todo_needs_ticket a aegis:Policy ;
     rdfs:label "todo-needs-ticket" ;
     aegis:targets "CodeModule" ;
@@ -50,7 +58,18 @@ aegis:policy_todo_needs_ticket a aegis:Policy ;
     aegis:boundary "action" ;
     aegis:effect "warn" ;
     aegis:selector aegis:sel_rust_line_comments ;
-    aegis:predicate aegis:pred_todo_has_ticket .
+    aegis:predicate aegis:pred_todo_has_ticket ;
+    # SOFT, at the PAA. An untracked TODO is admissible at a cost — it is a
+    # habit worth naming, not an inadmissible action — and "cost" is only
+    # measurable over the edit that actually landed. Declaring it hard would
+    # make `effect "warn"` a lie the graph could not detect.
+    aegis:constraintClass "soft" ;
+    aegis:verificationPoint "PAA" ;
+    aegis:hostedAtLayer "orchestration" ;
+    aegis:sourceType "operational" ;
+    aegis:authority "engineering-conventions" ;
+    aegis:operatingPoint aegis:op_todo_has_ticket ;
+    aegis:latencyBudgetMs 10 .
 
 # ═══════════════════════════════════════════════════════════════════
 # no-ticket-in-comment — a comment must NOT carry a ticket id (must-not-match).
@@ -63,6 +82,15 @@ aegis:pred_no_ticket_in_comment a aegis:Predicate ;
     aegis:matchType "must-not-match" ;
     aegis:tier "tree-sitter" .
 
+aegis:op_no_ticket_in_comment a aegis:OperatingPoint ;
+    aegis:kind "exact_predicate" ;
+    # Hard-class asymmetry (SARC §5.2): a missed violation is by definition
+    # unacceptable, a false block falls back to a human. Both are 0.0 here only
+    # because the predicate is exact — an inexact hard predicate would carry a
+    # tolerant FP number and a zero FN one, never the reverse.
+    aegis:falsePositiveTolerance 0.0 ;
+    aegis:falseNegativeTolerance 0.0 .
+
 aegis:policy_no_ticket_in_comment a aegis:Policy ;
     rdfs:label "no-ticket-in-comment" ;
     aegis:targets "CodeModule" ;
@@ -70,7 +98,20 @@ aegis:policy_no_ticket_in_comment a aegis:Policy ;
     aegis:boundary "action" ;
     aegis:effect "deny" ;
     aegis:selector aegis:sel_rust_line_comments ;
-    aegis:predicate aegis:pred_no_ticket_in_comment .
+    aegis:predicate aegis:pred_no_ticket_in_comment ;
+    # HARD, at the PAG. The text must not reach the file, so admissibility is
+    # decided before dispatch; deferring it to the PAA would leave the ticket id
+    # written and report it afterwards.
+    aegis:constraintClass "hard" ;
+    aegis:verificationPoint "PAG" ;
+    # Orchestration, not tool: Hank's pre-edit hook is the host. That is the
+    # honest layer — an agent that writes the file by another route is not
+    # governed by this, and claiming `tool` would say otherwise.
+    aegis:hostedAtLayer "orchestration" ;
+    aegis:sourceType "operational" ;
+    aegis:authority "engineering-conventions" ;
+    aegis:operatingPoint aegis:op_no_ticket_in_comment ;
+    aegis:latencyBudgetMs 5 .
 
 # ═══════════════════════════════════════════════════════════════════
 # VerifierRegistration — the root of trust for Hank's edit-time verdicts.

@@ -178,10 +178,15 @@ aegis:PolicyShape a sh:NodeShape ;
         sh:in ( "action" "transition" ) ;
     ] ;
     sh:property [
+        # The RESPONSE when the claim is unsatisfied — distinct from
+        # `constraintClass`, which says what kind of bound this is. `throttle`
+        # is the soft-class response SARC §4.2 places at the PAA: it cannot
+        # prevent the action that just completed, but it backs off the ones
+        # after it (see `aegis:backoffFormula`).
         sh:path aegis:effect ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
-        sh:in ( "allow" "warn" "require-approval" "deny" "escalate" "record" ) ;
+        sh:in ( "allow" "warn" "require-approval" "deny" "escalate" "record" "throttle" ) ;
     ] ;
     sh:property [
         # The workflow to instantiate when the effect requires one
@@ -205,6 +210,160 @@ aegis:PolicyShape a sh:NodeShape ;
     sh:property [
         sh:path aegis:predicate ;
         sh:class aegis:Predicate ;
+        sh:maxCount 1 ;
+    ] ;
+
+    # ── SARC constraint metadata ────────────────────────────────────
+    # SARC (arXiv:2605.07728) §3.1 models a constraint as
+    # ⟨src, class, pred, verif, resp⟩ plus a declared operating point θ, and
+    # §4.2 (Table 3) fixes which class may be enforced at which point. The
+    # fields below supply the parts `boundary` + `effect` alone cannot:
+    # `effect` was carrying BOTH the class and the response, which is why
+    # "is this a hard constraint?" was not a question this graph could answer.
+    #
+    # Every field is sh:maxCount-only here, NOT minCount. Conditional
+    # requirement ("an action-boundary policy must declare a class", "an
+    # escalation must declare a reversibility window") is a cross-field rule
+    # that SHACL core cannot state, and encoding it as an unconditional
+    # minCount would reject every committed-tier policy that legitimately has
+    # no structural placement. Those rules live in src/governance/placement.rs
+    # and run at definition time alongside this shape — see
+    # docs/design/policy-edit-hooks.md.
+
+    sh:property [
+        # SARC §3.1: C = Ch ∪ Cs ∪ Ce. The class is WHAT KIND of bound this is,
+        # independent of what happens when it fires — hard constraints are never
+        # admissible, soft ones are admissible at a declared cost, escalation
+        # ones transfer control to a human.
+        sh:path aegis:constraintClass ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "hard" "soft" "escalation" ) ;
+    ] ;
+    sh:property [
+        # SARC §4.1: the enforcement point this constraint is evaluated at.
+        # Finer than `boundary`, which stays as the coarse action/transition
+        # split — an action-boundary constraint may be a Pre-Action Gate check,
+        # an Action-Time Monitor, or a Post-Action Auditor, and the difference
+        # decides whether it can prevent anything.
+        sh:path aegis:verificationPoint ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "PAG" "ATM" "PAA" "tool_layer" "policy_layer" ) ;
+    ] ;
+    sh:property [
+        # SARC §4.3: which architectural layer HOSTS the check. There is
+        # deliberately no "prompt" value: a hard constraint hosted only at the
+        # prompt layer is what SARC I6 exists to forbid, and a value the
+        # vocabulary cannot express is one no deployment can accidentally
+        # configure. Rejecting it here would be a check that could be turned
+        # off; omitting it is a check that cannot fail to hold.
+        sh:path aegis:hostedAtLayer ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "orchestration" "tool" "policy" ) ;
+    ] ;
+    sh:property [
+        # SARC §3.1: src. Where the obligation comes from. `aegis:authority` on
+        # the parent Directive says WHO issued it; this says what KIND of
+        # instrument it is, which is what decides precedence when two
+        # constraints conflict (§9.8: regulatory > contractual > operational).
+        sh:path aegis:sourceType ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "regulatory" "contractual" "ethical" "operational" ) ;
+    ] ;
+    sh:property [
+        # SARC §5.2/I2: a predicate without a declared operating point is
+        # incomplete — the FP/FN trade-off is a decision the deploying
+        # organization owns, not a default chosen by whoever wrote the regex.
+        sh:path aegis:operatingPoint ;
+        sh:class aegis:OperatingPoint ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # SARC §5.1: constraint evaluation must be O(tool latency), never
+        # O(model latency). A declared budget is what makes that checkable
+        # rather than aspirational; Hank already enforces a whole-guard deadline
+        # (`policy.deadline_ms`) and this is its per-constraint refinement.
+        sh:path aegis:latencyBudgetMs ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # SARC §5.3/I4: the window within which the contemplated action can
+        # still be undone without compounding cost. An escalation whose queue
+        # wait exceeds it is structurally too slow, whatever the operator does.
+        sh:path aegis:reversibilityWindowSeconds ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # ONE permitted value, by design. SARC §5.3 requires a declared
+        # default-DENY when no operator can service an escalation inside the
+        # reversibility window: default-allow under load turns an escalation
+        # constraint into a no-op exactly when it matters, which is the
+        # opposite of oversight. Modelling it as a one-value enum rather than a
+        # boolean means the unsafe setting is unrepresentable rather than
+        # merely discouraged.
+        sh:path aegis:onTimeout ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "deny" ) ;
+    ] ;
+    sh:property [
+        # The backoff a `throttle` effect applies to SUBSEQUENT actions once a
+        # soft window is crossed. Free-form (the consumer compiles it); present
+        # so a throttling policy declares its response rather than leaving the
+        # amount to the implementer.
+        sh:path aegis:backoffFormula ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# OperatingPoint — the declared FP/FN posture of a predicate (SARC §5.2).
+# Split out as its own node rather than flattened onto Policy so it can be
+# shared by predicates that legitimately have the same calibration, and so
+# the tolerances travel together with the basis they were measured against.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:OperatingPointShape a sh:NodeShape ;
+    sh:targetClass aegis:OperatingPoint ;
+    sh:property [
+        # "exact_predicate" (no classifier error — an exact string/regex/typed
+        # comparison), "threshold" (a numeric cut), or
+        # "deterministic_threshold" (a threshold over an exact quantity).
+        sh:path aegis:kind ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( "exact_predicate" "threshold" "deterministic_threshold" ) ;
+    ] ;
+    sh:property [
+        # Blocked-a-valid-action rate this deployment accepts. For a hard
+        # constraint SARC §5.2 expects this to be the tolerant one: a missed
+        # violation is by definition unacceptable, a false block falls back to
+        # escalation.
+        sh:path aegis:falsePositiveTolerance ;
+        sh:datatype xsd:decimal ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:falseNegativeTolerance ;
+        sh:datatype xsd:decimal ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:threshold ;
+        sh:datatype xsd:decimal ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # What the threshold is measured over — the quantity, so a reader can
+        # tell a spend cap from a symbol count without reading the claim.
+        sh:path aegis:calibrationBasis ;
+        sh:datatype xsd:string ;
         sh:maxCount 1 ;
     ] .
 

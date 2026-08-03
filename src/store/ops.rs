@@ -257,6 +257,12 @@ impl Store {
             }
         }
 
+        // Definition-time placement check (SARC §4.2). Runs FIRST and only on
+        // writes that define or amend a policy: a malformed constraint must be
+        // refused before it can be evaluated, or the very next write is judged
+        // by a rule whose class and enforcement point disagree.
+        self.validate_policy_placement(datums, graph)?;
+
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.

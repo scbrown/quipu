@@ -325,6 +325,22 @@ impl Store {
         result
     }
 
+    /// Validate the SARC class↔placement rules for any policy this write
+    /// defines or amends (`src/governance/placement.rs`). Gated by
+    /// `[quipu.governance] validate_placement`, default off.
+    ///
+    /// Deliberately NOT gated by `enforce_on_write`: definition-time
+    /// well-formedness of a constraint is a different question from
+    /// evaluation-time enforcement of it, and a deployment may reasonably want
+    /// its policy definitions checked while it is still staging enforcement in
+    /// advise mode.
+    pub(crate) fn validate_policy_placement(&self, datums: &[Datum], graph: i64) -> Result<()> {
+        if !self.governance_config.validate_placement {
+            return Ok(());
+        }
+        crate::governance::validate_placement(self, datums, graph)
+    }
+
     /// Invalidate the cached policy registry if this transaction defined or
     /// amended a governance policy. Cheap no-op unless enforcement is enabled.
     pub(crate) fn invalidate_policy_registry_if_governance(
