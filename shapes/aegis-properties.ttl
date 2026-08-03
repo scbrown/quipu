@@ -450,3 +450,31 @@ aegis:enforcedInsteadAt a owl:DatatypeProperty ;
     rdfs:domain aegis:ToolClass ;
     rdfs:range xsd:string ;
     rdfs:comment "Where enforcement happens for a class that cannot be governed here — a VCS hook, branch protection, destination-side credentials. An acknowledged bypass surface with no stated alternative is a note that something is unhandled; with one, it is a design." .
+
+# ═══════════════════════════════════════════════════════════════════
+# Inheritance under delegation, and trust boundaries (SARC §9.5).
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:inheritedByDelegates a owl:DatatypeProperty ;
+    rdfs:label "inherited by delegates" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether this constraint binds the whole subtree under a dispatch rather than only the agent it was written for. Constraint LAUNDERING is the failure it addresses: an orchestrator bound by a rule dispatches a sub-agent, the rule is not re-applied at the deeper layer, and the action happens anyway — nobody decided to drop it, it simply was not carried." .
+
+aegis:onUndecidable a owl:DatatypeProperty ;
+    rdfs:label "on undecidable" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What happens when an inherited constraint reaches a layer that cannot evaluate it. The only permitted value is \"escalate\" — there is deliberately no \"drop\", because a constraint that silently stops applying where it cannot be checked is one an agent escapes by dispatching into a context where the evidence is absent. The decidability RESCUE: evaluate at the deepest layer where it still decides, or hand it to a human." .
+
+aegis:importsUntrustedState a owl:DatatypeProperty ;
+    rdfs:label "imports untrusted state" ;
+    rdfs:domain aegis:ToolClass ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether this class brings state INTO the agent's context that has not been through this deployment's constraints — a sub-agent's response, a retrieval result, an MCP tool's output. An importing class that traverses no enforcement point is strictly worse than an ungoverned class acting locally: it is a channel by which unchecked content enters and is then acted on." .
+
+aegis:untrustedOrigin a owl:DatatypeProperty ;
+    rdfs:label "untrusted origin" ;
+    rdfs:domain aegis:ToolClass ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Where the imported state comes from, in prose, for a reader deciding how much to worry. Free text rather than an enum: an enum would go stale the first time a new integration lands, and a wrong enum value is worse than a sentence." .

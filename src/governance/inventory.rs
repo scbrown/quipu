@@ -58,6 +58,11 @@ pub struct ToolClass {
     pub ungoverned_reason: Option<String>,
     /// Where enforcement happens instead.
     pub enforced_instead_at: Option<String>,
+    /// Whether this class brings state into the agent's context that has not
+    /// been through this deployment's constraints.
+    pub imports_untrusted_state: Option<bool>,
+    /// Where that state comes from.
+    pub untrusted_origin: Option<String>,
 }
 
 impl ToolClass {
@@ -73,7 +78,8 @@ pub fn load(store: &Store) -> Result<Vec<ToolClass>> {
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-         SELECT ?c ?label ?by ?executable ?point ?reason ?instead WHERE {{ \
+         SELECT ?c ?label ?by ?executable ?point ?reason ?instead ?imports ?origin \
+         WHERE {{ \
             ?c a a:ToolClass . \
             OPTIONAL {{ ?c rdfs:label ?label }} \
             OPTIONAL {{ ?c a:dispatchedBy ?by }} \
@@ -81,6 +87,8 @@ pub fn load(store: &Store) -> Result<Vec<ToolClass>> {
             OPTIONAL {{ ?c a:governedAt ?point }} \
             OPTIONAL {{ ?c a:ungovernedReason ?reason }} \
             OPTIONAL {{ ?c a:enforcedInsteadAt ?instead }} \
+            OPTIONAL {{ ?c a:importsUntrustedState ?imports }} \
+            OPTIONAL {{ ?c a:untrustedOrigin ?origin }} \
          }}"
     );
     let QueryResult::Select { rows, .. } = sparql::query(store, &q)? else {
@@ -117,6 +125,10 @@ pub fn load(store: &Store) -> Result<Vec<ToolClass>> {
         if entry.executable.is_none() {
             entry.executable = boolean(store, row.get("executable"));
         }
+        if entry.imports_untrusted_state.is_none() {
+            entry.imports_untrusted_state = boolean(store, row.get("imports"));
+        }
+        merge(&mut entry.untrusted_origin, text(store, row.get("origin")));
         if let Some(point) = text(store, row.get("point")) {
             entry.governed_at.insert(point);
         }
@@ -161,6 +173,7 @@ pub fn check(store: &Store) -> Result<Report> {
             }
         }
         check_class(class, &mut report);
+        check_trust_boundary(class, &mut report);
     }
 
     // The other direction: a constraint placed where nothing traverses.
@@ -255,6 +268,39 @@ pub fn summary(report: &Report) -> String {
         classes = report.records_checked,
         constraints = report.constraints_in_scope,
     )
+}
+
+/// The zero-trust gateway check (SARC §9.5).
+///
+/// A class that IMPORTS state is reported whether or not it is governed, and
+/// separately from the ungoverned-class findings, because the risk is different
+/// in kind: not an action that escaped a gate, but unchecked content entering
+/// the agent's context and then being acted on. `governedAt` says the class's
+/// own ACTIONS traverse a point; it says nothing about what the class returned.
+fn check_trust_boundary(class: &ToolClass, report: &mut Report) {
+    if class.imports_untrusted_state != Some(true) {
+        return;
+    }
+    let label = &class.label;
+    let Some(origin) = class.untrusted_origin.as_deref() else {
+        // An undocumented import channel. Worse than a documented one, because
+        // nobody can weigh a risk they cannot describe.
+        report.discrepancies.push(finding(
+            Severity::Violation,
+            Some(label),
+            format!(
+                "tool class '{label}' imports state from outside this trust                  domain and declares no aegis:untrustedOrigin. Say what enters                  through it — an import channel nobody can describe is one                  nobody can weigh."
+            ),
+        ));
+        return;
+    };
+    report.discrepancies.push(finding(
+        Severity::Incompleteness,
+        Some(label),
+        format!(
+            "tool class '{label}' imports state that has not been through this              deployment's constraints: {origin}. No trust predicate evaluates              imported content today — the PAA judges the file after an edit, not              the material the edit was based on — so this is an open boundary              reported on every run rather than a gap that was closed."
+        ),
+    ));
 }
 
 fn finding(severity: Severity, subject: Option<&str>, detail: String) -> Discrepancy {

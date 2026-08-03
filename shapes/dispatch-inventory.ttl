@@ -92,7 +92,9 @@
     aegis:dispatchedBy "claude-code-harness" ;
     aegis:executable true ;
     aegis:ungovernedReason "a sub-agent dispatch is not itself a state change, but the actions inside it are — and its own hook invocations are recorded as a flat sequence, so the subtree is reconstructible from the principal chain rather than structural" ;
-    aegis:enforcedInsteadAt "the sub-agent's own PAG, narrowed by authority intersection along the principal chain" .
+    aegis:enforcedInsteadAt "the sub-agent's own PAG, narrowed by authority intersection along the principal chain" ;
+    aegis:importsUntrustedState true ;
+    aegis:untrustedOrigin "the sub-agent's response text, which re-enters the caller's context and is acted on. The sub-agent's own PAG governs what the sub-agent DID; nothing governs what it SAID." .
 
 <http://aegis.gastown.local/tool/ci-pipeline> a aegis:ToolClass ;
     rdfs:label "ci-pipeline" ;
@@ -128,3 +130,25 @@
     aegis:executable true ;
     aegis:ungovernedReason "an agent that can edit its own guard is outside what an agent-side hook can enforce, by construction — origin-side stamping is complementary to destination-side credentials, never a substitute" ;
     aegis:enforcedInsteadAt "per-agent credentials at the destination" .
+
+# ── Importing classes: state crossing into the agent's context ─────
+# Governed or not, these bring content that has not been through this
+# deployment's constraints. The inventory reports them separately from ordinary
+# ungoverned classes because the risk is different in kind: not an action that
+# escaped a gate, but unchecked content that enters and is then acted on.
+
+<http://aegis.gastown.local/tool/mcp-tool-call> a aegis:ToolClass ;
+    rdfs:label "mcp-tool-call" ;
+    aegis:dispatchedBy "claude-code-harness" ;
+    aegis:executable true ;
+    aegis:ungovernedReason "an MCP server executes the call in its own process; the harness sees a request and a reply, not the effects between them" ;
+    aegis:enforcedInsteadAt "the MCP server's own authorization, and destination-side credentials" ;
+    aegis:importsUntrustedState true ;
+    aegis:untrustedOrigin "tool output from a server outside this trust domain, returned verbatim into the agent's context" .
+
+<http://aegis.gastown.local/tool/retrieval> a aegis:ToolClass ;
+    rdfs:label "retrieval" ;
+    aegis:dispatchedBy "bobbin" ;
+    aegis:executable false ;
+    aegis:importsUntrustedState true ;
+    aegis:untrustedOrigin "retrieved documents and code, which may themselves contain instructions the model reads as directives" .

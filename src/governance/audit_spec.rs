@@ -30,6 +30,8 @@ pub struct Constraint {
     /// trace records the layer that actually evaluated it, and the placement
     /// pass compares the two.
     pub hosted_at_layer: Option<String>,
+    /// Whether this constraint binds the whole subtree under a dispatch.
+    pub inherited_by_delegates: Option<bool>,
 }
 
 /// The constraint an evaluation cites, keyed by the id the trace carries.
@@ -45,13 +47,14 @@ pub fn load(store: &Store) -> Result<Spec> {
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-         SELECT ?p ?label ?class ?point ?effect ?layer WHERE {{ \
+         SELECT ?p ?label ?class ?point ?effect ?layer ?inherited WHERE {{ \
             ?p a a:Policy ; a:boundary \"action\" . \
             OPTIONAL {{ ?p rdfs:label ?label }} \
             OPTIONAL {{ ?p a:constraintClass ?class }} \
             OPTIONAL {{ ?p a:verificationPoint ?point }} \
             OPTIONAL {{ ?p a:effect ?effect }} \
             OPTIONAL {{ ?p a:hostedAtLayer ?layer }} \
+            OPTIONAL {{ ?p a:inheritedByDelegates ?inherited }} \
          }}"
     );
     let QueryResult::Select { rows, .. } = sparql::query(store, &q)? else {
@@ -77,6 +80,9 @@ pub fn load(store: &Store) -> Result<Spec> {
         merge(&mut entry.point, text(store, row.get("point")));
         merge(&mut entry.effect, text(store, row.get("effect")));
         merge(&mut entry.hosted_at_layer, text(store, row.get("layer")));
+        if entry.inherited_by_delegates.is_none() {
+            entry.inherited_by_delegates = boolean(store, row.get("inherited"));
+        }
     }
     Ok(spec)
 }
@@ -95,6 +101,26 @@ fn local_name(iri: &str) -> String {
         .filter(|s| !s.is_empty())
         .unwrap_or(iri)
         .to_string()
+}
+
+/// A boolean, however the store holds it. Anything unrecognised is `None` —
+/// "not declared" and "declared false" are different claims.
+fn boolean(store: &Store, value: Option<&Value>) -> Option<bool> {
+    match value {
+        Some(Value::Bool(b)) => Some(*b),
+        Some(Value::Int(i)) => Some(*i != 0),
+        Some(Value::Str(s)) => parse_bool(s),
+        Some(Value::Ref(id)) => store.resolve(*id).ok().and_then(|s| parse_bool(&s)),
+        _ => None,
+    }
+}
+
+fn parse_bool(text: &str) -> Option<bool> {
+    match text {
+        "true" | "1" => Some(true),
+        "false" | "0" => Some(false),
+        _ => None,
+    }
 }
 
 fn text(store: &Store, value: Option<&Value>) -> Option<String> {

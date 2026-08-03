@@ -218,7 +218,7 @@ COMMANDS:
     quipu repl [--db <path>]
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
-    quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>|tree <trace.jsonl> [--json] [--db <path>]
+    quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
 OPTIONS:

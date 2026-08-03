@@ -15,6 +15,7 @@ fn constraint(id: &str, class: &str, point: &str, effect: &str) -> Constraint {
         point: Some(point.to_string()),
         effect: Some(effect.to_string()),
         hosted_at_layer: None,
+        inherited_by_delegates: None,
     }
 }
 

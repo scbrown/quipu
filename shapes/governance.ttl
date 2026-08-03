@@ -776,3 +776,59 @@ aegis:ToolClassShape a sh:NodeShape ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
     ] .
+
+# ── Inheritance under delegation ───────────────────────────────────
+# SARC §9.5's constraint LAUNDERING: an orchestrator bound by a constraint
+# dispatches a sub-agent, the constraint is not re-applied at the deeper layer,
+# and the action happens anyway. Nobody decided to drop it; it simply was not
+# carried.
+#
+# `inheritedByDelegates` declares that a constraint binds the whole subtree
+# under a dispatch, not only the agent it was written for. `onUndecidable`
+# declares what happens when the deeper layer cannot evaluate it — and the only
+# permitted value is "escalate", for the same reason `onTimeout` admits only
+# "deny": a constraint that silently stops applying where it cannot be checked
+# is one an agent can escape by dispatching into a context where the evidence
+# is absent.
+
+aegis:InheritanceShape a sh:NodeShape ;
+    sh:targetClass aegis:Policy ;
+    sh:property [
+        sh:path aegis:inheritedByDelegates ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # No "drop" value. Not expressible, deliberately.
+        sh:path aegis:onUndecidable ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "escalate" ) ;
+    ] .
+
+# ── Trust boundaries on imported state ─────────────────────────────
+# The zero-trust agent gateway of SARC §9.5: state crossing INTO the agent's
+# context — a sub-agent's response, a retrieval result, an MCP tool's output —
+# has not been through this deployment's constraints and must not be treated as
+# if it had.
+#
+# Declared on the ToolClass because that is the thing that actually imports.
+# An importing class that traverses no enforcement point is a strictly worse
+# finding than an ungoverned class that only acts locally: it is a channel by
+# which unchecked content enters and then gets acted on.
+
+aegis:TrustBoundaryShape a sh:NodeShape ;
+    sh:targetClass aegis:ToolClass ;
+    sh:property [
+        sh:path aegis:importsUntrustedState ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Where the imported state comes from, for a reader deciding how much to
+        # worry. Free text: an enum here would go stale the first time a new
+        # integration lands, and a wrong enum value is worse than a sentence.
+        sh:path aegis:untrustedOrigin ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] .

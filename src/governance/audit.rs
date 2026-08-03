@@ -72,6 +72,10 @@ pub enum Pass {
     Outcome,
     /// Who is answerable.
     Attribution,
+    /// Whether an inherited constraint stopped applying under delegation.
+    /// Runs over the attribution tree rather than record-by-record — see
+    /// [`super::inheritance`].
+    Inheritance,
     /// Whether every executable tool class traverses an enforcement point.
     /// Runs over the dispatch graph rather than over a trace, so its findings
     /// carry no record index — see [`super::inventory`].
@@ -87,6 +91,7 @@ impl Pass {
             Pass::Placement => "placement",
             Pass::Outcome => "outcome",
             Pass::Attribution => "attribution",
+            Pass::Inheritance => "inheritance",
             Pass::Inventory => "inventory",
         }
     }

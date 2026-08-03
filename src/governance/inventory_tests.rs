@@ -286,3 +286,108 @@ fn the_shipped_inventory_conforms_to_its_own_check() {
         "the shipped inventory must still admit its ungoverned surfaces"
     );
 }
+
+// ── Trust boundaries (SARC §9.5, the zero-trust gateway) ─────────────────────
+
+#[test]
+fn an_importing_class_is_reported_even_when_it_is_governed() {
+    // The risk is different in kind. `governedAt` says the class's own ACTIONS
+    // traverse a point; it says nothing about what the class RETURNED.
+    let mut store = Store::open_in_memory().unwrap();
+    tool_class(
+        &mut store,
+        "Task",
+        &[
+            ("executable", "true"),
+            ("governedAt", "PAG"),
+            ("importsUntrustedState", "true"),
+            ("untrustedOrigin", "the sub-agent's response text"),
+        ],
+    );
+    let report = check(&store).unwrap();
+    assert!(report.conforms(), "{:#?}", report.discrepancies);
+    assert!(
+        incompletenesses(&report)
+            .iter()
+            .any(|d| d.detail.contains("has not been through this")),
+        "{:#?}",
+        report.discrepancies
+    );
+}
+
+#[test]
+fn an_undocumented_import_channel_is_a_violation() {
+    // An import channel nobody can describe is one nobody can weigh.
+    let mut store = Store::open_in_memory().unwrap();
+    tool_class(
+        &mut store,
+        "mystery-import",
+        &[("executable", "false"), ("importsUntrustedState", "true")],
+    );
+    let report = check(&store).unwrap();
+    assert!(
+        violations(&report)
+            .iter()
+            .any(|d| d.detail.contains("nobody can describe")),
+        "{:#?}",
+        report.discrepancies
+    );
+}
+
+#[test]
+fn the_control_a_non_importing_class_gets_no_trust_finding() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_class(
+        &mut store,
+        "Edit",
+        &[("executable", "true"), ("governedAt", "PAG")],
+    );
+    let report = check(&store).unwrap();
+    assert!(report.is_complete(), "{:#?}", report.discrepancies);
+}
+
+#[test]
+fn an_undeclared_import_flag_is_not_read_as_importing() {
+    // Absent is not false and it is not true either — but a class that says
+    // nothing about importing has made no claim to check, and inventing one
+    // would flag every entry in the file.
+    let mut store = Store::open_in_memory().unwrap();
+    tool_class(&mut store, "Read", &[("executable", "false")]);
+    let report = check(&store).unwrap();
+    assert!(report.is_complete(), "{:#?}", report.discrepancies);
+}
+
+#[test]
+fn the_shipped_inventory_declares_its_import_channels() {
+    // The stack really does have them — a sub-agent's response, an MCP server's
+    // output, retrieved documents — and a seed file that omitted them would be
+    // claiming a closed perimeter this deployment does not have.
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = std::fs::read_to_string("shapes/dispatch-inventory.ttl").unwrap();
+    crate::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        TS,
+        None,
+        None,
+    )
+    .unwrap();
+    let importing: Vec<_> = load(&store)
+        .unwrap()
+        .into_iter()
+        .filter(|c| c.imports_untrusted_state == Some(true))
+        .collect();
+    assert!(
+        importing.len() >= 3,
+        "{:?}",
+        importing.iter().map(|c| &c.label).collect::<Vec<_>>()
+    );
+    assert!(
+        importing.iter().all(|c| c.untrusted_origin.is_some()),
+        "every declared import channel must say what enters through it"
+    );
+    // And the shipped file still passes its own check.
+    assert!(check(&store).unwrap().conforms());
+}

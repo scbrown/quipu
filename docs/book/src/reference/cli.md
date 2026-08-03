@@ -254,6 +254,15 @@ Findings, in the same two severities:
 - **violation**, the other direction — a constraint in Σ placed at a point no
   declared executable class traverses. It reads as governance in the catalog and
   can never fire in the deployment.
+- **incompleteness**, the zero-trust boundary — a class declaring
+  `aegis:importsUntrustedState` brings content into the agent's context that has
+  not been through this deployment's constraints (a sub-agent's response, an MCP
+  server's output, retrieved documents). Reported whether or not the class is
+  governed: `governedAt` says its own *actions* traverse a point and says nothing
+  about what it *returned*. No trust predicate evaluates imported content today,
+  so this is an open boundary reported on every run rather than a closed gap. A
+  class that imports and declares no `aegis:untrustedOrigin` is a **violation** —
+  an import channel nobody can describe is one nobody can weigh.
 
 An empty inventory is reported as an incompleteness, never as a pass: an unwritten
 dispatch graph is not an empty one.
@@ -332,3 +341,43 @@ answerable. The trace this stack emits is a **sequence**, so the tree here is
   the same caller produce the same chain and land on one node. Not an error — one
   agent legitimately does many things — but the reader must not be told the tree
   is unambiguous when it is not.
+
+### `quipu audit inheritance <trace.jsonl>`
+
+Check whether a constraint declared `aegis:inheritedByDelegates` stopped applying
+under delegation — SARC §9.5's **constraint laundering**.
+
+```bash
+quipu audit inheritance trace.jsonl --db my.db
+```
+
+Exits `1` on a violation, like `quipu audit <trace>`.
+
+An orchestrator is bound by a constraint, dispatches a sub-agent, and the
+constraint is not re-applied at the deeper layer. Nobody decided to drop it; it
+simply was not carried, and the record looks exactly like a constraint that
+legitimately did not apply.
+
+Two findings at deliberately different severities, because one has evidence and
+the other has a question:
+
+- **Violation.** Constraint *C* decided on target *T* under chain
+  `[orchestrator]`, and a deeper action on the **same target** under
+  `[orchestrator, worker]` did not evaluate it. *C* proved it could decide for
+  *T*, so its absence deeper is a drop.
+- **Incompleteness.** *C* was evaluated at a dispatch node and never anywhere in
+  its subtree. That might be laundering and might be a selector that legitimately
+  matched nothing deeper; deciding needs the files as they stood, which quipu
+  does not have.
+
+Reporting both as violations would make the strong one unfindable.
+
+`aegis:onUndecidable` admits only `"escalate"` — the same shape as
+`aegis:onTimeout` admitting only `"deny"`. That is the **decidability rescue**:
+evaluate at the deepest layer where the constraint still decides, or hand it to a
+human. A constraint that silently stops applying where it cannot be checked is
+one an agent escapes by dispatching into a context where the evidence is absent.
+
+A Σ where no constraint declares `inheritedByDelegates` reports an
+incompleteness, never a clean pass: "nothing is inherited" and "nothing has said
+whether anything is inherited" are different states.
