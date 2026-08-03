@@ -6,6 +6,10 @@
 /// every tenant overlay, which is the defect quipu #56 fixed.
 pub const ROOT_GRAPH: i64 = 0;
 
+/// The IRI naming the ROOT graph in authority grants. ROOT has term id 0 rather
+/// than an interned IRI, so an authority covering it needs a name to grant.
+pub const ROOT_GRAPH_IRI: &str = "urn:quipu:graph:root";
+
 /// SQL statements for initialising the Quipu fact log schema.
 pub const INIT_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS terms (

@@ -1,6 +1,22 @@
 # Design: Group Isolation / Multi-Tenant Partitioning
 
-> **Implementation status (2026-07-23, kelly):** ⬜ **Planned — deliberately deferred
+> **Update (SARC I5):** the framing below — "true isolation is unbuilt" — is no
+> longer the accurate description of the codebase, and reading it that way was
+> costing us. Quipu HAS a real isolation substrate in named graphs: `graphs` is a
+> registry with an enforced `committed|overlay` class and a bind-once
+> `parent_branch`, and writes, retractions and idempotency are graph-scoped in
+> SQL (`store/overlays.rs`, `store/ops.rs`). What was missing was never
+> partitioning — it was **authorization**: `http_auth::authorize` is one global
+> bearer token, and nothing said which principal may write to which graph.
+>
+> That much smaller gap is now closed by `src/governance/authority.rs`
+> (`aegis:Principal` + `authorityOver`, intersected along a call chain, enforced
+> on the write path under `[quipu.governance] enforce_authority`). The `group_id`
+> analysis below still stands on its own terms — a flat provenance label is not a
+> partition — but "quipu has no tenancy primitive" does not follow from it, and
+> this doc previously implied it did.
+>
+> **Original status (2026-07-23, kelly):** ⬜ **Planned — deliberately deferred
 > (YAGNI); not a gap to fill.** The keeper gate decided NOT to build true isolation.
 > Verified the live state still matches the doc: `group_id` is a flat provenance
 > label and the `group_ids` search filter is best-effort post-hoc

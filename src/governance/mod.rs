@@ -9,6 +9,7 @@
 //!
 //! See `docs/design/policy-edit-hooks.md`.
 
+pub mod authority;
 pub mod guard;
 pub mod placement;
 pub mod router;

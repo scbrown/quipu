@@ -62,6 +62,10 @@ pub struct Store {
     /// savepoint back, and a request written in place would vanish with it —
     /// leaving a refusal with nothing for an operator to act on.
     pub(crate) pending_requests: Vec<crate::governance::router::PendingRequest>,
+    /// The principal-and-agent chain the current caller is acting under (SARC
+    /// §9.6's `P`). Empty means unattributed, which is NOT the same as
+    /// unconstrained — see `enforce_graph_authority`.
+    pub(crate) principal_chain: Vec<String>,
     /// True while the store is writing verdict facts. The gate honours it and
     /// skips: a policy targeting `aegis:Verdict` would otherwise deny the
     /// verdict recording its own denial.
@@ -217,6 +221,7 @@ impl Store {
             policy_registry: None,
             pending_verdicts: Vec::new(),
             pending_requests: Vec::new(),
+            principal_chain: Vec::new(),
             recording_verdicts: false,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
             vector_delegate: None,
@@ -381,6 +386,52 @@ impl Store {
             Some("write-gate verdict"),
         );
         self.recording_verdicts = false;
+    }
+
+    /// Set the principal-and-agent chain for subsequent writes.
+    ///
+    /// Ordered outermost-first: `[originating principal, …, executor]`. The
+    /// effective authority is the INTERSECTION along it, so appending a delegate
+    /// can only narrow what may be written (SARC §9.3).
+    pub fn set_principal_chain(&mut self, chain: Vec<String>) {
+        self.principal_chain = chain;
+    }
+
+    /// The current chain.
+    #[must_use]
+    pub fn principal_chain(&self) -> &[String] {
+        &self.principal_chain
+    }
+
+    /// Refuse a write to `graph` that the chain's authority does not cover.
+    ///
+    /// Gated by `[quipu.governance] enforce_authority`, default off. With NO
+    /// chain set the check does not apply: an unattributed write is the shape
+    /// every existing caller has, and turning attribution into a hard
+    /// requirement beneath a running deployment would break every one of them
+    /// at once. What the flag buys is that a chain, once supplied, is BINDING —
+    /// so adopting attribution is opt-in per caller and cannot silently widen.
+    pub(crate) fn enforce_graph_authority(&self, graph: i64) -> Result<()> {
+        if !self.governance_config.enforce_authority
+            || self.recording_verdicts
+            || self.principal_chain.is_empty()
+        {
+            return Ok(());
+        }
+        let graph_iri = if graph == crate::schema::ROOT_GRAPH {
+            crate::schema::ROOT_GRAPH_IRI.to_string()
+        } else {
+            self.resolve(graph)?
+        };
+        let authority = crate::governance::authority::chain_authority(self, &self.principal_chain)?;
+        if authority.permits(&graph_iri) {
+            return Ok(());
+        }
+        Err(Error::PolicyDenied(crate::governance::authority::refusal(
+            &self.principal_chain,
+            &graph_iri,
+            &authority,
+        )))
     }
 
     /// Write the `DecisionRequest`s the router staged, after the savepoint has

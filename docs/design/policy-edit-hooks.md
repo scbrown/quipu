@@ -359,6 +359,34 @@ Status: ☐ open · ☑ done (this change).
   Not built, and not implied: no scheduler, no notification. `routedTo` records
   WHICH group should rule; delivering to them is a consumer of this record.
   Claiming otherwise would be the dashboard anti-pattern with extra steps.
+- **Q-SARC-AUTHORITY** ☑ Authority intersection over named graphs
+  (`src/governance/authority.rs`), SARC I5 §9.3. The gap here was NOT missing
+  multi-tenancy: named graphs are already a storage-enforced isolation substrate
+  (registry with `committed|overlay` class, bind-once parent branches,
+  graph-scoped writes/retracts/idempotency). What was missing was AUTHORIZATION —
+  one global bearer token, and nothing saying which principal may write to which
+  graph.
+
+  `aegis:Principal` holds `authorityOver` graph IRIs (or `*`). A call chain's
+  effective authority is the INTERSECTION of every link's, so a delegate can only
+  narrow it and a sub-agent cannot use credentials broader than its caller's
+  (the §9.5 authority-escalation-via-tool-capability defence). An empty
+  intersection permits nothing and is a REFUSAL, never a fallback to the
+  principal's own authority — that fallback is the escalation the rule prevents.
+
+  The wildcard is the identity under intersection: it declines to narrow rather
+  than widening, so a single-tenant deployment where everyone holds `*` behaves
+  exactly as before, while a `*`-holding orchestrator delegating to a scoped
+  worker gets the WORKER's scope.
+
+  Gated by `enforce_authority`, default off, and **inert without a chain**: every
+  existing caller sets none, and making attribution a hard requirement beneath a
+  running deployment would break all of them at once. The flag makes a supplied
+  chain binding, so adoption is per-caller and cannot silently widen. *AC:* a
+  write outside the chain's authority is refused at the write path with a reason
+  naming the chain, the graph and what is held; the same write lands with the
+  flag off; an unattributed write is untouched.
+
 - **Q-SARC-AUDIT** ☐ `quipu_audit_check(Σ, T)` (`src/governance/audit.rs`): the
   four correspondence passes — coverage, class-placement compatibility, outcome
   consistency, attribution completeness — returning a structured discrepancy

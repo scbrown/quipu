@@ -138,6 +138,10 @@ impl Store {
         // BEFORE commit — the `&Store`-based SPARQL evaluator cannot run while a
         // `Savepoint` holds a mutable borrow of the connection. Nests inside
         // speculate()'s outer savepoint exactly as the RAII form did.
+        // Authority first, before anything is staged: a write the chain may not
+        // make should not reach the policy gate, the placement check, or the
+        // fact table. SARC I5.
+        self.enforce_graph_authority(graph)?;
         self.conn.execute_batch("SAVEPOINT quipu_transact")?;
         match self.stage_and_guard(datums, timestamp, actor, source, graph) {
             Ok(staged) => {

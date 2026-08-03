@@ -120,6 +120,18 @@ pub struct GovernanceConfig {
     /// disagree will be accepted and then evaluated somewhere it cannot do its
     /// job, and nothing will say so.
     pub validate_placement: bool,
+
+    /// Enforce authority intersection over named graphs on the write path
+    /// (`src/governance/authority.rs`, SARC I5). When a caller has set a
+    /// principal chain, a write to a graph the chain's INTERSECTED authority
+    /// does not cover is refused.
+    ///
+    /// Default false. Note it is inert for a caller that sets no chain: an
+    /// unattributed write is the shape every existing caller has, and making
+    /// attribution a hard requirement beneath a running deployment would break
+    /// all of them at once. The flag makes a supplied chain BINDING, so adopting
+    /// attribution is per-caller and cannot silently widen.
+    pub enforce_authority: bool,
 }
 
 /// Vector storage backend selection.

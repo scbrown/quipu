@@ -670,3 +670,39 @@ aegis:DecisionRequestShape a sh:NodeShape ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Principal — WHO acts, and over which graphs (SARC I5, §9.3).
+#
+# Quipu's named graphs were already an isolation substrate: a registry with an
+# enforced committed|overlay class, bind-once parent branches, and graph-scoped
+# writes, retractions and idempotency in SQL. What was missing was never
+# partitioning — it was AUTHORIZATION. Nothing said which principal may write to
+# which graph, so the isolation was real and ungoverned.
+#
+# `authorityOver` is that grant. The effective authority of a call chain is the
+# INTERSECTION of every link's, so a delegate can only narrow it; the wildcard
+# "*" declines to narrow rather than widening, which is what lets a
+# single-tenant deployment carry on unchanged. An empty intersection permits
+# nothing and is a refusal, never a fallback to the principal's own authority —
+# that fallback would be the authority escalation the rule exists to prevent.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:PrincipalShape a sh:NodeShape ;
+    sh:targetClass aegis:Principal ;
+    sh:property [
+        # The stable id a call chain names. Distinct from the IRI so a chain can
+        # be carried as short strings across a process boundary.
+        sh:path aegis:principalId ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Graph IRIs this principal may write, or "*" for every graph.
+        # Repeatable. A principal with NO authorityOver holds nothing, not
+        # everything: reading an absent grant as permission is how an
+        # access-control layer becomes decorative.
+        sh:path aegis:authorityOver ;
+        sh:datatype xsd:string ;
+    ] .

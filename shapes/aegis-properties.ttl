@@ -143,3 +143,61 @@ aegis:calibrationBasis a owl:DatatypeProperty ;
     rdfs:label "calibration basis" ;
     rdfs:range xsd:string ;
     rdfs:comment "What the threshold is measured over, so a reader can tell a rolling spend cap from a symbol count without reading the claim." .
+
+# ═══════════════════════════════════════════════════════════════════
+# Authority and escalation (SARC I5 §9.3, I4 §5.3).
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:principalId a owl:DatatypeProperty ;
+    rdfs:label "principal id" ;
+    rdfs:domain aegis:Principal ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The stable identifier a principal-and-agent call chain names. Distinct from the entity's IRI so a chain can be carried as short strings across a process boundary without minting IRIs at every hop." .
+
+aegis:authorityOver a owl:DatatypeProperty ;
+    rdfs:label "authority over" ;
+    rdfs:domain aegis:Principal ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A named graph this principal may write, or \"*\" for every graph. Repeatable. The effective authority of a call chain is the INTERSECTION of every link's, so adding a delegate can only narrow it and a sub-agent cannot use credentials broader than its caller's. A principal with no authorityOver holds NOTHING — an absent grant is not permission." .
+
+aegis:forPolicy a owl:DatatypeProperty ;
+    rdfs:label "for policy" ;
+    rdfs:domain aegis:DecisionRequest ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The policy whose escalation opened this request." .
+
+aegis:forTarget a owl:DatatypeProperty ;
+    rdfs:label "for target" ;
+    rdfs:domain aegis:DecisionRequest ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The entity whose write was suspended awaiting a human ruling." .
+
+aegis:expiresAt a owl:DatatypeProperty ;
+    rdfs:label "expires at" ;
+    rdfs:domain aegis:DecisionRequest ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Unix seconds after which an unserviced request is DENIED, derived from the constraint's reversibility window. Required: a request with no expiry is the unbounded escalation SARC I4 forbids — the point at which the absence of a ruling becomes an answer has to be declared." .
+
+aegis:routedTo a owl:ObjectProperty ;
+    rdfs:label "routed to" ;
+    rdfs:domain aegis:DecisionRequest ;
+    rdfs:range aegis:OperatorGroup ;
+    rdfs:comment "Which operator group can rule on this request. Records WHO should decide; delivering the request to them is a consumer of this record, not something quipu does." .
+
+aegis:operatorCount a owl:DatatypeProperty ;
+    rdfs:label "operator count" ;
+    rdfs:domain aegis:OperatorGroup ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Servers in the M/M/c sense — how many operators can rule in parallel. Part of the specification rather than an unstated operational assumption, because SARC §5.3 makes the expected wait a MEASURABLE property and a queue with undeclared parameters cannot be measured against a reversibility window." .
+
+aegis:meanServiceSeconds a owl:DatatypeProperty ;
+    rdfs:label "mean service time (s)" ;
+    rdfs:domain aegis:OperatorGroup ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Mean time to rule on one request. With operatorCount this is enough to compute the expected queue wait and compare it against a constraint's reversibility window." .
+
+aegis:afterHours a owl:DatatypeProperty ;
+    rdfs:label "after hours" ;
+    rdfs:domain aegis:OperatorGroup ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What happens outside declared hours: \"deny\", or \"defer_within_window\". There is deliberately no allow: an after-hours ALLOW is the default-allow-under-load SARC §5.3 names as the opposite of oversight, and it is left unrepresentable for the same reason onTimeout is." .
