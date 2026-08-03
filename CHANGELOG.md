@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- *(scripts)* Ingest sibling repos as code and doc entities([f44e79d](https://github.com/scbrown/quipu/commit/f44e79db801ae0bad677229db7342152c404359f))
 - *(ui)* 3D Datalinks view over the prerequisite DAG([1a83e48](https://github.com/scbrown/quipu/commit/1a83e48037898050b11fbf2fee0c6903e58ac521))
 - *(docs)* Publish the Datalinks demo to GitHub Pages([1ca9832](https://github.com/scbrown/quipu/commit/1ca983226eb27931c693fcdd38ab9f488f12f94f))
 - *(governance)* SARC constraint metadata and class-placement conformance([fd3e6f8](https://github.com/scbrown/quipu/commit/fd3e6f8ac3bbf7d4482988ec8d1ebc1f652a6da1))
@@ -21,12 +22,26 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
+- *(ci)* The changelog gate is dark per HEAD-COMMIT author, not per PR author([9be5a84](https://github.com/scbrown/quipu/commit/9be5a8490bbeaf377733fc912b673ab9e6426586))
+- *(ci)* A hand-corrected release PR is discarded, and every generated one is bad([03e3231](https://github.com/scbrown/quipu/commit/03e323194d4b578dead277ef938469cd7f2c90e7))
+- *(design)* Spatial explorer for Quipu graphs([72d09b8](https://github.com/scbrown/quipu/commit/72d09b8dabe15e2354dd2885f43be8b7634b3080))
+- *(design)* SARC gaps as Q-SARC-* backlog beads([0ac14bc](https://github.com/scbrown/quipu/commit/0ac14bce5d88d2e71dc5aa6b699a2de697a1c985))
+- *(design)* Cite SARC properly in the conformance section([efa2a4c](https://github.com/scbrown/quipu/commit/efa2a4c1a46baafc53be247c77a9d06c0fff8a74))
 - *(shapes)* Describe the governance plane's vocabulary (Q-SARC-VOCAB)([a795998](https://github.com/scbrown/quipu/commit/a79599878f7b6ced4c29860c14eeb0f8549d93ac))
 - README and backlog catch up with the governance plane([01be9a5](https://github.com/scbrown/quipu/commit/01be9a5de4214b930e1f83515f4b8b151069b1cf))
 
 ### Fixed
 
+- *(release)* Take the version baseline from our git tags, not a stranger's crate([fbfe1b5](https://github.com/scbrown/quipu/commit/fbfe1b57cf1f88220498b26794278439a22072a9))
 - *(governance)* Enforce the safety enums on the write path, and describe the vocabulary([bc1ffaa](https://github.com/scbrown/quipu/commit/bc1ffaab089c666f602dac007db0bc0c57599580))
+
+### Miscellaneous
+
+- Release v0.3.18([330fd08](https://github.com/scbrown/quipu/commit/330fd0807be060aa7a6c11d863f1faa68d923864))
+
+### Reverted
+
+- *(ci)* The release-pr/release reorder did not fix the changelog dump([792a9a2](https://github.com/scbrown/quipu/commit/792a9a29427f2a7b6bbe9812cbf5b11dffd8aa32))
 
 ## [0.3.17] - 2026-08-02
 
