@@ -15,6 +15,7 @@ fn action(class: Option<&str>, point: Option<&str>) -> Placement {
         point: point.map(str::to_string),
         reversibility_window: None,
         on_timeout: None,
+        hosted_at_layer: None,
         ambiguous: Vec::new(),
     }
 }
@@ -26,6 +27,7 @@ fn escalation(point: &str, window: Option<&str>, timeout: Option<&str>) -> Place
         point: Some(point.to_string()),
         reversibility_window: window.map(str::to_string),
         on_timeout: timeout.map(str::to_string),
+        hosted_at_layer: None,
         ambiguous: Vec::new(),
     }
 }
@@ -402,4 +404,91 @@ fn a_clean_re_placement_retracting_the_old_value_lands() {
     store
         .transact(&move_to_pag, TS, None, None)
         .expect("a re-placement that retracts the old values must land");
+}
+
+// ── Value checks for the safety-critical enums ───────────────────────────────
+//
+// These live here, not only in the shape, because SHACL runs only under
+// `shacl.validate_on_write` (default FALSE) and validates episode ingest rather
+// than every transact. The shape tests in governance_tests.rs prove the SHAPE
+// rejects these; these prove the WRITE PATH does, which is the claim that
+// matters.
+
+fn with_timeout(timeout: &str) -> Placement {
+    Placement {
+        on_timeout: Some(timeout.to_string()),
+        ..Placement::default()
+    }
+}
+
+fn with_layer(layer: &str) -> Placement {
+    Placement {
+        hosted_at_layer: Some(layer.to_string()),
+        ..Placement::default()
+    }
+}
+
+#[test]
+fn on_timeout_allow_is_refused_by_the_check_not_only_by_the_shape() {
+    let why = with_timeout("allow").violation("p").unwrap();
+    assert!(why.contains("onTimeout"), "{why}");
+    assert!(
+        why.contains("no-op"),
+        "the reason names the failure: an escalation that passes under load: {why}"
+    );
+    assert!(with_timeout("deny").violation("p").is_none());
+}
+
+#[test]
+fn the_prompt_layer_is_refused_by_the_check_too() {
+    let why = with_layer("prompt").violation("p").unwrap();
+    assert!(why.contains("hostedAtLayer"), "{why}");
+    assert!(why.contains("I6"), "the reason cites the invariant: {why}");
+    for ok in ["orchestration", "tool", "policy"] {
+        assert!(
+            with_layer(ok).violation("p").is_none(),
+            "{ok} is a permitted layer"
+        );
+    }
+}
+
+#[test]
+fn the_value_checks_apply_outside_the_action_boundary_too() {
+    // Both are checked BEFORE the boundary exemption, deliberately: a
+    // transition-boundary escalation with onTimeout "allow" fails just as
+    // silently as an action-boundary one, and the exemption exists only for
+    // PLACEMENT, which a non-action policy genuinely does not have.
+    let transition = Placement {
+        boundary: Some("transition".to_string()),
+        on_timeout: Some("allow".to_string()),
+        ..Placement::default()
+    };
+    assert!(
+        transition.violation("p").is_some(),
+        "a bad onTimeout is not excused by the boundary"
+    );
+}
+
+#[test]
+fn a_bad_value_is_refused_at_the_write_path() {
+    // Liveness for the value checks, through the real transact.
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    let err = define(
+        &mut store,
+        "http://ex/p",
+        &[
+            ("targets", "CodeModule"),
+            ("claim", "ASK { ?s ?p ?o }"),
+            ("boundary", "action"),
+            ("constraintClass", "escalation"),
+            ("verificationPoint", "PAG"),
+            ("reversibilityWindowSeconds", "600"),
+            ("onTimeout", "allow"),
+        ],
+    );
+    assert!(
+        matches!(err, Err(Error::PolicyDenied(_))),
+        "onTimeout \"allow\" must be refused on the write path, got {err:?}"
+    );
 }

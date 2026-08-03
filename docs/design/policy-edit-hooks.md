@@ -236,7 +236,20 @@ Status: ☐ open · ☑ done (this change).
   the write gate and returns `PolicyDenied`, so a refused definition leaves the
   store byte-identical.
 
-  Two things surfaced while building it, both worth carrying forward:
+  Three things surfaced while building it, all worth carrying forward:
+
+  0. **"Unrepresentable" was an overstatement, now corrected.** `onTimeout` has a
+     one-value `sh:in` and `hostedAtLayer` has no `"prompt"` value, and this was
+     first written up as making the unsafe settings unrepresentable. A `sh:in`
+     enum only binds when SHACL runs, and SHACL runs under
+     `shacl.validate_on_write` — default **false**, and scoped to episode ingest
+     rather than every `Store::transact`. A policy written through `/knot` could
+     carry `onTimeout "allow"` and nothing would object. Both values are now
+     re-checked by the placement pass, which IS on the write path, before the
+     action-boundary exemption (a bad `onTimeout` fails just as silently on a
+     transition-boundary policy). The vocabulary omission is defence in depth
+     behind that, not a guarantee above it — and the honest ceiling stays
+     "refused on quipu's write path", since a raw SQL write bypasses everything.
 
   1. **Multi-valued fields are refused, not resolved.** Asserting
      `constraintClass "hard"` over an existing `"soft"` leaves BOTH facts
@@ -251,6 +264,35 @@ Status: ☐ open · ☑ done (this change).
      unit cases over `Placement::violation` and liveness cases through
      `Store::transact`, plus the flag-off control that makes the rejection
      attributable to this check rather than to something else on the write path.
+- **Q-SARC-VOCAB** ☐ Describe the `aegis:` vocabulary, not only constrain it.
+  `shapes/*.ttl` carried **zero** `rdfs:domain` / `rdfs:range` / `rdf:Property` /
+  `owl:*Property` declarations before Q-SARC-CLASS: every term was defined
+  implicitly by the shapes constraining it, which states validity and not
+  meaning. `shapes/aegis-properties.ttl` now covers the SARC fields; this bead
+  is the rest.
+
+  Per property: `owl:DatatypeProperty` or `owl:ObjectProperty`, `rdfs:label`,
+  `rdfs:range`, and an `rdfs:comment` saying what the term MEANS and how it
+  differs from its nearest neighbour — a comment restating the label passes a
+  presence check while telling a reader nothing.
+
+  `rdfs:domain` **only where the subject class is unambiguous.** It is an
+  inference the reasoner materialises, so declaring it on a generic name
+  (`aegis:kind`, `aegis:name`, `aegis:threshold`) silently retypes the first
+  unrelated thing in the estate to use that name. Property-at-a-time, in
+  shape-file order, never one sweep; each batch runs the reasoner over a store
+  holding the shipped catalog and asserts the inferred types are the intended
+  ones, since materialisation is the risk. *AC:*
+  `every_sarc_property_the_shape_constrains_is_also_described` generalises to
+  every `aegis:` property the shape graph mentions, so adding a constrained
+  property without a declaration fails the build.
+
+  This is what `src/owl.rs` and the reasoner's domain/range inference were built
+  for and have been starved of. It is also the precondition for the two
+  consumers already committed to: conversational authoring over the catalog, and
+  aligning `aegis:` against an external vocabulary (ontology matching takes
+  property descriptions as its primary signal and there are none).
+
 - **Q-SARC-ER** ☐ Escalation router (`src/governance/router.rs`):
   `aegis:OperatorGroup` with an M/M/c capacity model, a DecisionRequest queue,
   hold-until-τ_rev, default-deny on timeout, and re-validation of an
@@ -266,6 +308,30 @@ Status: ☐ open · ☑ done (this change).
 
 ### hank
 
+- **H-SARC-I6** ☐ Check `aegis:hostedAtLayer` against reality at the projection
+  seam. The field is declared and unconsumed: nothing compares it to where a
+  constraint is ACTUALLY evaluated, so a policy may claim `"tool"` — the layer an
+  agent cannot route around — while being enforced solely by hank's
+  orchestration-layer pre-edit hook, which an agent bypasses by writing the file
+  another way. I6 is checked for well-formedness and not for truth, and a false
+  `tool` claim is worse than an honest `orchestration` one because it stops
+  people looking.
+
+  Hank knows what it is: a rule evaluated by `hank hook pre-edit` is hosted at
+  the orchestration layer, always — a constant, not a setting. On projection,
+  compare declared against actual. The check is **one-directional**: declaring a
+  weaker layer than the truth understates robustness and is harmless; declaring a
+  stronger one is the failure.
+
+  Response is a loud fail-open, never a block — refusing to project a policy
+  because its metadata overclaims would disable a rule that does still work,
+  trading a documentation error for an enforcement gap. Record the layer actually
+  used on the verdict and trace record so the Q-SARC-AUDIT checker can verify
+  claim against record rather than taking the claim. *AC:* a projected policy
+  declaring `"tool"` and evaluated by hank produces a mismatch notice naming the
+  policy, the claimed layer and the real one, and still evaluates and still
+  blocks if hard; `"orchestration"` and an absent declaration both produce
+  silence.
 - **H-DEP** ☐ Pin and wire the `quipu` git dep (commented out in
   `hank/Cargo.toml`; Phase-4 kickoff). *AC:* `--features quipu` builds against a
   real quipu rev; promote path reaches a live `/knot`.

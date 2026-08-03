@@ -85,6 +85,7 @@ struct Placement {
     point: Option<String>,
     reversibility_window: Option<String>,
     on_timeout: Option<String>,
+    hosted_at_layer: Option<String>,
     /// Fields that resolved to more than one distinct value, as
     /// `(field, values)`. See [`Placement::violation`] — this is checked first.
     ambiguous: Vec<(&'static str, Vec<String>)>,
@@ -116,6 +117,54 @@ impl Placement {
                  the new one.",
                 sorted.len(),
                 sorted.join(", ")
+            ));
+        }
+
+        // VALUE checks for the two safety-critical enums, HERE rather than left
+        // to the shape.
+        //
+        // `shapes/governance.ttl` gives `onTimeout` a one-value `sh:in` and
+        // `hostedAtLayer` no "prompt" value, and it is tempting to call those
+        // settings unrepresentable. They are not. SHACL runs only when
+        // `shacl.validate_on_write` is set — it defaults to FALSE, and it
+        // validates episode ingest rather than `Store::transact` generally — so
+        // a policy written through `/knot` or a direct transact could carry
+        // `onTimeout "allow"` and nothing would object. "The shape rejects it"
+        // and "the store cannot hold it" are different claims, and shipping the
+        // second while only the first is true is how a control comes to be
+        // believed in without being invoked.
+        //
+        // These two are re-checked on the path that is actually on, because
+        // both failures are silent and load-bearing: default-allow turns an
+        // escalation into a no-op exactly under the load that made it matter
+        // (SARC §5.3), and a hard constraint hosted at the prompt layer is what
+        // I6 exists to forbid.
+        //
+        // NB this still cannot make a value unwritable — a raw SQL write, or a
+        // process that opens the store directly, bypasses every check quipu has.
+        // The honest claim is "refused on quipu's write path", and the vocabulary
+        // omission is defence in depth behind it, not a guarantee above it.
+        if let Some(timeout) = self.on_timeout.as_deref()
+            && timeout != "deny"
+        {
+            return Some(format!(
+                "policy '{iri}' declares aegis:onTimeout \"{timeout}\". The only \
+                 permitted value is \"deny\": when no operator services an \
+                 escalation inside its reversibility window the action must be \
+                 treated as denied. Default-allow under operator unavailability \
+                 converts the constraint into a no-op exactly when load makes it \
+                 matter, which is the opposite of oversight."
+            ));
+        }
+        if let Some(layer) = self.hosted_at_layer.as_deref()
+            && !matches!(layer, "orchestration" | "tool" | "policy")
+        {
+            return Some(format!(
+                "policy '{iri}' declares aegis:hostedAtLayer \"{layer}\". Permitted: \
+                 orchestration, tool, policy. There is deliberately no \"prompt\" \
+                 layer — a constraint expressed as an instruction the model may \
+                 reinterpret or route around is not enforcement, and hosting one \
+                 there is what SARC I6 forbids."
             ));
         }
 
@@ -307,6 +356,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
             OPTIONAL {{ ?p a:verificationPoint ?point }} \
             OPTIONAL {{ ?p a:reversibilityWindowSeconds ?window }} \
             OPTIONAL {{ ?p a:onTimeout ?timeout }} \
+            OPTIONAL {{ ?p a:hostedAtLayer ?layer }} \
          }}"
     );
     // Collect the DISTINCT values each field resolved to, rather than the last
@@ -328,6 +378,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 ("verificationPoint", "point"),
                 ("reversibilityWindowSeconds", "window"),
                 ("onTimeout", "timeout"),
+                ("hostedAtLayer", "layer"),
             ] {
                 if let Some(v) = lexical(row.get(binding)) {
                     let seen = entry.entry(field).or_default();
@@ -360,6 +411,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 point: single("verificationPoint"),
                 reversibility_window: single("reversibilityWindowSeconds"),
                 on_timeout: single("onTimeout"),
+                hosted_at_layer: single("hostedAtLayer"),
                 ambiguous,
             },
         );

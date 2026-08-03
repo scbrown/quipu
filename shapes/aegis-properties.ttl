@@ -1,0 +1,145 @@
+# Property declarations for the aegis: governance vocabulary.
+#
+# WHY THIS FILE EXISTS
+#
+# Until now the aegis: vocabulary was defined only IMPLICITLY, by the SHACL
+# shapes that constrain it. `shapes/*.ttl` contained zero rdfs:domain,
+# rdfs:range, rdf:Property or owl:*Property declarations — so a reader (or an
+# agent, or an ontology matcher) could learn that `aegis:constraintClass` must
+# be one of three strings, and could not learn what it MEANS, what it attaches
+# to, or how it differs from `aegis:effect`.
+#
+# A shape says what is VALID. An ontology says what a term MEANS and what it
+# RELATES. Agentic consumers need the second: an agent composing a policy in the
+# authoring surface, or an ontology-matching pass aligning aegis: against an
+# external governance vocabulary, has nothing to read from a shape graph.
+#
+# It also feeds machinery quipu already has and was starving: `src/owl.rs`
+# parses rdfs:domain / rdfs:range / rdfs:subPropertyOf, and the reasoner does
+# domain/range inference (step 5). Both were built and fed nothing.
+#
+# SCOPE: the SARC constraint-metadata properties added in Q-SARC-CLASS.
+# Declaring the rest of the aegis: vocabulary is a follow-up (Q-SARC-VOCAB) —
+# doing it in one sweep would mean asserting domains for classes whose intended
+# subjects predate this work and are not all obvious from their shapes.
+#
+# ── A CONSEQUENCE TO UNDERSTAND BEFORE LOADING THIS ──────────────────────────
+#
+# rdfs:domain is not documentation; it is an INFERENCE RULE, and quipu's
+# reasoner MATERIALISES it. Declaring
+#
+#     aegis:constraintClass rdfs:domain aegis:Policy .
+#
+# means the reasoner will assert `?x a aegis:Policy` for ANY subject carrying
+# that property. If someone attaches `aegis:constraintClass` to a Selector by
+# mistake, the Selector becomes a Policy — and then the placement check will
+# demand a verification point of it. That is correct RDFS and a real trap; it is
+# the reason domains are declared here deliberately, one property at a time,
+# rather than swept in.
+#
+# rdfs:range on a DATATYPE property is inert for the same machinery: the
+# reasoner types only object values that are IRI references, so a literal-valued
+# property infers nothing. The ranges below are declared for readers and
+# matchers, not to drive inference.
+#
+# Load via POST /shapes, or `quipu knot`.
+
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+# ═══════════════════════════════════════════════════════════════════
+# The SARC constraint object (arXiv:2605.07728 §3.1):
+#   c = ⟨src, class, pred, verif, resp⟩ + operating point θ
+# Each property below is one field of that tuple. The tuple's own prose is in
+# hank docs/book/src/design/sarc-conformance.md.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:constraintClass a owl:DatatypeProperty ;
+    rdfs:label "constraint class" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What KIND of bound this constraint is, independent of what happens when it fires: \"hard\" (never admissible under any policy), \"soft\" (admissible at a declared cost), or \"escalation\" (control transfers to a human). Distinct from aegis:effect, which is the RESPONSE. The two were one field until Q-SARC-CLASS, and collapsing them is what made \"may this action ever execute?\" a question the graph could not answer." .
+
+aegis:verificationPoint a owl:DatatypeProperty ;
+    rdfs:label "verification point" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The enforcement point at which this constraint is evaluated: \"PAG\" (Pre-Action Gate, before dispatch), \"ATM\" (Action-Time Monitor, mid-flight), \"PAA\" (Post-Action Auditor, after the action and before the next), \"tool_layer\", or \"policy_layer\". Finer than aegis:boundary, which stays the coarse action/transition split. Which points a constraint may occupy is decided by its class — see src/governance/placement.rs." .
+
+aegis:hostedAtLayer a owl:DatatypeProperty ;
+    rdfs:label "hosted at layer" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The architectural layer that HOSTS the check: \"orchestration\" (code in the planner or dispatcher), \"tool\" (inside the tool implementation), or \"policy\" (outside the agent process entirely). There is deliberately no \"prompt\" value: a constraint expressed as an instruction the model may reinterpret or route around is not enforcement. NB the omission is defence in depth, not a guarantee — it is refused on quipu's write path by the placement check, and nothing can make a value unwritable to a store opened directly." .
+
+aegis:sourceType a owl:DatatypeProperty ;
+    rdfs:label "source type" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What KIND of instrument this obligation comes from: \"regulatory\", \"contractual\", \"ethical\" or \"operational\". aegis:authority on the parent Directive says WHO issued it; this says what kind of thing it is, which is what decides precedence when two constraints conflict (regulatory > contractual > operational)." .
+
+aegis:operatingPoint a owl:ObjectProperty ;
+    rdfs:label "operating point" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range aegis:OperatingPoint ;
+    rdfs:comment "The declared false-positive / false-negative posture of this constraint's predicate. Required for a complete constraint: the FP/FN trade-off is a decision the deploying organization owns, not a default chosen by whoever wrote the regex, and a predicate without one is under-specified in a fiduciary sense as much as a technical one." .
+
+aegis:latencyBudgetMs a owl:DatatypeProperty ;
+    rdfs:label "latency budget (ms)" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Wall-clock budget for evaluating this constraint at its verification point. Exists to keep constraint evaluation on the order of tool latency and never model latency: a check that needs another model call both doubles per-step latency and inherits the nondeterminism the check was supposed to bound." .
+
+aegis:reversibilityWindowSeconds a owl:DatatypeProperty ;
+    rdfs:label "reversibility window (s)" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "The time within which the contemplated action can still be undone without compounding cost. An escalation whose expected queue wait exceeds this window is structurally too slow however diligent the operator: the architect must tighten the predicate, add capacity, or convert the constraint to a hard block. Required on escalation-class constraints — an escalation without a bound is not human oversight, it is deferred autonomy." .
+
+aegis:onTimeout a owl:DatatypeProperty ;
+    rdfs:label "on timeout" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What happens when the reversibility window elapses with no operator ruling. The only permitted value is \"deny\". Default-allow under operator unavailability converts an escalation constraint into a no-op exactly under the load that made it matter, which is the opposite of oversight — so this is a fail-safe, not a fail-degraded, default." .
+
+aegis:backoffFormula a owl:DatatypeProperty ;
+    rdfs:label "backoff formula" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The backoff a \"throttle\" effect applies to SUBSEQUENT actions once a soft window has been crossed. Present so a throttling constraint declares its response rather than leaving the amount to whoever implements it; the consumer compiles the expression." .
+
+# ═══════════════════════════════════════════════════════════════════
+# OperatingPoint — the calibration node.
+# No rdfs:domain on these: they belong to OperatingPoint, but `aegis:kind` and
+# `aegis:threshold` are generic enough names that asserting a domain would
+# materialise a wrong rdf:type the first time anything else in the estate used
+# them. Declared with range and comment only, deliberately.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:kind a owl:DatatypeProperty ;
+    rdfs:label "operating point kind" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "How this operating point is expressed: \"exact_predicate\" (a string, regex or typed comparison with no classifier and so no score to threshold), \"threshold\" (a numeric cut), or \"deterministic_threshold\" (a threshold over an exactly-known quantity)." .
+
+aegis:falsePositiveTolerance a owl:DatatypeProperty ;
+    rdfs:label "false positive tolerance" ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "The rate of blocked-but-valid actions this deployment accepts. For a hard constraint the asymmetry normally favours tolerating false positives: a missed violation is by definition unacceptable, while a wrongly blocked action falls back to escalation." .
+
+aegis:falseNegativeTolerance a owl:DatatypeProperty ;
+    rdfs:label "false negative tolerance" ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "The rate of admitted-but-violating actions this deployment accepts. Zero for an exact predicate; a hard constraint with an inexact predicate should carry a tolerant false-positive number and a near-zero one here, never the reverse." .
+
+aegis:threshold a owl:DatatypeProperty ;
+    rdfs:label "threshold" ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "The numeric cut this operating point applies, in the units of its calibration basis." .
+
+aegis:calibrationBasis a owl:DatatypeProperty ;
+    rdfs:label "calibration basis" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What the threshold is measured over, so a reader can tell a rolling spend cap from a symbol count without reading the claim." .

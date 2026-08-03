@@ -360,3 +360,92 @@ fn policy_selector_must_point_at_a_selector() {
     let fb = validate_shapes(SHAPES, &data).unwrap();
     assert!(!fb.conforms, "selector must reference an aegis:Selector");
 }
+
+// ── Property declarations (shapes/aegis-properties.ttl) ──────────────────────
+
+const AEGIS_PROPERTIES: &str = include_str!("../shapes/aegis-properties.ttl");
+
+#[test]
+fn the_property_declarations_parse() {
+    // A vocabulary file that does not parse is a vocabulary nothing can read,
+    // and it would fail silently — the reasoner simply loads no axioms.
+    let fb = validate_shapes(SHAPES, AEGIS_PROPERTIES).unwrap();
+    assert!(
+        fb.conforms,
+        "property declarations must parse and not violate the governance shapes: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn every_sarc_property_the_shape_constrains_is_also_described() {
+    // The gap this file closes: a shape says what is VALID, and said nothing
+    // about what a term MEANS. If a future field is added to the shape without
+    // a declaration here, it is back to being defined only by its constraints —
+    // so the two files are checked against each other rather than trusted to
+    // drift together.
+    for property in [
+        "constraintClass",
+        "verificationPoint",
+        "hostedAtLayer",
+        "sourceType",
+        "operatingPoint",
+        "latencyBudgetMs",
+        "reversibilityWindowSeconds",
+        "onTimeout",
+        "backoffFormula",
+    ] {
+        assert!(
+            SHAPES.contains(&format!("aegis:{property}")),
+            "{property} should be constrained by the governance shapes"
+        );
+        assert!(
+            AEGIS_PROPERTIES.contains(&format!("aegis:{property} a owl:")),
+            "aegis:{property} is constrained by a shape but not DECLARED — \
+             add it to shapes/aegis-properties.ttl with a domain, range and comment"
+        );
+        // A declaration with no comment is a declaration that documents nothing.
+        let block = AEGIS_PROPERTIES
+            .split(&format!("aegis:{property} a owl:"))
+            .nth(1)
+            .unwrap()
+            .split(" .\n")
+            .next()
+            .unwrap();
+        assert!(
+            block.contains("rdfs:comment"),
+            "aegis:{property} must carry an rdfs:comment saying what it MEANS"
+        );
+    }
+}
+
+#[test]
+fn domains_are_declared_only_where_the_subject_is_unambiguous() {
+    // rdfs:domain is an INFERENCE RULE the reasoner materialises, not
+    // documentation: declaring it asserts rdf:type on every subject carrying
+    // the property. The generically-named OperatingPoint fields deliberately
+    // carry no domain, because the first other thing in the estate to use
+    // `aegis:kind` would otherwise be silently typed an OperatingPoint.
+    for generic in ["kind", "threshold", "calibrationBasis"] {
+        let block = AEGIS_PROPERTIES
+            .split(&format!("aegis:{generic} a owl:"))
+            .nth(1)
+            .unwrap()
+            .split(" .\n")
+            .next()
+            .unwrap();
+        assert!(
+            !block.contains("rdfs:domain"),
+            "aegis:{generic} is too generic a name to carry a materialising domain"
+        );
+    }
+    // The policy-specific ones do carry it, because their subject is not in doubt.
+    let block = AEGIS_PROPERTIES
+        .split("aegis:constraintClass a owl:")
+        .nth(1)
+        .unwrap()
+        .split(" .\n")
+        .next()
+        .unwrap();
+    assert!(block.contains("rdfs:domain aegis:Policy"));
+}
