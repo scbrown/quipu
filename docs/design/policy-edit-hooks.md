@@ -146,22 +146,36 @@ the hank↔quipu dep being wired (commented out today). See the backlog.
 ## SARC conformance
 
 The Phase A/B split above is one half of a larger picture. Besanson's SARC
-framework (arXiv:2605.07728) names four enforcement points in an agent loop —
-Pre-Action Gate, Action-Time Monitor, Post-Action Auditor, Escalation Router —
-and eight invariants whose joint effect is a *decidable audit*: given a
-specification Σ and a trace T, an auditor can mechanically check `T ⊨ Σ`.
+framework — *SARC: A Governance-by-Architecture Framework for Agentic AI
+Systems: Compiling Regulatory Obligations into Runtime Constraints*, working
+paper, Universidad Torcuato Di Tella,
+[arXiv:2605.07728v1](https://arxiv.org/abs/2605.07728) [cs.SE], reference
+artifacts at <https://github.com/besanson/sarc-governance> — names four
+enforcement points in an agent loop (§4.1): Pre-Action Gate, Action-Time
+Monitor, Post-Action Auditor, Escalation Router. Eight invariants (§3.5) bind
+them, and their joint effect is a *decidable audit* (Definition 2, §3.6): given
+a specification Σ and a trace T, an auditor can mechanically check `T ⊨ Σ` in
+`O(|T|·|C|)` without access to the model or its prompts.
 
 Measured against that, quipu's write gate and hank's pre-edit hook together are
 a solid PAG and a solid policy-layer reference monitor, and the signed
 `aegis:Verdict` + `VerifierRegistration` machinery is ahead of SARC's own
-prototype. The gaps are specific: the constraint object is under-declared (no
-class, no operating point, no reversibility window), there is no PAA, no ATM,
-no escalation router, and nothing checks correspondence.
+reference artifact (a JSON spec file and a Python checker, §3.6). Note also that
+SARC positions itself as a specification discipline layered *over* a
+policy-as-code substrate rather than a replacement for one (§2.1) — which is
+exactly the relationship this document's Phase A gate already has to Phase B's
+projection.
+
+The gaps are specific: the constraint object is under-declared — no
+`constraintClass`, no operating point θ, no reversibility window τ_rev, so
+`aegis:effect` is carrying both the class and the response and the
+class-to-placement rules of §4.2 (Table 3) cannot be checked at all. There is no
+PAA, no ATM, no escalation router, and nothing checks correspondence.
 
 The gap analysis and build order live in hank's book, at
 `docs/book/src/design/sarc-conformance.md` — the same cross-repo citation style
-this document already uses. The quipu-side work it implies is listed as
-`Q-SARC-*` in the backlog below.
+this document already uses; its Sources section carries the full reference list.
+The quipu-side work it implies is listed as `Q-SARC-*` in the backlog below.
 
 ## Backlog (beads)
 
