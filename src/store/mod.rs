@@ -52,6 +52,15 @@ pub struct Store {
     /// type. Built lazily on the first enforced write and invalidated when a
     /// transaction defines or amends a policy. `None` = not yet built / stale.
     pub(crate) policy_registry: Option<PolicyRegistry>,
+    /// Verdicts the write gate decided and has not yet written. Staged rather
+    /// than emitted in place because a DENIED write is rolled back, and a
+    /// verdict written inside that savepoint would go with it — losing exactly
+    /// the record worth keeping. Drained after the savepoint resolves.
+    pub(crate) pending_verdicts: Vec<crate::governance::verdict_facts::PendingVerdict>,
+    /// True while the store is writing verdict facts. The gate honours it and
+    /// skips: a policy targeting `aegis:Verdict` would otherwise deny the
+    /// verdict recording its own denial.
+    pub(crate) recording_verdicts: bool,
     /// Base namespace new IRIs are minted under on the episode write paths.
     /// Defaults to the built-in aegis namespace; the server sets it from
     /// `[quipu].base_ns` at startup so a non-aegis deployment does not silently
@@ -201,6 +210,8 @@ impl Store {
             governance_config: GovernanceConfig::default(),
             pending_write_events: std::cell::RefCell::new(Vec::new()),
             policy_registry: None,
+            pending_verdicts: Vec::new(),
+            recording_verdicts: false,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
             vector_delegate: None,
             local_vector_backend: None,
@@ -311,7 +322,7 @@ impl Store {
     /// claim is unsatisfied for a touched target — the caller rolls the write
     /// back so nothing is committed.
     pub(crate) fn enforce_write_policies(&mut self, datums: &[Datum], graph: i64) -> Result<()> {
-        if !self.governance_config.enforce_on_write {
+        if !self.governance_config.enforce_on_write || self.recording_verdicts {
             return Ok(());
         }
         if self.policy_registry.is_none() {
@@ -320,9 +331,47 @@ impl Store {
         // Take the registry out so the evaluator can borrow `&self` (SPARQL);
         // restore it afterwards. Evaluation never mutates the registry.
         let registry = self.policy_registry.take().expect("registry just built");
-        let result = registry.evaluate_write(self, datums, graph);
+        let mut verdicts = Vec::new();
+        let result = registry.evaluate_write(self, datums, graph, &mut verdicts);
         self.policy_registry = Some(registry);
+        // STAGED, not written. The caller writes them after the savepoint
+        // resolves — a denial rolls back, and a verdict written inside that
+        // savepoint would be rolled back with it.
+        self.pending_verdicts = verdicts;
         result
+    }
+
+    /// Write the verdicts the gate staged, in their own transaction.
+    ///
+    /// Called after the write's savepoint has resolved EITHER WAY, so the
+    /// verdict of a denial survives the rollback that denial caused. Failures
+    /// here are swallowed: a verdict that cannot be recorded must not turn a
+    /// successful write into a failed one, nor a denial into a different error
+    /// than the policy's.
+    pub(crate) fn flush_pending_verdicts(&mut self, timestamp: &str) {
+        let pending = std::mem::take(&mut self.pending_verdicts);
+        if pending.is_empty() || self.recording_verdicts {
+            return;
+        }
+        let mut datums = Vec::new();
+        for verdict in &pending {
+            match crate::governance::verdict_facts::datums_for(self, verdict, timestamp) {
+                Ok(mut d) => datums.append(&mut d),
+                // No signing identity => no verdict, never an unsigned one.
+                Err(_) => return,
+            }
+        }
+        if datums.is_empty() {
+            return;
+        }
+        self.recording_verdicts = true;
+        let _ = self.transact(
+            &datums,
+            timestamp,
+            Some("quipu"),
+            Some("write-gate verdict"),
+        );
+        self.recording_verdicts = false;
     }
 
     /// Validate the SARC class↔placement rules for any policy this write
@@ -335,7 +384,7 @@ impl Store {
     /// its policy definitions checked while it is still staging enforcement in
     /// advise mode.
     pub(crate) fn validate_policy_placement(&self, datums: &[Datum], graph: i64) -> Result<()> {
-        if !self.governance_config.validate_placement {
+        if !self.governance_config.validate_placement || self.recording_verdicts {
             return Ok(());
         }
         crate::governance::validate_placement(self, datums, graph)

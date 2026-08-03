@@ -11,6 +11,7 @@
 
 pub mod guard;
 pub mod placement;
+pub mod verdict_facts;
 
 pub use guard::{PolicyRegistry, is_governance_write};
 pub use placement::validate_write as validate_placement;

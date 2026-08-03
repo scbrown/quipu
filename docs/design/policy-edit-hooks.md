@@ -213,9 +213,38 @@ Status: ☐ open · ☑ done (this change).
 - **Q-TRANSITION** ☐ `boundary:"transition"` enforcement at step transitions
   (the second half of the boundary enum). *AC:* a transition policy gates its
   workflow step the way `action` gates a write.
-- **Q-VERDICT-PERSIST** ☐ Persist the write-gate verdict as a signed, bitemporal
+- **Q-VERDICT-PERSIST** ☑ Persist the write-gate verdict as a signed, bitemporal
   Verdict fact (reuse `signing.rs`). *AC:* every enforced decision is auditable
   and replayable, not just an accept/reject.
+
+  **The ordering is the whole design.** A denied write is ROLLED BACK, so a
+  verdict written inside the same savepoint goes with it — and the denial's
+  verdict is exactly the one worth keeping, because an accepted write leaves its
+  own evidence in the facts it wrote while a refused one leaves nothing at all.
+  Verdicts are therefore STAGED on the `Store` during evaluation and flushed
+  afterwards, in their own transaction, once the savepoint has resolved either
+  way. `a_denied_write_still_records_its_verdict` is the case.
+
+  Three things travel with it:
+
+  - **`unknown` is recorded, not skipped.** When an evidence probe finds nothing
+    to judge, "no evidence yet" and "never evaluated" are different facts, and an
+    absent verdict makes the gate look as though the policy did not apply.
+  - **No signing identity means NO verdict, never an unsigned one.** A bare
+    `satisfied` in the record is forgeable by anyone who can write a fact; the
+    point of a verdict is that it is an attestation rather than a claim.
+  - **Re-entry is guarded.** Writing a verdict is itself a write the gate would
+    evaluate, and a policy targeting `aegis:Verdict` would deny the verdict
+    recording its own denial. The recording path sets a flag the gate and the
+    placement check both honour — a deliberate hole, narrow: only these facts,
+    only for the duration of the write.
+
+  The evidence hash covers `predicate|target|outcome`, **not** the graph state.
+  The gate's evidence is a SPARQL ASK over the committed store, which has no
+  stable serialisation to hash, and inventing one that moved with unrelated facts
+  would make every verdict spuriously stale. That makes this binding narrower
+  than hank's, which hashes the edit text it genuinely saw — and saying so is
+  better than implying a guarantee the shape of the evidence cannot support.
 - **Q-SARC-CLASS** ☑ Complete the constraint object in `shapes/governance.ttl`:
   `constraintClass ∈ {hard,soft,escalation}`, `verificationPoint ∈
   {PAG,ATM,PAA,tool_layer,policy_layer}`, `hostedAtLayer` (no `"prompt"` value —

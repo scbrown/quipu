@@ -150,6 +150,9 @@ impl Store {
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
                 crate::metrics::metrics().observe_write(datums.len() as u64);
+                // Q-VERDICT-PERSIST: outside the savepoint, so the accept case
+                // and the denial case below record identically.
+                self.flush_pending_verdicts(timestamp);
                 Ok(tx_id)
             }
             Err(e) => {
@@ -158,6 +161,10 @@ impl Store {
                 let _ = self
                     .conn
                     .execute_batch("ROLLBACK TO quipu_transact; RELEASE quipu_transact");
+                // AFTER the rollback, deliberately. The verdict of a denial is
+                // the one worth keeping — an accepted write leaves its own
+                // evidence in the facts it wrote, a refused one leaves nothing.
+                self.flush_pending_verdicts(timestamp);
                 Err(e)
             }
         }

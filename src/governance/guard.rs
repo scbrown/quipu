@@ -90,7 +90,13 @@ impl PolicyRegistry {
     /// Evaluate the applicable action-boundary policies for a write. Returns
     /// `Err(PolicyDenied)` on the first blocking policy whose claim is
     /// unsatisfied for a touched target; otherwise `Ok(())`.
-    pub fn evaluate_write(&self, store: &Store, datums: &[Datum], graph: i64) -> Result<()> {
+    pub fn evaluate_write(
+        &self,
+        store: &Store,
+        datums: &[Datum],
+        graph: i64,
+        verdicts: &mut Vec<super::verdict_facts::PendingVerdict>,
+    ) -> Result<()> {
         if self.by_type.is_empty() {
             return Ok(());
         }
@@ -121,7 +127,7 @@ impl PolicyRegistry {
                     }
                 };
                 for policy in policies {
-                    evaluate_one(store, &eiri, policy)?;
+                    evaluate_one(store, &eiri, policy, verdicts)?;
                 }
             }
         }
@@ -171,26 +177,45 @@ fn effect_blocks(effect: &str) -> bool {
 
 /// Evaluate a single policy against a single target entity. A non-blocking
 /// effect runs no ASK (nothing to enforce at the write gate).
-fn evaluate_one(store: &Store, entity_iri: &str, policy: &CompiledPolicy) -> Result<()> {
+fn evaluate_one(
+    store: &Store,
+    entity_iri: &str,
+    policy: &CompiledPolicy,
+    verdicts: &mut Vec<super::verdict_facts::PendingVerdict>,
+) -> Result<()> {
     if !effect_blocks(&policy.effect) {
         return Ok(());
     }
     guard_iri(entity_iri)?;
     let target = format!("<{entity_iri}>");
 
+    let mut stage = |outcome: &str| {
+        verdicts.push(super::verdict_facts::PendingVerdict {
+            predicate_id: policy.policy_iri.clone(),
+            target_ref: entity_iri.to_string(),
+            outcome: outcome.to_string(),
+        });
+    };
+
     // Evidence probe: if the evidence does not exist yet the outcome is
     // `unknown` (distinct from unsatisfied) and the write is NOT blocked.
     if let Some(probe) = &policy.evidence_probe {
         let bound_probe = probe.replace("$target", &target);
         if !run_ask(store, &bound_probe)? {
+            // Recorded as `unknown`, not skipped. "No evidence yet" and "never
+            // evaluated" are different facts, and an absent verdict makes the
+            // gate look as though the policy did not apply.
+            stage("unknown");
             return Ok(());
         }
     }
 
     let bound_claim = policy.claim.replace("$target", &target);
     if run_ask(store, &bound_claim)? {
+        stage("satisfied");
         Ok(())
     } else {
+        stage("unsatisfied");
         Err(Error::PolicyDenied(format!(
             "'{entity_iri}' blocked by policy '{}' (effect '{}', target type '{}'): claim unsatisfied",
             policy.policy_iri, policy.effect, policy.target_type_iri
