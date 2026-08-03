@@ -5149,7 +5149,7 @@ dependencies = [
 
 [[package]]
 name = "quipu"
-version = "0.3.17"
+version = "0.3.18"
 dependencies = [
  "arrow-array",
  "arrow-schema",
