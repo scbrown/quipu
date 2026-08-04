@@ -13,16 +13,27 @@
 //!   distinct within each atom.
 //!
 //! Anything else (3+ atoms, negation, unary predicates, repeated variables
-//! inside a body atom, constants in body atoms, two-atom bodies without a
-//! shared variable) is rejected up-front with [`ReasonerError::Unsupported`]
-//! so the evaluator never sees it.
+//! inside a body atom, two-atom bodies without a shared variable) is rejected
+//! up-front with [`ReasonerError::Unsupported`] so the evaluator never sees it.
 //!
 //! Constants in the **head** are allowed — they compile down to fixed slot
 //! values — but must be IRIs that already exist in the term dictionary.
+//!
+//! Constants in a **body** atom are allowed too, and compile to a *selection*:
+//! the column is pinned to that IRI's term id and non-matching tuples are
+//! dropped before the head is projected (aegis-jgxas). This is what makes
+//! `rdf:type(?x, <GitCommit>) :- rdf:type(?x, <Commit>)` — class equivalence
+//! as a live Datalog rule — expressible.
+//!
+//! A body constant that has never been interned makes the rule *unsatisfiable*
+//! rather than an error: no fact can reference a term that does not exist, so
+//! the correct derivation is the empty set. That is deliberately NOT the head's
+//! behaviour, where an unknown IRI means the rule could never write anything
+//! meaningful and is a genuine authoring mistake.
 
 use std::collections::BTreeMap;
 
-use datafrog::{Iteration, Variable};
+use datafrog::{Iteration, PrefixFilter, Variable};
 
 use super::ast::{Atom, BodyAtom, Rule, Term};
 use super::{ReasonerError, Result};
@@ -37,18 +48,42 @@ pub(crate) struct Plan {
     head_pred: String,
     /// Projection from body bindings to each of the head's two slots.
     head_plan: [HeadSlot; 2],
+    /// A body constant referenced an IRI that has never been interned, so
+    /// no fact can match and the rule derives the empty set. Kept as a plan
+    /// (rather than an error) so the rest of the stratum still runs.
+    unsatisfiable: bool,
+}
+
+/// A body-atom column pinned to a constant term id: `(column, term_id)`.
+type Filter = (usize, i64);
+
+/// A variable occupying a body-atom column: `(name, column)`.
+type Binding = (String, usize);
+
+/// A body atom split into the columns that bind and the columns that filter.
+type SplitAtom = (Vec<Binding>, Vec<Filter>);
+
+/// Does `row` satisfy every pinned column?
+fn passes(filters: &[Filter], row: &[i64; 2]) -> bool {
+    filters.iter().all(|&(col, id)| row[col] == id)
 }
 
 enum Shape {
     OneAtom(OneAtomPlan),
-    TwoAtom(TwoAtomPlan),
+    // Boxed: a two-atom plan carries two datafrog Variables and four Vecs,
+    // which would otherwise make every `Shape` as large as its widest arm.
+    TwoAtom(Box<TwoAtomPlan>),
 }
 
 struct OneAtomPlan {
     input: String,
-    /// Variable name → column index in the body atom. Always size 2 with
-    /// distinct keys (a body like `p(?x, ?x)` is rejected at compile time).
-    binding: [(String, usize); 2],
+    /// Variable name → column index in the body atom. Holds one entry per
+    /// column that carries a *variable*; a column carrying a constant
+    /// contributes a `filters` entry instead. Names are distinct (a body
+    /// like `p(?x, ?x)` is rejected at compile time).
+    binding: Vec<Binding>,
+    /// Columns pinned to a constant.
+    filters: Vec<Filter>,
 }
 
 struct TwoAtomPlan {
@@ -60,10 +95,15 @@ struct TwoAtomPlan {
     right_join_col: usize,
     /// Name of the shared join variable.
     join_var: String,
-    /// Variable name at the left atom's non-join column.
-    left_nonjoin_var: String,
-    /// Variable name at the right atom's non-join column.
-    right_nonjoin_var: String,
+    /// Variable at the left atom's non-join column, or `None` when that
+    /// column carries a constant (in which case it is in `left_filters`).
+    left_nonjoin_var: Option<String>,
+    /// Variable at the right atom's non-join column, or `None` as above.
+    right_nonjoin_var: Option<String>,
+    /// Columns of the left atom pinned to a constant.
+    left_filters: Vec<Filter>,
+    /// Columns of the right atom pinned to a constant.
+    right_filters: Vec<Filter>,
     /// Pre-allocated keyed view of the left atom — rebuilt each tick so
     /// incremental updates to `left_pred` flow through.
     left_keyed: Variable<(i64, i64)>,
@@ -97,21 +137,36 @@ pub(crate) fn compile_rule(
             return Err(unsupported(rule, "non-binary body atom"));
         }
         for term in &atom.args {
-            if !matches!(term, Term::Var(_)) {
-                return Err(unsupported(rule, "constant argument in body atom"));
+            if matches!(term, Term::Str(_)) {
+                // Facts are `Value::Ref` triples; a literal cannot match one.
+                return Err(unsupported(rule, "string constant in body atom"));
+            }
+        }
+    }
+
+    // Resolve every body constant up-front. A miss means "no such term
+    // exists, so nothing can match" — recorded, not raised.
+    let mut unsatisfiable = false;
+    for atom in &body_atoms {
+        for term in &atom.args {
+            if let Term::Iri(iri) = term
+                && !const_ids.contains_key(iri)
+            {
+                unsatisfiable = true;
             }
         }
     }
 
     let shape = match body_atoms.len() {
-        1 => Shape::OneAtom(plan_one_atom(rule, body_atoms[0])?),
-        2 => Shape::TwoAtom(plan_two_atom(
+        1 => Shape::OneAtom(plan_one_atom(rule, body_atoms[0], const_ids)?),
+        2 => Shape::TwoAtom(Box::new(plan_two_atom(
             iteration,
             rule,
             body_atoms[0],
             body_atoms[1],
+            const_ids,
             vars,
-        )?),
+        )?)),
         _ => return Err(unsupported(rule, "body with more than 2 atoms")),
     };
 
@@ -124,7 +179,32 @@ pub(crate) fn compile_rule(
         shape,
         head_pred: rule.head.predicate.clone(),
         head_plan,
+        unsatisfiable,
     })
+}
+
+/// Split a body atom's two columns into variable bindings and constant
+/// filters. Missing constants resolve to `i64::MIN` — never a real term id,
+/// so the filter cannot match; the `unsatisfiable` flag is what actually
+/// short-circuits, this is only belt-and-braces.
+fn split_columns(rule: &Rule, atom: &Atom, const_ids: &BTreeMap<String, i64>) -> Result<SplitAtom> {
+    let mut binding: Vec<Binding> = Vec::new();
+    let mut filters: Vec<Filter> = Vec::new();
+    for (col, term) in atom.args.iter().enumerate() {
+        match term {
+            Term::Var(name) => {
+                if binding.iter().any(|(n, _)| n == name) {
+                    return Err(unsupported(rule, "repeated variable in a body atom"));
+                }
+                binding.push((name.clone(), col));
+            }
+            Term::Iri(iri) => {
+                filters.push((col, const_ids.get(iri).copied().unwrap_or(i64::MIN)));
+            }
+            Term::Str(_) => return Err(unsupported(rule, "string constant in body atom")),
+        }
+    }
+    Ok((binding, filters))
 }
 
 fn positive_body(rule: &Rule) -> Result<Vec<&Atom>> {
@@ -138,15 +218,16 @@ fn positive_body(rule: &Rule) -> Result<Vec<&Atom>> {
     Ok(out)
 }
 
-fn plan_one_atom(rule: &Rule, atom: &Atom) -> Result<OneAtomPlan> {
-    let v0 = var_name(rule, &atom.args[0])?;
-    let v1 = var_name(rule, &atom.args[1])?;
-    if v0 == v1 {
-        return Err(unsupported(rule, "repeated variable in a body atom"));
-    }
+fn plan_one_atom(
+    rule: &Rule,
+    atom: &Atom,
+    const_ids: &BTreeMap<String, i64>,
+) -> Result<OneAtomPlan> {
+    let (binding, filters) = split_columns(rule, atom, const_ids)?;
     Ok(OneAtomPlan {
         input: atom.predicate.clone(),
-        binding: [(v0.to_string(), 0), (v1.to_string(), 1)],
+        binding,
+        filters,
     })
 }
 
@@ -155,22 +236,20 @@ fn plan_two_atom(
     rule: &Rule,
     left: &Atom,
     right: &Atom,
+    const_ids: &BTreeMap<String, i64>,
     vars: &BTreeMap<String, Variable<(i64, i64)>>,
 ) -> Result<TwoAtomPlan> {
-    let l0 = var_name(rule, &left.args[0])?;
-    let l1 = var_name(rule, &left.args[1])?;
-    let r0 = var_name(rule, &right.args[0])?;
-    let r1 = var_name(rule, &right.args[1])?;
-    if l0 == l1 || r0 == r1 {
-        return Err(unsupported(rule, "repeated variable inside a body atom"));
-    }
+    let (left_binding, left_filters) = split_columns(rule, left, const_ids)?;
+    let (right_binding, right_filters) = split_columns(rule, right, const_ids)?;
 
-    // Exactly one of {l0,l1} must match exactly one of {r0,r1}.
+    // Exactly one variable must be shared between the two atoms. Columns
+    // carrying constants are selections, not join keys, so they take no
+    // part in this search.
     let mut matches = Vec::new();
-    for (li, lname) in [l0, l1].iter().enumerate() {
-        for (ri, rname) in [r0, r1].iter().enumerate() {
+    for (lname, li) in &left_binding {
+        for (rname, ri) in &right_binding {
             if lname == rname {
-                matches.push((li, ri, (*lname).to_string()));
+                matches.push((*li, *ri, lname.clone()));
             }
         }
     }
@@ -181,8 +260,14 @@ fn plan_two_atom(
         ));
     }
     let (left_join_col, right_join_col, join_var) = matches.into_iter().next().unwrap();
-    let left_nonjoin_var = if left_join_col == 0 { l1 } else { l0 }.to_string();
-    let right_nonjoin_var = if right_join_col == 0 { r1 } else { r0 }.to_string();
+    let nonjoin = |binding: &[Binding], join_col: usize| -> Option<String> {
+        binding
+            .iter()
+            .find(|(_, col)| *col != join_col)
+            .map(|(name, _)| name.clone())
+    };
+    let left_nonjoin_var = nonjoin(&left_binding, left_join_col);
+    let right_nonjoin_var = nonjoin(&right_binding, right_join_col);
 
     if !vars.contains_key(&left.predicate) || !vars.contains_key(&right.predicate) {
         return Err(ReasonerError::Unsupported {
@@ -208,16 +293,11 @@ fn plan_two_atom(
         join_var,
         left_nonjoin_var,
         right_nonjoin_var,
+        left_filters,
+        right_filters,
         left_keyed,
         right_keyed,
     })
-}
-
-fn var_name<'a>(rule: &Rule, term: &'a Term) -> Result<&'a str> {
-    match term {
-        Term::Var(name) => Ok(name.as_str()),
-        Term::Iri(_) | Term::Str(_) => Err(unsupported(rule, "constant argument in body atom")),
-    }
 }
 
 fn head_slot(rule: &Rule, term: &Term, const_ids: &BTreeMap<String, i64>) -> Result<HeadSlot> {
@@ -237,6 +317,10 @@ impl Plan {
     /// Advance this rule by one iteration tick, writing any new tuples
     /// into the head predicate's variable.
     pub(crate) fn step(&self, vars: &BTreeMap<String, Variable<(i64, i64)>>) {
+        // A body constant naming an un-interned IRI can match nothing.
+        if self.unsatisfiable {
+            return;
+        }
         let head = vars
             .get(&self.head_pred)
             .expect("head variable must have been allocated before compile");
@@ -257,9 +341,21 @@ impl Plan {
         };
         let head_plan = self.head_plan.clone();
         let binding = plan.binding.clone();
-        head.from_map(input, move |&(c0, c1)| {
-            resolve_head(&head_plan, &binding, &[c0, c1])
-        });
+        if plan.filters.is_empty() {
+            head.from_map(input, move |&(c0, c1)| {
+                resolve_head(&head_plan, &binding, &[c0, c1])
+            });
+            return;
+        }
+        // Constants in the body are a selection: drop tuples whose pinned
+        // columns disagree BEFORE projecting the head. Skipping this is the
+        // aegis-jgxas over-derivation — every typed entity would match.
+        let filters = plan.filters.clone();
+        head.from_leapjoin(
+            input,
+            PrefixFilter::from(move |&(c0, c1): &(i64, i64)| passes(&filters, &[c0, c1])),
+            move |&(c0, c1), &()| resolve_head(&head_plan, &binding, &[c0, c1]),
+        );
     }
 
     fn step_two_atom(
@@ -275,22 +371,20 @@ impl Plan {
             return;
         };
 
-        let left_join_col = plan.left_join_col;
-        plan.left_keyed.from_map(left_src, move |&(c0, c1)| {
-            if left_join_col == 0 {
-                (c0, c1)
-            } else {
-                (c1, c0)
-            }
-        });
-        let right_join_col = plan.right_join_col;
-        plan.right_keyed.from_map(right_src, move |&(c0, c1)| {
-            if right_join_col == 0 {
-                (c0, c1)
-            } else {
-                (c1, c0)
-            }
-        });
+        // Apply each atom's constant selection while keying it for the join,
+        // so non-matching tuples never reach `from_join`.
+        key_filtered(
+            &plan.left_keyed,
+            left_src,
+            plan.left_join_col,
+            &plan.left_filters,
+        );
+        key_filtered(
+            &plan.right_keyed,
+            right_src,
+            plan.right_join_col,
+            &plan.right_filters,
+        );
 
         let head_plan = self.head_plan.clone();
         let join_var = plan.join_var.clone();
@@ -301,15 +395,39 @@ impl Plan {
             &plan.right_keyed,
             move |&key, &l_val, &r_val| {
                 // A stable 3-slot row: [join_key, left_nonjoin, right_nonjoin].
-                let binding = [
-                    (join_var.clone(), 0_usize),
-                    (left_nonjoin_var.clone(), 1),
-                    (right_nonjoin_var.clone(), 2),
-                ];
+                // A non-join column holding a constant contributes no binding.
+                let mut binding: Vec<Binding> = vec![(join_var.clone(), 0_usize)];
+                if let Some(v) = &left_nonjoin_var {
+                    binding.push((v.clone(), 1));
+                }
+                if let Some(v) = &right_nonjoin_var {
+                    binding.push((v.clone(), 2));
+                }
                 resolve_head(&head_plan, &binding, &[key, l_val, r_val])
             },
         );
     }
+}
+
+/// Rebuild `keyed` from `src` as `(join_column, other_column)`, dropping any
+/// tuple that fails the atom's constant selection.
+fn key_filtered(
+    keyed: &Variable<(i64, i64)>,
+    src: &Variable<(i64, i64)>,
+    join_col: usize,
+    filters: &[Filter],
+) {
+    let rekey = move |c0: i64, c1: i64| if join_col == 0 { (c0, c1) } else { (c1, c0) };
+    if filters.is_empty() {
+        keyed.from_map(src, move |&(c0, c1)| rekey(c0, c1));
+        return;
+    }
+    let filters = filters.to_vec();
+    keyed.from_leapjoin(
+        src,
+        PrefixFilter::from(move |&(c0, c1): &(i64, i64)| passes(&filters, &[c0, c1])),
+        move |&(c0, c1), &()| rekey(c0, c1),
+    );
 }
 
 fn resolve_head(head_plan: &[HeadSlot; 2], binding: &[(String, usize)], row: &[i64]) -> (i64, i64) {

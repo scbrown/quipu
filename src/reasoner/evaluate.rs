@@ -211,7 +211,9 @@ fn project_rule_body(rule: &super::ast::Rule, world: &World, out: &mut BTreeSet<
             };
             for &(c0, c1) in tuples {
                 let mut row: BTreeMap<&str, i64> = BTreeMap::new();
-                bind_atom(a, &[c0, c1], &mut row);
+                if !bind_atom(a, &[c0, c1], world, &mut row) {
+                    continue;
+                }
                 if let Some(t) = head_tuple(&row) {
                     out.insert(t);
                 }
@@ -227,10 +229,12 @@ fn project_rule_body(rule: &super::ast::Rule, world: &World, out: &mut BTreeSet<
             };
             for &(lc0, lc1) in l_tuples {
                 let mut row_l: BTreeMap<&str, i64> = BTreeMap::new();
-                bind_atom(l, &[lc0, lc1], &mut row_l);
+                if !bind_atom(l, &[lc0, lc1], world, &mut row_l) {
+                    continue;
+                }
                 for &(rc0, rc1) in r_tuples {
                     let mut row = row_l.clone();
-                    if !bind_atom_with_check(r, &[rc0, rc1], &mut row) {
+                    if !bind_atom(r, &[rc0, rc1], world, &mut row) {
                         continue;
                     }
                     if let Some(t) = head_tuple(&row) {
@@ -243,32 +247,38 @@ fn project_rule_body(rule: &super::ast::Rule, world: &World, out: &mut BTreeSet<
     }
 }
 
-fn bind_atom<'a>(atom: &'a super::ast::Atom, row: &[i64], out: &mut BTreeMap<&'a str, i64>) {
-    use super::ast::Term;
-    for (term, &val) in atom.args.iter().zip(row.iter()) {
-        if let Term::Var(name) = term {
-            out.insert(name.as_str(), val);
-        }
-    }
-}
-
-/// Like `bind_atom` but fails (returns false) if an existing binding for
-/// the same variable disagrees with the new value. Used for the second
-/// atom of a two-atom join where the shared variable must be consistent.
-fn bind_atom_with_check<'a>(
+/// Unify one body atom against one stored tuple.
+///
+/// Returns false — rejecting the tuple — when a constant column disagrees
+/// with the fact, or when an already-bound variable would have to take a
+/// second value (the shared-variable check for a two-atom join).
+///
+/// The constant arm is aegis-jgxas: this function used to bind variables and
+/// *silently skip* `Term::Iri`, so `rdf:type(?x, <Commit>)` matched every
+/// typed entity in the graph and the reactive path derived `GitCommit` for
+/// all of them. A constant column is a filter, and an unresolvable constant
+/// matches nothing rather than matching everything.
+fn bind_atom<'a>(
     atom: &'a super::ast::Atom,
     row: &[i64],
+    world: &World,
     out: &mut BTreeMap<&'a str, i64>,
 ) -> bool {
     use super::ast::Term;
     for (term, &val) in atom.args.iter().zip(row.iter()) {
-        if let Term::Var(name) = term {
-            match out.get(name.as_str()) {
+        match term {
+            Term::Var(name) => match out.get(name.as_str()) {
                 Some(existing) if *existing != val => return false,
                 _ => {
                     out.insert(name.as_str(), val);
                 }
-            }
+            },
+            Term::Iri(iri) => match world.const_ids.get(iri) {
+                Some(&id) if id == val => {}
+                _ => return false,
+            },
+            // Facts are `Value::Ref` triples; a literal cannot match one.
+            Term::Str(_) => return false,
         }
     }
     true
@@ -325,13 +335,21 @@ impl World {
             }
         }
 
-        // Intern constants used in rule heads so we can emit `Value::Ref`
-        // for them. Constants that don't exist yet are fine for compilation
-        // but any rule that references them will be rejected at compile
-        // time — see `head_slot` in `compile.rs`.
+        // Resolve constants used in rule heads so we can emit `Value::Ref`
+        // for them, and in rule BODIES so a constant column can be matched
+        // against stored facts. Constants that don't exist yet are simply
+        // absent: in the head that is a compile-time rejection
+        // (`head_slot`), in the body it makes the rule derive nothing
+        // (`unsatisfiable`) — see `compile.rs`.
+        //
+        // Body constants were omitted here until aegis-jgxas. Without them
+        // `project_rule_body` had no term id to compare against and silently
+        // ignored the constant, matching every tuple of the predicate.
         let mut const_ids: BTreeMap<String, i64> = BTreeMap::new();
         for rule in &ruleset.rules {
-            for term in &rule.head.args {
+            let head_terms = rule.head.args.iter();
+            let body_terms = rule.body.iter().flat_map(|b| b.atom().args.iter());
+            for term in head_terms.chain(body_terms) {
                 if let super::ast::Term::Iri(iri) = term
                     && !const_ids.contains_key(iri)
                     && let Some(id) = store.lookup(iri)?

@@ -382,3 +382,81 @@ ex:r1 a rule:Rule ;
         "unrelated predicate should not trigger observer"
     );
 }
+
+// ── Constants in body atoms, reactive path (aegis-jgxas) ──────
+
+const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const COMMIT: &str = "http://aegis.gastown.local/ontology/Commit";
+const GIT_COMMIT: &str = "http://aegis.gastown.local/ontology/GitCommit";
+
+fn assert_type(store: &mut Store, subject: &str, class: &str) {
+    let s = store.intern(subject).unwrap();
+    let p = store.intern(RDF_TYPE).unwrap();
+    let o = store.intern(class).unwrap();
+    store
+        .transact(
+            &[Datum {
+                entity: s,
+                attribute: p,
+                value: Value::Ref(o),
+                valid_from: TS.to_string(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            TS,
+            Some("test"),
+            Some("base"),
+        )
+        .unwrap();
+}
+
+#[test]
+fn reactive_type_atom_rule_derives_only_the_matching_class() {
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:eq a rule:Rule ;
+    rule:id "EQ" ;
+    rule:head "<{RDF_TYPE}>(?x, <{GIT_COMMIT}>)" ;
+    rule:body "<{RDF_TYPE}>(?x, <{COMMIT}>)" .
+"#
+    );
+    let mut store = setup_store_with_observer(&ttl);
+
+    // Intern GitCommit first so the head constant resolves.
+    assert_type(&mut store, "ex:g1", GIT_COMMIT);
+    // A Person — must never be derived as a GitCommit.
+    assert_type(&mut store, "ex:p1", "http://ex/Person");
+    // The one entity that SHOULD gain GitCommit.
+    assert_type(&mut store, "ex:c1", COMMIT);
+
+    let git_commit_id = store.lookup(GIT_COMMIT).unwrap().unwrap();
+    let rdf_type_id = store.lookup(RDF_TYPE).unwrap().unwrap();
+    let p1 = store.lookup("ex:p1").unwrap().unwrap();
+    let c1 = store.lookup("ex:c1").unwrap().unwrap();
+
+    let as_git_commit: Vec<i64> = store
+        .current_facts()
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == rdf_type_id && f.value == Value::Ref(git_commit_id))
+        .map(|f| f.entity)
+        .collect();
+
+    assert!(
+        as_git_commit.contains(&c1),
+        "ex:c1 is a Commit and must gain GitCommit reactively"
+    );
+    assert!(
+        !as_git_commit.contains(&p1),
+        "ex:p1 is a Person and must NOT be derived as a GitCommit — \
+         the reactive path ignored the body constant"
+    );
+    assert_eq!(
+        count_derived(&store, RDF_TYPE, "reasoner:EQ"),
+        1,
+        "exactly one derivation expected"
+    );
+}
