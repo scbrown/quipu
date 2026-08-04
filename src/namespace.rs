@@ -19,6 +19,8 @@ pub const RDFS: &str = "http://www.w3.org/2000/01/rdf-schema#";
 pub const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
 pub const PROV: &str = "http://www.w3.org/ns/prov#";
 pub const SHACL: &str = "http://www.w3.org/ns/shacl#";
+pub const OWL: &str = "http://www.w3.org/2002/07/owl#";
+pub const SKOS: &str = "http://www.w3.org/2004/02/skos/core#";
 
 // ── Bobbin namespace ──────────────────────────────────────────
 

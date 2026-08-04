@@ -820,3 +820,124 @@ fn episode_graph_field_writes_to_named_graph_not_root() {
         .unwrap();
     assert!(y_in_root > 0, "a no-graph episode must write ROOT (g=0)");
 }
+
+#[test]
+fn prefixed_edge_relation_is_emitted_verbatim_not_forced_into_aegis() {
+    // Regression guard for aegis-kuotp. /episode used to force EVERY relation
+    // into aegis: and then sanitize it, so `rdfs:subClassOf` was stored as
+    // `aegis:rdfs_subClassOf` — a predicate that resembles the intended one,
+    // matches nothing, and is inert — behind HTTP 200 with a healthy count.
+    let ep = parse_episode(
+        r#"{
+        "name": "prefix-test",
+        "nodes": [
+            {"name": "child", "type": "FailureMode"},
+            {"name": "parent", "type": "FailureMode"}
+        ],
+        "edges": [
+            {"source": "child", "target": "parent", "relation": "rdfs:subClassOf"},
+            {"source": "child", "target": "parent", "relation": "owl:sameAs"},
+            {"source": "child", "target": "parent", "relation": "related_to"}
+        ]
+    }"#,
+    );
+
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+
+    assert!(
+        ttl.contains("aegis:child rdfs:subClassOf aegis:parent"),
+        "prefixed relation must be emitted verbatim:\n{ttl}"
+    );
+    assert!(
+        ttl.contains("aegis:child owl:sameAs aegis:parent"),
+        "owl: relation must be emitted verbatim (a real instance existed in the \
+         live graph as the inert aegis:owl_sameAs):\n{ttl}"
+    );
+    // The exact mangled forms that were the defect.
+    assert!(
+        !ttl.contains("aegis:rdfs_subClassOf"),
+        "the mangled predicate must be gone:\n{ttl}"
+    );
+    assert!(
+        !ttl.contains("aegis:owl_sameAs"),
+        "the mangled predicate must be gone:\n{ttl}"
+    );
+    // A bare relation still lands in the aegis: domain vocabulary, unchanged.
+    assert!(
+        ttl.contains("aegis:child aegis:related_to aegis:parent"),
+        "bare relations must keep working:\n{ttl}"
+    );
+    // Every prefix the resolver accepts must actually be declared, or the
+    // emitted Turtle does not parse.
+    assert!(ttl.contains("@prefix owl:"), "owl: undeclared:\n{ttl}");
+    assert!(ttl.contains("@prefix skos:"), "skos: undeclared:\n{ttl}");
+    assert!(ttl.contains("@prefix sh:"), "sh: undeclared:\n{ttl}");
+}
+
+#[test]
+fn full_iri_edge_relation_is_emitted_verbatim() {
+    let ep = parse_episode(
+        r#"{
+        "name": "iri-test",
+        "nodes": [{"name": "a", "type": "Thing"}, {"name": "b", "type": "Thing"}],
+        "edges": [
+            {"source": "a", "target": "b", "relation": "<http://example.org/ns#custom>"}
+        ]
+    }"#,
+    );
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    assert!(
+        ttl.contains("aegis:a <http://example.org/ns#custom> aegis:b"),
+        "full-IRI relation must be emitted verbatim:\n{ttl}"
+    );
+}
+
+#[test]
+fn unrepresentable_edge_relation_is_refused_not_silently_rewritten() {
+    // The whole point of aegis-kuotp: a predicate we cannot represent faithfully
+    // must produce an ERROR that names the right path, never a 200 plus a dead
+    // triple. Each case below is one that used to return success.
+    let mut store = crate::store::Store::open_in_memory().unwrap();
+
+    // (a) undeclared prefix -> refused, and the error must name /set.
+    let ep = parse_episode(
+        r#"{
+        "name": "bad-prefix",
+        "nodes": [{"name": "a", "type": "Thing"}, {"name": "b", "type": "Thing"}],
+        "edges": [{"source": "a", "target": "b", "relation": "skynet:controls"}]
+    }"#,
+    );
+    let err = ingest_episode(&mut store, &ep, "2026-08-04T00:00:00Z", TEST_BASE_NS)
+        .expect_err("an undeclared prefix must be refused, not stored mangled");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("/set"),
+        "the error must name the write path that DOES take a foreign IRI: {msg}"
+    );
+    assert!(
+        msg.contains("skynet"),
+        "the error must name the offending prefix: {msg}"
+    );
+
+    // (b) a relation that would be silently rewritten -> refused.
+    let ep = parse_episode(
+        r#"{
+        "name": "bad-chars",
+        "nodes": [{"name": "a", "type": "Thing"}, {"name": "b", "type": "Thing"}],
+        "edges": [{"source": "a", "target": "b", "relation": "runs on"}]
+    }"#,
+    );
+    let err = ingest_episode(&mut store, &ep, "2026-08-04T00:00:00Z", TEST_BASE_NS)
+        .expect_err("a relation that cannot round-trip must be refused");
+    assert!(
+        err.to_string().contains("runs_on"),
+        "the error must teach the working form: {err}"
+    );
+
+    // (c) NOTHING from a refused episode may land — the gate runs before the
+    // write, so the well-formed nodes beside the bad edge must not be stored.
+    assert!(
+        store.lookup(&format!("{TEST_BASE_NS}a")).unwrap().is_none(),
+        "a refused episode must write nothing at all"
+    );
+}

@@ -201,6 +201,16 @@ pub fn ingest_episode(
         }
     }
 
+    // Every edge relation must be representable without being rewritten. Before
+    // this check, a foreign-vocabulary predicate was forced into aegis: and
+    // sanitized — `rdfs:subClassOf` stored as `aegis:rdfs_subClassOf`, inert,
+    // behind an HTTP 200 with a healthy count (aegis-kuotp). Validate the whole
+    // episode before any write, same as the untyped-node gate above, so a bad
+    // edge fails loudly and specifically instead of landing as a dead triple.
+    for edge in &episode.edges {
+        resolve_edge_predicate(&edge.relation)?;
+    }
+
     let turtle = episode_to_turtle(episode, base_ns, &new_hash);
 
     // SHACL validation gates, run before any write — and before the idempotency
@@ -456,7 +466,12 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
     ttl.push_str(&format!("@prefix rdfs: <{}> .\n", namespace::RDFS));
     ttl.push_str(&format!("@prefix prov: <{}> .\n", namespace::PROV));
     ttl.push_str(&format!("@prefix quipu: <{}> .\n", namespace::QUIPU));
-    ttl.push_str(&format!("@prefix xsd: <{}> .\n\n", namespace::XSD));
+    ttl.push_str(&format!("@prefix xsd: <{}> .\n", namespace::XSD));
+    // Declared so an edge relation may name them verbatim (aegis-kuotp). Keep in
+    // lockstep with KNOWN_PREFIXES.
+    ttl.push_str(&format!("@prefix owl: <{}> .\n", namespace::OWL));
+    ttl.push_str(&format!("@prefix skos: <{}> .\n", namespace::SKOS));
+    ttl.push_str(&format!("@prefix sh: <{}> .\n\n", namespace::SHACL));
 
     let ep_local = sanitize_iri_local(&episode.name);
 
@@ -553,8 +568,12 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
     for edge in &episode.edges {
         let src = sanitize_iri_local(&edge.source);
         let tgt = sanitize_iri_local(&edge.target);
-        let rel = sanitize_iri_local(&edge.relation);
-        ttl.push_str(&format!("aegis:{src} aegis:{rel} aegis:{tgt} .\n"));
+        // Validated in ingest_episode_with_resolution before we get here; the
+        // fallback keeps this function infallible and can only be reached by a
+        // caller that generates Turtle without that gate.
+        let rel = resolve_edge_predicate(&edge.relation)
+            .unwrap_or_else(|_| format!("aegis:{}", sanitize_iri_local(&edge.relation)));
+        ttl.push_str(&format!("aegis:{src} {rel} aegis:{tgt} .\n"));
 
         // Optional confidence qualifier (hq-cug6). The bare triple above is always
         // asserted (back-compat); when a confidence is supplied we additionally
@@ -567,7 +586,7 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
             let stmt_hash = format!("{:016x}", fnv1a_64(format!("{src}|{rel}|{tgt}").as_bytes()));
             ttl.push_str(&format!("aegis:stmt_{stmt_hash} a rdf:Statement ;\n"));
             ttl.push_str(&format!("    rdf:subject aegis:{src} ;\n"));
-            ttl.push_str(&format!("    rdf:predicate aegis:{rel} ;\n"));
+            ttl.push_str(&format!("    rdf:predicate {rel} ;\n"));
             ttl.push_str(&format!("    rdf:object aegis:{tgt} ;\n"));
             ttl.push_str(&format!("    quipu:confidence {literal} .\n"));
         }
@@ -587,6 +606,95 @@ fn confidence_literal(value: &serde_json::Value) -> Option<String> {
         serde_json::Value::Number(n) => n.as_f64().map(|f| format!("\"{f}\"^^xsd:decimal")),
         _ => None,
     }
+}
+
+/// Prefixes that `episode_to_turtle` declares, and so may appear verbatim in an
+/// edge `relation`. Keep in lockstep with the `@prefix` block in
+/// `episode_to_turtle` — a prefix resolved here but not declared there emits
+/// Turtle that fails to parse.
+const KNOWN_PREFIXES: &[(&str, &str)] = &[
+    ("rdf", namespace::RDF),
+    ("rdfs", namespace::RDFS),
+    ("owl", namespace::OWL),
+    ("skos", namespace::SKOS),
+    ("prov", namespace::PROV),
+    ("quipu", namespace::QUIPU),
+    ("xsd", namespace::XSD),
+    ("sh", namespace::SHACL),
+];
+
+/// Resolve an edge `relation` into the Turtle predicate term to emit.
+///
+/// `/episode` used to force EVERY relation into `aegis:` and then sanitize it,
+/// so `rdfs:subClassOf` was stored as `aegis:rdfs_subClassOf` — a predicate that
+/// resembles the intended one, matches nothing, and is inert. The response was
+/// HTTP 200 with a healthy `count`, so nothing signalled the loss (aegis-kuotp).
+/// Measured in the live graph before the fix: `aegis:owl_sameAs` had a real
+/// instance that no `owl:sameAs` query could ever reach.
+///
+/// The policy is: represent the caller's predicate faithfully, or refuse and say
+/// which path to use. Never silently rewrite it.
+///
+/// - `<http://example.org/p>` — a full IRI, emitted verbatim.
+/// - `rdfs:subClassOf` — a declared prefix, emitted verbatim.
+/// - `foo:bar` — an undeclared prefix, REFUSED (naming `/set`).
+/// - `related_to` — no prefix, lands in `aegis:` as before.
+/// - `runs on` — would not round-trip through `sanitize_iri_local`, REFUSED.
+fn resolve_edge_predicate(relation: &str) -> Result<String> {
+    let rel = relation.trim();
+    if rel.is_empty() {
+        return Err(crate::error::Error::InvalidValue(
+            "edge relation is empty — every edge requires a relation.".to_string(),
+        ));
+    }
+
+    // A full IRI, written in angle brackets. Emitted verbatim.
+    if let Some(inner) = rel.strip_prefix('<').and_then(|r| r.strip_suffix('>')) {
+        if inner.contains(['<', '>', '"', ' ']) || !inner.contains(':') {
+            return Err(crate::error::Error::InvalidValue(format!(
+                "edge relation '{relation}' is not a usable IRI."
+            )));
+        }
+        return Ok(format!("<{inner}>"));
+    }
+
+    // A prefixed name. Resolve against the prefixes this writer declares.
+    if let Some((prefix, local)) = rel.split_once(':') {
+        let Some((name, _)) = KNOWN_PREFIXES.iter().find(|(p, _)| *p == prefix) else {
+            let known: Vec<&str> = KNOWN_PREFIXES.iter().map(|(p, _)| *p).collect();
+            return Err(crate::error::Error::InvalidValue(format!(
+                "edge relation '{relation}' uses undeclared prefix '{prefix}:'. \
+                 /episode can emit these prefixes verbatim: {}. For any other \
+                 vocabulary, POST the fact to /set, which takes a full predicate \
+                 IRI — or write the relation as a full IRI in angle brackets, \
+                 e.g. \"<http://example.org/{local}>\" (aegis-kuotp).",
+                known.join(", ")
+            )));
+        };
+        if local.is_empty() || sanitize_iri_local(local) != local {
+            return Err(crate::error::Error::InvalidValue(format!(
+                "edge relation '{relation}' has a local name that is not a valid \
+                 IRI local part. Use only letters, digits, '-', '_' and '.' \
+                 (aegis-kuotp)."
+            )));
+        }
+        return Ok(format!("{name}:{local}"));
+    }
+
+    // A bare name: the aegis: domain vocabulary, as before. It must survive
+    // sanitization unchanged, or we would be silently renaming it — the exact
+    // defect this function exists to stop, one namespace over.
+    if sanitize_iri_local(rel) != rel {
+        return Err(crate::error::Error::InvalidValue(format!(
+            "edge relation '{relation}' cannot be represented as-is — it would be \
+             silently rewritten to '{}'. Use only letters, digits, '-', '_' and \
+             '.' (e.g. '{}'), or a prefixed/full IRI for a foreign vocabulary \
+             (aegis-kuotp).",
+            sanitize_iri_local(rel),
+            sanitize_iri_local(rel)
+        )));
+    }
+    Ok(format!("aegis:{rel}"))
 }
 
 /// Sanitize a name into a valid IRI local name.
