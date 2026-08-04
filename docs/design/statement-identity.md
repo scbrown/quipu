@@ -13,7 +13,8 @@ The short answer is that the node half is already shipped, the edge half is
 half-shipped, and the part that is genuinely missing is not the property-graph
 data model but **per-occurrence statement identity** and **bounded path
 queries**. §6 explains why adopting a second data model would cost more than it
-buys.
+buys; §7 takes the fairer version of the question — a second *query language*
+over the same substrate — and surveys what the Rust ecosystem already provides.
 
 ## 1. What already exists
 
@@ -168,7 +169,135 @@ reachable via statement identity plus bounded paths, inside the one substrate.
 What openCypher would additionally buy is syntax, and syntax is not worth a
 second copy of the governance stack.
 
-## 7. Adjacent risk — namespace governance
+## 7. A second query language is a different question — and a fairer one
+
+§6 argues against a second *store*. The sharper version of the question is
+whether, once Proposals A and B land, Quipu could serve **Gremlin or openCypher
+over the same fact log** — one substrate, one governance path, an extra
+interface. That is not the Neptune trap, and the objection in §6 does not apply
+to it.
+
+The honest answer is that the three features are necessary but are the small
+half of the work, and that the two languages are very far apart in cost.
+
+### 7.1 What the features buy
+
+Statement identity is `Edge.id()`. Edge properties are `Edge.property()`.
+Bounded paths are `repeat().times(n).path()` / `[r:TYPE*1..4]`. These are exactly
+the three things RDF-as-shipped cannot represent, so without them a
+property-graph surface would be misrepresenting the store. With them the data
+model becomes sufficient to host one.
+
+What remains unbuilt is the **evaluator**, and that is where the effort is.
+
+### 7.2 Gremlin is a traversal machine, not a syntax
+
+SPARQL is declarative and set-based: hand the engine a pattern, get bindings.
+Gremlin is imperative and lazy — a chain of steps over a traverser stream, with
+`sideEffect`, `aggregate`, `store`, `cap`, `barrier`, `local`, `branch`,
+`choose`, `union`, `repeat/until/emit`. Most have no SPARQL construct to compile
+down to, so this is a second evaluator beside the existing one, not a frontend
+for it. Underneath sit semantics that are easy to get quietly wrong:
+
+- **Traverser bulking.** Traversers carry bulk counts and `path()` disables
+  bulking. Getting it wrong returns the right answers at the wrong multiplicity.
+- **Mutation steps.** `addV`, `addE`, and `property()` are part of the language.
+  What is the `valid_from` of an `addE`? What does `g.V().property('x', 1)` mean
+  against an append-only log that supersedes rather than overwrites? What does
+  the governance write-gate do with a traversal that mutates mid-stream? Each is
+  a decision, and "reads only" is a far smaller feature than "Gremlin."
+- **VertexProperty meta-properties.** TinkerPop allows properties on properties,
+  and multiple values per key each with its own id. Multi-valued predicates cover
+  part of that; meta-properties with identity are another round of §4.
+- **Element ids.** Gremlin ids are graph-assigned, opaque, and reusable. IRIs are
+  none of those.
+
+### 7.3 Crate landscape (surveyed 2026-08-04)
+
+| Crate | Version | Last release | License | What it actually is |
+|---|---|---|---|---|
+| [`gremlin-client`](https://github.com/wolf4ood/gremlin-rs) | 0.8.10 | 2024-05 | Apache-2.0 | **Client/driver only.** Talks *to* a Gremlin Server. |
+| [`decypher`](https://github.com/sunsided/decypher) | 0.2.0-alpha.6 | 2026-05 | EUPL-1.2 OR MIT OR Apache-2.0 | openCypher **parser** — typed AST, rowan CST, error-resilient. |
+| [`open-cypher`](https://github.com/a-poor/open-cypher) | 0.1.1 | 2022-07 | MIT | pest-based parser, **unmaintained** since 2022. |
+| `ocg` | 0.4.5 | 2026-02 | Apache-2.0 | Claims a full openCypher graph DB, but its stated repository is `github.ibm.com` — **source not publicly reachable**, 223 downloads. Not auditable, so not adoptable here. |
+
+**There is no server-side Gremlin implementation in Rust.** Every Rust Gremlin
+crate is a driver. Serving Gremlin means becoming a TinkerPop *provider* —
+deserializing Gremlin bytecode (drivers send bytecode, not strings) and executing
+it, plus the Gremlin Server WebSocket protocol and GraphSON/Gryo serialization.
+That is the whole traversal machine, from scratch, against a JVM-centric spec.
+
+**openCypher parsing is genuinely mostly done.** `decypher` is active, permissively
+licensed, and parses every construct this design needs. Verified directly against
+0.2.0-alpha.6 rather than taken from the README, which publishes no coverage
+matrix:
+
+```text
+OK  MATCH (n:Person) WHERE n.age > 18 RETURN n.name
+OK  MATCH (a)-[r:calls*1..4]->(b) RETURN b            <- bounded var-length
+OK  MATCH (a)-[r:dependsOn*1..4]->(b) WHERE r.hard = true RETURN b
+OK  MATCH p = (a)-[:calls*1..3]->(b) RETURN p         <- path return
+OK  MATCH p = shortestPath((a)-[:calls*]->(b)) RETURN p
+OK  aggregation / ORDER BY, OPTIONAL MATCH, WITH + UNION, CREATE with edge props
+```
+
+It is a real parser, not a permissive one — garbage, truncated input, and a
+typo'd `RETUR` are all rejected — and the AST carries the bound as a
+`RangeLiteral`, so the `1..4` survives to the evaluator. Caveat: it is
+**alpha**, its AST is explicitly unstable until 0.2.0, and unsupported
+productions surface as `CypherError::Unsupported`. That last property is the
+right failure mode for this codebase, but pinning and a vendoring plan are
+prerequisites, not afterthoughts.
+
+### 7.4 The precedent is already in the repo
+
+Quipu does not write its own SPARQL parser — it uses `spargebra` and implements
+evaluation itself across the ten files in `src/sparql/`. An openCypher surface
+would be the identical split: `decypher` for the front end, a `src/cypher/`
+evaluator of roughly that scale for the back end. That is a real, bounded,
+and estimable piece of work. Gremlin has no equivalent front end to borrow.
+
+### 7.5 The conformance asymmetry decides it
+
+Both languages have a conformance suite, and only one is reachable from Rust.
+
+- TinkerPop's `gremlin-test` structure and process suites are JVM, and running
+  them against a Rust implementation is its own project.
+- The **openCypher TCK is Gherkin/Cucumber**, deliberately language-agnostic. The
+  [`cucumber`](https://github.com/cucumber-rs/cucumber) crate (0.23.0, 2026-04,
+  ~16M downloads) runs Gherkin features natively in Rust.
+
+So an openCypher subset can be *measured* — the docs can state which TCK
+scenarios pass, and CI can hold that line. A Gremlin subset would be an
+unmeasured claim.
+
+### 7.6 The naming discipline applies here
+
+Hank's convention is that a tree-sitter approximation is never presented as
+LSP-precise, and Quipu tags every fact with a tier for the same reason. The same
+rule governs this: a twenty-clause traversal DSL is useful, but calling it
+Gremlin or Cypher sets an expectation measured by a suite it would fail, and the
+failure mode is a user's existing query silently returning wrong results rather
+than erroring. Whatever ships must name the supported subset explicitly and
+reject the rest loudly.
+
+### 7.7 Recommendation
+
+Build Proposals A and B for their own sake — governance needs statement identity
+regardless of any query language, and that case does not depend on this section.
+Then reassess, because the demand may not survive contact: NeuralAmplifier does
+no traversal at all, and Hank's interactive reachability stays in its own
+in-memory graph by design (`hank-spec.md` §9.6). The concrete consumers are the
+promoted code graph and homelab blast radius, and bounded property paths serve
+both without a second language.
+
+If a language still looks worth it: **openCypher, not Gremlin.** It is
+declarative, so it maps onto the evaluation model already here; its
+variable-length patterns carry the depth bound natively; the parser exists; and
+conformance is measurable from Rust. Gremlin is a second evaluator, a wire
+protocol, and an unmeasurable claim.
+
+## 8. Adjacent risk — namespace governance
 
 Worth settling alongside this work, because Proposal A widens the same path.
 Today every key in an episode node's `properties` map becomes a predicate in the
@@ -182,7 +311,7 @@ version is a report, not a block: list predicates minted by episode ingest that
 no shape mentions — the same shape as `quipu audit inventory`, which already
 answers "which tool classes are ungoverned."
 
-## 8. Suggested ordering
+## 9. Suggested ordering
 
 1. **Proposal A** (statement identity + edge properties) — unblocks governance
    and homelab, and is the smallest change since the mechanism exists.
@@ -191,4 +320,7 @@ answers "which tool classes are ungoverned."
 3. **Trace ingestion into the store**, so `governance/tree.rs` becomes a query
    rather than a reconstruction. Much the largest change, depends on (1) for
    per-dispatch identity, and wants its own design note before any code.
-4. **Namespace governance report** (§7) — independent of the others, and cheap.
+4. **Namespace governance report** (§8) — independent of the others, and cheap.
+
+A property-graph query surface (§7) is deliberately absent from this list. It is
+gated on (1) and (2) landing, and on the demand still existing afterwards.
