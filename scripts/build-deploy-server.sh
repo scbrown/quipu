@@ -57,6 +57,16 @@ BIN=quipu-server
 # the source it came from. Discovered wiring /ontology (aegis-06q1r): the route
 # would have deployed green and been inert.
 FEATURES="shacl,onnx,owl,reactive-reasoner"
+
+# The floor a deployable quipu-server must MEET, asserted INDEPENDENTLY of
+# FEATURES above (aegis-t1u2h). Deliberately not derived from it: if the gate
+# read the same variable the build uses, then editing FEATURES would move the
+# goalposts with it and a shrunken build would sail through — which is precisely
+# how aegis-06q1r nearly shipped an inert deploy. Two separate statements mean
+# dropping a feature from the build FAILS this gate instead of redefining it.
+# Escape hatch for a deliberate minimal build (mirrors bobbin's REQUIRE_KNOWLEDGE):
+#   REQUIRE_FEATURES="" disables the check entirely.
+REQUIRE_FEATURES="${REQUIRE_FEATURES-shacl,onnx,owl,reactive-reasoner}"
 BUILD_DIR="${BUILD_DIR:-$PWD}"
 INSTALL_TARGETS="${INSTALL_TARGETS:-/usr/local/bin/quipu-server}"
 SERVICE="${SERVICE-quipu}"
@@ -87,6 +97,41 @@ case "$(printf '%s' "${DEPLOY_ACTOR:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:
   ''|unknown|none|null|root|nobody|-|n/a|na|tbd|agent|crew|user)
     DEPLOY_ACTOR="" ;;
 esac
+
+# Assert a built binary meets REQUIRE_FEATURES, by reading the binary's OWN
+# QUIPU_FEATURES stamp (aegis-t1u2h). A function, not inline, so FEATURE_CHECK_ONLY
+# can exercise BOTH branches without a build or a deploy — the same reason
+# SHAPES_CHECK_ONLY exists. A gate that only ever fires at the end of a real deploy
+# is a gate nobody has seen fail.
+check_feature_stamp() {
+  artifact="$1"
+  [ -n "$REQUIRE_FEATURES" ] || { echo "feature stamp: check waived (REQUIRE_FEATURES empty)."; return 0; }
+  [ -r "$artifact" ] || die "cannot read binary '$artifact' for the feature check."
+  stamp=$(strings "$artifact" | grep -m1 -oE '[a-z-]+=[01](,[a-z-]+=[01])+' || true)
+  [ -n "$stamp" ] || die "$artifact carries NO QUIPU_FEATURES stamp — it predates the aegis-t1u2h build stamp, so its features CANNOT be verified. Rebuild from a tree whose build.rs stamps features, or set REQUIRE_FEATURES= to waive (you are then deploying unverified)."
+  missing=""
+  for f in ${REQUIRE_FEATURES//,/ }; do
+    case ",$stamp," in
+      *",$f=1,"*) ;;
+      *) missing="$missing $f" ;;
+    esac
+  done
+  [ -z "$missing" ] || die "$artifact is MISSING required feature(s):$missing
+  binary stamp: $stamp
+  required:     $REQUIRE_FEATURES
+  This binary would deploy GREEN and be INERT — the routes serve, health passes,
+  the sha matches, and no inference ever runs (the aegis-06q1r near-miss).
+  Rebuild with --features full. If a minimal build is genuinely intended,
+  re-run with REQUIRE_FEATURES= to waive."
+  echo "feature stamp: $stamp — meets required [$REQUIRE_FEATURES]."
+}
+
+# Exercise the feature gate alone, against any binary, with no build and no
+# deploy: FEATURE_CHECK_ONLY=/path/to/quipu-server ./build-deploy-server.sh
+if [ -n "${FEATURE_CHECK_ONLY:-}" ]; then
+  check_feature_stamp "$FEATURE_CHECK_ONLY"
+  exit 0
+fi
 
 require_actor() {
   [ -n "$DEPLOY_ACTOR" ] && return 0
@@ -226,6 +271,14 @@ fi
 [ "$(strings "$ARTIFACT" | grep -ci shacl)" -gt 0 ] || die "built $BIN carries NO shacl symbols — the feature did not compile in. Do not deploy."
 echo "feature smoke: onnx + shacl symbols present."
 
+# ── GATE 2b: the binary's OWN feature stamp must meet the floor (aegis-t1u2h) ──
+# The symbol smoke above cannot answer this. `owl` is three letters that occur all
+# over an RDF binary, so grepping for it reports present on a build that compiled
+# it out — a check that cannot fail is worse than no check. build.rs now stamps
+# QUIPU_FEATURES=<name>=0|1,... from Cargo.toml, so the ARTIFACT states its own
+# capabilities and this reads that rather than trusting the build flag.
+check_feature_stamp "$ARTIFACT"
+
 if [ "${NO_DEPLOY:-0}" = 1 ]; then
   say "NO_DEPLOY=1 — build + gate passed, not installing."; exit 0
 fi
@@ -262,9 +315,25 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -m 8 "$HEALTH_URL/health" || true)
 ver=$(curl -s -m 8 "$HEALTH_URL/version")
 grep -q '"onnx":true'  <<<"$ver" || die "/version does not report onnx enabled — the deployed binary is not the feature build. Running: $ver"
 grep -q '"shacl":true' <<<"$ver" || die "/version does not report shacl enabled — the deployed binary is not the feature build. Running: $ver"
+
+# The RUNNING server must meet the floor too (aegis-t1u2h). Gate 2b checked the
+# artifact we just built; this checks what is actually SERVING, which is a
+# different fact — the unit can load a binary from a path this script did not
+# install to. /version enumerates every declared feature since aegis-t1u2h, so
+# absence here is now real evidence rather than the old silence.
+if [ -n "$REQUIRE_FEATURES" ]; then
+  missing_run=""
+  for f in ${REQUIRE_FEATURES//,/ }; do
+    grep -q "\"$f\":true" <<<"$ver" || missing_run="$missing_run $f"
+  done
+  [ -z "$missing_run" ] || die "the RUNNING server is missing required feature(s):$missing_run
+  /version: $ver
+  If /version reports no such key at all, the serving binary predates aegis-t1u2h
+  and cannot report its features — treat that as unverified, not as passing."
+fi
 sha_running=$(echo "$ver" | grep -o '"git_sha":"[a-f0-9]*"' | cut -d'"' -f4)
 dirty_running=$(echo "$ver" | grep -o '"git_dirty":[a-z]*' | cut -d: -f2)
-echo "running: sha=${sha_running:0:8} features onnx+shacl confirmed, health 200."
+echo "running: sha=${sha_running:0:8} features [$REQUIRE_FEATURES] confirmed, health 200."
 
 # LOG WHAT IS SERVING — and log it HERE, BEFORE gate 3.5 can abort.
 # The shipped sha and the SERVED sha are different facts, and recording only the

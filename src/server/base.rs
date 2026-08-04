@@ -93,11 +93,26 @@ pub(crate) async fn version() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "git_sha": env!("QUIPU_GIT_SHA"),
         "git_dirty": env!("QUIPU_GIT_DIRTY") == "true",
-        "features": {
-            "shacl": cfg!(feature = "shacl"),
-            "onnx": cfg!(feature = "onnx"),
-        }
+        "features": compiled_features(),
     }))
+}
+
+/// Every declared feature and whether this binary has it (aegis-t1u2h).
+///
+/// Reads the `QUIPU_FEATURES` stamp that `build.rs` derives from `Cargo.toml`,
+/// so a feature added to the manifest shows up here without anyone remembering
+/// to edit this function. This replaced two hardcoded `cfg!` lines that reported
+/// shacl and onnx and stayed silent about owl and reactive-reasoner — silent in
+/// BOTH directions, so a binary with the OWL engine compiled out was
+/// indistinguishable from one where it worked.
+fn compiled_features() -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    for pair in env!("QUIPU_FEATURES").split(',').filter(|s| !s.is_empty()) {
+        if let Some((name, on)) = pair.split_once('=') {
+            map.insert(name.to_string(), json!(on == "1"));
+        }
+    }
+    serde_json::Value::Object(map)
 }
 
 /// Run store work on the blocking pool instead of an async worker (deploy: the
