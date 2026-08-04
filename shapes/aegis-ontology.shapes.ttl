@@ -1406,6 +1406,61 @@ aegis:SearchService rdfs:subClassOf aegis:Service .
 aegis:ClaudeCodeHook rdfs:subClassOf aegis:Script .
 aegis:AlertRule rdfs:subClassOf aegis:Directive .
 
+# ⚠️ READ THE PARENTHESIS IN THE HEADER ABOVE — IT IS THE WHOLE MECHANISM.
+#
+# "(also asserted as graph data)" is not a note, it is the load-bearing half.
+# Subclass expansion reads the FACTS TABLE, never this file: `collect_class_and
+# _subclasses` (src/sparql/rdfs.rs) does `SELECT e FROM facts WHERE a = subClassOf`.
+# Loading a shapes file puts it in the SHAPES table, which drives SHACL validation
+# and nothing else. So an axiom that lives ONLY here is inert — `?s a Parent` will
+# not return the child, and no error says so.
+#
+# MEASURED 2026-08-04, and it has already bitten: shapes/governance.ttl
+# declares `aegis:Decision rdfs:subClassOf aegis:DecisionRecord` and
+# `aegis:Verdict rdfs:subClassOf aegis:Observation` on two ADJACENT lines with the
+# comment "so the parent's shape ALSO applies to the child via inference". Both were
+# absent from the facts table; `?s a DecisionRecord` applied no inference at all and
+# missed its Decision instance. Their neighbour `aegis:Policy` worked — same file,
+# same commit — which is exactly why the failure was invisible.
+#
+# So: adding a line HERE changes nothing on its own. Assert it too:
+#   POST /knot {"actor":"<you>","turtle":"@prefix aegis: … rdfs:subClassOf … ."}
+# then PROVE it by expansion, not by re-reading the file:
+#   ?s a <Parent>  ->  the response's `inference.expandedTypes` must name the child.
+
+# ── Retired the hand dual-typing convention ─────────────────────
+#
+# Descriptive defect knowledge had no common parent, so a reader asking
+# `?s a Directive` silently missed every FailureMode — and the documented answer
+# was to hand dual-type each node forever. These two axiom sets replace that
+# discipline. FailureMode is deliberately NOT a subclass of Directive: a defect is
+# not a rule, and asserting it would both be false and flood Directive with ~250
+# descriptive nodes.
+aegis:FailureKnowledge rdfs:subClassOf aegis:OperationalKnowledge .
+aegis:FailureMode rdfs:subClassOf aegis:FailureKnowledge .
+aegis:FailurePattern rdfs:subClassOf aegis:FailureKnowledge .
+aegis:IncidentClass rdfs:subClassOf aegis:FailureKnowledge .
+aegis:Directive rdfs:subClassOf aegis:OperationalKnowledge .
+
+# ── Asserted in the store before they were ever written down ─────
+#
+# These 12 were asserted via /set and were live for a day with no
+# file recording them. Written here so the declared hierarchy is reviewable in one
+# place — NOT because writing them here is what makes them work. See the warning
+# above: they work because they are in the facts table.
+aegis:AgentTool rdfs:subClassOf aegis:Tool .
+aegis:CLI rdfs:subClassOf aegis:Tool .
+aegis:CLITool rdfs:subClassOf aegis:CLI .
+aegis:Container rdfs:subClassOf aegis:Host .
+aegis:RemoteHost rdfs:subClassOf aegis:Host .
+aegis:DockerContainer rdfs:subClassOf aegis:Host .
+aegis:DecisionRecord rdfs:subClassOf aegis:Document .
+aegis:DesignDoc rdfs:subClassOf aegis:Document .
+aegis:ExternalService rdfs:subClassOf aegis:Service .
+aegis:OperationalRule rdfs:subClassOf aegis:Directive .
+aegis:Procedure rdfs:subClassOf aegis:Directive .
+aegis:InternalIdentifierPattern rdfs:subClassOf aegis:TextRule .
+
 # ── SoftwareVersion ──────────────────────────────────────────────
 #
 # A specific released version of a piece of software, so an incident can point
