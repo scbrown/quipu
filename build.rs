@@ -92,6 +92,16 @@ fn stamp_features() {
         })
         .collect();
 
-    println!("cargo:rustc-env=QUIPU_FEATURES={}", pairs.join(","));
+    // The MARKER is load-bearing, not decoration. The deploy gate finds this stamp
+    // by scanning `strings` over the binary, and a bare `name=0|1,...` pattern is
+    // not distinctive enough to survive that: a release binary's string table
+    // contains fragments like "i=0,r=1" that match it, and the gate then read
+    // garbage as the feature set and refused a perfectly good build. Anchor on
+    // something that cannot occur by accident, and version it so the format can
+    // change without silently misreading an older binary.
+    println!(
+        "cargo:rustc-env=QUIPU_FEATURES=quipu-features/1;{}",
+        pairs.join(",")
+    );
     println!("cargo:rerun-if-changed=Cargo.toml");
 }

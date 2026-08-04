@@ -107,7 +107,11 @@ pub(crate) async fn version() -> impl IntoResponse {
 /// indistinguishable from one where it worked.
 fn compiled_features() -> serde_json::Value {
     let mut map = serde_json::Map::new();
-    for pair in env!("QUIPU_FEATURES").split(',').filter(|s| !s.is_empty()) {
+    // Strip the `quipu-features/<v>;` marker the stamp carries so the deploy gate
+    // can find it unambiguously in `strings` output (see build.rs).
+    let stamp = env!("QUIPU_FEATURES");
+    let stamp = stamp.split_once(';').map_or(stamp, |(_, rest)| rest);
+    for pair in stamp.split(',').filter(|s| !s.is_empty()) {
         if let Some((name, on)) = pair.split_once('=') {
             map.insert(name.to_string(), json!(on == "1"));
         }

@@ -107,7 +107,11 @@ check_feature_stamp() {
   artifact="$1"
   [ -n "$REQUIRE_FEATURES" ] || { echo "feature stamp: check waived (REQUIRE_FEATURES empty)."; return 0; }
   [ -r "$artifact" ] || die "cannot read binary '$artifact' for the feature check."
-  stamp=$(strings "$artifact" | grep -m1 -oE '[a-z-]+=[01](,[a-z-]+=[01])+' || true)
+  # Anchor on the versioned marker. A bare name=0|1 pattern is NOT distinctive
+  # enough in a release binary — its string table contains fragments like
+  # "i=0,r=1" that match, and this gate then refused a good build by reading
+  # garbage as the feature set (caught on the aegis-t1u2h deploy itself).
+  stamp=$(strings "$artifact" | grep -m1 -oE 'quipu-features/1;[a-z-]+=[01](,[a-z-]+=[01])*' | cut -d';' -f2- || true)
   [ -n "$stamp" ] || die "$artifact carries NO QUIPU_FEATURES stamp — it predates the aegis-t1u2h build stamp, so its features CANNOT be verified. Rebuild from a tree whose build.rs stamps features, or set REQUIRE_FEATURES= to waive (you are then deploying unverified)."
   missing=""
   for f in ${REQUIRE_FEATURES//,/ }; do
