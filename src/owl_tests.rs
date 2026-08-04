@@ -234,3 +234,75 @@ fn store_ontology_persistence() {
     assert!(store.remove_ontology("test").unwrap());
     assert!(store.list_ontologies().unwrap().is_empty());
 }
+
+/// `rdfs:subPropertyOf` must RESTATE facts under the superproperty (aegis-qfncf).
+///
+/// Regression guard for an axiom class that was parsed and then dropped: `Axioms`
+/// carried `subproperty_of`, `axiom_summary()` counted it, `/ontology` echoed it
+/// back — and `materialize()` never read it, so loading one returned success and
+/// changed nothing. Nothing failed, because nothing asked.
+///
+/// Uses its own ontology rather than TEST_ONTOLOGY, whose axiom counts are asserted
+/// exactly by `ontology_axiom_summary`.
+#[test]
+fn materialize_subproperty_restates_facts_under_the_superproperty() {
+    const SUBPROP_ONTOLOGY: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:touches a owl:ObjectProperty .
+ex:references a owl:ObjectProperty ;
+    rdfs:subPropertyOf ex:touches .
+ex:calls a owl:ObjectProperty ;
+    rdfs:subPropertyOf ex:references .
+"#;
+    let ont = Ontology::from_turtle(SUBPROP_ONTOLOGY).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+
+    let data = r#"
+@prefix ex: <http://example.org/> .
+ex:fnA ex:calls ex:fnB .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        data.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let report = ont.materialize(&mut store, "2026-01-01T00:00:00Z").unwrap();
+    assert!(
+        report.sub_property_inferences > 0,
+        "expected subproperty inferences, got {}",
+        report.sub_property_inferences
+    );
+
+    // One hop: calls -> references.
+    let direct = crate::sparql::query(
+        &store,
+        "ASK { <http://example.org/fnA> <http://example.org/references> <http://example.org/fnB> }",
+    )
+    .unwrap();
+    assert!(
+        matches!(direct, crate::sparql::QueryResult::Ask(true)),
+        "fnA should reference fnB via calls ⊑ references"
+    );
+
+    // TRANSITIVE: calls ⊑ references ⊑ touches. This is the half that makes a
+    // `touches` superproperty worth declaring at all — one query catching every
+    // predicate beneath it, however deep.
+    let transitive = crate::sparql::query(
+        &store,
+        "ASK { <http://example.org/fnA> <http://example.org/touches> <http://example.org/fnB> }",
+    )
+    .unwrap();
+    assert!(
+        matches!(transitive, crate::sparql::QueryResult::Ask(true)),
+        "fnA should touch fnB via the calls ⊑ references ⊑ touches chain"
+    );
+}

@@ -80,6 +80,8 @@ pub struct Axioms {
 pub struct MaterializeReport {
     /// Subclass type inferences (instance of parent class).
     pub subclass_inferences: usize,
+    /// `rdfs:subPropertyOf` inferences (fact restated under the superproperty).
+    pub sub_property_inferences: usize,
     /// Inverse property inferences.
     pub inverse_inferences: usize,
     /// Symmetric property inferences.
@@ -188,6 +190,43 @@ impl Ontology {
                         op: Op::Assert,
                     });
                     report.subclass_inferences += 1;
+                }
+            }
+        }
+
+        // 1b. Subproperty transitive closure: if x p y and p ⊑ q, then x q y.
+        //
+        // This was PARSED and then dropped on the floor (aegis-qfncf): `Axioms`
+        // carried `sub_property_of`, `axiom_summary()` counted it, `/ontology`
+        // reported it back — and nothing ever read it. So loading a subPropertyOf
+        // axiom returned success with `subproperty_of: 1` and materialized ZERO,
+        // and `rdfs.rs` gives it no query-time help either (that expands classes
+        // only). The axiom class was inert end to end while reporting as accepted.
+        //
+        // Measured before the fix: `aegis:calls rdfs:subPropertyOf aegis:touches`
+        // loaded cleanly and left `?s touches ?o` at 435 with 74116 `calls` facts
+        // sitting right there.
+        let property_closure = transitive_closure(&self.axioms.subproperty_of);
+        for (sub_property, supers) in &property_closure {
+            // `lookup`, not `intern`: a subproperty naming a predicate that no
+            // fact uses has nothing to restate, and interning it would mint a
+            // dangling id as a side effect of reasoning about it.
+            let Some(sub_id) = store.lookup(sub_property)? else {
+                continue;
+            };
+            let facts = collect_predicate_facts(store, sub_id)?;
+            for (entity_id, value) in &facts {
+                for super_property in supers {
+                    let super_id = store.intern(super_property)?;
+                    datums.push(Datum {
+                        entity: *entity_id,
+                        attribute: super_id,
+                        value: value.clone(),
+                        valid_from: timestamp.to_string(),
+                        valid_to: None,
+                        op: Op::Assert,
+                    });
+                    report.sub_property_inferences += 1;
                 }
             }
         }

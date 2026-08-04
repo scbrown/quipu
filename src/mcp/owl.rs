@@ -50,6 +50,7 @@ pub fn tool_load_ontology(store: &mut Store, input: &JsonValue) -> Result<JsonVa
                 "axioms": summary,
                 "materialized": {
                     "subclass_inferences": report.subclass_inferences,
+                    "sub_property_inferences": report.sub_property_inferences,
                     "inverse_inferences": report.inverse_inferences,
                     "symmetric_inferences": report.symmetric_inferences,
                     "equivalent_class_inferences": report.equivalent_class_inferences,
