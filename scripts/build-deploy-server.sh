@@ -47,7 +47,16 @@
 set -euo pipefail
 
 BIN=quipu-server
-FEATURES="shacl,onnx"
+# MUST match the `full` feature set that release.yml ships (Cargo.toml [features]),
+# not merely quipu-server's `required-features`. Those are the MINIMUM that makes
+# the bin compile, and building to that minimum silently ships a binary missing
+# capabilities the code has: with "shacl,onnx" the `owl` cfg is off, so POST
+# /ontology cannot load or materialize anything, and `reactive-reasoner` is off
+# too. That is the same silent-build-skip class this script exists to kill —
+# a binary that builds, deploys, health-checks, and is quietly less capable than
+# the source it came from. Discovered wiring /ontology (aegis-06q1r): the route
+# would have deployed green and been inert.
+FEATURES="shacl,onnx,owl,reactive-reasoner"
 BUILD_DIR="${BUILD_DIR:-$PWD}"
 INSTALL_TARGETS="${INSTALL_TARGETS:-/usr/local/bin/quipu-server}"
 SERVICE="${SERVICE-quipu}"
