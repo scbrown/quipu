@@ -37,6 +37,38 @@ bobbin:CodeModuleShape a sh:NodeShape ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
+    ] ;
+    # bobbin:repo above is a LITERAL STRING and stays one — it is what the
+    # bobbin promotion path emits. But a string is not walkable: it left all
+    # 10,143 code entities unable to reach the ownership layer sitting beside
+    # them (0 of 537 modules had any edge to a repo_<name> entity).
+    # in_repo is the IRI counterpart: the edge that makes owns / shepherds /
+    # managed_by reachable from a source file in two hops.
+    #
+    # NOT minCount 1, deliberately — same rule as CommitShape below: never
+    # require a predicate the emitter does not emit. Bobbin writes bobbin:repo,
+    # not bobbin:in_repo, so requiring it here would fail every future promotion.
+    # Backfilling it stays a reconciliation step until the emitter learns to
+    # write it (see the bead).
+    #
+    # ⚠ in_repo is RANGE-MIXED across the store and this constraint does not
+    # change that: CommitShape constrains the SAME predicate to xsd:string, and
+    # ~443 Commit/GitCommit entities use the literal form. The two senses are
+    # scoped by targetClass, so `?x in_repo ?r` unfiltered returns both strings
+    # and IRIs. Bind the subject's type, or test isIRI(?r), before relying on it.
+    # NOT sh:class bobbin:Repo, deliberately — measured, not assumed. SHACL here
+    # validates the SUBMITTED turtle in isolation, never the store, so sh:class
+    # would demand every writer redundantly re-assert `repo_x a bobbin:Repo` in
+    # the same payload; omitting it failed with a `class` violation on an
+    # otherwise-correct write. A constraint that fails correct writes is one
+    # people learn to bypass. nodeKind alone catches the disease this edge exists
+    # to cure (a literal string where a walkable IRI belongs) — it fired on
+    # exactly that case in testing. Residual, accepted: the target being a *Repo*
+    # is not checkable at write time; that needs a store-aware validator.
+    sh:property [
+        sh:path bobbin:in_repo ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
     ] .
 
 # ── CodeSymbol ─────────────────────────────────────────────────
