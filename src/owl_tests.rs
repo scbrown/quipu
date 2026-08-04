@@ -370,16 +370,25 @@ ex:Robot a owl:Class ;
     );
 }
 
-/// The write path must REJECT a second value on an owl:FunctionalProperty
-/// (aegis-bmqup). This is the constraint that `filePath`'s 205 violations
-/// (aegis-h69po) needed and did not have.
+/// A functional property must SUPERSEDE on update, not reject (aegis-7vn3b).
+///
+/// SEMANTICS CORRECTION, recorded rather than quietly rewritten. aegis-bmqup shipped
+/// a test here asserting the OPPOSITE — that a second value in a LATER write is
+/// rejected. That encoded a bug: in a bitemporal store `owl:FunctionalProperty`
+/// means at most one value AT A TIME, so a new value closes the old. Enforcing
+/// rejection instead turned every ordinary edit-and-re-ingest into an HTTP 400.
+/// That test was removed and replaced by this one.
+///
+/// Asserted against the MECHANISM, not a count: re-run the producing path, then
+/// re-measure. A test that only counted values would pass on a store where nothing
+/// had been updated yet.
 #[cfg(feature = "owl")]
 #[test]
-fn write_path_rejects_functional_property_violation() {
+fn functional_property_supersedes_on_update_instead_of_rejecting() {
     const ONT: &str = r#"
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix ex: <http://example.org/> .
-ex:ssn a owl:DatatypeProperty, owl:FunctionalProperty .
+ex:contentHash a owl:DatatypeProperty, owl:FunctionalProperty .
 "#;
     let mut store = Store::open_in_memory().unwrap();
     store.owl_config_mut().validate_on_write = true;
@@ -388,22 +397,76 @@ ex:ssn a owl:DatatypeProperty, owl:FunctionalProperty .
         .unwrap();
     store.invalidate_owl_cache();
 
-    // CONTROL: the first value is fine.
-    let ok = crate::rdf::ingest_rdf(
-        &mut store,
-        b"@prefix ex: <http://example.org/> .\nex:bob ex:ssn \"111\" .\n".as_ref(),
-        oxrdfio::RdfFormat::Turtle,
-        None,
-        "2026-01-01T00:00:00Z",
-        None,
-        None,
-    );
-    assert!(ok.is_ok(), "the first value of a functional property is legal");
+    fn ingest(store: &mut Store, hash: &str, ts: &str) -> crate::error::Result<(i64, usize)> {
+        let ttl =
+            format!("@prefix ex: <http://example.org/> .\nex:doc1 ex:contentHash \"{hash}\" .\n");
+        crate::rdf::ingest_rdf(
+            store,
+            ttl.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            ts,
+            None,
+            None,
+        )
+    }
+    fn asks(store: &Store, v: &str) -> bool {
+        let q = format!("ASK {{ <http://example.org/doc1> <http://example.org/contentHash> \"{v}\" }}");
+        matches!(
+            crate::sparql::query(store, &q).unwrap(),
+            crate::sparql::QueryResult::Ask(true)
+        )
+    }
 
-    // A SECOND, different value is the violation.
+    ingest(&mut store, "aaa", "2026-01-01T00:00:00Z").unwrap();
+    assert!(asks(&store, "aaa"), "control: the first value must be current");
+
+    // RE-RUN THE PRODUCING PATH: the same document, edited.
+    ingest(&mut store, "bbb", "2026-01-02T00:00:00Z")
+        .expect("an ordinary update to a functional property must be ACCEPTED, not rejected");
+
+    // RE-MEASURE.
+    assert!(!asks(&store, "aaa"), "the superseded value must no longer be current");
+    assert!(asks(&store, "bbb"), "the new value must be current");
+
+    // Not one-shot: a third update must work too.
+    ingest(&mut store, "ccc", "2026-01-03T00:00:00Z").expect("a second update must also be accepted");
+    assert!(asks(&store, "ccc"));
+    assert!(!asks(&store, "bbb"));
+
+    // SUPERSEDE, NOT DELETE. A store that ERASED the prior value would satisfy
+    // every assertion above and still be wrong — this is a bitemporal log.
+    let doc_id = store
+        .lookup("http://example.org/doc1")
+        .unwrap()
+        .expect("doc1 must exist");
+    let hist = format!("{:?}", store.entity_history(doc_id).unwrap());
+    assert!(
+        hist.contains("aaa"),
+        "the superseded value must remain in history, not be erased"
+    );
+}
+
+/// Two distinct values for one functional property in a SINGLE batch must still be
+/// REJECTED (aegis-7vn3b) — superseding there would silently pick a winner.
+#[cfg(feature = "owl")]
+#[test]
+fn functional_property_still_rejects_two_values_in_one_batch() {
+    const ONT: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/> .
+ex:contentHash a owl:DatatypeProperty, owl:FunctionalProperty .
+"#;
+    let mut store = Store::open_in_memory().unwrap();
+    store.owl_config_mut().validate_on_write = true;
+    store
+        .load_ontology("t", ONT, "2026-01-01T00:00:00Z")
+        .unwrap();
+    store.invalidate_owl_cache();
+
     let err = crate::rdf::ingest_rdf(
         &mut store,
-        b"@prefix ex: <http://example.org/> .\nex:bob ex:ssn \"222\" .\n".as_ref(),
+        b"@prefix ex: <http://example.org/> .\nex:doc2 ex:contentHash \"aaa\", \"bbb\" .\n".as_ref(),
         oxrdfio::RdfFormat::Turtle,
         None,
         "2026-01-01T00:00:00Z",
@@ -412,18 +475,7 @@ ex:ssn a owl:DatatypeProperty, owl:FunctionalProperty .
     );
     let msg = format!("{:?}", err.unwrap_err());
     assert!(
-        msg.contains("OWL constraint violation") && msg.contains("unctional"),
-        "expected a structured FunctionalProperty rejection, got: {msg}"
-    );
-
-    // FAILED CLOSED: the second value must not be present.
-    let stuck = crate::sparql::query(
-        &store,
-        "ASK { <http://example.org/bob> <http://example.org/ssn> \"222\" }",
-    )
-    .unwrap();
-    assert!(
-        matches!(stuck, crate::sparql::QueryResult::Ask(false)),
-        "the rejected value must NOT have been written"
+        msg.contains("OWL constraint violation"),
+        "an ambiguous batch must still be refused, got: {msg}"
     );
 }

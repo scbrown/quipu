@@ -206,6 +206,14 @@ impl Store {
         let mut written_asserts: Vec<&Datum> = Vec::new();
         let mut written_retracts: Vec<&Datum> = Vec::new();
 
+        // Functional-property supersede (aegis-7vn3b). MUST run before the insert
+        // loop below: it closes the PRIOR value so the new one lands as the only
+        // current fact. Run after, and both would be live and the OWL gate would
+        // reject the write — which is exactly the bug, an ordinary update turned
+        // into an HTTP 400.
+        #[cfg(feature = "owl")]
+        self.supersede_functional_values(datums, timestamp, graph)?;
+
         {
             let mut insert = self.conn.prepare(
                 "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \

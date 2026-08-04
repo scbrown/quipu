@@ -18,7 +18,7 @@ use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
 use crate::governance::PolicyRegistry;
 use crate::schema::INIT_SQL;
-use crate::types::Value;
+use crate::types::{Op, Value};
 use crate::vector::{KnowledgeVectorStore, VECTORS_SQL};
 use crate::vector_delegate::{DelegatingVectorStore, VectorSearchDelegate};
 
@@ -382,6 +382,111 @@ impl Store {
         self.owl_cache = None;
     }
 
+    /// Close the prior value of a functional property so a new one can replace it
+    /// (aegis-7vn3b).
+    ///
+    /// THE BUG THIS FIXES. The write path only ever CLOSED a fact on an exact
+    /// `(e,a,v)` retraction, so asserting a different value for the same `(e,a)`
+    /// left both live. Measured: `contentHash = "aaa"` then `contentHash = "bbb"`
+    /// yields BOTH as current facts. Two consequences, one silent and one loud —
+    /// cleaning duplicate scalars is undone by the next re-ingest (the aegis-h69po
+    /// filePath fix went 205 → 0 → 50 in hours), and declaring the property
+    /// `owl:FunctionalProperty` made every ordinary update an HTTP 400, because the
+    /// update itself manufactured the second value.
+    ///
+    /// THE SEMANTICS. In a bitemporal store `owl:FunctionalProperty` means *at most
+    /// one value AT A TIME*, so a new value must CLOSE the old — that is an update,
+    /// and it is the common case. Rejection remains correct for two distinct values
+    /// inside ONE batch, where nothing says which should win; those are left alone
+    /// here and `enforce_owl_constraints` still refuses them.
+    ///
+    /// Tied to the same `owl.validate_on_write` flag as the rejection half, so the
+    /// switch turns on one coherent behaviour rather than half of one.
+    #[cfg(feature = "owl")]
+    pub(crate) fn supersede_functional_values(
+        &mut self,
+        datums: &[Datum],
+        timestamp: &str,
+        graph: i64,
+    ) -> Result<usize> {
+        if !self.owl_config.validate_on_write || self.recording_verdicts {
+            return Ok(0);
+        }
+        self.ensure_owl_cache()?;
+        let Some(ontology) = self.owl_cache.take() else {
+            return Ok(0);
+        };
+        let functional = ontology.axioms.functional_properties.clone();
+        self.owl_cache = Some(ontology);
+        if functional.is_empty() {
+            return Ok(0);
+        }
+
+        // Group this batch's asserts by (entity, attribute) for functional attrs.
+        let mut proposed: std::collections::HashMap<(i64, i64), Vec<Vec<u8>>> =
+            std::collections::HashMap::new();
+        for d in datums {
+            if d.op != Op::Assert {
+                continue;
+            }
+            let Ok(attr_iri) = self.resolve(d.attribute) else {
+                continue;
+            };
+            if functional.contains(&attr_iri) {
+                proposed
+                    .entry((d.entity, d.attribute))
+                    .or_default()
+                    .push(d.value.to_bytes());
+            }
+        }
+
+        let mut closed = 0usize;
+        let mut close_other = self.conn.prepare(
+            "UPDATE facts SET valid_to = ?1 \
+             WHERE e = ?2 AND a = ?3 AND v != ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
+        )?;
+        for ((entity, attribute), values) in &proposed {
+            // AMBIGUOUS BATCH: two distinct values for one functional property in
+            // a single write. Superseding here would silently pick whichever the
+            // loop saw last. Leave it untouched — the validator rejects it, which
+            // is the honest outcome when the caller has not said which wins.
+            let distinct: std::collections::HashSet<&Vec<u8>> = values.iter().collect();
+            if distinct.len() > 1 {
+                continue;
+            }
+            let Some(new_value) = values.first() else {
+                continue;
+            };
+            closed += close_other.execute(params![
+                timestamp,
+                entity,
+                attribute,
+                new_value,
+                graph
+            ])?;
+        }
+        Ok(closed)
+    }
+
+    /// Build the combined ontology cache if it is not already populated.
+    #[cfg(feature = "owl")]
+    fn ensure_owl_cache(&mut self) -> Result<()> {
+        if self.owl_cache.is_some() {
+            return Ok(());
+        }
+        let stored = self.list_ontologies()?;
+        if stored.is_empty() {
+            return Ok(());
+        }
+        let combined: String = stored
+            .iter()
+            .map(|(_, turtle, _)| turtle.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        self.owl_cache = Some(Box::new(crate::owl::Ontology::from_turtle(&combined)?));
+        Ok(())
+    }
+
     /// Reject a write that violates `owl:disjointWith` or `owl:FunctionalProperty`
     /// (aegis-bmqup).
     ///
@@ -401,20 +506,9 @@ impl Store {
         if !self.owl_config.validate_on_write || self.recording_verdicts {
             return Ok(());
         }
-        if self.owl_cache.is_none() {
-            let stored = self.list_ontologies()?;
-            if stored.is_empty() {
-                return Ok(());
-            }
-            // One ontology over the union of every stored TTL: a disjointness
-            // declared in one set must still bite a write validated against all.
-            let combined: String = stored
-                .iter()
-                .map(|(_, turtle, _)| turtle.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
-            self.owl_cache = Some(Box::new(crate::owl::Ontology::from_turtle(&combined)?));
-        }
+        // One ontology over the union of every stored TTL: a disjointness
+        // declared in one set must still bite a write validated against all.
+        self.ensure_owl_cache()?;
         let Some(ontology) = self.owl_cache.take() else {
             return Ok(());
         };
