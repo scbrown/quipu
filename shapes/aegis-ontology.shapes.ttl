@@ -1461,6 +1461,62 @@ aegis:OperationalRule rdfs:subClassOf aegis:Directive .
 aegis:Procedure rdfs:subClassOf aegis:Directive .
 aegis:InternalIdentifierPattern rdfs:subClassOf aegis:TextRule .
 
+# ── De-facto vocabulary, governed ────────────────────────────────
+#
+# Three kinds that earned their way in by USAGE and had no shape: Host (66
+# instances), OperationalRule (28), Capability (7). They are not one author's
+# typos — they span many episodes over months — so the disposition is to GOVERN
+# them, not to retract the instances. (FailureMode was the fourth and is already
+# governed; do not re-add it.)
+#
+# Each requires only rdfs:label, which is this file's floor for any entity and is
+# NOT a tightening: MEASURED before landing, all 101 instances across the three
+# already carry a label (66/66, 28/28, 7/7), so these shapes refuse nothing that
+# exists. Shapes here enforce on every write, so an untested constraint would
+# start bouncing legitimate data — hence the floor and the measurement, with any
+# real tightening left to a deliberate pass.
+#
+# Modelling calls, made rather than deferred:
+#
+#   Host — a SUPERCLASS, not redundant. Six children already resolve to it
+#   (ProxmoxNode, BareMetalHost, LXCContainer, Container, RemoteHost,
+#   DockerContainer), so `?s a Host` already expands to the whole population and
+#   retyping its direct instances away would break that. Shaping the parent is one
+#   of the two sanctioned remedies for an unshaped abstract parent.
+#
+#   OperationalRule — kept DISTINCT and subclassed under Directive (asserted
+#   above). It was already reachable from a Directive query while unvalidated,
+#   which is the retrievability trap in reverse: covered to a reader, ungoverned
+#   in fact.
+#
+#   Capability — kept DISTINCT from AgentTool. The original proposal said the two
+#   overlapped, citing verify_release; MEASURED, none of the seven current
+#   Capability instances carries AgentTool. They name what the system CAN DO
+#   (crew-only-guard, st-stalled-detector, skein-dispatch-work-skill), which is
+#   not the same claim as a tool an agent invokes. Folding them would assert an
+#   overlap the data does not show.
+
+aegis:HostShape a sh:NodeShape ;
+    sh:targetClass aegis:Host ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+aegis:OperationalRuleShape a sh:NodeShape ;
+    sh:targetClass aegis:OperationalRule ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+aegis:CapabilityShape a sh:NodeShape ;
+    sh:targetClass aegis:Capability ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ── SoftwareVersion ──────────────────────────────────────────────
 #
 # A specific released version of a piece of software, so an incident can point
