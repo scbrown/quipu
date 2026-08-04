@@ -53,6 +53,7 @@ use entity::{
     events_get, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
     transactions,
 };
+use tools::ontology;
 use tools::{
     accept_proposal, ask, context, cooccurrence, cord, embed_backfill, episode, episodes_complete,
     graph_view, graphiti_search_nodes, hybrid_search, impact_analysis, list_proposals,
@@ -304,6 +305,7 @@ async fn main() {
         .route("/set", post(set_predicate))
         .route("/episode/retract", post(retract_episode))
         .route("/shapes", post(shapes))
+        .route("/ontology", post(ontology))
         .route("/subscriptions", post(subscriptions))
         .route("/propose", post(propose_schema_change))
         .route("/proposals", post(list_proposals))

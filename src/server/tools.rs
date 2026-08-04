@@ -171,6 +171,37 @@ ro_handler!(
 // so it is rw_handler!, not the ro_handler! it was mis-registered as.
 rw_handler!(shapes, quipu::tool_shapes);
 
+// aegis-06q1r: the OWL ontology route. `tool_load_ontology` already both
+// persists the ontology AND calls `Ontology::materialize`, which is the whole
+// point: measured on aegis-qgqci, asserting `runs_on owl:inverseOf hosts` as a
+// bare triple leaves the runs_on/hosts overlap at ZERO, because — unlike
+// rdfs:subClassOf, which src/sparql/rdfs.rs backward-chains at query time —
+// owl:inverseOf is not chained at all. A load-only route would have registered
+// axioms, reported success, and entailed nothing (the same shape as POST
+// /shapes, whose triples never reach the queryable store). So this is
+// rw_handler! and /ontology is in WRITE_ENDPOINTS.
+#[cfg(feature = "owl")]
+rw_handler!(ontology, quipu::tool_load_ontology);
+
+// Registered even without the `owl` feature, and deliberately NOT left to 404.
+// The parent bead (aegis-1xb10) was slowed by exactly this ambiguity: /ontology
+// 404'd, /version reports only `shacl`/`onnx`, and neither signal distinguished
+// "not compiled in" from "no route" — so an engine that WAS compiled in read as
+// absent. An explicit error names which of the two it is.
+#[cfg(not(feature = "owl"))]
+pub(crate) async fn ontology(
+    State(_s): State<SharedStore>,
+    axum::Json(_i): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    Err(quipu::Error::InvalidValue(
+        "/ontology is registered but this binary was built WITHOUT the `owl` feature, \
+         so no ontology can be loaded or materialized. Rebuild with --features owl \
+         (release builds use --features full, which includes it)."
+            .into(),
+    )
+    .into())
+}
+
 // Event push P2: subscription registry (create/list/delete via action, the
 // /shapes pattern — one POST route, one WRITE_ENDPOINTS entry).
 rw_handler!(subscriptions, quipu::tool_subscriptions);
