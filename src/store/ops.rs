@@ -279,6 +279,14 @@ impl Store {
         // and the caller rolls the savepoint back — the write never commits.
         self.enforce_write_policies(datums, graph)?;
 
+        // OWL write-time constraints (aegis-bmqup): disjointWith and
+        // FunctionalProperty. Same contract as the policy guard above — an Err
+        // here rolls the savepoint back, so a violating write never commits.
+        // Placed AFTER the policy gate so authority and governance still decide
+        // first, and BEFORE emit_events so a rejected write emits nothing.
+        #[cfg(feature = "owl")]
+        self.enforce_owl_constraints(datums)?;
+
         // Event log (event-log P1): append this tx's semantic events INSIDE the
         // savepoint, AFTER the policy guard — a denied write emits nothing, a
         // rolled-back write takes its events with it, and offset order equals

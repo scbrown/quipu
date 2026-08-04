@@ -12,7 +12,7 @@ use std::sync::Arc;
 use rusqlite::{Connection, params};
 
 use crate::config::{
-    EmbeddingConfig, GovernanceConfig, ResolutionConfig, SearchConfig, ShaclConfig,
+    EmbeddingConfig, GovernanceConfig, OwlConfig, ResolutionConfig, SearchConfig, ShaclConfig,
 };
 use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
@@ -43,6 +43,15 @@ pub struct Store {
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,
+    /// OWL write-time constraint policy (aegis-bmqup).
+    pub(crate) owl_config: OwlConfig,
+    /// Ontology built from the stored ontologies, cached because the write gate
+    /// would otherwise re-parse every stored TTL on EVERY transaction. Set to
+    /// `None` to invalidate — `load_ontology`/`remove_ontology` do exactly that,
+    /// so a newly loaded axiom is enforced on the very next write rather than
+    /// after a restart.
+    #[cfg(feature = "owl")]
+    pub(crate) owl_cache: Option<Box<crate::owl::Ontology>>,
     /// Governance enforcement policy. When `enforce_on_write` is set, the write
     /// path evaluates `boundary:"action"` policies against the pending state and
     /// rejects a write that leaves a governed target non-compliant (the loom's
@@ -216,6 +225,9 @@ impl Store {
             resolution_config: ResolutionConfig::default(),
             search_config: SearchConfig::default(),
             shacl_config: ShaclConfig::default(),
+            owl_config: OwlConfig::default(),
+            #[cfg(feature = "owl")]
+            owl_cache: None,
             governance_config: GovernanceConfig::default(),
             pending_write_events: std::cell::RefCell::new(Vec::new()),
             policy_registry: None,
@@ -317,6 +329,16 @@ impl Store {
         &self.shacl_config
     }
 
+    /// The OWL write-time constraint policy.
+    pub fn owl_config(&self) -> &OwlConfig {
+        &self.owl_config
+    }
+
+    /// Mutable OWL policy, for enabling write-time enforcement at runtime.
+    pub fn owl_config_mut(&mut self) -> &mut OwlConfig {
+        &mut self.owl_config
+    }
+
     /// Get a mutable reference to the governance enforcement config.
     pub fn governance_config_mut(&mut self) -> &mut GovernanceConfig {
         &mut self.governance_config
@@ -352,6 +374,68 @@ impl Store {
         // savepoint would be rolled back with it.
         self.pending_verdicts = verdicts;
         result
+    }
+
+    /// Drop the cached ontology so the next write rebuilds it (aegis-bmqup).
+    #[cfg(feature = "owl")]
+    pub fn invalidate_owl_cache(&mut self) {
+        self.owl_cache = None;
+    }
+
+    /// Reject a write that violates `owl:disjointWith` or `owl:FunctionalProperty`
+    /// (aegis-bmqup).
+    ///
+    /// `Ontology::validate()` implemented both constraints and had NO CALLER in
+    /// the server, while `docs/book/src/concepts/owl.md` stated that Quipu
+    /// "enforces at write time" and listed them as enforced. This is that caller.
+    ///
+    /// Cost is bounded by the WRITE, not the store: `validate()` derives the
+    /// touched entities from the proposed datums and then reads only those
+    /// entities' existing facts. The ontology itself is cached because otherwise
+    /// every transaction would re-parse every stored TTL.
+    ///
+    /// Off by default (`owl.validate_on_write`) — see `OwlConfig` for why
+    /// flipping it on is a behaviour change, not a bug fix.
+    #[cfg(feature = "owl")]
+    pub(crate) fn enforce_owl_constraints(&mut self, datums: &[Datum]) -> Result<()> {
+        if !self.owl_config.validate_on_write || self.recording_verdicts {
+            return Ok(());
+        }
+        if self.owl_cache.is_none() {
+            let stored = self.list_ontologies()?;
+            if stored.is_empty() {
+                return Ok(());
+            }
+            // One ontology over the union of every stored TTL: a disjointness
+            // declared in one set must still bite a write validated against all.
+            let combined: String = stored
+                .iter()
+                .map(|(_, turtle, _)| turtle.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            self.owl_cache = Some(Box::new(crate::owl::Ontology::from_turtle(&combined)?));
+        }
+        let Some(ontology) = self.owl_cache.take() else {
+            return Ok(());
+        };
+        let result = ontology.validate(self, datums);
+        self.owl_cache = Some(ontology);
+        let violations = result?;
+        if violations.is_empty() {
+            return Ok(());
+        }
+        // Structured, and naming EVERY violation rather than just the first —
+        // an author fixing them one round-trip at a time is how a strict gate
+        // gets switched off.
+        let detail = violations
+            .iter()
+            .map(|v| format!("{} ({})", v.message, v.focus_node))
+            .collect::<Vec<_>>()
+            .join("; ");
+        Err(Error::InvalidValue(format!(
+            "OWL constraint violation ({} violation(s)): {detail}",
+            violations.len()
+        )))
     }
 
     /// Write the verdicts the gate staged, in their own transaction.
@@ -736,6 +820,9 @@ impl Store {
 
     /// Store a named OWL ontology.
     pub fn load_ontology(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        // NOTE: &self, so the cache is invalidated by the /ontology tool after
+        // this returns (see invalidate_owl_cache). Kept here as the reminder that
+        // a stale cache would enforce yesterday's axioms.
         self.conn.execute(
             "INSERT OR REPLACE INTO ontologies (name, turtle, loaded_at) VALUES (?1, ?2, ?3)",
             params![name, turtle, timestamp],

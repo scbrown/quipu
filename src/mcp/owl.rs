@@ -40,6 +40,9 @@ pub fn tool_load_ontology(store: &mut Store, input: &JsonValue) -> Result<JsonVa
 
             // Persist.
             store.load_ontology(name, turtle, timestamp)?;
+            // The write gate caches the combined ontology; a newly loaded axiom
+            // must bite on the NEXT write, not after a restart (aegis-bmqup).
+            store.invalidate_owl_cache();
 
             // Materialize entailments.
             let report = ontology.materialize(store, timestamp)?;
@@ -87,6 +90,9 @@ pub fn tool_load_ontology(store: &mut Store, input: &JsonValue) -> Result<JsonVa
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| Error::InvalidValue("missing 'name' parameter".into()))?;
             let removed = store.remove_ontology(name)?;
+            // Same reason as load: a retired axiom must stop rejecting writes
+            // immediately, or the gate enforces an ontology nobody can see.
+            store.invalidate_owl_cache();
             Ok(serde_json::json!({
                 "action": "remove",
                 "name": name,

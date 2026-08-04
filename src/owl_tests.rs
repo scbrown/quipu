@@ -306,3 +306,124 @@ ex:fnA ex:calls ex:fnB .
         "fnA should touch fnB via the calls ⊑ references ⊑ touches chain"
     );
 }
+
+/// The write path must REJECT an owl:disjointWith violation (aegis-bmqup).
+///
+/// `Ontology::validate()` implemented this and had no caller in the server, while
+/// docs/book/src/concepts/owl.md claimed write-time enforcement. These two tests
+/// are the difference between the doc being true and being aspiration.
+#[cfg(feature = "owl")]
+#[test]
+fn write_path_rejects_disjoint_class_violation() {
+    const ONT: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/> .
+ex:Person a owl:Class .
+ex:Robot a owl:Class ;
+    owl:disjointWith ex:Person .
+"#;
+    let mut store = Store::open_in_memory().unwrap();
+    store.owl_config_mut().validate_on_write = true;
+    store
+        .load_ontology("t", ONT, "2026-01-01T00:00:00Z")
+        .unwrap();
+    store.invalidate_owl_cache();
+
+    // CONTROL: one type alone must be accepted, or the test proves nothing
+    // beyond "writes fail".
+    let ok = crate::rdf::ingest_rdf(
+        &mut store,
+        b"@prefix ex: <http://example.org/> .\nex:r2d2 a ex:Robot .\n".as_ref(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    );
+    assert!(ok.is_ok(), "a single non-conflicting type must be accepted");
+
+    // The violation: the same entity also typed as the disjoint class.
+    let err = crate::rdf::ingest_rdf(
+        &mut store,
+        b"@prefix ex: <http://example.org/> .\nex:r2d2 a ex:Person .\n".as_ref(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    );
+    let msg = format!("{:?}", err.unwrap_err());
+    assert!(
+        msg.contains("OWL constraint violation") && msg.contains("isjoint"),
+        "expected a structured disjointWith rejection, got: {msg}"
+    );
+
+    // FAILED CLOSED: the offending type must not be in the store.
+    let stuck = crate::sparql::query(
+        &store,
+        "ASK { <http://example.org/r2d2> a <http://example.org/Person> }",
+    )
+    .unwrap();
+    assert!(
+        matches!(stuck, crate::sparql::QueryResult::Ask(false)),
+        "the rejected type must NOT have been written"
+    );
+}
+
+/// The write path must REJECT a second value on an owl:FunctionalProperty
+/// (aegis-bmqup). This is the constraint that `filePath`'s 205 violations
+/// (aegis-h69po) needed and did not have.
+#[cfg(feature = "owl")]
+#[test]
+fn write_path_rejects_functional_property_violation() {
+    const ONT: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/> .
+ex:ssn a owl:DatatypeProperty, owl:FunctionalProperty .
+"#;
+    let mut store = Store::open_in_memory().unwrap();
+    store.owl_config_mut().validate_on_write = true;
+    store
+        .load_ontology("t", ONT, "2026-01-01T00:00:00Z")
+        .unwrap();
+    store.invalidate_owl_cache();
+
+    // CONTROL: the first value is fine.
+    let ok = crate::rdf::ingest_rdf(
+        &mut store,
+        b"@prefix ex: <http://example.org/> .\nex:bob ex:ssn \"111\" .\n".as_ref(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    );
+    assert!(ok.is_ok(), "the first value of a functional property is legal");
+
+    // A SECOND, different value is the violation.
+    let err = crate::rdf::ingest_rdf(
+        &mut store,
+        b"@prefix ex: <http://example.org/> .\nex:bob ex:ssn \"222\" .\n".as_ref(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    );
+    let msg = format!("{:?}", err.unwrap_err());
+    assert!(
+        msg.contains("OWL constraint violation") && msg.contains("unctional"),
+        "expected a structured FunctionalProperty rejection, got: {msg}"
+    );
+
+    // FAILED CLOSED: the second value must not be present.
+    let stuck = crate::sparql::query(
+        &store,
+        "ASK { <http://example.org/bob> <http://example.org/ssn> \"222\" }",
+    )
+    .unwrap();
+    assert!(
+        matches!(stuck, crate::sparql::QueryResult::Ask(false)),
+        "the rejected value must NOT have been written"
+    );
+}

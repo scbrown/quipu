@@ -2,7 +2,8 @@
 
 Quipu supports OWL 2 RL reasoning through a built-in ontology engine. OWL
 ontologies define class hierarchies, property characteristics, and constraints
-that Quipu enforces at write time and uses to materialize inferred facts.
+that Quipu uses to materialize inferred facts, and — when
+`owl.validate_on_write` is enabled — enforces at write time.
 
 ## Loading an Ontology
 
@@ -35,9 +36,10 @@ On load, Quipu:
 | Axiom | Effect |
 |---|---|
 | `rdfs:subClassOf` | Transitive closure: instances of a subclass are also instances of all superclasses |
-| `owl:disjointWith` | Write-time validation: rejects an entity typed with two disjoint classes |
+| `owl:disjointWith` | Write-time validation (opt-in): rejects an entity typed with two disjoint classes |
+| `rdfs:subPropertyOf` | Materialization: a fact under a subproperty is restated under every superproperty (transitive) |
 | `owl:inverseOf` | Materialization: `(a P b)` produces `(b Q a)` |
-| `owl:FunctionalProperty` | Write-time validation: rejects a second value on a functional property |
+| `owl:FunctionalProperty` | Write-time validation (opt-in): rejects a second value on a functional property |
 | `owl:SymmetricProperty` | Materialization: `(a P b)` produces `(b P a)` |
 | `owl:equivalentClass` | Materialization: instances of A become instances of B and vice versa |
 | `rdfs:domain` / `rdfs:range` | Materialization: infers type from property usage |
@@ -58,14 +60,41 @@ After materialization, `ASK { ex:fido a ex:Animal }` returns true.
 
 ## Write-Time Validation
 
-Two OWL constraints are enforced at write time:
+> **Enforcement is OPT-IN, and was not wired at all before 2026-08-04.**
+> This section previously stated flatly that the two constraints below "are
+> enforced at write time". That was FALSE for the shipped server:
+> `Ontology::validate()` implemented both and had **no caller** — nothing on the
+> write path invoked it, so an ontology could declare a disjointness and every
+> violating write was accepted. The caller landed on 2026-08-04.
+>
+> It is recorded here rather than quietly corrected because the failure mode is
+> the doc, not the code: a capability claim in a manual is not tested, it is
+> BELIEVED, so it stops the reader checking the very thing that is broken.
+
+Two OWL constraints can be enforced at write time. They are **off by default** —
+set `owl.validate_on_write = true` (mirroring `shacl.validate_on_write`), and
+build with the `owl` feature.
+
+The default is off on purpose. Axioms may have accumulated in a store while
+nothing enforced them, so enabling this can start rejecting writes against a
+population that was never checked. **Load the axioms, measure the existing
+violations, then enable**. In one real store a single functional-property
+candidate had 205 live violations at the moment it would have been declared.
 
 **Disjoint classes**: If `ex:Person owl:disjointWith ex:Robot`, then an entity
 cannot be typed as both. Attempting to assert `ex:alice a ex:Robot` when
-`ex:alice a ex:Person` already exists returns a structured error.
+`ex:alice a ex:Person` already exists returns a structured error and the write
+is rolled back.
 
 **Functional properties**: If `ex:ssn a owl:FunctionalProperty`, an entity can
-have at most one value. A second assertion is rejected.
+have at most one value. A second, different value is rejected.
+
+Both reject the whole transaction: the constraint runs inside the write's
+savepoint, so a violating batch commits nothing. Violations are reported
+together rather than one per round-trip.
+
+Constraints are evaluated against the **union of all loaded ontologies**, and a
+`load` or `remove` through `POST /ontology` takes effect on the next write.
 
 ## Feature Flag
 

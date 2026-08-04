@@ -94,6 +94,24 @@ pub struct ShaclConfig {
     pub validate_on_write: bool,
 }
 
+/// OWL write-time constraint policy (aegis-bmqup).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct OwlConfig {
+    /// Enforce `owl:disjointWith` and `owl:FunctionalProperty` from the
+    /// persistently-loaded ontologies on every write, rejecting the transaction
+    /// when a proposed batch violates one.
+    ///
+    /// Default FALSE, mirroring `shacl.validate_on_write` — and deliberately so
+    /// rather than on-by-default. `Ontology::validate()` shipped with NO CALLER
+    /// while `docs/book/src/concepts/owl.md` claimed write-time enforcement, so
+    /// turning it on is a behaviour change for every existing deployment: axioms
+    /// that have been accumulating unenforced would start rejecting writes the
+    /// moment the flag flipped, against a population never checked against them.
+    /// Load the axioms, measure the existing violations, THEN enable.
+    pub validate_on_write: bool,
+}
+
 /// Governance enforcement policy (the loom, write-path gate).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
@@ -239,6 +257,9 @@ pub struct QuipuConfig {
     /// SHACL validation policy.
     pub shacl: ShaclConfig,
 
+    /// OWL write-time constraint policy (disjointWith, FunctionalProperty).
+    pub owl: OwlConfig,
+
     /// Governance enforcement policy (write-path gate).
     pub governance: GovernanceConfig,
 }
@@ -255,6 +276,7 @@ impl Default for QuipuConfig {
             resolution: ResolutionConfig::default(),
             search: SearchConfig::default(),
             shacl: ShaclConfig::default(),
+            owl: OwlConfig::default(),
             governance: GovernanceConfig::default(),
         }
     }
