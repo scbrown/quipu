@@ -192,7 +192,9 @@ async fn main() {
                 // A malformed ruleset must not take the server down, but it must
                 // not pass unremarked either: the failure mode being avoided is a
                 // reasoner that silently does nothing.
-                Err(e) => eprintln!("reactive reasoner NOT registered — rules failed to parse: {e}"),
+                Err(e) => {
+                    eprintln!("reactive reasoner NOT registered — rules failed to parse: {e}")
+                }
             },
             Ok(None) => {}
             Err(e) => eprintln!("reactive reasoner NOT registered — could not read shapes: {e}"),
