@@ -1,5 +1,5 @@
 [package]
-name = "quipu"
+name = "quipu-ai"
 version = "0.3.17"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
@@ -32,6 +32,10 @@ exclude = [
     "release-plz.toml",
     "scripts/",
 ]
+
+[lib]
+name = "quipu"
+path = "src/lib.rs"
 
 [[bin]]
 name = "quipu"
