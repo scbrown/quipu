@@ -155,6 +155,50 @@ async fn main() {
         }
     }
 
+    // Register the reactive reasoner so DERIVED facts stay fresh on write
+    // (aegis-nnf0h). It was registered at src/cli.rs:582 and NOWHERE else, so the
+    // server — the only writer that matters, since every agent ingests through it
+    // — ran with no incremental derivation at all.
+    //
+    // Rules come from the SHAPES table: `shapes/aegis-rules.ttl` documents that
+    // rules may be stored alongside SHACL shapes, and the parser only picks up
+    // `a rule:Rule` subjects, so the two vocabularies coexist and no new storage
+    // or route is needed. A deployment with no rules loaded is the normal case and
+    // stays silent.
+    //
+    // SCOPE, stated because the bead's original framing over-promised: this makes
+    // DATALOG derivation incremental. `ReactiveReasoner::new` takes a `RuleSet` and
+    // there is no OWL path in it, so OWL materialization remains one-shot at
+    // ontology load. Entailments that must stay live are therefore better
+    // expressed as rules — an `owl:inverseOf` is exactly a one-atom projection,
+    // `hosts(?y, ?x) :- runs_on(?x, ?y)`.
+    //
+    // The ruleset is a snapshot taken at startup: rules loaded through /shapes
+    // afterwards need a restart to take effect. Called out rather than hidden,
+    // because "loaded but not observed" is the same silent-inertness this
+    // workstream keeps finding.
+    #[cfg(feature = "reactive-reasoner")]
+    {
+        match store.get_combined_shapes() {
+            Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, None) {
+                Ok(ruleset) if !ruleset.is_empty() => {
+                    let n = ruleset.len();
+                    store.add_observer(std::sync::Arc::new(quipu::ReactiveReasoner::new(ruleset)));
+                    eprintln!(
+                        "reactive reasoner registered — {n} Datalog rule(s) re-derive on every write"
+                    );
+                }
+                Ok(_) => {}
+                // A malformed ruleset must not take the server down, but it must
+                // not pass unremarked either: the failure mode being avoided is a
+                // reasoner that silently does nothing.
+                Err(e) => eprintln!("reactive reasoner NOT registered — rules failed to parse: {e}"),
+            },
+            Ok(None) => {}
+            Err(e) => eprintln!("reactive reasoner NOT registered — could not read shapes: {e}"),
+        }
+    }
+
     // Apply the governance enforcement policy: when enabled, `boundary:"action"`
     // policies gate every write (the loom's write-time gate, see
     // docs/design/policy-edit-hooks.md).
