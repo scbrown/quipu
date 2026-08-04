@@ -411,7 +411,8 @@ ex:contentHash a owl:DatatypeProperty, owl:FunctionalProperty .
         )
     }
     fn asks(store: &Store, v: &str) -> bool {
-        let q = format!("ASK {{ <http://example.org/doc1> <http://example.org/contentHash> \"{v}\" }}");
+        let q =
+            format!("ASK {{ <http://example.org/doc1> <http://example.org/contentHash> \"{v}\" }}");
         matches!(
             crate::sparql::query(store, &q).unwrap(),
             crate::sparql::QueryResult::Ask(true)
@@ -419,18 +420,25 @@ ex:contentHash a owl:DatatypeProperty, owl:FunctionalProperty .
     }
 
     ingest(&mut store, "aaa", "2026-01-01T00:00:00Z").unwrap();
-    assert!(asks(&store, "aaa"), "control: the first value must be current");
+    assert!(
+        asks(&store, "aaa"),
+        "control: the first value must be current"
+    );
 
     // RE-RUN THE PRODUCING PATH: the same document, edited.
     ingest(&mut store, "bbb", "2026-01-02T00:00:00Z")
         .expect("an ordinary update to a functional property must be ACCEPTED, not rejected");
 
     // RE-MEASURE.
-    assert!(!asks(&store, "aaa"), "the superseded value must no longer be current");
+    assert!(
+        !asks(&store, "aaa"),
+        "the superseded value must no longer be current"
+    );
     assert!(asks(&store, "bbb"), "the new value must be current");
 
     // Not one-shot: a third update must work too.
-    ingest(&mut store, "ccc", "2026-01-03T00:00:00Z").expect("a second update must also be accepted");
+    ingest(&mut store, "ccc", "2026-01-03T00:00:00Z")
+        .expect("a second update must also be accepted");
     assert!(asks(&store, "ccc"));
     assert!(!asks(&store, "bbb"));
 
@@ -466,7 +474,8 @@ ex:contentHash a owl:DatatypeProperty, owl:FunctionalProperty .
 
     let err = crate::rdf::ingest_rdf(
         &mut store,
-        b"@prefix ex: <http://example.org/> .\nex:doc2 ex:contentHash \"aaa\", \"bbb\" .\n".as_ref(),
+        b"@prefix ex: <http://example.org/> .\nex:doc2 ex:contentHash \"aaa\", \"bbb\" .\n"
+            .as_ref(),
         oxrdfio::RdfFormat::Turtle,
         None,
         "2026-01-01T00:00:00Z",
