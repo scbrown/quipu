@@ -39,16 +39,34 @@ repos:
         types: [rust]
         pass_filenames: false
 
+      # --all-targets and the `full` variant mirror .github/workflows/ci.yml's
+      # clippy matrix. Both are load-bearing, and their ABSENCE cost 17h of red
+      # main (aegis-zw37h): without --all-targets these lint only the lib, and
+      # quipu-server has required-features shacl+onnx so nothing below `full`
+      # builds it at all. The two lints that held main red sat in exactly those
+      # blind spots — a bin and a test file. A local gate that is a strict subset
+      # of CI's does not fail earlier, it fails LATER and somewhere nobody reads.
       - id: cargo-clippy-no-default
         name: cargo clippy (no default features)
-        entry: cargo clippy --no-default-features -- -D warnings -A missing-docs
+        entry: cargo clippy --no-default-features --all-targets -- -D warnings -A missing-docs
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-clippy-shacl
         name: cargo clippy (shacl)
-        entry: cargo clippy --features shacl -- -D warnings -A missing-docs
+        entry: cargo clippy --features shacl --all-targets -- -D warnings -A missing-docs
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      # The slowest hook here, and deliberately kept: it is the ONLY one that
+      # lints quipu-server and the owl / reactive-reasoner code. Drop it and those
+      # files go unlinted locally again — which is the state that produced this
+      # hook's own reason for existing.
+      - id: cargo-clippy-full
+        name: cargo clippy (full bundle — the one that lints quipu-server)
+        entry: cargo clippy --features full --all-targets -- -D warnings -A missing-docs
         language: system
         types: [rust]
         pass_filenames: false
