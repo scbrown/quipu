@@ -941,3 +941,93 @@ fn unrepresentable_edge_relation_is_refused_not_silently_rewritten() {
         "a refused episode must write nothing at all"
     );
 }
+
+#[test]
+fn comma_separated_type_is_refused_not_minted_as_a_junk_class() {
+    // Regression guard for aegis-vngta. `{"type": "Feature, Concept"}` used to mint
+    // ONE class `aegis:Feature__Concept` behind HTTP 200 — the node present, correctly
+    // described and edged, and absent from `?s a Feature`, the query anyone runs.
+    let mut store = crate::store::Store::open_in_memory().unwrap();
+    let ep = parse_episode(
+        r#"{
+        "name": "comma-type",
+        "nodes": [{"name": "governor-burndown", "type": "Feature, Concept"}],
+        "edges": []
+    }"#,
+    );
+    let err = ingest_episode(&mut store, &ep, "2026-08-04T00:00:00Z", TEST_BASE_NS)
+        .expect_err("a comma-separated type must be refused, not minted as one class");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Feature__Concept"),
+        "the error must show the junk class that WOULD have been minted: {msg}"
+    );
+    assert!(
+        msg.contains("ONE ENTRY PER TYPE"),
+        "the error must teach the working form: {msg}"
+    );
+    assert!(
+        msg.contains("governor-burndown"),
+        "the error must name the offending node: {msg}"
+    );
+    // Nothing from a refused episode may land.
+    assert!(
+        store
+            .lookup(&format!("{TEST_BASE_NS}governor-burndown"))
+            .unwrap()
+            .is_none(),
+        "a refused episode must write nothing at all"
+    );
+}
+
+#[test]
+fn one_entry_per_type_still_yields_one_entity_with_both_types() {
+    // The CONVERSE, and it is the half that makes the guard a policy rather than a
+    // filter: the documented working form must keep working, or the refusal above
+    // just breaks multi-typing instead of fixing it.
+    let mut store = crate::store::Store::open_in_memory().unwrap();
+    let ep = parse_episode(
+        r#"{
+        "name": "multi-type-ok",
+        "nodes": [
+            {"name": "governor-burndown", "type": "Feature"},
+            {"name": "governor-burndown", "type": "Concept"}
+        ],
+        "edges": []
+    }"#,
+    );
+    ingest_episode(&mut store, &ep, "2026-08-04T00:00:00Z", TEST_BASE_NS)
+        .expect("one-entry-per-type is the documented working form and must be accepted");
+
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    assert!(
+        ttl.contains("aegis:governor-burndown a aegis:Feature"),
+        "first type missing:\n{ttl}"
+    );
+    assert!(
+        ttl.contains("aegis:governor-burndown a aegis:Concept"),
+        "second type missing:\n{ttl}"
+    );
+    assert!(
+        !ttl.contains("Feature__Concept"),
+        "no junk class may appear:\n{ttl}"
+    );
+}
+
+#[test]
+fn type_that_would_be_silently_rewritten_is_refused() {
+    let mut store = crate::store::Store::open_in_memory().unwrap();
+    let ep = parse_episode(
+        r#"{
+        "name": "bad-type-chars",
+        "nodes": [{"name": "thing", "type": "Web Service"}],
+        "edges": []
+    }"#,
+    );
+    let err = ingest_episode(&mut store, &ep, "2026-08-04T00:00:00Z", TEST_BASE_NS)
+        .expect_err("a type that cannot round-trip must be refused");
+    assert!(
+        err.to_string().contains("Web_Service"),
+        "the error must show what it would have become: {err}"
+    );
+}
