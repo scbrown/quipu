@@ -18,7 +18,9 @@ use crate::embedding::EmbeddingProvider;
 use crate::error::{Error, Result};
 use crate::governance::PolicyRegistry;
 use crate::schema::INIT_SQL;
-use crate::types::{Op, Value};
+#[cfg(feature = "owl")]
+use crate::types::Op;
+use crate::types::Value;
 use crate::vector::{KnowledgeVectorStore, VECTORS_SQL};
 use crate::vector_delegate::{DelegatingVectorStore, VectorSearchDelegate};
 
@@ -457,13 +459,8 @@ impl Store {
             let Some(new_value) = values.first() else {
                 continue;
             };
-            closed += close_other.execute(params![
-                timestamp,
-                entity,
-                attribute,
-                new_value,
-                graph
-            ])?;
+            closed +=
+                close_other.execute(params![timestamp, entity, attribute, new_value, graph])?;
         }
         Ok(closed)
     }

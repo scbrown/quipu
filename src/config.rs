@@ -257,7 +257,7 @@ pub struct QuipuConfig {
     /// SHACL validation policy.
     pub shacl: ShaclConfig,
 
-    /// OWL write-time constraint policy (disjointWith, FunctionalProperty).
+    /// OWL write-time constraint policy (disjointWith, `FunctionalProperty`).
     pub owl: OwlConfig,
 
     /// Governance enforcement policy (write-path gate).
