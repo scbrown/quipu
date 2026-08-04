@@ -242,7 +242,7 @@ fn store_ontology_persistence() {
 /// back — and `materialize()` never read it, so loading one returned success and
 /// changed nothing. Nothing failed, because nothing asked.
 ///
-/// Uses its own ontology rather than TEST_ONTOLOGY, whose axiom counts are asserted
+/// Uses its own ontology rather than `TEST_ONTOLOGY`, whose axiom counts are asserted
 /// exactly by `ontology_axiom_summary`.
 #[test]
 fn materialize_subproperty_restates_facts_under_the_superproperty() {
