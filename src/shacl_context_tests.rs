@@ -426,3 +426,89 @@ fn partition_soak_no_payload_is_newly_refused() {
         "the fix repaired nothing — it is not doing its job"
     );
 }
+
+/// The subset property is an INVARIANT OF THE CODE, not an observation about
+/// one payload shape (sattler, aegis-fp17f condition 2).
+///
+/// `repaired()` filters `baseline.results`; there is no path that adds to it.
+/// So it holds for any payload. But every agent's `/episode` goes through this
+/// validator and an episode has a completely different shape from a code
+/// projection — entity nodes with `aegis:` types and edges to entities typed
+/// only in the store — so the invariant is exercised on that shape too rather
+/// than left as a claim about control flow.
+#[test]
+fn the_subset_property_holds_for_an_episode_shaped_payload() {
+    const EP_SHAPES: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+aegis:DirectiveShape a sh:NodeShape ;
+    sh:targetClass aegis:Directive ;
+    sh:property [ sh:path rdfs:label ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+    sh:property [ sh:path aegis:mitigates ; sh:class aegis:FailureMode ] .
+"#;
+    // The FailureMode exists ONLY in the store — the episode references it, as a
+    // corrective or follow-up episode routinely does.
+    let mut store = Store::open_in_memory().expect("store");
+    crate::rdf::ingest_rdf(
+        &mut store,
+        "<http://aegis.gastown.local/ontology/some-failure> \
+         <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> \
+         <http://aegis.gastown.local/ontology/FailureMode> .\n"
+            .as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-05T00:00:00Z",
+        None,
+        Some("test"),
+    )
+    .expect("ingested");
+
+    let episode = r#"
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:some-directive a aegis:Directive ;
+    rdfs:label "some-directive" ;
+    aegis:mitigates aegis:some-failure .
+"#;
+
+    let old = crate::shacl::validate_shapes(EP_SHAPES, episode).expect("validated");
+    let new = validate_with_store_context(&store, EP_SHAPES, episode).expect("validated");
+
+    assert!(
+        !old.conforms,
+        "CONTROL FAILED: the episode must be refused WITHOUT store context, else \
+         this shape does not exercise aegis-fp17f"
+    );
+    let old_keys: std::collections::BTreeSet<String> = old
+        .results
+        .iter()
+        .map(|r| format!("{}|{}", r.focus_node, r.component))
+        .collect();
+    for r in &new.results {
+        assert!(
+            old_keys.contains(&format!("{}|{}", r.focus_node, r.component)),
+            "episode path reported an issue the payload-alone verdict did not: {r:?}"
+        );
+    }
+    assert!(
+        new.conforms,
+        "an episode referencing an entity typed only in the store was refused: {:?}",
+        new.results
+    );
+
+    // And the failing case still fails: a Directive with no label is refused on
+    // its own merits, store context or not.
+    let bad = r#"
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:unlabelled a aegis:Directive ;
+    aegis:mitigates aegis:some-failure .
+"#;
+    let v = validate_with_store_context(&store, EP_SHAPES, bad).expect("validated");
+    assert!(
+        !v.conforms,
+        "a real violation on the episode path was laundered by store context"
+    );
+}
