@@ -124,9 +124,9 @@ struct Hist {
 /// values would grow this map without limit and blow up both the render and the
 /// scraping Prometheus. The cap converts that from an outage into a lost label.
 ///
-/// 32 is sized against the KNOWN caller list on aegis-ma1hy (SessionStart
+/// 32 is sized against the KNOWN caller list on `aegis-ma1hy` (`SessionStart`
 /// query-first hooks, hank's pre-edit/pre-bash policy hooks, st subscribe,
-/// agent /episode writes, the ingest path, bobbin) with room to spare. If
+/// agent `/episode` writes, the ingest path, bobbin) with room to spare. If
 /// `other` ever dominates, that is the signal to raise it — deliberately, not
 /// by removing the cap.
 const MAX_CLIENTS: usize = 32;
@@ -419,10 +419,7 @@ mod tests {
         assert_eq!(normalize_client(Some(""), Some("st/1.2")), "st");
         // Hostile input cannot break the exposition format or mint a label of
         // unbounded length: quotes, backslashes, newlines and spaces are gone.
-        assert_eq!(
-            normalize_client(Some("ev\"il\\\nagent name"), None),
-            "evil"
-        );
+        assert_eq!(normalize_client(Some("ev\"il\\\nagent name"), None), "evil");
         assert_eq!(normalize_client(Some(&"x".repeat(200)), None).len(), 32);
         // Non-ASCII that filters to nothing must not produce an empty label.
         assert_eq!(normalize_client(Some("日本語"), None), "unattributed");
@@ -464,9 +461,11 @@ mod tests {
         m.observe_client("hank", "/query", 3.0);
         m.observe_client("bobbin", "/query", 1.0);
         let text = m.render(0, 0, 0);
-        assert!(text.contains(
-            "quipu_http_client_requests_total{client=\"hank\",endpoint=\"/query\"} 2"
-        ));
+        assert!(
+            text.contains(
+                "quipu_http_client_requests_total{client=\"hank\",endpoint=\"/query\"} 2"
+            )
+        );
         assert!(text.contains(
             "quipu_http_client_request_seconds_total{client=\"hank\",endpoint=\"/query\"} 5"
         ));
