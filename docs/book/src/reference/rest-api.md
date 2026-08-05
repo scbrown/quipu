@@ -13,6 +13,41 @@ quipu-server --db my.db --bind 0.0.0.0:3030
 | `--db <path>` | Store database path (default: `.bobbin/quipu/quipu.db`) |
 | `--bind <addr>` | Bind address (default: `127.0.0.1:3030`) |
 
+## Authentication
+
+**Reads are open; writes need a bearer token.** When the server is started with an
+auth token configured, every *write* endpoint requires:
+
+```
+Authorization: Bearer <token>
+```
+
+Reads — `/query`, `/search`, entity lookups, `/health`, `/version` — need no
+credential and answer normally.
+
+**The authoritative list is `http_auth::WRITE_ENDPOINTS` in `src/http_auth.rs`, not
+this page.** It is enforced: `write_endpoints_cover_every_route` fails the build if
+any registered route is unclassified, so the code cannot drift from itself — but
+this page can drift from the code, so treat it as a summary and the constant as the
+answer.
+
+Two entries surprise people, and both are deliberate:
+
+| Endpoint | Why it is a WRITE |
+|---|---|
+| `/project` | Looks read-only — `stats`, `pagerank`, `ppr`, `components` only read — but `louvain` with `persist: true` **writes** `quipu:memberOfCommunity` and supersedes any prior derivation. The route is gated as a whole. |
+| `/shapes` | Gated even to *list*. Loading a shape set persists it, and a listed-but-unloaded set validates nothing while still reporting success. |
+
+A refusal is never silent. Both refusals return a JSON body naming
+the cause, so `curl -s` cannot render an auth failure as an empty result:
+
+```json
+{"endpoint":"/project","reason":"missing_or_invalid_bearer_token","error":"unauthorized: ..."}
+{"endpoint":"/knot","reason":"server_is_read_only","error":"read-only mode: ..."}
+```
+
+`reason` is the stable field to branch on; `error` is prose and may be reworded.
+
 ## Endpoints
 
 All POST endpoints accept `Content-Type: application/json`.
