@@ -222,6 +222,18 @@ pub(crate) async fn query(
         .unwrap_or("")
         .to_string();
 
+    // Same normaliser the request middleware uses, so the label here and the
+    // label on quipu_http_client_* are always the same string. Recomputed rather
+    // than threaded through a request extension: it is a short string op, and one
+    // shared function is a stronger guarantee of agreement than one shared value
+    // passed through two layers.
+    let client = quipu::metrics::normalize_client(
+        headers.get("x-quipu-client").and_then(|v| v.to_str().ok()),
+        headers
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok()),
+    );
+
     blocking(move || {
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the
@@ -237,7 +249,13 @@ pub(crate) async fn query(
                 .collect();
             eprintln!("{} query start: {text}", quipu::time::now_iso());
         }
+        // WAIT is measured across the acquisition, HELD from just after it
+        // (aegis-vxl81). The two are separated here rather than at the HTTP
+        // boundary because that boundary cannot tell them apart, and conflating
+        // them is what makes a queued caller look like an expensive one.
+        let lock_t0 = std::time::Instant::now();
         let store = store.lock();
+        let wait_secs = lock_t0.elapsed().as_secs_f64();
         let started = std::time::Instant::now();
 
         let run = |store: &quipu::Store| -> Result<axum::response::Response, AppError> {
@@ -269,6 +287,14 @@ pub(crate) async fn query(
         };
 
         let result = run(&store);
+        // Recorded while the guard is STILL ALIVE, so `held` is genuinely the
+        // lock-holding interval and not "until the response was serialised".
+        quipu::metrics::metrics().observe_store_time(
+            &client,
+            "/query",
+            wait_secs,
+            started.elapsed().as_secs_f64(),
+        );
         // The request line above has method+status+duration; only a slow or
         // failed query earns its TEXT in the log — that is the one thing the
         // next wedge RCA needs and the one thing the middleware cannot

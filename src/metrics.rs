@@ -147,6 +147,20 @@ pub struct Metrics {
     /// client would multiply series by the bucket count to answer a question
     /// nobody asked.
     clients: Mutex<BTreeMap<(String, String), (u64, f64)>>,
+    /// (client, endpoint) -> (seconds WAITING for the store lock, seconds HOLDING it).
+    ///
+    /// The distinction this exists for (`aegis-vxl81`): the wall-clock figure in
+    /// `clients` above is, on a serialised store, mostly QUEUE WAIT — which is
+    /// time caused by OTHER callers. Reporting it as a caller's share attributes
+    /// SUFFERING as if it were CAUSATION, and that misreading nearly got the only
+    /// working store monitor cut for consuming "26.7% of /query time" when its
+    /// real capacity share was under 1%.
+    ///
+    /// HELD time is the one that adds up to capacity: the store is serialised, so
+    /// the held seconds of all callers sum to the wall-clock the store was busy.
+    /// WAIT is kept alongside because their RATIO is the saturation signal — wait
+    /// >> held means the store is queueing, not working hard.
+    store_time: Mutex<BTreeMap<(String, String), (f64, f64)>>,
     /// Total datums committed to the store — correlates an RSS rise with the
     /// write volume that drove it (memory telemetry).
     facts_written: AtomicU64,
@@ -206,6 +220,24 @@ impl Metrics {
         let e = map.entry(key).or_insert((0, 0.0));
         e.0 += 1;
         e.1 += seconds;
+    }
+
+    /// Attribute store-lock WAIT and HELD seconds to a caller (`aegis-vxl81`).
+    ///
+    /// `held` is capacity consumed; `wait` is capacity consumed by everyone else.
+    /// Same [`MAX_CLIENTS`] fold as [`observe_client`], for the same reason — the
+    /// label comes from a caller-controlled header.
+    pub fn observe_store_time(&self, client: &str, endpoint: &str, wait: f64, held: f64) {
+        let mut map = self.store_time.lock().unwrap();
+        let key = (client.to_string(), endpoint.to_string());
+        let key = if map.contains_key(&key) || map.len() < MAX_CLIENTS - 1 {
+            key
+        } else {
+            ("other".to_string(), endpoint.to_string())
+        };
+        let e = map.entry(key).or_insert((0.0, 0.0));
+        e.0 += wait;
+        e.1 += held;
     }
 
     /// Record `n` datums committed, and sample RSS into the high-water mark so
@@ -304,6 +336,39 @@ impl Metrics {
             let _ = writeln!(
                 out,
                 "quipu_http_client_request_seconds_total{{client=\"{}\",endpoint=\"{}\"}} {secs}",
+                esc(client),
+                esc(ep)
+            );
+        }
+
+        // Store-lock time, split into the two quantities the wall-clock counter
+        // above cannot separate (aegis-vxl81). Use `held` to answer "who is
+        // BURNING the store" — on a serialised store held seconds sum to the time
+        // the store was busy, so a caller's share of held IS its share of
+        // capacity. Use `wait` only as a saturation signal: wait >> held means
+        // queueing. Answering the capacity question with the wall-clock counter
+        // reports the biggest SUFFERER as the biggest cause.
+        out.push_str(
+            "# HELP quipu_store_wait_seconds_total Seconds spent WAITING for the store lock, by caller. Time caused by OTHER callers.\n\
+             # TYPE quipu_store_wait_seconds_total counter\n",
+        );
+        for ((client, ep), (wait, _held)) in self.store_time.lock().unwrap().iter() {
+            let _ = writeln!(
+                out,
+                "quipu_store_wait_seconds_total{{client=\"{}\",endpoint=\"{}\"}} {wait}",
+                esc(client),
+                esc(ep)
+            );
+        }
+
+        out.push_str(
+            "# HELP quipu_store_held_seconds_total Seconds spent HOLDING the store lock, by caller. This is capacity actually consumed.\n\
+             # TYPE quipu_store_held_seconds_total counter\n",
+        );
+        for ((client, ep), (_wait, held)) in self.store_time.lock().unwrap().iter() {
+            let _ = writeln!(
+                out,
+                "quipu_store_held_seconds_total{{client=\"{}\",endpoint=\"{}\"}} {held}",
                 esc(client),
                 esc(ep)
             );
@@ -452,6 +517,56 @@ mod tests {
             .filter_map(|l| l.rsplit(' ').next()?.parse::<u64>().ok())
             .sum();
         assert_eq!(total as usize, MAX_CLIENTS * 4);
+    }
+
+    #[test]
+    fn store_time_separates_waiting_from_burning() {
+        let m = Metrics::default();
+        // The measured shape of the aegis-vxl81 misread: a probe that WAITS a long
+        // time in the queue while doing almost no work, alongside a caller that
+        // actually occupies the store.
+        m.observe_store_time("ma5er-probe", "/query", 2.0, 0.15);
+        m.observe_store_time("ma5er-probe", "/query", 2.0, 0.15);
+        m.observe_store_time("bulk-writer", "/query", 0.0, 4.0);
+        let text = m.render(0, 0, 0);
+
+        assert!(text.contains(
+            "quipu_store_wait_seconds_total{client=\"ma5er-probe\",endpoint=\"/query\"} 4"
+        ));
+        assert!(text.contains(
+            "quipu_store_held_seconds_total{client=\"ma5er-probe\",endpoint=\"/query\"} 0.3"
+        ));
+        assert!(text.contains(
+            "quipu_store_held_seconds_total{client=\"bulk-writer\",endpoint=\"/query\"} 4"
+        ));
+        // THE POINT, and asserted against the RENDERED numbers rather than
+        // against literals: ranking callers by wall-clock INVERTS the answer that
+        // ranking them by held time gives. The probe looks like the bigger
+        // consumer by wall-clock (4.3s vs 4.0s) while being ~7% of capacity by
+        // held (0.3s vs 4.0s). That is the aegis-vxl81 misread in one assertion —
+        // and clippy was right to reject the literal version, which asserted
+        // arithmetic rather than behaviour.
+        let val = |metric: &str, client: &str| -> f64 {
+            text.lines()
+                .find(|l| l.starts_with(metric) && l.contains(client))
+                .and_then(|l| l.rsplit(' ').next())
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or_else(|| panic!("no {metric} for {client}"))
+        };
+        let probe_wall = val("quipu_store_wait_seconds_total", "ma5er-probe")
+            + val("quipu_store_held_seconds_total", "ma5er-probe");
+        let writer_wall = val("quipu_store_wait_seconds_total", "bulk-writer")
+            + val("quipu_store_held_seconds_total", "bulk-writer");
+        let probe_held = val("quipu_store_held_seconds_total", "ma5er-probe");
+        let writer_held = val("quipu_store_held_seconds_total", "bulk-writer");
+        assert!(
+            probe_wall > writer_wall,
+            "wall-clock must rank the probe higher: {probe_wall} vs {writer_wall}"
+        );
+        assert!(
+            probe_held < writer_held,
+            "held must rank the WRITER higher: {probe_held} vs {writer_held}"
+        );
     }
 
     #[test]
