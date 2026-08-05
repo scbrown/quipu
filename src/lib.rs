@@ -33,6 +33,8 @@ pub mod schema;
 pub mod semweb;
 #[cfg(feature = "shacl")]
 pub mod shacl;
+#[cfg(feature = "shacl")]
+pub mod shacl_context;
 pub mod signing;
 pub mod sparql;
 pub mod store;

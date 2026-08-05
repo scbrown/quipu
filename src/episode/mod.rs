@@ -226,7 +226,7 @@ pub fn ingest_episode(
     {
         // Shapes carried inline on the episode (existing behaviour).
         if let Some(shapes) = &episode.shapes {
-            shacl_validate_or_reject(shapes, &turtle)?;
+            shacl_validate_or_reject(store, shapes, &turtle)?;
         }
         // Persistently-loaded shapes, when write-validation is enabled (hq-c6s).
         // Without this, stored shapes only gate the `knot` path and episode
@@ -241,9 +241,10 @@ pub fn ingest_episode(
             && let Some(stored) = store.get_combined_shapes()?
         {
             let split = shacl::split_shapes_by_policy(&stored);
-            shacl_validate_or_reject(&split.reject, &turtle)?;
+            shacl_validate_or_reject(store, &split.reject, &turtle)?;
             if split.has_emit {
-                let feedback = shacl::validate_shapes(&split.emit, &turtle)?;
+                let feedback =
+                    crate::shacl_context::validate_with_store_context(store, &split.emit, &turtle)?;
                 if !feedback.conforms {
                     for issue in &feedback.results {
                         store.queue_write_event(crate::store::PendingWriteEvent {
@@ -395,9 +396,15 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 /// Validate `data_turtle` against `shapes_turtle`, returning a `ValidationFailed`
 /// error that lists the violations when it does not conform (hq-c6s). Shared by
 /// the inline-shapes and persistent-shapes gates in `ingest_episode`.
+///
+/// Validated WITH THE STORE AS CONTEXT (aegis-fp17f): an episode references
+/// entities it does not re-describe — that is what an edge to an existing node
+/// is — so a payload-only `sh:class` check refuses correct writes for the
+/// accident of what travelled with them. See `shacl_context`.
 #[cfg(feature = "shacl")]
-fn shacl_validate_or_reject(shapes_turtle: &str, data_turtle: &str) -> Result<()> {
-    let feedback = shacl::validate_shapes(shapes_turtle, data_turtle)?;
+fn shacl_validate_or_reject(store: &Store, shapes_turtle: &str, data_turtle: &str) -> Result<()> {
+    let feedback =
+        crate::shacl_context::validate_with_store_context(store, shapes_turtle, data_turtle)?;
     if feedback.conforms {
         return Ok(());
     }

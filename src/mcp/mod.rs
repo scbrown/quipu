@@ -843,9 +843,14 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         (None, None) => None,
     };
 
+    // Validated WITH THE STORE AS CONTEXT (aegis-fp17f). `/knot` is the chunked
+    // write path, so it is where payload-only `sh:class` did its damage: a
+    // caller that splits one graph across several posts had every chunk judged
+    // as if the others did not exist. See `shacl_context` for why the store
+    // supplies only types, and only for nodes the payload already references.
     #[cfg(feature = "shacl")]
     if let Some(shapes) = &combined_shapes {
-        let feedback = crate::shacl::validate_shapes(shapes, turtle)?;
+        let feedback = crate::shacl_context::validate_with_store_context(store, shapes, turtle)?;
         if !feedback.conforms {
             let issues: Vec<JsonValue> = feedback
                 .results
