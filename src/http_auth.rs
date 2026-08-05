@@ -477,4 +477,40 @@ mod tests {
             problems.join("\n  ")
         );
     }
+
+    #[test]
+    fn auth_refusals_carry_a_json_body_not_a_bare_status() {
+        // aegis-zodg0. `StatusCode::X.into_response()` yields a ZERO-LENGTH body,
+        // so `curl -s` prints NOTHING and exits 0 and the caller reads a refusal
+        // as "no results" / "the graph is empty". Measured on /project: it took
+        // two round trips to establish it was auth at all, and /shapes had the
+        // same silent 401 — so there was no correct per-route body to copy and
+        // the defect was in this middleware, not in any one handler.
+        //
+        // Guarded as TEXT for the same reason write_endpoints_cover_every_route
+        // is: server.rs sits behind the `onnx` feature and the default matrix
+        // never compiles it, so a behavioural test here would not run. This does.
+        let src = include_str!("server.rs");
+        for bare in [
+            "StatusCode::UNAUTHORIZED.into_response()",
+            "StatusCode::FORBIDDEN.into_response()",
+        ] {
+            assert!(
+                !src.contains(bare),
+                "server.rs reintroduced `{bare}` — a bare status has an EMPTY body, \
+                 which curl -s renders as silence and exit 0. Return \
+                 (StatusCode::X, axum::Json(json!({{\"error\": ...}}))) instead."
+            );
+        }
+        // And the replacement must actually be there — a file that stopped
+        // refusing at all would pass the checks above vacuously.
+        assert!(
+            src.contains("missing_or_invalid_bearer_token"),
+            "the 401 arm no longer emits its JSON reason code"
+        );
+        assert!(
+            src.contains("server_is_read_only"),
+            "the 403 arm no longer emits its JSON reason code"
+        );
+    }
 }

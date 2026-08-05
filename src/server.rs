@@ -407,7 +407,8 @@ async fn main() {
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_token = auth_token.clone();
                 async move {
-                    let is_write = quipu::http_auth::is_write_endpoint(req.uri().path());
+                    let path = req.uri().path().to_string();
+                    let is_write = quipu::http_auth::is_write_endpoint(&path);
                     let auth_header = req
                         .headers()
                         .get(axum::http::header::AUTHORIZATION)
@@ -420,12 +421,52 @@ async fn main() {
                         auth_header.as_deref(),
                     ) {
                         quipu::http_auth::AccessDecision::Allow => next.run(req).await,
-                        quipu::http_auth::AccessDecision::Unauthorized => {
-                            StatusCode::UNAUTHORIZED.into_response()
-                        }
-                        quipu::http_auth::AccessDecision::ReadOnly => {
-                            StatusCode::FORBIDDEN.into_response()
-                        }
+                        // BOTH refusals carry a JSON body, and that is the whole
+                        // point of aegis-zodg0. `StatusCode::into_response()`
+                        // yields a bare status with a ZERO-LENGTH body, so
+                        // `curl -s` prints NOTHING and exits 0 — a refusal that
+                        // is indistinguishable from "the algorithm returned no
+                        // results" or "the graph is empty". Measured on /project:
+                        // it took two round trips to discover it was auth at all.
+                        //
+                        // Same failure SHAPE this repo already records for the
+                        // bobbin /search 405 (CLAUDE.md): a documented recipe that
+                        // silently returns nothing, so the reader concludes the
+                        // service is empty rather than that they called it wrong.
+                        // A refusal MUST say it refused; an empty body cannot.
+                        //
+                        // Fixed HERE, in the middleware, rather than per-route:
+                        // every bearer-gated endpoint shared the defect. /shapes
+                        // returned 0 bytes on 401 too, so there was no correct
+                        // per-route body to copy — the bug was never /project's.
+                        quipu::http_auth::AccessDecision::Unauthorized => (
+                            StatusCode::UNAUTHORIZED,
+                            axum::Json(serde_json::json!({
+                                "error": format!(
+                                    "unauthorized: {path} is a WRITE endpoint and requires a bearer token. \
+                                     Send `Authorization: Bearer <token>`. Read endpoints (/query, /search, \
+                                     entity reads, /health) are open and need no credential. \
+                                     Note /project is gated because `louvain` with persist:true WRITES \
+                                     quipu:memberOfCommunity, even though its other algorithms only read."
+                                ),
+                                "endpoint": path,
+                                "reason": "missing_or_invalid_bearer_token",
+                            })),
+                        )
+                            .into_response(),
+                        quipu::http_auth::AccessDecision::ReadOnly => (
+                            StatusCode::FORBIDDEN,
+                            axum::Json(serde_json::json!({
+                                "error": format!(
+                                    "read-only mode: {path} is a WRITE endpoint and this server was \
+                                     started read-only, so no credential will authorize it. Restart \
+                                     without read-only to permit writes."
+                                ),
+                                "endpoint": path,
+                                "reason": "server_is_read_only",
+                            })),
+                        )
+                            .into_response(),
                     }
                 }
             },
