@@ -439,21 +439,35 @@ async fn main() {
                         // every bearer-gated endpoint shared the defect. /shapes
                         // returned 0 bytes on 401 too, so there was no correct
                         // per-route body to copy — the bug was never /project's.
-                        quipu::http_auth::AccessDecision::Unauthorized => (
-                            StatusCode::UNAUTHORIZED,
-                            axum::Json(serde_json::json!({
-                                "error": format!(
-                                    "unauthorized: {path} is a WRITE endpoint and requires a bearer token. \
-                                     Send `Authorization: Bearer <token>`. Read endpoints (/query, /search, \
-                                     entity reads, /health) are open and need no credential. \
-                                     Note /project is gated because `louvain` with persist:true WRITES \
-                                     quipu:memberOfCommunity, even though its other algorithms only read."
-                                ),
-                                "endpoint": path,
-                                "reason": "missing_or_invalid_bearer_token",
-                            })),
-                        )
-                            .into_response(),
+                        quipu::http_auth::AccessDecision::Unauthorized => {
+                            // The /project note is PATH-SCOPED. Emitting it on
+                            // every gated route put an explanation of `louvain`
+                            // on a /shapes 401 — a message that is accurate about
+                            // some other endpoint is its own small version of the
+                            // defect this whole change is about, so it is
+                            // conditional rather than convenient.
+                            let why = if path == "/project" {
+                                " /project looks read-only and is not: `louvain` with persist:true \
+                                 WRITES quipu:memberOfCommunity, so the whole route is gated even \
+                                 though its other algorithms only read."
+                            } else {
+                                ""
+                            };
+                            (
+                                StatusCode::UNAUTHORIZED,
+                                axum::Json(serde_json::json!({
+                                    "error": format!(
+                                        "unauthorized: {path} is a WRITE endpoint and requires a bearer \
+                                         token. Send `Authorization: Bearer <token>`. Read endpoints \
+                                         (/query, /search, entity reads, /health) are open and need no \
+                                         credential.{why}"
+                                    ),
+                                    "endpoint": path,
+                                    "reason": "missing_or_invalid_bearer_token",
+                                })),
+                            )
+                                .into_response()
+                        }
                         quipu::http_auth::AccessDecision::ReadOnly => (
                             StatusCode::FORBIDDEN,
                             axum::Json(serde_json::json!({
