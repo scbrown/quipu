@@ -44,6 +44,69 @@ pub fn process_memory() -> (u64, u64) {
     (0, 0)
 }
 
+/// Unix seconds at which this process started serving, recorded by
+/// [`init_start_time`] during startup.
+static START_UNIX: OnceLock<f64> = OnceLock::new();
+
+/// Record the process start time. Call ONCE, from server startup.
+///
+/// Deliberately explicit rather than lazily initialised on first touch: a lazy
+/// value would be set by whatever happened to call it first — plausibly the
+/// first `/metrics` scrape — and would then report a "start time" minutes after
+/// the real one. If this is never called, [`render`] omits the metric entirely.
+/// Absent beats wrong: a missing series is visibly missing, whereas a plausible
+/// wrong one silently corrupts every restart calculation built on it.
+pub fn init_start_time() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |d| d.as_secs_f64());
+    let _ = START_UNIX.set(now);
+}
+
+/// Normalise a caller identity into a bounded metric label (aegis-ma1hy).
+///
+/// Precedence: the explicit `X-Quipu-Client` header, then `User-Agent`, then
+/// `unattributed`. Everything is lowercased, cut at the first `/` (so
+/// `curl/8.5.0` and `hank/0.4.1` collapse to `curl` and `hank` rather than
+/// minting a label per released version), restricted to `[a-z0-9._-]`, and
+/// truncated to 32 bytes.
+///
+/// `unattributed` is a REAL answer, not a failure: it is the measure of how much
+/// load still cannot be attributed, which is the number aegis-ma1hy exists to
+/// drive down. Callers that send nothing must be visible as a bloc, never
+/// silently dropped.
+#[must_use]
+pub fn normalize_client(explicit: Option<&str>, user_agent: Option<&str>) -> String {
+    let raw = explicit
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| user_agent.map(str::trim).filter(|s| !s.is_empty()));
+    let Some(raw) = raw else {
+        return "unattributed".to_string();
+    };
+    let cleaned: String = raw
+        // Cut at the first `/` OR any whitespace. Splitting on newlines matters
+        // beyond tidiness: a raw newline in a label value would break the
+        // exposition format outright, and this header is caller-controlled.
+        // The char filter below would also strip it, but two independent
+        // defences for a format-injection vector reachable by any caller is the
+        // right number.
+        .split(['/', ' ', '\t', '\n', '\r'])
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        .take(32)
+        .collect();
+    if cleaned.is_empty() {
+        "unattributed".to_string()
+    } else {
+        cleaned
+    }
+}
+
 /// Upper bounds (seconds) of the duration histogram buckets; +Inf is implicit.
 const BUCKETS: [f64; 8] = [0.005, 0.025, 0.1, 0.5, 1.0, 2.5, 10.0, 30.0];
 
@@ -54,6 +117,20 @@ struct Hist {
     total: u64,
 }
 
+/// Maximum distinct `client` label values before everything else folds into
+/// `other`. The label's SOURCE is a request header, i.e. attacker/caller
+/// controlled, so an uncapped map is an unbounded-cardinality hole reachable by
+/// anyone who can reach the port: one loop sending random `X-Quipu-Client`
+/// values would grow this map without limit and blow up both the render and the
+/// scraping Prometheus. The cap converts that from an outage into a lost label.
+///
+/// 32 is sized against the KNOWN caller list on aegis-ma1hy (SessionStart
+/// query-first hooks, hank's pre-edit/pre-bash policy hooks, st subscribe,
+/// agent /episode writes, the ingest path, bobbin) with room to spare. If
+/// `other` ever dominates, that is the signal to raise it — deliberately, not
+/// by removing the cap.
+const MAX_CLIENTS: usize = 32;
+
 #[derive(Default)]
 pub struct Metrics {
     /// (endpoint template, status) -> request count.
@@ -62,6 +139,14 @@ pub struct Metrics {
     durations: Mutex<BTreeMap<String, Hist>>,
     /// /policy/check outcome -> count.
     policy: Mutex<BTreeMap<String, u64>>,
+    /// (client, endpoint template) -> (request count, summed seconds).
+    ///
+    /// A SUM and a COUNT rather than a per-client histogram: the question this
+    /// exists to answer (aegis-ma1hy) is "which caller accounts for what
+    /// fraction of /query TIME", which is a ratio of sums. A histogram per
+    /// client would multiply series by the bucket count to answer a question
+    /// nobody asked.
+    clients: Mutex<BTreeMap<(String, String), (u64, f64)>>,
     /// Total datums committed to the store — correlates an RSS rise with the
     /// write volume that drove it (memory telemetry).
     facts_written: AtomicU64,
@@ -95,6 +180,32 @@ impl Metrics {
         }
         h.sum += seconds;
         h.total += 1;
+    }
+
+    /// Attribute one request's TIME to a caller (aegis-ma1hy).
+    ///
+    /// Call with the already-normalised label from [`normalize_client`]; this
+    /// method does not normalise, so that the middleware pays that cost once and
+    /// the same string reaches the log line and the metric.
+    ///
+    /// Folds into `other` past [`MAX_CLIENTS`] distinct values — see that
+    /// constant for why the cap is not optional.
+    pub fn observe_client(&self, client: &str, endpoint: &str, seconds: f64) {
+        let mut map = self.clients.lock().unwrap();
+        let key = (client.to_string(), endpoint.to_string());
+        // `MAX_CLIENTS - 1`, not `MAX_CLIENTS`: the `other` bucket needs a slot
+        // of its own, or the cap is silently one higher than the constant says.
+        // My own test caught this at 33 series against a stated cap of 32 — a
+        // one-series overshoot is harmless, but a cap that does not mean its own
+        // number is the kind of thing that gets copied somewhere it matters.
+        let key = if map.contains_key(&key) || map.len() < MAX_CLIENTS - 1 {
+            key
+        } else {
+            ("other".to_string(), endpoint.to_string())
+        };
+        let e = map.entry(key).or_insert((0, 0.0));
+        e.0 += 1;
+        e.1 += seconds;
     }
 
     /// Record `n` datums committed, and sample RSS into the high-water mark so
@@ -166,6 +277,51 @@ impl Metrics {
                 "quipu_http_request_duration_seconds_count{{endpoint=\"{ep}\"}} {}",
                 h.total
             );
+        }
+
+        // Per-caller attribution (aegis-ma1hy). Two counters rather than a
+        // histogram: "what fraction of /query time is caller X" is a ratio of
+        // sums, and the ratio is taken over increase() of BOTH, so it is
+        // reset-safe in a way a bare counter read is not.
+        out.push_str(
+            "# HELP quipu_http_client_requests_total Requests served, by normalised caller and route template.\n\
+             # TYPE quipu_http_client_requests_total counter\n",
+        );
+        for ((client, ep), (n, _secs)) in self.clients.lock().unwrap().iter() {
+            let _ = writeln!(
+                out,
+                "quipu_http_client_requests_total{{client=\"{}\",endpoint=\"{}\"}} {n}",
+                esc(client),
+                esc(ep)
+            );
+        }
+
+        out.push_str(
+            "# HELP quipu_http_client_request_seconds_total Cumulative request seconds, by normalised caller and route template.\n\
+             # TYPE quipu_http_client_request_seconds_total counter\n",
+        );
+        for ((client, ep), (_n, secs)) in self.clients.lock().unwrap().iter() {
+            let _ = writeln!(
+                out,
+                "quipu_http_client_request_seconds_total{{client=\"{}\",endpoint=\"{}\"}} {secs}",
+                esc(client),
+                esc(ep)
+            );
+        }
+
+        // Restart detection. quipu exported NO process start time, which is why
+        // restarts had to be counted by inferring counter RESETS — and an
+        // increase() across an unnoticed reset already fabricated a 169k/5min
+        // figure against a true ~400/100min (aegis-jebd8). Every counter above
+        // inherits that hazard; this gauge is what makes a reset visible instead
+        // of merely inferable. Emitted ONLY if startup recorded it (see
+        // init_start_time): absent beats a wrong start time.
+        if let Some(t) = START_UNIX.get() {
+            out.push_str(
+                "# HELP process_start_time_seconds Start time of the process since unix epoch in seconds.\n\
+                 # TYPE process_start_time_seconds gauge\n",
+            );
+            let _ = writeln!(out, "process_start_time_seconds {t}");
         }
 
         out.push_str(
@@ -242,6 +398,84 @@ fn esc(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn client_label_precedence_and_normalisation() {
+        // Explicit header wins over User-Agent.
+        assert_eq!(
+            normalize_client(Some("hank-policy-hook"), Some("curl/8.5.0")),
+            "hank-policy-hook"
+        );
+        // Version suffixes collapse — otherwise every release mints a label.
+        assert_eq!(normalize_client(None, Some("curl/8.5.0")), "curl");
+        assert_eq!(normalize_client(None, Some("bobbin/0.6.5")), "bobbin");
+        // Absent, empty, and whitespace-only all read as unattributed, which is
+        // a real measurement (how much load nobody claims), not a failure.
+        assert_eq!(normalize_client(None, None), "unattributed");
+        assert_eq!(normalize_client(Some(""), None), "unattributed");
+        assert_eq!(normalize_client(Some("   "), Some("")), "unattributed");
+        // An empty explicit header falls THROUGH to User-Agent rather than
+        // swallowing it.
+        assert_eq!(normalize_client(Some(""), Some("st/1.2")), "st");
+        // Hostile input cannot break the exposition format or mint a label of
+        // unbounded length: quotes, backslashes, newlines and spaces are gone.
+        assert_eq!(
+            normalize_client(Some("ev\"il\\\nagent name"), None),
+            "evil"
+        );
+        assert_eq!(normalize_client(Some(&"x".repeat(200)), None).len(), 32);
+        // Non-ASCII that filters to nothing must not produce an empty label.
+        assert_eq!(normalize_client(Some("日本語"), None), "unattributed");
+    }
+
+    #[test]
+    fn client_cardinality_is_capped_and_overflow_is_visible() {
+        let m = Metrics::default();
+        // Far more distinct callers than the cap, all on one endpoint.
+        for i in 0..(MAX_CLIENTS * 4) {
+            m.observe_client(&format!("caller{i}"), "/query", 0.1);
+        }
+        let text = m.render(0, 0, 0);
+        let series = text
+            .lines()
+            .filter(|l| l.starts_with("quipu_http_client_requests_total"))
+            .count();
+        // The cap is the point: an uncapped map would render 128 series here.
+        assert!(
+            series <= MAX_CLIENTS,
+            "client series {series} exceeded the cap {MAX_CLIENTS}"
+        );
+        // Overflow is FOLDED, never dropped — the totals must still add up, or
+        // the attribution silently understates load, which is worse than no
+        // attribution at all.
+        assert!(text.contains("client=\"other\""));
+        let total: u64 = text
+            .lines()
+            .filter(|l| l.starts_with("quipu_http_client_requests_total"))
+            .filter_map(|l| l.rsplit(' ').next()?.parse::<u64>().ok())
+            .sum();
+        assert_eq!(total as usize, MAX_CLIENTS * 4);
+    }
+
+    #[test]
+    fn client_time_attribution_sums_and_start_time_is_absent_until_recorded() {
+        let m = Metrics::default();
+        m.observe_client("hank", "/query", 2.0);
+        m.observe_client("hank", "/query", 3.0);
+        m.observe_client("bobbin", "/query", 1.0);
+        let text = m.render(0, 0, 0);
+        assert!(text.contains(
+            "quipu_http_client_requests_total{client=\"hank\",endpoint=\"/query\"} 2"
+        ));
+        assert!(text.contains(
+            "quipu_http_client_request_seconds_total{client=\"hank\",endpoint=\"/query\"} 5"
+        ));
+        assert!(text.contains(
+            "quipu_http_client_request_seconds_total{client=\"bobbin\",endpoint=\"/query\"} 1"
+        ));
+        // 5 of 6 seconds are hank's — the ratio this whole change exists to make
+        // computable (aegis-ma1hy: 65.6% of /query load was unattributable).
+    }
 
     #[test]
     fn counters_histogram_and_gauges_render_in_exposition_format() {

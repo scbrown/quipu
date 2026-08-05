@@ -455,6 +455,19 @@ async fn main() {
                     .extensions()
                     .get::<axum::extract::MatchedPath>()
                     .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
+                // WHO is calling (aegis-ma1hy). Read here, before the request is
+                // consumed by next.run. Computed once and used for BOTH the
+                // metric label and the log lines: the log is what an RCA reads
+                // when the metric has already been reset by a restart, and the
+                // two disagreeing would be worse than either alone.
+                let client = quipu::metrics::normalize_client(
+                    req.headers()
+                        .get("x-quipu-client")
+                        .and_then(|v| v.to_str().ok()),
+                    req.headers()
+                        .get(axum::http::header::USER_AGENT)
+                        .and_then(|v| v.to_str().ok()),
+                );
                 // Log at START with an id, then again at completion. The
                 // request that never completes is exactly the one an RCA
                 // needs, and completion-only logging guarantees it is the one
@@ -464,17 +477,18 @@ async fn main() {
                 // plain-file stderr redirects where no journald stamps lines.
                 static REQ_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
                 let id = REQ_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                eprintln!("{} req#{id} {method} {path} ...", quipu::time::now_iso());
+                eprintln!(
+                    "{} req#{id} client={client} {method} {path} ...",
+                    quipu::time::now_iso()
+                );
                 let started = std::time::Instant::now();
                 let resp = next.run(req).await;
                 let status = resp.status().as_u16();
-                quipu::metrics::metrics().observe_request(
-                    &endpoint,
-                    status,
-                    started.elapsed().as_secs_f64(),
-                );
+                let elapsed = started.elapsed().as_secs_f64();
+                quipu::metrics::metrics().observe_request(&endpoint, status, elapsed);
+                quipu::metrics::metrics().observe_client(&client, &endpoint, elapsed);
                 eprintln!(
-                    "{} req#{id} {method} {path} -> {status} in {}ms",
+                    "{} req#{id} client={client} {method} {path} -> {status} in {}ms",
                     quipu::time::now_iso(),
                     started.elapsed().as_millis()
                 );
@@ -533,6 +547,11 @@ async fn main() {
             eprintln!("error binding {bind_addr}: {e}");
             std::process::exit(1);
         });
+
+    // AFTER the bind succeeds, so the recorded start time is when this process
+    // began SERVING, not when it began trying. A failed bind exits above; a
+    // start time recorded before it would describe a process that never served.
+    quipu::metrics::init_start_time();
 
     axum::serve(listener, app).await.unwrap();
 }
