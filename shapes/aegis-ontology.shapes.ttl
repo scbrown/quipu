@@ -1517,6 +1517,54 @@ aegis:CapabilityShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── The last two asserted abstract parents ───────────────────────
+#
+# Service (65 direct assertions) and Tool (18) were the remaining classes
+# reported by invariant I8: a parent with children and no shape of its own, so a
+# node typed with the PARENT is governed by nothing while `?s a Service` returns
+# it anyway. Shaping them is the second of I8's two sanctioned remedies, and it
+# is the SAME call ec1f082 made for Host directly above — made the same way,
+# from the same measurement, so the two do not have to be argued separately.
+#
+# Why shape rather than retype, per class, MEASURED not assumed:
+#
+#   Service — five children already resolve to it (WebApplication,
+#   DatabaseService, SystemdService, SearchService, ExternalService), so the
+#   constant-IRI query already expands to 370 while only 65 are asserted.
+#   Retyping those 65 away would break that expansion for the ones that are
+#   genuinely just "a service" and nothing narrower — 26 of the 65 carry no
+#   other type at all, which is the population a child class does not exist for.
+#
+#   Tool — same shape, smaller: children CLI and AgentTool, 18 asserted, 11 of
+#   them bare. The bare ones are guards, skills and probes (dangerous-command-
+#   guard, hank-census, st_doctor); "a tool" is the honest claim for those and
+#   inventing a child to hold them would be modelling for the checker's benefit.
+#
+# NOT a tightening, and measured before landing exactly as ec1f082 required:
+# 65/65 Service and 18/18 Tool instances already carry rdfs:label, so these two
+# shapes refuse nothing that exists. The asserted counts come from the FILTER
+# form (`?s a ?c . FILTER(?c = <...>)`); the constant form expands over
+# subClassOf and would have reported 370 — see the note on I8 in
+# verify_shape_invariants.py.
+#
+# Landing these takes I8's direct-assertion count to ZERO, which is the trigger
+# its own docstring names for promoting it from a REPORT to a FAILURE. That flip
+# is in the same change, because the report is what let the backlog re-grow.
+
+aegis:ServiceShape a sh:NodeShape ;
+    sh:targetClass aegis:Service ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
+aegis:ToolShape a sh:NodeShape ;
+    sh:targetClass aegis:Tool ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ── SoftwareVersion ──────────────────────────────────────────────
 #
 # A specific released version of a piece of software, so an incident can point

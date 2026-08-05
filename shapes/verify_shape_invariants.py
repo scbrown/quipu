@@ -57,8 +57,9 @@ WHY EACH INVARIANT EXISTS — each is a bug that actually happened:
 
   I8  (--live) No ABSTRACT parent is asserted directly on an instance. An
       abstract parent is DERIVED, not listed: a class used as the object of
-      rdfs:subClassOf that has no sh:targetClass of its own (today: Service,
-      Host). I7 cannot see this — the parent IS declared, just not shaped —
+      rdfs:subClassOf that has no sh:targetClass of its own (today:
+      FailureKnowledge, OperationalKnowledge, TextRule — none asserted).
+      I7 cannot see this — the parent IS declared, just not shaped —
       and neither can any coverage count, because a constant-IRI type query
       resolves subclasses and returns the node whether it was typed with the
       parent or the child. So `?s a aegis:Service` reports a node as covered
@@ -67,20 +68,34 @@ WHY EACH INVARIANT EXISTS — each is a bug that actually happened:
       nodes, then re-measured to 61 asserted, of which 26 carried no other
       type at all — those 26 are governed by nothing whatsoever).
 
-      Judgement, on the record: Service and Host stay abstract and UNSHAPED.
-      Shaping them would bless the catch-all — the bare nodes are misfiled,
-      not under-described (a source checkout and a network appliance typed
-      Host; a dashboard typed Service), and a shape on the parent would
-      target every child by inference for no gain. The fix is retyping.
-      REPORTS rather than fails, for the reason I1 gives: this check may only
-      assert what live data already satisfies, and today it does not. Flip it
-      to a failure the moment the direct-assertion count reaches zero — that
-      is what stops the backlog being silently re-grown.
+      Judgement, RESOLVED and now FATAL. This paragraph used to
+      record the opposite ruling — "Service and Host stay abstract and UNSHAPED,
+      the fix is retyping" — and it was already contradicted by the file it
+      guards: ec1f082 shaped Host, for the reason retyping was rejected. Both
+      remedies are legitimate; which one applies is a per-class call, so a
+      blanket ruling in the docstring was the wrong instrument and went stale
+      the same day it was written.
+
+      The call actually made, per class, on measurement:
+        Host, Service, Tool — SHAPED (rdfs:label floor). Each has children that
+          already resolve to it, so the constant-IRI query expands to the whole
+          population; retyping the asserted ones away would break that for the
+          bare nodes, which are the population no child class exists for (26 of
+          65 Service, 11 of 18 Tool). Label coverage was 100% before landing, so
+          none of the three shapes refuses anything that exists.
+        Retyping stays the right remedy where the assertions are genuinely
+          MISFILED rather than merely broad. Nothing is in that state today.
+
+      Direct assertions are therefore ZERO, which is the condition this check
+      set for itself, so it now FAILS instead of reporting. A report is what let
+      the backlog re-grow; a failure is what stops it. If this fires, the fix is
+      the per-class call above — never widening the exemption.
 
 The three lists compared here drift INDEPENDENTLY — that is the disease. A
 generator can come later; this check stays either way, because the first
 hand-edit of a generated table re-opens the same hole, silently.
 """
+import inspect
 import json
 import re
 import subprocess
@@ -367,7 +382,11 @@ def main():
         # look catastrophically violated (aegis-6h45e).
         direct = {k: in_use[k] for k in sorted(abstract) if in_use.get(k)}
         if direct:
-            reports.append(
+            # FATAL since ServiceShape and ToolShape landed. This reported for
+            # as long as live data did not satisfy it (the I1 rule); the
+            # backlog is now zero, so the promise the I8 docstring made — flip
+            # this the moment the count reaches zero — comes due.
+            failures.append(
                 f"I8 ABSTRACT-PARENT ASSERTED DIRECTLY: {len(direct)} of {len(abstract)} "
                 f"abstract parent(s) carry direct assertions ({sum(direct.values())} entities):\n      "
                 + "\n      ".join(f"{k}: {n}" for k, n in sorted(direct.items(), key=lambda kv: -kv[1]))
@@ -375,6 +394,8 @@ def main():
                 "\n      with the PARENT is governed by nothing while reading as covered — the"
                 "\n      inference-expanded count includes it either way. Retype each to the"
                 "\n      concrete child, or shape the parent (which retires it from this check)."
+                "\n      Do NOT silence this by exempting the class: an exemption list is the"
+                "\n      stale audit table I4 forbids, and the backlog it hides re-grows unseen."
             )
         elif abstract:
             print(f"I8 abstract parents never asserted .......... ok ({len(abstract)} abstract)")
@@ -499,6 +520,23 @@ def selftest():
         fails.append("I8-positive: a zero-assertion abstract parent was reported")
     if abstract_parents(parents, shaped | {"Service", "Host"}):
         fails.append("I8-positive: shaping a parent did not retire it from the check")
+
+    # I8 SEVERITY. The backlog reached zero, so I8 fails rather
+    # than reports; the failure mode this guards is someone quieting it back to
+    # a report to make a red run green, which is indistinguishable from a fix in
+    # the output and re-opens the hole silently. Asserted against this file's
+    # OWN SOURCE and named as such: the routing lives inline in main(), so there
+    # is no seam to call, and a source assertion that says so beats a
+    # behavioural claim that is really only a comment.
+    # Read main()'s source, NOT the whole file: this check's own marker string
+    # would otherwise match itself and the guard would pass on nothing.
+    i8_block = inspect.getsource(main).split("# I8 ")[-1].split("elif abstract:")[0]
+    if "failures.append(" not in i8_block:
+        fails.append("I8-severity: the I8 branch no longer routes to failures — "
+                     "it was demoted back to a report")
+    if "reports.append(" in i8_block:
+        fails.append("I8-severity: the I8 branch appends to reports; a direct "
+                     "assertion must be FATAL, not scrolled past")
 
     if fails:
         print("SELFTEST FAILED:", file=sys.stderr)
