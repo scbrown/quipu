@@ -20,6 +20,29 @@
 
 bobbin:CodeModuleShape a sh:NodeShape ;
     sh:targetClass bobbin:CodeModule ;
+    # rdfs:label is REQUIRED. Ordered AFTER the emitter shipped, not before, and
+    # the order is measured rather than stylistic: the previous exporter emitted
+    # these four classes with NO label at all, so this constraint would have
+    # refused every promotion and left the hourly ingest's marker unadvanced —
+    # advise before enforce (see the bead). Verified on the DEPLOYED binary
+    # before this landed, not on its source, and across every repo the lane
+    # ingests: 15,311 entities, none unlabelled.
+    #
+    #     CodeModule 127/127   CodeSymbol 1850/1850  Document 29/29   Section 176/176
+    #     CodeModule 144/144   CodeSymbol 7638/7638  Document 57/57   Section 541/541
+    #     CodeModule 148/148   CodeSymbol 3436/3436  Document 154/154 Section 1011/1011
+    #
+    # xsd:string matches BundleShape/CommitShape below: the exporter writes plain
+    # literals, which are xsd:string in RDF 1.1. A language-tagged label would be
+    # rdf:langString and would NOT satisfy this — intentional, and consistent with
+    # those neighbours. Same rule as the in_repo note above: never require a
+    # predicate the emitter does not emit.
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
     sh:property [
         sh:path bobbin:filePath ;
         sh:datatype xsd:string ;
@@ -79,6 +102,29 @@ bobbin:CodeModuleShape a sh:NodeShape ;
 
 bobbin:CodeSymbolShape a sh:NodeShape ;
     sh:targetClass bobbin:CodeSymbol ;
+    # rdfs:label is REQUIRED. Ordered AFTER the emitter shipped, not before, and
+    # the order is measured rather than stylistic: the previous exporter emitted
+    # these four classes with NO label at all, so this constraint would have
+    # refused every promotion and left the hourly ingest's marker unadvanced —
+    # advise before enforce (see the bead). Verified on the DEPLOYED binary
+    # before this landed, not on its source, and across every repo the lane
+    # ingests: 15,311 entities, none unlabelled.
+    #
+    #     CodeModule 127/127   CodeSymbol 1850/1850  Document 29/29   Section 176/176
+    #     CodeModule 144/144   CodeSymbol 7638/7638  Document 57/57   Section 541/541
+    #     CodeModule 148/148   CodeSymbol 3436/3436  Document 154/154 Section 1011/1011
+    #
+    # xsd:string matches BundleShape/CommitShape below: the exporter writes plain
+    # literals, which are xsd:string in RDF 1.1. A language-tagged label would be
+    # rdf:langString and would NOT satisfy this — intentional, and consistent with
+    # those neighbours. Same rule as the in_repo note above: never require a
+    # predicate the emitter does not emit.
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
     sh:property [
         sh:path bobbin:name ;
         sh:datatype xsd:string ;
@@ -108,6 +154,29 @@ bobbin:CodeSymbolShape a sh:NodeShape ;
 
 bobbin:DocumentShape a sh:NodeShape ;
     sh:targetClass bobbin:Document ;
+    # rdfs:label is REQUIRED. Ordered AFTER the emitter shipped, not before, and
+    # the order is measured rather than stylistic: the previous exporter emitted
+    # these four classes with NO label at all, so this constraint would have
+    # refused every promotion and left the hourly ingest's marker unadvanced —
+    # advise before enforce (see the bead). Verified on the DEPLOYED binary
+    # before this landed, not on its source, and across every repo the lane
+    # ingests: 15,311 entities, none unlabelled.
+    #
+    #     CodeModule 127/127   CodeSymbol 1850/1850  Document 29/29   Section 176/176
+    #     CodeModule 144/144   CodeSymbol 7638/7638  Document 57/57   Section 541/541
+    #     CodeModule 148/148   CodeSymbol 3436/3436  Document 154/154 Section 1011/1011
+    #
+    # xsd:string matches BundleShape/CommitShape below: the exporter writes plain
+    # literals, which are xsd:string in RDF 1.1. A language-tagged label would be
+    # rdf:langString and would NOT satisfy this — intentional, and consistent with
+    # those neighbours. Same rule as the in_repo note above: never require a
+    # predicate the emitter does not emit.
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
     sh:property [
         sh:path bobbin:filePath ;
         sh:datatype xsd:string ;
@@ -122,6 +191,29 @@ bobbin:DocumentShape a sh:NodeShape ;
 
 bobbin:SectionShape a sh:NodeShape ;
     sh:targetClass bobbin:Section ;
+    # rdfs:label is REQUIRED. Ordered AFTER the emitter shipped, not before, and
+    # the order is measured rather than stylistic: the previous exporter emitted
+    # these four classes with NO label at all, so this constraint would have
+    # refused every promotion and left the hourly ingest's marker unadvanced —
+    # advise before enforce (see the bead). Verified on the DEPLOYED binary
+    # before this landed, not on its source, and across every repo the lane
+    # ingests: 15,311 entities, none unlabelled.
+    #
+    #     CodeModule 127/127   CodeSymbol 1850/1850  Document 29/29   Section 176/176
+    #     CodeModule 144/144   CodeSymbol 7638/7638  Document 57/57   Section 541/541
+    #     CodeModule 148/148   CodeSymbol 3436/3436  Document 154/154 Section 1011/1011
+    #
+    # xsd:string matches BundleShape/CommitShape below: the exporter writes plain
+    # literals, which are xsd:string in RDF 1.1. A language-tagged label would be
+    # rdf:langString and would NOT satisfy this — intentional, and consistent with
+    # those neighbours. Same rule as the in_repo note above: never require a
+    # predicate the emitter does not emit.
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
     sh:property [
         sh:path bobbin:heading ;
         sh:datatype xsd:string ;
