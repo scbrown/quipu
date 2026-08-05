@@ -313,6 +313,27 @@ groupId`) to a listed group, and it **drops** ungrouped `/knot` facts (they have
 no episode to trace). `entity_type` restricts to an rdf:type IRI. See
 [group-isolation](../../design/group-isolation.md).
 
+> ⚠️ **The `type: A, B` in a result's `text` is NOT valid as `/episode` input.** A
+> multi-typed entity renders as `... type: Feature, Tool, Concept`, and that string
+> looks exactly like a `type` value you could paste back. It is not one — `/episode`
+> takes `type` as a SINGLE class and refuses a comma-separated value (400). To give an
+> entity several types, send **one node entry per type, repeating the same name**;
+> the canonical-name resolver folds them into one entity:
+>
+> ```json
+> {"nodes":[{"name":"governor","type":"Feature"},{"name":"governor","type":"Concept"}]}
+> ```
+>
+> This bites careful readers specifically: searching first to reuse existing
+> conventions is what hands you the string, so following the "search before you mint"
+> rule is what leads into it.
+>
+> **Why the rendering is not simply changed:** that `text` is the EMBEDDING SOURCE
+> (`src/embedding.rs`, `format!("type: {}", types.join(", "))`), not a display string.
+> Altering the separator changes the text every stored vector was computed from, so it
+> would need a full re-embed backfill to stay coherent — a much larger change than it
+> looks. Documented here rather than "fixed" cheaply and inconsistently.
+
 ### `POST /hybrid_search`
 
 Combined SPARQL filter + vector ranking.
