@@ -85,6 +85,30 @@ pub struct ReadLabel {
     pub labels_tx: Option<i64>,
 }
 
+/// A dataset's composed label — the fold over its member graphs (quipu #67).
+///
+/// Each axis carries its own [`Coverage`], because a graph may declare
+/// freshness and say nothing about trust. `value: None` means *undeclared*, and
+/// is never a fabricated `fresh`/⊤/⊥.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatasetLabels {
+    /// Composed freshness — the meet over declared members.
+    pub freshness: Composed<Freshness>,
+    /// Composed trust — the meet over declared members, within one chain.
+    pub trust: Composed<Trust>,
+    /// Composed policy — the JOIN (union) of declared members' obligations.
+    pub policy: Composed<PolicyClass>,
+}
+
+impl DatasetLabels {
+    /// Whether no member declared anything on any axis. `/query` reports
+    /// `"labels": null` in this case rather than three empty objects.
+    #[must_use]
+    pub fn is_undeclared(&self) -> bool {
+        self.freshness.value.is_none() && self.trust.value.is_none() && self.policy.value.is_none()
+    }
+}
+
 /// One graph's disagreement between the RDF source of truth and the cache.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelDrift {
@@ -302,6 +326,17 @@ impl Store {
         let Some(g) = self.lookup(graph_iri)? else {
             return Ok(Self::undeclared_label());
         };
+        self.label_of_id(g)
+    }
+
+    /// [`Store::label_of`] by graph id, for callers that already resolved it —
+    /// the dataset fold reads ids straight out of `GraphScope`.
+    ///
+    /// # Errors
+    /// As [`Store::label_of`].
+    pub fn label_of_id(&self, g: i64) -> Result<ReadLabel> {
+        let graph_iri = self.resolve(g).unwrap_or_else(|_| format!("g={g}"));
+        let graph_iri = graph_iri.as_str();
 
         let row: Option<CacheRow> = self
             .conn
@@ -479,6 +514,63 @@ impl Store {
             )));
         }
         Ok(())
+    }
+
+    /// The composed label of a whole dataset — the fold over its member graphs
+    /// (quipu #67, graph-labels.md §4).
+    ///
+    /// **Computed once per query, not per row.** This is
+    /// `O(|dataset|)` — a handful of PK-indexed reads on `graphs` — and never
+    /// `O(|rows|)`. Per-solution labelling is a *semantic* blocker rather than a
+    /// cost knob: `sparql/triple.rs` omits `g` from the projection precisely so
+    /// `SELECT DISTINCT e, a, v` collapses a triple present in three graphs to
+    /// one solution, which IS the RDF-merge semantics of `FROM`. Projecting `g`
+    /// to carry a per-row label would turn one solution into three — different
+    /// results, not slower ones.
+    ///
+    /// **Conservative by construction:** a dataset containing a stale graph is
+    /// labelled stale even if no returned row came from it. Conservative cannot
+    /// overstate, which is the direction every mapping in this stack chooses.
+    ///
+    /// # Errors
+    /// When two member graphs carry trust values from *different chains*. Ranks
+    /// are only comparable within a declared chain (#66), so this refuses
+    /// rather than returning a composed trust that means nothing. Freshness and
+    /// policy would still be computable, but reporting a partial label as if it
+    /// were the label is the kind of quiet half-truth this axis exists to stop.
+    pub fn dataset_labels(&self, graphs: &[i64]) -> Result<DatasetLabels> {
+        let mut fresh = Vec::with_capacity(graphs.len());
+        let mut trust = Vec::with_capacity(graphs.len());
+        let mut policy = Vec::with_capacity(graphs.len());
+
+        for &g in graphs {
+            let l = self.label_of_id(g)?;
+            fresh.push(l.freshness.value);
+            trust.push(l.trust.value);
+            policy.push(l.policy.value);
+        }
+
+        Ok(DatasetLabels {
+            freshness: crate::lattice::fold_meet(fresh)?,
+            trust: crate::lattice::fold_meet(trust)?,
+            policy: crate::lattice::fold_join(policy)?,
+        })
+    }
+
+    /// Every named graph's id (`g <> 0`, excluding the reserved meta-graph).
+    ///
+    /// The meta-graph is excluded deliberately: it holds labels *about* graphs,
+    /// so folding its own label into a dataset that merely ranges over "all
+    /// named graphs" would be a category error.
+    pub fn all_named_graph_ids(&self) -> Result<Vec<i64>> {
+        let meta_g = self.meta_graph_id()?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT g FROM graphs WHERE g <> 0 AND g <> ?1")?;
+        let ids = stmt
+            .query_map(params![meta_g], |r| r.get::<_, i64>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(ids)
     }
 
     /// Recompute every graph's label from the meta-graph facts and report where

@@ -22,6 +22,7 @@ use crate::error::{Error, Result};
 use crate::resolution::EntityCandidate;
 use crate::sparql::{self, QueryResult, TemporalContext, rdfs};
 use crate::store::Store;
+use crate::store::labels;
 use crate::types::Value;
 
 /// Render episode-ingest resolution hints (node name → near-duplicate
@@ -152,6 +153,47 @@ pub fn query_inference(store: &Store, input: &JsonValue) -> Result<Vec<rdfs::Exp
 /// invites less scrutiny than a count does — a reader must not read a marked
 /// `true` as "this true is inferred". Establishing contribution means running
 /// the query a second time without expansion; the marker deliberately does not.
+/// Attach the dataset's composed label as a top-level `"labels"` key (quipu
+/// #67, graph-labels.md §4.1).
+///
+/// Always present, `null` when nothing was declared — deliberately unlike the
+/// inference marker above, whose PRESENCE is its signal. Here `null` is a
+/// meaningful *undeclared*, and a reader must be able to tell it apart from a
+/// server that does not do labels at all.
+///
+/// **A refusal is reported, never propagated.** If the fold refuses (member
+/// graphs carrying trust from different chains — #66), the label becomes
+/// `{"error": …}` and the query still returns its rows. Failing the whole query
+/// would be a regression for every caller that never asked about labels, and
+/// this key is attached unconditionally. Refusing to state a label is the
+/// honest outcome; refusing to answer the query is a different and unasked-for
+/// one.
+fn add_labels(out: &mut JsonValue, labels: &Result<Option<labels::DatasetLabels>>) {
+    let value = match labels {
+        Ok(None) => JsonValue::Null,
+        Ok(Some(l)) => serde_json::json!({
+            "freshness": {
+                "value": l.freshness.value.map(crate::lattice::Freshness::as_str),
+                "coverage": l.freshness.coverage.as_str(),
+            },
+            "trust": {
+                "value": l.trust.value.as_ref().map(|t| serde_json::json!({
+                    "iri": t.iri, "chain": t.chain, "rank": t.rank,
+                })),
+                "coverage": l.trust.coverage.as_str(),
+            },
+            "policy": {
+                "value": l.policy.value.as_ref().map(|p| p.tokens()),
+                "coverage": l.policy.coverage.as_str(),
+            },
+        }),
+        Err(e) => serde_json::json!({ "error": e.to_string() }),
+    };
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert("labels".to_string(), value);
+    }
+}
+
 fn add_inference(out: &mut JsonValue, expanded: &[rdfs::ExpandedType]) {
     if expanded.is_empty() {
         return;
@@ -716,6 +758,12 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     // when it did not, so the field's PRESENCE is the signal — a marker that
     // appears on every response is one readers stop seeing.
     let inferred = query_inference(store, input).unwrap_or_default();
+    // Computed from the SAME `query_context` the executor used, so the label
+    // describes the dataset the query actually read. Held as a Result: a
+    // cross-chain refusal is reported in the field, never raised as a query
+    // failure (see `add_labels`).
+    let labeled =
+        query_context(store, input).and_then(|(q, ctx)| sparql::dataset_labels_for(store, q, &ctx));
 
     match result {
         QueryResult::Select { variables, rows } => {
@@ -737,6 +785,7 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "truncated": truncated
             });
             add_inference(&mut out, &inferred);
+            add_labels(&mut out, &labeled);
             Ok(out)
         }
         QueryResult::Ask(result) => {
@@ -748,6 +797,7 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             // the marker is the only thing that can distinguish the two worlds.
             let mut out = serde_json::json!({ "result": result });
             add_inference(&mut out, &inferred);
+            add_labels(&mut out, &labeled);
             Ok(out)
         }
         QueryResult::Graph(triples) => {
@@ -771,6 +821,7 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "truncated": truncated
             });
             add_inference(&mut out, &inferred);
+            add_labels(&mut out, &labeled);
             Ok(out)
         }
     }

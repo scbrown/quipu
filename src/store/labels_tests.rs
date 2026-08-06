@@ -541,3 +541,153 @@ fn the_meta_graph_id_is_a_runtime_rowid_not_a_constant() {
         META_GRAPH_IRI
     );
 }
+
+// ---------------------------------------------------------------------------
+// quipu #67 — the dataset fold
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_dataset_is_only_as_fresh_as_its_weakest_member() {
+    // #67 acceptance: FROM a b with fresh+stale graphs -> labels report stale.
+    let mut store = Store::open_in_memory().unwrap();
+    for (iri, f) in [("urn:g:a", Freshness::Fresh), ("urn:g:b", Freshness::Stale)] {
+        store.overlay_create(iri, 0).unwrap();
+        store
+            .set_graph_label(
+                iri,
+                &GraphLabel {
+                    freshness: Some(f),
+                    ..Default::default()
+                },
+                TS,
+                None,
+            )
+            .unwrap();
+    }
+    let a = store.lookup("urn:g:a").unwrap().unwrap();
+    let b = store.lookup("urn:g:b").unwrap().unwrap();
+
+    let l = store.dataset_labels(&[a, b]).unwrap();
+    assert_eq!(l.freshness.value, Some(Freshness::Stale));
+    assert_eq!(l.freshness.coverage, Coverage::Full);
+}
+
+#[test]
+fn an_undeclared_member_makes_coverage_partial_without_moving_the_value() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.overlay_create("urn:g:lab", 0).unwrap();
+    store.overlay_create("urn:g:bare", 0).unwrap();
+    store
+        .set_graph_label(
+            "urn:g:lab",
+            &GraphLabel {
+                freshness: Some(Freshness::Fresh),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    let lab = store.lookup("urn:g:lab").unwrap().unwrap();
+    let bare = store.lookup("urn:g:bare").unwrap().unwrap();
+
+    let l = store.dataset_labels(&[lab, bare]).unwrap();
+    assert_eq!(
+        l.freshness.value,
+        Some(Freshness::Fresh),
+        "an undeclared graph must not drag the value to the floor"
+    );
+    assert_eq!(
+        l.freshness.coverage,
+        Coverage::Partial,
+        "but it must be visible — silence must not flatter"
+    );
+}
+
+#[test]
+fn a_wholly_unlabelled_dataset_is_undeclared() {
+    let store = Store::open_in_memory().unwrap();
+    store.overlay_create("urn:g:x", 0).unwrap();
+    let x = store.lookup("urn:g:x").unwrap().unwrap();
+    let l = store.dataset_labels(&[x]).unwrap();
+    assert!(
+        l.is_undeclared(),
+        "reported as null, not as a fabricated label"
+    );
+    assert_eq!(l.freshness.coverage, Coverage::None);
+}
+
+#[test]
+fn dataset_obligations_accumulate_by_union() {
+    let mut store = Store::open_in_memory().unwrap();
+    for (iri, tok) in [("urn:g:p1", "pii"), ("urn:g:p2", "no-export")] {
+        store.overlay_create(iri, 0).unwrap();
+        store
+            .set_graph_label(
+                iri,
+                &GraphLabel {
+                    policy: Some(PolicyClass::new([tok])),
+                    ..Default::default()
+                },
+                TS,
+                None,
+            )
+            .unwrap();
+    }
+    let p1 = store.lookup("urn:g:p1").unwrap().unwrap();
+    let p2 = store.lookup("urn:g:p2").unwrap().unwrap();
+
+    let l = store.dataset_labels(&[p1, p2]).unwrap();
+    let p = l.policy.value.expect("declared");
+    assert!(
+        p.contains("pii") && p.contains("no-export"),
+        "a clean graph must not launder a restricted one"
+    );
+}
+
+#[test]
+fn a_cross_chain_dataset_refuses_rather_than_composing_ranks() {
+    let mut store = Store::open_in_memory().unwrap();
+    for (iri, chain) in [("urn:g:c1", "urn:chain:one"), ("urn:g:c2", "urn:chain:two")] {
+        store.overlay_create(iri, 0).unwrap();
+        store
+            .set_graph_label(
+                iri,
+                &GraphLabel {
+                    trust: Some(trust(&format!("{iri}#t"), chain, 10)),
+                    ..Default::default()
+                },
+                TS,
+                None,
+            )
+            .unwrap();
+    }
+    let c1 = store.lookup("urn:g:c1").unwrap().unwrap();
+    let c2 = store.lookup("urn:g:c2").unwrap().unwrap();
+
+    let err = store
+        .dataset_labels(&[c1, c2])
+        .expect_err("ranks from different chains are incomparable");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("urn:chain:one") && msg.contains("urn:chain:two"),
+        "{msg}"
+    );
+}
+
+#[test]
+fn the_meta_graph_is_excluded_from_all_named_graph_ids() {
+    // Folding the label-holding graph's own label into "all named graphs" is a
+    // category error, and would also make every GRAPH ?g query's label depend
+    // on whether anyone had labelled the meta-graph.
+    let store = Store::open_in_memory().unwrap();
+    store.overlay_create("urn:g:real", 0).unwrap();
+    let ids = store.all_named_graph_ids().unwrap();
+    let meta_g = store.meta_graph_id().unwrap();
+    assert!(
+        !ids.contains(&meta_g),
+        "meta-graph must not be a dataset member"
+    );
+    assert!(!ids.contains(&0), "ROOT is not a NAMED graph");
+    assert!(ids.contains(&store.lookup("urn:g:real").unwrap().unwrap()));
+}

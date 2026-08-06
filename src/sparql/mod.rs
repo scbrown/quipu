@@ -150,6 +150,94 @@ pub fn query(store: &Store, sparql: &str) -> Result<QueryResult> {
     query_temporal(store, sparql, &TemporalContext::default())
 }
 
+/// A query result together with its dataset's composed label (quipu #67).
+///
+/// Not `Clone`: `QueryResult` is not, and adding it would mean touching the
+/// type this issue is explicit about leaving alone.
+#[derive(Debug)]
+pub struct LabeledResult {
+    /// The ordinary result — **byte-identical** to what [`query_temporal`]
+    /// returns for the same query.
+    pub result: QueryResult,
+    /// The dataset's composed label, or `None` when no member graph declared
+    /// anything. `None` is *undeclared*, never a fabricated `fresh`/⊤/⊥.
+    pub labels: Option<crate::store::labels::DatasetLabels>,
+}
+
+/// Execute a query and also report its dataset's composed label.
+///
+/// A **new entry point, deliberately**: [`QueryResult`] is unchanged and
+/// [`query_temporal`] keeps its signature, because many internal callers match
+/// on the result and want nothing more (graph-labels.md §4.1). Nothing on the
+/// existing path is touched, so there is no regression to measure on it — the
+/// extra parse below is paid only by callers that ask for labels.
+///
+/// The label is a property of the **dataset**, computed once here — not per
+/// row. See [`Store::dataset_labels`] for why per-solution labelling is a
+/// semantic blocker rather than a cost knob.
+///
+/// # Errors
+/// Parse and evaluation errors as [`query_temporal`], plus a refusal when the
+/// dataset's member graphs carry trust from different chains (#66).
+pub fn query_labeled(store: &Store, sparql: &str, ctx: &TemporalContext) -> Result<LabeledResult> {
+    let labels = dataset_labels_for(store, sparql, ctx)?;
+    let result = query_temporal(store, sparql, ctx)?;
+    Ok(LabeledResult { result, labels })
+}
+
+/// The composed label of the dataset a query would read, **without running it**.
+///
+/// Split out so the `/query` and `quipu_query` surfaces can attach a `"labels"`
+/// key beside their existing result without executing the query twice, and so
+/// there is exactly ONE implementation of "which graphs does this query read".
+///
+/// Returns `None` when no member graph declared anything on any axis —
+/// *undeclared*, reported as `"labels": null` rather than as a fabricated
+/// `fresh`/⊤/⊥.
+///
+/// # Errors
+/// Parse errors, and a refusal when member graphs carry trust from different
+/// chains (#66).
+pub fn dataset_labels_for(
+    store: &Store,
+    sparql: &str,
+    ctx: &TemporalContext,
+) -> Result<Option<crate::store::labels::DatasetLabels>> {
+    // Resolve the dataset exactly the way evaluation will, by running the same
+    // `apply_dataset` over the same parsed dataset clause. A second
+    // implementation of the resolution would be free to drift from the one that
+    // decides what the query actually reads — labelling a dataset the query
+    // does not read is precisely the failure this is meant to prevent.
+    let parsed = SparqlParser::new()
+        .parse_query(sparql)
+        .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
+    let dataset = match &parsed {
+        Query::Select { dataset, .. }
+        | Query::Construct { dataset, .. }
+        | Query::Describe { dataset, .. }
+        | Query::Ask { dataset, .. } => dataset.clone(),
+    };
+    let scoped = apply_dataset(store, dataset.as_ref(), ctx)?;
+
+    let member_ids: Vec<i64> = match &scoped.graph {
+        GraphScope::Default(ids) => ids.clone(),
+        GraphScope::Named(id) => vec![*id],
+        // `GRAPH ?g` with no `FROM NAMED` ranges every named graph, so the fold
+        // does too — the label has to cover what the query could read.
+        GraphScope::AnyNamed { restrict, .. } => match restrict {
+            Some(ids) => ids.clone(),
+            None => store.all_named_graph_ids()?,
+        },
+    };
+
+    let composed = store.dataset_labels(&member_ids)?;
+    Ok(if composed.is_undeclared() {
+        None
+    } else {
+        Some(composed)
+    })
+}
+
 /// Clears the `SQLite` progress handler on drop, so an early return or error
 /// cannot leave a stale deadline interrupting the NEXT query on this
 /// connection.

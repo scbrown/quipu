@@ -2335,3 +2335,202 @@ fn the_explicit_path_form_matches_the_constant_form() {
     .unwrap();
     assert_eq!(path["rows"][0]["n"], 3);
 }
+
+/// Canonical rendering of a `QueryResult` for equality assertions.
+///
+/// `Bindings` is a `HashMap`, so `{:?}` on a row varies by key iteration order
+/// and is NOT a stable serialization — comparing debug strings reports a
+/// difference where there is none. (Caught exactly that way while writing the
+/// byte-identical test below: same rows, same order, different key order.)
+/// Sort each row's keys; keep ROW order, which is semantically meaningful.
+fn canonical(result: &QueryResult) -> String {
+    match result {
+        QueryResult::Select { variables, rows } => {
+            let body: Vec<String> = rows
+                .iter()
+                .map(|r| {
+                    let mut kv: Vec<String> = r.iter().map(|(k, v)| format!("{k}={v:?}")).collect();
+                    kv.sort();
+                    format!("{{{}}}", kv.join(","))
+                })
+                .collect();
+            format!("Select vars={variables:?} rows=[{}]", body.join(","))
+        }
+        other => format!("{other:?}"),
+    }
+}
+
+// --- quipu #67: dataset labels on the query path ---
+
+/// Two named graphs, one fresh and one stale, plus a ROOT triple.
+fn labeled_store() -> (Store, String, String) {
+    use crate::lattice::Freshness;
+    use crate::store::labels::GraphLabel;
+    use crate::types::{Op, Value};
+
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-08-06T00:00:00Z";
+    let (a, b) = ("urn:g:fresh".to_string(), "urn:g:stale".to_string());
+    let e = store.intern("http://example.org/s").unwrap();
+    let p = store.intern("http://example.org/p").unwrap();
+
+    for (iri, f) in [(&a, Freshness::Fresh), (&b, Freshness::Stale)] {
+        let g = store.overlay_create(iri, 0).unwrap();
+        store
+            .overlay_write(g, Op::Assert, e, p, Value::Str(iri.clone()), ts)
+            .unwrap();
+        store
+            .set_graph_label(
+                iri,
+                &GraphLabel {
+                    freshness: Some(f),
+                    ..Default::default()
+                },
+                ts,
+                None,
+            )
+            .unwrap();
+    }
+    (store, a, b)
+}
+
+#[test]
+fn from_two_graphs_reports_the_weaker_freshness() {
+    // #67 acceptance: FROM a b with fresh+stale -> labels report stale.
+    let (store, a, b) = labeled_store();
+    let q = format!("SELECT ?o FROM <{a}> FROM <{b}> WHERE {{ ?s ?p ?o }}");
+    let out = query_labeled(&store, &q, &TemporalContext::default()).unwrap();
+
+    let labels = out.labels.expect("both members declared freshness");
+    assert_eq!(
+        labels.freshness.value,
+        Some(crate::lattice::Freshness::Stale)
+    );
+    assert_eq!(labels.freshness.coverage, crate::lattice::Coverage::Full);
+    assert_eq!(out.result.rows().len(), 2, "and the rows are unaffected");
+}
+
+#[test]
+fn an_unlabelled_dataset_reports_no_labels_and_an_identical_payload() {
+    // #67 acceptance, the important half: the QueryResult payload must be
+    // byte-identical to what the un-labelled entry point returns.
+    let store = test_store_with_data();
+    let q = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
+
+    let plain = query(&store, q).unwrap();
+    let labeled = query_labeled(&store, q, &TemporalContext::default()).unwrap();
+
+    assert!(
+        labeled.labels.is_none(),
+        "nothing declared -> null, never a fabricated label"
+    );
+    // Compare the rendered payload, which is what a client actually receives.
+    assert_eq!(
+        canonical(&labeled.result),
+        canonical(&plain),
+        "the result payload must not change when labels are requested"
+    );
+}
+
+#[test]
+fn labels_do_not_change_the_rows_a_query_returns() {
+    // A conservative dataset label must not be implemented by filtering.
+    let (store, a, b) = labeled_store();
+    let q = format!("SELECT ?o FROM <{a}> FROM <{b}> WHERE {{ ?s ?p ?o }}");
+    let plain = query(&store, &q).unwrap();
+    let labeled = query_labeled(&store, &q, &TemporalContext::default()).unwrap();
+    assert_eq!(canonical(&labeled.result), canonical(&plain));
+}
+
+#[test]
+fn the_root_only_path_is_unlabelled_and_untouched() {
+    let store = test_store_with_data();
+    let out = query_labeled(
+        &store,
+        "SELECT ?s WHERE { ?s ?p ?o }",
+        &TemporalContext::default(),
+    )
+    .unwrap();
+    assert!(
+        out.labels.is_none(),
+        "ROOT alone declares nothing by default"
+    );
+}
+
+#[test]
+fn the_query_json_carries_a_labels_key() {
+    // #67: /query and quipu_query gain a top-level "labels" key beside
+    // `truncated`. Always present; null when undeclared.
+    let (store, a, b) = labeled_store();
+    let input = serde_json::json!({
+        "query": format!("SELECT ?o FROM <{a}> FROM <{b}> WHERE {{ ?s ?p ?o }}")
+    });
+    let out = crate::mcp::tool_query(&store, &input).unwrap();
+    let labels = out.get("labels").expect("the key is always present");
+    assert_eq!(
+        labels["freshness"]["value"], "stale",
+        "the weaker member wins"
+    );
+    assert_eq!(labels["freshness"]["coverage"], "full");
+}
+
+#[test]
+fn an_undeclared_dataset_serializes_labels_as_null() {
+    let store = test_store_with_data();
+    let out = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query": "SELECT ?s WHERE { ?s ?p ?o }"}),
+    )
+    .unwrap();
+    assert!(
+        out.get("labels").is_some_and(serde_json::Value::is_null),
+        "present and null — a reader must tell 'undeclared' from 'this server has no labels'"
+    );
+    // And the rest of the payload is untouched.
+    assert!(out.get("rows").is_some() && out.get("truncated").is_some());
+}
+
+#[test]
+fn a_cross_chain_dataset_reports_a_label_error_without_failing_the_query() {
+    // The regression this design avoids: `labels` is attached to EVERY
+    // response, so a refusal must not take the query down with it. Callers who
+    // never asked about labels must keep getting their rows.
+    use crate::lattice::Trust;
+    use crate::store::labels::GraphLabel;
+    use crate::types::{Op, Value};
+
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-08-06T00:00:00Z";
+    let e = store.intern("http://example.org/s").unwrap();
+    let p = store.intern("http://example.org/p").unwrap();
+    for (iri, chain) in [("urn:g:x1", "urn:chain:a"), ("urn:g:x2", "urn:chain:b")] {
+        let g = store.overlay_create(iri, 0).unwrap();
+        store
+            .overlay_write(g, Op::Assert, e, p, Value::Str(iri.into()), ts)
+            .unwrap();
+        store
+            .set_graph_label(
+                iri,
+                &GraphLabel {
+                    trust: Some(Trust::new(format!("{iri}#t"), chain, 10)),
+                    ..Default::default()
+                },
+                ts,
+                None,
+            )
+            .unwrap();
+    }
+
+    let input = serde_json::json!({
+        "query": "SELECT ?o FROM <urn:g:x1> FROM <urn:g:x2> WHERE { ?s ?p ?o }"
+    });
+    let out = crate::mcp::tool_query(&store, &input).expect("the QUERY must still succeed");
+    assert_eq!(out["count"], 2, "rows are returned as normal");
+    let err = out["labels"]["error"]
+        .as_str()
+        .expect("the refusal is reported IN the label, not raised");
+    assert!(
+        err.contains("urn:chain:a") && err.contains("urn:chain:b"),
+        "{err}"
+    );
+}
