@@ -1,6 +1,7 @@
 //! The core fact log store backed by `SQLite`.
 
 pub mod events;
+pub mod labels;
 pub mod ops;
 pub mod overlays;
 pub mod push;
@@ -308,6 +309,7 @@ impl Store {
         conn.execute_batch(INIT_SQL)?;
         conn.execute_batch(VECTORS_SQL)?;
         Self::migrate_named_graphs(&conn)?;
+        Self::migrate_graph_labels(&conn)?;
         Ok(Self::with_connection(conn))
     }
 
@@ -869,6 +871,74 @@ impl Store {
             conn.execute_batch("ALTER TABLE facts ADD COLUMN g INTEGER NOT NULL DEFAULT 0;")?;
         }
         conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);")?;
+        Ok(())
+    }
+
+    /// Additive migration for graph labels (quipu #65). Adds the five nullable
+    /// cache columns to `graphs` and reserves the label meta-graph.
+    ///
+    /// Follows `migrate_named_graphs` above deliberately, including the
+    /// aegis-akb8 hazard: any index on the new columns is created **here**, not
+    /// in `schema::INIT_SQL`, because `INIT_SQL` runs first and against
+    /// pre-label stores, where `CREATE INDEX … ON graphs(trust_chain)` would
+    /// hard-fail with `no such column` before this ALTER could add it.
+    ///
+    /// **The meta-graph is seeded here and could not be seeded in `INIT_SQL`.**
+    /// ROOT is `g = 0`, a constant an `INSERT` can hardcode; the meta-graph's
+    /// `g` is `intern("urn:quipu:graph:meta")` — a *runtime rowid* that depends
+    /// on what the store has already interned. It has to be looked up.
+    ///
+    /// Idempotent, and additive in the strict sense: the columns are nullable
+    /// with no default, so every existing graph reads back *undeclared* rather
+    /// than a fabricated label, and the reserved meta-graph starts with zero
+    /// facts — so no query's results change. `created_at` is the same fixed
+    /// epoch ROOT uses rather than a clock read, so the migration is
+    /// deterministic and fixtures stay stable.
+    fn migrate_graph_labels(conn: &Connection) -> Result<()> {
+        // Five nullable cache columns, each guarded independently: a store part
+        // way through an interrupted migration must converge, not fail.
+        //
+        // `trust_chain` is TEXT holding the chain's IRI, deliberately NOT an
+        // interned term id. Term ids are exactly what quipu #74's `respace`
+        // must rewrite, and every term-id-bearing column added here widens that
+        // surface — a respace that misses one does not error, it silently
+        // repoints the registry. Text costs a few bytes and stays out of it.
+        for (col, decl) in [
+            ("fresh_rank", "INTEGER"),
+            ("trust_rank", "INTEGER"),
+            ("trust_chain", "TEXT"),
+            ("policy", "TEXT"),
+            ("labels_tx", "INTEGER"),
+        ] {
+            let present: bool = conn
+                .prepare("SELECT 1 FROM pragma_table_info('graphs') WHERE name = ?1")?
+                .exists(params![col])?;
+            if !present {
+                conn.execute_batch(&format!("ALTER TABLE graphs ADD COLUMN {col} {decl};"))?;
+            }
+        }
+
+        // Reserve the meta-graph. Interning is the same INSERT-OR-IGNORE then
+        // SELECT that `Store::intern` does; done in SQL because this runs
+        // against a bare `Connection`, before a `Store` exists.
+        conn.execute(
+            "INSERT OR IGNORE INTO terms (iri) VALUES (?1)",
+            params![crate::namespace::META_GRAPH_IRI],
+        )?;
+        let meta_g: i64 = conn.query_row(
+            "SELECT id FROM terms WHERE iri = ?1",
+            params![crate::namespace::META_GRAPH_IRI],
+            |r| r.get(0),
+        )?;
+        // `committed`, not `overlay`: labels are durable and bitemporal, and
+        // overlay-class graphs are excluded from bitemporality by design.
+        // Self-rooted like ROOT, so it is never resolved against a parent.
+        conn.execute(
+            "INSERT OR IGNORE INTO graphs (g, class, parent_branch, created_at) \
+             VALUES (?1, 'committed', NULL, '1970-01-01T00:00:00Z')",
+            params![meta_g],
+        )?;
+
         Ok(())
     }
 

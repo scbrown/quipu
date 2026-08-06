@@ -162,7 +162,11 @@ impl Meet for Freshness {
 
 /// The default trust chain Quipu ships. Consumers declare their own; Quipu
 /// learns neither Hank's nor `NeuralAmplifier`'s vocabulary (§2).
-pub const DEFAULT_TRUST_CHAIN: &str = "http://quipu.dev/ontology/defaultTrustChain";
+///
+/// `https:`, matching [`crate::namespace::QUIPU`]. The design doc writes the
+/// `quipu:` namespace as `http:`; this codebase has always used `https:`, and
+/// interning both spellings would mint two distinct terms for one predicate.
+pub const DEFAULT_TRUST_CHAIN: &str = "https://quipu.dev/ontology/defaultTrustChain";
 
 /// A trust value: an IRI, its rank, and **the chain that ranked it**.
 ///

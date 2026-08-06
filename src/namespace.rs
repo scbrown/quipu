@@ -33,6 +33,33 @@ pub const BOBBIN: &str = "https://bobbin.dev/ontology#";
 
 pub const QUIPU: &str = "https://quipu.dev/ontology/";
 
+// ── Graph labels (quipu #65) ───────────────────────────────────
+//
+// The reserved meta-graph and the three label-axis predicates from
+// `docs/design/graph-labels.md`. Built from `QUIPU` deliberately: the design
+// doc writes these as `http://quipu.dev/…` while this codebase's namespace has
+// always been `https://`, and two spellings would intern as two DIFFERENT
+// terms — a graph labelled through one and read through the other would come
+// back undeclared, with nothing to see but a silent miss.
+
+/// The reserved meta-graph holding every graph's labels.
+///
+/// Unlike ROOT (`g = 0`, a constant), this graph's `g` is
+/// `intern(META_GRAPH_IRI)` — a runtime rowid. That is why it is seeded in the
+/// migration function and never in `INIT_SQL`.
+pub const META_GRAPH_IRI: &str = "urn:quipu:graph:meta";
+
+/// `quipu:freshness` — how current a graph's contents are.
+pub const QUIPU_FRESHNESS: &str = "https://quipu.dev/ontology/freshness";
+/// `quipu:trust` — the graph's trust value (an IRI, ranked by a chain).
+pub const QUIPU_TRUST: &str = "https://quipu.dev/ontology/trust";
+/// `quipu:policyClass` — an obligation token carried by the graph.
+pub const QUIPU_POLICY_CLASS: &str = "https://quipu.dev/ontology/policyClass";
+/// `quipu:trustRank` — a trust value's rank within its chain.
+pub const QUIPU_TRUST_RANK: &str = "https://quipu.dev/ontology/trustRank";
+/// `quipu:inChain` — the chain that ranks a trust value.
+pub const QUIPU_IN_CHAIN: &str = "https://quipu.dev/ontology/inChain";
+
 // ── Commonly-used IRIs ─────────────────────────────────────────
 
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
