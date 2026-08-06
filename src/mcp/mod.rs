@@ -1070,6 +1070,22 @@ pub fn tool_definitions() -> Vec<JsonValue> {
             }
         }),
         serde_json::json!({
+            "name": "quipu_queries",
+            "description": "Manage STORED named queries — competency questions a consumer ships with its domain, callable through quipu_ask alongside the compiled-in catalog. Definitions are validated at LOAD (template must parse; every {placeholder} needs a spec; an optional param needs a default) and versioned: re-loading a name closes the prior version rather than overwriting it.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": { "type": "string", "enum": ["load", "list", "get", "remove"], "description": "Action to perform (default: list)" },
+                    "name": { "type": "string", "description": "Query name (required for load/get/remove)" },
+                    "description": { "type": "string", "description": "What the query answers" },
+                    "template": { "type": "string", "description": "SPARQL template with {param} placeholders (required for load)" },
+                    "dataset": { "type": "string", "description": "Optional dataset IRI this query is scoped to; activates it unless the caller passes `graph`" },
+                    "params": { "type": "array", "description": "Ordered param specs: {name, type: iri|text|int, required, default, description}", "items": {} },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
+                }
+            }
+        }),
+        serde_json::json!({
             "name": "quipu_datasets",
             "description": "Manage named datasets — a reusable NAME for an arbitrary set of graphs, so it can be labelled, governed and handed to another agent. `FROM <dataset-iri>` then means FROM over its members. Datasets overlap freely and are never implicitly active.",
             "inputSchema": {

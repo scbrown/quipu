@@ -193,6 +193,12 @@ rw_handler!(shapes, quipu::tool_shapes);
 // ro_handler! that /overlay/create was mis-registered as (aegis-2f4n).
 rw_handler!(datasets, quipu::tool_datasets);
 
+// quipu #79: the stored named-query registry. `load`/`remove` MUTATE, so
+// rw_handler! and a WRITE_ENDPOINTS entry — "when unsure, it is a write".
+// `tool_ask` deliberately stays ro_handler!: it only READS the registry, and
+// `every_pooled_tool_survives_a_read_only_connection` pins that.
+rw_handler!(queries, quipu::tool_queries);
+
 // aegis-06q1r: the OWL ontology route. `tool_load_ontology` already both
 // persists the ontology AND calls `Ontology::materialize`, which is the whole
 // point: measured on aegis-qgqci, asserting `runs_on owl:inverseOf hosts` as a

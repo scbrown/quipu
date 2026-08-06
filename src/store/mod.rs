@@ -6,6 +6,7 @@ pub mod labels;
 pub mod ops;
 pub mod overlays;
 pub mod push;
+pub mod queries;
 #[cfg(test)]
 mod tests;
 
@@ -315,6 +316,7 @@ impl Store {
         Self::migrate_graph_labels(&conn)?;
         Self::migrate_datasets(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
+        Self::migrate_query_registry(&conn)?;
         Ok(Self::with_connection(conn))
     }
 
@@ -955,6 +957,46 @@ impl Store {
             params![meta_g],
         )?;
 
+        Ok(())
+    }
+
+    /// Stored named-query registry (quipu #79).
+    ///
+    /// Versioned in #71's close-don't-overwrite style **from day one** rather
+    /// than retrofitted: a query definition is policy about how a layer is
+    /// read, and losing the prior version loses the answer to "what did this
+    /// name mean when that result was produced".
+    ///
+    /// `dataset` is the optional scope (NULL = global). Stored as the dataset
+    /// IRI, not a term id — the #74 respace rule again.
+    fn migrate_query_registry(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS queries (
+                 name        TEXT    NOT NULL,
+                 description TEXT    NOT NULL,
+                 template    TEXT    NOT NULL,
+                 dataset     TEXT,
+                 valid_from  TEXT    NOT NULL,
+                 valid_to    TEXT,
+                 tx          INTEGER,
+                 PRIMARY KEY (name, valid_from)
+             );
+             CREATE INDEX IF NOT EXISTS idx_queries_open ON queries(name, valid_to);
+             -- `ord` keeps the display order the ParamSpec array has; the params
+             -- of a query are a LIST, and a set would silently reorder a
+             -- self-describing catalog between reads.
+             CREATE TABLE IF NOT EXISTS query_params (
+                 name        TEXT    NOT NULL,
+                 valid_from  TEXT    NOT NULL,
+                 ord         INTEGER NOT NULL,
+                 param       TEXT    NOT NULL,
+                 kind        TEXT    NOT NULL CHECK (kind IN ('iri','text','int')),
+                 required    INTEGER NOT NULL,
+                 default_val TEXT,
+                 description TEXT    NOT NULL,
+                 PRIMARY KEY (name, valid_from, ord)
+             );",
+        )?;
         Ok(())
     }
 

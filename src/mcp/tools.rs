@@ -4,12 +4,14 @@
 //! reads, searches, shape/subscription management, and writes.
 
 mod datasets;
+mod queries;
 mod read;
 pub(crate) mod search;
 mod shapes;
 mod write;
 
 pub use datasets::tool_datasets;
+pub use queries::tool_queries;
 pub use read::{tool_cord, tool_unravel};
 pub use search::{tool_hybrid_search, tool_search};
 pub use shapes::{resolve_validation_shapes, tool_shapes, tool_subscriptions, tool_validate};

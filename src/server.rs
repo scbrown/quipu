@@ -168,7 +168,7 @@ use tools::{
     accept_proposal, ask, context, cooccurrence, cord, datasets, embed_backfill, episode,
     episodes_complete, graph_view, graphiti_search_nodes, hybrid_search, impact_analysis,
     list_proposals, overlay_compose, overlay_create, overlay_write, policy_check, project_graph,
-    propose_schema_change, reject_proposal, report, report_get, resolve_probe, retract,
+    propose_schema_change, queries, reject_proposal, report, report_get, resolve_probe, retract,
     retract_episode, search, search_facts, search_nodes, set_predicate, shapes, subscriptions,
     unified_search, unravel, validate, verdict_verify, verifier_authorized,
 };
@@ -550,6 +550,7 @@ async fn main() {
         .route("/ontology", post(ontology))
         .route("/subscriptions", post(subscriptions))
         .route("/datasets", post(datasets))
+        .route("/queries", post(queries))
         .route("/propose", post(propose_schema_change))
         .route("/proposals", post(list_proposals))
         .route("/proposal/accept", post(accept_proposal))

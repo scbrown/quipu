@@ -41,6 +41,17 @@ pub enum ParamKind {
 }
 
 impl ParamKind {
+    /// Parse the stored string form. `None` for anything unrecognised — the
+    /// registry validates kinds at load, so this cannot silently default.
+    pub(crate) fn from_label(s: &str) -> Option<Self> {
+        match s {
+            "iri" => Some(ParamKind::Iri),
+            "text" => Some(ParamKind::Text),
+            "int" => Some(ParamKind::Int),
+            _ => None,
+        }
+    }
+
     fn label(self) -> &'static str {
         match self {
             ParamKind::Iri => "iri",
@@ -50,7 +61,13 @@ impl ParamKind {
     }
 
     /// Validate and escape `raw` for safe substitution into a query template.
-    fn render(self, name: &str, raw: &str) -> Result<String> {
+    /// Render one parameter value.
+    ///
+    /// `pub(crate)` so the STORED registry (#79) renders through this exact
+    /// function rather than a copy. Two renderers would drift, and the drift
+    /// would show up as a stored query producing different SPARQL from an
+    /// identical builtin one.
+    pub(crate) fn render(self, name: &str, raw: &str) -> Result<String> {
         match self {
             ParamKind::Iri => {
                 if raw.is_empty() {
@@ -149,6 +166,10 @@ impl NamedQuery {
             "name": self.name,
             "description": self.description,
             "params": params,
+            // quipu #79: BOTH sides flag their origin. A flag only one side
+            // emits is not a flag — a reader cannot tell "builtin" from
+            // "an older server that did not label anything".
+            "source": "builtin",
         })
     }
 }
@@ -316,9 +337,24 @@ pub const CATALOG: &[NamedQuery] = &[
 ];
 
 /// Render the full catalog as JSON for discovery.
-fn catalog_json() -> JsonValue {
+///
+/// Merges the compiled-in catalog with the STORED registry (#79), each entry
+/// flagged `source: "builtin" | "stored"` — a caller that cannot tell them
+/// apart cannot tell which ones travel with a pack.
+fn catalog_json(store: &Store) -> JsonValue {
+    let mut queries: Vec<JsonValue> = CATALOG.iter().map(|q| q.to_catalog_json()).collect();
+    if let Ok(stored) = store.query_list() {
+        // Builtins are listed first, matching dispatch order below: a stored
+        // query cannot shadow a builtin, so listing it first would misdescribe
+        // which one an invocation reaches.
+        queries.extend(
+            stored
+                .iter()
+                .map(super::super::store::queries::StoredQuery::to_catalog_json),
+        );
+    }
     serde_json::json!({
-        "queries": CATALOG.iter().map(|q| q.to_catalog_json()).collect::<Vec<_>>(),
+        "queries": queries,
         "usage": "Call with {\"name\": \"<query>\", \"params\": {...}}. Call with no name to list.",
     })
 }
@@ -333,17 +369,11 @@ pub fn tool_ask(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let name = input.get("name").and_then(|v| v.as_str());
 
     let Some(name) = name else {
-        return Ok(catalog_json());
+        return Ok(catalog_json(store));
     };
     if name == "list" {
-        return Ok(catalog_json());
+        return Ok(catalog_json(store));
     }
-
-    let query = CATALOG.iter().find(|q| q.name == name).ok_or_else(|| {
-        Error::InvalidValue(format!(
-            "unknown named query '{name}'; call quipu_ask with no name to list available queries"
-        ))
-    })?;
 
     // Collect caller params into a string map for rendering.
     let mut args: BTreeMap<String, String> = BTreeMap::new();
@@ -359,8 +389,35 @@ pub fn tool_ask(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         }
     }
 
-    let sparql = query.render(&args)?;
-    let result = sparql::query(store, &sparql)?;
+    // COMPILED-IN FIRST, then the stored registry (#79). Deliberate: a stored
+    // query cannot shadow a builtin, so loading a pack can never silently
+    // change what an existing name does.
+    let (sparql, dataset) = match CATALOG.iter().find(|q| q.name == name) {
+        Some(builtin) => (builtin.render(&args)?, None),
+        None => {
+            let stored = store.query_get(name)?.ok_or_else(|| {
+                Error::InvalidValue(format!(
+                    "unknown named query '{name}'; call quipu_ask with no name to list available queries"
+                ))
+            })?;
+            (stored.render(&args)?, stored.dataset.clone())
+        }
+    };
+
+    // A dataset-scoped query ACTIVATES its dataset (#69 FROM expansion) —
+    // unless the caller named a graph, in which case the caller wins. The
+    // scope is a default, not a lock: a consumer must always be able to say
+    // where it wants a question answered.
+    let result = match dataset {
+        Some(ds) if input.get("graph").is_none() => {
+            let ctx = sparql::TemporalContext {
+                graph: sparql::GraphScope::Default(store.dataset_member_ids(&ds)?),
+                ..Default::default()
+            };
+            sparql::query_temporal(store, &sparql, &ctx)?
+        }
+        _ => sparql::query(store, &sparql)?,
+    };
 
     let columns: Vec<String> = result.variables().to_vec();
     let rows: Vec<JsonValue> = result
@@ -380,7 +437,7 @@ pub fn tool_ask(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         .collect();
 
     Ok(serde_json::json!({
-        "query": query.name,
+        "query": name,
         "sparql": sparql,
         "columns": columns,
         "rows": rows,
