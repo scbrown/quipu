@@ -2534,3 +2534,52 @@ fn a_cross_chain_dataset_reports_a_label_error_without_failing_the_query() {
         "{err}"
     );
 }
+
+#[test]
+fn a_configured_floor_refuses_at_the_query_surface() {
+    // #68 end to end: the refusal reaches the caller of /query & quipu_query.
+    let (mut store, a, b) = labeled_store();
+    store.labels_config_mut().min_freshness = Some("fresh".into());
+
+    let input = serde_json::json!({
+        "query": format!("SELECT ?o FROM <{a}> FROM <{b}> WHERE {{ ?s ?p ?o }}")
+    });
+    let err = crate::mcp::tool_query(&store, &input).expect_err("urn:g:stale is below the floor");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("urn:g:stale"),
+        "names the offending graph: {msg}"
+    );
+    assert!(msg.contains("refused"), "{msg}");
+}
+
+#[test]
+fn without_a_floor_the_same_query_succeeds() {
+    // The control that makes the test above mean something: the query itself is
+    // fine, and it is the FLOOR that refuses it.
+    let (store, a, b) = labeled_store();
+    let input = serde_json::json!({
+        "query": format!("SELECT ?o FROM <{a}> FROM <{b}> WHERE {{ ?s ?p ?o }}")
+    });
+    let out = crate::mcp::tool_query(&store, &input).expect("no floor configured");
+    assert_eq!(out["count"], 2);
+}
+
+#[test]
+fn a_floor_does_not_gate_the_raw_evaluator() {
+    // Deliberate boundary (graph-labels.md §11): floors are a consumer-facing
+    // quality gate at the service surface, NOT access control. The reasoner,
+    // SHACL validation and the episode write path use `query`/`query_temporal`
+    // and must keep working — refusing an internal maintenance query because a
+    // graph is stale would break the machinery that makes it fresh again.
+    let (mut store, a, b) = labeled_store();
+    store.labels_config_mut().min_freshness = Some("fresh".into());
+    let q = format!("SELECT ?o FROM <{a}> FROM <{b}> WHERE {{ ?s ?p ?o }}");
+    assert_eq!(
+        query(&store, &q)
+            .expect("the raw evaluator is not gated")
+            .rows()
+            .len(),
+        2
+    );
+}

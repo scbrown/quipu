@@ -753,6 +753,23 @@ pub fn tool_overlay_compose(store: &Store, input: &JsonValue) -> Result<JsonValu
 /// Input: `{ "query": "SELECT/ASK/CONSTRUCT/DESCRIBE ...", "valid_at": "...", "tx": N }`
 /// Output depends on query form.
 pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    // quipu #68: label floors are enforced HERE, at the service boundary, and
+    // deliberately not inside `query_temporal`.
+    //
+    // A floor is a consumer-facing quality gate, not an access-control
+    // mechanism (graph-labels.md §11) — so it guards the surface external
+    // callers reach, while the reasoner, SHACL validation and the episode write
+    // path keep using the raw evaluator. Refusing an internal maintenance query
+    // because a graph is stale would break the very machinery that makes it
+    // fresh again.
+    //
+    // A no-op unless a floor is configured, so the default path is unchanged.
+    if !store.labels_config().is_unset() {
+        let (q, ctx) = query_context(store, input)?;
+        let member_ids = sparql::dataset_member_ids(store, q, &ctx)?;
+        store.check_label_floor(&member_ids)?;
+    }
+
     let (result, truncated) = query_result(store, input)?;
     // Announce subclass inference when it widened the answer. Omitted entirely
     // when it did not, so the field's PRESENCE is the signal — a marker that

@@ -557,6 +557,129 @@ impl Store {
         })
     }
 
+    /// Refuse the query if this dataset's label falls below a configured floor
+    /// (quipu #68, graph-labels.md §5).
+    ///
+    /// **Unset floors are a no-op** — an unconfigured store returns `Ok` before
+    /// reading a single label, so there is no query-path cost and no behaviour
+    /// change whatsoever.
+    ///
+    /// The refusal **names the graph that dragged the label down**, mirroring
+    /// `authority::refusal`, which names the narrowest link in a chain. "Which
+    /// layer made this answer untrustworthy" is then a one-line answer instead
+    /// of a manual walk over the dataset. The check therefore runs **per
+    /// member** rather than over the composed label: the fold tells you the
+    /// dataset is stale, but only the members tell you *which one*.
+    ///
+    /// **Undeclared fails a configured floor.** Fail-safe at enforcement,
+    /// honest at reporting (§2.1): `label_of` still reports *undeclared* rather
+    /// than inventing a value, and a floor treats that absence as a failure
+    /// rather than as permission.
+    ///
+    /// ⚠️ This is **not access control** (§11). It refuses a query; it does not
+    /// hide rows, and a caller naming a graph directly still reads it.
+    ///
+    /// # Errors
+    /// [`Error::PolicyDenied`] naming the offending graph and the failing axis.
+    pub fn check_label_floor(&self, graphs: &[i64]) -> Result<()> {
+        let floor = self.labels_config();
+        if floor.is_unset() {
+            return Ok(());
+        }
+
+        let min_fresh = match floor.min_freshness.as_deref() {
+            Some(s) => Some(Freshness::parse(s).ok_or_else(|| {
+                Error::InvalidValue(format!(
+                    "[quipu.labels] min_freshness = '{s}' is not a freshness value \
+                     (fresh|recomputing|stale)"
+                ))
+            })?),
+            None => None,
+        };
+        if floor.min_trust_rank.is_some() && floor.min_trust_chain.is_none() {
+            return Err(Error::InvalidValue(
+                "[quipu.labels] min_trust_rank is set without min_trust_chain. A rank \
+                 means nothing outside the chain that declared it — say which chain the \
+                 floor is expressed in, or ranks from an unrelated vocabulary would be \
+                 compared as bare integers."
+                    .into(),
+            ));
+        }
+
+        for &g in graphs {
+            let iri = self.resolve(g).unwrap_or_else(|_| format!("g={g}"));
+            let l = self.label_of_id(g)?;
+
+            if let Some(min) = min_fresh {
+                match l.freshness.value {
+                    Some(f) if f >= min => {}
+                    Some(f) => {
+                        return Err(Error::PolicyDenied(format!(
+                            "query refused: graph '{iri}' is '{f}', below the configured \
+                             freshness floor '{min}'. Labels are not access control — this \
+                             refuses the query, it does not hide rows."
+                        )));
+                    }
+                    None => {
+                        return Err(Error::PolicyDenied(format!(
+                            "query refused: graph '{iri}' declares no freshness, and a \
+                             freshness floor of '{min}' is configured. Undeclared fails a \
+                             floor — fail-safe at enforcement, rather than reading silence \
+                             as '{min}'."
+                        )));
+                    }
+                }
+            }
+
+            if let (Some(min_rank), Some(min_chain)) =
+                (floor.min_trust_rank, floor.min_trust_chain.as_deref())
+            {
+                match &l.trust.value {
+                    Some(t) if t.chain != min_chain => {
+                        return Err(Error::PolicyDenied(format!(
+                            "query refused: graph '{iri}' carries trust '{}' ranked in chain \
+                             '{}', but the configured floor is expressed in chain \
+                             '{min_chain}'. Ranks are not comparable across chains, so this \
+                             cannot be evaluated rather than being evaluated wrongly.",
+                            t.iri, t.chain
+                        )));
+                    }
+                    Some(t) if t.rank < min_rank => {
+                        return Err(Error::PolicyDenied(format!(
+                            "query refused: graph '{iri}' carries trust '{}' at rank {} in \
+                             chain '{min_chain}', below the configured floor of {min_rank}.",
+                            t.iri, t.rank
+                        )));
+                    }
+                    Some(_) => {}
+                    None => {
+                        return Err(Error::PolicyDenied(format!(
+                            "query refused: graph '{iri}' declares no trust, and a trust floor \
+                             of {min_rank} in chain '{min_chain}' is configured. Undeclared \
+                             fails a floor."
+                        )));
+                    }
+                }
+            }
+
+            if !floor.deny_policy_tokens.is_empty()
+                && let Some(p) = &l.policy.value
+                && let Some(tok) = floor
+                    .deny_policy_tokens
+                    .iter()
+                    .find(|t| p.contains(t.as_str()))
+            {
+                return Err(Error::PolicyDenied(format!(
+                    "query refused: graph '{iri}' carries the denied policy token '{tok}'. \
+                     Obligations compose by union, so one restricted graph taints the whole \
+                     dataset."
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Every named graph's id (`g <> 0`, excluding the reserved meta-graph).
     ///
     /// The meta-graph is excluded deliberately: it holds labels *about* graphs,

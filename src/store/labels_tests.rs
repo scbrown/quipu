@@ -691,3 +691,232 @@ fn the_meta_graph_is_excluded_from_all_named_graph_ids() {
     assert!(!ids.contains(&0), "ROOT is not a NAMED graph");
     assert!(ids.contains(&store.lookup("urn:g:real").unwrap().unwrap()));
 }
+
+// ---------------------------------------------------------------------------
+// quipu #68 — label floors
+// ---------------------------------------------------------------------------
+
+fn store_with_labeled(iri: &str, label: GraphLabel) -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    store.overlay_create(iri, 0).unwrap();
+    store.set_graph_label(iri, &label, TS, None).unwrap();
+    store
+}
+
+#[test]
+fn floors_unset_is_zero_behaviour_change() {
+    // #68 acceptance 1. The default store refuses nothing, whatever the labels.
+    let store = store_with_labeled(
+        "urn:g:stale",
+        GraphLabel {
+            freshness: Some(Freshness::Stale),
+            ..Default::default()
+        },
+    );
+    let g = store.lookup("urn:g:stale").unwrap().unwrap();
+    assert!(store.labels_config().is_unset());
+    assert!(
+        store.check_label_floor(&[g]).is_ok(),
+        "an unconfigured store must never refuse"
+    );
+}
+
+#[test]
+fn a_freshness_floor_refuses_and_names_the_offending_graph_and_axis() {
+    // #68 acceptance 2.
+    let mut store = store_with_labeled(
+        "urn:g:old",
+        GraphLabel {
+            freshness: Some(Freshness::Stale),
+            ..Default::default()
+        },
+    );
+    store.labels_config_mut().min_freshness = Some("fresh".into());
+    let g = store.lookup("urn:g:old").unwrap().unwrap();
+
+    let err = store.check_label_floor(&[g]).expect_err("stale < fresh");
+    let msg = err.to_string();
+    assert!(msg.contains("urn:g:old"), "names the graph: {msg}");
+    assert!(msg.contains("freshness"), "names the axis: {msg}");
+    assert!(msg.contains("stale") && msg.contains("fresh"), "{msg}");
+}
+
+#[test]
+fn a_member_above_the_floor_is_not_refused() {
+    // Control: the floor must not refuse everything.
+    let mut store = store_with_labeled(
+        "urn:g:new",
+        GraphLabel {
+            freshness: Some(Freshness::Fresh),
+            ..Default::default()
+        },
+    );
+    store.labels_config_mut().min_freshness = Some("fresh".into());
+    let g = store.lookup("urn:g:new").unwrap().unwrap();
+    assert!(store.check_label_floor(&[g]).is_ok());
+}
+
+#[test]
+fn undeclared_coverage_fails_a_configured_floor() {
+    // #68 acceptance 3: fail-safe at enforcement, honest at reporting. The
+    // graph still READS as undeclared (never fabricated) — it just does not
+    // pass a floor.
+    let mut store = Store::open_in_memory().unwrap();
+    store.overlay_create("urn:g:bare", 0).unwrap();
+    store.labels_config_mut().min_freshness = Some("stale".into());
+    let g = store.lookup("urn:g:bare").unwrap().unwrap();
+
+    assert!(
+        store.label_of_id(g).unwrap().freshness.value.is_none(),
+        "reporting stays honest: still undeclared"
+    );
+    let err = store
+        .check_label_floor(&[g])
+        .expect_err("undeclared must not pass a floor");
+    assert!(err.to_string().contains("declares no freshness"), "{err}");
+}
+
+#[test]
+fn partial_coverage_fails_because_one_member_is_undeclared() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.overlay_create("urn:g:has", 0).unwrap();
+    store.overlay_create("urn:g:hasnt", 0).unwrap();
+    store
+        .set_graph_label(
+            "urn:g:has",
+            &GraphLabel {
+                freshness: Some(Freshness::Fresh),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    store.labels_config_mut().min_freshness = Some("fresh".into());
+    let a = store.lookup("urn:g:has").unwrap().unwrap();
+    let b = store.lookup("urn:g:hasnt").unwrap().unwrap();
+
+    let err = store
+        .check_label_floor(&[a, b])
+        .expect_err("partial coverage fails a configured floor");
+    assert!(
+        err.to_string().contains("urn:g:hasnt"),
+        "names the culprit: {err}"
+    );
+}
+
+#[test]
+fn a_trust_rank_floor_without_a_chain_is_refused_as_meaningless() {
+    let mut store = store_with_labeled(
+        "urn:g:t",
+        GraphLabel {
+            trust: Some(trust("urn:t:v", "urn:chain:a", 10)),
+            ..Default::default()
+        },
+    );
+    store.labels_config_mut().min_trust_rank = Some(30);
+    // min_trust_chain deliberately left unset.
+    let g = store.lookup("urn:g:t").unwrap().unwrap();
+    let err = store
+        .check_label_floor(&[g])
+        .expect_err("a rank needs a chain");
+    assert!(err.to_string().contains("min_trust_chain"), "{err}");
+}
+
+#[test]
+fn a_trust_floor_in_another_chain_cannot_be_evaluated() {
+    let mut store = store_with_labeled(
+        "urn:g:t2",
+        GraphLabel {
+            trust: Some(trust("urn:t:v", "urn:chain:theirs", 90)),
+            ..Default::default()
+        },
+    );
+    store.labels_config_mut().min_trust_rank = Some(30);
+    store.labels_config_mut().min_trust_chain = Some("urn:chain:ours".into());
+    let g = store.lookup("urn:g:t2").unwrap().unwrap();
+
+    let err = store.check_label_floor(&[g]).expect_err("cross-chain");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("urn:chain:theirs") && msg.contains("urn:chain:ours"),
+        "{msg}"
+    );
+    assert!(
+        !msg.contains("below the configured floor"),
+        "rank 90 must NOT be compared to 30 across chains: {msg}"
+    );
+}
+
+#[test]
+fn a_denied_policy_token_refuses_and_names_it() {
+    let mut store = store_with_labeled(
+        "urn:g:secret",
+        GraphLabel {
+            policy: Some(PolicyClass::new(["no-export", "pii"])),
+            ..Default::default()
+        },
+    );
+    store.labels_config_mut().deny_policy_tokens = vec!["no-export".into()];
+    let g = store.lookup("urn:g:secret").unwrap().unwrap();
+
+    let err = store.check_label_floor(&[g]).expect_err("denied token");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("urn:g:secret") && msg.contains("no-export"),
+        "{msg}"
+    );
+}
+
+#[test]
+fn an_undenied_policy_token_passes() {
+    let mut store = store_with_labeled(
+        "urn:g:ok",
+        GraphLabel {
+            policy: Some(PolicyClass::new(["pii"])),
+            ..Default::default()
+        },
+    );
+    store.labels_config_mut().deny_policy_tokens = vec!["no-export".into()];
+    let g = store.lookup("urn:g:ok").unwrap().unwrap();
+    assert!(store.check_label_floor(&[g]).is_ok());
+}
+
+#[test]
+fn the_floor_reaches_the_store_from_a_parsed_config_file() {
+    // A config-switched feature can pass every unit test that sets the struct
+    // directly while being UNREACHABLE from a real deployment, because the
+    // parse or the wiring is what is broken. So start from TOML text, exactly
+    // as a deployment does.
+    let toml = r#"
+[quipu.labels]
+min_freshness = "fresh"
+deny_policy_tokens = ["no-export"]
+"#;
+    // Parse the WHOLE QuipuConfig, so the serde rename is exercised too: the
+    // Rust field is `label_floors` but the documented TOML key is `labels`, and
+    // a rename that silently stopped matching would leave the floor unset with
+    // nothing to see.
+    let parsed: toml::Value = toml::from_str(toml).unwrap();
+    let full: crate::config::QuipuConfig = parsed["quipu"].clone().try_into().unwrap();
+    let cfg = full.label_floors;
+
+    assert_eq!(cfg.min_freshness.as_deref(), Some("fresh"));
+    assert_eq!(cfg.deny_policy_tokens, vec!["no-export".to_string()]);
+    assert!(!cfg.is_unset(), "a parsed floor must not read as unset");
+
+    // And it must actually gate once wired the way `server.rs` wires it.
+    let mut store = store_with_labeled(
+        "urn:g:cfg",
+        GraphLabel {
+            freshness: Some(Freshness::Stale),
+            ..Default::default()
+        },
+    );
+    store.labels_config_mut().clone_from(&cfg);
+    let g = store.lookup("urn:g:cfg").unwrap().unwrap();
+    assert!(
+        store.check_label_floor(&[g]).is_err(),
+        "the floor must gate when it arrives from a config FILE, not just from a setter"
+    );
+}

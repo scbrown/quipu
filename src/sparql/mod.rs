@@ -203,6 +203,32 @@ pub fn dataset_labels_for(
     sparql: &str,
     ctx: &TemporalContext,
 ) -> Result<Option<crate::store::labels::DatasetLabels>> {
+    let member_ids = dataset_member_ids(store, sparql, ctx)?;
+
+    // quipu #68: the floor is checked against the MEMBERS, before composing —
+    // the fold says the dataset is stale, only the members say which one is.
+    // A no-op when no floor is configured.
+    store.check_label_floor(&member_ids)?;
+
+    let composed = store.dataset_labels(&member_ids)?;
+    Ok(if composed.is_undeclared() {
+        None
+    } else {
+        Some(composed)
+    })
+}
+
+/// The interned ids of the graphs a query's dataset would read.
+///
+/// The ONE implementation of "which graphs does this query read", shared by the
+/// label fold and the #68 floor check. Both resolve by calling the same
+/// `apply_dataset` evaluation uses, so neither can drift from what is actually
+/// read — labelling or gating a dataset the query does not read is the failure
+/// this exists to prevent.
+///
+/// # Errors
+/// SPARQL parse errors, and store errors while resolving graph IRIs.
+pub fn dataset_member_ids(store: &Store, sparql: &str, ctx: &TemporalContext) -> Result<Vec<i64>> {
     // Resolve the dataset exactly the way evaluation will, by running the same
     // `apply_dataset` over the same parsed dataset clause. A second
     // implementation of the resolution would be free to drift from the one that
@@ -230,12 +256,7 @@ pub fn dataset_labels_for(
         },
     };
 
-    let composed = store.dataset_labels(&member_ids)?;
-    Ok(if composed.is_undeclared() {
-        None
-    } else {
-        Some(composed)
-    })
+    Ok(member_ids)
 }
 
 /// Clears the `SQLite` progress handler on drop, so an early return or error

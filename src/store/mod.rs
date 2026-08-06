@@ -43,6 +43,7 @@ pub struct Store {
     /// these from `[quipu.search]` at startup so callers can't request
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
+    pub(crate) labels_config: crate::config::LabelsConfig,
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,
@@ -298,6 +299,7 @@ impl Store {
     pub fn adopt_read_config_from(&mut self, other: &Self) {
         self.base_ns.clone_from(&other.base_ns);
         self.search_config.clone_from(&other.search_config);
+        self.labels_config.clone_from(&other.labels_config);
         self.owl_config.clone_from(&other.owl_config);
         self.embedding_config.clone_from(&other.embedding_config);
         self.embedding_provider
@@ -326,6 +328,7 @@ impl Store {
             embedding_config: EmbeddingConfig::default(),
             resolution_config: ResolutionConfig::default(),
             search_config: SearchConfig::default(),
+            labels_config: crate::config::LabelsConfig::default(),
             shacl_config: ShaclConfig::default(),
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]
@@ -419,6 +422,16 @@ impl Store {
     /// Get a reference to the search/limit config.
     pub fn search_config(&self) -> &SearchConfig {
         &self.search_config
+    }
+
+    /// Get a mutable reference to the graph-label floor config (quipu #68).
+    pub fn labels_config_mut(&mut self) -> &mut crate::config::LabelsConfig {
+        &mut self.labels_config
+    }
+
+    /// Get a reference to the graph-label floor config (quipu #68).
+    pub fn labels_config(&self) -> &crate::config::LabelsConfig {
+        &self.labels_config
     }
 
     /// Get a mutable reference to the SHACL validation config.

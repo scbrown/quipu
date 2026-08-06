@@ -240,6 +240,9 @@ async fn main() {
     // Apply search/limit guardrails so callers can't request unbounded result
     // sets or scan the whole fact log (hq-gkd).
     store.search_config_mut().clone_from(&config.search);
+    // quipu #68: the floors and their consumer land together — a settable knob
+    // that nothing reads is the bug config.rs guards against.
+    store.labels_config_mut().clone_from(&config.label_floors);
 
     // Apply the SHACL validation policy so episode writes can be gated against
     // persistently-loaded shapes, not just episode-inline shapes (hq-c6s).

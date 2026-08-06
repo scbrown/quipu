@@ -17,6 +17,54 @@ use crate::namespace;
 /// `*5`, `*3` literals across the search/graphiti/vector paths (hq-gkd).
 pub const DEFAULT_OVERSAMPLE_FACTOR: usize = 10;
 
+/// Graph-label enforcement floors (quipu #68, graph-labels.md §5).
+///
+/// **All unset by default, and unset means zero behaviour change** — no query
+/// is ever refused by a store that has not configured a floor.
+///
+/// ⚠️ **These are NOT access control.** A floor refuses a *query*; it does not
+/// hide rows, and nothing stops a caller who names a graph directly from
+/// reading it. `aegis:authorityOver` gates writes only; a read-side authority
+/// check does not exist and is not built here. Presenting trust labels as a
+/// confidentiality boundary would repeat the `group_id` mistake this stack
+/// already documents (graph-labels.md §11).
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct LabelsConfig {
+    /// Refuse queries whose composed dataset freshness is below this
+    /// (`fresh` | `recomputing` | `stale`). Unset = no freshness floor.
+    pub min_freshness: Option<String>,
+
+    /// Refuse queries whose composed trust rank is below this.
+    ///
+    /// **Must be set together with [`LabelsConfig::min_trust_chain`].** A bare
+    /// rank floor is exactly the category error the trust axis refuses at
+    /// runtime: a rank means nothing outside the chain that declared it, so
+    /// "at least 30" is unanswerable until you say *thirty in which chain*.
+    /// The design writes this as a single `min_trust`; splitting it is what
+    /// makes it checkable rather than a number that silently compares across
+    /// vocabularies.
+    pub min_trust_rank: Option<i64>,
+
+    /// The chain [`LabelsConfig::min_trust_rank`] is expressed in.
+    pub min_trust_chain: Option<String>,
+
+    /// Refuse queries whose composed policy carries any of these obligation
+    /// tokens (e.g. `no-export`). Empty = no policy floor.
+    pub deny_policy_tokens: Vec<String>,
+}
+
+impl LabelsConfig {
+    /// Whether any floor is configured. The fast path: an unconfigured store
+    /// does no label work at all on the query path.
+    #[must_use]
+    pub fn is_unset(&self) -> bool {
+        self.min_freshness.is_none()
+            && self.min_trust_rank.is_none()
+            && self.deny_policy_tokens.is_empty()
+    }
+}
+
 /// Search/limit guardrails (hq-gkd). Without these, callers could pass
 /// `limit: 1_000_000` and unbounded SPARQL could scan the whole fact log.
 #[derive(Debug, Clone, Deserialize)]
@@ -227,6 +275,18 @@ pub struct QuipuConfig {
     /// Path to the triple store database (default: `.bobbin/quipu/quipu.db`).
     pub store_path: PathBuf,
 
+    /// Graph-label enforcement floors (quipu #68). All unset by default.
+    ///
+    /// Named `label_floors` rather than `labels`, though the TOML key stays
+    /// `[quipu.labels]` per the design. The wiring guard below greps the tree
+    /// for `.field`, so a field sharing its name with ANY other struct's field
+    /// is reported wired by that other struct — `LabeledResult.labels` (#67)
+    /// did exactly that, and the guard passed with this field's only consumer
+    /// deleted. A distinctive Rust name is what makes the guard able to check
+    /// it at all; serde keeps the config file unchanged.
+    #[serde(rename = "labels")]
+    pub label_floors: LabelsConfig,
+
     // aegis-4h3x: `schema_path` was removed here. It was a documented config key
     // with NO reader anywhere in the tree — accepted, defaulted, and inert, the
     // same false-affordance as `base_ns` was on the ingest path. Deleting is
@@ -268,6 +328,7 @@ impl Default for QuipuConfig {
     fn default() -> Self {
         Self {
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
+            label_floors: LabelsConfig::default(),
             base_ns: namespace::DEFAULT_BASE_NS.to_string(),
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
@@ -524,6 +585,43 @@ mod tests {
             .collect()
     }
 
+    /// Whether `.field` is read in `src` as a WHOLE field access.
+    ///
+    /// A bare `src.contains(".labels")` also matches `.labels_config`, so a
+    /// field could be reported as wired by an identifier that merely starts
+    /// with its name. Measured 2026-08-06 (quipu #68): with the sole consumer
+    /// of `config.labels` deleted, the guard still PASSED, because
+    /// `store.labels_config()` contains `.labels`. The guard's comment
+    /// anticipates false matches for generic leaf names and assumes top-level
+    /// names are distinctive — that assumption breaks the moment a field shares
+    /// a prefix with any other identifier in the tree, which is easy to do
+    /// accidentally and impossible to notice, since the failure is a PASS.
+    ///
+    /// So require the next character not to continue an identifier.
+    fn field_is_read(src: &str, field: &str) -> bool {
+        let needle = format!(".{field}");
+        src.match_indices(&needle).any(|(i, _)| {
+            src[i + needle.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !c.is_alphanumeric() && c != '_')
+        })
+    }
+
+    #[test]
+    fn the_wiring_guard_does_not_match_a_longer_identifier() {
+        // The guard guarding the guard. Without this, a prefix collision makes
+        // `config_knobs_are_wired_or_listed_unwired` silently vacuous for the
+        // colliding field — and it fails in the direction that reassures.
+        assert!(
+            !field_is_read("store.labels_config_mut().foo();", "labels"),
+            "`.labels_config` must NOT count as a read of `.labels`"
+        );
+        assert!(field_is_read("cfg.labels.min_freshness", "labels"));
+        assert!(field_is_read("clone_from(&config.labels);", "labels"));
+        assert!(field_is_read("let x = c.labels;", "labels"));
+    }
+
     #[test]
     fn config_knobs_are_wired_or_listed_unwired() {
         // THE CLASS GUARD. A documented, settable config field that
@@ -537,7 +635,7 @@ mod tests {
         let src = src_without_config();
         let mut dead = Vec::new();
         for field in quipu_config_top_level_fields() {
-            let consumed = src.contains(&format!(".{field}"));
+            let consumed = field_is_read(&src, &field);
             let listed = UNWIRED_TOP_LEVEL.contains(&field.as_str());
             if !consumed && !listed {
                 dead.push(field);
@@ -558,7 +656,7 @@ mod tests {
                 "UNWIRED_TOP_LEVEL lists {u:?} which is not a QuipuConfig field — remove it"
             );
             assert!(
-                !src.contains(&format!(".{u}")),
+                !field_is_read(&src, u),
                 "UNWIRED_TOP_LEVEL still lists {u:?} but it is now consumed outside config.rs — \
                  it is wired; remove it from the allowlist and unwired_warnings()"
             );
