@@ -1075,3 +1075,88 @@ fn type_that_would_be_silently_rewritten_is_refused() {
         "the error must show what it would have become: {err}"
     );
 }
+
+/// A retry after a lost response must be reported as SUCCESS, not as a write
+/// that achieved nothing.
+///
+/// `/episode` has been idempotent since hq-fhc, so retrying is safe. The defect
+/// was that it did not SAY so: the no-op returned `count: 0, tx_id: 0`, which is
+/// exactly what a failed write returns, while every caller's documented success
+/// check is "HTTP 200 with count > 0". The safe mechanism reported itself as a
+/// failure, and the natural recovery from "it didn't land" is to re-post under a
+/// different name — the entity fragmentation this store already has beads about.
+#[test]
+fn an_identical_repost_reports_unchanged_rather_than_an_empty_write() {
+    let mut store = Store::open_in_memory().unwrap();
+    let ep = parse_episode(
+        r#"{"name": "retry-probe", "episode_body": "b", "source": "s",
+            "nodes": [{"name": "alpha", "type": "Probe", "description": "d"}],
+            "edges": []}"#,
+    );
+
+    let first =
+        ingest_episode_outcome(&mut store, &ep, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+    assert_eq!(first.2, IngestOutcome::Created);
+    assert!(first.1 > 0, "the first ingest must actually write");
+
+    // The retry: byte-identical payload, as a caller re-sending after a timeout.
+    let retry =
+        ingest_episode_outcome(&mut store, &ep, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+    assert_eq!(
+        retry.2,
+        IngestOutcome::Unchanged,
+        "an identical re-post must report `unchanged`, so a caller can tell it \
+         from a write that did nothing"
+    );
+    assert_eq!(retry.1, 0, "and it must still write nothing");
+    assert_eq!(retry.0, NOOP_TX);
+
+    // The facts are present exactly ONCE — idempotency is real, not just reported.
+    let alpha = store
+        .lookup(&format!("{TEST_BASE_NS}alpha"))
+        .unwrap()
+        .expect("alpha exists");
+    let comments = store
+        .entity_facts(alpha)
+        .unwrap()
+        .into_iter()
+        .filter(|f| store.resolve(f.attribute).unwrap().ends_with("comment"))
+        .count();
+    assert_eq!(comments, 1, "the retry duplicated a comment");
+}
+
+/// Changed content on an existing episode is `updated`, not `created` — so a
+/// caller can tell a genuine revision from a first write, which is the other
+/// half of what `count` alone cannot express.
+#[test]
+fn a_changed_repost_reports_updated() {
+    let mut store = Store::open_in_memory().unwrap();
+    let first = parse_episode(
+        r#"{"name": "rev", "episode_body": "one",
+            "nodes": [{"name": "n", "type": "Probe"}], "edges": []}"#,
+    );
+    let second = parse_episode(
+        r#"{"name": "rev", "episode_body": "two",
+            "nodes": [{"name": "n", "type": "Probe"}], "edges": []}"#,
+    );
+    let a =
+        ingest_episode_outcome(&mut store, &first, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+    let b =
+        ingest_episode_outcome(&mut store, &second, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+    assert_eq!(a.2, IngestOutcome::Created);
+    assert_eq!(b.2, IngestOutcome::Updated);
+    assert!(b.1 > 0, "a changed episode must write");
+}
+
+/// The three outcomes must have distinct wire strings, or a caller branching on
+/// the field is back where it started.
+#[test]
+fn outcome_wire_strings_are_distinct() {
+    let all = [
+        IngestOutcome::Created.as_str(),
+        IngestOutcome::Updated.as_str(),
+        IngestOutcome::Unchanged.as_str(),
+    ];
+    let uniq: std::collections::HashSet<_> = all.iter().collect();
+    assert_eq!(uniq.len(), 3, "outcome strings collide: {all:?}");
+}

@@ -174,6 +174,51 @@ curl -s localhost:3030/episode -X POST \
   }'
 ```
 
+#### `outcome`: what the ingest DID — branch on this, never on `count`
+
+`/episode` is idempotent. The activity IRI is derived from the episode name and
+stamped with a content hash, so **re-posting identical content is a no-op and
+retrying after a lost response is SAFE**.
+
+The response says which of three things happened:
+
+| `outcome` | Meaning | `count` | `tx_id` |
+|---|---|---|---|
+| `created` | The episode did not exist; its facts were written. | > 0 | > 0 |
+| `updated` | It existed with DIFFERENT content; stale activity facts were retracted and the new content written. | > 0 | > 0 |
+| `unchanged` | It already existed with identical content. Nothing was written and nothing needed to be. **This is success.** | 0 | 0 |
+
+**Why this field exists.** Before it, the idempotent no-op returned `count: 0,
+tx_id: 0` — byte-for-byte what a write that achieved nothing returns — while the
+documented success check for callers of this API was "HTTP 200 with `count > 0`".
+So a successful retry reported as a failure. The natural recovery from "my
+episode did not land" is to re-post it under a different name or with re-worded
+nodes, and *that* mints duplicate entities. The safe mechanism was steering
+callers into the unsafe action.
+
+So the success check is:
+
+```bash
+# right: the facts are in the store for all three outcomes
+curl -s .../episode -X POST ... | jq -e '.outcome' >/dev/null
+
+# WRONG: reports a successful idempotent retry as a failure
+curl -s .../episode -X POST ... | jq -e '.count > 0'
+```
+
+`count > 0` remains a useful *"did this call write anything"* question. It was
+never a *"did the write land"* question, and only looked like one because the
+first post and the only post were usually the same post.
+
+Two things it does **not** promise, both still on the caller:
+
+- **`outcome` describes THIS episode name.** Re-posting the same knowledge under
+  a *different* name is a new episode and will be `created` — idempotency is
+  keyed on the name plus content hash, not on meaning.
+- **A `200` still is not proof of retrievability.** A node filed under a type
+  nobody queries is `created` and unreachable. Ask it back the way a reader
+  would.
+
 #### Edge `relation`: which vocabularies `/episode` can write
 
 `/episode` used to force **every** relation into `aegis:` and then sanitize it, so

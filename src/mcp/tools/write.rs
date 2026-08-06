@@ -292,6 +292,11 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     Ok(serde_json::json!({
         "tx_id": result.tx_id,
         "count": result.count,
+        // BRANCH ON THIS, NOT ON `count`. `unchanged` means the
+        // identical episode was already recorded — success, and the answer a
+        // caller retrying after a lost response needs. `count: 0` alone cannot
+        // say that, and reads as a failed write.
+        "outcome": result.outcome.as_str(),
         "episode": ep.name,
         "resolution_hints": crate::mcp::resolution_hints_json(&result.resolution_hints)
     }))

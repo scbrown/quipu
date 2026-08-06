@@ -52,9 +52,54 @@ pub struct IngestResult {
     pub tx_id: i64,
     /// Number of triples written.
     pub count: usize,
+    /// What the ingest actually DID: `created`, `updated`, or `unchanged`.
+    /// See [`IngestOutcome`] — this exists because the idempotent no-op was
+    /// indistinguishable from a failed write.
+    pub outcome: IngestOutcome,
     /// Per-node resolution candidates (node name → candidates).
     /// Only populated when resolution is enabled and matches were found.
     pub resolution_hints: Vec<(String, Vec<EntityCandidate>)>,
+}
+
+/// What an `/episode` ingest did, so a caller can tell "already recorded" from
+/// "nothing was written".
+///
+/// `/episode` has been idempotent since hq-fhc: the activity IRI derives from the
+/// episode name and carries a content hash, so re-posting identical content is a
+/// no-op. That is correct, and it makes retrying after a lost response SAFE.
+///
+/// **But the no-op returned `count: 0, tx_id: 0` — byte-for-byte what a write
+/// that achieved nothing returns** — while the documented success check across
+/// every caller of this API is "HTTP 200 with `count > 0`". So the successful
+/// retry reported as a failure. And the natural recovery from "my episode did
+/// not land" is to re-post under a different name or with re-worded nodes, which
+/// is exactly the entity fragmentation this store already carries beads about.
+/// The safe mechanism was steering callers into the unsafe action.
+///
+/// A mechanism that is correct and reports itself ambiguously is not one you can
+/// act on. Branch on this field, never on `count`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IngestOutcome {
+    /// The episode did not exist; its facts were written.
+    Created,
+    /// The episode existed with DIFFERENT content: stale activity facts were
+    /// retracted and the new content written.
+    Updated,
+    /// The episode already existed with identical content. Nothing was written
+    /// and nothing needed to be. **This is success** — the facts are in the
+    /// store, and a caller that retried after a lost response has its answer.
+    Unchanged,
+}
+
+impl IngestOutcome {
+    /// Stable wire string for the JSON response.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::Updated => "updated",
+            Self::Unchanged => "unchanged",
+        }
+    }
 }
 
 /// Ingest an episode into the store with optional entity resolution.
@@ -105,11 +150,12 @@ pub fn ingest_episode_with_resolution(
         }
     }
 
-    let (tx_id, count) = ingest_episode(store, episode, timestamp, base_ns)?;
+    let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
 
     Ok(IngestResult {
         tx_id,
         count,
+        outcome,
         resolution_hints,
     })
 }
@@ -169,12 +215,30 @@ pub struct Edge {
 ///
 /// Converts nodes and edges to Turtle and writes via `ingest_rdf`.
 /// Returns `(tx_id, triple_count)`.
+///
+/// Prefer [`ingest_episode_outcome`] on any path that reports back to a caller:
+/// this signature cannot distinguish "wrote nothing because it was already
+/// there" from "wrote nothing", and that ambiguity is the whole point of the outcome field.
 pub fn ingest_episode(
     store: &mut Store,
     episode: &Episode,
     timestamp: &str,
     base_ns: &str,
 ) -> Result<(i64, usize)> {
+    let (tx, count, _) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
+    Ok((tx, count))
+}
+
+/// Ingest an episode, reporting WHAT IT DID as well as how much it wrote.
+///
+/// Returns `(tx_id, triple_count, outcome)`. See [`IngestOutcome`] for why the
+/// third element is not optional information.
+pub fn ingest_episode_outcome(
+    store: &mut Store,
+    episode: &Episode,
+    timestamp: &str,
+    base_ns: &str,
+) -> Result<(i64, usize, IngestOutcome)> {
     // Idempotency key (hq-fhc). The episode activity IRI is derived purely from
     // the episode name, so re-ingesting the same name targets the same node. We
     // stamp the activity with a content hash: identical re-ingests are no-ops,
@@ -268,8 +332,9 @@ pub fn ingest_episode(
     let existing_hash = current_content_hash(store, &ep_iri, base_ns)?;
 
     // Idempotency fast path: same content already recorded → skip the write.
+    // Reported as `Unchanged`, NOT as a bare `count: 0` — see `IngestOutcome`.
     if existing_hash.as_deref() == Some(new_hash.as_str()) {
-        return Ok((NOOP_TX, 0));
+        return Ok((NOOP_TX, 0, IngestOutcome::Unchanged));
     }
 
     let actor = episode.source.as_deref();
@@ -279,6 +344,11 @@ pub fn ingest_episode(
     // them rather than leaving stale active values. Only the activity node is
     // retracted; its generated entities are reconciled by fact-level dedup.
     // SHACL has already passed above, so this never half-mutates on rejection.
+    let outcome = if existing_hash.is_some() {
+        IngestOutcome::Updated
+    } else {
+        IngestOutcome::Created
+    };
     if existing_hash.is_some()
         && let Some(ep_id) = store.lookup(&ep_iri)?
     {
@@ -295,7 +365,7 @@ pub fn ingest_episode(
         _ => 0,
     };
 
-    ingest_rdf_to_graph(
+    let (tx_id, count) = ingest_rdf_to_graph(
         store,
         turtle.as_bytes(),
         oxrdfio::RdfFormat::Turtle,
@@ -304,7 +374,8 @@ pub fn ingest_episode(
         actor,
         Some(&source_str),
         graph,
-    )
+    )?;
+    Ok((tx_id, count, outcome))
 }
 
 /// Transaction id returned when an episode ingest is a no-op (the identical
