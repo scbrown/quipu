@@ -283,6 +283,48 @@ pub fn pack(
                 out.query_load(&q, timestamp)?;
             }
         }
+        // Embeddings, RE-KEYED BY IRI. `vectors.entity_id` is a local term id
+        // and does not travel, so the join is through the IRI on both sides.
+        //
+        // ⚠️ This was MISSING when #81 first landed: `--with_vectors` was
+        // checked (it refuses a delegated backend) and then never acted on, so
+        // asking for vectors on the ordinary SQLite path produced a pack with
+        // none and said nothing. The refusal above exists precisely to avoid
+        // "silently missing the vectors that were asked for" — and the SQLite
+        // path did exactly that. A flag that is accepted and inert is the same
+        // class of defect as an unwired config key.
+        let mut vector_count = 0usize;
+        if opts.with_vectors {
+            let mut stmt = store.conn.prepare(
+                "SELECT entity_id, text, embedding, valid_from, valid_to FROM vectors \
+                 WHERE valid_to IS NULL",
+            )?;
+            let rows: Vec<(i64, String, Vec<u8>, String, Option<String>)> = stmt
+                .query_map([], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            for (entity_id, text, embedding, valid_from, valid_to) in rows {
+                // An embedding whose entity did not travel with this graph is
+                // skipped rather than carried: a vector pointing at an IRI the
+                // pack does not contain is a dangling row, and re-interning it
+                // would silently widen the pack's term table.
+                let Ok(iri) = store.resolve(entity_id) else {
+                    continue;
+                };
+                let Some(local) = out.lookup(&iri)? else {
+                    continue;
+                };
+                out.conn.execute(
+                    "INSERT OR REPLACE INTO vectors \
+                     (entity_id, text, embedding, valid_from, valid_to) \
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    rusqlite::params![local, text, embedding, valid_from, valid_to],
+                )?;
+                vector_count += 1;
+            }
+        }
+
         // Carry the graph's label so a consumer can compose it (#67) without
         // taking the producer's word for it out of band.
         let l = store.label_of(graph_iri)?;
@@ -312,6 +354,7 @@ pub fn pack(
                 "facts": fact_count,
                 "shapes": opts.shapes.len(),
                 "queries": opts.queries.len(),
+                "vectors": vector_count,
             })
             .to_string(),
         };

@@ -280,3 +280,88 @@ impl crate::vector_delegate::VectorSearchDelegate for NoopDelegate {
         Ok(0)
     }
 }
+
+#[test]
+fn with_vectors_actually_carries_the_embeddings() {
+    // REGRESSION. When #81 first landed, `with_vectors` was CHECKED (it refuses
+    // a delegated backend) and then never acted on — so asking for vectors on
+    // the ordinary SQLite path produced a pack with none, silently. The refusal
+    // existed specifically to avoid "silently missing the vectors that were
+    // asked for", and the other path did exactly that.
+    //
+    // A flag that is accepted and inert is the same class of defect as an
+    // unwired config key: the only detector is asserting an OBSERVABLE EFFECT,
+    // never that the call succeeded.
+    let store = producer(0);
+    let s_id = store.lookup("http://example.org/s").unwrap().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO vectors (entity_id, text, embedding, valid_from) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![s_id, "some text", vec![0u8, 1, 2, 3], TS],
+        )
+        .unwrap();
+
+    let out = tmp("withvectors");
+    let opts = PackOptions {
+        with_vectors: true,
+        ..Default::default()
+    };
+    let m = pack(&store, "urn:g:pack", &out, &opts, TS).unwrap();
+    assert!(
+        m.counts.contains("\"vectors\":1"),
+        "the manifest must report what travelled: {}",
+        m.counts
+    );
+
+    let opened = Store::open(&out).unwrap();
+    let (n, text): (i64, String) = opened
+        .conn
+        .query_row(
+            "SELECT COUNT(*), COALESCE(MAX(text), '') FROM vectors",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(n, 1, "the embedding travelled");
+    assert_eq!(text, "some text");
+
+    // RE-KEYED BY IRI, not copied: the packed store's entity_id is its OWN
+    // term id for that IRI, which need not equal the producer's.
+    let packed_entity: i64 = opened
+        .conn
+        .query_row("SELECT entity_id FROM vectors", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        opened.resolve(packed_entity).unwrap(),
+        "http://example.org/s",
+        "the vector points at the right IRI in the packed store"
+    );
+
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn without_the_flag_no_vectors_travel() {
+    // The control: the test above must pass because the flag WORKS, not because
+    // vectors leak into every pack.
+    let store = producer(0);
+    let s_id = store.lookup("http://example.org/s").unwrap().unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO vectors (entity_id, text, embedding, valid_from) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![s_id, "t", vec![0u8], TS],
+        )
+        .unwrap();
+
+    let out = tmp("novectors");
+    pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
+    let opened = Store::open(&out).unwrap();
+    let n: i64 = opened
+        .conn
+        .query_row("SELECT COUNT(*) FROM vectors", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 0, "no flag, no vectors");
+    let _ = std::fs::remove_file(&out);
+}
