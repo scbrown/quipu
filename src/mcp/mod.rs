@@ -101,8 +101,14 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
     // compatible when omitted (ROOT default). An unknown IRI scopes to an empty
     // default graph (no rows) — never a silent fall-through to ROOT. A `FROM`
     // clause in the query text overrides this (see `apply_dataset`).
+    // quipu #69: the `graph` param resolves a dataset name too, so `FROM
+    // <dataset>` and `graph: "<dataset>"` mean the same thing rather than one
+    // of them silently scoping to an empty graph.
     let graph = match input.get("graph").and_then(|v| v.as_str()) {
         None => sparql::GraphScope::default(),
+        Some(iri) if store.is_dataset(iri)? => {
+            sparql::GraphScope::Default(store.dataset_member_ids(iri)?)
+        }
         Some(iri) => sparql::GraphScope::Default(vec![store.lookup(iri)?.unwrap_or(-1)]),
     };
     Ok((
@@ -1050,6 +1056,20 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "name": { "type": "string", "description": "Shape graph name (required for load/remove)" },
                     "turtle": { "type": "string", "description": "SHACL shapes in Turtle format (required for load)" },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
+                }
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_datasets",
+            "description": "Manage named datasets — a reusable NAME for an arbitrary set of graphs, so it can be labelled, governed and handed to another agent. `FROM <dataset-iri>` then means FROM over its members. Datasets overlap freely and are never implicitly active.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "action": { "type": "string", "enum": ["create", "list", "show", "remove"], "description": "Action to perform (default: list)" },
+                    "name": { "type": "string", "description": "Dataset IRI (required for create/show/remove)" },
+                    "members": { "type": "array", "description": "Graph IRIs, or {\"graph\": \"<iri>\", \"ord\": N} objects for a declared ordering. Duplicate ranks are refused.", "items": {} },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" },
+                    "actor": { "type": "string", "description": "Who is creating the dataset" }
                 }
             }
         }),

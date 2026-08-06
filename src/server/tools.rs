@@ -188,6 +188,11 @@ ro_handler!(
 // so it is rw_handler!, not the ro_handler! it was mis-registered as.
 rw_handler!(shapes, quipu::tool_shapes);
 
+// quipu #69: named datasets. create/remove WRITE (the datasets tables plus the
+// meta-graph mirror), so rw_handler! and a WRITE_ENDPOINTS entry — not the
+// ro_handler! that /overlay/create was mis-registered as (aegis-2f4n).
+rw_handler!(datasets, quipu::tool_datasets);
+
 // aegis-06q1r: the OWL ontology route. `tool_load_ontology` already both
 // persists the ontology AND calls `Ontology::materialize`, which is the whole
 // point: measured on aegis-qgqci, asserting `runs_on owl:inverseOf hosts` as a

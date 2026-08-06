@@ -1243,12 +1243,12 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_graph"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 29);
+        assert_eq!(defs.len(), 30);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 28);
+        assert_eq!(defs.len(), 29);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 

@@ -55,6 +55,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/overlay/create", // ro_handler by signature, but writes the graphs registry
     "/events/commit", // durable consumer cursor upsert (event-log P1)
     "/subscriptions", // push-subscription registry create/list/delete (event-log P2)
+    "/datasets", // named-dataset registry create/remove (quipu #69) + meta-graph mirror
     // aegis-06q1r: OWL ontology load/list/remove. `load` both PERSISTS the
     // ontology and MATERIALIZES entailments (new rdf:type / inverse facts), so it
     // is emphatically a write — and `remove` drops a stored ontology. Listed

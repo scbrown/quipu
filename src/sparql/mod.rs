@@ -390,10 +390,23 @@ fn apply_dataset(
     let Some(ds) = dataset else {
         return Ok(ctx.clone());
     };
+    // quipu #69: an IRI that NAMES A DATASET expands to its members here, in
+    // the one resolve closure. That placement is the whole design: everything
+    // downstream — evaluation, the #67 label fold, the #68 floor check — reads
+    // the expanded member set without knowing datasets exist, so none of them
+    // can disagree about what the query reads.
+    //
+    // Checked before the plain graph lookup because a dataset name is a
+    // deliberate registration; interned as an ordinary term it would otherwise
+    // resolve to a graph id that matches nothing. With no datasets registered
+    // the table is empty and this is exactly today's behaviour.
     let resolve = |nodes: &[spargebra::term::NamedNode]| -> Result<Vec<i64>> {
         let mut ids = Vec::new();
         for nn in nodes {
-            if let Some(g) = store.lookup(nn.as_str())? {
+            let iri = nn.as_str();
+            if store.is_dataset(iri)? {
+                ids.extend(store.dataset_member_ids(iri)?);
+            } else if let Some(g) = store.lookup(iri)? {
                 ids.push(g);
             }
         }

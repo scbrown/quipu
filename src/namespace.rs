@@ -60,6 +60,13 @@ pub const QUIPU_TRUST_RANK: &str = "https://quipu.dev/ontology/trustRank";
 /// `quipu:inChain` — the chain that ranks a trust value.
 pub const QUIPU_IN_CHAIN: &str = "https://quipu.dev/ontology/inChain";
 
+// ── Named datasets (quipu #69) ─────────────────────────────────
+
+/// `quipu:Dataset` — the class of a named graph set.
+pub const QUIPU_DATASET: &str = "https://quipu.dev/ontology/Dataset";
+/// `quipu:includesGraph` — a dataset's membership edge.
+pub const QUIPU_INCLUDES_GRAPH: &str = "https://quipu.dev/ontology/includesGraph";
+
 // ── Commonly-used IRIs ─────────────────────────────────────────
 
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";

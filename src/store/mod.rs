@@ -1,5 +1,6 @@
 //! The core fact log store backed by `SQLite`.
 
+pub mod datasets;
 pub mod events;
 pub mod labels;
 pub mod ops;
@@ -312,6 +313,7 @@ impl Store {
         conn.execute_batch(VECTORS_SQL)?;
         Self::migrate_named_graphs(&conn)?;
         Self::migrate_graph_labels(&conn)?;
+        Self::migrate_datasets(&conn)?;
         Ok(Self::with_connection(conn))
     }
 
@@ -952,6 +954,45 @@ impl Store {
             params![meta_g],
         )?;
 
+        Ok(())
+    }
+
+    /// Additive migration for named datasets (quipu #69) — a *name* for an
+    /// arbitrary set of graphs, so it can be reused, labelled and governed.
+    ///
+    /// **`parent_branch` is deliberately untouched.** The branch tree is not a
+    /// taxonomy; it is `compose_view`'s resolution root, bind-once so an
+    /// overlay cannot forge presence in a base it was never bound to. Datasets
+    /// and the branch tree are different relations over the same node set, and
+    /// conflating them is the failure Alexander's essay names.
+    ///
+    /// **Members are stored as graph IRIs (TEXT), not interned term ids** —
+    /// following the rule proposed in the quipu #74 acceptance amendment: do
+    /// not put a term id in a new column unless you need term identity. Every
+    /// term-id-bearing column widens the surface `respace` must rewrite, and a
+    /// respace that misses one does not error, it silently repoints the
+    /// registry. Resolution does a `lookup` per member, which `apply_dataset`
+    /// already does for every `FROM` IRI anyway.
+    fn migrate_datasets(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS datasets (
+                 name       TEXT PRIMARY KEY,
+                 created_at TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS dataset_members (
+                 dataset   TEXT NOT NULL REFERENCES datasets(name) ON DELETE CASCADE,
+                 graph_iri TEXT NOT NULL,
+                 ord       INTEGER,
+                 PRIMARY KEY (dataset, graph_iri)
+             );
+             -- A declared ordering must be unambiguous: two members at the same
+             -- rank is a silent tiebreak waiting to happen, and a silent
+             -- tiebreak is how 'learned tactic beats canonical' ships. NULL ord
+             -- (an unordered dataset) is exempt — SQLite's unique index treats
+             -- NULLs as distinct, which is exactly the semantics wanted here.
+             CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_ord
+                 ON dataset_members(dataset, ord);",
+        )?;
         Ok(())
     }
 

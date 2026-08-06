@@ -2583,3 +2583,141 @@ fn a_floor_does_not_gate_the_raw_evaluator() {
         2
     );
 }
+
+// --- quipu #69: named datasets ---
+
+#[test]
+fn from_a_dataset_iri_equals_from_over_its_members() {
+    // #69 acceptance 1, asserted as an EQUIVALENCE rather than a row count, so
+    // it cannot pass by coincidentally returning the right number of rows.
+    use crate::store::datasets::DatasetMember;
+    let (mut store, a, b) = labeled_store();
+    store
+        .dataset_create(
+            "urn:ds:both",
+            &[DatasetMember::new(&a), DatasetMember::new(&b)],
+            "2026-08-06T00:00:00Z",
+            None,
+        )
+        .unwrap();
+
+    let via_members = query(
+        &store,
+        &format!("SELECT ?o FROM <{a}> FROM <{b}> WHERE {{ ?s ?p ?o }}"),
+    )
+    .unwrap();
+    let via_dataset = query(&store, "SELECT ?o FROM <urn:ds:both> WHERE { ?s ?p ?o }").unwrap();
+
+    assert_eq!(canonical(&via_dataset), canonical(&via_members));
+    assert_eq!(via_dataset.rows().len(), 2, "and it is not vacuously empty");
+}
+
+#[test]
+fn a_dataset_is_never_implicitly_active() {
+    // Silence must not widen the dataset. Registering one must not change what
+    // a query with no FROM clause reads.
+    use crate::store::datasets::DatasetMember;
+    let (mut store, a, b) = labeled_store();
+    let before = query(&store, "SELECT ?o WHERE { ?s ?p ?o }").unwrap();
+    store
+        .dataset_create(
+            "urn:ds:lurking",
+            &[DatasetMember::new(&a), DatasetMember::new(&b)],
+            "2026-08-06T00:00:00Z",
+            None,
+        )
+        .unwrap();
+    let after = query(&store, "SELECT ?o WHERE { ?s ?p ?o }").unwrap();
+    assert_eq!(
+        canonical(&after),
+        canonical(&before),
+        "the ROOT-alone default survives"
+    );
+}
+
+#[test]
+fn no_dataset_means_apply_dataset_behaves_exactly_as_today() {
+    // #69 acceptance 4. With the datasets table empty, a FROM over ordinary
+    // graphs is unchanged.
+    let (store, a, b) = labeled_store();
+    assert!(store.dataset_list().unwrap().is_empty());
+    let out = query(
+        &store,
+        &format!("SELECT ?o FROM <{a}> FROM <{b}> WHERE {{ ?s ?p ?o }}"),
+    )
+    .unwrap();
+    assert_eq!(out.rows().len(), 2);
+}
+
+#[test]
+fn a_dataset_label_is_the_fold_over_its_members() {
+    // The reason datasets and labels meet: #66's homomorphism is what makes a
+    // named set's label well defined.
+    use crate::store::datasets::DatasetMember;
+    let (mut store, a, b) = labeled_store();
+    store
+        .dataset_create(
+            "urn:ds:mixed",
+            &[DatasetMember::new(&a), DatasetMember::new(&b)],
+            "2026-08-06T00:00:00Z",
+            None,
+        )
+        .unwrap();
+
+    let out = query_labeled(
+        &store,
+        "SELECT ?o FROM <urn:ds:mixed> WHERE { ?s ?p ?o }",
+        &TemporalContext::default(),
+    )
+    .unwrap();
+    let labels = out.labels.expect("members declare freshness");
+    assert_eq!(
+        labels.freshness.value,
+        Some(crate::lattice::Freshness::Stale),
+        "fresh meet stale = stale, through the dataset name"
+    );
+}
+
+#[test]
+fn a_floor_sees_through_a_dataset_name() {
+    // #68 + #69: the floor must not be bypassable by naming a dataset instead
+    // of its members. Both go through the same resolve closure, which is why.
+    use crate::store::datasets::DatasetMember;
+    let (mut store, a, b) = labeled_store();
+    store
+        .dataset_create(
+            "urn:ds:gated",
+            &[DatasetMember::new(&a), DatasetMember::new(&b)],
+            "2026-08-06T00:00:00Z",
+            None,
+        )
+        .unwrap();
+    store.labels_config_mut().min_freshness = Some("fresh".into());
+
+    let err = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query": "SELECT ?o FROM <urn:ds:gated> WHERE { ?s ?p ?o }"}),
+    )
+    .expect_err("the stale member is still a member");
+    assert!(err.to_string().contains("urn:g:stale"), "{err}");
+}
+
+#[test]
+fn the_graph_param_resolves_a_dataset_name_too() {
+    use crate::store::datasets::DatasetMember;
+    let (mut store, a, b) = labeled_store();
+    store
+        .dataset_create(
+            "urn:ds:param",
+            &[DatasetMember::new(&a), DatasetMember::new(&b)],
+            "2026-08-06T00:00:00Z",
+            None,
+        )
+        .unwrap();
+    let out = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query": "SELECT ?o WHERE { ?s ?p ?o }", "graph": "urn:ds:param"}),
+    )
+    .unwrap();
+    assert_eq!(out["count"], 2, "`graph` and `FROM` must agree");
+}
