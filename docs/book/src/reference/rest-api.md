@@ -132,6 +132,96 @@ curl -s localhost:3030/episode -X POST \
   }'
 ```
 
+#### Edge `relation`: which vocabularies `/episode` can write
+
+`/episode` used to force **every** relation into `aegis:` and then sanitize it, so
+`"relation": "rdfs:subClassOf"` was stored as `aegis:rdfs_subClassOf` — a predicate
+that resembles the intended one, matches nothing, and is inert — behind HTTP 200 with
+a healthy `count`. It no longer does. The policy is now: **represent the caller's
+predicate faithfully, or refuse and say which path to use.** Never silently rewrite it.
+
+| `relation` | Emitted |
+|---|---|
+| `runs_on` | `aegis:runs_on` — the domain vocabulary, unchanged |
+| `owl:sameAs`, `rdfs:seeAlso`, `rdf:*`, `skos:*`, `prov:*`, `quipu:*`, `xsd:*`, `sh:*` | verbatim, in that namespace |
+| `<http://example.org/p>` | verbatim (full IRI in angle brackets) |
+| `foo:bar` (undeclared prefix) | **400**, naming `/set` and the angle-bracket form |
+| `runs on` (would not round-trip sanitization) | **400** — it would be silently renamed |
+
+The declared prefix set is `KNOWN_PREFIXES` in `src/episode/mod.rs`, kept in lockstep
+with the `@prefix` block `episode_to_turtle` emits.
+
+#### Asserting an alias — entity dedup with `owl:sameAs`
+
+`owl:sameAs` is this graph's alias convention, and `/episode`'s `resolution_hints`
+exist to tell you at ingest time that you are about to split an entity. Acting on that
+hint is a normal `/episode` edge:
+
+```bash
+curl -s localhost:3030/episode -X POST -H "Content-Type: application/json" \
+  -d '{"name": "alias-fix", "source": "<bead-id>",
+       "nodes": [{"name": "backup-freshness.timer"}, {"name": "backup-freshness-exporter"}],
+       "edges": [{"source": "backup-freshness.timer",
+                  "target": "backup-freshness-exporter",
+                  "relation": "owl:sameAs"}]}'
+```
+
+Two rules that are not obvious from the 200:
+
+- **Reuse the existing node names byte-for-byte.** Node identity here is the literal
+  name string: quipu matches `canonical_name:exact` and merges, or it does not match
+  and mints a second node. Re-wording a name on a follow-up post is how aliases get
+  created rather than resolved. `/search` or `/resolve` first, and copy the name out.
+- **`count > 0` proves the write landed, not that a reader can find it.** Follow every
+  alias write with the query a reader would actually run:
+
+  ```bash
+  curl -s localhost:3030/query -X POST -H "Content-Type: application/json" \
+    -d '{"query":"SELECT ?o WHERE { <http://aegis.gastown.local/ontology/backup-freshness.timer> <http://www.w3.org/2002/07/owl#sameAs> ?o }"}'
+  ```
+
+  A `0` here on a `200` write is the silent-rewrite shape: the fact is present and
+  misnamed. Pair it with a control (query a predicate you know is populated) before
+  believing an empty result.
+
+Historical note, since the answer is not guessable from the data: the alias pairs
+predating this fix were written through **`/knot`** (Turtle), which is the only write
+path that accepts a caller-supplied `source`. Their transaction `source` strings are
+free text — e.g. `"schema-gate ruling 2026-07-20"` — where `/episode` always stamps
+`episode:<name>`, `/set` stamps `set`, and `/retract` stamps `retract`. Some are stamped `actor: null, source: null`: `/knot` called with neither,
+which lands a structural identity fact with no audit trail. Pass `actor` and `source`.
+
+### `POST /set`
+
+Atomic single-call supersede: set `(entity, predicate)` to exactly `value`, retracting
+every current object on that predicate and asserting the new one in ONE transaction.
+Re-parenting (`reports_to` A → B) is one call with no window where the predicate is
+empty and no way to end up multi-valued by forgetting the retract half.
+
+```bash
+curl -s localhost:3030/set -X POST -H "Content-Type: application/json" \
+  -d '{"entity": "http://example.org/svc",
+       "predicate": "http://example.org/reports_to",
+       "value": {"iri": "http://example.org/new-boss"},
+       "actor": "<who>"}'
+```
+
+Optional: `timestamp`, `actor`. Returns
+`{"tx_id", "retracted": N, "asserted": 0|1, "entity", "predicate"}`; setting the
+already-sole-current value is an idempotent no-op (`tx_id: 0, retracted: 0,
+asserted: 0`).
+
+- The **predicate is a full IRI**, from any vocabulary. This is the endpoint
+  `/episode` names in its refusal when an edge relation uses an undeclared prefix.
+- **SINGLE-VALUE semantics**: all current objects are replaced. For
+  add-without-remove, assert via `/knot`.
+- The **entity must already exist** — `/set` on a typo'd IRI must not mint an
+  unlabelled orphan node. The predicate may be new.
+- The `value` shape discipline is the same as `/retract`: a bare string is a
+  *literal*; an edge must be `{"iri": "..."}`. A bare IRI-shaped string aimed at a
+  Ref-holding predicate is a loud 400, not a mis-shaped write. `{"str": "..."}`
+  states that a literal is intended and disarms that heuristic.
+
 ### `POST /validate`
 
 Dry-run SHACL validation.
@@ -488,12 +578,38 @@ Reject a pending proposal. Body: `id`, `note`, optional `decided_by`,
 
 ### `POST /entity_history`
 
-Return the full fact history (across transactions) for an entity. Body: entity
-IRI.
+Return the full fact history (across transactions) for an entity. The body field is
+**`iri`**, not `entity` — `{"entity": ...}` returns
+`{"error": "missing 'iri' parameter"}`.
+
+```bash
+curl -s localhost:3030/entity_history -X POST -H "Content-Type: application/json" \
+  -d '{"iri": "http://example.org/svc"}'
+```
+
+Returns `{"iri", "count", "history": [{"op", "predicate", "value", "tx",
+"valid_from", "valid_to"}, ...]}`. The `tx` is the handle for `/transactions` below —
+together they answer "which write path asserted this fact, and who owned it".
 
 ### `GET /transactions`
 
-List transactions in the store.
+List transactions in the store, oldest first.
+
+| Param | Effect |
+|---|---|
+| *(none)* | the whole log |
+| `since=<tx>` | only transactions **newer** than `<tx>` — the poller's cursor, so a watermarked poll is O(new) rather than O(log) |
+| `limit=<n>` | clamped to `1..=10_000`; **applies from the start of the log**, not the end |
+
+There is no `offset`. Passing `limit` alone therefore returns the *oldest* N — on a
+38k-transaction store, `?limit=40000` hands back transactions 1–10000 and nothing
+recent. To look up a specific transaction, use `?since=<tx-1>&limit=1`.
+
+Each entry is `{id, timestamp, actor, source}`. `source` identifies the write path:
+`episode:<name>` (`/episode`), `set` (`/set`), `retract` (`/retract`,
+`/episode/retract`), or caller-supplied free text (`/knot`). `actor` and `source` are
+both optional on `/knot`, and a call that omits them lands facts with **no audit
+trail at all** — `{"actor": null, "source": null}`. Pass them.
 
 ### `POST /embed_backfill`
 

@@ -875,6 +875,50 @@ fn prefixed_edge_relation_is_emitted_verbatim_not_forced_into_aegis() {
 }
 
 #[test]
+fn every_known_prefix_resolves_and_is_declared() {
+    // The test above names three prefixes by hand out of the eight in
+    // KNOWN_PREFIXES, so a ninth entry added without a matching `@prefix` line
+    // would pass it and emit Turtle that does not parse. The two lists are only
+    // kept in lockstep by a comment; this asserts the invariant instead.
+    // Found while confirming owl:sameAs was reachable from /episode at all.
+    let edges: String = KNOWN_PREFIXES
+        .iter()
+        .map(|(p, _)| format!(r#"{{"source":"a","target":"b","relation":"{p}:probe"}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let ep = parse_episode(&format!(
+        r#"{{"name":"prefix-lockstep",
+             "nodes":[{{"name":"a","type":"Thing"}},{{"name":"b","type":"Thing"}}],
+             "edges":[{edges}]}}"#
+    ));
+
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+
+    for (prefix, _ns) in KNOWN_PREFIXES {
+        // Resolves rather than being refused or mangled into aegis:.
+        assert_eq!(
+            resolve_edge_predicate(&format!("{prefix}:probe")).unwrap(),
+            format!("{prefix}:probe"),
+            "{prefix}: must resolve to itself"
+        );
+        assert!(
+            ttl.contains(&format!("aegis:a {prefix}:probe aegis:b")),
+            "{prefix}: relation not emitted verbatim:\n{ttl}"
+        );
+        // ...and the prefix it emits is actually declared in the same document.
+        assert!(
+            ttl.contains(&format!("@prefix {prefix}:")),
+            "KNOWN_PREFIXES has '{prefix}' but episode_to_turtle declares no \
+             `@prefix {prefix}:` — the emitted Turtle would not parse:\n{ttl}"
+        );
+        assert!(
+            !ttl.contains(&format!("aegis:{prefix}_probe")),
+            "{prefix}: was mangled into the aegis: namespace:\n{ttl}"
+        );
+    }
+}
+
+#[test]
 fn full_iri_edge_relation_is_emitted_verbatim() {
     let ep = parse_episode(
         r#"{

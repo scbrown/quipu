@@ -85,7 +85,13 @@ curl -s localhost:3030/episode -X POST \
 |-------|----------|-------------|
 | `source` | Yes | Source entity name |
 | `target` | Yes | Target entity name |
-| `relation` | Yes | Predicate name (e.g., "runsOn") |
+| `relation` | Yes | Predicate: a bare name lands in `aegis:` (e.g. `"runsOn"`); a declared prefix (`owl:sameAs`, `rdfs:seeAlso`, `rdf:`, `skos:`, `prov:`, `quipu:`, `xsd:`, `sh:`) or a full `<http://…>` IRI is emitted verbatim; anything else is a **400**, never a silent rewrite. See [REST API → edge `relation`](../reference/rest-api.md#post-episode). |
+
+**Aliases / entity dedup.** `owl:sameAs` is the convention, and it is writable from
+`/episode`. It was not always: it used to land as the inert `aegis:owl_sameAs`
+behind a 200. Reuse existing node names byte-for-byte, and check retrievability with
+the reader's own query rather than trusting `count > 0`; the full recipe is in the
+[REST API reference](../reference/rest-api.md#post-episode).
 
 ## Graphiti-Compatible Ingestion
 
