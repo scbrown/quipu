@@ -5165,6 +5165,7 @@ dependencies = [
  "oxttl",
  "parking_lot",
  "petgraph 0.7.1",
+ "proptest",
  "regex",
  "ring",
  "rudof_lib",

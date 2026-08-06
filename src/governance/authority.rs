@@ -137,13 +137,24 @@ impl Authority {
 /// the whole difference between a fail-safe and a fail-open: "nobody said who is
 /// acting" must not mean "anybody may act", and the caller decides whether an
 /// unattributed write is permitted rather than inheriting a silent yes.
+/// Composition routes through [`crate::lattice::Meet`] (quipu #66), which is
+/// where "composition never widens" is stated once for every axis. `Authority`'s
+/// meet delegates straight back to [`Authority::intersect`], so behaviour here
+/// is unchanged and the existing tests remain the guard.
+///
+/// The trait method is fallible (trust ranks can be incomparable); an
+/// `Authority` meet never is. Rather than `expect` a panic into the
+/// authorization path, an impossible error collapses to [`Authority::none`] —
+/// the fail-safe direction this module already insists on everywhere else.
 #[must_use]
 pub fn intersect_chain(authorities: &[Authority]) -> Authority {
+    use crate::lattice::Meet;
     let Some((first, rest)) = authorities.split_first() else {
         return Authority::none();
     };
-    rest.iter()
-        .fold(first.clone(), |acc, next| acc.intersect(next))
+    rest.iter().fold(first.clone(), |acc, next| {
+        acc.meet(next).unwrap_or_else(|_| Authority::none())
+    })
 }
 
 /// Read a principal's declared authority from the graph.

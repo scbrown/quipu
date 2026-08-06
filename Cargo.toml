@@ -141,3 +141,7 @@ unused_self = "warn"
 
 [dev-dependencies]
 tempfile = "3"
+# Dev-only: the label-lattice homomorphism proptest (quipu #66). Already in the
+# lock file transitively, so this pulls no new supply chain and nothing new
+# ships in the binary.
+proptest = "1"
