@@ -920,3 +920,237 @@ deny_policy_tokens = ["no-export"]
         "the floor must gate when it arrives from a config FILE, not just from a setter"
     );
 }
+
+// ---------------------------------------------------------------------------
+// quipu #80 — retrieval policy: RECOMMEND, NEVER ENFORCE
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_recommended_floor_is_queryable() {
+    let mut store = store_with_graph("urn:g:pack");
+    store
+        .set_recommended_floor(
+            "urn:g:pack",
+            &RecommendedFloor {
+                min_freshness: Some(Freshness::Fresh),
+                min_trust: Some("urn:t:attested".into()),
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+
+    let f = store.recommended_floor("urn:g:pack").unwrap();
+    assert_eq!(f.min_freshness, Some(Freshness::Fresh));
+    assert_eq!(f.min_trust.as_deref(), Some("urn:t:attested"));
+    let line = f.line("urn:g:pack");
+    assert!(line.contains("RECOMMENDS"), "{line}");
+    assert!(
+        line.contains("advisory only"),
+        "the banner must not read as something the store applied: {line}"
+    );
+}
+
+#[test]
+fn an_ungoverned_graph_recommends_nothing() {
+    let store = store_with_graph("urn:g:bare");
+    assert!(store.recommended_floor("urn:g:bare").unwrap().is_empty());
+    assert!(
+        store
+            .recommended_floor("urn:g:never-made")
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn enforcement_is_byte_identical_with_and_without_a_recommendation() {
+    // #80 acceptance 1, and the LOAD-BEARING rule of the whole issue.
+    //
+    // A pack that could TIGHTEN enforcement could DoS its consumer; one that
+    // could LOOSEN it could bypass the consumer's floor. So the recommendation
+    // must make NO difference to what is enforced — in either direction.
+    //
+    // Both arms, because "recommend never enforces" is two claims:
+    //   A. an aggressive recommendation must not start refusing things;
+    //   B. a permissive recommendation must not stop the consumer's own floor.
+    let mk = || {
+        let mut s = Store::open_in_memory().unwrap();
+        s.overlay_create("urn:g:p", 0).unwrap();
+        s.set_graph_label(
+            "urn:g:p",
+            &GraphLabel {
+                freshness: Some(Freshness::Recomputing),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+        s
+    };
+
+    // --- A. no consumer floor. A demanding recommendation must change nothing.
+    let plain = mk();
+    let g = plain.lookup("urn:g:p").unwrap().unwrap();
+    let baseline = plain.check_label_floor(&[g]).is_ok();
+    assert!(baseline, "no floor configured -> nothing refused");
+
+    let mut recommended = mk();
+    recommended
+        .set_recommended_floor(
+            "urn:g:p",
+            &RecommendedFloor {
+                min_freshness: Some(Freshness::Fresh),
+                min_trust: None,
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    let g2 = recommended.lookup("urn:g:p").unwrap().unwrap();
+    assert_eq!(
+        recommended.check_label_floor(&[g2]).is_ok(),
+        baseline,
+        "a pack recommending `fresh` must NOT start refusing a `recomputing` graph"
+    );
+
+    // --- B. a consumer floor IS set, and a permissive recommendation must not
+    // relax it.
+    let mut consumer = mk();
+    consumer.labels_config_mut().min_freshness = Some("fresh".into());
+    let gc = consumer.lookup("urn:g:p").unwrap().unwrap();
+    let refused_without = consumer.check_label_floor(&[gc]).is_err();
+    assert!(refused_without, "the consumer's own floor refuses");
+
+    consumer
+        .set_recommended_floor(
+            "urn:g:p",
+            &RecommendedFloor {
+                min_freshness: Some(Freshness::Stale),
+                min_trust: None,
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        consumer.check_label_floor(&[gc]).is_err(),
+        refused_without,
+        "a pack recommending `stale` must NOT bypass the consumer's `fresh` floor"
+    );
+}
+
+#[test]
+fn an_empty_recommendation_is_refused() {
+    let mut store = store_with_graph("urn:g:e");
+    assert!(
+        store
+            .set_recommended_floor("urn:g:e", &RecommendedFloor::default(), TS, None)
+            .is_err()
+    );
+}
+
+#[test]
+fn a_default_dataset_resolves_through_dataset_expansion() {
+    // #80 acceptance 2: the declaration names a dataset, and that name goes
+    // through #69's expansion — it is not a second, parallel resolution path.
+    use crate::store::datasets::DatasetMember;
+    let mut store = Store::open_in_memory().unwrap();
+    store.overlay_create("urn:g:pack", 0).unwrap();
+    store.overlay_create("urn:g:terms", 0).unwrap();
+    store
+        .dataset_create(
+            "urn:ds:pack",
+            &[
+                DatasetMember::new("urn:g:pack"),
+                DatasetMember::new("urn:g:terms"),
+            ],
+            TS,
+            None,
+        )
+        .unwrap();
+    store
+        .set_default_dataset("urn:g:pack", "urn:ds:pack", TS, None)
+        .unwrap();
+
+    let declared = store.default_dataset("urn:g:pack").unwrap().unwrap();
+    assert_eq!(declared, "urn:ds:pack");
+    // And it expands through #69 rather than needing its own resolver.
+    assert_eq!(
+        store.dataset_member_ids(&declared).unwrap().len(),
+        2,
+        "the declared name resolves through the ONE dataset expansion"
+    );
+}
+
+#[test]
+fn declaring_a_default_dataset_does_not_activate_it() {
+    // A dataset is never implicitly active (#69), and #80 must not smuggle in
+    // an exception. Declaring one must not change what a bare query reads.
+    use crate::store::datasets::DatasetMember;
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let g = store.overlay_create("urn:g:pack", 0).unwrap();
+    let e = store.intern("http://example.org/s").unwrap();
+    let a = store.intern("http://example.org/p").unwrap();
+    store
+        .overlay_write(g, Op::Assert, e, a, Value::Str("in-pack".into()), TS)
+        .unwrap();
+    store
+        .dataset_create("urn:ds:pack", &[DatasetMember::new("urn:g:pack")], TS, None)
+        .unwrap();
+
+    let before = crate::sparql::query(&store, "SELECT ?o WHERE { ?s ?p ?o }")
+        .unwrap()
+        .rows()
+        .len();
+    store
+        .set_default_dataset("urn:g:pack", "urn:ds:pack", TS, None)
+        .unwrap();
+    let after = crate::sparql::query(&store, "SELECT ?o WHERE { ?s ?p ?o }")
+        .unwrap()
+        .rows()
+        .len();
+    assert_eq!(
+        before, after,
+        "declaring is not activating; ROOT-alone survives"
+    );
+}
+
+#[test]
+fn the_recommendation_banner_is_surfaced_for_every_graph_that_declares_one() {
+    // The `doctor labels` surface walks `all_named_graph_ids` and prints
+    // `line()` per declaring graph. Asserted at that seam rather than by
+    // capturing stdout, so the test breaks if the DATA stops being reachable —
+    // which is the part that could silently regress.
+    let mut store = Store::open_in_memory().unwrap();
+    store.overlay_create("urn:g:a", 0).unwrap();
+    store.overlay_create("urn:g:b", 0).unwrap();
+    store
+        .set_recommended_floor(
+            "urn:g:a",
+            &RecommendedFloor {
+                min_freshness: Some(Freshness::Fresh),
+                min_trust: None,
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+
+    let declaring: Vec<String> = store
+        .all_named_graph_ids()
+        .unwrap()
+        .into_iter()
+        .filter_map(|g| {
+            let iri = store.resolve(g).ok()?;
+            let rec = store.recommended_floor(&iri).ok()?;
+            (!rec.is_empty()).then(|| rec.line(&iri))
+        })
+        .collect();
+
+    assert_eq!(declaring.len(), 1, "only the declaring graph is surfaced");
+    assert!(declaring[0].contains("urn:g:a"));
+    assert!(declaring[0].contains("advisory only"));
+}

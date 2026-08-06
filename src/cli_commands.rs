@@ -533,6 +533,31 @@ pub fn cmd_doctor(args: &[String], db_path: &str) {
         }
     };
 
+    // quipu #80: surface producers' RECOMMENDED floors here. They are advisory
+    // — the store never applies them — so they are reported beside the drift
+    // report rather than mixed into it, and the banner says so on every line.
+    // (#75's attach path is the other intended print point; `RecommendedFloor::line`
+    // is what it will call.)
+    if let Ok(graphs) = store.all_named_graph_ids() {
+        let mut shown = false;
+        for g in graphs {
+            let Ok(iri) = store.resolve(g) else { continue };
+            let Ok(rec) = store.recommended_floor(&iri) else {
+                continue;
+            };
+            if !rec.is_empty() {
+                if !shown {
+                    println!("recommended floors (advisory — NOT enforced):");
+                    shown = true;
+                }
+                println!("  {}", rec.line(&iri));
+            }
+        }
+        if shown {
+            println!();
+        }
+    }
+
     match store.graph_label_drift() {
         Ok(drift) if drift.is_empty() => {
             println!("labels: no drift — every cached label agrees with the meta-graph");

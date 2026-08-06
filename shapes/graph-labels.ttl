@@ -159,3 +159,62 @@ quipu:TrustChainShape
         sh:maxCount 1 ;
         sh:message  "quipu:inChain must be exactly one IRI naming the chain that ranks this trust value" ;
     ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Retrieval policy — RECOMMEND, NEVER ENFORCE (quipu #80)
+# ═══════════════════════════════════════════════════════════════════
+#
+# A pack declares what its producer considers safe; the CONSUMER's
+# `[quipu.labels]` config decides what is actually enforced (#68).
+#
+# This split is a safety property, not tidiness. A pack that could TIGHTEN
+# enforcement could DoS its consumer by shipping an unsatisfiable floor; one
+# that could LOOSEN it could bypass the consumer's own floor. Neither is
+# acceptable, so neither is possible: nothing in the query path reads these
+# predicates, and a test asserts enforcement is byte-identical with and without
+# them present.
+#
+# Same discipline as the label predicates above: `rdfs:range` only, never
+# `rdfs:domain`, and targeting by `sh:targetSubjectsOf` — these attach to a
+# graph IRI today and could attach to a pack node later.
+
+quipu:defaultDataset        rdfs:range rdfs:Resource .
+quipu:recommendsFreshness   rdfs:range xsd:string .
+quipu:recommendsTrust       rdfs:range rdfs:Resource .
+
+quipu:DefaultDatasetShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:defaultDataset ;
+    sh:property [
+        sh:path     quipu:defaultDataset ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message  "quipu:defaultDataset must be exactly one IRI naming a dataset — declaring it does NOT activate it; a dataset is never implicitly active" ;
+    ] .
+
+# The recommended floor uses the SAME closed freshness vocabulary as
+# quipu:freshness. A recommendation drawn from a different vocabulary than the
+# thing it recommends about is unreadable by the consumer it is addressed to.
+quipu:RecommendedFreshnessShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:recommendsFreshness ;
+    sh:property [
+        sh:path     quipu:recommendsFreshness ;
+        sh:datatype xsd:string ;
+        sh:in ( "fresh" "recomputing" "stale" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message  "quipu:recommendsFreshness must be exactly one of fresh|recomputing|stale — the same closed vocabulary as quipu:freshness, since a consumer reads the recommendation against its own labels" ;
+    ] .
+
+quipu:RecommendedTrustShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:recommendsTrust ;
+    sh:property [
+        sh:path     quipu:recommendsTrust ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message  "quipu:recommendsTrust must be exactly one IRI — a literal could not be ranked by a chain, so it would recommend nothing checkable" ;
+    ] .

@@ -67,6 +67,20 @@ pub const QUIPU_DATASET: &str = "https://quipu.dev/ontology/Dataset";
 /// `quipu:includesGraph` — a dataset's membership edge.
 pub const QUIPU_INCLUDES_GRAPH: &str = "https://quipu.dev/ontology/includesGraph";
 
+// ── Retrieval policy (quipu #80) ───────────────────────────────
+//
+// A pack RECOMMENDS; the consumer's `[quipu.labels]` config ENFORCES. These
+// predicates are read and surfaced, never applied.
+
+/// `quipu:defaultDataset` — the dataset a graph expects to be activated with.
+pub const QUIPU_DEFAULT_DATASET: &str = "https://quipu.dev/ontology/defaultDataset";
+/// `quipu:recommendsFreshness` — the minimum freshness a producer considers
+/// safe for consumers of this layer. Advisory.
+pub const QUIPU_RECOMMENDS_FRESHNESS: &str = "https://quipu.dev/ontology/recommendsFreshness";
+/// `quipu:recommendsTrust` — the minimum trust value a producer considers safe.
+/// Advisory.
+pub const QUIPU_RECOMMENDS_TRUST: &str = "https://quipu.dev/ontology/recommendsTrust";
+
 // ── Commonly-used IRIs ─────────────────────────────────────────
 
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
