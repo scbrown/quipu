@@ -159,6 +159,12 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("graphs", "trust_chain", TermIdKind::None),
     ("graphs", "policy", TermIdKind::None),
     ("graphs", "labels_tx", TermIdKind::None),
+    // -- attach::migrate_graph_source (quipu #75) --
+    // TEXT holding an attachment ALIAS, not a term id. Added by #75 — and this
+    // entry exists because respace REFUSED to run until it did, one hour after
+    // the gate was built, in the ordinary course of building the next issue.
+    // That is the acceptance-5 mechanism working on its author.
+    ("graphs", "source", TermIdKind::None),
     // -- Store::migrate_datasets (quipu #69) --
     // Members are graph IRIs, not term ids, for the same reason.
     ("datasets", "name", TermIdKind::None),

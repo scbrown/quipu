@@ -138,6 +138,10 @@ impl Store {
         // BEFORE commit — the `&Store`-based SPARQL evaluator cannot run while a
         // `Savepoint` holds a mutable borrow of the connection. Nests inside
         // speculate()'s outer savepoint exactly as the RAII form did.
+        // Attachment first, ahead even of authority: a write to an attached
+        // graph is not a permission question, it is a category error — that
+        // graph's facts live in a file this store does not own (quipu #75).
+        self.assert_graph_is_writable(graph)?;
         // Authority first, before anything is staged: a write the chain may not
         // make should not reach the policy gate, the placement check, or the
         // fact table. SARC I5.

@@ -1,5 +1,6 @@
 //! The core fact log store backed by `SQLite`.
 
+pub mod attach;
 pub mod datasets;
 pub mod events;
 pub mod labels;
@@ -125,6 +126,10 @@ pub struct Store {
     /// drains this after every write handler; work only accumulates here
     /// within a single locked write section.
     pub(crate) pending_embed: Option<crate::embedding::DeferredEmbed>,
+    /// Read-only databases mounted alongside this one (quipu #75). Empty for
+    /// every store that did not ask for attachments, which is the default and
+    /// must stay indistinguishable from before the feature existed.
+    pub(crate) attachments: Vec<attach::Attachment>,
 }
 
 /// An advisory event observed before a write and appended with it (P3).
@@ -311,10 +316,34 @@ impl Store {
             .clone_from(&other.embedding_provider);
     }
 
+    /// Open a store with read-only databases mounted alongside it (quipu #75).
+    ///
+    /// The attachments contribute NAMED graphs. No existing query's result
+    /// changes: the default dataset stays main-ROOT-alone, so an attachment is
+    /// only visible to a query that names one of its graphs.
+    ///
+    /// # Errors
+    /// [`Error::Store`] for an invalid alias, a duplicate alias, or an
+    /// attachment quipu refuses to compose (no `g` column, or a term space
+    /// that collides — see `attach::verify_attached_schema`).
+    pub fn open_with_attachments(path: &str, attachments: &[attach::Attachment]) -> Result<Self> {
+        let conn = Connection::open(path)?;
+        Self::init_with_attachments(conn, attachments)
+    }
+
     fn init(conn: Connection) -> Result<Self> {
+        Self::init_with_attachments(conn, &[])
+    }
+
+    fn init_with_attachments(conn: Connection, attachments: &[attach::Attachment]) -> Result<Self> {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(INIT_SQL)?;
         conn.execute_batch(VECTORS_SQL)?;
+        // ATTACH here, after INIT_SQL and before the migrations, per
+        // multi-db-composition.md §2. Safe because every migration below uses
+        // unqualified table names, which SQLite binds to `main` — measured, not
+        // assumed; the table is in `attach`'s module docs.
+        attach::attach_all(&conn, attachments)?;
         Self::migrate_named_graphs(&conn)?;
         // BEFORE `migrate_graph_labels`, which interns the meta-graph IRI: that
         // intern must know the store's space, or on a non-zero-space store it
@@ -325,7 +354,63 @@ impl Store {
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
         Self::migrate_retraction_tx(&conn)?;
-        Ok(Self::with_connection(conn))
+        attach::migrate_graph_source(&conn)?;
+
+        // Verification runs AFTER the migrations, not at attach time, because
+        // the space-collision check needs the local store's own space — which
+        // `migrate_term_spaces` is what establishes. Nothing has read the
+        // attachment before this point.
+        if !attachments.is_empty() {
+            let local_space = local_term_space(&conn)?;
+            attach::verify_attached_schema(&conn, attachments, local_space)?;
+            attach::register_attached_graphs(&conn, attachments)?;
+        }
+
+        let mut store = Self::with_connection(conn);
+        store.attachments = attachments.to_vec();
+        Ok(store)
+    }
+
+    /// The databases mounted alongside this store.
+    #[must_use]
+    pub fn attachments(&self) -> &[attach::Attachment] {
+        &self.attachments
+    }
+
+    /// Refuse a write aimed at a graph that lives in an attached database.
+    ///
+    /// **This is the only mechanism covering this case** — it reads like a
+    /// third redundant layer and is not. `mode=ro` stops a write to the
+    /// attached FILE, and unqualified table names route writes to `main`; but
+    /// routing to `main` is precisely what makes this defect. Measured with
+    /// this check removed: the write succeeds, one row lands in `main.facts`
+    /// carrying the attached graph's id, the attached file is untouched, and
+    /// every composed query then reads a local fact as though the layer had
+    /// supplied it. Nothing errors anywhere.
+    ///
+    /// # Errors
+    /// [`Error::Store`] naming the graph and the attachment that owns it.
+    pub fn assert_graph_is_writable(&self, graph: i64) -> Result<()> {
+        if graph == crate::schema::ROOT_GRAPH || self.attachments.is_empty() {
+            return Ok(());
+        }
+        let source: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT source FROM main.graphs WHERE g = ?1",
+                params![graph],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten();
+        if let Some(alias) = source {
+            return Err(Error::Store(format!(
+                "refusing to write to graph {graph}: it belongs to the attached \
+                 database {alias:?}, which is mounted read-only and is another \
+                 owner's artifact. Write to a local graph instead."
+            )));
+        }
+        Ok(())
     }
 
     /// Wrap an already-opened connection in a default-configured `Store`,
@@ -358,6 +443,7 @@ impl Store {
             local_vector_backend: None,
             defer_auto_embed: false,
             pending_embed: None,
+            attachments: Vec::new(),
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
         }
