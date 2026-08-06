@@ -72,6 +72,7 @@ fn main() {
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_commands::cmd_export(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
+        "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "migrate-vectors" => cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
         _ => {
@@ -218,6 +219,7 @@ COMMANDS:
     quipu repl [--db <path>]
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
+    quipu doctor labels [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 

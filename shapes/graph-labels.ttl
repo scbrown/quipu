@@ -1,0 +1,161 @@
+# SHACL shapes for graph labels — freshness, trust and policy (quipu #65).
+#
+# Design: docs/design/graph-labels.md §2, §3, §3.1. The algebra these shapes
+# protect lives in src/lattice.rs (#66); the store side is src/store/labels.rs.
+#
+# Load via POST /shapes:
+#   curl -s localhost:3030/shapes -X POST -H "Content-Type: application/json" \
+#     -d '{"action":"load","name":"graph-labels","turtle":"<contents>"}'
+#
+# ═══════════════════════════════════════════════════════════════════
+# TWO DECISIONS HERE ARE LOAD-BEARING. Please read before editing.
+# ═══════════════════════════════════════════════════════════════════
+#
+# 1. `rdfs:range` ONLY — never `rdfs:domain`, and the targets are
+#    `sh:targetSubjectsOf`, never `sh:targetClass`.
+#
+#    The recorded Q-SARC-VOCAB lesson (docs/design/policy-edit-hooks.md): a
+#    domain declaration on a predicate used at TWO attachment levels silently
+#    RETYPES whatever it touches when the reasoner materialises it. These
+#    predicates attach to a graph IRI today and to a `stmt_` node later (§8,
+#    quipu #73) — one substrate, one governance path. A domain saying "the
+#    subject of quipu:freshness is a Graph" would retype every labelled
+#    statement into a graph the moment statement-level labels land.
+#
+#    `sh:targetSubjectsOf` targets by PREDICATE USE rather than by class, so it
+#    governs both attachment levels without asserting anything about what the
+#    subject IS. That is the whole reason it is used here.
+#
+# 2. `sh:maxCount 1` on freshness and trust — and deliberately NOT on
+#    policyClass.
+#
+#    Issue #65 says "minCount/maxCount 1" as shorthand, but §2 is explicit that
+#    policy is the POWERSET axis: a set of obligation tokens composed by JOIN
+#    (union). A maxCount on quipu:policyClass would cap that set at one token
+#    and break the axis — a graph could not be both `pii` and `no-export`.
+#
+#    The cardinality on freshness/trust is not tidiness either: it is the
+#    runtime precondition that makes src/lattice.rs's composition well defined.
+#    The homomorphism `label(A ∪ B) = label(A) ⊓ label(B)` assumes labelling is
+#    a FUNCTION — one label per graph per axis. Relaxing maxCount here would
+#    silently falsify every composed dataset label, with nothing to see.
+
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix quipu: <https://quipu.dev/ontology/> .
+
+# ═══════════════════════════════════════════════════════════════════
+# Vocabulary — ranges only. NO rdfs:domain anywhere in this file.
+# ═══════════════════════════════════════════════════════════════════
+
+quipu:freshness   rdfs:range xsd:string .
+quipu:trust       rdfs:range rdfs:Resource .
+quipu:policyClass rdfs:range xsd:string .
+quipu:trustRank   rdfs:range xsd:integer .
+quipu:inChain     rdfs:range rdfs:Resource .
+
+# ═══════════════════════════════════════════════════════════════════
+# Freshness — a CLOSED vocabulary, exactly one value.
+# ═══════════════════════════════════════════════════════════════════
+#
+# Closed because the tag is the reader's only signal of currency. An
+# unrecognised freshness string must not pass and then be read charitably:
+# `Freshness::parse` returns None for anything off-list rather than defaulting
+# to `fresh`, and this shape is what stops it being written in the first place.
+#
+# Quipu never OBSERVES staleness — a producer declares it. There is no
+# synthesized `fresh` tag, ever (§11).
+
+quipu:GraphFreshnessShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:freshness ;
+    sh:property [
+        sh:path     quipu:freshness ;
+        sh:datatype xsd:string ;
+        sh:in ( "fresh" "recomputing" "stale" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message  "quipu:freshness must be exactly one of fresh|recomputing|stale — an unrecognised value must not be readable as 'fresh'" ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Trust — exactly one value, and it must be an IRI, not a literal.
+# ═══════════════════════════════════════════════════════════════════
+#
+# Trust is NOT a hardcoded enum, so there is no sh:in here: the values are IRIs
+# and the ORDERING is data (quipu:trustRank + quipu:inChain below). Hank ships
+# live|lsp|tree-sitter|committed|attested; NeuralAmplifier ships
+# canonical|house-rule|engine-observed|aspirational. Quipu must learn neither.
+#
+# sh:nodeKind sh:IRI is the real constraint: a literal trust value could not
+# carry a rank or a chain, so it would be a rank-less token that compares
+# against nothing.
+
+quipu:GraphTrustShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:trust ;
+    sh:property [
+        sh:path     quipu:trust ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message  "quipu:trust must be exactly one IRI — a literal cannot carry a rank or a chain, so it would order against nothing" ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# Policy — a SET. No maxCount, by design (see decision 2 above).
+# ═══════════════════════════════════════════════════════════════════
+
+quipu:GraphPolicyShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:policyClass ;
+    sh:property [
+        sh:path     quipu:policyClass ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:pattern  "^[^\\s]+$" ;
+        sh:message  "a quipu:policyClass token must be a non-empty string with no whitespace — tokens are stored space-separated in the graphs cache and would read back as two distinct obligations" ;
+    ] .
+
+# ═══════════════════════════════════════════════════════════════════
+# The trust chain — facts about the trust VALUE, not about the graph.
+# ═══════════════════════════════════════════════════════════════════
+#
+# This is what makes the ordering data. A rank means nothing outside the chain
+# that declared it, so the two travel together: a value carrying a rank without
+# a chain is an integer with no frame, and comparing it to another chain's rank
+# is the category error src/lattice.rs refuses at runtime.
+#
+# Kept as separate shapes rather than one, so a violation message names which
+# half is missing.
+
+quipu:TrustRankShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:trustRank ;
+    sh:property [
+        sh:path     quipu:trustRank ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message  "quipu:trustRank must be exactly one integer" ;
+    ] ;
+    sh:property [
+        sh:path     quipu:inChain ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message  "a trust value carrying a quipu:trustRank must also declare its quipu:inChain — a rank without a chain is an integer with no frame, and ranks are only comparable within a declared chain" ;
+    ] .
+
+quipu:TrustChainShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:inChain ;
+    sh:property [
+        sh:path     quipu:inChain ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message  "quipu:inChain must be exactly one IRI naming the chain that ranks this trust value" ;
+    ] .

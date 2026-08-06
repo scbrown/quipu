@@ -510,3 +510,54 @@ fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalC
         }
     }
 }
+
+/// `quipu doctor labels` — recompute every graph's label from the meta-graph
+/// facts and report where the `graphs` cache disagrees (quipu #65).
+///
+/// RDF is the source of truth. A non-empty report means the CACHE is wrong,
+/// never the facts — so this reports rather than repairs, and says which side
+/// is authoritative in its own output. Exits non-zero on drift so a cron or CI
+/// caller can gate on it without parsing the text.
+pub fn cmd_doctor(args: &[String], db_path: &str) {
+    let sub = args.get(2).map_or("labels", String::as_str);
+    if sub != "labels" {
+        eprintln!("usage: quipu doctor labels [--db <path>]");
+        std::process::exit(1);
+    }
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match store.graph_label_drift() {
+        Ok(drift) if drift.is_empty() => {
+            println!("labels: no drift — every cached label agrees with the meta-graph");
+        }
+        Ok(drift) => {
+            println!(
+                "labels: {} disagreement(s) between the meta-graph (authoritative) \
+                 and the graphs cache\n",
+                drift.len()
+            );
+            for d in &drift {
+                println!("  {}", d.graph_iri);
+                println!("    axis:   {}", d.axis);
+                println!("    rdf:    {}   <- authoritative", d.rdf);
+                println!("    cached: {}", d.cached);
+            }
+            println!(
+                "\nThe cache is derived; the facts are the truth. Re-declare these \
+                 graphs' labels with set_graph_label to rebuild the cache."
+            );
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("doctor error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
