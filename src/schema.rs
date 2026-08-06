@@ -156,4 +156,34 @@ CREATE TABLE IF NOT EXISTS schema_terms (
     first_offset INTEGER NOT NULL,
     PRIMARY KEY (term, kind)
 );
+
+-- Term-space registry (quipu #74). Each database owns a SPACE `s` and allocates
+-- term ids from `s * 2^40 + k`, making ids globally unique across composed files
+-- by construction — so an attached DB needs no remap at read time, which is the
+-- whole point (a `Ref` term id is embedded in an opaque BLOB that SQL cannot
+-- rewrite, so query-time remapping was never available).
+--
+-- **Legacy stores are space 0 BY DEFINITION.** An existing store's ids are
+-- `1..n`, exactly the range space 0 owns, so migrating one is this single row
+-- and never a rewrite of any id.
+--
+-- The row is seeded by `Store::migrate_term_spaces`, NOT by an `INSERT` here.
+-- A store that has been respaced into space 7 has `(7, 'main', 1)`, and an
+-- unconditional seed of `(0, …)` in INIT_SQL would silently re-add space 0 on
+-- the next open, leaving two rows claiming to be local.
+CREATE TABLE IF NOT EXISTS term_spaces (
+    space INTEGER PRIMARY KEY,
+    db    TEXT    NOT NULL,
+    local INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_term_spaces_local
+    ON term_spaces(local) WHERE local = 1;
 "#;
+
+/// Bits reserved for the term id within a space: space `s` owns
+/// `[s * 2^40, (s+1) * 2^40)`. ~1.1e12 terms per space, ~8.4e6 spaces in an
+/// i64 rowid — orders of magnitude of headroom in both dimensions.
+pub const SPACE_BITS: u32 = 40;
+
+/// The size of one term space, `2^40`.
+pub const SPACE_SIZE: i64 = 1 << SPACE_BITS;

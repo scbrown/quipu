@@ -8,11 +8,13 @@ pub mod overlays;
 pub mod push;
 pub mod queries;
 #[cfg(test)]
+mod term_space_tests;
+#[cfg(test)]
 mod tests;
 
 use std::sync::Arc;
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::config::{
     EmbeddingConfig, GovernanceConfig, OwlConfig, ResolutionConfig, SearchConfig, ShaclConfig,
@@ -313,6 +315,10 @@ impl Store {
         conn.execute_batch(INIT_SQL)?;
         conn.execute_batch(VECTORS_SQL)?;
         Self::migrate_named_graphs(&conn)?;
+        // BEFORE `migrate_graph_labels`, which interns the meta-graph IRI: that
+        // intern must know the store's space, or on a non-zero-space store it
+        // allocates the reserved graph OUTSIDE the space that owns it.
+        Self::migrate_term_spaces(&conn)?;
         Self::migrate_graph_labels(&conn)?;
         Self::migrate_datasets(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
@@ -957,15 +963,7 @@ impl Store {
         // Reserve the meta-graph. Interning is the same INSERT-OR-IGNORE then
         // SELECT that `Store::intern` does; done in SQL because this runs
         // against a bare `Connection`, before a `Store` exists.
-        conn.execute(
-            "INSERT OR IGNORE INTO terms (iri) VALUES (?1)",
-            params![crate::namespace::META_GRAPH_IRI],
-        )?;
-        let meta_g: i64 = conn.query_row(
-            "SELECT id FROM terms WHERE iri = ?1",
-            params![crate::namespace::META_GRAPH_IRI],
-            |r| r.get(0),
-        )?;
+        let meta_g: i64 = intern_in_space(conn, crate::namespace::META_GRAPH_IRI)?;
         // `committed`, not `overlay`: labels are durable and bitemporal, and
         // overlay-class graphs are excluded from bitemporality by design.
         // Self-rooted like ROOT, so it is never resolved against a parent.
@@ -1137,16 +1135,42 @@ impl Store {
     }
 
     pub fn intern(&self, iri: &str) -> Result<i64> {
-        self.conn.execute(
-            "INSERT OR IGNORE INTO terms (iri) VALUES (?1)",
-            params![iri],
-        )?;
-        let id: i64 =
-            self.conn
-                .query_row("SELECT id FROM terms WHERE iri = ?1", params![iri], |row| {
-                    row.get(0)
-                })?;
-        Ok(id)
+        intern_in_space(&self.conn, iri)
+    }
+
+    /// The space this database allocates term ids from (quipu #74).
+    ///
+    /// Exactly one row carries `local = 1` (enforced by a partial unique index).
+    /// A store with no such row predates the registry and is space 0 by
+    /// definition — see `migrate_term_spaces`.
+    ///
+    /// # Errors
+    /// Store errors reading the registry.
+    pub fn local_term_space(&self) -> Result<i64> {
+        local_term_space(&self.conn)
+    }
+
+    /// Seed the term-space registry (quipu #74).
+    ///
+    /// Idempotent and respace-safe: seeds `(0, 'main', 1)` only when the store
+    /// has no local row at all. A store respaced into space 7 already has one,
+    /// and re-seeding space 0 here would leave two rows claiming to be local —
+    /// which is why this is not an `INSERT OR IGNORE` in `schema::INIT_SQL`.
+    ///
+    /// **A legacy store is space 0 by definition, so this is a one-row insert
+    /// and never a rewrite.** Its ids are `1..n`, exactly the range space 0
+    /// owns; that is the property the whole migration story rests on.
+    fn migrate_term_spaces(conn: &Connection) -> Result<()> {
+        let has_local: bool = conn
+            .prepare("SELECT 1 FROM term_spaces WHERE local = 1")?
+            .exists([])?;
+        if !has_local {
+            conn.execute(
+                "INSERT INTO term_spaces (space, db, local) VALUES (0, 'main', 1)",
+                [],
+            )?;
+        }
+        Ok(())
     }
 
     /// Resolve a term id back to its IRI.
@@ -1477,4 +1501,101 @@ impl Store {
     pub(crate) fn prepare(&self, sql: &str) -> Result<rusqlite::Statement<'_>> {
         Ok(self.conn.prepare(sql)?)
     }
+}
+
+/// The space a bare connection allocates from (quipu #74).
+///
+/// A store with no local row predates the registry, and a legacy store is space
+/// 0 by definition — so the absence reads as 0 rather than as an error.
+pub(crate) fn local_term_space(conn: &Connection) -> Result<i64> {
+    let space: Option<i64> = conn
+        .query_row("SELECT space FROM term_spaces WHERE local = 1", [], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    Ok(space.unwrap_or(0))
+}
+
+/// Intern an IRI, allocating within this database's term space (quipu #74).
+///
+/// Takes a bare `Connection` because `migrate_graph_labels` interns the
+/// meta-graph IRI before a `Store` exists, and that intern must be space-aware
+/// for exactly the same reason every other one is.
+///
+/// ## ⛔ `k` MUST be derived from the table, never from an independent counter.
+///
+/// Space 0 is already densely occupied on every existing store, at positions
+/// this code did not choose: measured on a fresh store, `id 1` is the reserved
+/// meta-graph and the first user term is `2`, and on a store migrated long
+/// after creation the meta-graph sits at whatever rowid happened to be next.
+/// An allocator that invents `k` from its own counter hands back an id that is
+/// already bound — silently repointing a live term. That is the failure this
+/// branch exists to prevent, and `allocation_never_returns_an_id_already_bound`
+/// is the test that catches it (verified by sabotage: a naive counter fails 5
+/// of the 8 tests in that file).
+///
+/// The space-0 branch below keeps the literal rowid path, which is what makes
+/// allocation byte-identical to pre-#74 and is the reason #74 is inert by
+/// default. **But note what is NOT true:** "space 0 must delegate to the rowid"
+/// cannot be enforced by a test, because the `else` branch computes
+/// `MAX(id) + 1` within the space and for space 0 that IS the rowid — the two
+/// are the same function. Sabotage confirmed it: disabling this branch entirely
+/// changed no observable behaviour. The rowid path is kept for clarity and
+/// because it is obviously right, not because anything would catch its removal.
+/// The property that is genuinely load-bearing is the one in the heading.
+///
+/// If some future change needs `k` for space 0 from any source other than the
+/// table, that is a STOP and a fresh go/no-go — not an implementation detail
+/// (sattler, ruled 2026-08-06).
+pub(crate) fn intern_in_space(conn: &Connection, iri: &str) -> Result<i64> {
+    // Already interned is the overwhelmingly common path and is space-agnostic.
+    let existing: Option<i64> = conn
+        .query_row("SELECT id FROM terms WHERE iri = ?1", params![iri], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    if let Some(id) = existing {
+        return Ok(id);
+    }
+
+    let space = local_term_space(conn)?;
+    if space == 0 {
+        // The rowid path, unchanged. See the ⛔ note above.
+        conn.execute(
+            "INSERT OR IGNORE INTO terms (iri) VALUES (?1)",
+            params![iri],
+        )?;
+    } else {
+        // Allocate the next free id WITHIN this space's half-open range. A
+        // fresh non-zero-space store has an empty `terms`, where the rowid
+        // would be 1 — outside the space entirely — so the id is explicit.
+        // `k` starts at 1, exactly as it does in space 0. The base `s * 2^40`
+        // (k = 0) is deliberately never allocated: space 0 reserves id 0 for
+        // ROOT_GRAPH, and giving every space the identical k-range is what lets
+        // "legacy ids are 1..n" mean "space 0", rather than nearly meaning it.
+        let lo = space * crate::schema::SPACE_SIZE;
+        let hi = lo + crate::schema::SPACE_SIZE;
+        let next: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(id), ?1) + 1 FROM terms WHERE id >= ?1 AND id < ?2",
+            params![lo, hi],
+            |r| r.get(0),
+        )?;
+        if next >= hi {
+            return Err(Error::InvalidValue(format!(
+                "term space {space} is exhausted ({} terms); \
+                 respace this database into a fresh space",
+                crate::schema::SPACE_SIZE
+            )));
+        }
+        conn.execute(
+            "INSERT OR IGNORE INTO terms (id, iri) VALUES (?1, ?2)",
+            params![next, iri],
+        )?;
+    }
+
+    Ok(
+        conn.query_row("SELECT id FROM terms WHERE iri = ?1", params![iri], |r| {
+            r.get(0)
+        })?,
+    )
 }
