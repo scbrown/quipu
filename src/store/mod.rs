@@ -7,6 +7,7 @@ pub mod ops;
 pub mod overlays;
 pub mod push;
 pub mod queries;
+pub mod respace;
 #[cfg(test)]
 mod term_space_tests;
 #[cfg(test)]

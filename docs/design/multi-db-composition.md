@@ -1,11 +1,30 @@
 # Design: Multi-DB Composition — term spaces, ATTACH, and the blob sidecar
 
-> **Implementation status (2026-08-06):** ⬜ **Designed, not built.** There is
-> no `ATTACH DATABASE` anywhere in the tree today; `Store` holds one
-> `rusqlite::Connection` in WAL mode. This document settles the design so the
-> implementation is mechanical. The blob sidecar (§7) is
-> **design-accepted / consumer-gated** — do not build it until a payload
-> consumer exists.
+> **Implementation status (2026-08-06):** 🟨 **Step 2 of §9 is built; ATTACH is
+> not.** There is still no `ATTACH DATABASE` anywhere in the tree; `Store` holds
+> one `rusqlite::Connection` in WAL mode. What exists:
+>
+> - **§1.1 term spaces — BUILT.** `term_spaces` registry, space-aware
+>   allocation (`s · 2^40 + k`, `k` derived from the table), legacy stores
+>   space 0 by definition. `src/store/mod.rs`, `src/store/term_space_tests.rs`.
+> - **`quipu db respace` — BUILT.** `src/store/respace.rs`. Reads the source
+>   read-only and writes a new file; the original is left byte-identical.
+> - **§1.2 aliases / §2 ATTACH / §5 cross-DB limits — NOT built** (quipu #75,
+>   #76, #77).
+>
+> The blob sidecar (§7) is **design-accepted / consumer-gated** — do not build
+> it until a payload consumer exists.
+>
+> ⚠️ **One thing this document did not say, found while building respace.** §1
+> lists the term-id-bearing state as `facts.e`, `facts.a`, `facts.g` and the
+> `Ref` blob. That is incomplete: `graphs.g`, `graphs.parent_branch` and
+> **`vectors.entity_id`** are also term ids. The first two were caught by #74's
+> acceptance amendment; `vectors.entity_id` was named in no issue, no comment
+> and no document, and was found only by enumerating the live schema. Respace
+> therefore derives its work from the schema and refuses on any column it
+> cannot classify — see the module docs. **Do not re-state a list of
+> term-id-bearing columns here.** Every copy of that list so far has been
+> wrong, including this one.
 
 **Status:** The driving deployment already exists as a convention Quipu knows
 nothing about: NeuralAmplifier's tenancy design gives each recurring principal

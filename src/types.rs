@@ -74,7 +74,14 @@ pub enum Value {
 }
 
 // Tag bytes used as the first byte of the stored BLOB.
-const TAG_REF: u8 = 0;
+//
+// `TAG_REF` is `pub(crate)` because `store::respace` selects the `Ref`-valued
+// rows of `facts` in SQL (`substr(v, 1, 1) = ?`) rather than decoding every
+// blob in the store. Reading the constant rather than hardcoding `X'00'` is
+// what makes that filter follow a change to the codec instead of silently
+// selecting the wrong tag — and a respace that selects the wrong rows does not
+// error, it rewrites the wrong values.
+pub(crate) const TAG_REF: u8 = 0;
 const TAG_STR: u8 = 1;
 const TAG_INT: u8 = 2;
 const TAG_FLOAT: u8 = 3;

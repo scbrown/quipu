@@ -13,6 +13,7 @@
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
 //!   quipu stats [--db <path>]            Show store statistics
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
+//!   quipu db respace --into <space> --out <file>  Move a store into a term space
 //!
 //! Aliases: load=knot, query=read
 
@@ -74,6 +75,7 @@ fn main() {
         "stats" => cli_commands::cmd_stats(db_path),
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_commands::cmd_pack(&args, db_path),
+        "db" => cli_commands::cmd_db(&args, db_path),
         "migrate-vectors" => cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
         _ => {
@@ -223,6 +225,7 @@ COMMANDS:
     quipu doctor labels [--db <path>]
     quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     quipu pack --verify <file.qpack.db>
+    quipu db respace --into <space> --out <file> [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 

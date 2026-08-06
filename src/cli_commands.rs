@@ -680,3 +680,57 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         }
     }
 }
+
+/// `quipu db respace --into <space> --out <file>` (quipu #74).
+///
+/// Deliberately requires an explicit `--out`: respace is the one operation here
+/// that produces a store whose ids differ from every other copy, and defaulting
+/// the destination is how one gets written over something.
+pub fn cmd_db(args: &[String], db_path: &str) {
+    let sub = args.get(2).map_or("", String::as_str);
+    if sub != "respace" {
+        eprintln!("usage: quipu db respace --into <space> --out <file> [--db <path>]");
+        std::process::exit(1);
+    }
+
+    let Some(into) = flag_value(args, "--into") else {
+        eprintln!("quipu db respace requires --into <space>");
+        std::process::exit(1);
+    };
+    let Ok(space) = into.parse::<i64>() else {
+        eprintln!("--into must be an integer space number, got {into:?}");
+        std::process::exit(1);
+    };
+    let Some(out) = flag_value(args, "--out") else {
+        eprintln!("quipu db respace requires --out <file>");
+        std::process::exit(1);
+    };
+
+    match quipu::store::respace::respace_file(
+        std::path::Path::new(db_path),
+        std::path::Path::new(out),
+        space,
+    ) {
+        Ok(report) => {
+            println!(
+                "respaced {db_path} -> {out}\n  space: {} -> {}\n  rows touched: {}",
+                report.from_space,
+                report.to_space,
+                report.rows()
+            );
+            for (table, column, n) in &report.columns {
+                println!("    {table}.{column}: {n}");
+            }
+            println!("    facts.v (Ref blobs): {}", report.ref_blobs);
+            println!(
+                "  the original is untouched: {db_path} was opened read-only and \
+                 still owns space {}",
+                report.from_space
+            );
+        }
+        Err(e) => {
+            eprintln!("respace error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
