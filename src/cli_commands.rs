@@ -620,7 +620,8 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         .unwrap_or_else(|| {
             eprintln!(
                 "usage: quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] \
-             [--shapes S]... [--queries Q]... [--with-vectors]\n       quipu pack --verify <file>"
+             [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]\n       \
+             quipu pack --verify <file>"
             );
             std::process::exit(1);
         });
@@ -652,7 +653,17 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         with_vectors: args.iter().any(|a| a == "--with-vectors"),
     };
 
-    match quipu::pack::pack(&store, graph, out, &opts, &chrono_now()) {
+    // `--format turtle` writes an interop BUNDLE (a directory of plain files)
+    // rather than a store. Export-only: nothing unpacks it, because its purpose
+    // is to be read by something that is not Quipu.
+    let turtle = flag_value(args, "--format") == Some("turtle");
+    let packed = if turtle {
+        quipu::pack::pack_turtle(&store, graph, out, &opts, &chrono_now())
+    } else {
+        quipu::pack::pack(&store, graph, out, &opts, &chrono_now())
+    };
+
+    match packed {
         Ok(m) => {
             println!("packed {} -> {out}", m.source_graph);
             println!("  name:         {} {}", m.name, m.version);

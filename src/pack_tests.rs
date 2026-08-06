@@ -365,3 +365,104 @@ fn without_the_flag_no_vectors_travel() {
     assert_eq!(n, 0, "no flag, no vectors");
     let _ = std::fs::remove_file(&out);
 }
+
+// --- --format turtle: the interop bundle ---
+
+fn tmpdir(name: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("quipu-ttl-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    dir.to_string_lossy().into_owned()
+}
+
+#[test]
+fn the_turtle_bundle_writes_all_four_files() {
+    let store = producer(0);
+    store.load_shapes("s1", "# a shape", TS).unwrap();
+    store
+        .query_load(
+            &crate::store::queries::StoredQuery {
+                name: "q1".into(),
+                description: "d".into(),
+                template: "SELECT ?s WHERE { ?s ?p ?o }".into(),
+                dataset: None,
+                params: vec![],
+            },
+            TS,
+        )
+        .unwrap();
+
+    let dir = tmpdir("bundle");
+    let opts = PackOptions {
+        shapes: vec!["s1".into()],
+        queries: vec!["q1".into()],
+        ..Default::default()
+    };
+    let m = pack_turtle(&store, "urn:g:pack", &dir, &opts, TS).unwrap();
+    assert_eq!(m.pack_format, "1-turtle");
+
+    for f in ["graph.ttl", "shapes.ttl", "queries.json", "manifest.json"] {
+        let p = std::path::Path::new(&dir).join(f);
+        assert!(p.exists(), "missing {f}");
+        assert!(
+            std::fs::metadata(&p).unwrap().len() > 0,
+            "{f} is empty — a bundle file that exists but says nothing is worse than an absent one"
+        );
+    }
+
+    // The manifest is real JSON with the hash in it, not a string blob.
+    let mf: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(std::path::Path::new(&dir).join("manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(mf["content_hash"], m.content_hash);
+    assert_eq!(mf["counts"]["facts"], 2);
+    assert!(mf["producer"]["tool"].as_str().unwrap().contains("turtle"));
+
+    // The query bundle carries the TEMPLATE — a catalog entry without it is not
+    // executable by the tool receiving the bundle.
+    let qs: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(std::path::Path::new(&dir).join("queries.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        qs["queries"][0]["template"]
+            .as_str()
+            .is_some_and(|t| t.contains("SELECT"))
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn both_formats_agree_on_the_content_hash() {
+    // The property that makes the hash an IDENTITY rather than a checksum of
+    // bytes: the same graph packs to the same hash whether it is shipped as a
+    // store file or as an interop bundle. Hashing emitted bytes would have made
+    // the FORMAT part of the identity — two renderings of the same knowledge
+    // with different hashes, which is what a content hash exists to rule out.
+    let store = producer(0);
+    let db = tmp("agree");
+    let dir = tmpdir("agree");
+
+    let a = pack(&store, "urn:g:pack", &db, &PackOptions::default(), TS).unwrap();
+    let b = pack_turtle(&store, "urn:g:pack", &dir, &PackOptions::default(), TS).unwrap();
+    assert_eq!(
+        a.content_hash, b.content_hash,
+        "one graph, one identity, two renderings"
+    );
+
+    let _ = std::fs::remove_file(&db);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_turtle_bundle_refuses_an_unknown_graph_and_writes_nothing() {
+    let store = producer(0);
+    let dir = tmpdir("badgraph");
+    assert!(pack_turtle(&store, "urn:g:missing", &dir, &PackOptions::default(), TS).is_err());
+    assert!(
+        !std::path::Path::new(&dir).join("graph.ttl").exists(),
+        "a refused export must not leave a partial bundle"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

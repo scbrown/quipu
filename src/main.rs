@@ -221,7 +221,7 @@ COMMANDS:
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
     quipu doctor labels [--db <path>]
-    quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--shapes S]... [--queries Q]... [--with-vectors]
+    quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     quipu pack --verify <file.qpack.db>
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
