@@ -643,3 +643,480 @@ fn graph_labels_travel_with_an_attachment_but_labels_tx_does_not() {
          the local registry, where it would read as a local tx"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `facts_source()` — the composed read path (quipu #75 acceptance 1 and 2)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn facts_columns_matches_the_schema() {
+    // A CONTRACT, not documentation. `FACTS_COLUMNS` is what every branch of
+    // the composed union projects; if a column is added to `facts` and this
+    // list is not revisited, a composed query cannot see it and nothing else
+    // in the suite would say so.
+    //
+    // Deliberately the same shape as quipu #74's acceptance 5 — derive the
+    // work from the schema and refuse what you have not classified. That
+    // mechanism has now fired on its own author twice (`vectors.entity_id`,
+    // then `graphs.source`), which is the argument for repeating it here.
+    let scratch = Scratch::new("factscols");
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+    let store = Store::open(&main.to_string_lossy()).unwrap();
+
+    let actual: Vec<String> = store
+        .conn
+        .prepare("SELECT name FROM pragma_table_info('facts')")
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+
+    assert_eq!(
+        actual,
+        super::FACTS_COLUMNS,
+        "`facts` and FACTS_COLUMNS disagree. A column was added to the table \
+         without deciding whether a composed query projects it. Add it to \
+         FACTS_COLUMNS (and remember every attached layer must then have it, \
+         which `verify_attached_schema` enforces), or record here why it is \
+         deliberately not composed."
+    );
+}
+
+#[test]
+fn no_attachment_facts_source_is_the_literal_facts_table() {
+    // Acceptance 1, and it is stricter than "the same results": the SQL must
+    // be BYTE-identical. `main.facts` would return the same rows and pass any
+    // behavioural test, while changing the text of every query in the product
+    // — which is exactly the kind of change that is invisible until something
+    // downstream (a plan, a cache key, a log) depends on it.
+    let scratch = Scratch::new("byteident");
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+
+    let opened = Store::open(&main.to_string_lossy()).unwrap();
+    assert_eq!(opened.facts_source(), "facts");
+
+    // `open` routes through `init_with_attachments(&[])`, but so does an
+    // explicit empty slice, and a caller who passes one must be treated as
+    // never having composed at all.
+    let explicit_empty = Store::open_with_attachments(&main.to_string_lossy(), &[]).unwrap();
+    assert_eq!(explicit_empty.facts_source(), "facts");
+
+    let in_memory = Store::open_in_memory().unwrap();
+    assert_eq!(in_memory.facts_source(), "facts");
+
+    // The same requirement for term resolution, for the same reason:
+    // `SELECT iri FROM main.terms WHERE id = ?1` returns identical rows and
+    // would still rewrite the query behind every `resolve` call in the
+    // product — and `resolve` runs per binding, not per query.
+    assert_eq!(opened.resolve_sql(), super::RESOLVE_SQL_LOCAL);
+    assert_eq!(explicit_empty.resolve_sql(), super::RESOLVE_SQL_LOCAL);
+    assert_eq!(in_memory.resolve_sql(), super::RESOLVE_SQL_LOCAL);
+}
+
+#[test]
+fn graph_predicate_is_pushed_into_each_union_branch() {
+    // Acceptance 2. `idx_geav` exists per file — each database's own migration
+    // created it — so a graph-scoped read should SEARCH both files by index.
+    // Pushed outside the union instead, SQLite scans both files on every
+    // triple pattern.
+    //
+    // Measured on the bundled SQLite 3.48.0: the outer-WHERE form and the
+    // form with the predicate written into each branch by hand produce the
+    // IDENTICAL plan, so `facts_source()` can stay a drop-in table source.
+    // That is a property of the planner, not of our SQL, and this test is the
+    // only thing that would notice it changing.
+    let scratch = Scratch::new("eqp");
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+    let (layer, _) = respaced_layer(&scratch, "shared", "s", 8);
+    let store = Store::open_with_attachments(
+        &main.to_string_lossy(),
+        &[Attachment::read_only("shared", &layer.to_string_lossy())],
+    )
+    .unwrap();
+
+    // The exact shape the BGP evaluator builds for a `GRAPH <iri>` pattern.
+    let sql = format!(
+        "SELECT DISTINCT e, a, v, g FROM {} \
+         WHERE op = 1 AND g = ?1 AND valid_to IS NULL",
+        store.facts_source()
+    );
+    let plan: Vec<String> = store
+        .conn
+        .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+        .unwrap()
+        .query_map([1i64], |r| r.get::<_, String>(3))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    let plan_text = plan.join(" | ");
+
+    for file in ["main.facts", "shared.facts"] {
+        assert!(
+            plan.iter()
+                .any(|l| l.contains(file) && l.contains("idx_geav") && l.contains("SEARCH")),
+            "the graph predicate must reach INSIDE the branch for {file}, so \
+             that file's own idx_geav is used. Plan was: {plan_text}"
+        );
+    }
+    assert!(
+        !plan.iter().any(|l| l.contains("SCAN main.facts")),
+        "a full scan of a fact table per triple pattern is the failure this \
+         acceptance criterion exists to prevent. Plan was: {plan_text}"
+    );
+}
+
+#[test]
+fn the_union_reads_exactly_the_registered_graphs() {
+    // The registry and the readable rows are ONE set, expressed once in
+    // `contributed_graphs_sql`. A registry entry with no readable rows is a
+    // graph that resolves and returns nothing; a readable row with no registry
+    // entry is a fact from a graph the store cannot name or label. Either way
+    // nothing errors, which is why this is pinned rather than trusted.
+    let scratch = Scratch::new("drift");
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+    let (layer, _) = respaced_layer(&scratch, "shared", "s", 8);
+    let store = Store::open_with_attachments(
+        &main.to_string_lossy(),
+        &[Attachment::read_only("shared", &layer.to_string_lossy())],
+    )
+    .unwrap();
+
+    let registered: Vec<i64> = store
+        .conn
+        .prepare("SELECT g FROM main.graphs WHERE source = 'shared' ORDER BY g")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert!(
+        !registered.is_empty(),
+        "the fixture must contribute a graph"
+    );
+
+    // Every graph the union can read FROM THIS LAYER, taken from the composed
+    // source itself rather than from a second copy of the predicate.
+    let readable: Vec<i64> = store
+        .conn
+        .prepare(&format!(
+            "SELECT DISTINCT g FROM {} WHERE g IN \
+             (SELECT g FROM main.graphs WHERE source = 'shared') ORDER BY g",
+            store.facts_source()
+        ))
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        readable, registered,
+        "the graphs a composed query can read and the graphs the registry \
+         records for this layer must be the same set"
+    );
+
+    // And nothing from the layer OUTSIDE that set is readable — the leak
+    // direction. The layer's own ROOT and meta-graph are reserved to it.
+    let leaked: i64 = store
+        .conn
+        .query_row(
+            &format!(
+                "SELECT COUNT(*) FROM {} WHERE g NOT IN (SELECT g FROM main.graphs)",
+                store.facts_source()
+            ),
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        leaked, 0,
+        "a composed query can read facts from a graph that is in no registry"
+    );
+}
+
+#[test]
+fn an_attachment_missing_a_projected_column_is_refused() {
+    // A layer that predates a `facts` migration cannot produce a column the
+    // union projects. Refused at ATTACH, not at query time: a query naming
+    // none of this layer's graphs would otherwise fail too, and the caller
+    // would have no idea why.
+    let scratch = Scratch::new("missingcol");
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+
+    // A hand-built layer with `g` (so it passes the named-graphs check) but no
+    // `retracted_tx` (added by `migrate_retraction_tx`, quipu #83).
+    let old = scratch.path("old.db");
+    {
+        let c = rusqlite::Connection::open(&old).unwrap();
+        c.execute_batch(
+            "CREATE TABLE facts (e INTEGER, a INTEGER, v BLOB, g INTEGER, \
+                 tx INTEGER, valid_from TEXT, valid_to TEXT, op INTEGER);
+             CREATE TABLE terms (id INTEGER PRIMARY KEY, iri TEXT);
+             CREATE TABLE term_spaces (space INTEGER PRIMARY KEY, db TEXT, local INTEGER);
+             INSERT INTO term_spaces VALUES (11, 'main', 1);",
+        )
+        .unwrap();
+    }
+
+    let err = expect_refused(Store::open_with_attachments(
+        &main.to_string_lossy(),
+        &[Attachment::read_only("old", &old.to_string_lossy())],
+    ));
+    assert!(
+        err.contains("retracted_tx"),
+        "the refusal must NAME the missing column: {err}"
+    );
+    assert!(
+        err.contains("migrate") || err.contains("current quipu"),
+        "the refusal must name the fix: {err}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// End-to-end through the query path (quipu #75 acceptance 3, and the composed
+// read the whole issue exists for)
+// ---------------------------------------------------------------------------
+
+/// A composed store and the same store opened without the attachment.
+fn composed(scratch: &Scratch, space: i64) -> (Store, Store, String) {
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+    let (layer, layer_iri) = respaced_layer(scratch, "shared", "s", space);
+    let plain = Store::open(&main.to_string_lossy()).unwrap();
+    let with = Store::open_with_attachments(
+        &main.to_string_lossy(),
+        &[Attachment::read_only("shared", &layer.to_string_lossy())],
+    )
+    .unwrap();
+    (plain, with, layer_iri)
+}
+
+fn rows_of(store: &Store, sparql: &str) -> Vec<String> {
+    let r = crate::sparql::query(store, sparql).unwrap();
+    let crate::sparql::QueryResult::Select { rows, .. } = r else {
+        panic!("expected a SELECT result");
+    };
+    let mut out: Vec<String> = rows
+        .iter()
+        .map(|b| {
+            let mut kv: Vec<String> = b.iter().map(|(k, v)| format!("{k}={v:?}")).collect();
+            kv.sort();
+            kv.join(",")
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+#[test]
+fn attaching_changes_no_query_result_through_the_query_path() {
+    // Acceptance 3, through `sparql::query` rather than through hand-written
+    // SQL. The distinction is the whole point: the existing
+    // `attaching_changes_no_existing_query_result` reads `FROM facts`
+    // directly, which is `main`-only whatever `facts_source()` does, so it
+    // CANNOT observe the union. This one can.
+    //
+    // What it catches, measured on the first cut of `build_facts_source`: an
+    // attached layer's `facts` holds that layer's OWN ROOT rows at `g = 0`,
+    // so a union that took the table unrestricted put them in the LOCAL
+    // default graph. One local ROOT fact became two, silently — the exact
+    // widening §3 forbids, produced by writing §4's SQL sketch literally.
+    let scratch = Scratch::new("e2enowiden");
+    let (plain, with, _) = composed(&scratch, 8);
+
+    let q = "SELECT ?s ?o WHERE { ?s ?p ?o }";
+    let before = rows_of(&plain, q);
+    assert!(
+        !before.is_empty(),
+        "the fixture must return default-graph rows"
+    );
+    assert_eq!(
+        rows_of(&with, q),
+        before,
+        "attaching a database changed what the default dataset returns"
+    );
+}
+
+#[test]
+fn an_attached_graph_is_readable_through_graph_var() {
+    // The capability #75 exists to deliver: a composed query reads a graph
+    // that lives in another file. `GRAPH ?g` is the form that works today —
+    // it needs no local interning, because the graph id arrives IN the row.
+    let scratch = Scratch::new("e2eread");
+    let (plain, with, _) = composed(&scratch, 8);
+
+    let q = "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s ?p ?o } }";
+    let local_only = rows_of(&plain, q);
+    let composed_rows = rows_of(&with, q);
+
+    assert!(
+        composed_rows.len() > local_only.len(),
+        "the attached layer contributed nothing: local={local_only:?} \
+         composed={composed_rows:?}"
+    );
+    assert!(
+        composed_rows.iter().any(|r| r.contains("s named")),
+        "the attached layer's NAMED-graph fact must be readable: \
+         {composed_rows:?}"
+    );
+    // ...and its ROOT fact must NOT be, in this scope either: `g <> 0` is what
+    // keeps a layer's default graph its own.
+    assert!(
+        !composed_rows.iter().any(|r| r.contains("s root")),
+        "the attached layer's ROOT fact leaked into the named-graph scope: \
+         {composed_rows:?}"
+    );
+    // Every local solution survives composition unchanged.
+    for r in &local_only {
+        assert!(
+            composed_rows.contains(r),
+            "composition dropped a local solution {r:?}: {composed_rows:?}"
+        );
+    }
+}
+
+#[test]
+fn an_attached_layers_meta_graph_is_not_ranged_by_graph_var() {
+    // quipu #70 excludes the LOCAL label meta-graph from `GRAPH ?g`, so that
+    // labelling something never starts returning trust facts as data. A layer
+    // brings its own meta-graph, in its own term space, which the local
+    // exclusion (one id) cannot cover. `contributed_graphs_sql` drops it at
+    // the union instead.
+    //
+    // The fixture must therefore have real meta-graph FACTS — a layer whose
+    // labels were only ever set as `graphs` columns has an interned meta-graph
+    // IRI and nothing in it, and would pass this test with the exclusion
+    // removed.
+    let scratch = Scratch::new("e2emeta");
+    let main = scratch.path("main.db");
+    seed_layer(&main, "m");
+
+    let src = scratch.path("lab-src.db");
+    let giri = seed_layer(&src, "s");
+    {
+        let mut layer = Store::open(&src.to_string_lossy()).unwrap();
+        layer
+            .set_graph_label(
+                &giri,
+                &crate::store::labels::GraphLabel {
+                    freshness: Some(crate::lattice::Freshness::Fresh),
+                    ..Default::default()
+                },
+                T0,
+                None,
+            )
+            .unwrap();
+        let meta = layer.meta_graph_id().unwrap();
+        let n: i64 = layer
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM facts WHERE g = ?1",
+                rusqlite::params![meta],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            n > 0,
+            "fixture is vacuous: the layer's meta-graph holds no facts, so \
+             this test would pass with the exclusion removed"
+        );
+    }
+    let layer_path = scratch.path("lab.db");
+    crate::store::respace::respace_file(&src, &layer_path, 12).unwrap();
+
+    let store = Store::open_with_attachments(
+        &main.to_string_lossy(),
+        &[Attachment::read_only(
+            "shared",
+            &layer_path.to_string_lossy(),
+        )],
+    )
+    .unwrap();
+
+    // The layer's meta-graph id, IN ITS OWN SPACE, read from the mounted file.
+    // Not the local one: the local exclusion is a single id and cannot cover a
+    // second database's reserved graph, which is the entire reason the union
+    // has to drop it.
+    let attached_meta: i64 = store
+        .conn
+        .query_row(
+            "SELECT id FROM shared.terms WHERE iri = ?1",
+            rusqlite::params![crate::namespace::META_GRAPH_IRI],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_ne!(
+        attached_meta,
+        store.meta_graph_id().unwrap(),
+        "fixture is vacuous: the two meta-graphs share an id, so the local \
+         exclusion alone would hide the attached one"
+    );
+
+    // Compare on the BOUND ID, not on a rendered string. `?g` binds
+    // `Value::Ref(id)`, so an earlier version of this test that searched the
+    // formatted row for the meta-graph IRI could never match and passed with
+    // the exclusion removed — caught by sabotage, not by review.
+    let crate::sparql::QueryResult::Select { rows, .. } =
+        crate::sparql::query(&store, "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s ?p ?o } }").unwrap()
+    else {
+        panic!("expected a SELECT result");
+    };
+    let graphs: Vec<Value> = rows
+        .iter()
+        .filter_map(|b| b.get("?g").or_else(|| b.get("g")).cloned())
+        .collect();
+    assert!(
+        !graphs.is_empty(),
+        "fixture is vacuous: GRAPH ?g bound no graphs at all"
+    );
+    assert!(
+        !graphs.contains(&Value::Ref(attached_meta)),
+        "an attached layer's label meta-graph must not be ranged by GRAPH ?g \
+         — labelling a layer would start returning trust facts as data. \
+         Bound graphs: {graphs:?}, attached meta: {attached_meta}"
+    );
+}
+
+#[test]
+fn naming_an_attached_graph_by_iri_is_refused_not_silently_empty() {
+    // The honest limit of this increment. `lookup` is main-only by design
+    // (quipu #76 owns IRI -> id across spaces), so `GRAPH <attached-iri>`
+    // cannot resolve. What it must NOT do is return zero rows: that is
+    // indistinguishable from a typo and from "the attach did not work", and it
+    // is the silent-wrong-answer shape this design refuses everywhere else.
+    let scratch = Scratch::new("e2ename");
+    let (plain, with, layer_iri) = composed(&scratch, 8);
+
+    let q = format!("SELECT ?s WHERE {{ GRAPH <{layer_iri}> {{ ?s ?p ?o }} }}");
+    let err = crate::sparql::query(&with, &q)
+        .expect_err("naming an attached graph must be refused, not empty")
+        .to_string();
+    assert!(
+        err.contains("#76"),
+        "the refusal must name the issue: {err}"
+    );
+    assert!(
+        err.contains(&layer_iri) && err.contains("shared"),
+        "the refusal must name the IRI and the layer: {err}"
+    );
+
+    // A genuinely unknown IRI keeps today's match-nothing behaviour, on the
+    // composed store as well as the plain one. The refusal is scoped to "this
+    // layer knows the term", not to "the store has attachments" — otherwise it
+    // would turn every typo on a composed store into an error.
+    let unknown = "SELECT ?s WHERE { GRAPH <urn:nope:nothing> { ?s ?p ?o } }";
+    assert!(rows_of(&with, unknown).is_empty());
+    assert!(rows_of(&plain, unknown).is_empty());
+
+    // FROM names graphs by IRI too, and had the same silent-empty path.
+    let from_q = format!("SELECT ?s FROM <{layer_iri}> WHERE {{ ?s ?p ?o }}");
+    let err = crate::sparql::query(&with, &from_q)
+        .expect_err("FROM naming an attached graph must be refused")
+        .to_string();
+    assert!(err.contains("#76"), "{err}");
+}

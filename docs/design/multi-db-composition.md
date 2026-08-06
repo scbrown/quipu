@@ -1,16 +1,33 @@
 # Design: Multi-DB Composition — term spaces, ATTACH, and the blob sidecar
 
-> **Implementation status (2026-08-06):** 🟨 **Step 2 of §9 is built; ATTACH is
-> not.** There is still no `ATTACH DATABASE` anywhere in the tree; `Store` holds
-> one `rusqlite::Connection` in WAL mode. What exists:
+> **Implementation status (2026-08-06):** 🟩 **§2–§4 are built and composed
+> reads work; §1.2 aliases and §5 cross-DB limits are not.** What exists:
 >
 > - **§1.1 term spaces — BUILT.** `term_spaces` registry, space-aware
 >   allocation (`s · 2^40 + k`, `k` derived from the table), legacy stores
 >   space 0 by definition. `src/store/mod.rs`, `src/store/term_space_tests.rs`.
 > - **`quipu db respace` — BUILT.** `src/store/respace.rs`. Reads the source
 >   read-only and writes a new file; the original is left byte-identical.
-> - **§1.2 aliases / §2 ATTACH / §5 cross-DB limits — NOT built** (quipu #75,
->   #76, #77).
+> - **§2 ATTACH / §3 registration / §4 `facts_source()` — BUILT** (quipu #75).
+>   `src/store/attach.rs`. `Store::open_with_attachments` mounts, verifies and
+>   registers; the BGP evaluator reads the composed source. **`GRAPH ?g` ranges
+>   attached graphs end-to-end today.**
+> - **§1.2 aliases / §5 cross-DB limits — NOT built** (quipu #76, #77).
+>
+> ⚠️ **The one thing §4's SQL sketch gets wrong, measured while building it.**
+> `SELECT … FROM shared.facts` written literally puts the attached layer's OWN
+> `g = 0` rows into the LOCAL default graph: one local ROOT fact became two, and
+> nothing errored. An attachment's branch must be restricted to the graphs it
+> CONTRIBUTES — the same `g <> 0 AND g <> <its meta>` set §3 already decided the
+> registry copies. §4 and §3 disagreed, and §4 is the one that is wrong.
+>
+> ⚠️ **The honest limit of what is built: `GRAPH <attached-iri>` is REFUSED, not
+> served.** `lookup` (IRI → id) reads `main` only, because the same IRI in two
+> spaces has two ids and picking one silently would be a wrong join — that is
+> #76's whole subject. `resolve` (id → IRI) DOES cross attachments, because term
+> spaces make it unambiguous and the union is unusable without it. Naming an
+> attached graph therefore errors and names #76, rather than matching nothing:
+> an empty result there is indistinguishable from a typo.
 >
 > The blob sidecar (§7) is **design-accepted / consumer-gated** — do not build
 > it until a payload consumer exists.
@@ -154,11 +171,40 @@ Not a SQL VIEW named `facts` — that would shadow the real table and break
 every write. A helper:
 
 ```rust
-fn facts_source(&self) -> Cow<'_, str>
+fn facts_source(&self) -> &str
 // no attachments  -> "facts"                      (today's exact SQL)
 // with attachments-> "(SELECT … FROM main.facts
-//                      UNION ALL SELECT … FROM shared.facts) AS facts"
+//                      UNION ALL SELECT … FROM shared.facts
+//                        WHERE g <> 0 AND g <> <shared's meta-graph>) AS facts"
 ```
+
+⚠️ **That `WHERE` is not optional, and this section shipped without it.** An
+attached layer's `facts` holds *its own* ROOT rows at `g = 0`; unioned raw, they
+join the **local** default graph and every existing query returns more than it
+did before the attach — measured, one local ROOT fact became two, silently. The
+branch must select exactly the graphs the layer CONTRIBUTES, which §3 already
+defined when it decided reserved graphs are per-database. Express that predicate
+**once** and use it for both the registry copy and the union: a registry entry
+with no readable rows is a graph that resolves and returns nothing, and a
+readable row with no registry entry is a fact from a graph the store cannot name
+or label. Neither errors.
+
+Returned as `&str` off a field computed at open, not `Cow` per call: building it
+reads each attachment's `terms` for its meta-graph id, and a triple pattern is
+evaluated per BGP per solution.
+
+**The caller's `WHERE` stays outside the subquery.** Measured on the bundled
+SQLite 3.48.0 rather than assumed: its push-down optimisation moves the outer
+predicate into both branches, and `EXPLAIN QUERY PLAN` is *identical* to writing
+the predicate into each branch by hand — `SEARCH main.facts USING INDEX idx_geav
+(g=?)` on both sides. That is a property of the planner, not of our SQL, so it is
+asserted by a test rather than trusted.
+
+**Term resolution has to cross the attachment too**, or the union returns rows
+that cannot be expressed: `GRAPH ?g { ?s ?p ?o }` produced `unknown term id:
+8796093022210` before `resolve` read the attached `terms`. `resolve` (id → IRI)
+is unambiguous — term spaces give each id exactly one owner — and belongs here.
+`lookup` (IRI → id) is **not**, and stays main-only for §1.2 / #76.
 
 Two non-negotiable tests:
 

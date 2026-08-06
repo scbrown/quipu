@@ -130,6 +130,20 @@ pub struct Store {
     /// every store that did not ask for attachments, which is the default and
     /// must stay indistinguishable from before the feature existed.
     pub(crate) attachments: Vec<attach::Attachment>,
+    /// The table source a composed query reads `facts` from — see
+    /// [`attach::build_facts_source`]. Exactly `"facts"` with no attachments,
+    /// which is the byte-identical SQL every query built before quipu #75.
+    ///
+    /// A cached `String` rather than the design's `Cow<'_, str>`: building it
+    /// reads each attachment's `terms` table for its meta-graph id, and a
+    /// triple pattern is evaluated per BGP per solution — recomputing it per
+    /// query would put a `SELECT` behind every one. It is fixed at open, as the
+    /// attachments themselves are.
+    pub(crate) facts_source: String,
+    /// The SQL [`Self::resolve`] uses to turn a term id back into an IRI — see
+    /// [`attach::build_resolve_sql`]. Exactly today's single-table query with
+    /// no attachments.
+    pub(crate) resolve_sql: String,
 }
 
 /// An advisory event observed before a write and appended with it (P3).
@@ -366,9 +380,37 @@ impl Store {
             attach::register_attached_graphs(&conn, attachments)?;
         }
 
+        // AFTER verification and registration: the source it builds is only
+        // meaningful for attachments quipu has agreed to compose, and it reads
+        // the same meta-graph id registration filtered on.
+        let facts_source = attach::build_facts_source(&conn, attachments)?;
+        let resolve_sql = attach::build_resolve_sql(attachments);
+
         let mut store = Self::with_connection(conn);
         store.attachments = attachments.to_vec();
+        store.facts_source = facts_source;
+        store.resolve_sql = resolve_sql;
         Ok(store)
+    }
+
+    /// The SQL [`Self::resolve`] runs. Exposed for the test that pins it
+    /// byte-identical on an unattached store.
+    #[cfg(test)]
+    pub(crate) fn resolve_sql(&self) -> &str {
+        &self.resolve_sql
+    }
+
+    /// The table source a query reads `facts` from: `"facts"` for a store with
+    /// no attachments, a `UNION ALL` over `main` and every attached layer
+    /// otherwise (`multi-db-composition.md` §4).
+    ///
+    /// Interpolate this in place of the `facts` table name in a query that
+    /// should see attached graphs. **Not for the write path or for local
+    /// bookkeeping** — writes are `main`-only by design (§6), and a read that
+    /// is deliberately ROOT-scoped cannot see an attached graph anyway, since
+    /// attachments contribute only NAMED graphs.
+    pub(crate) fn facts_source(&self) -> &str {
+        &self.facts_source
     }
 
     /// The databases mounted alongside this store.
@@ -444,6 +486,8 @@ impl Store {
             defer_auto_embed: false,
             pending_embed: None,
             attachments: Vec::new(),
+            facts_source: "facts".to_string(),
+            resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
         }
@@ -1261,12 +1305,63 @@ impl Store {
     }
 
     /// Resolve a term id back to its IRI.
+    ///
+    /// With attachments mounted this also reads their `terms` tables — see
+    /// [`Self::resolve_sql`] for why that is unambiguous, and why the
+    /// *opposite* direction is deliberately not done here.
     pub fn resolve(&self, id: i64) -> Result<String> {
         self.conn
-            .query_row("SELECT iri FROM terms WHERE id = ?1", params![id], |row| {
-                row.get(0)
-            })
+            .query_row(&self.resolve_sql, params![id], |row| row.get(0))
             .map_err(|_| Error::UnknownTerm(id))
+    }
+
+    /// Refuse, naming quipu #76, when `iri` is interned ONLY in an attached
+    /// layer.
+    ///
+    /// [`Self::lookup`] reads `main` only — deliberately, because the same IRI
+    /// in two spaces has two ids and picking one silently would be a wrong
+    /// join rather than a missing one (see `attach::build_resolve_sql`). The
+    /// cost of that decision lands here: naming an attached graph as
+    /// `GRAPH <iri>` or `FROM <iri>` finds nothing locally and falls into the
+    /// unknown-graph path, which matches nothing.
+    ///
+    /// That path is right for a graph that does not exist and wrong for one
+    /// that does, and the two are indistinguishable to the caller — an empty
+    /// result reads as "the attach did not work" or as a typo. So when the IRI
+    /// IS interned in a mounted layer, say so instead of returning nothing.
+    ///
+    /// Only fires on a composed store, and only for an IRI an attachment
+    /// actually knows: an unattached store, and a genuinely unknown IRI on an
+    /// attached one, keep today's match-nothing behaviour exactly.
+    ///
+    /// # Errors
+    /// [`Error::Store`] naming the alias, the IRI and the blocking issue.
+    pub(crate) fn refuse_if_attached_only(&self, iri: &str) -> Result<()> {
+        if self.attachments.is_empty() {
+            return Ok(());
+        }
+        for a in &self.attachments {
+            let found: Option<i64> = self
+                .conn
+                .query_row(
+                    &format!("SELECT id FROM {}.terms WHERE iri = ?1", a.alias),
+                    params![iri],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if found.is_some() {
+                return Err(Error::Store(format!(
+                    "<{iri}> is interned in the attached layer {:?} (alias {}) \
+                     but not in this store, and naming a term across an \
+                     attachment is not implemented yet (quipu #76). Refused \
+                     rather than matched-against-nothing, because an empty \
+                     result here is indistinguishable from a misspelt IRI. \
+                     `GRAPH ?g` ranges attached graphs today and does work.",
+                    a.path, a.alias
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Look up a term id by IRI, returning None if not interned.

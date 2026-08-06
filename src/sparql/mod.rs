@@ -540,6 +540,12 @@ fn apply_dataset(
                 ids.extend(store.dataset_member_ids(iri)?);
             } else if let Some(g) = store.lookup(iri)? {
                 ids.push(g);
+            } else {
+                // quipu #75: same reason as the `GRAPH <iri>` site — a
+                // `FROM`/`FROM NAMED` naming an ATTACHED graph is not an
+                // unknown graph, and contributing nothing would read as an
+                // empty layer rather than an unimplemented lookup.
+                store.refuse_if_attached_only(iri)?;
             }
         }
         Ok(ids)

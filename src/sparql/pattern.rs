@@ -331,7 +331,17 @@ pub fn eval_pattern_seeded(
                 // silent fall-through. A FROM NAMED restriction that excludes
                 // this graph likewise makes it invisible (id -1).
                 NamedNodePattern::NamedNode(iri) => {
-                    let gid = store.lookup(iri.as_str())?.unwrap_or(-1);
+                    let gid = match store.lookup(iri.as_str())? {
+                        Some(g) => g,
+                        None => {
+                            // quipu #75: on a COMPOSED store, "unknown locally"
+                            // may mean "lives in an attached layer", which is a
+                            // real graph and not a typo. Refuse rather than
+                            // match nothing; unattached stores are untouched.
+                            store.refuse_if_attached_only(iri.as_str())?;
+                            -1
+                        }
+                    };
                     let visible = ctx
                         .named_dataset
                         .as_ref()

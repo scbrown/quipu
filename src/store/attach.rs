@@ -154,12 +154,175 @@ fn attached_term_space(conn: &Connection, alias: &str) -> Result<i64> {
     Ok(space.unwrap_or(0))
 }
 
+/// Every `facts` column a composed query projects from each branch of the
+/// union (see [`build_facts_source`]).
+///
+/// This list is a **contract with the schema**, not documentation. Two
+/// mechanisms hold it to the schema rather than to anyone's memory:
+///
+/// - `facts_columns_matches_the_schema` fails the moment a column is added to
+///   `facts` without a decision about whether the composed source projects it;
+/// - [`verify_attached_schema`] refuses an attachment whose `facts` lacks any
+///   of these, because a `UNION ALL` branch that cannot produce a column is a
+///   query-time failure in a path the caller did not ask to compose.
+///
+/// The rule quipu #74's acceptance amendment set, one level up: derive the
+/// work from the schema and refuse what you cannot classify.
+pub(crate) const FACTS_COLUMNS: &[&str] = &[
+    "e",
+    "a",
+    "v",
+    "g",
+    "tx",
+    "valid_from",
+    "valid_to",
+    "op",
+    "retracted_tx",
+];
+
+/// The graphs an attachment **contributes**, as a SQL predicate on `g`.
+///
+/// ONE definition, used by both [`register_attached_graphs`] (which of the
+/// layer's graphs enter the local registry) and [`build_facts_source`] (which
+/// of the layer's rows a composed query can read). These two sets must be
+/// identical: a registry entry with no readable rows is a graph that resolves
+/// and returns nothing, and a readable row with no registry entry is a fact
+/// arriving from a graph the store cannot name or label. Sharing the predicate
+/// is what makes drifting apart impossible rather than merely unlikely;
+/// `the_union_reads_exactly_the_registered_graphs` pins it.
+///
+/// `meta` is the attachment's own label meta-graph id, in ITS term space, or
+/// `None` for a layer predating graph labels.
+fn contributed_graphs_sql(meta: Option<i64>) -> String {
+    // Reserved graphs are per-database and are NOT contributed — see
+    // `register_attached_graphs`. `g <> 0` drops the layer's own ROOT, which is
+    // the compatibility guarantee itself: without it the layer's default-graph
+    // facts join the LOCAL default graph, and every existing query returns more
+    // rows than it did before the attach. Measured on a two-store composition:
+    // one local ROOT fact became two.
+    match meta {
+        Some(m) => format!("g <> 0 AND g <> {m}"),
+        None => "g <> 0".to_string(),
+    }
+}
+
+/// The attachment's own label meta-graph id, in ITS term space.
+///
+/// Absent is fine — a layer predating graph labels simply has none.
+fn attached_meta_graph(conn: &Connection, alias: &str) -> Result<Option<i64>> {
+    Ok(conn
+        .query_row(
+            &format!("SELECT id FROM {alias}.terms WHERE iri = ?1"),
+            params![crate::namespace::META_GRAPH_IRI],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
+/// The table source a composed query reads `facts` from
+/// (`multi-db-composition.md` §4).
+///
+/// - **No attachments → the literal `"facts"`.** Byte-identical to the SQL
+///   every query built before this feature existed. That is acceptance 1, and
+///   it is a stronger requirement than "the same results": a store that never
+///   asked to compose must not pay a planner cost, and the diff of this
+///   feature against an unattached store must be empty.
+/// - **With attachments → `(SELECT … FROM main.facts UNION ALL SELECT …
+///   FROM <alias>.facts WHERE <contributed>) AS facts`.**
+///
+/// **Never a SQL VIEW named `facts`** — a view would shadow the real table and
+/// break every write.
+///
+/// # Why the caller's `WHERE` may stay outside
+///
+/// Acceptance 2 requires the graph predicate to reach *inside* each branch, so
+/// each file's own `idx_geav` is used instead of both files being scanned per
+/// triple pattern. Measured on the bundled `SQLite` 3.48.0 rather than assumed:
+/// its push-down optimisation moves the outer `WHERE` into both branches, and
+/// `EXPLAIN QUERY PLAN` for the outer-`WHERE` form is **identical** to the form
+/// with the predicate written into each branch by hand — `SEARCH main.facts
+/// USING INDEX idx_geav (g=?)` and the same for the attachment.
+///
+/// So this returns a drop-in table source and callers are unchanged apart from
+/// one interpolation. That is a property of the planner, not of our SQL, which
+/// is why `graph_predicate_is_pushed_into_each_union_branch` asserts the plan:
+/// if a future `SQLite` stops pushing down, the union silently becomes a
+/// double table scan on every triple pattern, and a test is the only thing that
+/// would say so.
+///
+/// # Errors
+/// [`Error::Sqlite`] if an attachment's `terms` cannot be read.
+pub(crate) fn build_facts_source(conn: &Connection, attachments: &[Attachment]) -> Result<String> {
+    if attachments.is_empty() {
+        return Ok("facts".to_string());
+    }
+    let cols = FACTS_COLUMNS.join(", ");
+    let mut branches = vec![format!("SELECT {cols} FROM main.facts")];
+    for a in attachments {
+        let alias = &a.alias;
+        let meta = attached_meta_graph(conn, alias)?;
+        branches.push(format!(
+            "SELECT {cols} FROM {alias}.facts WHERE {}",
+            contributed_graphs_sql(meta)
+        ));
+    }
+    Ok(format!("({}) AS facts", branches.join(" UNION ALL ")))
+}
+
+/// The term-resolution query for a store with no attachments — today's exact
+/// SQL, and the byte-identity baseline for [`build_resolve_sql`].
+pub(crate) const RESOLVE_SQL_LOCAL: &str = "SELECT iri FROM terms WHERE id = ?1";
+
+/// The SQL `Store::resolve` uses to turn a term id back into an IRI.
+///
+/// # Why this direction crosses the attachment boundary and the other does not
+///
+/// The union [`build_facts_source`] builds yields rows whose `e`, `a` and `g`
+/// are term ids belonging to an attached file. Without resolution the composed
+/// query returns them and then fails — measured before writing this, on a
+/// two-store composition: `GRAPH ?g { ?s ?p ?o }` produced
+/// `unknown term id: 8796093022210`. The union is not usable without this, so
+/// it is part of the same increment; an error that reads like store corruption
+/// is not an acceptable interim state for a feature that otherwise looks
+/// finished.
+///
+/// **id → IRI is unambiguous by construction.** Term spaces (quipu #74)
+/// partition the id range per database and `verify_attached_schema` refuses a
+/// composition whose spaces collide, so an id belongs to exactly one file. The
+/// branches cannot disagree; `LIMIT 1` is a bound, not a tie-break.
+///
+/// **IRI → id is NOT, and is deliberately left alone (quipu #76).** The same
+/// IRI interned in two spaces has two ids — an alias, not a collision — so a
+/// `lookup` that returned the first match would be silently incomplete exactly
+/// when two layers share vocabulary, which is the normal case for the
+/// shared-reference-layer deployment this design exists for. That needs
+/// `lookup_all`, `IN`-predicates and post-`DISTINCT` canonicalisation, which
+/// is #76's whole subject. Guessing here would produce a wrong join rather
+/// than a missing one, and this design refuses silent wrong answers.
+///
+/// The visible consequence today, pinned by
+/// `naming_an_attached_graph_by_iri_is_not_resolvable_yet`: naming an attached
+/// graph as `GRAPH <iri>` matches nothing, because the IRI is interned in the
+/// layer and `lookup` reads `main` only.
+pub(crate) fn build_resolve_sql(attachments: &[Attachment]) -> String {
+    if attachments.is_empty() {
+        return RESOLVE_SQL_LOCAL.to_string();
+    }
+    let mut branches = vec!["SELECT iri FROM main.terms WHERE id = ?1".to_string()];
+    for a in attachments {
+        branches.push(format!("SELECT iri FROM {}.terms WHERE id = ?1", a.alias));
+    }
+    format!("{} LIMIT 1", branches.join(" UNION ALL "))
+}
+
 /// Refuse an attachment quipu cannot compose, naming the fix.
 ///
-/// Two refusals, both **before** anything reads the attachment:
+/// Three refusals, all **before** anything reads the attachment:
 ///
 /// - its `facts` has no `g` column, so it predates named graphs and has no
 ///   notion of the graph a composed query selects on;
+/// - its `facts` is missing some other column of [`FACTS_COLUMNS`], which a
+///   `UNION ALL` branch must produce;
 /// - its term space collides with the local store's or with another
 ///   attachment's, so ids from the two files mean different things.
 ///
@@ -181,18 +344,41 @@ pub(crate) fn verify_attached_schema(
 
     for a in attachments {
         let alias = &a.alias;
-        let has_g: bool = conn
+        let present: Vec<String> = conn
             .prepare(&format!(
-                "SELECT 1 FROM pragma_table_info('facts', '{alias}') WHERE name = 'g'"
+                "SELECT name FROM pragma_table_info('facts', '{alias}')"
             ))?
-            .exists([])?;
-        if !has_g {
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<std::result::Result<_, _>>()?;
+
+        // `g` first and by itself: it has a MEANING the others do not. Missing
+        // `g` says the layer predates named graphs, so there is nothing for a
+        // composed query to select on — a different diagnosis, and a different
+        // sentence, from "this file is behind on migrations".
+        if !present.iter().any(|c| c == "g") {
             return Err(Error::Store(format!(
                 "cannot attach {:?} as {alias}: its `facts` table has no `g` \
                  column, so it predates named graphs and a composed query has no \
                  graph to select on. Open it once with a current quipu to migrate \
                  it, then attach it.",
                 a.path
+            )));
+        }
+
+        let missing: Vec<&str> = FACTS_COLUMNS
+            .iter()
+            .copied()
+            .filter(|c| !present.iter().any(|p| p == c))
+            .collect();
+        if !missing.is_empty() {
+            return Err(Error::Store(format!(
+                "cannot attach {:?} as {alias}: its `facts` table is missing {}, \
+                 which every branch of a composed query's UNION must produce. \
+                 Refused here rather than at query time, because a query that \
+                 named none of this layer's graphs would still fail. Open it once \
+                 with a current quipu to migrate it, then attach it.",
+                a.path,
+                missing.join(", ")
             )));
         }
 
@@ -268,15 +454,11 @@ pub(crate) fn register_attached_graphs(
     let mut registered = 0;
     for a in attachments {
         let alias = &a.alias;
-        // The attachment's own meta-graph id, in ITS term space. Absent is
-        // fine — a layer predating graph labels simply has none.
-        let meta: Option<i64> = conn
-            .query_row(
-                &format!("SELECT id FROM {alias}.terms WHERE iri = ?1"),
-                params![crate::namespace::META_GRAPH_IRI],
-                |r| r.get(0),
-            )
-            .optional()?;
+        let meta = attached_meta_graph(conn, alias)?;
+        // The SAME predicate `build_facts_source` puts on this layer's rows —
+        // see `contributed_graphs_sql`. Registry and readable rows are one set
+        // expressed once, so they cannot drift into disagreeing.
+        let contributed = contributed_graphs_sql(meta);
         // `INSERT OR REPLACE` keyed on g: re-opening a store with the same
         // attachment must converge rather than accumulate or fail. The source
         // column is re-asserted each time, so a graph that moved between
@@ -288,9 +470,9 @@ pub(crate) fn register_attached_graphs(
                       fresh_rank, trust_rank, trust_chain, policy) \
                  SELECT g, class, parent_branch, created_at, ?1, \
                         fresh_rank, trust_rank, trust_chain, policy \
-                 FROM {alias}.graphs WHERE g <> 0 AND g IS NOT ?2"
+                 FROM {alias}.graphs WHERE {contributed}"
             ),
-            params![alias, meta],
+            params![alias],
         )?;
     }
     Ok(registered)

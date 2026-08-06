@@ -226,10 +226,23 @@ pub fn eval_triple_pattern(
     // `g` is projected only for `GRAPH ?g` (to bind ?g per row); for the default
     // and single-named scopes it is omitted so DISTINCT collapses cross-graph
     // duplicates in a FROM union.
+    // quipu #75: `facts_source()` is the literal `facts` for a store with no
+    // attachments, so this is byte-identical to the SQL above for every store
+    // that did not ask to compose. With attachments it is a `UNION ALL` over
+    // main and each layer's CONTRIBUTED graphs; the conditions above stay
+    // outside it and SQLite pushes them into each branch — measured, and
+    // asserted by `graph_predicate_is_pushed_into_each_union_branch`.
+    //
+    // This is the ONLY query-path site that composes. The other readers of
+    // `facts` are either the write path, local bookkeeping, or deliberately
+    // ROOT-scoped (`rdfs::eval_type_pattern_with_subclasses` pins `g = 0`) —
+    // and an attachment contributes only NAMED graphs, so a ROOT-scoped read
+    // could not see one even if it composed.
+    let facts = store.facts_source();
     let sql = if want_g {
-        format!("SELECT DISTINCT e, a, v, g FROM facts{where_clause}")
+        format!("SELECT DISTINCT e, a, v, g FROM {facts}{where_clause}")
     } else {
-        format!("SELECT DISTINCT e, a, v FROM facts{where_clause}")
+        format!("SELECT DISTINCT e, a, v FROM {facts}{where_clause}")
     };
     let mut stmt = store.prepare(&sql)?;
 
