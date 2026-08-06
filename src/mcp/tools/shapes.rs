@@ -6,11 +6,6 @@ use serde_json::Value as JsonValue;
 use crate::error::{Error, Result};
 use crate::store::Store;
 
-/// MCP tool: `quipu_validate` -- Validate data against shapes.
-///
-/// Input: `{ "shapes": "<shapes turtle>", "data": "<data turtle>" }`
-/// Output: validation feedback JSON
-#[cfg(feature = "shacl")]
 /// Resolve the shape source for a `/validate` request (quipu #71).
 ///
 /// Returns `None` when the request carries its own `shapes` — the existing
@@ -44,6 +39,20 @@ pub fn resolve_validation_shapes(
     store.get_combined_shapes_as_of(&as_of)
 }
 
+/// MCP tool: `quipu_validate` -- Validate data against shapes.
+///
+/// Input: `{ "shapes": "<shapes turtle>", "data": "<data turtle>" }`
+/// Output: validation feedback JSON
+///
+/// ⚠️ The `#[cfg]` below must stay ADJACENT to this fn. It was separated from it
+/// once (quipu #71 inserted `resolve_validation_shapes` between the two), which
+/// silently moved the gate onto the new function and left this one ungated —
+/// three compile errors under `--no-default-features`, and a red CI nobody was
+/// subscribed to for six hours. Do not insert anything between here and the fn.
+///
+/// # Errors
+/// Missing `shapes`/`data` parameters, or a SHACL validation error.
+#[cfg(feature = "shacl")]
 pub fn tool_validate(input: &JsonValue) -> Result<JsonValue> {
     let shapes = input
         .get("shapes")

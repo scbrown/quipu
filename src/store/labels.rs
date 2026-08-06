@@ -891,7 +891,7 @@ impl Store {
     /// Read a graph's recommended floor.
     ///
     /// ⚠️ **This is READ and SURFACED, never applied.** A pack that could
-    /// tighten enforcement could DoS its consumer; one that could loosen it
+    /// tighten enforcement could `DoS` its consumer; one that could loosen it
     /// could bypass the consumer's own floor. So nothing in the query path
     /// consults this — [`Store::check_label_floor`] reads
     /// `[quipu.labels]` and nothing else, and a test asserts enforcement is

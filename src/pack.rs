@@ -299,7 +299,11 @@ pub fn pack(
                 "SELECT entity_id, text, embedding, valid_from, valid_to FROM vectors \
                  WHERE valid_to IS NULL",
             )?;
-            let rows: Vec<(i64, String, Vec<u8>, String, Option<String>)> = stmt
+            // One `vectors` row as packed: entity id, text, embedding blob, and
+            // the bitemporal window. Named because clippy reads the bare 5-tuple
+            // as a complex type, and a name is better than an allow.
+            type VectorRow = (i64, String, Vec<u8>, String, Option<String>);
+            let rows: Vec<VectorRow> = stmt
                 .query_map([], |r| {
                     Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
                 })?

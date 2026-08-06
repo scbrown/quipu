@@ -696,10 +696,10 @@ fn the_meta_graph_is_excluded_from_all_named_graph_ids() {
 // quipu #68 — label floors
 // ---------------------------------------------------------------------------
 
-fn store_with_labeled(iri: &str, label: GraphLabel) -> Store {
+fn store_with_labeled(iri: &str, label: &GraphLabel) -> Store {
     let mut store = Store::open_in_memory().unwrap();
     store.overlay_create(iri, 0).unwrap();
-    store.set_graph_label(iri, &label, TS, None).unwrap();
+    store.set_graph_label(iri, label, TS, None).unwrap();
     store
 }
 
@@ -708,7 +708,7 @@ fn floors_unset_is_zero_behaviour_change() {
     // #68 acceptance 1. The default store refuses nothing, whatever the labels.
     let store = store_with_labeled(
         "urn:g:stale",
-        GraphLabel {
+        &GraphLabel {
             freshness: Some(Freshness::Stale),
             ..Default::default()
         },
@@ -726,7 +726,7 @@ fn a_freshness_floor_refuses_and_names_the_offending_graph_and_axis() {
     // #68 acceptance 2.
     let mut store = store_with_labeled(
         "urn:g:old",
-        GraphLabel {
+        &GraphLabel {
             freshness: Some(Freshness::Stale),
             ..Default::default()
         },
@@ -746,7 +746,7 @@ fn a_member_above_the_floor_is_not_refused() {
     // Control: the floor must not refuse everything.
     let mut store = store_with_labeled(
         "urn:g:new",
-        GraphLabel {
+        &GraphLabel {
             freshness: Some(Freshness::Fresh),
             ..Default::default()
         },
@@ -809,7 +809,7 @@ fn partial_coverage_fails_because_one_member_is_undeclared() {
 fn a_trust_rank_floor_without_a_chain_is_refused_as_meaningless() {
     let mut store = store_with_labeled(
         "urn:g:t",
-        GraphLabel {
+        &GraphLabel {
             trust: Some(trust("urn:t:v", "urn:chain:a", 10)),
             ..Default::default()
         },
@@ -827,7 +827,7 @@ fn a_trust_rank_floor_without_a_chain_is_refused_as_meaningless() {
 fn a_trust_floor_in_another_chain_cannot_be_evaluated() {
     let mut store = store_with_labeled(
         "urn:g:t2",
-        GraphLabel {
+        &GraphLabel {
             trust: Some(trust("urn:t:v", "urn:chain:theirs", 90)),
             ..Default::default()
         },
@@ -852,7 +852,7 @@ fn a_trust_floor_in_another_chain_cannot_be_evaluated() {
 fn a_denied_policy_token_refuses_and_names_it() {
     let mut store = store_with_labeled(
         "urn:g:secret",
-        GraphLabel {
+        &GraphLabel {
             policy: Some(PolicyClass::new(["no-export", "pii"])),
             ..Default::default()
         },
@@ -872,7 +872,7 @@ fn a_denied_policy_token_refuses_and_names_it() {
 fn an_undenied_policy_token_passes() {
     let mut store = store_with_labeled(
         "urn:g:ok",
-        GraphLabel {
+        &GraphLabel {
             policy: Some(PolicyClass::new(["pii"])),
             ..Default::default()
         },
@@ -908,7 +908,7 @@ deny_policy_tokens = ["no-export"]
     // And it must actually gate once wired the way `server.rs` wires it.
     let mut store = store_with_labeled(
         "urn:g:cfg",
-        GraphLabel {
+        &GraphLabel {
             freshness: Some(Freshness::Stale),
             ..Default::default()
         },

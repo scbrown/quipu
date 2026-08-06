@@ -1056,7 +1056,7 @@ impl Store {
     /// CLOSES the prior row, `remove` closes rather than deletes.
     ///
     /// ⚠️ **This is the one migration here that rebuilds a table.** Multiple
-    /// rows per name means the primary key must change, and SQLite cannot alter
+    /// rows per name means the primary key must change, and `SQLite` cannot alter
     /// a PK in place. Guarded on the presence of `valid_from` so it runs once;
     /// wrapped in a savepoint so a failure leaves the old table intact; and
     /// safe to drop because **nothing references either table by foreign key**
@@ -1261,17 +1261,17 @@ impl Store {
 
     /// Get all stored shapes concatenated as a single Turtle string.
     pub fn get_combined_shapes(&self) -> Result<Option<String>> {
-        Self::combine(self.list_shapes()?)
+        Self::combine(&self.list_shapes()?)
     }
 
     /// The combined shapes as they stood at `as_of` — the `as_of` twin
     /// `POST /validate` and the MCP tool use to validate against a prior
     /// version's semantics.
     pub fn get_combined_shapes_as_of(&self, as_of: &AsOf) -> Result<Option<String>> {
-        Self::combine(self.list_shapes_as_of(as_of)?)
+        Self::combine(&self.list_shapes_as_of(as_of)?)
     }
 
-    fn combine(rows: Vec<(String, String, String)>) -> Result<Option<String>> {
+    fn combine(rows: &[(String, String, String)]) -> Result<Option<String>> {
         if rows.is_empty() {
             return Ok(None);
         }
