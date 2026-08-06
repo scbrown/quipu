@@ -244,6 +244,24 @@ async fn main() {
     // that nothing reads is the bug config.rs guards against.
     store.labels_config_mut().clone_from(&config.label_floors);
 
+    // quipu #47: report the configured federation remotes at startup, and prove
+    // they are REACHED rather than merely parsed. `federation.remotes` was
+    // parsed, exported, and consumed by nothing for months; announcing what was
+    // configured — and whether each one answers — is what makes the difference
+    // visible without waiting for a federated query to be issued.
+    if !config.federation.remotes.is_empty() {
+        let fed = quipu::provider::federated_from_config(&store, "local", &config.federation);
+        for status in fed.health_all() {
+            match (status.healthy, status.message.as_deref()) {
+                (true, _) => eprintln!("federation: '{}' reachable", status.name),
+                (false, Some(why)) => {
+                    eprintln!("federation: '{}' NOT reachable — {why}", status.name);
+                }
+                (false, None) => eprintln!("federation: '{}' NOT reachable", status.name),
+            }
+        }
+    }
+
     // Apply the SHACL validation policy so episode writes can be gated against
     // persistently-loaded shapes, not just episode-inline shapes (hq-c6s).
     store.shacl_config_mut().clone_from(&config.shacl);

@@ -518,13 +518,6 @@ impl QuipuConfig {
                     .to_string(),
             );
         }
-        if !self.federation.remotes.is_empty() {
-            w.push(format!(
-                "federation.remotes has {} entry(ies) but federation is UNIMPLEMENTED — there is \
-                 no remote GraphProvider, so the remotes are ignored.",
-                self.federation.remotes.len()
-            ));
-        }
         w
     }
 }
@@ -538,7 +531,13 @@ mod tests {
     /// entry is a promise: it is loud at runtime via `unwired_warnings()` and its
     /// docs say "unimplemented". When one is wired, remove it here AND from
     /// `unwired_warnings`, and the guard below will hold you to consuming it.
-    const UNWIRED_TOP_LEVEL: &[&str] = &["federation"];
+    /// quipu #47 emptied this: `federation` was the wholly-dead sub-config the
+    /// guard was written for, and `provider::federated_from_config` now consumes
+    /// it. An EMPTY allowlist is the healthy state — every documented knob is
+    /// wired. Re-adding an entry means accepting a settable-but-inert switch, so
+    /// it needs a `unwired_warnings()` branch and an "unimplemented" doc note in
+    /// the same change.
+    const UNWIRED_TOP_LEVEL: &[&str] = &[];
 
     /// Concatenated source of every `src/**/*.rs` EXCEPT config.rs, so the guard
     /// can ask "is this field read anywhere but its own definition?".
@@ -583,6 +582,27 @@ mod tests {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_lowercase() || c == '_'))
             .collect()
+    }
+
+    /// `src` with `//`-comments stripped, so PROSE cannot satisfy a usage check.
+    ///
+    /// Third false-negative class found for this guard (quipu #47), and the
+    /// worst of the three: a mention in a COMMENT counted as a use. Writing
+    /// `[[quipu.federation.remotes]]` in a doc string marked `federation` as
+    /// consumed — so a comment explaining that a field is DEAD CONFIG would
+    /// itself certify it as live.
+    ///
+    /// Truncating at `//` can also cut a line at a URL inside a string literal.
+    /// That direction is safe: it can only cause a spurious FAILURE (the guard
+    /// complains about a field that is used), never a spurious pass.
+    fn strip_comments(src: &str) -> String {
+        src.lines()
+            .map(|l| match l.find("//") {
+                Some(i) => &l[..i],
+                None => l,
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// Whether `.field` is read in `src` as a WHOLE field access.
@@ -632,7 +652,7 @@ mod tests {
         // top-level fields because their names are distinctive; a generic leaf name
         // like `name`/`url` cannot be grepped without false matches. federation was
         // the wholly-dead sub-config this was written for.
-        let src = src_without_config();
+        let src = strip_comments(&src_without_config());
         let mut dead = Vec::new();
         for field in quipu_config_top_level_fields() {
             let consumed = field_is_read(&src, &field);
@@ -665,8 +685,9 @@ mod tests {
 
     #[test]
     fn unwired_knobs_warn_loudly_when_set() {
-        // The set-but-inert knobs must produce a warning, so they are never silent
-        //. Pins the two known cases; wiring one means updating this.
+        // The set-but-inert knobs must produce a warning, so they are never
+        // silent. Wiring one means updating this — federation did exactly that
+        // in quipu #47, and the assertion below flipped rather than vanished.
         let mut cfg = QuipuConfig::default();
         assert!(cfg.unwired_warnings().is_empty(), "defaults must not warn");
 
@@ -678,15 +699,19 @@ mod tests {
             "vector.backend = lancedb must warn — the quipu binaries do not honour it"
         );
 
+        // quipu #47 WIRED federation, so this flipped from "must warn" to "must
+        // NOT warn". Kept rather than deleted: a warning that outlives its
+        // subject is worse than no warning — it trains readers to ignore the
+        // channel, and the next genuinely-inert knob is the one they miss.
         cfg.federation.remotes.push(RemoteEndpoint {
             name: "prod".into(),
             url: "http://example:3030".into(),
         });
         assert!(
-            cfg.unwired_warnings()
+            !cfg.unwired_warnings()
                 .iter()
                 .any(|w| w.contains("federation")),
-            "a configured federation remote must warn — federation is unimplemented"
+            "federation is implemented (quipu #47) — it must NOT warn as unwired"
         );
     }
 
