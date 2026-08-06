@@ -13,7 +13,9 @@ fn code_entity_shapes_parse() {
 fn valid_code_module_conforms() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 bobbin:mod1 a bobbin:CodeModule ;
+    rdfs:label "main" ;
     bobbin:filePath "src/main.rs" ;
     bobbin:repo "quipu" ;
     bobbin:language "rust" .
@@ -43,11 +45,14 @@ bobbin:mod1 a bobbin:CodeModule ;
 fn valid_code_symbol_conforms() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 bobbin:mod1 a bobbin:CodeModule ;
+    rdfs:label "lib" ;
     bobbin:filePath "src/lib.rs" ;
     bobbin:repo "quipu" ;
     bobbin:language "rust" .
 bobbin:sym1 a bobbin:CodeSymbol ;
+    rdfs:label "validate" ;
     bobbin:name "validate" ;
     bobbin:symbolKind "function" ;
     bobbin:definedIn bobbin:mod1 .
@@ -97,7 +102,9 @@ bobbin:sym1 a bobbin:CodeSymbol ;
 fn valid_document_conforms() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 bobbin:doc1 a bobbin:Document ;
+    rdfs:label "README" ;
     bobbin:filePath "docs/README.md" .
 "#;
     let fb = validate_shapes(SHAPES, data).unwrap();
@@ -122,8 +129,10 @@ bobbin:doc1 a bobbin:Document .
 fn valid_section_conforms() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
 bobbin:sec1 a bobbin:Section ;
+    rdfs:label "Getting Started" ;
     bobbin:heading "Getting Started" ;
     bobbin:headingDepth "2"^^xsd:integer .
 "#;
@@ -153,6 +162,7 @@ fn valid_bundle_conforms() {
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 bobbin:mod1 a bobbin:CodeModule ;
+    rdfs:label "lib" ;
     bobbin:filePath "src/lib.rs" ;
     bobbin:repo "quipu" ;
     bobbin:language "rust" .
