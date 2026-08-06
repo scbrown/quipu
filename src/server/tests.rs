@@ -475,7 +475,7 @@ fn an_empty_pool_falls_back_to_the_writer() {
 }
 
 /// Pool connections are opened READ-ONLY. The borrow checker cannot enforce
-/// this the way `&Store` vs `&mut Store` does in the tool layer, so SQLite is
+/// this the way `&Store` vs `&mut Store` does in the tool layer, so `SQLite` is
 /// the mechanism: a write through a pooled connection must FAIL, not race.
 #[test]
 fn pooled_connections_refuse_writes() {
@@ -513,10 +513,10 @@ fn pooled_connections_refuse_writes() {
 /// already caught mis-registered as `ro_handler!` on exactly that mistake.
 ///
 /// A writing tool on a pooled connection does not corrupt anything — the
-/// connection is `SQLITE_OPEN_READ_ONLY`, so SQLite refuses — but it does turn a
+/// connection is `SQLITE_OPEN_READ_ONLY`, so `SQLite` refuses — but it does turn a
 /// working read endpoint into a 500. That is the regression this pins.
 ///
-/// The discriminator is the SQLite read-only error specifically, not "did it
+/// The discriminator is the `SQLite` read-only error specifically, not "did it
 /// error": most of these tools error on the deliberately-thin inputs below, and
 /// that is fine. Only `attempt to write a readonly database` is a failure.
 /// Validated against the real message rather than a guessed one.
@@ -548,11 +548,13 @@ fn every_pooled_tool_survives_a_read_only_connection() {
     );
 
     let entity = "http://example.org/n";
-    let cases: Vec<(
-        &str,
+    /// One registered read-only tool: name, entry point, minimal valid input.
+    type ToolCase = (
+        &'static str,
         fn(&Store, &serde_json::Value) -> quipu::Result<serde_json::Value>,
         serde_json::Value,
-    )> = vec![
+    );
+    let cases: Vec<ToolCase> = vec![
         (
             "tool_query",
             quipu::tool_query,

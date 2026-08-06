@@ -226,7 +226,7 @@ impl Store {
     /// Two deliberate differences from [`Self::open`]:
     ///
     /// - `SQLITE_OPEN_READ_ONLY`, so a bug on a read path cannot write. This is
-    ///   the mechanism, not the comment: a stray `INSERT` here fails at SQLite
+    ///   the mechanism, not the comment: a stray `INSERT` here fails at `SQLite`
     ///   rather than racing the writer.
     /// - **No DDL and no migration.** `init` runs `INIT_SQL`, `VECTORS_SQL` and
     ///   `migrate_named_graphs` on every open. Running schema setup N more times

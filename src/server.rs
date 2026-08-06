@@ -27,7 +27,7 @@ type SharedStore = Arc<StoreHandle>;
 /// read-only connections.
 ///
 /// WAL already permits N concurrent readers alongside one writer. Before this,
-/// every read took the writer's mutex, so SQLite's concurrency was present and
+/// every read took the writer's mutex, so `SQLite`'s concurrency was present and
 /// unused — measured at effective parallelism **1.0** for N = 1, 2, 4, 8 on a
 /// quiet store, i.e. 8 concurrent queries cost 8x one query's wall time
 /// the pre-pool measurement this replaced.
@@ -109,7 +109,7 @@ impl StoreHandle {
     ///
     /// Only call this where the work is genuinely read-only: the connection is
     /// opened `SQLITE_OPEN_READ_ONLY` with `PRAGMA query_only`, so a write
-    /// attempted through it fails at SQLite rather than corrupting anything —
+    /// attempted through it fails at `SQLite` rather than corrupting anything —
     /// but failing a request is still a bug, and the borrow checker cannot
     /// catch it here the way `&Store` vs `&mut Store` does in the tool layer.
     fn read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
