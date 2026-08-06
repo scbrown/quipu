@@ -1,5 +1,6 @@
 //! The core fact log store backed by `SQLite`.
 
+pub mod alias;
 pub mod attach;
 pub mod datasets;
 pub mod events;
@@ -385,6 +386,10 @@ impl Store {
         // the same meta-graph id registration filtered on.
         let facts_source = attach::build_facts_source(&conn, attachments)?;
         let resolve_sql = attach::build_resolve_sql(attachments);
+        // quipu #76: the alias table is TEMP and derived, so it is built here
+        // rather than migrated — see `alias`'s module docs for why it is not
+        // persisted. Safe on an unattached store: it creates an empty table.
+        alias::build_term_alias(&conn, attachments)?;
 
         let mut store = Self::with_connection(conn);
         store.attachments = attachments.to_vec();
@@ -1362,6 +1367,69 @@ impl Store {
             }
         }
         Ok(())
+    }
+
+    /// Every id this IRI denotes across the composition — the local id and
+    /// each attached layer's id for the same IRI (quipu #76).
+    ///
+    /// The canonical (local) id comes FIRST when there is one, so a caller
+    /// taking `.first()` gets the id the local store can resolve, label and
+    /// write against.
+    ///
+    /// For a store with no attachments this returns exactly what
+    /// [`Self::lookup`] returns, as zero or one element — and the predicate
+    /// built from it is byte-identical to the pre-#76 SQL.
+    ///
+    /// # Errors
+    /// [`Error::Sqlite`] if the lookup fails.
+    pub fn lookup_all(&self, iri: &str) -> Result<Vec<i64>> {
+        let local = self.lookup(iri)?;
+        if self.attachments.is_empty() {
+            return Ok(local.into_iter().collect());
+        }
+        let mut ids: Vec<i64> = local.into_iter().collect();
+        for a in &self.attachments {
+            let mut stmt = self
+                .conn
+                .prepare(&format!("SELECT id FROM {}.terms WHERE iri = ?1", a.alias))?;
+            let mut rows = stmt.query(params![iri])?;
+            while let Some(r) = rows.next()? {
+                let id: i64 = r.get(0)?;
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+        }
+        Ok(ids)
+    }
+
+    /// Map an id to the one the LOCAL store uses for the same IRI.
+    ///
+    /// An id with no alias row — every id on an unattached store, and every
+    /// local id — is returned unchanged, so this is an identity function until
+    /// a composition actually contains an alias.
+    ///
+    /// This is the *"sharp edge"* of `multi-db-composition.md` §1.2. SQL
+    /// `DISTINCT` runs over raw ids, so an entity present in both files
+    /// survives it as two rows that are semantically one. Canonicalising in
+    /// Rust **after** the SQL DISTINCT is what collapses them, and it costs
+    /// the size of the result set rather than the size of the store.
+    ///
+    /// # Errors
+    /// [`Error::Sqlite`] if the lookup fails.
+    pub fn canonical_id(&self, id: i64) -> Result<i64> {
+        if self.attachments.is_empty() {
+            return Ok(id);
+        }
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT canonical_id FROM term_alias WHERE alias_id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(id))
     }
 
     /// Look up a term id by IRI, returning None if not interned.
