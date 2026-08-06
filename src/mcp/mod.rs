@@ -57,7 +57,17 @@ pub(crate) fn resolution_hints_json(hints: &[(String, Vec<EntityCandidate>)]) ->
 pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bool)> {
     let (query_str, ctx) = query_context(store, input)?;
 
-    let result = sparql::query_temporal(store, query_str, &ctx)?;
+    // quipu #70: per-row labels are OPT-IN and only annotate under `GRAPH ?g`.
+    // Off by default so no existing response shape changes.
+    let result = if input
+        .get("row_labels")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        sparql::query_row_labeled(store, query_str, &ctx)?
+    } else {
+        sparql::query_temporal(store, query_str, &ctx)?
+    };
     let max_rows = store.search_config().max_sparql_rows;
 
     Ok(match result {

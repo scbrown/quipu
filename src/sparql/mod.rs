@@ -150,6 +150,138 @@ pub fn query(store: &Store, sparql: &str) -> Result<QueryResult> {
     query_temporal(store, sparql, &TemporalContext::default())
 }
 
+/// The variable a `GRAPH ?g { … }` binds, if the query has one (quipu #70).
+///
+/// Per-row labels are only free — and only *meaningful* — where the graph is
+/// already bound per row. Everywhere else the dataset label (#67) is the
+/// correct granularity, and projecting `g` to fake a per-row one would change
+/// the results rather than annotate them (§4).
+///
+/// The parse is what identifies the graph variable: a row binding an IRI is
+/// indistinguishable from any other IRI-valued variable once evaluation is
+/// done.
+fn graph_variable(pattern: &spargebra::algebra::GraphPattern) -> Option<String> {
+    use spargebra::algebra::GraphPattern as GP;
+    use spargebra::term::NamedNodePattern;
+    match pattern {
+        GP::Graph { name, inner } => match name {
+            NamedNodePattern::Variable(v) => Some(v.as_str().to_string()),
+            NamedNodePattern::NamedNode(_) => graph_variable(inner),
+        },
+        GP::Join { left, right } | GP::Union { left, right } => {
+            graph_variable(left).or_else(|| graph_variable(right))
+        }
+        GP::LeftJoin { left, right, .. } => graph_variable(left).or_else(|| graph_variable(right)),
+        GP::Minus { left, right } => graph_variable(left).or_else(|| graph_variable(right)),
+        GP::Filter { inner, .. }
+        | GP::Extend { inner, .. }
+        | GP::OrderBy { inner, .. }
+        | GP::Project { inner, .. }
+        | GP::Distinct { inner }
+        | GP::Reduced { inner }
+        | GP::Slice { inner, .. }
+        | GP::Group { inner, .. } => graph_variable(inner),
+        _ => None,
+    }
+}
+
+/// Annotate each row with the label of the graph it came from (quipu #70).
+///
+/// Adds `_freshness` / `_trust` / `_policy` columns using the exact pattern
+/// `FederatedProvider::query_all` already uses for `_provider`.
+///
+/// # Errors
+/// When the annotated rows span **more than one trust chain**. Nothing here
+/// composes ranks — but the worked example this exists for is
+/// `ORDER BY DESC(?rank)`, and ordering ranks drawn from two chains is the
+/// silent cross-chain comparison the trust axis refuses (§6). Better to refuse
+/// the annotation than to hand back a result that sorts meaninglessly.
+fn annotate_row_labels(store: &Store, result: QueryResult, g_var: &str) -> Result<QueryResult> {
+    let QueryResult::Select {
+        mut variables,
+        rows,
+    } = result
+    else {
+        // ASK has no rows and CONSTRUCT emits triples, not bindings — neither
+        // has a per-row graph to annotate.
+        return Ok(result);
+    };
+    for col in ["_freshness", "_trust", "_policy"] {
+        if !variables.iter().any(|v| v == col) {
+            variables.push(col.to_string());
+        }
+    }
+
+    let mut seen_chain: Option<String> = None;
+    let mut annotated = Vec::with_capacity(rows.len());
+    for row in rows {
+        let mut row = row;
+        if let Some(&Value::Ref(gid)) = row.get(g_var) {
+            let l = store.label_of_id(gid)?;
+            if let Some(f) = l.freshness.value {
+                row.insert("_freshness".into(), Value::Str(f.as_str().into()));
+            }
+            if let Some(t) = &l.trust.value {
+                match &seen_chain {
+                    Some(prev) if prev != &t.chain => {
+                        return Err(Error::InvalidValue(format!(
+                            "per-row trust labels span two chains ('{prev}' and '{}'). \
+                             Ranks are only comparable within a declared chain, so an \
+                             ORDER BY over these rows would be meaningless — refused \
+                             rather than sorted.",
+                            t.chain
+                        )));
+                    }
+                    Some(_) => {}
+                    None => seen_chain = Some(t.chain.clone()),
+                }
+                row.insert("_trust".into(), Value::Str(t.iri.clone()));
+            }
+            if let Some(p) = &l.policy.value {
+                row.insert("_policy".into(), Value::Str(p.tokens().join(" ")));
+            }
+        }
+        annotated.push(row);
+    }
+
+    Ok(QueryResult::Select {
+        variables,
+        rows: annotated,
+    })
+}
+
+/// Execute a query, annotating each row with its source graph's label.
+///
+/// **Opt-in, and only under `GRAPH ?g`.** A query with no graph variable is
+/// evaluated and returned unchanged: there is no per-row graph to label, and
+/// inventing one would mean projecting `g`, which changes results rather than
+/// annotating them.
+///
+/// # Errors
+/// As [`query_temporal`], plus a refusal when the annotated rows span more than
+/// one trust chain.
+pub fn query_row_labeled(
+    store: &Store,
+    sparql: &str,
+    ctx: &TemporalContext,
+) -> Result<QueryResult> {
+    let parsed = SparqlParser::new()
+        .parse_query(sparql)
+        .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
+    let g_var = match &parsed {
+        Query::Select { pattern, .. }
+        | Query::Construct { pattern, .. }
+        | Query::Describe { pattern, .. }
+        | Query::Ask { pattern, .. } => graph_variable(pattern),
+    };
+
+    let result = query_temporal(store, sparql, ctx)?;
+    match g_var {
+        Some(v) => annotate_row_labels(store, result, &v),
+        None => Ok(result),
+    }
+}
+
 /// A query result together with its dataset's composed label (quipu #67).
 ///
 /// Not `Clone`: `QueryResult` is not, and adding it would mean touching the

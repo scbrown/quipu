@@ -2721,3 +2721,285 @@ fn the_graph_param_resolves_a_dataset_name_too() {
     .unwrap();
     assert_eq!(out["count"], 2, "`graph` and `FROM` must agree");
 }
+
+// --- quipu #70: per-row labels under GRAPH ?g + precedence as ORDER BY ---
+
+/// Two named graphs at different trust ranks, plus a meta-graph ranking them.
+/// This is graph-labels.md §6's worked example, as a fixture.
+fn precedence_store() -> Store {
+    use crate::lattice::{Freshness, Trust};
+    use crate::store::labels::GraphLabel;
+    use crate::types::{Op, Value};
+
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-08-06T00:00:00Z";
+    let e_s = store.intern("http://example.org/s").unwrap();
+    let a_p = store.intern("http://example.org/p").unwrap();
+
+    for (iri, rank, fresh, val) in [
+        ("urn:g:canonical", 40, Freshness::Fresh, "from-canonical"),
+        ("urn:g:learned", 10, Freshness::Stale, "from-learned"),
+    ] {
+        let g = store.overlay_create(iri, 0).unwrap();
+        store
+            .overlay_write(g, Op::Assert, e_s, a_p, Value::Str(val.into()), ts)
+            .unwrap();
+        store
+            .set_graph_label(
+                iri,
+                &GraphLabel {
+                    freshness: Some(fresh),
+                    trust: Some(Trust::new(format!("{iri}#t"), "urn:chain:demo", rank)),
+                    ..Default::default()
+                },
+                ts,
+                None,
+            )
+            .unwrap();
+    }
+    store
+}
+
+#[test]
+fn per_row_labels_appear_under_graph_var_when_requested() {
+    // #70 acceptance 1, the "when requested" half.
+    let store = precedence_store();
+    let q = "SELECT ?g ?o WHERE { GRAPH ?g { ?s ?p ?o } }";
+    let out = query_row_labeled(&store, q, &TemporalContext::default()).unwrap();
+
+    assert!(out.variables().contains(&"_freshness".to_string()));
+    assert_eq!(out.rows().len(), 2);
+    for row in out.rows() {
+        let g = value_to_iri(&store, row.get("g").unwrap());
+        let f = row.get("_freshness").expect("annotated");
+        let expected = if g == "urn:g:canonical" {
+            "fresh"
+        } else {
+            "stale"
+        };
+        assert_eq!(
+            f,
+            &Value::Str(expected.into()),
+            "row label follows its own graph"
+        );
+    }
+}
+
+#[test]
+fn per_row_labels_are_absent_without_a_graph_variable() {
+    // #70 acceptance 1, the "only under GRAPH ?g" half. A FROM-union query has
+    // no per-row graph — the dataset label (#67) is the right granularity, and
+    // projecting `g` to fake one would change the results.
+    let store = precedence_store();
+    let q = "SELECT ?o FROM <urn:g:canonical> FROM <urn:g:learned> WHERE { ?s ?p ?o }";
+    let out = query_row_labeled(&store, q, &TemporalContext::default()).unwrap();
+    assert!(!out.variables().contains(&"_freshness".to_string()));
+}
+
+#[test]
+fn per_row_labels_are_off_unless_asked_for() {
+    // Opt-in per request: the default response shape is unchanged.
+    let store = precedence_store();
+    let q = "SELECT ?g ?o WHERE { GRAPH ?g { ?s ?p ?o } }";
+
+    let plain = crate::mcp::tool_query(&store, &serde_json::json!({"query": q})).unwrap();
+    assert!(
+        plain["rows"][0].get("_freshness").is_none(),
+        "off by default"
+    );
+
+    let asked =
+        crate::mcp::tool_query(&store, &serde_json::json!({"query": q, "row_labels": true}))
+            .unwrap();
+    assert!(
+        asked["rows"][0].get("_freshness").is_some(),
+        "on when asked"
+    );
+}
+
+#[test]
+fn the_precedence_query_returns_plane_ordered_results() {
+    // #70 acceptance 2 — graph-labels.md §6's worked example, pinned. This is
+    // the query the whole design promises needs NO engine change, and it joins
+    // two GRAPH patterns on ?g (verified during sequencing; the sabotage that
+    // proves the join is load-bearing is `the_g_join_is_not_a_cartesian` below).
+    let store = precedence_store();
+    // NOTE the extra hop through `quipu:trust`. graph-labels.md §6 writes this
+    // example as `GRAPH <meta> { ?g quipu:trustRank ?rank }`, i.e. as if the
+    // RANK were a property of the graph — but §2 is explicit that the rank
+    // belongs to the TRUST VALUE (`smac:canonical quipu:trustRank 40`), which is
+    // what makes an ordering shareable data rather than a per-graph number. The
+    // two sections disagree, and §6 taken literally returns ZERO rows.
+    let q = format!(
+        "SELECT ?o ?g ?rank WHERE {{ \
+           GRAPH ?g {{ ?s <http://example.org/p> ?o }} \
+           GRAPH <{meta}> {{ ?g <{trust_p}> ?t . ?t <{rank_p}> ?rank }} \
+         }} ORDER BY DESC(?rank)",
+        meta = crate::namespace::META_GRAPH_IRI,
+        trust_p = crate::namespace::QUIPU_TRUST,
+        rank_p = crate::namespace::QUIPU_TRUST_RANK,
+    );
+    let out = query(&store, &q).unwrap();
+    let rows = out.rows();
+    assert_eq!(rows.len(), 2, "one row per data graph");
+    assert_eq!(
+        rows[0].get("rank"),
+        Some(&Value::Int(40)),
+        "canonical (40) outranks learned (10)"
+    );
+    assert_eq!(rows[1].get("rank"), Some(&Value::Int(10)));
+}
+
+#[test]
+fn the_g_join_is_not_a_cartesian() {
+    // The sabotage, kept as a test: unsharing ?g must change the answer. If it
+    // did not, the precedence test above would pass without the join doing any
+    // work — 2 rows by luck rather than by pairing.
+    let store = precedence_store();
+    let q = format!(
+        "SELECT ?o ?g ?rank WHERE {{ \
+           GRAPH ?g {{ ?s <http://example.org/p> ?o }} \
+           GRAPH <{meta}> {{ ?other <{trust_p}> ?t . ?t <{rank_p}> ?rank }} \
+         }}",
+        meta = crate::namespace::META_GRAPH_IRI,
+        trust_p = crate::namespace::QUIPU_TRUST,
+        rank_p = crate::namespace::QUIPU_TRUST_RANK,
+    );
+    assert_eq!(
+        query(&store, &q).unwrap().rows().len(),
+        4,
+        "unshared ?g is a 2x2 cartesian — so the shared form's 2 rows are a real join"
+    );
+}
+
+#[test]
+fn ties_are_returned_as_ties_never_silently_broken() {
+    // #70 acceptance 2, second half. Two graphs at the SAME rank must both come
+    // back. A silent tiebreak is how "learned tactic beats canonical" ships.
+    use crate::lattice::Trust;
+    use crate::store::labels::GraphLabel;
+    use crate::types::{Op, Value};
+
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-08-06T00:00:00Z";
+    let e_s = store.intern("http://example.org/s").unwrap();
+    let a_p = store.intern("http://example.org/p").unwrap();
+    for iri in ["urn:g:tieA", "urn:g:tieB"] {
+        let g = store.overlay_create(iri, 0).unwrap();
+        store
+            .overlay_write(g, Op::Assert, e_s, a_p, Value::Str(iri.into()), ts)
+            .unwrap();
+        store
+            .set_graph_label(
+                iri,
+                &GraphLabel {
+                    trust: Some(Trust::new(format!("{iri}#t"), "urn:chain:demo", 25)),
+                    ..Default::default()
+                },
+                ts,
+                None,
+            )
+            .unwrap();
+    }
+
+    let q = format!(
+        "SELECT ?g ?rank WHERE {{ \
+           GRAPH ?g {{ ?s <http://example.org/p> ?o }} \
+           GRAPH <{meta}> {{ ?g <{trust_p}> ?t . ?t <{rank_p}> ?rank }} \
+         }} ORDER BY DESC(?rank)",
+        meta = crate::namespace::META_GRAPH_IRI,
+        trust_p = crate::namespace::QUIPU_TRUST,
+        rank_p = crate::namespace::QUIPU_TRUST_RANK,
+    );
+    let out = query(&store, &q).unwrap();
+    assert_eq!(
+        out.rows().len(),
+        2,
+        "both tied graphs are returned, not one"
+    );
+    for r in out.rows() {
+        assert_eq!(r.get("rank"), Some(&Value::Int(25)));
+    }
+}
+
+#[test]
+fn cross_chain_row_labels_error_rather_than_being_compared() {
+    // #70 acceptance 3. Nothing here composes ranks — but the point of these
+    // columns is ORDER BY, and ordering ranks from two chains is exactly the
+    // silent cross-chain comparison the trust axis exists to refuse.
+    use crate::lattice::Trust;
+    use crate::store::labels::GraphLabel;
+    use crate::types::{Op, Value};
+
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-08-06T00:00:00Z";
+    let e_s = store.intern("http://example.org/s").unwrap();
+    let a_p = store.intern("http://example.org/p").unwrap();
+    for (iri, chain) in [("urn:g:c1", "urn:chain:one"), ("urn:g:c2", "urn:chain:two")] {
+        let g = store.overlay_create(iri, 0).unwrap();
+        store
+            .overlay_write(g, Op::Assert, e_s, a_p, Value::Str(iri.into()), ts)
+            .unwrap();
+        store
+            .set_graph_label(
+                iri,
+                &GraphLabel {
+                    trust: Some(Trust::new(format!("{iri}#t"), chain, 10)),
+                    ..Default::default()
+                },
+                ts,
+                None,
+            )
+            .unwrap();
+    }
+
+    let err = query_row_labeled(
+        &store,
+        "SELECT ?g ?o WHERE { GRAPH ?g { ?s ?p ?o } }",
+        &TemporalContext::default(),
+    )
+    .expect_err("two chains in one result set");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("urn:chain:one") && msg.contains("urn:chain:two"),
+        "{msg}"
+    );
+}
+
+#[test]
+fn graph_var_excludes_the_meta_graph_but_it_stays_reachable_by_name() {
+    // A DECISION, pinned (quipu #70). `GRAPH ?g { ?s ?p ?o }` is the natural
+    // "every named graph's triples" query. Letting ?g range over the reserved
+    // label meta-graph would make it return freshness/trust facts as if they
+    // were data — and a consumer's result set would silently change the first
+    // time anyone labelled anything.
+    //
+    // Naming the meta-graph is deliberate; ranging over it is not.
+    let store = precedence_store();
+
+    let ranged = query(&store, "SELECT ?g ?o WHERE { GRAPH ?g { ?s ?p ?o } }").unwrap();
+    for row in ranged.rows() {
+        assert_ne!(
+            value_to_iri(&store, row.get("g").unwrap()),
+            crate::namespace::META_GRAPH_IRI,
+            "?g must not range over the meta-graph"
+        );
+    }
+    assert_eq!(ranged.rows().len(), 2, "just the two data graphs");
+
+    // But an explicit name still reads it — §6's precedence query depends on it.
+    let named = query(
+        &store,
+        &format!(
+            "SELECT ?s ?o WHERE {{ GRAPH <{}> {{ ?s <{}> ?o }} }}",
+            crate::namespace::META_GRAPH_IRI,
+            crate::namespace::QUIPU_TRUST_RANK,
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        named.rows().len(),
+        2,
+        "explicitly named, it is fully readable"
+    );
+}

@@ -148,7 +148,29 @@ pub fn eval_triple_pattern(
         }
         GraphScope::AnyNamed { var, restrict } => {
             match restrict {
-                None => conditions.push("g <> 0".to_string()),
+                // quipu #70: an UNRESTRICTED `GRAPH ?g` excludes the reserved
+                // label meta-graph as well as ROOT.
+                //
+                // The meta-graph holds labels *about* graphs. Letting `?g` range
+                // over it means `GRAPH ?g { ?s ?p ?o }` — the natural "give me
+                // every named graph's triples" — starts returning freshness and
+                // trust facts as if they were data, and a consumer's result set
+                // silently changes the first time anyone labels anything.
+                //
+                // It stays reachable by EXPLICIT name, which is what §6's
+                // precedence query uses (`GRAPH <urn:quipu:graph:meta> { … }`).
+                // Naming it is deliberate; ranging over it is not. A `FROM NAMED`
+                // restriction naming it explicitly is likewise honoured below.
+                //
+                // Not a regression: the meta-graph is new in #65, so no existing
+                // query could have been reading it.
+                None => {
+                    conditions.push(format!("g <> 0 AND g <> ?{}", sql_params.len() + 1));
+                    let meta_g = store
+                        .lookup(crate::namespace::META_GRAPH_IRI)?
+                        .unwrap_or(-1);
+                    sql_params.push(Box::new(meta_g));
+                }
                 Some(ids) => conditions.push(sql_graph_in(ids, &mut sql_params)),
             }
             Some(var.clone())
