@@ -21,7 +21,117 @@ use quipu::EmbeddingProvider;
 /// it. (`parking_lot`'s `lock()` has no poison Result — a panic while holding
 /// the lock simply unlocks, which is fine: Store keeps its invariants in
 /// `SQLite` transactions, not in Rust-visible state.)
-type SharedStore = Arc<FairMutex<quipu::Store>>;
+type SharedStore = Arc<StoreHandle>;
+
+/// The store as the handlers see it: ONE writer connection, plus a pool of
+/// read-only connections.
+///
+/// WAL already permits N concurrent readers alongside one writer. Before this,
+/// every read took the writer's mutex, so SQLite's concurrency was present and
+/// unused — measured at effective parallelism **1.0** for N = 1, 2, 4, 8 on a
+/// quiet store, i.e. 8 concurrent queries cost 8x one query's wall time
+/// the pre-pool measurement this replaced.
+///
+/// `lock()` keeps its exact former meaning — the writer, behind the same
+/// `FairMutex` — so every existing call site is unchanged and writes are still
+/// serialised. `read()` is the new path.
+struct StoreHandle {
+    writer: FairMutex<quipu::Store>,
+    readers: ReadPool,
+}
+
+/// A fixed set of read-only connections, each owned exclusively while in use.
+///
+/// `rusqlite::Connection` is `Send` but **not** `Sync`, so this cannot be an
+/// `RwLock` over one connection however much the access pattern looks like one:
+/// the shape has to be N connections, not a smarter lock over one.
+///
+/// **What happens when every connection is busy** — the question the design has
+/// to answer out loud, because it is where the starvation the `FairMutex` was
+/// introduced to bound would come back wearing a new name:
+///
+/// 1. Fast path: take any connection that is free right now. Work-conserving —
+///    a reader never queues while a connection sits idle.
+/// 2. Otherwise: queue on ONE connection chosen round-robin, and wait on its
+///    `FairMutex`, which is FIFO. So a reader's wait is bounded by the queue on
+///    its own connection — roughly 1/N of today's single queue — and it cannot
+///    be starved indefinitely by later arrivals.
+///
+/// The writer keeps its own `FairMutex` and is never in this pool, so the mfg0
+/// case that motivated fairness (a `SELECT ... LIMIT 1` measured waiting 38.5s
+/// behind a write flood) improves strictly: readers leave the writer's queue
+/// entirely rather than sharing it more politely.
+///
+/// An EMPTY pool is a supported configuration, not a degenerate one: `read()`
+/// falls back to the writer lock, which is exactly today's behaviour. In-memory
+/// stores take that path because each `:memory:` connection would be a
+/// different, empty database — a pool there would not be slow, it would be
+/// wrong.
+struct ReadPool {
+    conns: Vec<FairMutex<quipu::Store>>,
+    next: std::sync::atomic::AtomicUsize,
+}
+
+impl ReadPool {
+    fn empty() -> Self {
+        Self {
+            conns: Vec::new(),
+            next: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.conns.len()
+    }
+}
+
+impl StoreHandle {
+    /// A handle with NO read pool: every read takes the writer lock, which is
+    /// the pre-pool behaviour. Used by the in-memory server tests, where a pool
+    /// is not merely unhelpful but wrong — each `:memory:` connection would be
+    /// its own empty database.
+    #[cfg(test)]
+    fn writer_only(store: quipu::Store) -> Self {
+        Self {
+            writer: FairMutex::new(store),
+            readers: ReadPool::empty(),
+        }
+    }
+
+    /// The WRITER connection. Unchanged semantics: one at a time, FIFO-fair.
+    /// Every pre-existing `.lock()` call site means exactly what it meant
+    /// before, which is why this refactor does not have to audit them.
+    fn lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        self.writer.lock()
+    }
+
+    /// A READ connection from the pool, or the writer when the pool is empty.
+    ///
+    /// Only call this where the work is genuinely read-only: the connection is
+    /// opened `SQLITE_OPEN_READ_ONLY` with `PRAGMA query_only`, so a write
+    /// attempted through it fails at SQLite rather than corrupting anything —
+    /// but failing a request is still a bug, and the borrow checker cannot
+    /// catch it here the way `&Store` vs `&mut Store` does in the tool layer.
+    fn read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        if self.readers.conns.is_empty() {
+            return self.writer.lock();
+        }
+        // Work-conserving fast path.
+        for c in &self.readers.conns {
+            if let Some(g) = c.try_lock() {
+                return g;
+            }
+        }
+        // All busy: queue FIFO on one connection. Relaxed is right — this is a
+        // load-spreading hint, not a synchronisation edge.
+        let i = self
+            .readers
+            .next
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            % self.readers.conns.len();
+        self.readers.conns[i].lock()
+    }
+}
 
 const UI_HTML: &str = include_str!("../ui/index.html");
 const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
@@ -267,7 +377,73 @@ async fn main() {
         Err(e) => eprintln!("warning: verdict signing disabled -- {e}"),
     }
 
-    let state: SharedStore = Arc::new(FairMutex::new(store));
+    // Build the read pool LAST, from the fully-configured writer.
+    // Order is load-bearing: `adopt_read_config_from` copies the writer's
+    // read-relevant policy, so every setter above must already have run. A pool
+    // built earlier would serve reads under default search guardrails and a
+    // default base namespace, and answer the same question differently
+    // depending on which connection happened to take it.
+    //
+    // An in-memory store is deliberately NOT pooled: each `:memory:` connection
+    // is a separate empty database, so a pool there would serve reads from
+    // nothing. Same for a store we cannot open read-only — announce it and run
+    // serialised rather than fail to boot, since a slow server is recoverable
+    // and a dead one is not.
+    let read_pool = if db_path == ":memory:" {
+        ReadPool::empty()
+    } else if store.has_vector_delegate() || store.has_local_vector_backend() {
+        // FAIL SAFE, not fail silent. The vector backends are boxed trait
+        // objects and are not `Clone`, so `adopt_read_config_from` cannot carry
+        // them onto a pooled reader — and `unified_search`, `ask`,
+        // `search_nodes` and `search_facts` are all pooled AND vector-backed.
+        // A pool built here would answer those from the built-in SQLite vectors
+        // table while the writer answered from the configured backend: same
+        // question, two answers, no error, decided by which connection happened
+        // to take the request.
+        //
+        // Not reachable in this deployment — the REST server configures neither
+        // backend today (`lancedb: false`) — which is exactly why it needs to be
+        // a guard rather than a note. Whoever turns LanceDB on will not be
+        // thinking about the read pool.
+        eprintln!(
+            "read pool: DISABLED — a vector delegate/local backend is configured and \
+             cannot be shared with read-only connections. Serving reads from the writer \
+             rather than answering vector search two different ways."
+        );
+        ReadPool::empty()
+    } else {
+        let want = config.server.read_pool_size;
+        let mut conns = Vec::with_capacity(want);
+        for i in 0..want {
+            match quipu::Store::open_read_only(&db_path) {
+                Ok(mut r) => {
+                    r.adopt_read_config_from(&store);
+                    conns.push(FairMutex::new(r));
+                }
+                Err(e) => {
+                    eprintln!(
+                        "warning: read connection {i} of {want} failed to open ({e}) — \
+                         continuing with {i}; reads fall back to the writer when the pool is empty"
+                    );
+                    break;
+                }
+            }
+        }
+        ReadPool {
+            conns,
+            next: std::sync::atomic::AtomicUsize::new(0),
+        }
+    };
+    if read_pool.len() > 0 {
+        eprintln!("read pool: {} read-only connections", read_pool.len());
+    } else {
+        eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
+    }
+
+    let state: SharedStore = Arc::new(StoreHandle {
+        writer: FairMutex::new(store),
+        readers: read_pool,
+    });
     let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives

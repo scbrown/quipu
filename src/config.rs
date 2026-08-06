@@ -304,6 +304,20 @@ pub struct ServerConfig {
     /// preserving the existing browser-tab behaviour; non-empty restricts
     /// cross-origin requests to these exact origins.
     pub cors_allowed_origins: Vec<String>,
+
+    /// Number of read-only connections serving reads concurrently
+    /// this. WAL permits N concurrent readers; before the pool every
+    /// read queued behind the single writer connection, so effective
+    /// parallelism was 1.0 at every concurrency.
+    ///
+    /// **0 disables the pool** and every read serialises behind the writer
+    /// lock — the pre-pool behaviour, kept reachable as the rollback that does
+    /// not need a redeploy.
+    ///
+    /// Default 4: enough to show the curve flatten without opening a file
+    /// handle per request. Readers are cheap but not free — each is an open
+    /// `SQLite` connection with its own page cache.
+    pub read_pool_size: usize,
 }
 
 impl Default for ServerConfig {
@@ -314,6 +328,7 @@ impl Default for ServerConfig {
             auth_token: None,
             read_only: false,
             cors_allowed_origins: Vec::new(),
+            read_pool_size: 4,
         }
     }
 }

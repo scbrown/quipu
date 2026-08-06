@@ -17,7 +17,24 @@ macro_rules! ro_handler {
             State(s): State<SharedStore>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
-            blocking(move || Ok(axum::Json($tool(&s.lock(), &i)?))).await
+            // POOLED READ.
+            //
+            // ⚠ `&Store` does NOT prove read-only, and assuming it does is the
+            // mistake this comment exists to stop. `Store::intern` takes
+            // `&self` and runs an INSERT; so do `load_shapes`, `remove_shapes`,
+            // `load_ontology` and `remove_ontology`. The borrow checker cannot
+            // tell a pooled-safe tool from a writing one, and this codebase has
+            // already caught two handlers mis-registered as `ro_handler!` for
+            // exactly that reason (see the notes on `set_predicate` and the
+            // named-graphs registry below).
+            //
+            // So the guarantee is EMPIRICAL, not type-level, and it is pinned by
+            // `every_pooled_tool_survives_a_read_only_connection` in
+            // `server/tests.rs`. A tool that writes fails LOUDLY here — the
+            // connection is `SQLITE_OPEN_READ_ONLY`, so it returns "attempt to
+            // write a readonly database" rather than racing the writer. That is
+            // a 500 on a read endpoint, which is why the test exists.
+            blocking(move || Ok(axum::Json($tool(&s.read(), &i)?))).await
         }
     };
 }

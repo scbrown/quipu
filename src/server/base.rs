@@ -254,7 +254,11 @@ pub(crate) async fn query(
         // boundary because that boundary cannot tell them apart, and conflating
         // them is what makes a queued caller look like an expensive one.
         let lock_t0 = std::time::Instant::now();
-        let store = store.lock();
+        // POOLED READ. SPARQL is read-only, so this takes a
+        // read-only connection instead of the writer's mutex. `wait_secs` keeps
+        // meaning the same thing — time spent acquiring — which is what makes
+        // the before/after curve comparable rather than merely different.
+        let store = store.read();
         let wait_secs = lock_t0.elapsed().as_secs_f64();
         let started = std::time::Instant::now();
 

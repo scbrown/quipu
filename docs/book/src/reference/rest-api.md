@@ -13,6 +13,48 @@ quipu-server --db my.db --bind 0.0.0.0:3030
 | `--db <path>` | Store database path (default: `.bobbin/quipu/quipu.db`) |
 | `--bind <addr>` | Bind address (default: `127.0.0.1:3030`) |
 
+## Read Concurrency
+
+Reads are served from a pool of read-only connections; writes keep the single
+FIFO-fair writer connection. WAL already permits N concurrent readers alongside
+one writer — before the pool, every read took the writer's mutex, so that
+capability was present and unused.
+
+```toml
+[quipu.server]
+read_pool_size = 4    # 0 disables the pool; every read then serialises
+```
+
+MEASURED on a 160k-fact store, same binary, pool the only variable (`server-CPU`
+divided by wall time, so it counts cores actually used rather than inferring
+them):
+
+| | N=8 concurrent | N=16 |
+|---|---|---|
+| `read_pool_size = 0` | 1.09s, **1.00 cores** | 2.18s, **0.99 cores** |
+| `read_pool_size = 8` | 0.43s, **6.40 cores** | 0.80s, **6.80 cores** |
+
+`quipu_store_wait_seconds_total` — time spent acquiring, exported on `/metrics` —
+falls to **0.000s** with the pool on. That is the number to watch: a rising
+`wait` means readers are queueing again.
+
+Wall-clock speedup is smaller than the core count because each query costs more
+CPU when eight run at once (2.6x for a full scan, 1.4x for an index lookup —
+shared-cache contention, not a lock). The pool removes the serialisation; it
+cannot make a memory-bandwidth-bound scan free.
+
+Two cases where the pool disables itself, both announced on stderr at startup:
+
+- **an in-memory store** — each `:memory:` connection is its own empty database,
+  so a pool there would not be slow, it would be wrong;
+- **a configured vector delegate or local vector backend** — those are not
+  shareable with a read-only connection, and several pooled handlers
+  (`/search_nodes`, `/search_facts`, `/unified_search`, `/ask`) are vector-backed.
+  Rather than answer the same question from two different indexes depending on
+  which connection took it, the pool stands down.
+
+`read_pool_size = 0` is the rollback, and it is runtime config — no redeploy.
+
 ## Authentication
 
 **Reads are open; writes need a bearer token.** When the server is started with an

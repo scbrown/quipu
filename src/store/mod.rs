@@ -214,12 +214,110 @@ impl Store {
         Self::init(conn)
     }
 
+    /// Open an existing store READ-ONLY, for a reader in a connection pool.
+    ///
+    /// WAL already permits N concurrent readers alongside one writer; before
+    /// this, the server serialised every read behind the single writer
+    /// connection's mutex, so effective parallelism was 1.0 at every
+    /// concurrency. A pool needs N connections because
+    /// `rusqlite::Connection` is `Send` but **not** `Sync` — it cannot be
+    /// shared behind a read lock, only moved and owned exclusively.
+    ///
+    /// Two deliberate differences from [`Self::open`]:
+    ///
+    /// - `SQLITE_OPEN_READ_ONLY`, so a bug on a read path cannot write. This is
+    ///   the mechanism, not the comment: a stray `INSERT` here fails at SQLite
+    ///   rather than racing the writer.
+    /// - **No DDL and no migration.** `init` runs `INIT_SQL`, `VECTORS_SQL` and
+    ///   `migrate_named_graphs` on every open. Running schema setup N more times
+    ///   at startup is at best redundant work against the writer's database and
+    ///   at worst a concurrent migration; a read-only connection cannot do it
+    ///   anyway. The writer owns schema, exclusively.
+    ///
+    /// The returned store carries DEFAULT configuration. Callers must copy the
+    /// read-relevant policy across with [`Self::adopt_read_config_from`] — a
+    /// pooled reader running different search guardrails than the writer would
+    /// silently answer the same question two ways depending on which connection
+    /// served it.
+    pub fn open_read_only(path: &str) -> Result<Self> {
+        let conn = Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+        )?;
+        // foreign_keys is a no-op for reads but keeps the connection's semantics
+        // identical to the writer's; query_only makes the read-only intent true
+        // at the SQL layer as well as the file-handle layer.
+        //
+        // `mmap_size` is NOT a micro-optimisation here, it is what makes the
+        // pool a win at all — MEASURED, and it was measured because the first
+        // version of this function omitted it and the acceptance curve caught
+        // the result.
+        //
+        // Going from one connection to N trades a lock for N private page
+        // caches. The single shared connection had ONE cache that every
+        // serialised reader warmed for the next; eight connections each fault
+        // the same pages in separately. With 8 concurrent readers on a 160k-fact
+        // store that showed up as `wait` falling to 0.000s — the lock contention
+        // genuinely gone — while `held` rose from 0.136s to 1.72s per query.
+        // Parallelism was real and per-query cost had inflated 13x to pay for
+        // it, so wall time barely moved. A pool can serialise silently; it can
+        // also PARALLELISE silently and still buy nothing, and only the curve
+        // tells them apart.
+        //
+        // Memory-mapped I/O restores the sharing: every connection maps the same
+        // file pages through the OS page cache instead of copying them into a
+        // private heap cache, so N readers cost roughly one reader's memory.
+        conn.execute_batch(
+            "PRAGMA foreign_keys=ON;
+             PRAGMA query_only=ON;
+             PRAGMA mmap_size=268435456;
+             PRAGMA cache_size=-32000;",
+        )?;
+        Ok(Self::with_connection(conn))
+    }
+
+    /// Copy the READ-relevant configuration from another store.
+    ///
+    /// Reads are policy-bearing: `search_config` bounds result sets (hq-gkd),
+    /// `base_ns` decides which IRIs a query is even about, and
+    /// `owl_config` governs subclass inference on the read path. A pooled reader
+    /// left on defaults would answer differently from the writer for reasons no
+    /// caller could see — the same class of defect as a fact that is present and
+    /// unretrievable.
+    ///
+    /// Write-path policy (`resolution`, `shacl`, `governance`, `signing`) is
+    /// deliberately NOT copied: a read-only connection never reaches those
+    /// gates, and copying them would imply a reader could write.
+    ///
+    /// Not copied either, and the reason is a real constraint rather than a
+    /// preference: the vector backends (`vector_delegate`,
+    /// `local_vector_backend`) are boxed trait objects and are not `Clone`, so
+    /// vector-search handlers stay on the writer connection. See `ReadPool` in
+    /// the server for which handlers are pooled.
+    pub fn adopt_read_config_from(&mut self, other: &Self) {
+        self.base_ns.clone_from(&other.base_ns);
+        self.search_config.clone_from(&other.search_config);
+        self.owl_config.clone_from(&other.owl_config);
+        self.embedding_config.clone_from(&other.embedding_config);
+        self.embedding_provider
+            .clone_from(&other.embedding_provider);
+    }
+
     fn init(conn: Connection) -> Result<Self> {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(INIT_SQL)?;
         conn.execute_batch(VECTORS_SQL)?;
         Self::migrate_named_graphs(&conn)?;
-        Ok(Self {
+        Ok(Self::with_connection(conn))
+    }
+
+    /// Wrap an already-opened connection in a default-configured `Store`,
+    /// running no DDL. Split out of `init` so `open_read_only` can share the
+    /// struct construction without sharing the schema setup — the two must not
+    /// drift, or a pooled reader would be a different kind of Store than the
+    /// writer.
+    fn with_connection(conn: Connection) -> Self {
+        Self {
             conn,
             signing: None,
             embedding_provider: None,
@@ -244,7 +342,7 @@ impl Store {
             pending_embed: None,
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
-        })
+        }
     }
 
     /// Defer auto-embedding: writes collect embed work instead of running the
