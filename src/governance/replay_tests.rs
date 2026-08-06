@@ -438,19 +438,18 @@ fn a_policy_added_after_the_window_was_not_in_scope_then() {
 }
 
 #[test]
-fn as_of_tx_cannot_reconstruct_a_retracted_policy_and_that_is_structural() {
-    // Pinned as a KNOWN LIMIT rather than left as a trap.
+fn as_of_tx_now_reconstructs_a_retracted_policy_too() {
+    // WAS a pinned LIMIT (#72), now a pinned FIX (quipu #83).
     //
-    // #72 says "the layer supports it end to end". For valid-time it does. For
-    // transaction-time it does NOT, and cannot with today's schema: retraction
-    // UPDATEs `valid_to` to a TIMESTAMP and leaves the row's original `tx`
-    // untouched, so there is no retraction transaction recorded anywhere in
-    // `facts`. `as_of_tx` filters `tx <= N` while still requiring the row be
-    // live NOW, so a policy retracted since is invisible at every N.
+    // #72 recorded that `as_of_tx` could not see a fact retracted since: the
+    // retraction set `valid_to` to a timestamp and left the row's `tx` alone,
+    // so no retracting transaction was recorded, while the query still required
+    // present-tense liveness. #83 added `facts.retracted_tx` and made the as-of
+    // predicate `valid_to IS NULL OR retracted_tx > N`.
     //
-    // Consequence: use VALID-TIME for as-of Σ. Recording a retraction tx would
-    // fix it, but that is a `facts` schema change on the core write path and
-    // belongs in its own issue, not smuggled into this one.
+    // Kept rather than deleted, and kept asserting BOTH axes: the limit is the
+    // reason this test exists, and a future change that silently reintroduced
+    // it would otherwise have nothing watching.
     let mut store = Store::open_in_memory().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let tx = store.latest_tx_id().unwrap();
@@ -466,8 +465,8 @@ fn as_of_tx_cannot_reconstruct_a_retracted_policy_and_that_is_structural() {
     .unwrap();
     assert_eq!(
         by_tx.get("c").and_then(|c| c.class.clone()),
-        None,
-        "as_of_tx cannot see the retracted `hard` — this is the documented limit"
+        Some("hard".into()),
+        "as_of_tx now reconstructs the retracted value (quipu #83)"
     );
 
     let by_time = crate::governance::audit_spec::load_as_of(
@@ -481,6 +480,17 @@ fn as_of_tx_cannot_reconstruct_a_retracted_policy_and_that_is_structural() {
     assert_eq!(
         by_time.get("c").and_then(|c| c.class.clone()),
         Some("hard".into()),
-        "valid-time CAN, because the window is stored on the row"
+        "valid-time still works, and the two axes now agree"
+    );
+
+    // And live Σ still sees the CURRENT value — the fix must not make as-of
+    // leak into the default read.
+    assert_eq!(
+        crate::governance::audit_spec::load(&store)
+            .unwrap()
+            .get("c")
+            .and_then(|c| c.class.clone()),
+        Some("soft".into()),
+        "the default read is unchanged"
     );
 }

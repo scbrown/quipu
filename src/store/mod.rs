@@ -317,6 +317,7 @@ impl Store {
         Self::migrate_datasets(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
+        Self::migrate_retraction_tx(&conn)?;
         Ok(Self::with_connection(conn))
     }
 
@@ -539,6 +540,7 @@ impl Store {
         datums: &[Datum],
         timestamp: &str,
         graph: i64,
+        tx_id: i64,
     ) -> Result<usize> {
         if !self.owl_config.validate_on_write || self.recording_verdicts {
             return Ok(0);
@@ -572,8 +574,12 @@ impl Store {
         }
 
         let mut closed = 0usize;
+        // quipu #83: stamp the retracting tx here TOO. This is the SECOND
+        // fact-closing site; fixing only `close_assertion` would leave every
+        // functional-property supersede invisible to as-of-tx, in exactly the
+        // way the whole defect describes.
         let mut close_other = self.conn.prepare(
-            "UPDATE facts SET valid_to = ?1 \
+            "UPDATE facts SET valid_to = ?1, retracted_tx = ?6 \
              WHERE e = ?2 AND a = ?3 AND v != ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
         )?;
         for ((entity, attribute), values) in &proposed {
@@ -588,8 +594,9 @@ impl Store {
             let Some(new_value) = values.first() else {
                 continue;
             };
-            closed +=
-                close_other.execute(params![timestamp, entity, attribute, new_value, graph])?;
+            closed += close_other.execute(params![
+                timestamp, entity, attribute, new_value, graph, tx_id
+            ])?;
         }
         Ok(closed)
     }
@@ -968,6 +975,34 @@ impl Store {
             params![meta_g],
         )?;
 
+        Ok(())
+    }
+
+    /// Record which transaction RETRACTED a fact (quipu #83).
+    ///
+    /// `as_of_tx = N` is meant to answer "what did the store know as of
+    /// transaction N?". It could not: retraction sets `valid_to` to a
+    /// TIMESTAMP and leaves the row's original `tx` untouched, so no retraction
+    /// transaction was recorded anywhere — while the as-of-tx query still
+    /// required the row be live NOW. A fact live at N but retracted since was
+    /// invisible at EVERY N, and silently: a smaller answer, never an error.
+    ///
+    /// Additive and nullable. **Deliberately NOT backfilled**, because the
+    /// information to backfill it with was never recorded — that is the whole
+    /// defect. A legacy row closed before this migration has `valid_to` set and
+    /// `retracted_tx` NULL, and the as-of predicate
+    /// (`valid_to IS NULL OR retracted_tx > N`) leaves it invisible exactly as
+    /// it is today. So existing stores see NO behaviour change; only retractions
+    /// made from here on become time-travelable. Inventing a plausible
+    /// `retracted_tx` for legacy rows would make them visible at windows they
+    /// may not have been live in, which is a worse answer than the honest gap.
+    fn migrate_retraction_tx(conn: &Connection) -> Result<()> {
+        let present: bool = conn
+            .prepare("SELECT 1 FROM pragma_table_info('facts') WHERE name = 'retracted_tx'")?
+            .exists([])?;
+        if !present {
+            conn.execute_batch("ALTER TABLE facts ADD COLUMN retracted_tx INTEGER;")?;
+        }
         Ok(())
     }
 

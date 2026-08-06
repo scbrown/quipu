@@ -2257,3 +2257,202 @@ fn validate_falls_back_to_stored_shapes_and_honours_as_of() {
     .unwrap();
     assert_eq!(then, "# v1", "as-of v1's window uses v1 semantics");
 }
+
+// ---------------------------------------------------------------------------
+// quipu #83 — as_of_tx can see facts retracted since
+// ---------------------------------------------------------------------------
+
+/// Assert `(e,a,v)`, returning the tx that did it.
+fn assert_one(store: &mut Store, e: i64, a: i64, v: &str, ts: &str) -> i64 {
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str(v.into()),
+                valid_from: ts.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            ts,
+            None,
+            None,
+        )
+        .unwrap()
+}
+
+#[test]
+fn as_of_tx_sees_a_fact_that_was_live_then_and_is_retracted_now() {
+    // THE defect. `as_of_tx = N` means "what did the store know at N?" — a fact
+    // asserted before N and retracted after it MUST be visible at N.
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://example.org/s").unwrap();
+    let a = store.intern("http://example.org/p").unwrap();
+    let tx1 = assert_one(&mut store, e, a, "v1", "2026-01-01T00:00:00Z");
+
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("v1".into()),
+                valid_from: "2026-06-01T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            "2026-06-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    // Now: gone.
+    let now = crate::sparql::query(&store, "SELECT ?o WHERE { ?s ?p ?o }").unwrap();
+    assert_eq!(now.rows().len(), 0, "retracted, so absent now");
+
+    // As of tx1: present.
+    let ctx = crate::sparql::TemporalContext {
+        as_of_tx: Some(tx1),
+        ..Default::default()
+    };
+    let then = crate::sparql::query_temporal(&store, "SELECT ?o WHERE { ?s ?p ?o }", &ctx).unwrap();
+    assert_eq!(
+        then.rows().len(),
+        1,
+        "as of tx1 the fact was live — this is what quipu #83 fixed"
+    );
+}
+
+#[test]
+fn as_of_tx_still_excludes_a_fact_retracted_before_that_tx() {
+    // The CONTROL that makes the test above mean something. If `as_of_tx`
+    // simply ignored retraction, both tests would pass for the wrong reason.
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://example.org/s").unwrap();
+    let a = store.intern("http://example.org/p").unwrap();
+    assert_one(&mut store, e, a, "v1", "2026-01-01T00:00:00Z");
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("v1".into()),
+                valid_from: "2026-02-01T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            "2026-02-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    // A tx AFTER the retraction.
+    let later = assert_one(&mut store, e, a, "v2", "2026-03-01T00:00:00Z");
+
+    let ctx = crate::sparql::TemporalContext {
+        as_of_tx: Some(later),
+        ..Default::default()
+    };
+    let rows = crate::sparql::query_temporal(&store, "SELECT ?o WHERE { ?s ?p ?o }", &ctx)
+        .unwrap()
+        .rows()
+        .len();
+    assert_eq!(rows, 1, "only v2 — v1 was already retracted by then");
+}
+
+#[test]
+fn the_retracting_tx_is_recorded_on_the_row() {
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://example.org/s").unwrap();
+    let a = store.intern("http://example.org/p").unwrap();
+    assert_one(&mut store, e, a, "v1", "2026-01-01T00:00:00Z");
+    let rtx = store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("v1".into()),
+                valid_from: "2026-06-01T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            "2026-06-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    let recorded: Option<i64> = store
+        .conn
+        .query_row(
+            "SELECT retracted_tx FROM facts WHERE e = ?1 AND valid_to IS NOT NULL",
+            params![e],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        recorded,
+        Some(rtx),
+        "the closing tx is recorded, not inferred"
+    );
+}
+
+#[test]
+fn a_legacy_row_closed_before_the_migration_stays_invisible() {
+    // Deliberate, and the reason there is no backfill: the tx that closed a
+    // legacy row was NEVER RECORDED. Leaving `retracted_tx` NULL makes
+    // `retracted_tx > N` NULL, so the row stays invisible exactly as it is
+    // today — no behaviour change for existing stores. Inventing a plausible
+    // value would make it visible at windows it may not have been live in,
+    // which is a worse answer than the honest gap.
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://example.org/s").unwrap();
+    let a = store.intern("http://example.org/p").unwrap();
+    let tx1 = assert_one(&mut store, e, a, "v1", "2026-01-01T00:00:00Z");
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("v1".into()),
+                valid_from: "2026-06-01T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            "2026-06-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    // Simulate a pre-#83 row: closed, with no retracting tx recorded.
+    store
+        .conn
+        .execute("UPDATE facts SET retracted_tx = NULL", [])
+        .unwrap();
+
+    let ctx = crate::sparql::TemporalContext {
+        as_of_tx: Some(tx1),
+        ..Default::default()
+    };
+    let rows = crate::sparql::query_temporal(&store, "SELECT ?o WHERE { ?s ?p ?o }", &ctx)
+        .unwrap()
+        .rows()
+        .len();
+    assert_eq!(rows, 0, "legacy rows behave exactly as they did before #83");
+}
+
+#[test]
+fn the_retraction_tx_migration_is_idempotent() {
+    let store = Store::open_in_memory().unwrap();
+    Store::migrate_retraction_tx(&store.conn).unwrap();
+    Store::migrate_retraction_tx(&store.conn).unwrap();
+    let cols: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('facts') WHERE name = 'retracted_tx'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(cols, 1);
+}

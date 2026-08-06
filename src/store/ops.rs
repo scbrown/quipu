@@ -212,7 +212,7 @@ impl Store {
         // reject the write — which is exactly the bug, an ordinary update turned
         // into an HTTP 400.
         #[cfg(feature = "owl")]
-        self.supersede_functional_values(datums, timestamp, graph)?;
+        self.supersede_functional_values(datums, timestamp, graph, tx_id)?;
 
         {
             let mut insert = self.conn.prepare(
@@ -221,8 +221,11 @@ impl Store {
             )?;
             // Retraction is SCOPED to `graph`: an overlay closing an assertion
             // touches only its own graph, never ROOT (base un-mutated, #36).
+            // quipu #83: `retracted_tx` records WHICH transaction closed the
+            // fact. Without it `as_of_tx` cannot tell a fact that was live at N
+            // from one retracted since, and silently under-reports.
             let mut close_assertion = self.conn.prepare(
-                "UPDATE facts SET valid_to = ?1 \
+                "UPDATE facts SET valid_to = ?1, retracted_tx = ?6 \
                  WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
             )?;
             // Idempotent assertions: skip if an active fact with the same
@@ -241,7 +244,8 @@ impl Store {
                         d.entity,
                         d.attribute,
                         v_bytes,
-                        graph
+                        graph,
+                        tx_id
                     ])?;
                     written_retracts.push(d);
                 } else {
