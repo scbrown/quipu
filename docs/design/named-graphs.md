@@ -267,6 +267,15 @@ decision is therefore about the **write gate**, not the validator:
 
 - [group-isolation.md](group-isolation.md) — multi-tenant partitioning; named
   graphs are the storage substrate it would build on if the deferral flips.
+- [graph-labels.md](graph-labels.md) — freshness/trust/policy labels on the
+  graphs this doc partitions, composing by meet/join over the active dataset;
+  named datasets (saved `FROM` sets) as the overlapping-set complement to the
+  `parent_branch` tree.
+- [multi-db-composition.md](multi-db-composition.md) — attached read-only
+  databases contributing named graphs via disjoint term spaces; reuses §4's
+  ROOT-alone default as "attaching adds graphs, never widens a query."
+- [shape-versioning.md](shape-versioning.md) — the time axis for the shapes
+  §7.2 keeps in ROOT.
 - quipu #36 (this feature) and #37 (provenance work-item co-occurrence).
 - `src/store/overlays.rs` (overlay primitives), `src/sparql/pattern.rs` +
   `src/sparql/mod.rs` (the query surface), `src/schema.rs` (`facts.g`, `graphs`).

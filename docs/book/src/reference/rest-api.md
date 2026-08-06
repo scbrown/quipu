@@ -60,7 +60,7 @@ Two cases where the pool disables itself, both announced on stderr at startup:
 **Reads are open; writes need a bearer token.** When the server is started with an
 auth token configured, every *write* endpoint requires:
 
-```
+```text
 Authorization: Bearer <token>
 ```
 
