@@ -397,3 +397,5 @@ Dependency-ordered; **[U]** unblocks modelling work, **[P]** parallel:
   as an isolation boundary.
 - `src/governance/authority.rs` — the existing meet, to be factored into
   `src/lattice.rs`.
+- [knowledge-packs.md](knowledge-packs.md) — packs carry these labels and
+  *recommend* floors; consumer enforcement stays sovereign.

@@ -271,3 +271,6 @@ attaching adds graphs without changing any existing query's results.
 - [group-isolation.md](group-isolation.md) — per-tenant DBs are the isolation
   boundary that `group_id` is not; this doc is what makes the shared layer
   mountable beside them.
+- [knowledge-packs.md](knowledge-packs.md) — the distribution format: a pack
+  is an attachable layer file with a manifest, content hash, and retrieval
+  policy.
