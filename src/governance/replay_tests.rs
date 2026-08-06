@@ -36,6 +36,10 @@ fn clean(path: &str) -> TraceRecord {
 
 /// Declare a policy in the store so Σ knows the constraint.
 fn policy(store: &mut Store, label: &str, class: &str, effect: &str) {
+    policy_at(store, label, class, effect, TS);
+}
+
+fn policy_at(store: &mut Store, label: &str, class: &str, effect: &str, ts: &str) {
     let ns = crate::namespace::DEFAULT_BASE_NS;
     let iri = format!("http://ex/policy/{label}");
     let entity = store.intern(&iri).unwrap();
@@ -43,7 +47,7 @@ fn policy(store: &mut Store, label: &str, class: &str, effect: &str) {
         entity,
         attribute: store.intern(crate::namespace::RDF_TYPE).unwrap(),
         value: crate::types::Value::Ref(store.intern(&format!("{ns}Policy")).unwrap()),
-        valid_from: TS.to_string(),
+        valid_from: ts.to_string(),
         valid_to: None,
         op: crate::types::Op::Assert,
     }];
@@ -58,12 +62,12 @@ fn policy(store: &mut Store, label: &str, class: &str, effect: &str) {
             entity,
             attribute: store.intern(attribute).unwrap(),
             value: crate::types::Value::Str(value.to_string()),
-            valid_from: TS.to_string(),
+            valid_from: ts.to_string(),
             valid_to: None,
             op: crate::types::Op::Assert,
         });
     }
-    store.transact(&datums, TS, None, None).unwrap();
+    store.transact(&datums, ts, None, None).unwrap();
 }
 
 fn only(report: &ReplayReport) -> &RuleStats {
@@ -267,4 +271,216 @@ fn replay_jsonl_reads_the_spec_from_the_store() {
     let stats = only(&report);
     assert_eq!(stats.would_block, 1, "Σ came from the store");
     assert!(stats.line().contains("no gate objects"), "{}", stats.line());
+}
+
+// ---------------------------------------------------------------------------
+// quipu #72 — as-of Σ: fidelity and drift as SEPARATE columns
+// ---------------------------------------------------------------------------
+
+/// Re-class a policy's `constraintClass` at a later timestamp, the way a spec
+/// edit after the trace window does.
+fn reclass(store: &mut Store, label: &str, old_class: &str, new_class: &str, at: &str) {
+    let ns = crate::namespace::DEFAULT_BASE_NS;
+    let entity = store.intern(&format!("http://ex/policy/{label}")).unwrap();
+    let attribute = store.intern(&format!("{ns}constraintClass")).unwrap();
+    // A re-class RETRACTS the old value and asserts the new. Asserting alone
+    // would leave BOTH — `constraintClass` is an ordinary RDF predicate, not a
+    // functional one, so a bare assert adds a second class rather than
+    // replacing the first. (Found the hard way: the drift test reported no
+    // movement because live Σ still saw `hard`.)
+    store
+        .transact(
+            &[
+                crate::store::Datum {
+                    entity,
+                    attribute,
+                    value: crate::types::Value::Str(old_class.to_string()),
+                    valid_from: at.to_string(),
+                    valid_to: None,
+                    op: crate::types::Op::Retract,
+                },
+                crate::store::Datum {
+                    entity,
+                    attribute,
+                    value: crate::types::Value::Str(new_class.to_string()),
+                    valid_from: at.to_string(),
+                    valid_to: None,
+                    op: crate::types::Op::Assert,
+                },
+            ],
+            at,
+            None,
+            None,
+        )
+        .unwrap();
+}
+
+#[test]
+fn no_as_of_is_behaviour_identical_to_today() {
+    // #72 acceptance 2. Live Σ stays the default, and the drift column is empty
+    // — "not asked", never "nothing moved".
+    let mut store = Store::open_in_memory().unwrap();
+    policy(&mut store, "c", "hard", "deny");
+    let trace = [
+        rec("a.rs", "notify", "c", "unsatisfied", "warned"),
+        rec("b.rs", "allow", "c", "satisfied", "no-action"),
+    ];
+    let live = replay(&store, &trace, 0).unwrap();
+    let explicit = replay_as_of(&store, &trace, 0, None).unwrap();
+    assert_eq!(live, explicit, "replay() is replay_as_of(.., None)");
+    assert!(
+        live.drift.is_empty(),
+        "no window asked for, so no drift claimed"
+    );
+}
+
+#[test]
+fn a_reclass_after_the_window_is_drift_not_a_trace_violation() {
+    // #72 acceptance 1, the whole point of the issue.
+    //
+    // The trace ran while `c` was HARD. Afterwards the spec re-classed it to
+    // SOFT. Judged against live Σ the trace looks wrong; judged against Σ as of
+    // its own window it was right, and the re-class is spec movement.
+    let mut store = Store::open_in_memory().unwrap();
+    policy(&mut store, "c", "hard", "deny");
+    reclass(&mut store, "c", "hard", "soft", "2026-06-01T00:00:00Z");
+
+    let trace = [
+        rec("a.rs", "notify", "c", "unsatisfied", "warned"),
+        rec("b.rs", "allow", "c", "satisfied", "no-action"),
+    ];
+    // VALID-TIME, not as_of_tx. Retraction records `valid_to` as a timestamp
+    // and leaves the row's original `tx` untouched, so there is no retraction
+    // transaction anywhere in `facts` — `as_of_tx` therefore cannot tell a fact
+    // that was live at tx N from one retracted since. Valid-time can, because
+    // the window is stored on the row. See the module note on this limit.
+    let as_of = crate::store::AsOf {
+        tx: None,
+        valid_at: Some("2026-03-01T00:00:00Z".into()),
+    };
+    let report = replay_as_of(&store, &trace, 0, Some(&as_of)).unwrap();
+
+    // FIDELITY: judged against Σ-then, the constraint was in spec and the trace
+    // is evaluated normally — NOT reported as citing something unknown.
+    let stats = only(&report);
+    assert!(
+        stats.in_spec,
+        "as of the trace's own window the policy existed; fidelity must judge against THAT"
+    );
+
+    // DRIFT: the re-class is reported, in its own column, as spec movement.
+    assert_eq!(report.drift.len(), 1, "{:#?}", report.drift);
+    let d = &report.drift[0];
+    assert_eq!(d.field, "class");
+    assert_eq!(
+        d.then.as_deref(),
+        Some("hard"),
+        "enforcement was judged against hard"
+    );
+    assert_eq!(d.now.as_deref(), Some("soft"));
+    assert!(
+        d.line().contains("not a trace violation"),
+        "phrased as movement, not fault: {}",
+        d.line()
+    );
+}
+
+#[test]
+fn an_unmoved_spec_reports_no_drift_even_when_asked() {
+    // The control. Without this, the drift test could pass because `as_of`
+    // reports drift for everything rather than because it detected a re-class.
+    let mut store = Store::open_in_memory().unwrap();
+    policy(&mut store, "c", "hard", "deny");
+    let trace = [rec("a.rs", "allow", "c", "satisfied", "no-action")];
+    let report = replay_as_of(
+        &store,
+        &trace,
+        0,
+        Some(&crate::store::AsOf {
+            tx: None,
+            valid_at: Some("2026-03-01T00:00:00Z".into()),
+        }),
+    )
+    .unwrap();
+    assert!(
+        report.drift.is_empty(),
+        "nothing moved, so nothing is reported: {:#?}",
+        report.drift
+    );
+}
+
+#[test]
+fn a_policy_added_after_the_window_was_not_in_scope_then() {
+    // A policy that did not exist at trace time could not have been evaluated
+    // then. Fidelity must say so rather than counting the trace as having
+    // missed a rule that had not been written yet.
+    let mut store = Store::open_in_memory().unwrap();
+    policy_at(&mut store, "new", "hard", "deny", "2026-06-01T00:00:00Z");
+
+    let trace = [rec("a.rs", "allow", "new", "satisfied", "no-action")];
+    let report = replay_as_of(
+        &store,
+        &trace,
+        0,
+        Some(&crate::store::AsOf {
+            tx: None,
+            valid_at: Some("2026-03-01T00:00:00Z".into()),
+        }),
+    )
+    .unwrap();
+    let stats = only(&report);
+    assert!(
+        !stats.in_spec,
+        "as of the window, 'new' did not exist — fidelity judges against Σ-then"
+    );
+    // And live Σ does know it, which is what makes the above meaningful.
+    assert!(replay(&store, &trace, 0).unwrap().rules[0].in_spec);
+}
+
+#[test]
+fn as_of_tx_cannot_reconstruct_a_retracted_policy_and_that_is_structural() {
+    // Pinned as a KNOWN LIMIT rather than left as a trap.
+    //
+    // #72 says "the layer supports it end to end". For valid-time it does. For
+    // transaction-time it does NOT, and cannot with today's schema: retraction
+    // UPDATEs `valid_to` to a TIMESTAMP and leaves the row's original `tx`
+    // untouched, so there is no retraction transaction recorded anywhere in
+    // `facts`. `as_of_tx` filters `tx <= N` while still requiring the row be
+    // live NOW, so a policy retracted since is invisible at every N.
+    //
+    // Consequence: use VALID-TIME for as-of Σ. Recording a retraction tx would
+    // fix it, but that is a `facts` schema change on the core write path and
+    // belongs in its own issue, not smuggled into this one.
+    let mut store = Store::open_in_memory().unwrap();
+    policy(&mut store, "c", "hard", "deny");
+    let tx = store.latest_tx_id().unwrap();
+    reclass(&mut store, "c", "hard", "soft", "2026-06-01T00:00:00Z");
+
+    let by_tx = crate::governance::audit_spec::load_as_of(
+        &store,
+        Some(&crate::store::AsOf {
+            tx: Some(tx),
+            valid_at: None,
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        by_tx.get("c").and_then(|c| c.class.clone()),
+        None,
+        "as_of_tx cannot see the retracted `hard` — this is the documented limit"
+    );
+
+    let by_time = crate::governance::audit_spec::load_as_of(
+        &store,
+        Some(&crate::store::AsOf {
+            tx: None,
+            valid_at: Some("2026-03-01T00:00:00Z".into()),
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        by_time.get("c").and_then(|c| c.class.clone()),
+        Some("hard".into()),
+        "valid-time CAN, because the window is stored on the row"
+    );
 }

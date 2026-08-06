@@ -166,6 +166,38 @@ impl RuleStats {
     }
 }
 
+/// One way Σ moved between the trace's window and now (quipu #72).
+///
+/// **Spec movement, stated as spec movement.** Reported in its own column
+/// precisely so it is never counted as a trace violation: a policy re-classed
+/// after the window did not make the runtime wrong at the time it ran.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpecDrift {
+    /// The constraint id the trace cites.
+    pub id: String,
+    /// Which field moved (`class`, `point`, `effect`, `hostedAtLayer`,
+    /// `presence`).
+    pub field: &'static str,
+    /// Its value in the trace's window — what enforcement was judged against.
+    pub then: Option<String>,
+    /// Its value now.
+    pub now: Option<String>,
+}
+
+impl SpecDrift {
+    /// A one-line rendering, phrased as movement rather than as fault.
+    #[must_use]
+    pub fn line(&self) -> String {
+        format!(
+            "{}: {} moved {} -> {} since the trace window (spec movement, not a trace violation)",
+            self.id,
+            self.field,
+            self.then.as_deref().unwrap_or("(undeclared)"),
+            self.now.as_deref().unwrap_or("(undeclared)"),
+        )
+    }
+}
+
 /// The result of a replay.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ReplayReport {
@@ -175,6 +207,11 @@ pub struct ReplayReport {
     pub records: usize,
     /// Lines that were not readable.
     pub unreadable: usize,
+    /// How Σ moved between the trace's window and now (quipu #72).
+    ///
+    /// Always EMPTY for a live-Σ replay, which has no "then" to compare
+    /// against — absence here means "not asked", never "nothing moved".
+    pub drift: Vec<SpecDrift>,
 }
 
 impl ReplayReport {
@@ -226,8 +263,42 @@ fn blocks_at_enforce(constraint: Option<&Constraint>) -> bool {
 }
 
 /// Re-check `trace` against the Σ currently in `store`.
+///
+/// Unchanged: this is the live-Σ drift check, and it stays the default.
 pub fn replay(store: &Store, trace: &[TraceRecord], unreadable: usize) -> Result<ReplayReport> {
-    let spec = audit_spec::load(store)?;
+    replay_as_of(store, trace, unreadable, None)
+}
+
+/// Re-check `trace`, separating **fidelity** from **drift** (quipu #72).
+///
+/// - **Fidelity** — the trace against Σ *as of its own window*: was enforcement
+///   right THEN? This is what the per-rule stats measure when `as_of` is given.
+/// - **Drift** — Σ-then against Σ-now, reported in its own
+///   [`ReplayReport::drift`] column as spec movement.
+///
+/// The two were previously indistinguishable. `replay` re-checked against
+/// CURRENT Σ, so a policy re-classed `hard` -> `soft` after the window silently
+/// falsified every `would_block`, and the class-placement pass reported the
+/// re-classing as a *trace* violation — unable to say whether the runtime got it
+/// wrong or the spec moved.
+///
+/// `as_of = None` reads live Σ and produces an empty drift column, i.e.
+/// behaviour identical to before.
+///
+/// # Errors
+/// Store and SPARQL errors while reading either Σ.
+pub fn replay_as_of(
+    store: &Store,
+    trace: &[TraceRecord],
+    unreadable: usize,
+    as_of: Option<&crate::store::AsOf>,
+) -> Result<ReplayReport> {
+    // Fidelity is judged against Σ-then; with no window that IS Σ-now.
+    let spec = audit_spec::load_as_of(store, as_of)?;
+    let drift = match as_of {
+        None => Vec::new(),
+        Some(_) => spec_drift(&spec, &audit_spec::load(store)?),
+    };
     let mut stats: BTreeMap<String, RuleStats> = BTreeMap::new();
     // Targets each rule refused, and every target that later saw a clean record.
     let mut refused: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -303,7 +374,46 @@ pub fn replay(store: &Store, trace: &[TraceRecord], unreadable: usize) -> Result
         rules: stats.into_values().collect(),
         records: trace.len(),
         unreadable,
+        drift,
     })
+}
+
+/// Compare Σ-then against Σ-now, field by field.
+///
+/// Only constraints the trace could have cited matter, so this walks `then`;
+/// a policy that did not exist then could not have been evaluated then. A
+/// policy present then and ABSENT now is reported as `presence` movement rather
+/// than skipped — a deleted policy is exactly the kind of movement that would
+/// otherwise read as "the trace cited something that is not in Σ".
+fn spec_drift(then: &audit_spec::Spec, now: &audit_spec::Spec) -> Vec<SpecDrift> {
+    let mut out = Vec::new();
+    for (id, was) in then {
+        let Some(is) = now.get(id) else {
+            out.push(SpecDrift {
+                id: id.clone(),
+                field: "presence",
+                then: Some("declared".into()),
+                now: None,
+            });
+            continue;
+        };
+        for (field, a, b) in [
+            ("class", &was.class, &is.class),
+            ("point", &was.point, &is.point),
+            ("effect", &was.effect, &is.effect),
+            ("hostedAtLayer", &was.hosted_at_layer, &is.hosted_at_layer),
+        ] {
+            if a != b {
+                out.push(SpecDrift {
+                    id: id.clone(),
+                    field,
+                    then: a.clone(),
+                    now: b.clone(),
+                });
+            }
+        }
+    }
+    out
 }
 
 /// Replay a raw JSONL trace.

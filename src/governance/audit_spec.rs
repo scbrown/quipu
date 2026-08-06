@@ -44,6 +44,28 @@ pub type Spec = BTreeMap<String, Constraint>;
 /// a trace record could have traversed, and holding one against a trace would
 /// report an absence that is correct.
 pub fn load(store: &Store) -> Result<Spec> {
+    load_as_of(store, None)
+}
+
+/// Read Σ as it stood at `as_of` (quipu #72).
+///
+/// `None` reads the LIVE Σ, which stays the default and keeps the rationale at
+/// the top of this file: a checker holding its own snapshot would agree with
+/// itself about a policy that had since been re-classed, which is the drift the
+/// check exists to catch.
+///
+/// What live-Σ alone cannot do is tell "the runtime got it wrong" apart from
+/// "the spec moved" — both surface as a trace violation. Reading Σ as of the
+/// trace's own window is what separates them (see
+/// [`crate::governance::replay::replay_as_of`]).
+///
+/// The policy facts are already bitemporal and the SPARQL layer already
+/// supports `AsOf` end to end; this only threads it through, which is why the
+/// gap was invisible.
+///
+/// # Errors
+/// Store and SPARQL errors.
+pub fn load_as_of(store: &Store, as_of: Option<&crate::store::AsOf>) -> Result<Spec> {
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
@@ -57,7 +79,12 @@ pub fn load(store: &Store) -> Result<Spec> {
             OPTIONAL {{ ?p a:inheritedByDelegates ?inherited }} \
          }}"
     );
-    let QueryResult::Select { rows, .. } = sparql::query(store, &q)? else {
+    let ctx = crate::sparql::TemporalContext {
+        valid_at: as_of.and_then(|a| a.valid_at.clone()),
+        as_of_tx: as_of.and_then(|a| a.tx),
+        ..Default::default()
+    };
+    let QueryResult::Select { rows, .. } = sparql::query_temporal(store, &q, &ctx)? else {
         return Ok(Spec::new());
     };
 
