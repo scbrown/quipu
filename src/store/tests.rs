@@ -1955,3 +1955,305 @@ fn compose_view_still_sees_the_overlay() {
         "root fact falls through to view"
     );
 }
+
+// ---------------------------------------------------------------------------
+// quipu #71 — bitemporal shape + ontology registry
+// ---------------------------------------------------------------------------
+
+#[test]
+fn loading_a_second_version_closes_the_first_rather_than_overwriting() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
+        .unwrap();
+    store
+        .load_shapes("s", "# v2", "2026-08-02T00:00:00Z")
+        .unwrap();
+
+    // Current reads see only v2 — unchanged behaviour.
+    let now = store.list_shapes().unwrap();
+    assert_eq!(now.len(), 1);
+    assert_eq!(now[0].1, "# v2");
+
+    // But v1 is still there, closed.
+    let total: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM shapes WHERE name = 's'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(total, 2, "the prior version is CLOSED, not discarded");
+}
+
+#[test]
+fn validate_as_of_v1s_window_uses_v1_semantics() {
+    // #71 acceptance 1 — the headline.
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
+        .unwrap();
+    store
+        .load_shapes("s", "# v2", "2026-08-02T00:00:00Z")
+        .unwrap();
+
+    let at_v1 = store
+        .get_combined_shapes_as_of(&AsOf {
+            tx: None,
+            valid_at: Some("2026-08-01T12:00:00Z".into()),
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(at_v1, "# v1", "as-of v1's window must use v1");
+
+    let at_v2 = store
+        .get_combined_shapes_as_of(&AsOf {
+            tx: None,
+            valid_at: Some("2026-08-02T12:00:00Z".into()),
+        })
+        .unwrap()
+        .unwrap();
+    assert_eq!(at_v2, "# v2");
+
+    // And the default (no as_of) is still current.
+    assert_eq!(store.get_combined_shapes().unwrap().unwrap(), "# v2");
+}
+
+#[test]
+fn a_window_before_any_version_has_no_shapes() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
+        .unwrap();
+    assert!(
+        store
+            .get_combined_shapes_as_of(&AsOf {
+                tx: None,
+                valid_at: Some("2026-07-01T00:00:00Z".into()),
+            })
+            .unwrap()
+            .is_none(),
+        "before it was loaded, it did not govern anything"
+    );
+}
+
+#[test]
+fn a_shape_load_appears_in_events_with_a_tx() {
+    // #71 acceptance 2. Before this the audit spine had NO record the rules moved.
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
+        .unwrap();
+
+    let (etype, tx): (String, i64) = store
+        .conn
+        .query_row(
+            "SELECT type, tx_id FROM events WHERE subject = 's' ORDER BY \"offset\" DESC LIMIT 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(etype, "shapes.loaded");
+    assert!(tx >= 0, "carries the tx watermark");
+}
+
+#[test]
+fn remove_closes_the_row_and_history_remains_queryable() {
+    // #71 acceptance 4.
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
+        .unwrap();
+    assert!(store.remove_shapes("s").unwrap());
+
+    assert!(store.list_shapes().unwrap().is_empty(), "gone from current");
+    let rows: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM shapes WHERE name = 's'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(rows, 1, "the row is CLOSED, never deleted");
+
+    // And it is still readable at a time when it was in force.
+    let then = store
+        .get_combined_shapes_as_of(&AsOf {
+            tx: None,
+            valid_at: Some("2026-08-01T12:00:00Z".into()),
+        })
+        .unwrap();
+    assert_eq!(then.as_deref(), Some("# v1"), "history stays queryable");
+}
+
+#[test]
+fn removing_something_absent_is_false_and_emits_nothing() {
+    let store = Store::open_in_memory().unwrap();
+    assert!(!store.remove_shapes("nope").unwrap());
+    let events: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(events, 0, "a no-op must not pollute the audit spine");
+}
+
+#[test]
+fn a_reload_at_the_same_instant_replaces_that_instants_version() {
+    // No meaningful ordering within one timestamp, and the (name, valid_from)
+    // primary key would otherwise collide.
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("s", "# a", "2026-08-01T00:00:00Z")
+        .unwrap();
+    store
+        .load_shapes("s", "# b", "2026-08-01T00:00:00Z")
+        .unwrap();
+    let rows: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM shapes WHERE name = 's'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(rows, 1);
+    assert_eq!(store.list_shapes().unwrap()[0].1, "# b");
+}
+
+#[test]
+fn ontologies_get_the_same_discipline() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_ontology("o", "# v1", "2026-08-01T00:00:00Z")
+        .unwrap();
+    store
+        .load_ontology("o", "# v2", "2026-08-02T00:00:00Z")
+        .unwrap();
+    assert_eq!(
+        store.list_ontologies().unwrap().len(),
+        1,
+        "current is one row"
+    );
+    let at_v1 = store
+        .list_ontologies_as_of(&AsOf {
+            tx: None,
+            valid_at: Some("2026-08-01T12:00:00Z".into()),
+        })
+        .unwrap();
+    assert_eq!(at_v1[0].1, "# v1");
+    assert!(store.remove_ontology("o").unwrap());
+    assert!(store.list_ontologies().unwrap().is_empty());
+}
+
+#[test]
+fn a_pre_migration_registry_migrates_with_open_rows_and_unchanged_reads() {
+    // #71 acceptance 3, driven from the ACTUAL old schema rather than from the
+    // migrated one — the only way to know the migration works is to run it on a
+    // table shaped the way the old code left it.
+    let store = Store::open_in_memory().unwrap();
+    store
+        .conn
+        .execute_batch(
+            "DROP TABLE shapes;
+             CREATE TABLE shapes (
+                 name      TEXT PRIMARY KEY,
+                 turtle    TEXT NOT NULL,
+                 loaded_at TEXT NOT NULL
+             );
+             INSERT INTO shapes (name, turtle, loaded_at)
+                 VALUES ('legacy', '# old', '2026-01-01T00:00:00Z');",
+        )
+        .unwrap();
+
+    Store::migrate_bitemporal_registries(&store.conn).unwrap();
+
+    // valid_from backfilled from loaded_at, valid_to open.
+    let (vf, vt): (String, Option<String>) = store
+        .conn
+        .query_row(
+            "SELECT valid_from, valid_to FROM shapes WHERE name = 'legacy'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(vf, "2026-01-01T00:00:00Z", "valid_from = loaded_at");
+    assert_eq!(vt, None, "open-ended");
+
+    // Default reads unchanged.
+    let listed = store.list_shapes().unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].0, "legacy");
+    assert_eq!(listed[0].1, "# old");
+    assert_eq!(store.get_combined_shapes().unwrap().unwrap(), "# old");
+
+    // And the migration is idempotent.
+    Store::migrate_bitemporal_registries(&store.conn).unwrap();
+    assert_eq!(store.list_shapes().unwrap().len(), 1);
+}
+
+#[test]
+fn the_migration_preserves_every_legacy_row() {
+    // A rebuild that silently dropped rows would be the worst outcome here, and
+    // a single-row fixture would not catch it.
+    let store = Store::open_in_memory().unwrap();
+    store
+        .conn
+        .execute_batch(
+            "DROP TABLE ontologies;
+             CREATE TABLE ontologies (
+                 name      TEXT PRIMARY KEY,
+                 turtle    TEXT NOT NULL,
+                 loaded_at TEXT NOT NULL
+             );
+             INSERT INTO ontologies (name, turtle, loaded_at) VALUES
+                 ('a', '# a', '2026-01-01T00:00:00Z'),
+                 ('b', '# b', '2026-01-02T00:00:00Z'),
+                 ('c', '# c', '2026-01-03T00:00:00Z');",
+        )
+        .unwrap();
+
+    Store::migrate_bitemporal_registries(&store.conn).unwrap();
+    let names: Vec<String> = store
+        .list_ontologies()
+        .unwrap()
+        .into_iter()
+        .map(|(n, _, _)| n)
+        .collect();
+    assert_eq!(names, vec!["a", "b", "c"], "all three survive the rebuild");
+}
+
+#[test]
+fn validate_falls_back_to_stored_shapes_and_honours_as_of() {
+    // quipu #71: the `/validate` surface. An explicit `shapes` still wins (the
+    // existing contract); absent one, the STORED shapes are used, optionally
+    // as they stood in a prior window.
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
+        .unwrap();
+    store
+        .load_shapes("s", "# v2", "2026-08-02T00:00:00Z")
+        .unwrap();
+
+    // Explicit shapes -> None, i.e. "caller supplied them, don't touch it".
+    let explicit = crate::resolve_validation_shapes(
+        &store,
+        &serde_json::json!({"shapes": "# mine", "data": ""}),
+    )
+    .unwrap();
+    assert!(
+        explicit.is_none(),
+        "an explicit `shapes` must not be overridden"
+    );
+
+    // No shapes, no window -> current.
+    let now = crate::resolve_validation_shapes(&store, &serde_json::json!({"data": ""}))
+        .unwrap()
+        .unwrap();
+    assert_eq!(now, "# v2", "defaults to now");
+
+    // No shapes, a prior window -> that window's version.
+    let then = crate::resolve_validation_shapes(
+        &store,
+        &serde_json::json!({"data": "", "valid_at": "2026-08-01T12:00:00Z"}),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(then, "# v1", "as-of v1's window uses v1 semantics");
+}

@@ -11,11 +11,50 @@ use crate::store::Store;
 /// Input: `{ "shapes": "<shapes turtle>", "data": "<data turtle>" }`
 /// Output: validation feedback JSON
 #[cfg(feature = "shacl")]
+/// Resolve the shape source for a `/validate` request (quipu #71).
+///
+/// Returns `None` when the request carries its own `shapes` — the existing
+/// contract, unchanged. Otherwise falls back to the STORED shapes, optionally
+/// as they stood at `valid_at` / `as_of_tx`, defaulting to now.
+///
+/// Split out from [`tool_validate`] so the caller can take the store lock ONLY
+/// to fetch the turtle and drop it before validation, which is CPU-bound and
+/// unbounded in the size of the payload. Validating under the lock would
+/// serialize every other request behind an arbitrary caller's data.
+///
+/// # Errors
+/// Store errors while reading the registry.
+pub fn resolve_validation_shapes(
+    store: &crate::store::Store,
+    input: &JsonValue,
+) -> Result<Option<String>> {
+    if input.get("shapes").and_then(|v| v.as_str()).is_some() {
+        return Ok(None);
+    }
+    let as_of = crate::store::AsOf {
+        tx: input.get("as_of_tx").and_then(serde_json::Value::as_i64),
+        valid_at: input
+            .get("valid_at")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+    };
+    if as_of.tx.is_none() && as_of.valid_at.is_none() {
+        return store.get_combined_shapes();
+    }
+    store.get_combined_shapes_as_of(&as_of)
+}
+
 pub fn tool_validate(input: &JsonValue) -> Result<JsonValue> {
     let shapes = input
         .get("shapes")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::InvalidValue("missing 'shapes' parameter".into()))?;
+        .ok_or_else(|| {
+            Error::InvalidValue(
+                "missing 'shapes' parameter, and the store has no shapes loaded for the \
+             requested window — pass 'shapes', or load some and retry"
+                    .into(),
+            )
+        })?;
     let data = input
         .get("data")
         .and_then(|v| v.as_str())

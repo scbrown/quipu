@@ -305,11 +305,26 @@ rw_handler!(set_predicate, quipu::tool_set);
 rw_handler!(retract_episode, quipu::tool_retract_episode);
 
 pub(crate) async fn validate(
-    State(_store): State<SharedStore>,
+    State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    // No store lock, but SHACL validation is CPU-bound and unbounded in the size
-    // of the payload, so it belongs off the reactor too.
+    // quipu #71: when the request carries no `shapes`, fall back to the STORED
+    // ones — optionally as they stood at `valid_at` / `as_of_tx`, defaulting to
+    // now. The lock is taken ONLY to fetch the turtle and dropped immediately:
+    // SHACL validation is CPU-bound and unbounded in the size of the payload,
+    // so validating under it would serialize every other request behind an
+    // arbitrary caller's data. That property is why this handler had no lock at
+    // all before, and it is preserved rather than traded away.
+    let mut input = input;
+    let resolved = {
+        let guard = store.lock();
+        quipu::resolve_validation_shapes(&guard, &input)?
+    };
+    if let Some(turtle) = resolved
+        && let Some(obj) = input.as_object_mut()
+    {
+        obj.insert("shapes".to_string(), JsonValue::String(turtle));
+    }
     blocking(move || Ok(axum::Json(quipu::tool_validate(&input)?))).await
 }
 
