@@ -1,0 +1,282 @@
+//! Tests for knowledge packs (quipu #81) — one per acceptance criterion.
+
+use super::*;
+use crate::lattice::Freshness;
+use crate::store::labels::GraphLabel;
+use crate::types::{Op, Value};
+
+const TS: &str = "2026-08-06T00:00:00Z";
+
+fn tmp(name: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("quipu-pack-{name}-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join("out.qpack.db").to_string_lossy().into_owned()
+}
+
+/// A store with one labelled graph holding two triples, one of them an
+/// object-position REFERENCE (the `Ref` BLOB that cannot be remapped in SQL).
+fn producer(extra_terms: usize) -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    // Intern junk first so a second store assigns DIFFERENT ids to the same
+    // IRIs — which is exactly what the hash must be insensitive to.
+    for i in 0..extra_terms {
+        store.intern(&format!("urn:junk:{i}")).unwrap();
+    }
+    let g = store.overlay_create("urn:g:pack", 0).unwrap();
+    let s = store.intern("http://example.org/s").unwrap();
+    let p = store.intern("http://example.org/p").unwrap();
+    let q = store.intern("http://example.org/q").unwrap();
+    let o = store.intern("http://example.org/o").unwrap();
+    store
+        .overlay_write(g, Op::Assert, s, p, Value::Str("literal".into()), TS)
+        .unwrap();
+    store
+        .overlay_write(g, Op::Assert, s, q, Value::Ref(o), TS)
+        .unwrap();
+    store
+        .set_graph_label(
+            "urn:g:pack",
+            &GraphLabel {
+                freshness: Some(Freshness::Fresh),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    store
+}
+
+// --- Acceptance 2: the hash describes CONTENT, not the producer ---
+
+#[test]
+fn the_hash_is_identical_across_different_term_id_assignment() {
+    // The acceptance that justifies sorting: `current_facts_in_graph` orders by
+    // TERM ID, which differs between these two stores because one interned junk
+    // first. Hashing emission order would make the hash a property of the
+    // producer.
+    let a = producer(0);
+    let b = producer(37);
+
+    let ha = content_hash(&canonical_content(&a, "urn:g:pack", &[], &[]).unwrap());
+    let hb = content_hash(&canonical_content(&b, "urn:g:pack", &[], &[]).unwrap());
+    assert_eq!(ha, hb, "same triples, different ids -> same hash");
+    assert!(ha.starts_with("sha256:"));
+
+    // Control: DIFFERENT content must hash differently, or the test above
+    // passes because the hash ignores everything.
+    let mut c = producer(0);
+    let g = c.lookup("urn:g:pack").unwrap().unwrap();
+    let s = c.intern("http://example.org/s").unwrap();
+    let extra = c.intern("http://example.org/extra").unwrap();
+    c.overlay_write(g, Op::Assert, s, extra, Value::Str("more".into()), TS)
+        .unwrap();
+    let hc = content_hash(&canonical_content(&c, "urn:g:pack", &[], &[]).unwrap());
+    assert_ne!(ha, hc, "an added triple MUST change the hash");
+}
+
+#[test]
+fn the_label_is_part_of_the_content() {
+    // A pack whose label changed is different content — a consumer composes it.
+    let a = producer(0);
+    let ha = content_hash(&canonical_content(&a, "urn:g:pack", &[], &[]).unwrap());
+
+    let mut b = producer(0);
+    b.set_graph_label(
+        "urn:g:pack",
+        &GraphLabel {
+            freshness: Some(Freshness::Stale),
+            ..Default::default()
+        },
+        "2026-08-07T00:00:00Z",
+        None,
+    )
+    .unwrap();
+    let hb = content_hash(&canonical_content(&b, "urn:g:pack", &[], &[]).unwrap());
+    assert_ne!(ha, hb, "the label travels with the content");
+}
+
+// --- Acceptance 1, 3, 5 ---
+
+#[test]
+fn a_pack_round_trips_and_verifies_and_leaves_no_wal_siblings() {
+    let store = producer(0);
+    let out = tmp("roundtrip");
+    let manifest = pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
+
+    assert_eq!(manifest.source_graph, "urn:g:pack");
+    assert_eq!(
+        manifest.term_space, 0,
+        "quipu #74 is gated; space 0 for now"
+    );
+    assert!(manifest.content_hash.starts_with("sha256:"));
+
+    // Acceptance 5: ONE file.
+    assert!(std::path::Path::new(&out).exists());
+    for suffix in [
+        "-wal",
+        "-shm",
+        ".building",
+        ".building-wal",
+        ".building-shm",
+    ] {
+        assert!(
+            !std::path::Path::new(&format!("{out}{suffix}")).exists(),
+            "a pack must be a single attachable artifact; found {out}{suffix}"
+        );
+    }
+
+    // Acceptance 1: --verify recomputes and matches.
+    let (stored, recomputed, ok) = verify(&out).unwrap();
+    assert!(ok, "stored {stored} != recomputed {recomputed}");
+
+    // Acceptance 3: the packed store opens standalone with its content intact.
+    let opened = Store::open(&out).unwrap();
+    let g = opened.lookup("urn:g:pack").unwrap().expect("graph present");
+    assert_eq!(
+        opened.current_facts_in_graph(g).unwrap().len(),
+        2,
+        "both facts travelled"
+    );
+    assert_eq!(
+        opened.label_of("urn:g:pack").unwrap().freshness.value,
+        Some(Freshness::Fresh),
+        "the label travelled"
+    );
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn an_object_position_reference_survives_re_interning() {
+    // The `Ref` BLOB is the whole reason packs re-intern rather than copy rows:
+    // SQL cannot rewrite it. If re-interning were wrong, this would resolve to
+    // a different IRI — or to nothing — in the packed store.
+    let store = producer(11);
+    let out = tmp("refs");
+    pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
+
+    let opened = Store::open(&out).unwrap();
+    let g = opened.lookup("urn:g:pack").unwrap().unwrap();
+    let refs: Vec<String> = opened
+        .current_facts_in_graph(g)
+        .unwrap()
+        .iter()
+        .filter_map(|f| match &f.value {
+            Value::Ref(id) => opened.resolve(*id).ok(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        refs,
+        vec!["http://example.org/o".to_string()],
+        "the reference resolves to the SAME IRI in the packed store"
+    );
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn shapes_and_queries_named_on_the_command_travel_with_the_pack() {
+    let store = producer(0);
+    store.load_shapes("s1", "# a shape", TS).unwrap();
+    store
+        .query_load(
+            &crate::store::queries::StoredQuery {
+                name: "q1".into(),
+                description: "d".into(),
+                template: "SELECT ?s WHERE { ?s ?p ?o }".into(),
+                dataset: None,
+                params: vec![],
+            },
+            TS,
+        )
+        .unwrap();
+
+    let out = tmp("bundle");
+    let opts = PackOptions {
+        shapes: vec!["s1".into()],
+        queries: vec!["q1".into()],
+        ..Default::default()
+    };
+    pack(&store, "urn:g:pack", &out, &opts, TS).unwrap();
+
+    let opened = Store::open(&out).unwrap();
+    assert_eq!(opened.list_shapes().unwrap().len(), 1);
+    assert_eq!(opened.query_list().unwrap().len(), 1);
+    assert!(
+        verify(&out).unwrap().2,
+        "hash covers shapes and queries too"
+    );
+    let _ = std::fs::remove_file(&out);
+}
+
+#[test]
+fn naming_a_shape_that_does_not_exist_is_refused() {
+    let store = producer(0);
+    let out = tmp("badshape");
+    let opts = PackOptions {
+        shapes: vec!["nope".into()],
+        ..Default::default()
+    };
+    let err = pack(&store, "urn:g:pack", &out, &opts, TS).expect_err("no such shape");
+    assert!(err.to_string().contains("no such shape"), "{err}");
+}
+
+#[test]
+fn packing_an_unknown_graph_is_refused() {
+    let store = producer(0);
+    let out = tmp("badgraph");
+    let err = pack(&store, "urn:g:missing", &out, &PackOptions::default(), TS)
+        .expect_err("unknown graph");
+    assert!(err.to_string().contains("unknown graph"), "{err}");
+}
+
+// --- Acceptance 4 ---
+
+#[test]
+fn with_vectors_refuses_on_a_non_sqlite_backend_naming_the_restriction() {
+    let mut store = producer(0);
+    store.set_vector_search_delegate(std::sync::Arc::new(NoopDelegate));
+    assert!(!store.has_sqlite_vector_backend());
+
+    let out = tmp("vectors");
+    let opts = PackOptions {
+        with_vectors: true,
+        ..Default::default()
+    };
+    let err = pack(&store, "urn:g:pack", &out, &opts, TS).expect_err("delegate cannot enumerate");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("SQLite vector backend"),
+        "names the restriction: {msg}"
+    );
+    assert!(msg.contains("enumerated"), "says WHY: {msg}");
+}
+
+/// A delegate that does nothing — enough to make the backend non-SQLite, which
+/// is the only property this test needs.
+struct NoopDelegate;
+
+impl crate::vector_delegate::VectorSearchDelegate for NoopDelegate {
+    fn vector_search(
+        &self,
+        _query: &[f32],
+        _limit: usize,
+        _valid_at: Option<&str>,
+    ) -> Result<Vec<crate::vector::VectorMatch>> {
+        Ok(vec![])
+    }
+
+    fn vector_search_filtered(
+        &self,
+        _query: &[f32],
+        _limit: usize,
+        _filter: Option<&str>,
+        _valid_at: Option<&str>,
+    ) -> Result<Vec<crate::vector::VectorMatch>> {
+        Ok(vec![])
+    }
+
+    fn vector_count(&self) -> Result<usize> {
+        Ok(0)
+    }
+}

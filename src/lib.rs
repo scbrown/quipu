@@ -23,6 +23,7 @@ pub mod namespace;
 pub mod onnx_embedder;
 #[cfg(feature = "owl")]
 pub mod owl;
+pub mod pack;
 pub mod proposal;
 pub mod provider;
 pub mod rdf;

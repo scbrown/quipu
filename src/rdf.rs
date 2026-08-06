@@ -263,7 +263,11 @@ fn serialize_facts(
     Ok(buf)
 }
 
-/// Export EVERY current fact across all graphs, flattened to triples.
+/// Export the ROOT/default graph's current facts, flattened to triples.
+///
+/// Drive-by (quipu #81): this said "EVERY current fact across all graphs".
+/// `current_facts` is ROOT-only, so the docstring promised a whole-store export
+/// that has never happened — name a graph with [`export_rdf_subset`] instead.
 pub fn export_rdf(store: &Store, format: RdfFormat) -> Result<Vec<u8>> {
     let facts = store.current_facts()?;
     serialize_facts(store, &facts, format)

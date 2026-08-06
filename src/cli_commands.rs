@@ -586,3 +586,86 @@ pub fn cmd_doctor(args: &[String], db_path: &str) {
         }
     }
 }
+
+/// `quipu pack <graph-iri> --out <file>` / `quipu pack --verify <file>`
+/// (quipu #81).
+///
+/// Top-level `pack`, deliberately not `quipu graph pack`: `quipu_graph` is an
+/// MCP tool name and a `graph` subcommand would collide with it.
+pub fn cmd_pack(args: &[String], db_path: &str) {
+    if let Some(path) = flag_value(args, "--verify") {
+        match quipu::pack::verify(path) {
+            Ok((stored, recomputed, true)) => {
+                println!("pack: OK\n  content_hash: {stored}");
+                let _ = recomputed;
+            }
+            Ok((stored, recomputed, false)) => {
+                eprintln!(
+                    "pack: HASH MISMATCH\n  manifest:   {stored}\n  recomputed: {recomputed}\n\
+                     The pack's contents do not match what it claims to be."
+                );
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("pack verify error: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    let graph = args
+        .get(2)
+        .filter(|a| !a.starts_with("--"))
+        .unwrap_or_else(|| {
+            eprintln!(
+                "usage: quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] \
+             [--shapes S]... [--queries Q]... [--with-vectors]\n       quipu pack --verify <file>"
+            );
+            std::process::exit(1);
+        });
+    let out = flag_value(args, "--out").unwrap_or_else(|| {
+        eprintln!("quipu pack requires --out <file.qpack.db>");
+        std::process::exit(1);
+    });
+
+    // Repeated flags collect, matching the `--predicate` idiom elsewhere.
+    let multi = |name: &str| -> Vec<String> {
+        args.windows(2)
+            .filter(|w| w[0] == name)
+            .map(|w| w[1].clone())
+            .collect()
+    };
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+    let opts = quipu::pack::PackOptions {
+        name: flag_value(args, "--name").map(String::from),
+        version: flag_value(args, "--version").map(String::from),
+        shapes: multi("--shapes"),
+        queries: multi("--queries"),
+        with_vectors: args.iter().any(|a| a == "--with-vectors"),
+    };
+
+    match quipu::pack::pack(&store, graph, out, &opts, &chrono_now()) {
+        Ok(m) => {
+            println!("packed {} -> {out}", m.source_graph);
+            println!("  name:         {} {}", m.name, m.version);
+            println!("  content_hash: {}", m.content_hash);
+            println!("  counts:       {}", m.counts);
+            println!(
+                "  term_space:   {} (quipu #74 gated; --space lands with it)",
+                m.term_space
+            );
+        }
+        Err(e) => {
+            eprintln!("pack error: {e}");
+            std::process::exit(1);
+        }
+    }
+}

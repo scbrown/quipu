@@ -439,6 +439,17 @@ impl Store {
         &self.labels_config
     }
 
+    /// Whether vectors live in the built-in `SQLite` table rather than a
+    /// delegated or `LanceDB` backend (quipu #81).
+    ///
+    /// A delegate has no enumerate, so its embeddings cannot be re-keyed by
+    /// IRI for a pack. `quipu pack --with-vectors` refuses rather than shipping
+    /// a pack silently missing the vectors that were asked for.
+    #[must_use]
+    pub fn has_sqlite_vector_backend(&self) -> bool {
+        self.vector_delegate.is_none() && self.local_vector_backend.is_none()
+    }
+
     /// Get a mutable reference to the SHACL validation config.
     pub fn shacl_config_mut(&mut self) -> &mut ShaclConfig {
         &mut self.shacl_config
