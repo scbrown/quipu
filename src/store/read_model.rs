@@ -226,17 +226,88 @@ impl ReadModel {
     }
 }
 
+/// Whether a read answered from a [`ReadModel`] would be identical to one
+/// answered from SQL.
+///
+/// This is the guard, and it is the load-bearing half of Phase 3 — the hash
+/// join is the easy part. A `ReadModel` holds **currently-valid asserted facts
+/// in ONE graph**, so every dimension outside that must reach SQL instead:
+///
+/// - `valid_at` / `as_of_tx` — the model holds no history at all. It was built
+///   from `valid_to IS NULL`, so a time-travelling query it answered would
+///   return the present and call it the past.
+/// - Anything but the plain ROOT default graph. A `FROM`-redefined default, a
+///   named graph, or `GRAPH ?g` all read a different fact set;
+///   `GraphScope::is_root_default` already exists for exactly this narrowing,
+///   and carries the same warning that these paths would otherwise silently
+///   read `g = 0`.
+/// - `FROM NAMED` — restricts which named graphs are visible, which the model
+///   does not model.
+/// - Attachments. `facts_source()` becomes a `UNION ALL` over composed layers
+///   and `canonical_id` starts rewriting ids; the model is built from one
+///   database and knows neither. Checking attachments covers aliasing too,
+///   because `canonical_id` is the identity when there are none.
+///
+/// Overlay composition and tombstone resolution need no separate check: an
+/// overlay is a named graph, so `is_root_default` already excludes it.
+///
+/// **A `false` here is not a performance bug.** A query that time-travels is
+/// slower because it is a different question, not because an optimization is
+/// missing.
+#[must_use]
+pub fn read_model_applicable(store: &Store, ctx: &crate::sparql::TemporalContext) -> bool {
+    ctx.valid_at.is_none()
+        && ctx.as_of_tx.is_none()
+        && ctx.named_dataset.is_none()
+        && ctx.graph.is_root_default()
+        && !store.has_attachments()
+}
+
 impl Store {
     /// Build a [`ReadModel`] over one graph's current facts.
     ///
-    /// Not cached on the store: Phase 3 (`quipu-syt`) decides residency and
-    /// invalidation policy alongside the scope guard that makes consulting it
-    /// safe. Building one here is explicit and costs a full scan.
+    /// Explicit and costs a full scan. For the resident one, see
+    /// [`Self::read_model`].
     ///
     /// # Errors
     /// [`crate::Error::Sqlite`] if the fact scan fails.
     pub fn build_read_model(&self, graph: i64) -> Result<ReadModel> {
         ReadModel::build(self, graph)
+    }
+
+    /// The resident ROOT read model, built on first use.
+    ///
+    /// # Invalidation
+    ///
+    /// Dropped wholesale by [`Self::invalidate_read_model`] on every write,
+    /// rather than updated in place with [`ReadModel::apply`]. That is
+    /// deliberate for the first cut: a `transact` can close prior facts as a
+    /// side effect of asserting new ones, and those closures are not in the
+    /// caller's datum list, so an incremental path would need to observe what
+    /// the write actually did rather than what it was asked to do. Dropping is
+    /// correct by construction; incremental maintenance is `quipu-m9h`.
+    ///
+    /// # Errors
+    /// [`crate::Error::Sqlite`] if the build's fact scan fails.
+    pub fn read_model(&self) -> Result<std::cell::Ref<'_, ReadModel>> {
+        if self.read_model.borrow().is_none() {
+            let built = ReadModel::build(self, crate::schema::ROOT_GRAPH)?;
+            *self.read_model.borrow_mut() = Some(built);
+        }
+        Ok(std::cell::Ref::map(self.read_model.borrow(), |m| {
+            m.as_ref().expect("just built")
+        }))
+    }
+
+    /// Drop the resident read model. Called after every committed write.
+    pub(crate) fn invalidate_read_model(&self) {
+        *self.read_model.borrow_mut() = None;
+    }
+
+    /// Whether a resident model is currently built. Test surface.
+    #[must_use]
+    pub fn read_model_is_resident(&self) -> bool {
+        self.read_model.borrow().is_some()
     }
 }
 

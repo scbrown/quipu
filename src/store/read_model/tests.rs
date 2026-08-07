@@ -322,3 +322,118 @@ fn typed_literals_are_distinct_index_keys() {
     assert_eq!(model.by_predicate_object(a, &Value::Int(1)), [e]);
     assert_eq!(model.by_predicate_object(a, &Value::Str("1".into())), [e]);
 }
+
+// --- Residency and the scope guard (quipu-syt) -----------------------------
+
+use crate::sparql::{GraphScope, TemporalContext};
+
+/// The resident model is built on first use and reused after that.
+#[test]
+fn the_resident_model_is_built_lazily() {
+    let s = store();
+    assert!(
+        !s.read_model_is_resident(),
+        "nothing built before first use"
+    );
+    let len = s.read_model().unwrap().len();
+    assert!(s.read_model_is_resident(), "first use builds it");
+    assert_eq!(s.read_model().unwrap().len(), len, "second use reuses it");
+}
+
+/// Every committed write drops it. A stale index that survives a write is the
+/// failure mode this whole design has to avoid.
+#[test]
+fn a_write_invalidates_the_resident_model() {
+    let mut s = store();
+    let _ = s.read_model().unwrap().len();
+    assert!(s.read_model_is_resident());
+
+    let d = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/b",
+        Op::Assert,
+    );
+    s.transact(&[d], "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    assert!(
+        !s.read_model_is_resident(),
+        "the write left a stale model resident"
+    );
+
+    // And the rebuild sees the new fact.
+    assert_eq!(s.read_model().unwrap().len(), 1);
+}
+
+#[test]
+fn the_guard_admits_a_plain_current_root_read() {
+    let s = store();
+    assert!(read_model_applicable(&s, &TemporalContext::default()));
+}
+
+/// Time travel in either axis must reach SQL: the model was built from
+/// `valid_to IS NULL` and holds no history, so it would answer the present and
+/// call it the past.
+#[test]
+fn the_guard_refuses_time_travel() {
+    let s = store();
+    let valid_at = TemporalContext {
+        valid_at: Some("2020-01-01T00:00:00Z".to_string()),
+        ..Default::default()
+    };
+    assert!(!read_model_applicable(&s, &valid_at), "valid_at admitted");
+
+    let as_of = TemporalContext {
+        as_of_tx: Some(1),
+        ..Default::default()
+    };
+    assert!(!read_model_applicable(&s, &as_of), "as_of_tx admitted");
+}
+
+/// Any graph scope but the plain ROOT default reads a different fact set.
+/// Overlays need no separate case — an overlay is a named graph.
+#[test]
+fn the_guard_refuses_every_non_root_graph_scope() {
+    let s = store();
+    for scope in [
+        GraphScope::Default(vec![]),
+        GraphScope::Default(vec![7]),
+        GraphScope::Default(vec![0, 7]),
+        GraphScope::Named(vec![7]),
+        GraphScope::AnyNamed {
+            var: "g".to_string(),
+            restrict: None,
+        },
+    ] {
+        let ctx = TemporalContext {
+            graph: scope,
+            ..Default::default()
+        };
+        assert!(
+            !read_model_applicable(&s, &ctx),
+            "a non-ROOT scope was admitted: {:?}",
+            ctx.graph
+        );
+    }
+}
+
+#[test]
+fn the_guard_refuses_a_from_named_restriction() {
+    let s = store();
+    let ctx = TemporalContext {
+        named_dataset: Some(vec![7]),
+        ..Default::default()
+    };
+    assert!(!read_model_applicable(&s, &ctx));
+}
+
+/// A store with no attachments has an identity `canonical_id` and a plain
+/// `facts` source, which is what makes the model equivalent to SQL. The guard
+/// keys on that one predicate for both.
+#[test]
+fn the_guard_keys_on_attachments_for_composition_and_aliasing() {
+    let s = store();
+    assert!(!s.has_attachments());
+    assert!(read_model_applicable(&s, &TemporalContext::default()));
+}

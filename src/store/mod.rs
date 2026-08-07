@@ -153,6 +153,9 @@ pub struct Store {
     pub(crate) resolve_sql: String,
     /// Memoized term dictionary — see [`TermCache`].
     pub(crate) term_cache: std::cell::RefCell<TermCache>,
+    /// Resident ROOT read model, built on demand and dropped on every write —
+    /// see [`read_model::ReadModel`] and [`Store::read_model`].
+    pub(crate) read_model: std::cell::RefCell<Option<read_model::ReadModel>>,
 }
 
 /// An advisory event observed before a write and appended with it (P3).
@@ -552,6 +555,7 @@ impl Store {
             facts_source: "facts".to_string(),
             resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
             term_cache: std::cell::RefCell::new(TermCache::default()),
+            read_model: std::cell::RefCell::new(None),
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
         }
@@ -1051,6 +1055,13 @@ impl Store {
 
     /// Invalidate the cached policy registry if this transaction defined or
     /// amended a governance policy. Cheap no-op unless enforcement is enabled.
+    /// Whether any database is attached — the predicate that decides whether
+    /// `facts_source()` is a plain table and `canonical_id` is the identity.
+    #[must_use]
+    pub fn has_attachments(&self) -> bool {
+        !self.attachments.is_empty()
+    }
+
     pub(crate) fn invalidate_policy_registry_if_governance(
         &mut self,
         datums: &[Datum],
