@@ -195,10 +195,10 @@ impl Store {
                 if let Value::Str(v) = f.value {
                     query_text = Some(v);
                 }
-            } else if Some(f.attribute) == params {
-                if let Value::Str(v) = f.value {
-                    params_text = Some(v);
-                }
+            } else if Some(f.attribute) == params
+                && let Value::Str(v) = f.value
+            {
+                params_text = Some(v);
             }
         }
         let (Some(system), Some(query), Some(params_text)) = (system, query_text, params_text)
