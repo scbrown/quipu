@@ -69,6 +69,7 @@ curl -s localhost:3030/episode -X POST \
 | `group_id` | No | Logical grouping (e.g., "monitoring") |
 | `episode_body` | No | Human-readable description |
 | `shapes` | No | Inline SHACL shapes for validation |
+| `replace_snapshot` | No | Atomically replace prior facts from this episode name; use for complete inventories |
 
 ### Node Fields
 

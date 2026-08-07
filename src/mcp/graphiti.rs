@@ -163,6 +163,7 @@ pub fn tool_episodes_complete(store: &mut Store, input: &JsonValue) -> Result<Js
         edges: Vec::new(),
         graph: None,
         shapes: None,
+        replace_snapshot: false,
     };
 
     let now = crate::time::now_iso();

@@ -855,6 +855,49 @@ impl Store {
         })
     }
 
+    /// Build the retractions needed to replace a producer-owned episode
+    /// snapshot, without committing them. The caller combines these datums with
+    /// the replacement assertions in one transaction.
+    pub(crate) fn plan_episode_retraction(
+        &self,
+        episode_name: &str,
+        graph: i64,
+    ) -> Result<Vec<Datum>> {
+        let source_tag = format!("episode:{episode_name}");
+        let facts = {
+            let mut stmt = self.conn.prepare(
+                "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
+                 FROM facts f JOIN transactions t ON f.tx = t.id \
+                 WHERE t.source = ?1 AND f.g = ?2 AND f.op = 1 AND f.valid_to IS NULL \
+                 ORDER BY f.e, f.a",
+            )?;
+            Self::collect_facts(&mut stmt, params![source_tag, graph])?
+        };
+        // Keep a label for nodes still referenced by another producer, so a
+        // disappearing inventory item does not leave an unnameable dangling
+        // reference. Types are deliberately not preserved: for snapshot
+        // producers, a type assertion is often the inventory membership fact
+        // readers count, and retaining it would make removal invisible.
+        let orphans = self.identity_orphans(&facts, &source_tag)?;
+        let (label_id, _) = self.identity_predicate_ids()?;
+        Ok(facts
+            .into_iter()
+            .filter(|f| {
+                !orphans.iter().any(|o| {
+                    o.entity == f.entity && o.lost_label && Some(f.attribute) == label_id
+                })
+            })
+            .map(|f| Datum {
+                entity: f.entity,
+                attribute: f.attribute,
+                value: f.value,
+                valid_from: f.valid_from,
+                valid_to: None,
+                op: Op::Retract,
+            })
+            .collect())
+    }
+
     /// Term ids for `rdfs:label` and `rdf:type`, or `None` if never interned
     /// (in which case no fact can carry that predicate).
     fn identity_predicate_ids(&self) -> Result<(Option<i64>, Option<i64>)> {

@@ -404,6 +404,7 @@ mod tests {
             edges,
             graph: None,
             shapes: None,
+            replace_snapshot: false,
         }
     }
 

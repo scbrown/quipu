@@ -320,6 +320,7 @@ fn episode_batch_embeds() {
         episode_body: Some("A test episode".into()),
         source: Some("test".into()),
         group_id: None,
+        replace_snapshot: false,
         nodes: vec![
             Node {
                 name: "Foo".into(),

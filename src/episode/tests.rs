@@ -394,6 +394,7 @@ fn shacl_validation_rejects_invalid_episode() {
         edges: vec![],
         graph: None,
         shapes: Some(shapes.into()),
+        replace_snapshot: false,
     };
 
     let err = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap_err();
@@ -441,6 +442,7 @@ fn shacl_validation_passes_valid_episode() {
         edges: vec![],
         graph: None,
         shapes: Some(shapes.into()),
+        replace_snapshot: false,
     };
 
     let (tx_id, count) =
@@ -532,6 +534,7 @@ fn batch_stops_on_validation_failure() {
             edges: vec![],
             graph: None,
             shapes: Some(shapes.into()),
+            replace_snapshot: false,
         },
         Episode {
             name: "bad-ep".into(),
@@ -547,6 +550,7 @@ fn batch_stops_on_validation_failure() {
             edges: vec![],
             graph: None,
             shapes: Some(shapes.into()),
+            replace_snapshot: false,
         },
     ];
     let timestamps = vec!["2026-04-04T12:00:00Z", "2026-04-04T12:01:00Z"];
@@ -649,6 +653,73 @@ fn reingest_changed_episode_updates_without_duplicating() {
     // And exactly one active content hash.
     let chash = format!("{TEST_BASE_NS}contentHash");
     assert_eq!(active_values(&store, &ep_iri, &chash).len(), 1);
+}
+
+#[test]
+fn snapshot_replacement_retracts_removed_entities_and_can_repopulate() {
+    let mut store = Store::open_in_memory().unwrap();
+    let full = parse_episode(
+        r#"{
+          "name": "inventory",
+          "replace_snapshot": true,
+          "nodes": [
+            {"name": "path-a", "type": "ExecutionPath"},
+            {"name": "path-b", "type": "ExecutionPath"}
+          ]
+        }"#,
+    );
+    ingest_episode(&mut store, &full, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    let empty = parse_episode(r#"{"name":"inventory","replace_snapshot":true,"nodes":[]}"#);
+    ingest_episode(&mut store, &empty, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+    let after_empty = crate::sparql::query(
+        &store,
+        &format!("SELECT ?s WHERE {{ ?s a <{TEST_BASE_NS}ExecutionPath> }}"),
+    )
+    .unwrap();
+    assert_eq!(
+        after_empty.rows().len(),
+        0,
+        "reader sees the empty snapshot"
+    );
+
+    let one = parse_episode(
+        r#"{
+          "name": "inventory",
+          "replace_snapshot": true,
+          "nodes": [{"name": "path-c", "type": "ExecutionPath"}]
+        }"#,
+    );
+    ingest_episode(&mut store, &one, "2026-01-03T00:00:00Z", TEST_BASE_NS).unwrap();
+    let after_one = crate::sparql::query(
+        &store,
+        &format!("SELECT ?s WHERE {{ ?s a <{TEST_BASE_NS}ExecutionPath> }}"),
+    )
+    .unwrap();
+    assert_eq!(
+        after_one.rows().len(),
+        1,
+        "reader sees the repopulated snapshot"
+    );
+}
+
+#[test]
+fn ordinary_episode_updates_remain_additive_for_generated_entities() {
+    let mut store = Store::open_in_memory().unwrap();
+    let first = parse_episode(r#"{"name":"knowledge","nodes":[{"name":"old","type":"Service"}]}"#);
+    ingest_episode(&mut store, &first, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+    let second = parse_episode(r#"{"name":"knowledge","nodes":[{"name":"new","type":"Service"}]}"#);
+    ingest_episode(&mut store, &second, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+    let result = crate::sparql::query(
+        &store,
+        &format!("SELECT ?s WHERE {{ ?s a <{TEST_BASE_NS}Service> }}"),
+    )
+    .unwrap();
+    assert_eq!(
+        result.rows().len(),
+        2,
+        "default episode semantics stay additive"
+    );
 }
 
 #[test]

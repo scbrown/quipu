@@ -232,6 +232,7 @@ mod tests {
             edges: vec![],
             graph: None,
             shapes: None,
+            replace_snapshot: false,
         };
         ingest_episode(store, &ep, "2026-07-23T00:00:00Z", DEFAULT_BASE_NS).unwrap();
     }

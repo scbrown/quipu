@@ -13,7 +13,7 @@ use serde::Deserialize;
 use crate::error::Error;
 use crate::error::Result;
 use crate::namespace;
-use crate::rdf::ingest_rdf_to_graph;
+use crate::rdf::{ingest_rdf_to_graph, parse_rdf};
 use crate::resolution::{self, EntityCandidate};
 #[cfg(feature = "shacl")]
 use crate::shacl;
@@ -182,6 +182,12 @@ pub struct Episode {
     /// Optional SHACL shapes (Turtle) to validate generated triples against.
     #[serde(default)]
     pub shapes: Option<String>,
+    /// Replace the complete set of facts previously asserted by this episode.
+    /// Intended for producers that publish a current snapshot rather than an
+    /// append-only knowledge event. Retractions and assertions commit in one
+    /// transaction, so readers never observe an empty intermediate state.
+    #[serde(default)]
+    pub replace_snapshot: bool,
 }
 
 /// A node (entity) extracted from an episode.
@@ -350,6 +356,7 @@ pub fn ingest_episode_outcome(
         IngestOutcome::Created
     };
     if existing_hash.is_some()
+        && !episode.replace_snapshot
         && let Some(ep_id) = store.lookup(&ep_iri)?
     {
         store.retract_entity(ep_id, None, timestamp, actor)?;
@@ -365,16 +372,39 @@ pub fn ingest_episode_outcome(
         _ => 0,
     };
 
-    let (tx_id, count) = ingest_rdf_to_graph(
-        store,
-        turtle.as_bytes(),
-        oxrdfio::RdfFormat::Turtle,
-        None,
-        timestamp,
-        actor,
-        Some(&source_str),
-        graph,
-    )?;
+    let (tx_id, count) = if episode.replace_snapshot {
+        let mut datums = store.plan_episode_retraction(&episode.name, graph)?;
+        let mut assertions = parse_rdf(
+            store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            timestamp,
+        )?;
+        let count = assertions.len();
+        // Facts present in both snapshots stay active. Besides avoiding needless
+        // history churn, this is required by the fact-log key: one transaction
+        // cannot contain both a Retract and Assert for the same (e, a, v).
+        datums.retain(|old| {
+            !assertions.iter().any(|new| {
+                old.entity == new.entity && old.attribute == new.attribute && old.value == new.value
+            })
+        });
+        datums.append(&mut assertions);
+        let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_str), graph)?;
+        (tx_id, count)
+    } else {
+        ingest_rdf_to_graph(
+            store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            timestamp,
+            actor,
+            Some(&source_str),
+            graph,
+        )?
+    };
     Ok((tx_id, count, outcome))
 }
 
@@ -404,6 +434,7 @@ fn current_content_hash(store: &Store, ep_iri: &str, base_ns: &str) -> Result<Op
 fn episode_content_hash(episode: &Episode) -> String {
     let mut parts: Vec<String> = vec![
         format!("name={}", episode.name),
+        format!("replace_snapshot={}", episode.replace_snapshot),
         format!("body={}", episode.episode_body.as_deref().unwrap_or("")),
         format!("source={}", episode.source.as_deref().unwrap_or("")),
         format!("group={}", episode.group_id.as_deref().unwrap_or("")),

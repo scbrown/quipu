@@ -174,6 +174,12 @@ curl -s localhost:3030/episode -X POST \
   }'
 ```
 
+Set `"replace_snapshot": true` for producers whose payload is the complete
+current state of an inventory. Facts previously asserted by the same episode
+name but absent from the new payload are retracted atomically with the new
+assertions. The default is `false`, preserving additive knowledge-ingestion
+semantics. Reusing a stable episode name is required for replacement.
+
 #### `outcome`: what the ingest DID — branch on this, never on `count`
 
 `/episode` is idempotent. The activity IRI is derived from the episode name and

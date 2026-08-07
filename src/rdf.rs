@@ -195,6 +195,23 @@ pub fn ingest_rdf_to_graph(
     source: Option<&str>,
     graph: i64,
 ) -> Result<(i64, usize)> {
+    let datums = parse_rdf(store, reader, format, base_iri, timestamp)?;
+    let count = datums.len();
+    let tx_id = store.transact_to_graph(&datums, timestamp, actor, source, graph)?;
+    Ok((tx_id, count))
+}
+
+/// Parse RDF into fact-log datums without committing them.
+///
+/// This is used by callers that must combine RDF assertions with other changes
+/// in one atomic transaction, such as replacing a producer-owned snapshot.
+pub(crate) fn parse_rdf(
+    store: &Store,
+    reader: impl Read,
+    format: RdfFormat,
+    base_iri: Option<&str>,
+    timestamp: &str,
+) -> Result<Vec<Datum>> {
     let mut parser = RdfParser::from_format(format);
     if let Some(base) = base_iri {
         parser = parser
@@ -221,13 +238,7 @@ pub fn ingest_rdf_to_graph(
         });
     }
 
-    let count = datums.len();
-    if count == 0 {
-        let tx_id = store.transact_to_graph(&[], timestamp, actor, source, graph)?;
-        return Ok((tx_id, 0));
-    }
-    let tx_id = store.transact_to_graph(&datums, timestamp, actor, source, graph)?;
-    Ok((tx_id, count))
+    Ok(datums)
 }
 
 /// Serialize current facts as RDF in the specified format.
