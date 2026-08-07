@@ -58,6 +58,52 @@ fn test_tool_knot() {
 }
 
 #[test]
+fn knot_snapshot_replacement_retracts_removed_turtle_facts() {
+    let mut store = Store::open_in_memory().unwrap();
+    let snapshot = |turtle: &str| {
+        serde_json::json!({
+            "turtle": turtle,
+            "timestamp": "2026-08-07T10:00:00Z",
+            "actor": "hank",
+            "source": "hank promote demo@abc (cli)",
+            "replace_snapshot": true,
+            "snapshot": "code:demo"
+        })
+    };
+    let query = serde_json::json!({
+        "query": "PREFIX ex: <http://example.org/> SELECT ?s WHERE { ?s a ex:Module }"
+    });
+
+    tool_knot(
+        &mut store,
+        &snapshot("@prefix ex: <http://example.org/> . ex:a a ex:Module . ex:b a ex:Module ."),
+    )
+    .unwrap();
+    assert_eq!(tool_query(&store, &query).unwrap()["count"], 2);
+
+    tool_knot(&mut store, &snapshot("@prefix ex: <http://example.org/> .")).unwrap();
+    assert_eq!(tool_query(&store, &query).unwrap()["count"], 0);
+
+    tool_knot(
+        &mut store,
+        &snapshot("@prefix ex: <http://example.org/> . ex:c a ex:Module ."),
+    )
+    .unwrap();
+    assert_eq!(tool_query(&store, &query).unwrap()["count"], 1);
+}
+
+#[test]
+fn knot_snapshot_replacement_requires_stable_identity() {
+    let mut store = Store::open_in_memory().unwrap();
+    let err = tool_knot(
+        &mut store,
+        &serde_json::json!({"turtle": "", "replace_snapshot": true}),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("stable 'snapshot' producer key"));
+}
+
+#[test]
 fn omitted_timestamp_defaults_to_now_not_epoch() {
     // hq-tb4: a write with no explicit timestamp must be stamped with the real
     // clock, not 1970 — defaulting to epoch silently corrupts the bitemporal

@@ -864,6 +864,20 @@ impl Store {
         graph: i64,
     ) -> Result<Vec<Datum>> {
         let source_tag = format!("episode:{episode_name}");
+        self.plan_source_retraction(&source_tag, graph)
+    }
+
+    /// Build the retractions needed to atomically replace all current facts
+    /// owned by one stable transaction source.
+    ///
+    /// Episodes use `episode:<name>`; complete Turtle producers use
+    /// `snapshot:<producer-key>`. Keeping the planner source-based makes
+    /// replacement a store primitive rather than an episode-only convention.
+    pub(crate) fn plan_source_retraction(
+        &self,
+        source_tag: &str,
+        graph: i64,
+    ) -> Result<Vec<Datum>> {
         let facts = {
             let mut stmt = self.conn.prepare(
                 "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
@@ -878,7 +892,7 @@ impl Store {
         // reference. Types are deliberately not preserved: for snapshot
         // producers, a type assertion is often the inventory membership fact
         // readers count, and retaining it would make removal invisible.
-        let orphans = self.identity_orphans(&facts, &source_tag)?;
+        let orphans = self.identity_orphans(&facts, source_tag)?;
         let (label_id, _) = self.identity_predicate_ids()?;
         Ok(facts
             .into_iter()

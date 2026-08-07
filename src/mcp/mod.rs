@@ -893,7 +893,8 @@ pub fn tool_export(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 /// MCP tool: `quipu_knot` -- Assert facts with optional SHACL validation.
 ///
 /// Input: `{ "turtle": "<data>", "timestamp": "...", "actor": "...",
-///           "source": "...", "shapes": "<optional shapes turtle>" }`
+///           "source": "...", "shapes": "<optional shapes turtle>",
+///           "replace_snapshot": false, "snapshot": "<stable producer key>" }`
 /// Output: `{ "tx_id": N, "count": N }` or validation feedback on failure.
 pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let turtle = input
@@ -909,6 +910,16 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
 
     let actor = input.get("actor").and_then(|v| v.as_str());
     let source = input.get("source").and_then(|v| v.as_str());
+    let replace_snapshot = input
+        .get("replace_snapshot")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    let snapshot = input.get("snapshot").and_then(JsonValue::as_str);
+    if replace_snapshot && snapshot.is_none_or(|s| s.trim().is_empty()) {
+        return Err(Error::InvalidValue(
+            "replace_snapshot requires a non-empty stable 'snapshot' producer key".into(),
+        ));
+    }
 
     // SHACL validation: combine per-request shapes with stored shapes.
     let request_shapes = input.get("shapes").and_then(|v| v.as_str());
@@ -956,20 +967,43 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         }
     }
 
-    let (tx_id, count) = crate::rdf::ingest_rdf(
-        store,
-        turtle.as_bytes(),
-        oxrdfio::RdfFormat::Turtle,
-        None,
-        timestamp,
-        actor,
-        source,
-    )?;
+    let (tx_id, count) = if replace_snapshot {
+        let source_tag = format!("snapshot:{}", snapshot.unwrap());
+        let mut datums = store.plan_source_retraction(&source_tag, 0)?;
+        let mut assertions = crate::rdf::parse_rdf(
+            store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            timestamp,
+        )?;
+        let count = assertions.len();
+        datums.retain(|old| {
+            !assertions.iter().any(|new| {
+                old.entity == new.entity && old.attribute == new.attribute && old.value == new.value
+            })
+        });
+        datums.append(&mut assertions);
+        let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_tag), 0)?;
+        (tx_id, count)
+    } else {
+        crate::rdf::ingest_rdf(
+            store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            timestamp,
+            actor,
+            source,
+        )?
+    };
 
     Ok(serde_json::json!({
         "conforms": true,
         "tx_id": tx_id,
-        "count": count
+        "count": count,
+        "snapshot": snapshot,
+        "replaced": replace_snapshot
     }))
 }
 
