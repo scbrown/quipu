@@ -100,6 +100,45 @@ aegis:ServerShape a sh:NodeShape ;
 }
 
 #[test]
+#[cfg(feature = "shacl")]
+fn named_graph_cannot_relax_the_loaded_root_shapes() {
+    let mut store = Store::open_in_memory().unwrap();
+    let strict = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:ServerShape a sh:NodeShape ;
+    sh:targetClass aegis:Server ;
+    sh:property [ sh:path aegis:hostname ; sh:minCount 1 ] .
+"#;
+    store
+        .load_shapes("root-server-shape", strict, "2026-01-01")
+        .unwrap();
+    store.shacl_config_mut().validate_on_write = true;
+
+    // The episode targets a named graph and supplies an inline shape that is
+    // deliberately laxer. Inline shapes are additional validation, never a
+    // replacement for the store's ROOT-loaded enforcing set.
+    let episode = parse_episode(
+        r#"{
+          "name": "named-lax",
+          "graph": "http://example.org/graph/tenant-1",
+          "nodes": [{"name": "Server1", "type": "Server"}],
+          "edges": [],
+          "shapes": "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix aegis: <http://aegis.gastown.local/ontology/> . aegis:LaxServerShape a sh:NodeShape ; sh:targetClass aegis:Server ; sh:property [ sh:path aegis:hostname ; sh:minCount 0 ] ."
+        }"#,
+    );
+
+    let err = ingest_episode(&mut store, &episode, "2026-01-02T00:00:00Z", TEST_BASE_NS)
+        .expect_err("the ROOT-loaded shape must still reject the named-graph write");
+    assert!(matches!(err, crate::error::Error::ValidationFailed { .. }));
+    let graph = store.lookup("http://example.org/graph/tenant-1").unwrap();
+    assert!(
+        graph.is_none(),
+        "validation happens before the target graph is even interned"
+    );
+}
+
+#[test]
 fn resolution_fires_on_duplicate_node() {
     // hq-uye: with resolution enabled, ingesting an episode whose node matches
     // an existing entity (by rdfs:label) must surface a dedup hint — the engine

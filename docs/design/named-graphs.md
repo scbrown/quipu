@@ -239,7 +239,8 @@ decision is therefore about the **write gate**, not the validator:
 - [x] Time travel and contradiction detection are ROOT-scoped (#56)
 - [x] Overlay compose still sees the overlay (regression guard, #56)
 - [x] A ruleset run against a branch writes its conclusions into that branch
-- [ ] An overlay asserting a laxer shape does not relax validation of its parent
+- [x] A named-graph write carrying a laxer inline shape cannot replace or relax
+      the ROOT-loaded enforcing shapes
 
 ## 8. Scope boundaries / follow-ups (honest)
 
