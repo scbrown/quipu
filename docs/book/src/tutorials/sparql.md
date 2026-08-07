@@ -315,8 +315,8 @@ HAVING(?n > 1)
 
 ## 9. RDFS Subclass Inference
 
-Remember that `hw:WebApp rdfs:subClassOf hw:Service`. Quipu automatically
-expands type queries through the subclass hierarchy:
+Remember that `hw:WebApp rdfs:subClassOf hw:Service`. SPARQL type patterns are
+asserted-only: a constant and a variable type form mean the same thing.
 
 ```sparql
 PREFIX hw: <http://example.org/homelab/>
@@ -327,51 +327,48 @@ WHERE {
 }
 ```
 
-This returns **all six** services — including traefik, grafana, and nginx
-(which are typed as `hw:WebApp`). Quipu follows `rdfs:subClassOf` edges
-automatically, so you query at the level you care about.
+This returns the three services asserted directly as `hw:Service`. It does not
+silently turn a syntactic type form into an RDFS entailment request.
 
-### The asymmetry: two forms, two numbers, both correct
+### One asserted form; make inference explicit
 
-Expansion applies when the type is a **constant IRI**. It does **not** apply
-when the type is a **variable** — that form is matched literally:
+These two forms now agree:
 
 ```sparql
-# INFERRED — includes hw:WebApp instances
+# ASSERTED ONLY
 SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a hw:Service }
 
-# ASSERTED ONLY — only things literally typed hw:Service
+# ASSERTED ONLY — equivalent spelling
 SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?t . FILTER(?t = hw:Service) }
 ```
 
-Those two queries express what looks like the same constraint and return
-different counts. **Neither is wrong**, and you need both:
+For the inferred question, say so with the standard property path:
 
 | Question | Form |
 |---|---|
-| "what depends on X", blast radius, impact | constant IRI (inferred) |
-| vocabulary census, governance gating, "who emits the wrong type" | variable + `FILTER` (asserted) |
+| vocabulary census, governance gating, "who emits the wrong type" | either asserted type form |
+| "what depends on X", blast radius, impact | explicit `a/rdfs:subClassOf*` path |
 
-To ask for inference explicitly — recommended when the distinction matters to
-your reader — use the path form, which is equivalent to the constant form:
+To ask for inference explicitly:
 
 ```sparql
 SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a/rdfs:subClassOf* hw:Service }
 ```
 
-### How to tell which one you got
+### Migration marker: what was withheld
 
 Ambiguity here is expensive: both queries return HTTP 200 and both counts are
 individually plausible, so a number answering the *other* question does not look
-wrong. Quipu therefore **announces expansion in the response** whenever it
-widened a type constant:
+wrong. The constant form used to widen through subclasses; during the migration
+window Quipu announces that withheld expansion only on queries whose answer could
+have changed:
 
 ```json
 {
-  "count": 6,
+  "count": 3,
   "inference": {
-    "applied": true,
-    "expandedTypes": [
+    "applied": false,
+    "withheldTypes": [
       {"type": "http://example.org/homelab/Service",
        "subclasses": ["http://example.org/homelab/WebApp"]}
     ]
@@ -379,34 +376,29 @@ widened a type constant:
 }
 ```
 
-The field is **absent** when nothing was inferred, so its presence is the
-signal. The subclasses are named because "inference happened" is not actionable
-on its own — you need to see *which* types were folded in to know whether the
-count is the one you wanted. A type with no subclasses is never reported: both
-forms agree there, which also makes a leaf type a useful control when you are
-checking this behaviour yourself.
+The field is **absent** when the flip did not change the query, so its presence
+is the signal. The subclasses are named so the reader can choose the explicit
+path form when the inferred answer is intended. A leaf type is never reported:
+the old and new answers already agree there.
 
 #### Every result shape carries it — including ASK
 
 The marker is not a SELECT feature. `ASK` is the shape most in need of it:
 
 ```sparql
-ASK { hw:postgres a hw:Service }     # -> {"result": true, "inference": {...}}
+ASK { hw:postgres a hw:Service }     # -> {"result": false, "inference": {...}}
 ```
 
 `hw:postgres` may be asserted **only** as `hw:DatabaseService` — nothing in the
-graph says it is a `hw:Service` — and this still answers `true`, because
-expansion widened the question. A boolean gives you no number to look at twice,
-so without the marker an inferred `true` is byte-for-byte identical to an
-asserted one. `CONSTRUCT`/`DESCRIBE` carry it too, and there it matters for a
-further reason: the triples you get back are inference-widened, and a
-materialised graph is easy to write down somewhere and re-read later as fact.
+graph says it is a `hw:Service`, so this now answers `false`. A boolean gives you
+no number to look at twice, so the marker makes the semantic change visible.
+`CONSTRUCT`/`DESCRIBE` carry it too: their formerly inferred triples are likewise
+withheld unless the query uses the explicit path.
 
-**What the marker claims.** It says expansion was applied *to the query*. It does
-**not** say the answer depended on it — a marked `ASK` can be `true` about a
-directly-asserted fact that needed no inference at all. Read a marked `true` as
-"this was the wide question", not as "this true is inferred". To settle whether
-the inference mattered, ask the asserted form:
+**What the marker claims.** It says the old implicit expansion was withheld from
+this query. It does not say the resulting answer necessarily changed: a marked
+`ASK` can still be `true` about a directly asserted fact. To ask the inferred
+question, use the explicit path; to inspect asserted types, ask:
 
 ```sparql
 SELECT ?t WHERE { hw:postgres a ?t }    # what is it ACTUALLY typed as?
@@ -417,16 +409,16 @@ SELECT ?t WHERE { hw:postgres a ?t }    # what is it ACTUALLY typed as?
 If you request a W3C shape with `Accept`
 (`application/sparql-results+json`, `application/sparql-results+xml`,
 `text/turtle`), the body is fixed by spec and has nowhere to put the marker.
-It travels as a response header instead, naming the widened type constants:
+It travels as a response header instead, naming the affected type constants:
 
 ```http
-x-quipu-inference: http://example.org/homelab/Service
+x-quipu-inference: withheld: http://example.org/homelab/Service
 ```
 
-Same rule: the header is **absent** when nothing was inferred. The body is
+Same rule: the header is **absent** when the flip did not affect the query. The body is
 untouched and stays conformant, so a standard parser is unaffected — but a
 client that ignores headers gets no signal, which is a reason to prefer the
-default JSON shape when the distinction matters. Full `expandedTypes` detail is
+default JSON shape when the distinction matters. Full `withheldTypes` detail is
 one `Accept`-free request away.
 
 ## 10. Property Paths

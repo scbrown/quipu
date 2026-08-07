@@ -391,7 +391,7 @@ fn select_order_by_with_limit() {
 }
 
 #[test]
-fn rdfs_subclass_type_query() {
+fn rdfs_subclass_type_query_is_explicit_property_path() {
     let mut store = Store::open_in_memory().unwrap();
     let turtle = r#"
 @prefix ex: <http://example.org/> .
@@ -419,18 +419,18 @@ ex:dave a ex:Other ; ex:name "Dave" .
 
     let result = query(
         &store,
-        "SELECT ?s WHERE { ?s a <http://example.org/Person> }",
+        "SELECT ?s WHERE { ?s a/<http://www.w3.org/2000/01/rdf-schema#subClassOf>* <http://example.org/Person> }",
     )
     .unwrap();
     assert_eq!(
         result.rows().len(),
         3,
-        "alice + bob + carol are all Persons"
+        "the explicit path includes employee and manager instances"
     );
 
     let result = query(
         &store,
-        "SELECT ?s WHERE { ?s a <http://example.org/Employee> }",
+        "SELECT ?s WHERE { ?s a/<http://www.w3.org/2000/01/rdf-schema#subClassOf>* <http://example.org/Employee> }",
     )
     .unwrap();
     assert_eq!(result.rows().len(), 2, "bob + carol are Employees");
@@ -2067,11 +2067,9 @@ ex:t2 a ex:Tool .
 }
 
 #[test]
-fn the_two_forms_disagree_and_both_are_right() {
-    // The defect in two numbers. `?s a <T>` is expanded over rdfs:subClassOf;
-    // `?s a ?t . FILTER(?t = <T>)` is matched literally. Both are legitimate —
-    // asserted-only is the basis for a vocabulary census, inferred for blast
-    // radius — so this asserts the DIVERGENCE, not a preferred answer.
+fn the_two_type_forms_are_asserted_only_and_agree() {
+    // The ruling: simple entailment in both forms. Inference remains available
+    // through the explicit property path test below.
     let store = inference_store();
     let inferred = crate::mcp::tool_query(
         &store,
@@ -2088,22 +2086,19 @@ fn the_two_forms_disagree_and_both_are_right() {
     )
     .unwrap();
     assert_eq!(
-        inferred["rows"][0]["n"], 3,
-        "constant form includes subclasses"
+        inferred["rows"][0]["n"], 1,
+        "constant form is asserted-only"
     );
     assert_eq!(
         asserted["rows"][0]["n"], 1,
         "variable form is asserted-only"
     );
+    assert_eq!(inferred["rows"][0]["n"], asserted["rows"][0]["n"]);
 }
 
 #[test]
-fn inference_is_announced_when_it_widened_the_answer() {
-    // The fix. Before this, the two counts above were indistinguishable in the
-    // response: same syntax shape, both HTTP 200, both plausible. Four readers
-    // took the wrong one in the wild; one sized a governance decision several
-    // times too large and CONCEALED an ungoverned subclass behind the inflated
-    // parent count.
+fn withheld_inference_is_announced_when_the_flip_changed_the_answer() {
+    // The flip must not recreate the silent count change it removes.
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2112,12 +2107,11 @@ fn inference_is_announced_when_it_widened_the_answer() {
              SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ex:Service }"}),
     )
     .unwrap();
-    assert_eq!(out["inference"]["applied"], true);
-    let expanded = &out["inference"]["expandedTypes"][0];
-    assert_eq!(expanded["type"], "http://example.org/Service");
-    // The subclasses are NAMED: "inference happened" is not actionable on its
-    // own — the reader needs to see that Service swallowed SearchService.
-    let subs: Vec<String> = expanded["subclasses"]
+    assert_eq!(out["rows"][0]["n"], 1);
+    assert_eq!(out["inference"]["applied"], false);
+    let withheld = &out["inference"]["withheldTypes"][0];
+    assert_eq!(withheld["type"], "http://example.org/Service");
+    let subs: Vec<String> = withheld["subclasses"]
         .as_array()
         .unwrap()
         .iter()
@@ -2128,10 +2122,9 @@ fn inference_is_announced_when_it_widened_the_answer() {
 }
 
 #[test]
-fn the_marker_is_absent_when_nothing_was_inferred() {
-    // The field's PRESENCE is the signal, so it must not appear on ordinary
-    // responses. Three controls: the asserted-only form, a leaf type with no
-    // subclasses, and a query with no type pattern at all.
+fn the_marker_is_absent_when_the_flip_changed_nothing() {
+    // Presence remains the signal: variable, leaf, and unrelated queries have
+    // the same answer before and after the migration.
     let store = inference_store();
     for q in [
         "PREFIX ex: <http://example.org/> \
@@ -2150,9 +2143,6 @@ fn the_marker_is_absent_when_nothing_was_inferred() {
 
 #[test]
 fn a_leaf_type_is_the_control_that_proves_the_marker_is_specific() {
-    // Tool has no subclasses, so both forms agree AND no marker is emitted. If
-    // this ever diverges, the marker is firing on something other than subclass
-    // expansion and the whole signal is untrustworthy.
     let store = inference_store();
     let inferred = crate::mcp::tool_query(
         &store,
@@ -2173,16 +2163,9 @@ fn a_leaf_type_is_the_control_that_proves_the_marker_is_specific() {
 }
 
 #[test]
-fn ask_carries_the_marker_too() {
-    // The residual after the marker shipped: `?s a <T>` was instrumented on
-    // SELECT, but the same question asked as an ASK came back a bare
-    // `{"result": true}`. ex:svc2 is asserted ONLY as WebApplication — nothing
-    // in the graph says it is a Service — yet the ASK says true. That is the
-    // wild case exactly (postgresql, asserted DatabaseService only).
-    //
-    // ASK is the WORST shape to leave silent: a boolean offers no number to look
-    // at twice, so nothing invites the second glance that catches an inflated
-    // count. The response must say which question it answered.
+fn ask_carries_the_withheld_marker_too() {
+    // ASK is a boolean, so the count-changing semantic flip is especially easy
+    // to miss without the marker. svc2 is only WebApplication, not Service.
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2190,20 +2173,16 @@ fn ask_carries_the_marker_too() {
             "PREFIX ex: <http://example.org/> ASK { ex:svc2 a ex:Service }"}),
     )
     .unwrap();
-    assert_eq!(out["result"], true);
-    assert_eq!(out["inference"]["applied"], true);
+    assert_eq!(out["result"], false);
+    assert_eq!(out["inference"]["applied"], false);
     assert_eq!(
-        out["inference"]["expandedTypes"][0]["type"],
+        out["inference"]["withheldTypes"][0]["type"],
         "http://example.org/Service"
     );
 }
 
 #[test]
-fn an_asserted_ask_and_a_leaf_ask_carry_no_marker() {
-    // Presence is the signal on ASK as it is on SELECT, so the controls have to
-    // hold here too — otherwise the marker is just decoration on every boolean.
-    // Both of these are true WITHOUT any inference: a leaf type, and a type
-    // pattern with no subclasses anywhere in the query.
+fn an_asserted_ask_and_a_leaf_ask_mark_only_the_changed_form() {
     let store = inference_store();
     for q in [
         "PREFIX ex: <http://example.org/> ASK { ex:t1 a ex:Tool }",
@@ -2219,16 +2198,9 @@ fn an_asserted_ask_and_a_leaf_ask_carry_no_marker() {
 }
 
 #[test]
-fn the_marker_reports_the_query_was_widened_not_that_the_answer_needed_it() {
-    // The documented LIMIT, pinned so it is not later "fixed" as a bug. ex:svc1
-    // is asserted ex:Service directly: this ASK would be true with no inference
-    // at all, and it still carries the marker, because expansion WAS applied to
-    // the query. Establishing that the answer DEPENDED on inference is a second
-    // question, and answering it means running the query again without
-    // expansion — which the marker deliberately does not do.
-    //
-    // Stated as a test because on a bare boolean the distinction is easy to lose:
-    // a marked `true` must not be read as "this true is inferred".
+fn the_marker_reports_withheld_expansion_even_when_the_boolean_stays_true() {
+    // svc1 is directly asserted Service, so the value does not change, but the
+    // query form did change and must still announce that fact.
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2237,13 +2209,11 @@ fn the_marker_reports_the_query_was_widened_not_that_the_answer_needed_it() {
     )
     .unwrap();
     assert_eq!(out["result"], true);
-    assert_eq!(out["inference"]["applied"], true);
+    assert_eq!(out["inference"]["applied"], false);
 }
 
 #[test]
-fn a_false_ask_still_says_whether_it_was_asked_the_wide_question() {
-    // "No" is a different claim depending on how wide the question was, and it
-    // is the answer most likely to be taken as final without a re-check.
+fn a_false_ask_still_says_inference_was_withheld() {
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2252,15 +2222,11 @@ fn a_false_ask_still_says_whether_it_was_asked_the_wide_question() {
     )
     .unwrap();
     assert_eq!(out["result"], false);
-    assert_eq!(out["inference"]["applied"], true);
+    assert_eq!(out["inference"]["applied"], false);
 }
 
 #[test]
-fn construct_carries_the_marker_too() {
-    // Same silence, one keyword away. Expansion adds SUBJECTS to the constructed
-    // graph — here svc2/svc3, which are not asserted Services — and a
-    // materialised graph is likelier than a count to be written down somewhere
-    // and re-read later as asserted fact.
+fn construct_carries_the_withheld_marker_too() {
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2269,16 +2235,12 @@ fn construct_carries_the_marker_too() {
              CONSTRUCT { ?s a ex:Service } WHERE { ?s a ex:Service }"}),
     )
     .unwrap();
-    assert_eq!(out["count"], 3);
-    assert_eq!(out["inference"]["applied"], true);
+    assert_eq!(out["count"], 1);
+    assert_eq!(out["inference"]["applied"], false);
 }
 
 #[test]
-fn the_note_reads_correctly_on_a_boolean_and_on_triples() {
-    // The note said "for asserted-only COUNTS" — accurate when only SELECT
-    // carried it, wrong on the two shapes it now also reaches. A marker whose
-    // own prose does not match the response it is attached to is one readers
-    // learn to discount.
+fn the_note_explains_the_explicit_inferred_form() {
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2287,12 +2249,12 @@ fn the_note_reads_correctly_on_a_boolean_and_on_triples() {
     )
     .unwrap();
     let note = out["inference"]["note"].as_str().unwrap();
-    assert!(note.contains("asserted-only answer"), "got: {note}");
-    assert!(!note.contains("counts"), "got: {note}");
+    assert!(note.contains("asserted-only"), "got: {note}");
+    assert!(note.contains("a/rdfs:subClassOf*"), "got: {note}");
 }
 
 #[test]
-fn the_w3c_shapes_get_the_marker_as_a_header_value() {
+fn the_w3c_shapes_get_the_withheld_marker_as_a_header_value() {
     // `Accept: application/sparql-results+json` reopens the whole defect: the
     // spec body has nowhere to put the marker, so on that path it must ride a
     // header or be silently dropped. Presence is still the signal, and the
@@ -2306,7 +2268,7 @@ fn the_w3c_shapes_get_the_marker_as_a_header_value() {
     .unwrap();
     assert_eq!(
         crate::mcp::inference_header(&inferred).as_deref(),
-        Some("http://example.org/Service")
+        Some("withheld: http://example.org/Service")
     );
 
     // Control: the header is absent exactly when the JSON field would be.
@@ -2320,11 +2282,7 @@ fn the_w3c_shapes_get_the_marker_as_a_header_value() {
 }
 
 #[test]
-fn the_explicit_path_form_matches_the_constant_form() {
-    // Item #2 of the ruling: a caller who WANTS inference can say so. Already
-    // supported; pinned so it stays that way, and so the equality is on record
-    // as the proof that the constant form's extra rows are subclass expansion
-    // and nothing else.
+fn the_explicit_path_form_preserves_the_inferred_question() {
     let store = inference_store();
     let path = crate::mcp::tool_query(
         &store,
@@ -2334,6 +2292,14 @@ fn the_explicit_path_form_matches_the_constant_form() {
     )
     .unwrap();
     assert_eq!(path["rows"][0]["n"], 3);
+    let constant = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query":
+            "PREFIX ex: <http://example.org/> \
+             SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ex:Service }"}),
+    )
+    .unwrap();
+    assert_eq!(constant["rows"][0]["n"], 1);
 }
 
 /// Canonical rendering of a `QueryResult` for equality assertions.

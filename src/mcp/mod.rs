@@ -135,15 +135,13 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
     ))
 }
 
-/// Which type constants in this request were widened by subclass inference.
+/// Which type constants in this request now withhold former subclass expansion.
 ///
-/// Empty when the answer is asserted-only, which is the common case — the field
-/// is omitted entirely from the response then, so a reader who sees it knows it
-/// means something. See [`crate::sparql::rdfs::expanded_types`] for why a count
-/// that looks fine can be answering the other question.
-pub fn query_inference(store: &Store, input: &JsonValue) -> Result<Vec<rdfs::ExpandedType>> {
+/// Empty when the asserted-only migration did not alter this query. The marker
+/// is omitted in that common case; see [`crate::sparql::rdfs::withheld_types`].
+pub fn query_inference(store: &Store, input: &JsonValue) -> Result<Vec<rdfs::WithheldType>> {
     let (query_str, ctx) = query_context(store, input)?;
-    Ok(rdfs::expanded_types(store, query_str, &ctx))
+    Ok(rdfs::withheld_types(store, query_str, &ctx))
 }
 
 /// Attach the inference marker to a response, when there is one to attach.
@@ -210,11 +208,11 @@ fn add_labels(out: &mut JsonValue, labels: &Result<Option<labels::DatasetLabels>
     }
 }
 
-fn add_inference(out: &mut JsonValue, expanded: &[rdfs::ExpandedType]) {
-    if expanded.is_empty() {
+fn add_inference(out: &mut JsonValue, withheld: &[rdfs::WithheldType]) {
+    if withheld.is_empty() {
         return;
     }
-    let types: Vec<JsonValue> = expanded
+    let types: Vec<JsonValue> = withheld
         .iter()
         .map(|e| {
             serde_json::json!({
@@ -227,19 +225,17 @@ fn add_inference(out: &mut JsonValue, expanded: &[rdfs::ExpandedType]) {
         obj.insert(
             "inference".to_string(),
             serde_json::json!({
-                "applied": true,
-                "expandedTypes": types,
-                // "counts" would be wrong on the two shapes this marker now also
-                // reaches: an ASK returns a boolean and CONSTRUCT returns triples.
-                "note": "rdfs:subClassOf expansion widened a type constant. For an \
-            asserted-only answer use the variable form: ?s a ?t . FILTER(?t = <Type>)",
+                "applied": false,
+                "withheldTypes": types,
+                "note": "asserted-only since the SPARQL type-form migration; rdfs:subClassOf \
+            expansion was withheld. For the inferred answer use ?s a/rdfs:subClassOf* <Type>",
             }),
         );
     }
 }
 
-/// The inference marker as an HTTP header value, or `None` when nothing was
-/// inferred.
+/// The asserted-only migration marker as an HTTP header value, or `None` when
+/// this query was unchanged.
 ///
 /// The W3C-negotiated response shapes (`application/sparql-results+json|xml`,
 /// `text/turtle`) are fixed by spec: there is no place in a `{"head":{},
@@ -248,21 +244,20 @@ fn add_inference(out: &mut JsonValue, expanded: &[rdfs::ExpandedType]) {
 /// the signal goes out of band, in a header, where it annotates the response
 /// without touching the body a conformant parser will read.
 ///
-/// Names only the widened type constants, not their subclass sets — a header is
-/// a bounded place and the parents are enough to know the answer is not
-/// asserted-only. The full `expandedTypes` detail is one Accept-free request
-/// away, in the bespoke JSON shape.
-pub fn inference_header(expanded: &[rdfs::ExpandedType]) -> Option<String> {
-    if expanded.is_empty() {
+/// Names only the affected type constants, not their subclass sets — a header is
+/// bounded. The full `withheldTypes` detail is one Accept-free request away.
+pub fn inference_header(withheld: &[rdfs::WithheldType]) -> Option<String> {
+    if withheld.is_empty() {
         return None;
     }
-    Some(
-        expanded
+    Some(format!(
+        "withheld: {}",
+        withheld
             .iter()
             .map(|e| e.type_iri.as_str())
             .collect::<Vec<_>>()
-            .join(", "),
-    )
+            .join(", ")
+    ))
 }
 
 /// Parse a JSON object-position value into a stored `Value`. Accepts a bare
