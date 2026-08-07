@@ -4,6 +4,8 @@
 //! SPARQL algebra over rows, while everything here turns a triple pattern into
 //! `SQL` over `facts` and binds the variables in the rows that come back.
 
+use std::collections::HashSet;
+
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use crate::error::Result;
@@ -298,6 +300,10 @@ pub fn eval_triple_pattern(
     let mut rows = stmt.query(param_refs.as_slice())?;
 
     let mut results = Vec::new();
+    // SQL DISTINCT sees raw ids, so aliases survive it. Dedup the canonical
+    // triple key in O(n): comparing each completed binding against the whole
+    // result vector made an unbound production scan quadratic (aegis-h7rtt).
+    let mut canonical_rows = HashSet::new();
     while let Some(row) = rows.next()? {
         let e_id = store.canonical_id(row.get(0)?)?;
         let a_id = store.canonical_id(row.get(1)?)?;
@@ -311,6 +317,10 @@ pub fn eval_triple_pattern(
         } else {
             None
         };
+        let canonical_key = (e_id, a_id, v.to_bytes(), g_id);
+        if !canonical_rows.insert(canonical_key) {
+            continue;
+        }
 
         let mut new_bindings = bindings.clone();
         let mut compatible = true;
@@ -384,7 +394,7 @@ pub fn eval_triple_pattern(
             }
         }
 
-        if compatible && !results.contains(&new_bindings) {
+        if compatible {
             results.push(new_bindings);
         }
     }
