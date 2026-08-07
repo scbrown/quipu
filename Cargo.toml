@@ -41,7 +41,7 @@ required-features = ["shacl"]
 [[bin]]
 name = "quipu-server"
 path = "src/server.rs"
-required-features = ["shacl", "onnx"]
+required-features = ["shacl", "onnx", "server"]
 
 [[bin]]
 name = "seed-fixtures"
@@ -60,7 +60,7 @@ required-features = ["shacl"]
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
 parking_lot = "0.12"
-ureq = { version = "2", default-features = false }
+ureq = { version = "2", default-features = false, optional = true }
 rusqlite = { version = "0.33", features = ["bundled", "hooks"] }
 thiserror = "2"
 oxrdf = "0.3"
@@ -74,9 +74,9 @@ regex = "1"
 rudof_lib = { version = "0.2.8", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-axum = "0.8"
-tower-http = { version = "0.6", features = ["cors"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+axum = { version = "0.8", optional = true }
+tower-http = { version = "0.6", features = ["cors"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 petgraph = "0.7"
 datafrog = "2"
 toml = "0.8"
@@ -93,7 +93,17 @@ ndarray = { version = "0.16", optional = true }
 default = ["shacl"]
 shacl = ["dep:rudof_lib"]
 owl = []
-lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
+# The HTTP surfaces, split because they are different directions and only one of
+# them is a server. `remote` is the federation CLIENT (`RemoteProvider` over
+# ureq); `server` is the REST/MCP server, and it implies `remote` because
+# `quipu-server` builds a federated provider from config at startup.
+#
+# Both are OFF by default: a library should not carry a web server, and neither
+# crate compiles for wasm32 (mio has no wasm target) — see
+# docs/design/wasm-support.md §4.3.
+remote = ["dep:ureq"]
+server = ["dep:axum", "dep:tower-http", "dep:tokio", "remote"]
+lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:tokio"]
 onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
 reactive-reasoner = []
 
@@ -106,7 +116,7 @@ reactive-reasoner = []
 # `Store::set_local_vector_backend`), so shipping it would add a protoc build
 # dependency and the whole datafusion tree for a capability the binaries do not
 # expose. `--all-features` is therefore NOT what a release is built with.
-full = ["shacl", "owl", "onnx", "reactive-reasoner"]
+full = ["shacl", "owl", "onnx", "reactive-reasoner", "server"]
 
 [lints.rust]
 unsafe_code = "deny"

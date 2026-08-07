@@ -166,9 +166,11 @@ quipu audit replay trace.jsonl --db my.db   # advise → enforce readiness, per 
 ### 🌐 REST API & Web UI
 
 ```bash
-# The server needs the onnx feature (embedding runtime); it is not on by default,
-# so a plain `cargo build --release` builds only the CLI and skips quipu-server.
-cargo build --release --features shacl,onnx
+# quipu-server needs `onnx` (the embedding runtime) AND `server` (axum/tokio —
+# the HTTP stack is feature-gated so the library does not carry a web server).
+# Neither is on by default, and an unmet required-feature SKIPS the binary
+# silently rather than erroring, so build the `full` bundle releases ship:
+cargo build --release --features full
 
 quipu-server --db my.db --bind 0.0.0.0:3030
 

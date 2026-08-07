@@ -1,7 +1,7 @@
 # Design: WebAssembly Support — running Quipu without a server
 
-> **Implementation status (2026-08-07):** 🔬 **Investigation complete, not
-> started.** Every blocker below was verified by building against
+> **Implementation status (2026-08-07):** 🚧 **Phase 1 landed; the rest
+> designed.** Every blocker below was verified by building against
 > `wasm32-unknown-unknown`, not inferred from the manifest. Every performance
 > number was measured on this branch, native x86-64, `--release`,
 > `--no-default-features`. The one number NOT measured is wasm-vs-native
@@ -12,8 +12,10 @@
 
 **Summary:** Quipu's graph core is already wasm-clean — the whole
 Oxigraph-family stack, `ring`, `petgraph`, `datafrog` and `regex` compile for
-`wasm32-unknown-unknown` today. The build blockers are SQLite's C dependency and
-four crates the library does not actually use.
+`wasm32-unknown-unknown` today. The four crates the library did not actually use
+(`axum`, `tower-http`, `tokio`, `ureq`) are now feature-gated and gone from a
+default build (§4.3). What remains is `getrandom`'s wasm backend, the clock and
+filesystem shims (§4.4), and the one hard blocker: SQLite's C dependency (§4.2).
 
 **What wasm should carry is not the episode log.** It is a *distilled* knowledge
 pack — the derived layer produced by the reasoner, community detection and
@@ -183,14 +185,23 @@ episodes, governance, the label lattice — sits on that connection. Two routes:
 
 ### 4.3 Blocked by construction, fixed by feature-gating
 
-- **`axum` / `tower-http` / `tokio`** are unconditional dependencies
-  (`Cargo.toml:77-79`) and pull `mio`:
-  `error: This wasm target is unsupported by mio`. But **nothing in the library
-  uses axum** — it is `src/server.rs` and `src/server/` only. Moving these
-  behind a `server` feature unblocks the build and is worth doing on its own
-  merits.
-- **`ureq`** (`src/provider.rs:311,442`) — blocking sockets. Gate it, or add a
-  `fetch`-based provider.
+- ✅ **`axum` / `tower-http` / `tokio` / `ureq` — RESOLVED** (`quipu-as2`).
+  These were unconditional dependencies pulling `mio`
+  (`error: This wasm target is unsupported by mio`), even though **nothing in
+  the library used axum** — it is `src/server.rs` and `src/server/` only.
+
+  They now sit behind **two** features rather than one, because they are
+  different directions and only one of them is a server:
+
+  | Feature | Carries | Why separate |
+  |---|---|---|
+  | `remote` | `ureq` | The federation **client** (`RemoteProvider`). An HTTP client is not a server, and a build may want one without the other. |
+  | `server` | `axum`, `tower-http`, `tokio` | The REST/MCP **server**. Implies `remote`, because `quipu-server` builds a federated provider from config at startup. |
+
+  Both default OFF; `lancedb` picked up its own `tokio` dependency, and `full`
+  gained `server`. Verified: `cargo tree --no-default-features` has no `axum`,
+  `tower-http`, `tokio`, `ureq`, `mio` **or** `hyper`. The wasm build now gets
+  past `mio` and stops at `getrandom` (§4.4) — the next blocker in line.
 - **`rudof_lib`** (the `shacl` feature) pulls `clap`, `crossterm`, `reqwest`.
   Not wasm-viable. See §7.
 - **`ort`** (`onnx`, `load-dynamic`) and **`lancedb`** — out entirely. Browser
@@ -353,9 +364,9 @@ to be explicit in the response, not inferred.
 `sqlite-wasm-rs` harness ingesting episodes and running the three queries above.
 Everything downstream is scoped by this result.
 
-**Phase 1 — Decouple (ships independently, valuable regardless).** Move
-`axum` / `tower-http` / `tokio` / `ureq` behind a `server` feature. Pure hygiene;
-the library should not carry a web server.
+**Phase 1 — Decouple. ✅ LANDED** (`quipu-as2`). Split into `server` and
+`remote` rather than one feature — see §4.3 for why, and for the verification
+that the whole HTTP stack is now absent from a default build.
 
 **Phase 2 — Portability shims.** `quipu::time` over the ten clock sites; gate
 `std::fs`; wire the `getrandom` features and the `RUSTFLAGS` cfg.

@@ -6,9 +6,12 @@
 
 use serde_json::Value as JsonValue;
 
-use crate::error::{Error, Result};
+#[cfg(feature = "remote")]
+use crate::error::Error;
+use crate::error::Result;
 use crate::sparql::QueryResult;
 use crate::store::Store;
+#[cfg(feature = "remote")]
 use crate::types::Value;
 
 /// Health status of a graph provider.
@@ -265,6 +268,9 @@ mod tests {
 
 /// A remote Quipu instance, reached over its REST API (quipu #47).
 ///
+/// Behind the `remote` feature: this is the only `ureq` user in the crate, and
+/// `ureq` is a blocking-socket HTTP client that does not build for wasm32.
+///
 /// This is the half of federation that `docs/book/src/architecture/federation.md`
 /// documented and nothing implemented: `FederatedProvider` could only aggregate
 /// LOCAL providers, so the headline — one query across a local store and remote
@@ -284,12 +290,14 @@ mod tests {
 /// fabricate `Ref`s — would silently grow the local term table on every read.
 ///
 /// `Lang` and `Typed` DO survive, because they serialize as objects.
+#[cfg(feature = "remote")]
 pub struct RemoteProvider {
     name: String,
     url: String,
     timeout: std::time::Duration,
 }
 
+#[cfg(feature = "remote")]
 impl RemoteProvider {
     /// A remote at `url` (e.g. `http://quipu.example:3030`), labelled `name`.
     pub fn new(name: impl Into<String>, url: impl Into<String>) -> Self {
@@ -338,6 +346,7 @@ impl RemoteProvider {
 /// An IRI and a string literal are the same JSON string, so both become
 /// [`Value::Str`] — see [`RemoteProvider`] for why that is a stated limit and
 /// not a bug to fix here.
+#[cfg(feature = "remote")]
 fn json_to_value(v: &JsonValue) -> Value {
     match v {
         JsonValue::Bool(b) => Value::Bool(*b),
@@ -369,6 +378,7 @@ fn json_to_value(v: &JsonValue) -> Value {
 ///
 /// Shape-directed, matching what `tool_query` emits: `rows`+`variables` for a
 /// SELECT, `result` for an ASK, `triples` for CONSTRUCT/DESCRIBE.
+#[cfg(feature = "remote")]
 fn parse_query_response(body: &JsonValue) -> Result<QueryResult> {
     if let Some(rows) = body.get("rows").and_then(|v| v.as_array()) {
         let variables: Vec<String> = body
@@ -415,6 +425,7 @@ fn parse_query_response(body: &JsonValue) -> Result<QueryResult> {
     ))
 }
 
+#[cfg(feature = "remote")]
 impl GraphProvider for RemoteProvider {
     fn name(&self) -> &str {
         &self.name
@@ -483,6 +494,7 @@ impl GraphProvider for RemoteProvider {
 ///
 /// The local store is added first so it leads the merged results, matching the
 /// order `query_all` reports.
+#[cfg(feature = "remote")]
 #[must_use]
 pub fn federated_from_config<'a>(
     store: &'a Store,
@@ -497,7 +509,7 @@ pub fn federated_from_config<'a>(
     fed
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "remote"))]
 mod remote_tests {
     use super::*;
 

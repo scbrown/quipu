@@ -36,6 +36,12 @@ jobs:
           # adding it turned up 11 findings on first run.
           - name: full
             flags: "--features full"
+          # `remote` WITHOUT `server`: the federation HTTP client on its own.
+          # `full` implies both, so without this entry the standalone-client
+          # cfg combination — the one a wasm-adjacent build would select — is
+          # never compiled. See docs/design/wasm-support.md §4.3.
+          - name: remote
+            flags: "--no-default-features --features remote"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -67,6 +73,10 @@ jobs:
             flags: "--no-default-features"
           - name: shacl
             flags: "--features shacl"
+          # Exercises the gated RemoteProvider tests, which `--no-default-features`
+          # compiles out entirely.
+          - name: remote
+            flags: "--no-default-features --features remote"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
