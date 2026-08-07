@@ -1,22 +1,23 @@
 # Design: Named Graphs (Quads) — the `graph × valid-time × tx-time` model
 
-> **Implementation status (2026-07-23, billy):** 🟡 **Partial — foundation landed.**
+> **Implementation status (2026-08-07):** ✅ **Complete on the sanctioned surfaces.**
 > The store layer (the `g` column, the `graphs` registry, overlay
 > create/write/compose, in-place migration) shipped earlier. The SPARQL read
 > surface — `GRAPH <iri>` / `GRAPH ?g` scoping, `FROM` / `FROM NAMED` dataset
 > selection, and the `graph` query param — is added in the #36 finish-work.
 > Verified by mechanism (`src/sparql/pattern.rs`, `src/sparql/mod.rs::apply_dataset`,
 > `src/mcp/mod.rs::query_result`) + 13 tests; full lib suite green.
-> **Update (quipu #36, 2026-08-07):** property paths now follow a fixed named
+> Property paths follow a fixed named
 > graph or a `FROM` merge without crossing undeclared graph boundaries;
 > `GRAPH ?g` remains deliberately refused. Implicit RDFS widening was retired
-> in favour of explicit property paths. **Remaining:** the write side stays on the overlay path +
-> `/episode` `graph` field (no `graph` param on `/knot` yet). These keep this 🟡.
-> **§6 is built for fixed datasets.** §7's cross-graph defect (§7.1) is
-> **fixed** — quipu #56 ROOT-scoped the whole committed read path; the reasoner
-> and SHACL scoping decisions in §7.2–§7.3 remain to build.
+> in favour of explicit property paths. The write side deliberately stays on
+> the overlay path + `/episode` `graph` field; a raw `/knot graph` parameter
+> would bypass the committed/overlay invariant and is not part of the contract.
+> §6 is built for fixed datasets. §7's committed-read defect is fixed, reasoner
+> evaluation reads and writes one selected graph, and ROOT-loaded SHACL shapes
+> remain enforcing for every destination graph.
 
-**Status:** **Partial — the subset-export / federation foundation.** Named-graph
+**Status:** **Complete — the subset-export / federation foundation.** Named-graph
 support is what lets a consumer *partition* the store into first-class subgraphs
 and query a **selected subset** rather than the whole graph. It is the substrate
 under per-tenant overlays (see [group-isolation.md](group-isolation.md)), Hank's
@@ -167,7 +168,7 @@ ROOT.
       property path
 - [x] An overlay cannot make a path appear in its committed parent
 
-## 7. SHACL and reasoner scope (designed, not yet built)
+## 7. SHACL and reasoner scope
 
 ### 7.1 The bug this uncovered — ✅ fixed (quipu #56)
 
