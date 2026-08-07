@@ -40,6 +40,7 @@
 - [EAVT Fact Log](architecture/eavt.md)
 - [RDF Data Model](architecture/rdf.md)
 - [SPARQL Engine](architecture/sparql.md)
+- [The In-Memory Read Model](architecture/read-model.md)
 - [SHACL Validation](architecture/shacl.md)
 - [Episode Ingestion](architecture/episodes.md)
 - [Vector Search](architecture/vector-search.md)
