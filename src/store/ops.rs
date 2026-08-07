@@ -202,9 +202,14 @@ impl Store {
         // `runs_on -> Host` stays true for facts ingested after the load
         // (aegis-qfncf). The inferred datums join this same transaction: guards,
         // events and reactive observers see the post-inference write atomically.
-        let mut staged_datums = datums.to_vec();
         #[cfg(feature = "owl")]
-        staged_datums.extend(self.owl_domain_range_inferences(datums, timestamp)?);
+        let staged_datums = {
+            let mut staged = datums.to_vec();
+            staged.extend(self.owl_domain_range_inferences(datums, timestamp)?);
+            staged
+        };
+        #[cfg(not(feature = "owl"))]
+        let staged_datums = datums.to_vec();
 
         // Collect the datums actually written (for observer notification),
         // classified by op. Overlay view-markers (Tombstone) are excluded from
