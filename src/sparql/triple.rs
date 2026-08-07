@@ -16,9 +16,6 @@ use super::pattern_util::{
     bind_var, resolve_object_pattern, resolve_predicate_pattern, resolve_subject_pattern,
     triple_pattern_vars,
 };
-use super::rdfs::{
-    collect_class_and_subclasses, eval_type_pattern_with_subclasses, is_rdf_type_pattern,
-};
 use super::{Bindings, GraphScope, TemporalContext};
 
 /// Evaluate a basic graph pattern -- a set of triple patterns.
@@ -129,20 +126,6 @@ pub fn eval_triple_pattern(
     bindings: &Bindings,
     ctx: &TemporalContext,
 ) -> Result<Vec<Bindings>> {
-    // RDFS type-hierarchy expansion. Only on the default graph (quipu #36):
-    // subclass expansion reads g=0 via rdfs.rs, so inside a named GRAPH a
-    // `?s a ?C` pattern is matched LITERALLY (export wants a graph's own
-    // triples, not cross-graph inference).
-    if ctx.graph.is_root_default()
-        && is_rdf_type_pattern(tp)
-        && let TermPattern::NamedNode(class_node) = &tp.object
-    {
-        let class_ids = collect_class_and_subclasses(store, class_node.as_str())?;
-        if !class_ids.is_empty() {
-            return eval_type_pattern_with_subclasses(store, tp, bindings, &class_ids, ctx);
-        }
-    }
-
     // Build SQL query with conditions based on bound values.
     let mut conditions = Vec::new();
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -284,9 +267,8 @@ pub fn eval_triple_pattern(
     //
     // This is the ONLY query-path site that composes. The other readers of
     // `facts` are either the write path, local bookkeeping, or deliberately
-    // ROOT-scoped (`rdfs::eval_type_pattern_with_subclasses` pins `g = 0`) —
-    // and an attachment contributes only NAMED graphs, so a ROOT-scoped read
-    // could not see one even if it composed.
+    // ROOT-scoped — and an attachment contributes only NAMED graphs, so a
+    // ROOT-scoped read could not see one even if it composed.
     let facts = store.facts_source();
     let sql = if want_g {
         format!("SELECT DISTINCT e, a, v, g FROM {facts}{where_clause}")

@@ -1,4 +1,4 @@
-//! RDFS type-hierarchy helpers — subclass inference for rdf:type queries.
+//! RDFS type-hierarchy helpers and the asserted-only migration marker.
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
@@ -7,9 +7,7 @@ use crate::namespace;
 use crate::store::Store;
 use crate::types::Value;
 
-use super::Bindings;
 use super::TemporalContext;
-use super::pattern::bind_var;
 
 pub const RDF_TYPE: &str = namespace::RDF_TYPE;
 const RDFS_SUBCLASS_OF: &str = namespace::RDFS_SUBCLASS_OF;
@@ -60,9 +58,9 @@ pub fn collect_class_and_subclasses(store: &Store, class_iri: &str) -> Result<Ve
     Ok(result)
 }
 
-/// One type constant in a query that subclass expansion widened.
+/// One type constant whose former subclass expansion is now withheld.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExpandedType {
+pub struct WithheldType {
     /// The IRI written in the query.
     pub type_iri: String,
     /// The subclasses folded in, transitively. Never empty — a type with no
@@ -70,39 +68,26 @@ pub struct ExpandedType {
     pub subclasses: Vec<String>,
 }
 
-/// Which type constants in `query` will be widened by subclass inference?
+/// Which type constants in `query` would have been widened before asserted-only?
 ///
 /// # Why this exists
 ///
-/// `?s a <T>` and `?s a ?t . FILTER(?t = <T>)` express the same constraint and
-/// return DIFFERENT counts: the constant form is expanded over `rdfs:subClassOf`
-/// (see [`eval_type_pattern_with_subclasses`]), the variable form is matched
-/// literally. Both answers are legitimate and both are needed — asserted-only is
-/// the right basis for a vocabulary census or governance gating, inferred is the
-/// right basis for blast radius — so neither semantics is a bug and neither may
-/// be silently removed.
+/// Before the migration, `?s a <T>` expanded over `rdfs:subClassOf`, while
+/// `?s a ?t . FILTER(?t = <T>)` matched literally. The constant form is now
+/// asserted-only too, per SPARQL simple entailment. The inferred question remains
+/// available explicitly as `?s a/rdfs:subClassOf* <T>`.
 ///
-/// What WAS a bug is that the response could not tell you which question it had
-/// answered. Both return HTTP 200, both numbers are individually plausible, and
-/// nothing distinguishes them. That silence produced FOUR independent
-/// measurement errors by four people; one shipped into a governance argument and
-/// sized a decision several times too large, and it also CONCEALED a real
-/// finding, because an ungoverned subclass was swallowed by its inflated parent
-/// count. A footgun that catches four careful readers is a product defect, and
-/// the fix is a flag rather than a semantics change.
+/// The semantic flip would itself silently change counts, so the response names
+/// only the constants for which expansion was withheld. The marker is omitted for
+/// all unaffected traffic; presence remains the signal.
 ///
 /// # Accuracy
 ///
-/// Gated on exactly the conditions the evaluator uses, so the marker cannot
-/// disagree with the numbers it annotates: default-graph only (inside a named
-/// GRAPH a type pattern is matched literally), rdf:type predicate, constant IRI
-/// object. A type whose subclass set is just itself is omitted — its count is
-/// asserted-only and saying otherwise would train readers to ignore the field.
+/// Gated on exactly the former evaluator conditions: default graph only,
+/// rdf:type predicate, constant IRI object. A leaf type is omitted because the
+/// flip does not change its answer.
 ///
-/// It reports that expansion WAS APPLIED, which is a fact about the query. It
-/// does not promise the extra classes contributed rows; that is a second
-/// question, and answering it would require running the query twice.
-pub fn expanded_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<ExpandedType> {
+pub fn withheld_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<WithheldType> {
     use spargebra::SparqlParser;
 
     if !ctx.graph.is_root_default() {
@@ -112,7 +97,7 @@ pub fn expanded_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<
         return Vec::new();
     };
 
-    let mut out: Vec<ExpandedType> = Vec::new();
+    let mut out: Vec<WithheldType> = Vec::new();
     for iri in type_constants(&parsed) {
         if out.iter().any(|e| e.type_iri == iri) {
             continue;
@@ -129,7 +114,7 @@ pub fn expanded_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<
             .filter_map(|id| store.resolve(*id).ok())
             .collect();
         if !subclasses.is_empty() {
-            out.push(ExpandedType {
+            out.push(WithheldType {
                 type_iri: iri,
                 subclasses,
             });
@@ -208,108 +193,4 @@ fn type_constants(query: &spargebra::Query) -> Vec<String> {
         | spargebra::Query::Ask { pattern, .. } => walk(pattern, &mut out),
     }
     out
-}
-
-/// Evaluate a `?x a <Class>` pattern with subclass expansion.
-pub fn eval_type_pattern_with_subclasses(
-    store: &Store,
-    tp: &TriplePattern,
-    bindings: &Bindings,
-    class_ids: &[i64],
-    ctx: &TemporalContext,
-) -> Result<Vec<Bindings>> {
-    let Some(type_pred_id) = store.lookup(RDF_TYPE)? else {
-        return Ok(vec![]);
-    };
-
-    // Subject filter (if bound).
-    let subject_id =
-        if let Some(iri) = super::pattern::resolve_subject_pattern(&tp.subject, bindings) {
-            match store.lookup(&iri)? {
-                Some(id) => Some(id),
-                None => return Ok(vec![]),
-            }
-        } else {
-            None
-        };
-
-    let mut results = Vec::new();
-
-    // For each class in the hierarchy, find instances.
-    for class_id in class_ids {
-        let v_bytes = Value::Ref(*class_id).to_bytes();
-
-        // Build SQL and params dynamically.
-        let mut conditions = vec!["a = ?1".to_string(), "v = ?2".to_string()];
-        let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-        params_vec.push(Box::new(type_pred_id));
-        params_vec.push(Box::new(v_bytes.clone()));
-
-        if let Some(sid) = subject_id {
-            conditions.push(format!("e = ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(sid));
-        }
-        conditions.push("op = 1".to_string());
-        conditions.push("g = 0".to_string()); // committed reads are ROOT-scoped (#36)
-        if let Some(vt) = &ctx.valid_at {
-            conditions.push(format!("valid_from <= ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(vt.clone()));
-            conditions.push(format!(
-                "(valid_to IS NULL OR valid_to > ?{})",
-                params_vec.len()
-            ));
-        } else {
-            conditions.push("valid_to IS NULL".to_string());
-        }
-        if let Some(tx) = ctx.as_of_tx {
-            conditions.push(format!("tx <= ?{}", params_vec.len() + 1));
-            params_vec.push(Box::new(tx));
-        }
-
-        // DISTINCT: dedup duplicate current (e,v) rows from re-asserted facts so
-        // `?x a Class` type matches don't multiply under joins/COUNT (GH#13).
-        let sql = format!(
-            "SELECT DISTINCT e, v FROM facts WHERE {}",
-            conditions.join(" AND ")
-        );
-        let mut stmt = store.prepare(&sql)?;
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-            params_vec.iter().map(std::convert::AsRef::as_ref).collect();
-        let mut rows = stmt.query(param_refs.as_slice())?;
-
-        while let Some(row) = rows.next()? {
-            let e_id: i64 = row.get(0)?;
-            let v_bytes_row: Vec<u8> = row.get(1)?;
-            let v = Value::from_bytes(&v_bytes_row)?;
-
-            let mut new_bindings = bindings.clone();
-            let mut compatible = true;
-
-            // Bind subject variable.
-            if let TermPattern::Variable(var) = &tp.subject {
-                let e_iri = store.resolve(e_id)?;
-                let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
-                    Value::Ref(term_id)
-                } else {
-                    Value::Str(e_iri)
-                };
-                if !bind_var(&mut new_bindings, var.as_str(), e_val, &mut compatible) {
-                    continue;
-                }
-            }
-
-            // Bind object variable (always the matched class).
-            if let TermPattern::Variable(var) = &tp.object
-                && !bind_var(&mut new_bindings, var.as_str(), v, &mut compatible)
-            {
-                continue;
-            }
-
-            if compatible {
-                results.push(new_bindings);
-            }
-        }
-    }
-
-    Ok(results)
 }
