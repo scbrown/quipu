@@ -215,7 +215,10 @@ fn edge_budget_drops_periphery_first_and_reports_honestly() {
         .iter()
         .map(|e| (e[0].as_u64().unwrap(), e[1].as_u64().unwrap()))
         .collect();
-    assert!(!pairs.contains(&(2, 0)), "periphery edge dropped, got {pairs:?}");
+    assert!(
+        !pairs.contains(&(2, 0)),
+        "periphery edge dropped, got {pairs:?}"
+    );
 }
 
 #[test]
