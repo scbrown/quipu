@@ -1,7 +1,13 @@
 # Design: Graph Labels — freshness, trust and policy as a lattice over named graphs
 
-> **Implementation status (2026-08-06):** ⬜ **Designed, not built.** Nothing in
-> this document is implemented. The substrate it builds on — named graphs, the
+> **Implementation status (2026-08-07):** 🟨 **Substantially built.** The three
+> axes, the fold and the query path landed 2026-08-06 (#65 columns + reserved
+> meta-graph, #66 `src/lattice.rs` meet/join + homomorphism proptest, #67 dataset
+> labels on the query path, #68 label floors, #70 per-row labels under `GRAPH ?g`).
+> `Freshness`, `Trust`, `PolicyClass`, `Coverage` and `Composed<T>` exist in code.
+> **§2.4 (durability) and §2.5 (derivation) are NOT built** — they are the open
+> extension, and each carries its own status line. #73 (statement-level labels)
+> remains design-only. The substrate it builds on — named graphs, the
 > `graphs` registry, `GRAPH`/`FROM`/`FROM NAMED`, graph-scoped authority — is
 > built (see [named-graphs.md](named-graphs.md) for its own partial-status
 > banner). Issue links live in each section; the dependency order is in §10.
@@ -45,6 +51,7 @@ by `Authority`, making the parallel structural instead of rhetorical.
 | `quipu:freshness` | `fresh` > `recomputing` > `stale` | total | meet |
 | `quipu:trust` | IRIs ranked by a *declared chain* | total within a chain; cross-chain **refused** | meet |
 | `quipu:policyClass` | set of obligation tokens (`pii`, `no-export`, …) | powerset ⊆ | join |
+| `quipu:durability` | `backed` > `reproducible` > `soleRecord` | total | meet |
 
 - **Freshness** reuses Hank's exact strings. When a composed label must be
   reported on a scale that only admits fresh/stale, `recomputing` collapses to
@@ -61,6 +68,61 @@ by `Authority`, making the parallel structural instead of rhetorical.
 - **Policy is the deliberately-partial axis** — Denning's information-flow
   lattice (§9). Incomparable label sets are normal; the join always exists on
   a powerset, so nothing blocks.
+
+### 2.4 Durability — what is lost if this store is lost (NOT BUILT)
+
+> **Status:** ⬜ proposed 2026-08-07. Nothing implemented.
+
+The axes above describe how much a fact can be *believed*. None describes whether
+it can be *recovered*. That question has an owner-facing form the others do not:
+
+    which facts would be LOST if this store were lost?
+
+| value | meaning |
+|---|---|
+| `backed` | independently persisted outside this store |
+| `reproducible` | re-derivable from a source that still exists (see §2.5) |
+| `soleRecord` | this store is the only copy; loss is permanent |
+
+**It composes by meet, for the same reason trust does:** a derived fact is only
+as durable as its least durable input. Join a `soleRecord` fact with a `backed`
+one and the result is `soleRecord` — you cannot reconstruct it without the
+fragile part. §1's invariant holds unchanged: composition never widens.
+
+**Declared, never synthesized** — the rule freshness already states for itself.
+Nothing may infer `backed` because a backup ran once, and an undeclared
+durability is undeclared (§2.1), never defaulted to safe. Reporting not-measured
+as safe is the failure this axis exists to expose.
+
+**⚠ Durability decays, and the axis cannot detect it.** `reproducible` is a claim
+about a source that still exists. Measured on one deployment while drafting this:
+two agent-session stores held the only copy of per-session usage records, with
+retention windows of roughly 27 days and 1 day, and **no retention policy
+configured in either**. A fact tagged `reproducible` silently becomes
+`soleRecord` when its source rotates, and nothing in the store notices. That is
+an argument for a re-declaration cadence — the same unsolved cadence problem
+freshness has — not for weakening the axis.
+
+### 2.5 Derivation method — a value, not an axis (NOT BUILT)
+
+> **Status:** ⬜ proposed 2026-08-07. Nothing implemented.
+
+`quipu:derivedBy` records **how to re-derive a fact**: a system, a query and
+parameters. It is deliberately **not** a lattice axis, and the contrast with
+§2.4 is the point —
+
+- **durability composes** (a fact is as fragile as its weakest input) → axis, meet
+- **a method does not** (two methods do not meet into a third) → per-fact value
+
+Splitting them resolves what began as one confused concept. The pairing is what
+makes either useful: `derivedBy` says *how* to recover a fact, `durability` says
+*whether you must*.
+
+This is also the substrate a metrics catalogue needs — *the store records that a
+metric exists, what it means, and how to fetch it; the samples stay in the
+time-series system.* That is why it belongs here as a store primitive rather than
+as a private field on some domain class: every consumer needing it so far has
+hand-rolled it, which is the same observation motivating this whole document.
 
 ### 2.1 Undeclared is not a lattice value
 
