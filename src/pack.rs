@@ -71,6 +71,58 @@ pub struct PackOptions {
     pub with_vectors: bool,
 }
 
+/// What [`unpack`] materialized and installed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnpackReport {
+    /// Destination graph IRI.
+    pub graph: String,
+    /// Imported fact count.
+    pub facts: usize,
+    /// Versioned shape definitions installed.
+    pub shapes: usize,
+    /// Versioned stored queries installed.
+    pub queries: usize,
+}
+
+/// Materialize a pack into `destination`, installing registries by their
+/// versioned write paths rather than overwriting consumer state (quipu #82).
+///
+/// # Errors
+/// The pack is invalid, import-with-remap fails, or a carried registry entry
+/// does not validate in the destination.
+pub fn unpack(
+    pack_path: &str,
+    destination: &str,
+    into: Option<&str>,
+    timestamp: &str,
+) -> Result<UnpackReport> {
+    let manifest = read_manifest(pack_path)?;
+    let graph = into.unwrap_or(&manifest.source_graph).to_string();
+
+    // Read the carried registries before opening the destination. They remain
+    // ordinary versioned definitions, never raw rows copied between files.
+    let source = Store::open(pack_path)?;
+    let shapes = source.list_shapes()?;
+    let queries = source.query_list()?;
+    drop(source);
+
+    let imported =
+        crate::store::import::import_graph(Path::new(destination), Path::new(pack_path), &graph)?;
+    let dest = Store::open(destination)?;
+    for (name, turtle, _) in &shapes {
+        dest.load_shapes(name, turtle, timestamp)?;
+    }
+    for query in &queries {
+        dest.query_load(query, timestamp)?;
+    }
+    Ok(UnpackReport {
+        graph,
+        facts: imported.facts,
+        shapes: shapes.len(),
+        queries: queries.len(),
+    })
+}
+
 /// The canonical content of a pack, as the exact bytes that get hashed.
 ///
 /// **Lexically sorted N-Triples**, plus the named shapes and queries and the

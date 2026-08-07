@@ -132,6 +132,8 @@ pub struct Store {
     /// every store that did not ask for attachments, which is the default and
     /// must stay indistinguishable from before the feature existed.
     pub(crate) attachments: Vec<attach::Attachment>,
+    /// Manifests surfaced from attached knowledge packs (quipu #82).
+    pub(crate) pack_manifests: Vec<(String, crate::pack::Manifest)>,
     /// The table source a composed query reads `facts` from — see
     /// [`attach::build_facts_source`]. Exactly `"facts"` with no attachments,
     /// which is the byte-identical SQL every query built before quipu #75.
@@ -381,6 +383,7 @@ impl Store {
             attach::verify_attached_schema(&conn, attachments, local_space)?;
             attach::register_attached_graphs(&conn, attachments)?;
         }
+        let pack_manifests = attach::attached_pack_manifests(&conn, attachments)?;
 
         // AFTER verification and registration: the source it builds is only
         // meaningful for attachments quipu has agreed to compose, and it reads
@@ -394,6 +397,7 @@ impl Store {
 
         let mut store = Self::with_connection(conn);
         store.attachments = attachments.to_vec();
+        store.pack_manifests = pack_manifests;
         store.facts_source = facts_source;
         store.resolve_sql = resolve_sql;
         Ok(store)
@@ -423,6 +427,12 @@ impl Store {
     #[must_use]
     pub fn attachments(&self) -> &[attach::Attachment] {
         &self.attachments
+    }
+
+    /// Knowledge-pack manifests contributed by attachments, paired with alias.
+    #[must_use]
+    pub fn pack_manifests(&self) -> &[(String, crate::pack::Manifest)] {
+        &self.pack_manifests
     }
 
     /// Refuse a write aimed at a graph that lives in an attached database.
@@ -492,6 +502,7 @@ impl Store {
             defer_auto_embed: false,
             pending_embed: None,
             attachments: Vec::new(),
+            pack_manifests: Vec::new(),
             facts_source: "facts".to_string(),
             resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
             #[cfg(feature = "reactive-reasoner")]
