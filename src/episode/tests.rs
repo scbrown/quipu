@@ -704,6 +704,47 @@ fn snapshot_replacement_retracts_removed_entities_and_can_repopulate() {
 }
 
 #[test]
+fn snapshot_removal_keeps_a_label_but_not_stale_membership_for_external_references() {
+    let mut store = Store::open_in_memory().unwrap();
+    let inventory = parse_episode(
+        r#"{
+          "name": "inventory",
+          "replace_snapshot": true,
+          "nodes": [{"name": "path-a", "type": "ExecutionPath"}]
+        }"#,
+    );
+    ingest_episode(&mut store, &inventory, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+    let reference = parse_episode(
+        r#"{
+          "name": "consumer",
+          "nodes": [{"name": "observer", "type": "Service"}],
+          "edges": [{"source": "observer", "target": "path-a", "relation": "observes"}]
+        }"#,
+    );
+    ingest_episode(&mut store, &reference, "2026-01-01T01:00:00Z", TEST_BASE_NS).unwrap();
+
+    let empty = parse_episode(r#"{"name":"inventory","replace_snapshot":true}"#);
+    ingest_episode(&mut store, &empty, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    let members = crate::sparql::query(
+        &store,
+        &format!("SELECT ?s WHERE {{ ?s a <{TEST_BASE_NS}ExecutionPath> }}"),
+    )
+    .unwrap();
+    assert_eq!(
+        members.rows().len(),
+        0,
+        "removed type cannot remain membership"
+    );
+    let labels = active_values(
+        &store,
+        &format!("{TEST_BASE_NS}path-a"),
+        namespace::RDFS_LABEL,
+    );
+    assert_eq!(labels, vec!["path-a"], "surviving reference stays nameable");
+}
+
+#[test]
 fn ordinary_episode_updates_remain_additive_for_generated_entities() {
     let mut store = Store::open_in_memory().unwrap();
     let first = parse_episode(r#"{"name":"knowledge","nodes":[{"name":"old","type":"Service"}]}"#);
