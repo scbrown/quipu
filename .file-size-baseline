@@ -1,0 +1,27 @@
+# Files over the 500-line limit, grandfathered at these sizes.
+# They may shrink; growing fails the build. Regenerate with:
+#   scripts/check-file-size.sh --update-baseline
+# Shrinking this file is the point. See quipu-bu3.
+src/cli.rs 689
+src/cli_commands.rs 784
+src/config.rs 860
+src/episode/mod.rs 892
+src/governance/audit/passes.rs 521
+src/graph.rs 1138
+src/http_auth.rs 518
+src/lattice.rs 582
+src/mcp/mod.rs 1481
+src/mcp/named_query.rs 544
+src/metrics.rs 652
+src/pack.rs 624
+src/provider.rs 646
+src/rdf.rs 892
+src/server.rs 828
+src/shacl.rs 665
+src/sparql/mod.rs 672
+src/store/attach.rs 515
+src/store/events.rs 909
+src/store/labels.rs 1086
+src/store/mod.rs 1791
+src/store/ops.rs 1274
+src/store/respace.rs 660

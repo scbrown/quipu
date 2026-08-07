@@ -8,6 +8,13 @@ AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledg
 
 - **Always use `just` instead of raw commands.** The justfile is configured with quiet output by default to save context — you only see errors and warnings.
 - **Prefer subcommands over separate recipes.** Group related operations under a single recipe with a subcommand argument (e.g., `just docs build`, `just docs lint`) rather than creating separate top-level recipes (e.g., `just docs-build`, `just docs-lint`).
+- **Keep source files small.** `scripts/check-file-size.sh` warns at 400 lines
+  and fails at 500 (tests exempt). It is a **ratchet**: files already over the
+  limit are grandfathered in `.file-size-baseline` at their current size and may
+  shrink freely, but growing past that size fails. A new file over 500 fails
+  outright. When a baselined file shrinks, run
+  `scripts/check-file-size.sh --update-baseline` and commit — it never loosens
+  an entry.
 
 ## Build Commands
 

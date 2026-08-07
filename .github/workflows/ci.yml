@@ -141,6 +141,12 @@ jobs:
       - run: pre-commit run --all-files
         env:
           SKIP: mdbook-build
+      # The AUTHORITATIVE file-size scan. The pre-commit hook runs --staged,
+      # which is right locally but checks nothing under `--all-files` (nothing
+      # is staged in CI) — that is exactly the hole quipu-5le describes, where
+      # the guard was green for its whole life without ever reading a file.
+      - run: scripts/test-check-file-size.sh
+      - run: scripts/check-file-size.sh
 
   lint-markdown:
     name: Markdown lint

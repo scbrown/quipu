@@ -71,9 +71,14 @@ repos:
         types: [rust]
         pass_filenames: false
 
+      # --staged, not a full scan: growth can only arrive through staged
+      # changes, so this is both sufficient and quiet locally. CI runs the
+      # full scan as the authority (.github/workflows/ci.yml) — the old
+      # version ran ONLY the staged form, which is why CI never checked
+      # anything at all (quipu-5le).
       - id: file-size-check
         name: file size check
-        entry: scripts/check-file-size.sh
+        entry: scripts/check-file-size.sh --staged
         language: script
         pass_filenames: false
         stages: [pre-commit]
