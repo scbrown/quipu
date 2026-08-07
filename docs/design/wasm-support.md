@@ -6,14 +6,21 @@
 > number was measured on this branch, native x86-64, `--release`,
 > `--no-default-features`. The one number NOT measured is wasm-vs-native
 > throughput; obtaining it is Phase 0.
+>
+> **Depends on [in-memory-read-model.md](in-memory-read-model.md).** The query
+> architecture is decided there; this document is downstream of it.
 
 **Summary:** Quipu's graph core is already wasm-clean — the whole
 Oxigraph-family stack, `ring`, `petgraph`, `datafrog` and `regex` compile for
 `wasm32-unknown-unknown` today. The build blockers are SQLite's C dependency and
-four crates the library does not actually use. **But the binding constraint is
-not the build — it is the BGP join evaluator, which is O(n²) and puts an
-interactive ceiling at roughly 10³–10⁴ episodes on any target.** wasm does not
-create that problem; it makes it arrive sooner and in a place the user can see.
+four crates the library does not actually use.
+
+**What wasm should carry is not the episode log.** It is a *distilled* knowledge
+pack — the derived layer produced by the reasoner, community detection and
+ontology rules — served read-only over an in-memory read model. Under that
+framing the browser holds tens of megabytes rather than gigabytes, the O(n²)
+join ceiling is designed around rather than inherited, and SHACL's absence stops
+being a contradiction because there is no write path to validate.
 
 ---
 
@@ -74,17 +81,55 @@ the algebra → each leaf triple pattern is compiled by `src/sparql/triple.rs` i
 a parameterized SQL `WHERE` clause over `facts`, and SQLite's planner picks the
 index.
 
-**There is no in-memory index alongside SQLite.** SQLite's B-trees *are* the
-index; its page cache *is* the working set. `open_in_memory()` is just the
-`:memory:` VFS — identical schema, identical SQL, pages in RAM. That is the
-crux of the port: **we do not have to move a storage engine to wasm, we have to
-give SQLite somewhere to put pages.**
+**The SPARQL engine keeps no in-memory index** — SQLite's B-trees are its index
+and its page cache is its working set. `open_in_memory()` is just the `:memory:`
+VFS: identical schema, identical SQL, pages in RAM.
 
-## 3. Use cases
+That is *not* true of Quipu as a whole, and the distinction matters for this
+port. `graph::project()` (`src/graph.rs:50`) pulls **every** current fact into a
+`Vec` via `current_facts()` and builds a petgraph `DiGraph`; it backs PageRank,
+shortest path, connected components and Louvain. `impact()`
+(`src/impact.rs:79`) walks the store with one indexed lookup per frontier node.
+So the codebase already contains both a full in-memory materialization and an
+anchored walk that scales — see
+[in-memory-read-model.md](in-memory-read-model.md) §2 for the measured
+comparison. It is specifically `eval_bgp` that has neither.
+
+For the port, the consequence is the same either way: **we do not have to move a
+storage engine to wasm, we have to give SQLite somewhere to put pages** — and
+then decide how much of the graph is resident on top of it.
+
+## 3. What runs in the browser: the distilled layer
+
+The unit shipped to wasm is **a knowledge pack of the derived graph**, not the
+episode log.
+
+Episodes are raw ingest — append-heavy, high-volume, valuable in aggregate and
+individually dull. What agents actually consume is the knowledge *derived* from
+them, and Quipu already produces it: `src/reasoner/` derives `affects` /
+`dependsOn` from raw EAVT with `source = "reasoner:<rule-id>"` provenance;
+`graph.rs` Louvain with `persist: true` consolidates emergent structure into
+stated facts; `src/derivation.rs` records how a fact can be recomputed;
+`src/context/` is the pipeline that serves agents. Named graphs give the derived
+layer somewhere to live that extends ROOT without mutating it, and
+`docs/design/knowledge-packs.md` already defines a pack as a self-contained,
+attachable store file.
+
+So the split is:
+
+| Layer | Lives | Shape | Scale |
+|---|---|---|---|
+| Episode log | Server, SQLite | Append-heavy, bitemporal, governed | 10⁵–10⁶ episodes |
+| Derived graph | Pack → browser, resident | Read-mostly, small, distilled | 10⁴–10⁵ entities |
+
+This is what makes the use cases below tractable rather than aspirational —
+a distilled pack is tens of megabytes where the raw log is gigabytes (§5).
+
+### 3.1 Use cases
 
 1. **Local-first agent memory.** Today Quipu needs a server. In wasm it is a
    library an agent embeds — browser extension, Electron/Tauri app, VS Code web
-   extension. Ontology-enforced memory that never leaves the device. For
+   extension. Ontology-derived memory that never leaves the device. For
    privacy-sensitive domains that is a product, not a feature.
 2. **Browser-based agent harnesses.** [WebContainers][wc] run a full Node.js
    runtime in-browser via wasm; [bolt.new][bolt] is an agent driving one —
@@ -92,9 +137,7 @@ give SQLite somewhere to put pages.**
    Web and JupyterLite are the same shape. These have **no backend to run
    `quipu-server` against**; a wasm build is the whole integration.
 3. **Zero-install evaluation.** Drop a knowledge pack on a web page and query
-   it. `docs/design/knowledge-packs.md` already defines a pack as a
-   self-contained store file, so this is nearly free once wasm lands — and it is
-   the best demo Quipu could have.
+   it — nearly free once wasm lands, and the best demo Quipu could have.
 4. **Sandboxing.** Wasm isolation is [being adopted specifically for
    agent-generated code][sandbox]. One Quipu instance per tenant per sandbox is
    defense in depth on top of named graphs, not a replacement for them.
@@ -172,15 +215,15 @@ episodes, governance, the label lattice — sits on that connection. Two routes:
 
 ## 5. Practical limits — measured
 
-This is the part that matters, and it is not what the build errors suggested.
+**The episode log does not fit in a browser, and does not need to.** This
+section sizes both layers so the split in §3 is a measurement rather than an
+assertion.
 
-**Method.** Synthetic Gas Town-shaped episodes: 3 nodes, 2 edges, descriptions
-on every node. Each yields **20 triples / 17 fact rows / 10 events**. Native
-x86-64, `--release`, `--no-default-features`, SQLite on local disk. Queries:
-a bound-subject point lookup, a `?s a :Service` type scan with `LIMIT 100`, and a
-2-hop join (`?d :targets ?s . ?s a :Service`) with `LIMIT 100`.
+### 5.1 Episode-log cost (server side)
 
-### 5.1 Storage — linear and heavy
+Measured with `examples/scale_bench.rs` — synthetic Gas Town-shaped episodes
+(3 nodes, 2 edges, descriptions), yielding **20 triples / 17 fact rows / 10
+events** each. Native x86-64, `--release`, `--no-default-features`.
 
 | Episodes | Triples | DB size | Bytes/episode |
 |---:|---:|---:|---:|
@@ -191,9 +234,7 @@ a bound-subject point lookup, a `?s a :Service` type scan with `LIMIT 100`, and 
 | 20,000 | 400,000 | 168.9 MB | 8,444 |
 
 **~8.3 KB per episode, ~416 bytes per triple**, dead linear. Ingest holds at
-315–390 episodes/s.
-
-Where it goes, at 10k episodes (83.3 MB total, via `dbstat`):
+315–390 episodes/s. Where it goes at 10k episodes (83.3 MB, via `dbstat`):
 
 | Component | Bytes | Share |
 |---|---:|---:|
@@ -206,98 +247,61 @@ Where it goes, at 10k episodes (83.3 MB total, via `dbstat`):
 Two things stand out. **The fact indexes cost 3.4× the facts themselves.** And
 **the event log is 30% of the database** — durable with no expiry by design (the
 reactor-down-6wk fix), which is correct for a server with consumers and pure
-overhead for a browser that has none.
+overhead for a browser that has none. A pack export carries neither.
 
-### 5.2 Queries — the wall
+At 1M episodes that is **~8.3 GB** — a server artifact, decisively not a browser
+one.
 
-| Episodes | Point lookup | Type scan (LIMIT 100) | 2-hop join (LIMIT 100) |
-|---:|---:|---:|---:|
-| 500 | 0.03 ms | 2.8 ms | 1,187 ms |
-| 1,000 | 0.10 ms | 5.7 ms | 4,709 ms |
-| 2,000 | 0.11 ms | 13.3 ms | 20,630 ms |
-| 4,000 | 0.11 ms | 24.4 ms | 84,444 ms |
-| 10,000 | 0.12 ms | 58.2 ms | — |
-| 20,000 | 0.22 ms | 145.9 ms | — |
+### 5.2 The query ceiling, and why it is designed around
 
-- **Point lookups are flat.** Bound-subject reads are effectively free at any
-  size tested. Good.
-- **Type scans are linear** in store size — `LIMIT` is not pushed down, so the
-  scan is done before the limit applies.
-- **The 2-hop join is quadratic.** Doubling episodes multiplies time by
-  3.97, 4.38, 4.09. Fitting `t = k·n²` with k = 4.75 µs/episode² predicts 76 s
-  at 4,000 against 84 s measured.
+`eval_bgp` is quadratic: a 2-hop join takes 1.2 s at 500 episodes, 4.7 s at
+1,000, 20.6 s at 2,000 and 84.4 s at 4,000, timing out against the default 30 s
+budget at ~2,510. Full analysis, cause and fix in
+[in-memory-read-model.md](in-memory-read-model.md) §1.
 
-The cause is in `src/sparql/triple.rs:35-45`. `eval_bgp` is a **nested-loop join
-with no join reordering and no hash join**: for each pattern, for each row
-accumulated so far, it issues a fresh SQL query. Worse, the binding code calls
-`store.resolve()` and `store.lookup()` per result row per pattern — two more
-dictionary round-trips each. A 2-pattern BGP whose first pattern yields N rows
-costs N+1 statements plus ~2N dictionary lookups.
+That ceiling is **not** inherited by the design in §3, for two reasons:
 
-What that model predicts:
+1. The derived layer is 10⁴–10⁵ entities, well inside where even the current
+   evaluator is usable.
+2. The read model replaces the nested-loop join with a hash join — measured at
+   **0.294 ms** for a 10,000-row 2-hop join over 170k facts, against a SQL path
+   that timed out on the same store with `LIMIT 100`.
 
-| 2-hop join budget | Max episodes |
-|---|---:|
-| 1 s | ~460 |
-| 10 s | ~1,450 |
-| 30 s (default `query_timeout_ms`) | ~2,510 |
+A browser build should ship with the read model, not without it. That is the
+dependency this document declares at the top.
 
-Observed behaviour matches: the join completes in 20.6 s at 2,000 episodes and
-times out at 2,500.
+### 5.3 What a browser actually holds
 
-### 5.3 So: can we hit low millions of episodes?
+Resident cost of the read model is **~350 bytes/fact** (measured,
+`examples/mem_read_model.rs`):
 
-**No — and not because of wasm.** At 1,000,000 episodes:
+| Contents | Facts | Resident | Verdict |
+|---|---:|---:|---|
+| Distilled pack, 10⁴ derived entities | ~10⁵ | ~35 MB | ✅ Comfortable, memory VFS or OPFS |
+| Distilled pack, 10⁵ derived entities | ~10⁶ | ~350 MB | ✅ OPFS, workable |
+| Raw log, 10⁴ episodes | 170k | 60 MB | ⚠️ Fits, but why |
+| Raw log, 10⁶ episodes | 17M | ~6 GB | ❌ Beyond `wasm32` entirely |
 
-- **Storage: ~8.3 GB.** Beyond the memory VFS entirely. On OPFS it is within
-  quota on a large disk, but it is a big ask for a browser origin.
-- **A single 2-hop join: ~55 days.** Six orders of magnitude past usable.
+### 5.4 Address-space and storage ceilings
 
-The honest framing is that **Quipu cannot do low millions of episodes on any
-target today.** The interactive ceiling for join queries is ~10³–10⁴ episodes,
-native, on this branch. wasm inherits that ceiling; it does not cause it.
+- `wasm32` has a **4 GB address space**. [Memory64 ships in every browser except
+  Safari as of early 2026][memory64] with caps around 16 GB, but it costs the
+  engine's 32-bit pointer optimizations — only worth taking above 4 GB, which
+  the design in §3 never approaches.
+- **Memory VFS**: the database must fit in linear memory. Fine for a distilled
+  pack, hopeless for the episode log.
+- **OPFS VFS**: the database lives on disk, linear memory holds only page cache
+  and the read model. Bounded by origin quota instead — [Chrome allows an origin
+  up to 60% of total disk][opfs], and [OPFS-backed SQLite handled 8–10
+  concurrent workers reliably in 2026 testing][powersync].
 
-### 5.4 Memory ceilings, once the join is fixed
+**OPFS is the target.** The memory VFS is a development convenience.
 
-- `wasm32` has a **4 GB address space**. [Memory64 is shipping in every browser
-  except Safari as of early 2026][memory64] with browser caps around 16 GB, but
-  it costs the engine's 32-bit pointer optimizations — a real performance
-  penalty, and only worth taking above 4 GB.
-- **Memory VFS**: the database must fit in linear memory. A practical 1–2 GB
-  budget means **~120k–240k episodes** at today's 8.3 KB.
-- **OPFS VFS**: the database lives on disk; linear memory holds only page cache
-  and working set. Size is bounded by origin quota instead —
-  [Chrome allows an origin up to 60% of total disk][opfs], typically hundreds of
-  MB to several GB, and [OPFS-backed SQLite handled 8–10 concurrent workers
-  reliably in 2026 testing][powersync].
+### 5.5 The number we do not have
 
-**OPFS is therefore not optional if scale matters.** The memory VFS is a
-development convenience.
-
-### 5.5 What would actually raise the ceiling
-
-Ranked by leverage. None of these are wasm work:
-
-1. **Replace the nested-loop BGP join** with hash joins and join reordering — or
-   push whole BGPs into a single SQL statement and let SQLite plan them. This is
-   the single highest-leverage change available in the codebase; it converts
-   2-hop joins from O(n²) to roughly O(n).
-2. **Cache the term dictionary in memory.** Removes ~2N SQL round-trips per
-   pattern from every result set.
-3. **Push `LIMIT` into the SQL** so bounded queries stop being linear scans.
-4. **Event-log retention policy.** Reclaims ~30% of storage; in a browser with
-   no consumers, not writing events at all is defensible.
-5. **Index and encoding trim.** Fact indexes cost 3.4× the data. `valid_from` /
-   `valid_to` as ISO-8601 TEXT are ~20 bytes each where an integer would be 8.
-
-With (1) and (2), low millions becomes a genuine conversation. Without them it
-is not, in a browser or on a server.
-
-### 5.6 The number we do not have
-
-**Wasm-vs-native throughput has not been measured.** Expect SQLite-in-wasm to be
-slower than native, but no figure in this document is a wasm figure and none
-should be quoted as one. Producing that number is Phase 0.
+**Wasm-vs-native throughput has not been measured.** Expect SQLite-in-wasm and
+the read model build to be slower than native, but no figure in this document is
+a wasm figure and none should be quoted as one. Producing it is Phase 0.
 
 ## 6. Export to SQLite — preserved, and nearly free
 
@@ -318,26 +322,30 @@ The `.db` file stays the interchange format.
 Round trip: browser → OPFS → serialize → download → `quipu attach`. No exporter
 to write, no format divergence.
 
-## 7. Open question: SHACL
+## 7. SHACL — resolved by the distillation split
 
 `rudof_lib` pulls `clap`, `crossterm` and `reqwest`, and `shacl` is a **default**
 feature (`Cargo.toml:93`) and `required-features` on both binaries. A wasm build
-is therefore `--no-default-features` — **no validation on write**.
+is therefore `--no-default-features` — **no SHACL**.
 
-For a project whose stated pitch is strict ontology enforcement, a build that
-silently accepts unvalidated facts is a contradiction, not a missing feature.
-The options:
+Framed as "a Quipu that accepts unvalidated writes," that was a contradiction of
+the project's stated pitch. Framed as §3, it is not a problem at all: **the
+browser serves a pack that was validated on the server that produced it.** A
+read-only consumer of an already-validated artifact has nothing to validate.
+
+That makes **query-only the design rather than a compromise**, and it is the
+recommendation. The other options stay on the table only if a browser write path
+is ever wanted:
 
 | Option | Consequence |
 |---|---|
-| **Query-only wasm** | No write path in wasm. Honest, smallest, and matches use cases 2 and 3. Recommended for v1. |
-| **Validate on import** | Browser writes are provisional; validation happens when the pack reaches a server. Needs a clear provisional/validated distinction on the wire. |
-| **Wasm-capable SHACL** | Largest scope; would need a `rudof` that builds for wasm, or an in-tree validator. |
+| **Query-only wasm** | ✅ Recommended. No write path, so no validation gap. Matches §3 exactly. |
+| **Validate on import** | Browser writes are provisional until a server accepts them. Needs a provisional/validated distinction on the wire. |
+| **Wasm-capable SHACL** | Largest scope; needs a `rudof` that builds for wasm, or an in-tree validator. |
 
-This is a contract decision, not an implementation detail, and it should be made
-before code is written. It also interacts with FR-3-style tiering: a fact
-written in a browser without validation is not the same kind of fact as one that
-passed shapes, and the response should not be able to claim otherwise.
+One invariant survives regardless: a fact that never passed shapes must never be
+presented as one that did. If a write path is added later, that distinction has
+to be explicit in the response, not inferred.
 
 ## 8. Plan
 
@@ -362,12 +370,18 @@ round-trip test that asserts a browser-produced pack opens natively.
 `AGENTS.md`, the feature does not ship dark — this lands *with* the feature, not
 after it.
 
-**Not in this plan, but gating the headline use case:** the join evaluator (§5.5
-items 1–3). A wasm build without it is real and useful at 10⁴–10⁵ episodes —
-one agent's working memory, one repository's knowledge, one knowledge pack.
-That is a good v1. Low millions is a separate, larger project against
-`src/sparql/`, and it should be scoped as one rather than smuggled in under a
-wasm banner.
+### 8.1 Ordering against the read model
+
+[in-memory-read-model.md](in-memory-read-model.md) is a **prerequisite, not a
+parallel track.** Its Phase 1 (bulk dictionary load) and Phases 2–3 (the read
+model and routing `eval_bgp` through it) should land first, on native, where
+they are independently valuable and testable against the full suite.
+
+Shipping wasm before them would put the quadratic evaluator in a browser tab —
+the worst place to discover it. Shipping after means the browser build inherits
+a linear join and a resident model sized for exactly the artifact it carries.
+
+The dependency runs one way only: nothing in the read model needs wasm.
 
 ---
 
