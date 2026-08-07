@@ -385,6 +385,7 @@ pub fn pack(
         // taking the producer's word for it out of band.
         let l = store.label_of(graph_iri)?;
         let label = crate::store::labels::GraphLabel {
+            durability: None,
             freshness: l.freshness.value,
             trust: l.trust.value.clone(),
             policy: l.policy.value.clone(),

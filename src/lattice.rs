@@ -157,7 +157,60 @@ impl Meet for Freshness {
 }
 
 // ---------------------------------------------------------------------------
-// Axis 2: trust
+// Axis 2: durability
+// ---------------------------------------------------------------------------
+
+/// Recoverability if this store is lost.
+///
+/// Declared, never synthesized. `SoleRecord < Reproducible < Backed`; a
+/// composition is only as durable as its least durable input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Durability {
+    /// This store is the only copy; loss is permanent.
+    SoleRecord,
+    /// Re-derivable from a source that currently exists.
+    Reproducible,
+    /// Independently persisted outside this store.
+    Backed,
+}
+
+impl Durability {
+    /// Parse a declared value. Unknown and absent values never default safe.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "soleRecord" => Some(Self::SoleRecord),
+            "reproducible" => Some(Self::Reproducible),
+            "backed" => Some(Self::Backed),
+            _ => None,
+        }
+    }
+
+    /// Canonical RDF literal spelling.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SoleRecord => "soleRecord",
+            Self::Reproducible => "reproducible",
+            Self::Backed => "backed",
+        }
+    }
+}
+
+impl fmt::Display for Durability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Meet for Durability {
+    fn meet(&self, other: &Self) -> Result<Self> {
+        Ok(*self.min(other))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Axis 3: trust
 // ---------------------------------------------------------------------------
 
 /// The default trust chain Quipu ships. Consumers declare their own; Quipu

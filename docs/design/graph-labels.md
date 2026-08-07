@@ -69,9 +69,10 @@ by `Authority`, making the parallel structural instead of rhetorical.
   lattice (§9). Incomparable label sets are normal; the join always exists on
   a powerset, so nothing blocks.
 
-### 2.4 Durability — what is lost if this store is lost (NOT BUILT)
+### 2.4 Durability — what is lost if this store is lost (BUILT)
 
-> **Status:** ⬜ proposed 2026-08-07. Nothing implemented.
+> **Status:** ✅ implemented 2026-08-07 (`Durability`, graph-label storage,
+> dataset meet, SHACL vocabulary, and query surfacing).
 
 The axes above describe how much a fact can be *believed*. None describes whether
 it can be *recovered*. That question has an owner-facing form the others do not:
@@ -103,9 +104,10 @@ configured in either**. A fact tagged `reproducible` silently becomes
 an argument for a re-declaration cadence — the same unsolved cadence problem
 freshness has — not for weakening the axis.
 
-### 2.5 Derivation method — a value, not an axis (NOT BUILT)
+### 2.5 Derivation method — a value, not an axis (BUILT)
 
-> **Status:** ⬜ proposed 2026-08-07. Nothing implemented.
+> **Status:** ✅ implemented 2026-08-07 as deterministic statement reification
+> plus `DerivationMethod { system, query, params }`; absent remains absent.
 
 `quipu:derivedBy` records **how to re-derive a fact**: a system, a query and
 parameters. It is deliberately **not** a lattice axis, and the contrast with
@@ -124,9 +126,10 @@ time-series system.* That is why it belongs here as a store primitive rather tha
 as a private field on some domain class: every consumer needing it so far has
 hand-rolled it, which is the same observation motivating this whole document.
 
-### 2.6 Refresh cadence — expiry is DE-DECLARATION, not a new value (NOT BUILT)
+### 2.6 Refresh cadence — expiry is DE-DECLARATION, not a new value (BUILT)
 
-> **Status:** ⬜ proposed 2026-08-07. Nothing implemented.
+> **Status:** ✅ implemented 2026-08-07 for graph-label declarations through
+> `set_graph_label_until`; expired cache entries read with coverage `none`.
 
 Every declared label records what a producer asserted **at write time**.
 `fresh` becomes stale; `reproducible` becomes `soleRecord` when its source

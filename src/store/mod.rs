@@ -1136,10 +1136,12 @@ impl Store {
         // repoints the registry. Text costs a few bytes and stays out of it.
         for (col, decl) in [
             ("fresh_rank", "INTEGER"),
+            ("durability_rank", "INTEGER"),
             ("trust_rank", "INTEGER"),
             ("trust_chain", "TEXT"),
             ("policy", "TEXT"),
             ("labels_tx", "INTEGER"),
+            ("labels_valid_to", "TEXT"),
         ] {
             let present: bool = conn
                 .prepare("SELECT 1 FROM pragma_table_info('graphs') WHERE name = ?1")?

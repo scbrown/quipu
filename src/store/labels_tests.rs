@@ -26,12 +26,69 @@ fn unlabelled_graph_reads_undeclared_with_coverage_none() {
     let l = store.label_of("urn:g:plain").unwrap();
 
     assert_eq!(l.freshness.coverage, Coverage::None);
+    assert_eq!(l.durability.coverage, Coverage::None);
     assert_eq!(l.trust.coverage, Coverage::None);
     assert_eq!(l.policy.coverage, Coverage::None);
     assert!(l.freshness.value.is_none(), "never a fabricated freshness");
+    assert!(l.durability.value.is_none(), "never fabricated as backed");
     assert!(l.trust.value.is_none(), "never a fabricated trust");
     assert!(l.policy.value.is_none(), "never a fabricated policy");
     assert!(l.labels_tx.is_none());
+}
+
+#[test]
+fn durability_is_declared_and_composes_by_weakest_member() {
+    let mut store = store_with_graph("urn:g:durable-a");
+    store.overlay_create("urn:g:durable-b", 0).unwrap();
+    store
+        .set_graph_label(
+            "urn:g:durable-a",
+            &GraphLabel {
+                durability: Some(Durability::Backed),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    store
+        .set_graph_label(
+            "urn:g:durable-b",
+            &GraphLabel {
+                durability: Some(Durability::SoleRecord),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    let ids = [
+        store.lookup("urn:g:durable-a").unwrap().unwrap(),
+        store.lookup("urn:g:durable-b").unwrap().unwrap(),
+    ];
+    let labels = store.dataset_labels(&ids).unwrap();
+    assert_eq!(labels.durability.value, Some(Durability::SoleRecord));
+    assert_eq!(labels.durability.coverage, Coverage::Full);
+}
+
+#[test]
+fn an_expired_declaration_reads_as_undeclared_not_as_its_last_value() {
+    let mut store = store_with_graph("urn:g:expired");
+    store
+        .set_graph_label_until(
+            "urn:g:expired",
+            &GraphLabel {
+                durability: Some(Durability::Backed),
+                ..Default::default()
+            },
+            "2020-01-01T00:00:00Z",
+            Some("2020-01-02T00:00:00Z"),
+            None,
+        )
+        .unwrap();
+    let label = store.label_of("urn:g:expired").unwrap();
+    assert_eq!(label.durability.value, None);
+    assert_eq!(label.durability.coverage, Coverage::None);
 }
 
 #[test]
@@ -73,6 +130,7 @@ fn declaring_one_axis_leaves_the_others_undeclared() {
 fn set_graph_label_writes_facts_and_cache_with_zero_drift() {
     let mut store = store_with_graph("urn:g:full");
     let label = GraphLabel {
+        durability: None,
         freshness: Some(Freshness::Recomputing),
         trust: Some(trust("urn:t:observed", DEFAULT_TRUST_CHAIN, 20)),
         policy: Some(PolicyClass::new(["pii", "no-export"])),
@@ -150,6 +208,7 @@ fn a_whitespace_policy_token_is_refused_before_anything_is_written() {
     // about atomicity. The savepoint is tested by the next test instead.
     let mut store = store_with_graph("urn:g:tok");
     let bad = GraphLabel {
+        durability: None,
         freshness: Some(Freshness::Fresh),
         trust: None,
         policy: Some(PolicyClass::new(["two words"])),

@@ -32,10 +32,10 @@ use rusqlite::OptionalExtension;
 use rusqlite::params;
 
 use crate::error::{Error, Result};
-use crate::lattice::{Composed, Coverage, Freshness, PolicyClass, Trust};
+use crate::lattice::{Composed, Coverage, Durability, Freshness, PolicyClass, Trust};
 use crate::namespace::{
-    META_GRAPH_IRI, QUIPU_FRESHNESS, QUIPU_IN_CHAIN, QUIPU_POLICY_CLASS, QUIPU_TRUST,
-    QUIPU_TRUST_RANK,
+    META_GRAPH_IRI, QUIPU_DURABILITY, QUIPU_FRESHNESS, QUIPU_IN_CHAIN, QUIPU_POLICY_CLASS,
+    QUIPU_TRUST, QUIPU_TRUST_RANK,
 };
 use crate::types::{Op, Value};
 
@@ -47,6 +47,8 @@ use super::{Datum, Store};
 pub struct GraphLabel {
     /// How current the graph's contents are.
     pub freshness: Option<Freshness>,
+    /// Recoverability if this store is lost.
+    pub durability: Option<Durability>,
     /// The graph's trust value, with the chain that ranks it.
     pub trust: Option<Trust>,
     /// Obligation tokens carried by the graph.
@@ -57,7 +59,10 @@ impl GraphLabel {
     /// Whether this label declares nothing at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.freshness.is_none() && self.trust.is_none() && self.policy.is_none()
+        self.freshness.is_none()
+            && self.durability.is_none()
+            && self.trust.is_none()
+            && self.policy.is_none()
     }
 
     /// Per-axis coverage for a single graph: `Full` where declared, `None`
@@ -77,6 +82,8 @@ impl GraphLabel {
 pub struct ReadLabel {
     /// Composed freshness for this graph.
     pub freshness: Composed<Freshness>,
+    /// Composed durability for this graph.
+    pub durability: Composed<Durability>,
     /// Composed trust for this graph.
     pub trust: Composed<Trust>,
     /// Composed policy for this graph.
@@ -94,6 +101,8 @@ pub struct ReadLabel {
 pub struct DatasetLabels {
     /// Composed freshness — the meet over declared members.
     pub freshness: Composed<Freshness>,
+    /// Meet of declared durability values.
+    pub durability: Composed<Durability>,
     /// Composed trust — the meet over declared members, within one chain.
     pub trust: Composed<Trust>,
     /// Composed policy — the JOIN (union) of declared members' obligations.
@@ -105,7 +114,10 @@ impl DatasetLabels {
     /// `"labels": null` in this case rather than three empty objects.
     #[must_use]
     pub fn is_undeclared(&self) -> bool {
-        self.freshness.value.is_none() && self.trust.value.is_none() && self.policy.value.is_none()
+        self.freshness.value.is_none()
+            && self.durability.value.is_none()
+            && self.trust.value.is_none()
+            && self.policy.value.is_none()
     }
 }
 
@@ -143,18 +155,25 @@ fn decode_policy(s: &str) -> PolicyClass {
     PolicyClass::new(s.split_whitespace())
 }
 
-/// The five cache columns as read from `graphs`:
-/// `(fresh_rank, trust_rank, trust_chain, policy, labels_tx)`.
+/// Label cache columns as read from `graphs`.
 type CacheRow = (
     Option<i64>,
     Option<i64>,
+    Option<i64>,
     Option<String>,
     Option<String>,
     Option<i64>,
+    Option<String>,
 );
 
-/// One `graphs` row during a drift sweep: `(g, fresh_rank, trust_chain, policy)`.
-type DriftRow = (i64, Option<i64>, Option<String>, Option<String>);
+/// One `graphs` row during a drift sweep.
+type DriftRow = (
+    i64,
+    Option<i64>,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+);
 
 impl Store {
     /// The meta-graph's `g`. Interned by the migration, so this is a lookup and
@@ -192,6 +211,28 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<i64> {
+        self.set_graph_label_until(graph_iri, label, timestamp, None, actor)
+    }
+
+    /// Declare a graph label that expires at `valid_to`.
+    ///
+    /// After expiry the whole declaration reads as undeclared; expiry never
+    /// manufactures an `unknown` value or preserves the last safe value.
+    pub fn set_graph_label_until(
+        &mut self,
+        graph_iri: &str,
+        label: &GraphLabel,
+        timestamp: &str,
+        valid_to: Option<&str>,
+        actor: Option<&str>,
+    ) -> Result<i64> {
+        if let Some(end) = valid_to
+            && (end.len() != 20 || !end.ends_with('Z') || end <= timestamp)
+        {
+            return Err(Error::InvalidValue(format!(
+                "label valid_to '{end}' must be canonical UTC and later than valid_from '{timestamp}'"
+            )));
+        }
         if label.is_empty() {
             return Err(Error::InvalidValue(format!(
                 "set_graph_label on '{graph_iri}' declares no axis; to clear a \
@@ -209,7 +250,17 @@ impl Store {
                 attribute: self.intern(QUIPU_FRESHNESS)?,
                 value: Value::Str(f.as_str().to_string()),
                 valid_from: timestamp.to_string(),
-                valid_to: None,
+                valid_to: valid_to.map(str::to_string),
+                op: Op::Assert,
+            });
+        }
+        if let Some(d) = label.durability {
+            datums.push(Datum {
+                entity: subject,
+                attribute: self.intern(QUIPU_DURABILITY)?,
+                value: Value::Str(d.as_str().to_string()),
+                valid_from: timestamp.to_string(),
+                valid_to: valid_to.map(str::to_string),
                 op: Op::Assert,
             });
         }
@@ -221,7 +272,7 @@ impl Store {
                 attribute: self.intern(QUIPU_TRUST)?,
                 value: Value::Ref(trust_term),
                 valid_from: timestamp.to_string(),
-                valid_to: None,
+                valid_to: valid_to.map(str::to_string),
                 op: Op::Assert,
             });
             // The chain and rank are facts about the TRUST VALUE, not about the
@@ -232,7 +283,7 @@ impl Store {
                 attribute: self.intern(QUIPU_IN_CHAIN)?,
                 value: Value::Ref(chain_term),
                 valid_from: timestamp.to_string(),
-                valid_to: None,
+                valid_to: valid_to.map(str::to_string),
                 op: Op::Assert,
             });
             datums.push(Datum {
@@ -240,7 +291,7 @@ impl Store {
                 attribute: self.intern(QUIPU_TRUST_RANK)?,
                 value: Value::Int(t.rank),
                 valid_from: timestamp.to_string(),
-                valid_to: None,
+                valid_to: valid_to.map(str::to_string),
                 op: Op::Assert,
             });
         }
@@ -252,7 +303,7 @@ impl Store {
                     attribute: attr,
                     value: Value::Str(tok.to_string()),
                     valid_from: timestamp.to_string(),
-                    valid_to: None,
+                    valid_to: valid_to.map(str::to_string),
                     op: Op::Assert,
                 });
             }
@@ -270,15 +321,17 @@ impl Store {
             let tx =
                 self.transact_to_graph(&datums, timestamp, actor, Some("graph-label"), meta_g)?;
             let updated = self.conn.execute(
-                "UPDATE graphs SET fresh_rank = ?2, trust_rank = ?3, trust_chain = ?4, \
-                 policy = ?5, labels_tx = ?6 WHERE g = ?1",
+                "UPDATE graphs SET fresh_rank = ?2, durability_rank = ?3, trust_rank = ?4, trust_chain = ?5, \
+                 policy = ?6, labels_tx = ?7, labels_valid_to = ?8 WHERE g = ?1",
                 params![
                     subject,
                     label.freshness.map(|f| f as i64),
+                    label.durability.map(|d| d as i64),
                     label.trust.as_ref().map(|t| t.rank),
                     label.trust.as_ref().map(|t| t.chain.clone()),
                     policy_encoded,
                     tx,
+                    valid_to,
                 ],
             )?;
             // An UPDATE matching no row is not an error in SQL, and that is
@@ -341,15 +394,57 @@ impl Store {
         let row: Option<CacheRow> = self
             .conn
             .query_row(
-                "SELECT fresh_rank, trust_rank, trust_chain, policy, labels_tx \
+                "SELECT fresh_rank, durability_rank, trust_rank, trust_chain, policy, labels_tx, labels_valid_to \
                      FROM graphs WHERE g = ?1",
                 params![g],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                    ))
+                },
             )
             .optional()?;
 
-        let Some((fresh_rank, trust_rank, trust_chain, policy, labels_tx)) = row else {
+        let Some((
+            fresh_rank,
+            durability_rank,
+            trust_rank,
+            trust_chain,
+            policy,
+            labels_tx,
+            labels_valid_to,
+        )) = row
+        else {
             return Ok(Self::undeclared_label());
+        };
+
+        if let Some(end) = labels_valid_to.as_deref() {
+            let expired: bool = self.conn.query_row(
+                "SELECT ?1 <= strftime('%Y-%m-%dT%H:%M:%SZ','now')",
+                params![end],
+                |r| r.get(0),
+            )?;
+            if expired {
+                return Ok(Self::undeclared_label());
+            }
+        }
+
+        let durability = match durability_rank {
+            Some(0) => Some(Durability::SoleRecord),
+            Some(1) => Some(Durability::Reproducible),
+            Some(2) => Some(Durability::Backed),
+            Some(other) => {
+                return Err(Error::Store(format!(
+                    "graph '{graph_iri}' has invalid durability_rank {other}"
+                )));
+            }
+            None => None,
         };
 
         let freshness = match fresh_rank {
@@ -398,6 +493,10 @@ impl Store {
                 coverage: GraphLabel::coverage_of(freshness.as_ref()),
                 value: freshness,
             },
+            durability: Composed {
+                coverage: GraphLabel::coverage_of(durability.as_ref()),
+                value: durability,
+            },
             trust: Composed {
                 coverage: GraphLabel::coverage_of(trust.as_ref()),
                 value: trust,
@@ -413,6 +512,10 @@ impl Store {
     fn undeclared_label() -> ReadLabel {
         ReadLabel {
             freshness: Composed {
+                value: None,
+                coverage: Coverage::None,
+            },
+            durability: Composed {
                 value: None,
                 coverage: Coverage::None,
             },
@@ -447,7 +550,8 @@ impl Store {
             .conn
             .query_row(
                 "SELECT v FROM facts WHERE e = ?1 AND a = ?2 AND g = ?3 \
-                 AND op = 1 AND valid_to IS NULL ORDER BY tx DESC LIMIT 1",
+                 AND op = 1 AND (valid_to IS NULL OR valid_to > strftime('%Y-%m-%dT%H:%M:%SZ','now')) \
+                 ORDER BY tx DESC LIMIT 1",
                 params![e, attr, graph],
                 |r| r.get(0),
             )
@@ -465,7 +569,7 @@ impl Store {
         };
         let mut stmt = self.conn.prepare(
             "SELECT v FROM facts WHERE e = ?1 AND a = ?2 AND g = ?3 \
-             AND op = 1 AND valid_to IS NULL",
+             AND op = 1 AND (valid_to IS NULL OR valid_to > strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
         )?;
         let raws = stmt
             .query_map(params![e, attr, graph], |r| r.get::<_, Vec<u8>>(0))?
@@ -540,18 +644,21 @@ impl Store {
     /// were the label is the kind of quiet half-truth this axis exists to stop.
     pub fn dataset_labels(&self, graphs: &[i64]) -> Result<DatasetLabels> {
         let mut fresh = Vec::with_capacity(graphs.len());
+        let mut durability = Vec::with_capacity(graphs.len());
         let mut trust = Vec::with_capacity(graphs.len());
         let mut policy = Vec::with_capacity(graphs.len());
 
         for &g in graphs {
             let l = self.label_of_id(g)?;
             fresh.push(l.freshness.value);
+            durability.push(l.durability.value);
             trust.push(l.trust.value);
             policy.push(l.policy.value);
         }
 
         Ok(DatasetLabels {
             freshness: crate::lattice::fold_meet(fresh)?,
+            durability: crate::lattice::fold_meet(durability)?,
             trust: crate::lattice::fold_meet(trust)?,
             policy: crate::lattice::fold_join(policy)?,
         })
@@ -703,16 +810,16 @@ impl Store {
         let mut drift = Vec::new();
         let meta_g = self.meta_graph_id()?;
 
-        let mut stmt = self
-            .conn
-            .prepare("SELECT g, fresh_rank, trust_chain, policy FROM graphs WHERE g <> ?1")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT g, fresh_rank, durability_rank, trust_chain, policy FROM graphs WHERE g <> ?1",
+        )?;
         let rows: Vec<DriftRow> = stmt
             .query_map(params![meta_g], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
             })?
             .collect::<std::result::Result<_, _>>()?;
 
-        for (g, fresh_rank, trust_chain, policy) in rows {
+        for (g, fresh_rank, durability_rank, trust_chain, policy) in rows {
             let graph_iri = self.resolve(g).unwrap_or_else(|_| format!("g={g}"));
 
             // Freshness.
@@ -730,6 +837,23 @@ impl Store {
                     axis: "freshness",
                     rdf: rdf_fresh.unwrap_or_else(|| "(undeclared)".into()),
                     cached: cached_fresh.unwrap_or_else(|| "(undeclared)".into()),
+                });
+            }
+
+            let rdf_durability = self.declared_str(g, QUIPU_DURABILITY, meta_g)?;
+            let cached_durability = match durability_rank {
+                Some(0) => Some("soleRecord".to_string()),
+                Some(1) => Some("reproducible".to_string()),
+                Some(2) => Some("backed".to_string()),
+                Some(other) => Some(format!("<invalid {other}>")),
+                None => None,
+            };
+            if rdf_durability != cached_durability {
+                drift.push(LabelDrift {
+                    graph_iri: graph_iri.clone(),
+                    axis: "durability",
+                    rdf: rdf_durability.unwrap_or_else(|| "(undeclared)".into()),
+                    cached: cached_durability.unwrap_or_else(|| "(undeclared)".into()),
                 });
             }
 

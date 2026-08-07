@@ -4,6 +4,19 @@
 //! Everything else pins a specific rule the design states in prose.
 
 use super::*;
+
+#[test]
+fn durability_meet_is_the_least_recoverable_input_and_unknown_is_absent() {
+    assert_eq!(
+        Durability::Backed.meet(&Durability::SoleRecord).unwrap(),
+        Durability::SoleRecord
+    );
+    assert_eq!(
+        Durability::parse("reproducible"),
+        Some(Durability::Reproducible)
+    );
+    assert_eq!(Durability::parse("unknown"), None);
+}
 use proptest::prelude::*;
 
 // ---------------------------------------------------------------------------

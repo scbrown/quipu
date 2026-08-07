@@ -190,6 +190,10 @@ fn add_labels(out: &mut JsonValue, labels: &Result<Option<labels::DatasetLabels>
                 "value": l.freshness.value.map(crate::lattice::Freshness::as_str),
                 "coverage": l.freshness.coverage.as_str(),
             },
+            "durability": {
+                "value": l.durability.value.map(crate::lattice::Durability::as_str),
+                "coverage": l.durability.coverage.as_str(),
+            },
             "trust": {
                 "value": l.trust.value.as_ref().map(|t| serde_json::json!({
                     "iri": t.iri, "chain": t.chain, "rank": t.rank,

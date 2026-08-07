@@ -53,8 +53,44 @@
 quipu:freshness   rdfs:range xsd:string .
 quipu:trust       rdfs:range rdfs:Resource .
 quipu:policyClass rdfs:range xsd:string .
+quipu:durability  rdfs:range xsd:string .
 quipu:trustRank   rdfs:range xsd:integer .
 quipu:inChain     rdfs:range rdfs:Resource .
+quipu:derivedBy         rdfs:range rdfs:Resource .
+quipu:derivationSystem  rdfs:range xsd:string .
+quipu:derivationQuery   rdfs:range xsd:string .
+quipu:derivationParams  rdfs:range xsd:string .
+
+# Derivation is a per-statement VALUE, not a lattice axis.  A method is one
+# executable system/query/params triple; absence stays absence.
+quipu:FactDerivationShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:derivedBy ;
+    sh:property [
+        sh:path quipu:derivedBy ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+quipu:DerivationMethodShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:derivationSystem ;
+    sh:property [ sh:path quipu:derivationSystem ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path quipu:derivationQuery ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path quipu:derivationParams ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+quipu:DurabilityShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:durability ;
+    sh:property [
+        sh:path quipu:durability ;
+        sh:datatype xsd:string ;
+        sh:in ( "soleRecord" "reproducible" "backed" ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "quipu:durability must be exactly one of soleRecord|reproducible|backed; undeclared never defaults to backed" ;
+    ] .
 
 # ═══════════════════════════════════════════════════════════════════
 # Freshness — a CLOSED vocabulary, exactly one value.

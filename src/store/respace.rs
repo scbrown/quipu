@@ -155,10 +155,12 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     // `trust_chain` is TEXT holding the chain's IRI, deliberately not interned,
     // precisely to stay off this surface. `labels_tx` is a transaction id.
     ("graphs", "fresh_rank", TermIdKind::None),
+    ("graphs", "durability_rank", TermIdKind::None),
     ("graphs", "trust_rank", TermIdKind::None),
     ("graphs", "trust_chain", TermIdKind::None),
     ("graphs", "policy", TermIdKind::None),
     ("graphs", "labels_tx", TermIdKind::None),
+    ("graphs", "labels_valid_to", TermIdKind::None),
     // -- attach::migrate_graph_source (quipu #75) --
     // TEXT holding an attachment ALIAS, not a term id. Added by #75 — and this
     // entry exists because respace REFUSED to run until it did, one hour after

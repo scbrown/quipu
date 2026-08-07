@@ -55,10 +55,29 @@ pub const QUIPU_FRESHNESS: &str = "https://quipu.dev/ontology/freshness";
 pub const QUIPU_TRUST: &str = "https://quipu.dev/ontology/trust";
 /// `quipu:policyClass` — an obligation token carried by the graph.
 pub const QUIPU_POLICY_CLASS: &str = "https://quipu.dev/ontology/policyClass";
+/// `quipu:durability` — declared recoverability of a graph or statement.
+pub const QUIPU_DURABILITY: &str = "https://quipu.dev/ontology/durability";
 /// `quipu:trustRank` — a trust value's rank within its chain.
 pub const QUIPU_TRUST_RANK: &str = "https://quipu.dev/ontology/trustRank";
 /// `quipu:inChain` — the chain that ranks a trust value.
 pub const QUIPU_IN_CHAIN: &str = "https://quipu.dev/ontology/inChain";
+/// `quipu:derivedBy` — a statement's derivation method resource.
+pub const QUIPU_DERIVED_BY: &str = "https://quipu.dev/ontology/derivedBy";
+/// `quipu:derivationSystem` — the system capable of executing a method.
+pub const QUIPU_DERIVATION_SYSTEM: &str = "https://quipu.dev/ontology/derivationSystem";
+/// `quipu:derivationQuery` — the query/command understood by that system.
+pub const QUIPU_DERIVATION_QUERY: &str = "https://quipu.dev/ontology/derivationQuery";
+/// `quipu:derivationParams` — canonical JSON parameters for the query.
+pub const QUIPU_DERIVATION_PARAMS: &str = "https://quipu.dev/ontology/derivationParams";
+
+/// RDF reified-statement class.
+pub const RDF_STATEMENT: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement";
+/// RDF reified-statement subject predicate.
+pub const RDF_SUBJECT: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#subject";
+/// RDF reified-statement predicate predicate.
+pub const RDF_PREDICATE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate";
+/// RDF reified-statement object predicate.
+pub const RDF_OBJECT: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#object";
 
 // ── Named datasets (quipu #69) ─────────────────────────────────
 

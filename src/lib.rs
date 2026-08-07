@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod context;
+pub mod derivation;
 pub mod embedding;
 pub mod episode;
 pub mod error;
@@ -56,6 +57,7 @@ pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
     KnowledgeRelevance, tool_context, tool_unified_search,
 };
+pub use derivation::{DerivationMethod, Rederivation};
 pub use embedding::{DeferredEmbed, EmbeddingProvider, NO_PROVIDER_HELP, build_entity_text};
 pub use episode::{
     Episode, IngestResolutionOpts, IngestResult, episode_provenance, ingest_batch, ingest_episode,
