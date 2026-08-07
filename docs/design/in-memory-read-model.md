@@ -251,10 +251,16 @@ Measured (`examples/scale_bench.rs`, same stores):
 (368–373 episodes/s against 315–390 before). Still quadratic — Phase 1 removes a
 constant factor, not the nested loop. That is Phase 3's job.
 
-One consequence to watch: the cache is unbounded, growing at roughly the term
-count. ~7 MB at 30k terms is nothing; a 1M-episode raw log's ~3M terms would be
-several hundred MB in a long-lived server. Tracked as `quipu-h03`, and another
-reason §7's derived-layer scoping is the right target.
+The cache is **bounded** (`quipu-h03`): `DEFAULT_TERM_CACHE_LIMIT` admits
+500k terms — roughly 175 MB at the measured ~350 bytes/term, against the ~30k a
+10k-episode store holds — adjustable via `Store::set_term_cache_limit`, where
+`0` disables memoization outright.
+
+At the cap it stops **admitting**, and does not evict. Every policy is correct
+here, because a miss falls through to SQL; the only question is behaviour under
+pressure, and eviction under a scan that touches every term degenerates into
+thrash — constant work, no hits. Refusing admission keeps whatever warmed first,
+which for these read paths is the hot set, and costs O(1) with no bookkeeping.
 
 **Phase 2 — `ReadModel`. ✅ LANDED** (`quipu-d6x`). `src/store/read_model.rs`:
 three permutation indexes over one graph's current facts, built via

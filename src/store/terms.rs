@@ -36,15 +36,55 @@ use crate::error::{Error, Result};
 /// A miss is NOT cached. [`Store::lookup`] returns `Option`, and an IRI that is
 /// absent now can be interned by the very next write — caching the absence
 /// would make `intern` invisible to a reader that had already asked.
-#[derive(Debug, Default)]
+///
+/// # Bounded (quipu-h03)
+///
+/// Growth is capped at [`DEFAULT_TERM_CACHE_LIMIT`] entries, adjustable with
+/// [`Store::set_term_cache_limit`]. At the cap the cache stops **admitting new
+/// entries**; it does not evict.
+///
+/// Not evicting is the deliberate choice. Every policy here is *correct* — a
+/// miss falls through to SQL — so the only question is behaviour under
+/// pressure, and eviction under a scan that touches every term degenerates into
+/// thrash: constant work, no hits. Refusing admission keeps whatever warmed
+/// first, which for every read path here is the hot set, and it is O(1) with no
+/// bookkeeping. The cost is that the cache cannot adapt if the working set
+/// genuinely moves; raise the cap or call
+/// [`Store::warm_term_cache`] if that ever matters.
+#[derive(Debug)]
 pub(crate) struct TermCache {
     id_to_iri: HashMap<i64, String>,
     iri_to_id: HashMap<String, i64>,
+    /// Maximum entries admitted. `0` disables caching entirely.
+    limit: usize,
+}
+
+/// Default ceiling on memoized terms.
+///
+/// At the ~350 bytes/term measured in `docs/design/in-memory-read-model.md`,
+/// 500k terms is roughly 175 MB — comfortably above the ~30k terms a
+/// 10k-episode store holds, and a bound rather than the unlimited growth the
+/// first cut shipped with.
+pub const DEFAULT_TERM_CACHE_LIMIT: usize = 500_000;
+
+impl Default for TermCache {
+    fn default() -> Self {
+        Self {
+            id_to_iri: HashMap::new(),
+            iri_to_id: HashMap::new(),
+            limit: DEFAULT_TERM_CACHE_LIMIT,
+        }
+    }
 }
 
 impl TermCache {
-    /// Record a mapping in both directions.
+    /// Record a mapping in both directions, unless the cache is at its cap.
     fn insert(&mut self, id: i64, iri: &str) {
+        // Re-recording an id already held is not growth, so let it through —
+        // otherwise a full cache could never refresh an entry it already owns.
+        if self.id_to_iri.len() >= self.limit && !self.id_to_iri.contains_key(&id) {
+            return;
+        }
         self.id_to_iri.insert(id, iri.to_string());
         self.iri_to_id.insert(iri.to_string(), id);
     }
@@ -53,9 +93,34 @@ impl TermCache {
     pub(crate) fn len(&self) -> usize {
         self.id_to_iri.len()
     }
+
+    /// Change the admission cap, discarding everything if caching is disabled.
+    fn set_limit(&mut self, limit: usize) {
+        self.limit = limit;
+        if limit == 0 {
+            self.id_to_iri.clear();
+            self.iri_to_id.clear();
+        }
+    }
 }
 
 impl Store {
+    /// Cap the memoized term dictionary at `limit` entries; `0` disables
+    /// caching entirely and drops what is already held.
+    ///
+    /// Every setting is correct — a cache miss reads SQL — so this trades
+    /// memory for round-trips and nothing else. See [`TermCache`] for why the
+    /// cap refuses admission rather than evicting.
+    pub fn set_term_cache_limit(&self, limit: usize) {
+        self.term_cache.borrow_mut().set_limit(limit);
+    }
+
+    /// Terms currently memoized.
+    #[must_use]
+    pub fn term_cache_len(&self) -> usize {
+        self.term_cache.borrow().len()
+    }
+
     pub fn intern(&self, iri: &str) -> Result<i64> {
         intern_in_space(&self.conn, iri)
     }

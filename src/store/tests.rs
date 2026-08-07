@@ -2558,3 +2558,63 @@ fn warm_term_cache_is_idempotent() {
     let second = store.warm_term_cache().unwrap();
     assert_eq!(first, second);
 }
+
+/// The cap must bound growth without ever changing an answer — a miss reads
+/// SQL, so a full cache is slower and never wrong.
+#[test]
+fn a_capped_term_cache_still_resolves_correctly() {
+    let store = test_store();
+    store.set_term_cache_limit(2);
+    let iris = [
+        "http://example.org/one",
+        "http://example.org/two",
+        "http://example.org/three",
+        "http://example.org/four",
+    ];
+    let ids: Vec<i64> = iris.iter().map(|i| store.intern(i).unwrap()).collect();
+
+    for (id, iri) in ids.iter().zip(iris.iter()) {
+        assert_eq!(store.resolve(*id).unwrap(), *iri, "resolve past the cap");
+        assert_eq!(store.lookup(iri).unwrap(), Some(*id), "lookup past the cap");
+    }
+    assert!(
+        store.term_cache_len() <= 2,
+        "cache grew past its cap: {}",
+        store.term_cache_len()
+    );
+}
+
+/// A zero cap disables memoization entirely and drops what is held. Every
+/// answer must survive that, since the fallback is the original SQL path.
+#[test]
+fn a_zero_term_cache_limit_disables_caching() {
+    let store = test_store();
+    let id = store.intern("http://example.org/x").unwrap();
+    assert_eq!(store.resolve(id).unwrap(), "http://example.org/x");
+    assert!(store.term_cache_len() > 0);
+
+    store.set_term_cache_limit(0);
+    assert_eq!(store.term_cache_len(), 0, "existing entries dropped");
+    assert_eq!(
+        store.resolve(id).unwrap(),
+        "http://example.org/x",
+        "resolution still works with caching off"
+    );
+    assert_eq!(store.term_cache_len(), 0, "and nothing is re-admitted");
+}
+
+/// `warm_term_cache` must respect the cap too, or the bulk path would be a
+/// hole straight through it.
+#[test]
+fn warm_term_cache_respects_the_cap() {
+    let store = test_store();
+    for i in 0..20 {
+        store.intern(&format!("http://example.org/{i}")).unwrap();
+    }
+    store.set_term_cache_limit(5);
+    let warmed = store.warm_term_cache().unwrap();
+    assert!(
+        warmed <= 5,
+        "warm admitted {warmed} entries past a cap of 5"
+    );
+}
