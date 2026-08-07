@@ -1269,6 +1269,12 @@ aegis:AlertRuleShape a sh:NodeShape ;
     sh:property [ sh:path aegis:keeper ; sh:maxCount 1 ; ] ;
     sh:property [ sh:path aegis:guardsProducer ; sh:nodeKind sh:IRI ; ] .
 
+aegis:TextRuleShape a sh:NodeShape ;
+    sh:targetClass aegis:TextRule ;
+    sh:property [ sh:path aegis:regex ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path aegis:enforcementTier ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
 aegis:InternalIdentifierPatternShape a sh:NodeShape ;
     sh:targetClass aegis:InternalIdentifierPattern ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
