@@ -171,9 +171,7 @@ case, measured — the honest expiry is short, not long.
 
 **The actionable query is the point of the whole mechanism:**
 
-```text
-which declarations expire within <N days>, and who owns re-asserting them?
-```
+    which declarations expire within <N days>, and who owns re-asserting them?
 
 Same shape as *which facts are `soleRecord`* (§2.4): a list someone can act on,
 rather than a property that quietly stops being true.
@@ -185,9 +183,7 @@ compatibility. Neither pole is right: defaulting to ⊤ fail-opens trust (an
 unlabelled graph would read as `attested`); defaulting to ⊥ drags every
 existing query's label to the floor. Instead the composed label is a pair:
 
-```text
-(fold over the DECLARED labels, coverage ∈ {full, partial, none})
-```
+    (fold over the DECLARED labels, coverage ∈ {full, partial, none})
 
 Today's stores report coverage `none` and the label as *undeclared* — matching
 the stack's convention of omitting freshness rather than faking `fresh`. When
@@ -201,12 +197,10 @@ registered `committed` in `graphs`. The `quipu:` namespace
 (`http://quipu.dev/ontology/`) is already the control-predicate home
 (`quipu:onViolation`).
 
-```turtle
-<urn:quipu:graph:datalinks-smac>
-    quipu:freshness   "fresh" ;
-    quipu:trust       smac:canonical ;
-    quipu:policyClass "no-export" .
-```
+    <urn:quipu:graph:datalinks-smac>
+        quipu:freshness   "fresh" ;
+        quipu:trust       smac:canonical ;
+        quipu:policyClass "no-export" .
 
 RDF wins the source-of-truth role because labels must be:
 
@@ -270,9 +264,7 @@ chooses.
 
 **The homomorphism, as a property test:**
 
-```text
-label(A ∪ B) = label(A) ⊓ label(B)
-```
+    label(A ∪ B) = label(A) ⊓ label(B)
 
 Graph-sets form a join-semilattice under union; labels form a lattice; `label`
 is a monotone map between them. That is the entire formal content of "a
@@ -285,10 +277,8 @@ stopped being associative and every derived answer is suspect.
 `QueryResult`'s three variants stay untouched — many internal callers match on
 it and want nothing more. New entry point:
 
-```rust
-pub struct LabeledResult { pub result: QueryResult, pub labels: DatasetLabels }
-pub fn query_labeled(store, sparql, ctx) -> Result<LabeledResult>
-```
+    pub struct LabeledResult { pub result: QueryResult, pub labels: DatasetLabels }
+    pub fn query_labeled(store, sparql, ctx) -> Result<LabeledResult>
 
 `/query` and `quipu_query` gain a top-level `"labels"` JSON key beside the
 existing `truncated` flag. Old clients ignore an extra key. **No new HTTP
@@ -322,12 +312,10 @@ policy currently enforced by the order Python calls things in. With labels it
 becomes seven `quipu:trustRank` facts, and retrieval precedence is plain
 SPARQL:
 
-```sparql
-SELECT ?s ?o ?g ?rank WHERE {
-  GRAPH ?g { ?s smac:prefersUnit ?o }
-  GRAPH <urn:quipu:graph:meta> { ?g quipu:trustRank ?rank }
-} ORDER BY DESC(?rank)
-```
+    SELECT ?s ?o ?g ?rank WHERE {
+      GRAPH ?g { ?s smac:prefersUnit ?o }
+      GRAPH <urn:quipu:graph:meta> { ?g quipu:trustRank ?rank }
+    } ORDER BY DESC(?rank)
 
 No engine change — *if* the `?g` join across two `GRAPH` patterns works today
 (it should, per [named-graphs.md](named-graphs.md) §5's "the same `?g` across a
@@ -366,11 +354,9 @@ graph set, and the merge semantics are already correct. What is missing is a
 **name** for a set, so it can be reused, labelled, governed, and handed to
 another agent:
 
-```sql
-CREATE TABLE datasets        (name TEXT PRIMARY KEY, created_at TEXT NOT NULL);
-CREATE TABLE dataset_members (dataset TEXT NOT NULL, g INTEGER NOT NULL,
-                              ord INTEGER, PRIMARY KEY (dataset, g));
-```
+    CREATE TABLE datasets        (name TEXT PRIMARY KEY, created_at TEXT NOT NULL);
+    CREATE TABLE dataset_members (dataset TEXT NOT NULL, g INTEGER NOT NULL,
+                                  ord INTEGER, PRIMARY KEY (dataset, g));
 
 mirrored into the meta-graph as `quipu:Dataset` / `quipu:includesGraph`.
 Resolution is a small change inside `apply_dataset`'s resolve closure: an IRI
@@ -381,10 +367,8 @@ makes that well-defined.
 
 Datasets overlap freely and neither contains the other:
 
-```text
-dataset:play-thinker   = {datalinks:smac, datalinks:thinker, doctrine, memory:durable}
-dataset:audit-canonical = {datalinks:smac, doctrine}
-```
+    dataset:play-thinker   = {datalinks:smac, datalinks:thinker, doctrine, memory:durable}
+    dataset:audit-canonical = {datalinks:smac, doctrine}
 
 That is Alexander's semilattice — the city, not the tree. The branch tree
 (`parent_branch`, overlay resolution) and the dataset semilattice (overlapping
