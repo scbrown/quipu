@@ -2,6 +2,90 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.19] - 2026-08-07
+
+### Added
+
+- *(server)* Expose the OWL ontology engine over REST as POST /ontology([c40e86e](https://github.com/scbrown/quipu/commit/c40e86e704eb28bb1c5a52a60851677c299dd7dd))
+- *(owl)* Materialize rdfs:subPropertyOf — it was parsed and then dropped on the floor([2bbcd4b](https://github.com/scbrown/quipu/commit/2bbcd4b05a6f571be9fd0fd84a1df8cd905b4f2c))
+- *(owl)* Wire Ontology::validate() into the write path, and correct the doc that claimed it already was([91d94e1](https://github.com/scbrown/quipu/commit/91d94e14d663bdbf2a430c3bb392617a3f0792fb))
+- *(server)* Register the reactive reasoner so derived facts stay fresh on write([9c04b20](https://github.com/scbrown/quipu/commit/9c04b20026bac0badbf9a7e08e8a9e2e7e3269bc))
+- *(shapes)* Land the declared class hierarchy, and say what actually makes it work([fd05e71](https://github.com/scbrown/quipu/commit/fd05e71f889b7c14ab42e6bbe220df0d239cc050))
+- *(shapes)* Govern Host, OperationalRule and Capability([ec1f082](https://github.com/scbrown/quipu/commit/ec1f0825664015ea38e274a0566b9f1738be8c8e))
+- *(shapes)* Govern CodeModule in_repo as a walkable IRI([302080c](https://github.com/scbrown/quipu/commit/302080c750238c6325e06f01c499af6eb73c395f))
+- *(shapes)* Govern Service and Tool, and make I8 fatal([8c627de](https://github.com/scbrown/quipu/commit/8c627deb3238c1a939563697dc9cf4cab41f39b5))
+- *(shapes)* Commit is subsumed by GitCommit, as a LIVE rule not a one-shot materialization([c8c4d53](https://github.com/scbrown/quipu/commit/c8c4d53532e46761943ceb592e123cc75c7eccce))
+- *(metrics)* Attribute request time to the CALLER, and make restarts visible([26d3027](https://github.com/scbrown/quipu/commit/26d3027f3c67072eebafd34bd667a79c6cfda0fa))
+- *(metrics)* Separate store WAIT from store HELD, so causation stops reading as suffering([43e5c20](https://github.com/scbrown/quipu/commit/43e5c20a9e24334c05204bfb91da26133e9c4284))
+- *(shapes)* Require rdfs:label on the four code-entity classes([2c3badb](https://github.com/scbrown/quipu/commit/2c3badb22f06fc541d2fba717d9f9a622cef3459))
+- *(episode)* Report WHAT an ingest did, so an idempotent retry stops reading as a failure([f323477](https://github.com/scbrown/quipu/commit/f32347754e3ba1276ac652b5c9d51cd3bd5872fd))
+- *(store)* Term spaces — the registry and space-aware allocation (quipu #74)([ae19939](https://github.com/scbrown/quipu/commit/ae199392eb06f8c39f787ee9dc4e5de66ad3cbd8))
+- *(store)* Quipu db respace — offline term-space remap (quipu #74)([41ca407](https://github.com/scbrown/quipu/commit/41ca4078696277d2daf32cf1ba75fd5fe91f9fba))
+- *(store)* ATTACH read-only layers — mount, verify, register (quipu #75)([8ead674](https://github.com/scbrown/quipu/commit/8ead674dd89dd9e60eeb0fe07e89f5b5e7864455))
+- *(store)* Facts_source union — composed reads over attached layers (quipu #75)([df4fffb](https://github.com/scbrown/quipu/commit/df4fffb35d7c58689ce168af8cf6f44f2ad89441))
+- *(store)* Term aliases — the alias table, lookup_all, and the adversarial fixture (quipu #76)([958d028](https://github.com/scbrown/quipu/commit/958d0288f8f78dc1cb3081cc259fe0303519c5c5))
+- *(store)* Resolve aliases across query term spaces (quipu #76)([ab5235b](https://github.com/scbrown/quipu/commit/ab5235b814ef3e739e58f6d50364634a5f01d110))
+- *(store)* Import graphs with eager term remap (quipu #85)([e546365](https://github.com/scbrown/quipu/commit/e5463652bd1fdf08f73e534303537590aff7e2b1))
+- *(pack)* Unpack and surface attached manifests (quipu #82)([435e86c](https://github.com/scbrown/quipu/commit/435e86cdd89b5014dfb503403f093cd61a5ed33b))
+- *(pack)* Verify attachments and warn on embedding drift (quipu #82)([603809a](https://github.com/scbrown/quipu/commit/603809ad2589e1bac88cd3c8ec9eff2c3f68b8b3))
+- *(store)* Fail loud on cross-db transaction time (quipu #77)([b937edf](https://github.com/scbrown/quipu/commit/b937edf32ed01c2190351560852c65d5ae16d2ed))
+- *(sparql)* Scope property paths to named datasets (quipu #36)([32c5ac8](https://github.com/scbrown/quipu/commit/32c5ac8d4c0d250677596ad11797d3a5db709a25))
+- *(reasoner)* Evaluate within one named graph (quipu #36)([743ec21](https://github.com/scbrown/quipu/commit/743ec21914aaac4bc895be945708f2cf3f9b9dd7))
+- *(episodes)* Support atomic snapshot replacement([d63b714](https://github.com/scbrown/quipu/commit/d63b714943d3f0939578890d1a275097804e5d0d))
+- Atomically replace knot snapshots([628d015](https://github.com/scbrown/quipu/commit/628d0151342e1c238f41139987fc30f23132589a))
+- *(labels)* Add durability and fact derivation methods([93f9a92](https://github.com/scbrown/quipu/commit/93f9a920fca1726bd3a6f4900fa999a95c707304))
+- *(shapes)* Govern text rules([a5eb73b](https://github.com/scbrown/quipu/commit/a5eb73b5d133ec546b30a32b456ef8c6f3df0a47))
+- *(owl)* Author functional and disjoint axiom sets([6d58d9a](https://github.com/scbrown/quipu/commit/6d58d9a8d2afcf357a970e6cce4ce2a702176cdf))
+- *(owl)* Author safe topology range axiom([1c59bcc](https://github.com/scbrown/quipu/commit/1c59bccba6d9f5515bf0f2338fc182894fdfb631))
+
+### Changed
+
+- *(store)* Remove superseded attached-only refusal (quipu #76)([f3f017a](https://github.com/scbrown/quipu/commit/f3f017a510d07e9667f9deddf22e59ef9bfe380e))
+
+### Documentation
+
+- *(design)* Statement identity, edge properties, and bounded paths([905d12e](https://github.com/scbrown/quipu/commit/905d12e75323c21a327ef7682fcaa449a1200753))
+- *(rest-api)* Document the alias write path, /set, and the audit-trail params([4c31f33](https://github.com/scbrown/quipu/commit/4c31f331d9f0213e0adb5b6316d801971f3529a7))
+
+### Fixed
+
+- *(version,deploy)* Report every compiled feature, and refuse a featureless binary([44af8a7](https://github.com/scbrown/quipu/commit/44af8a7565b423c430f36ae14544f5e535ab5f4b))
+- *(deploy)* Anchor the feature stamp on a versioned marker — the bare pattern matched binary noise([45a84b2](https://github.com/scbrown/quipu/commit/45a84b29cc3af1708179ba29573063235a4ec251))
+- *(owl)* Carry owl.validate_on_write from config into the store — the flag was unreachable([d7510d7](https://github.com/scbrown/quipu/commit/d7510d7493037ab82a2f9ed761ed7feeb4581e01))
+- *(owl)* Supersede a functional property on update instead of rejecting it([50b117a](https://github.com/scbrown/quipu/commit/50b117aa844cb001ecdb28b3ed9bc2e6ab513232))
+- *(episode)* Resolve foreign-vocabulary edge predicates, refuse what cannot be represented([73928f3](https://github.com/scbrown/quipu/commit/73928f3cc30593252ccecc5c4874a884074326bf))
+- *(ci)* Clear the two clippy lints that have held main red for ~17h([a50e268](https://github.com/scbrown/quipu/commit/a50e26877a2d1bee4f53a595e9c0e7c6b848b5da))
+- *(episode)* Refuse a comma-separated node type instead of minting a junk class([2294491](https://github.com/scbrown/quipu/commit/229449178d74b75e650efa0f0aec8c911ed588ea))
+- *(reasoner)* Constants in body atoms are a SELECTION, not an error and not a no-op([dd7860c](https://github.com/scbrown/quipu/commit/dd7860c009e4e0059f524e81adb2817021b60b8c))
+- *(server)* An auth refusal must SAY it refused — 401/403 returned a zero-length body([4b4eee8](https://github.com/scbrown/quipu/commit/4b4eee81c7b7c6bef1763d99589b384a021e3ecf))
+- *(server)* Scope the /project explanation to /project([1760904](https://github.com/scbrown/quipu/commit/1760904dc6cd02220212a4590f0bd0dfbab74c5b))
+- *(shacl)* Validate a write against the store, not just its request body([7e29558](https://github.com/scbrown/quipu/commit/7e29558af53f95157c5bf9618060b35ac97e8733))
+- *(lint)* Backtick SQLite in read-pool doc comments, alias the tool-case tuple([0be1d5a](https://github.com/scbrown/quipu/commit/0be1d5aa3f96365b8b703111f4dd5ac662c9011a))
+- *(ci)* Restore the --no-default-features build and clear -D warnings([c7221f8](https://github.com/scbrown/quipu/commit/c7221f8f9cb403ef5fa3eb03ddd6c14f7c8ac9d1))
+- *(sparql)* Keep alias dedup linear on wildcard scans([48d905b](https://github.com/scbrown/quipu/commit/48d905b944360c23e5148b1ce91104bcadc8b25c))
+- *(derivation)* Satisfy full-feature lint([b7e0c56](https://github.com/scbrown/quipu/commit/b7e0c56ad7b0ea6b3e2b8750ffc9fb5389ce4212))
+- *(owl)* Apply domain and range on new writes([f1943b5](https://github.com/scbrown/quipu/commit/f1943b5a4577a6ab720073e6e261a2809d9dd8dd))
+- *(ci)* Compile staged writes without owl([a19536f](https://github.com/scbrown/quipu/commit/a19536fd868ee2b6fe53d950285561998b7e5982))
+- *(graph-view)* Bound edges with a budget — node cap alone no longer bounds the payload([3831b2a](https://github.com/scbrown/quipu/commit/3831b2a48f69ea4c3b33d998151309fb0089b498))
+
+### Testing
+
+- *(shacl)* Pin the subset property on an episode-shaped payload([d7849b0](https://github.com/scbrown/quipu/commit/d7849b0003dc45c0ab5a6c81b4fb5ea4f1474cc9))
+- *(shacl)* Label the valid code-entity fixtures per the tightened shapes([c2d0929](https://github.com/scbrown/quipu/commit/c2d092983227eabf4102b74866d17049d2ecc663))
+- *(shacl)* Make the code-entity negative tests prove WHICH constraint fired([779512f](https://github.com/scbrown/quipu/commit/779512f7d90106b2bd1251599297d448cb9840ee))
+- *(shacl)* Pin root shapes across named graphs (quipu #36)([872de7b](https://github.com/scbrown/quipu/commit/872de7beb08400f58009b6b5f09b642cbf90b681))
+- *(episodes)* Pin snapshot removal with external refs([211e876](https://github.com/scbrown/quipu/commit/211e87612e0cd74cb08593bf779a7be4c0731e02))
+
+### Perf
+
+- *(server)* Serve reads from a read-only connection pool([2f9ee0b](https://github.com/scbrown/quipu/commit/2f9ee0b05ac169ec74353d7a6974fa8e484fb828))
+
+### Style
+
+- Rustfmt src/server.rs([60e9c73](https://github.com/scbrown/quipu/commit/60e9c73b3701737e4979ae9a7eb034d44046df2a))
+- *(metrics)* Cargo fmt + clippy doc_markdown([4b55218](https://github.com/scbrown/quipu/commit/4b552189c17b616ef289c21592e0861b708a39ad))
+- *(episodes)* Apply stable rustfmt([14e6628](https://github.com/scbrown/quipu/commit/14e66287ac3d491c6e18d3fb6f561a2eeabcf7cb))
+
 ## [0.3.18] - 2026-08-03
 
 ### Added
