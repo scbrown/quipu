@@ -300,7 +300,9 @@ fn unpack_materializes_and_versions_registries_beside_existing_entries() {
 
 #[test]
 fn a_respaced_pack_attaches_surfaces_its_manifest_and_spans_queries() {
-    let source = producer(0);
+    let mut source = producer(0);
+    source.embedding_config_mut().model_path = Some("models/producer.onnx".into());
+    source.embedding_config_mut().dimension = 768;
     let pack0 = tmp("attach-pack0");
     pack(&source, "urn:g:pack", &pack0, &PackOptions::default(), TS).unwrap();
     let pack7 = tmp("attach-pack7");
@@ -319,6 +321,12 @@ fn a_respaced_pack_attaches_surfaces_its_manifest_and_spans_queries() {
     assert_eq!(opened.pack_manifests().len(), 1);
     assert_eq!(opened.pack_manifests()[0].0, "pack");
     assert_eq!(opened.pack_manifests()[0].1.term_space, 7);
+    assert_eq!(opened.pack_embedding_warnings().len(), 1);
+    assert!(opened.pack_embedding_warnings()[0].contains("not converted"));
+    assert_eq!(
+        opened.verify_attached_pack_hashes().unwrap(),
+        vec![("pack".into(), true)]
+    );
     let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(
         &opened,
         "SELECT ?o WHERE { GRAPH <urn:g:pack> { <http://example.org/s> <http://example.org/p> ?o } }",

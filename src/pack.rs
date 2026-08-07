@@ -411,6 +411,9 @@ pub fn pack(
                 "shapes": opts.shapes.len(),
                 "queries": opts.queries.len(),
                 "vectors": vector_count,
+                "embedding_model": store.embedding_config().model_path.as_ref()
+                    .and_then(|p| p.file_name()).map(|p| p.to_string_lossy()),
+                "embedding_dimension": store.embedding_config().dimension,
             })
             .to_string(),
         };
@@ -591,6 +594,9 @@ pub fn pack_turtle(
             "facts": fact_count,
             "shapes": opts.shapes.len(),
             "queries": opts.queries.len(),
+            "embedding_model": store.embedding_config().model_path.as_ref()
+                .and_then(|p| p.file_name()).map(|p| p.to_string_lossy()),
+            "embedding_dimension": store.embedding_config().dimension,
         })
         .to_string(),
     };

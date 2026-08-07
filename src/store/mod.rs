@@ -435,6 +435,47 @@ impl Store {
         &self.pack_manifests
     }
 
+    /// Advisory embedding model/dimension mismatches for attached packs.
+    #[must_use]
+    pub fn pack_embedding_warnings(&self) -> Vec<String> {
+        let consumer_model = self
+            .embedding_config
+            .model_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|p| p.to_string_lossy().to_string());
+        self.pack_manifests.iter().filter_map(|(alias, manifest)| {
+            let counts: serde_json::Value = serde_json::from_str(&manifest.counts).ok()?;
+            let model = counts.get("embedding_model").and_then(|v| v.as_str()).map(str::to_string);
+            let dim = counts.get("embedding_dimension").and_then(serde_json::Value::as_u64)
+                .and_then(|n| usize::try_from(n).ok());
+            if model != consumer_model || dim != Some(self.embedding_config.dimension) {
+                Some(format!(
+                    "attached pack {alias} embedding model/dimension {:?}/{:?} differs from consumer {:?}/{}; vectors are not converted",
+                    model, dim, consumer_model, self.embedding_config.dimension
+                ))
+            } else { None }
+        }).collect()
+    }
+
+    /// Recompute content hashes for every attached pack on explicit request.
+    pub fn verify_attached_pack_hashes(&self) -> Result<Vec<(String, bool)>> {
+        self.pack_manifests
+            .iter()
+            .map(|(alias, _)| {
+                let attachment = self
+                    .attachments
+                    .iter()
+                    .find(|a| &a.alias == alias)
+                    .ok_or_else(|| {
+                        Error::Store(format!("pack manifest has no attachment: {alias}"))
+                    })?;
+                let (_, _, ok) = crate::pack::verify(&attachment.path)?;
+                Ok((alias.clone(), ok))
+            })
+            .collect()
+    }
+
     /// Refuse a write aimed at a graph that lives in an attached database.
     ///
     /// **This is the only mechanism covering this case** — it reads like a

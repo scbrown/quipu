@@ -186,6 +186,12 @@ claim is queryable and hash-anchored.
   land; the doc's contribution is naming the workflow so environments do it
   the same way.
 
+Operator sequence: explicitly verify the pack hash before mounting; record
+that exact `content_hash` as the environment pin; mount the same respaced
+artifact in the next environment; roll back by restoring the prior pinned
+artifact. Never re-pack between environments: that creates a different
+artifact and defeats the hash as the promotion identity.
+
 ## 5. Scope boundaries (honest)
 
 - **Packs are read-only artifacts.** No in-place mutation; a change is a new
