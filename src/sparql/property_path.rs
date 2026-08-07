@@ -5,7 +5,7 @@ use std::collections::{HashSet, VecDeque};
 use spargebra::algebra::PropertyPathExpression;
 use spargebra::term::TermPattern;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::store::Store;
 use crate::types::Value;
 
@@ -120,12 +120,9 @@ fn eval_single_edge(
     let Some(pred_id) = store.lookup(pred_iri)? else {
         return Ok(vec![]);
     };
-    let mut conds = vec![
-        "a = ?1".to_string(),
-        "op = 1".to_string(),
-        "g = 0".to_string(),
-    ];
+    let mut conds = vec!["a = ?1".to_string(), "op = 1".to_string()];
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(pred_id)];
+    add_graph_condition(&mut conds, &mut params, ctx)?;
     if let Some(s) = fixed_subj {
         conds.push(format!("e = ?{}", params.len() + 1));
         params.push(Box::new(s));
@@ -275,8 +272,9 @@ fn eval_negated_set(
         .iter()
         .filter_map(|n| store.lookup(n.as_str()).ok().flatten())
         .collect();
-    let mut conds = vec!["op = 1".to_string(), "g = 0".to_string()];
+    let mut conds = vec!["op = 1".to_string()];
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    add_graph_condition(&mut conds, &mut params, ctx)?;
     if let Some(s) = fixed_subj {
         conds.push(format!("e = ?{}", params.len() + 1));
         params.push(Box::new(s));
@@ -309,7 +307,8 @@ fn query_pairs(
 ) -> Result<Vec<(i64, i64)>> {
     // DISTINCT: dedup re-asserted duplicate current rows (GH#13).
     let sql = format!(
-        "SELECT DISTINCT e, v FROM facts WHERE {}",
+        "SELECT DISTINCT e, v FROM {} WHERE {}",
+        store.facts_source(),
         conds.join(" AND ")
     );
     let mut stmt = store.prepare(&sql)?;
@@ -328,10 +327,15 @@ fn query_pairs(
 }
 
 fn all_entity_ids(store: &Store, ctx: &TemporalContext) -> Result<Vec<i64>> {
-    let mut conds = vec!["op = 1".to_string(), "g = 0".to_string()];
+    let mut conds = vec!["op = 1".to_string()];
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    add_graph_condition(&mut conds, &mut params, ctx)?;
     add_temporal_conditions(&mut conds, &mut params, ctx);
-    let sql = format!("SELECT DISTINCT e FROM facts WHERE {}", conds.join(" AND "));
+    let sql = format!(
+        "SELECT DISTINCT e FROM {} WHERE {}",
+        store.facts_source(),
+        conds.join(" AND ")
+    );
     let mut stmt = store.prepare(&sql)?;
     let refs: Vec<&dyn rusqlite::types::ToSql> =
         params.iter().map(std::convert::AsRef::as_ref).collect();
@@ -341,6 +345,41 @@ fn all_entity_ids(store: &Store, ctx: &TemporalContext) -> Result<Vec<i64>> {
         ids.push(row.get(0)?);
     }
     Ok(ids)
+}
+
+/// Restrict every path step to the enclosing dataset graph scope.
+fn add_graph_condition(
+    conds: &mut Vec<String>,
+    params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
+    ctx: &TemporalContext,
+) -> Result<()> {
+    let gids = match &ctx.graph {
+        super::GraphScope::Default(gids) | super::GraphScope::Named(gids) => gids,
+        super::GraphScope::AnyNamed { .. } => {
+            return Err(Error::InvalidValue(
+                "property paths under GRAPH ?g are refused; see \
+                 docs/design/named-graphs.md §6.2"
+                    .to_string(),
+            ));
+        }
+    };
+    if gids.is_empty() {
+        conds.push("0 = 1".to_string());
+        return Ok(());
+    }
+    let placeholders: Vec<String> = gids
+        .iter()
+        .map(|gid| {
+            params.push(Box::new(*gid));
+            format!("?{}", params.len())
+        })
+        .collect();
+    conds.push(if placeholders.len() == 1 {
+        format!("g = {}", placeholders[0])
+    } else {
+        format!("g IN ({})", placeholders.join(", "))
+    });
+    Ok(())
 }
 
 fn add_temporal_conditions(

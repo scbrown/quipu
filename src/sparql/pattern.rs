@@ -306,14 +306,14 @@ pub fn eval_pattern_seeded(
             path,
             object,
         } => {
-            // quipu #36 follow-up: property paths are not yet graph-scoped (the
-            // path scan reads g=0). Fail loud inside a named GRAPH rather than
-            // silently returning default-graph results.
-            if !ctx.graph.is_root_default() {
+            // `GRAPH ?g` needs the graph binding carried through every step of
+            // an unknown-length closure. The fixed-graph and FROM-merge cases
+            // are scoped directly by property_path; this one remains loud.
+            if matches!(ctx.graph, GraphScope::AnyNamed { .. }) {
                 return Err(Error::InvalidValue(
-                    "property paths are only supported on the ROOT default graph \
-                     (quipu #36 follow-up); inside a named GRAPH or a FROM-redefined \
-                     default graph the path would read the wrong graph"
+                    "property paths under GRAPH ?g are refused: preserving one graph \
+                     binding across the whole closure requires per-graph evaluation; \
+                     see docs/design/named-graphs.md §6.2"
                         .to_string(),
                 ));
             }

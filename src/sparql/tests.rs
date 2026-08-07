@@ -1593,16 +1593,123 @@ fn graph_unknown_iri_is_empty_not_default() {
 }
 
 #[test]
-fn property_path_in_named_graph_fails_loud() {
-    let (store, g_iri) = test_store_named_graph();
+fn property_path_in_named_graph_stays_inside_that_graph() {
+    let (mut store, g_iri) = test_store_named_graph();
+    let g = store.lookup(&g_iri).unwrap().unwrap();
+    let y = store.lookup("http://example.org/y").unwrap().unwrap();
+    let p = store.lookup("http://example.org/p").unwrap().unwrap();
+    let z = store.intern("http://example.org/z").unwrap();
+    store
+        .overlay_write(
+            g,
+            crate::Op::Assert,
+            y,
+            p,
+            Value::Ref(z),
+            "2026-04-04T00:00:00Z",
+        )
+        .unwrap();
     let q = format!(
         "SELECT ?o WHERE {{ GRAPH <{g_iri}> {{ <http://example.org/x> <http://example.org/p>+ ?o }} }}"
     );
-    let err = query(&store, &q).unwrap_err();
-    let msg = format!("{err}");
+    let result = query(&store, &q).unwrap();
+    let objects: Vec<String> = result
+        .rows()
+        .iter()
+        .map(|row| value_to_iri(&store, row.get("o").unwrap()))
+        .collect();
     assert!(
-        msg.contains("property paths are only supported on the ROOT default graph"),
-        "must fail loud rather than silently read the default graph; got: {msg}"
+        objects.contains(&"http://example.org/y".to_string())
+            && objects.contains(&"http://example.org/z".to_string()),
+        "the closure must traverse both named-graph edges: {objects:?}"
+    );
+}
+
+#[test]
+fn property_path_under_graph_var_still_fails_loud() {
+    let (store, _) = test_store_named_graph();
+    let err = query(
+        &store,
+        "SELECT ?g ?o WHERE { GRAPH ?g { <http://example.org/x> <http://example.org/p>+ ?o } }",
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("named-graphs.md §6.2"), "{err}");
+}
+
+#[test]
+fn property_paths_do_not_cross_graphs_but_from_traverses_the_declared_merge() {
+    let mut store = Store::open_in_memory().unwrap();
+    let ts = "2026-04-04T00:00:00Z";
+    let p = store.intern("http://example.org/p").unwrap();
+    let x = store.intern("http://example.org/x").unwrap();
+    let y = store.intern("http://example.org/y").unwrap();
+    let z = store.intern("http://example.org/z").unwrap();
+    let root_only = store.intern("http://example.org/root-only").unwrap();
+    let g1_iri = "http://example.org/g/path-a";
+    let g2_iri = "http://example.org/g/path-b";
+    let g1 = store.overlay_create(g1_iri, 0).unwrap();
+    let g2 = store.overlay_create(g2_iri, 0).unwrap();
+    store
+        .overlay_write(g1, crate::Op::Assert, x, p, Value::Ref(y), ts)
+        .unwrap();
+    store
+        .overlay_write(g2, crate::Op::Assert, y, p, Value::Ref(z), ts)
+        .unwrap();
+    store
+        .transact(
+            &[crate::Datum {
+                entity: y,
+                attribute: p,
+                value: Value::Ref(root_only),
+                valid_from: ts.to_string(),
+                valid_to: None,
+                op: crate::Op::Assert,
+            }],
+            ts,
+            None,
+            None,
+        )
+        .unwrap();
+
+    let one_graph = query(
+        &store,
+        &format!(
+            "SELECT ?o WHERE {{ GRAPH <{g1_iri}> {{ <http://example.org/x> <http://example.org/p>+ ?o }} }}"
+        ),
+    )
+    .unwrap();
+    let one_objects: Vec<String> = one_graph
+        .rows()
+        .iter()
+        .map(|row| value_to_iri(&store, row.get("o").unwrap()))
+        .collect();
+    assert_eq!(
+        one_objects,
+        vec!["http://example.org/y"],
+        "a path in one graph must not borrow its next edge from ROOT or a sibling"
+    );
+
+    let merged = query(
+        &store,
+        &format!(
+            "SELECT ?o FROM <{g1_iri}> FROM <{g2_iri}> WHERE {{ <http://example.org/x> <http://example.org/p>+ ?o }}"
+        ),
+    )
+    .unwrap();
+    let merged_objects: Vec<String> = merged
+        .rows()
+        .iter()
+        .map(|row| value_to_iri(&store, row.get("o").unwrap()))
+        .collect();
+    assert!(
+        merged_objects.contains(&"http://example.org/y".to_string())
+            && merged_objects.contains(&"http://example.org/z".to_string()),
+        "FROM must traverse the RDF merge: {merged_objects:?}"
+    );
+    assert!(
+        !merged_objects.contains(&"http://example.org/root-only".to_string()),
+        "ROOT is not part of the declared FROM merge: {merged_objects:?}"
     );
 }
 

@@ -7,10 +7,12 @@
 > selection, and the `graph` query param — is added in the #36 finish-work.
 > Verified by mechanism (`src/sparql/pattern.rs`, `src/sparql/mod.rs::apply_dataset`,
 > `src/mcp/mod.rs::query_result`) + 13 tests; full lib suite green.
-> **Remaining:** property paths and RDFS inference are ROOT-default-only (they
-> **fail loud** elsewhere); the write side stays on the overlay path +
+> **Update (quipu #36, 2026-08-07):** property paths now follow a fixed named
+> graph or a `FROM` merge without crossing undeclared graph boundaries;
+> `GRAPH ?g` remains deliberately refused. Implicit RDFS widening was retired
+> in favour of explicit property paths. **Remaining:** the write side stays on the overlay path +
 > `/episode` `graph` field (no `graph` param on `/knot` yet). These keep this 🟡.
-> **§6 is designed and not yet built.** §7's cross-graph defect (§7.1) is
+> **§6 is built for fixed datasets.** §7's cross-graph defect (§7.1) is
 > **fixed** — quipu #56 ROOT-scoped the whole committed read path; the reasoner
 > and SHACL scoping decisions in §7.2–§7.3 remain to build.
 
@@ -102,13 +104,12 @@ There is deliberately **no** `graph` param on `/knot` yet — arbitrary writes t
 named committed branch would bypass the committed/overlay class invariant; the
 overlay path is the sanctioned route.
 
-## 6. Graph-scoping the traversal reads (designed, not yet built)
+## 6. Graph-scoping the traversal reads (built for fixed datasets)
 
-Property paths and RDFS inference currently **fail loud** outside the ROOT
-default graph. That was the right stopgap — silently reading `g = 0` from
-inside a `GRAPH <iri>` block returns another graph's data — but it leaves
-`GRAPH <iri> { ?s :dependsOn+ ?o }` unanswerable, which is precisely the query
-Hank's per-branch worlds need.
+Property paths follow the enclosing fixed graph scope. A `GRAPH <iri>` closure
+stays inside that graph, while `FROM <a> FROM <b>` traverses their RDF merge.
+Every scan uses the composed `facts_source`, so attached graphs obey the same
+rule. `GRAPH ?g` still fails loud for the reason in §6.2.
 
 ### 6.1 What is actually hardcoded
 
@@ -147,38 +148,24 @@ Half a path in a tenant overlay and half in ROOT is not a fact either graph
 asserts, and permitting it would make an overlay able to forge reachability in
 its parent.
 
-### 6.3 Subclass inference is deliberately *not* symmetric with paths
+### 6.3 RDFS inference is an explicit path
 
-An ontology (`rdfs:subClassOf`) is normally asserted once, in ROOT, while
-instance data lives in a branch or overlay. Scoping the closure to the *current*
-graph means `?s a ex:Person` inside a named graph stops matching an `ex:Engineer`
-whose superclass edge lives in ROOT — which reads as a regression, not a fix.
-
-So the two halves scope differently, and the asymmetry is the design:
-
-- **Instance matching** (`?s a ?C`) is scoped to the current graph.
-- **The subclass closure** (`collect_class_and_subclasses`) reads the
-  **schema graph**, which defaults to ROOT and does not follow the data scope.
-
-This preserves today's behaviour for the ROOT case exactly, and makes the named
-graph case do the useful thing (branch instances, shared ontology). It is also
-reversible: if a branch ever needs to *override* the ontology, the schema graph
-becomes the union `{current, ROOT}` with the nearest definition winning — the
-same nearest-overlay-wins rule §3 already uses for facts.
-
-An explicit `GRAPH <iri> { ?s a ?C }` where the caller wants literal, un-inferred
-matching keeps that today via §5's export semantics; the escape hatch is
-`FROM <iri>` with no schema graph, which we spell out when the flag exists.
+SPARQL type patterns use simple entailment: `?s a ex:Person` matches asserted
+types only. Inference is explicit as
+`?s a/rdfs:subClassOf* ex:Person`, and therefore follows the ordinary property
+path graph rules above. This replaced the earlier proposed asymmetry where the
+instance scan followed the data graph but the subclass closure silently read
+ROOT.
 
 ### 6.4 Acceptance
 
-- [ ] `GRAPH <iri> { ?s :p+ ?o }` traverses only `<iri>`; a path that would need
+- [x] `GRAPH <iri> { ?s :p+ ?o }` traverses only `<iri>`; a path that would need
       a ROOT edge to complete yields no row
-- [ ] `FROM <a> <b>` traverses the merge of `a` and `b`
-- [ ] `GRAPH ?g { ?s :p+ ?o }` still errors, with a message naming §6.2
-- [ ] `?s a ex:Person` inside a named graph matches instances in that graph via
-      a subclass edge asserted in ROOT
-- [ ] An overlay cannot make a path appear in its committed parent
+- [x] `FROM <a> <b>` traverses the merge of `a` and `b`
+- [x] `GRAPH ?g { ?s :p+ ?o }` still errors, with a message naming §6.2
+- [x] Explicit type-inference paths follow the same graph scope as every other
+      property path
+- [x] An overlay cannot make a path appear in its committed parent
 
 ## 7. SHACL and reasoner scope (designed, not yet built)
 
