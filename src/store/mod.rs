@@ -1320,55 +1320,6 @@ impl Store {
             .map_err(|_| Error::UnknownTerm(id))
     }
 
-    /// Refuse, naming quipu #76, when `iri` is interned ONLY in an attached
-    /// layer.
-    ///
-    /// [`Self::lookup`] reads `main` only — deliberately, because the same IRI
-    /// in two spaces has two ids and picking one silently would be a wrong
-    /// join rather than a missing one (see `attach::build_resolve_sql`). The
-    /// cost of that decision lands here: naming an attached graph as
-    /// `GRAPH <iri>` or `FROM <iri>` finds nothing locally and falls into the
-    /// unknown-graph path, which matches nothing.
-    ///
-    /// That path is right for a graph that does not exist and wrong for one
-    /// that does, and the two are indistinguishable to the caller — an empty
-    /// result reads as "the attach did not work" or as a typo. So when the IRI
-    /// IS interned in a mounted layer, say so instead of returning nothing.
-    ///
-    /// Only fires on a composed store, and only for an IRI an attachment
-    /// actually knows: an unattached store, and a genuinely unknown IRI on an
-    /// attached one, keep today's match-nothing behaviour exactly.
-    ///
-    /// # Errors
-    /// [`Error::Store`] naming the alias, the IRI and the blocking issue.
-    pub(crate) fn refuse_if_attached_only(&self, iri: &str) -> Result<()> {
-        if self.attachments.is_empty() {
-            return Ok(());
-        }
-        for a in &self.attachments {
-            let found: Option<i64> = self
-                .conn
-                .query_row(
-                    &format!("SELECT id FROM {}.terms WHERE iri = ?1", a.alias),
-                    params![iri],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            if found.is_some() {
-                return Err(Error::Store(format!(
-                    "<{iri}> is interned in the attached layer {:?} (alias {}) \
-                     but not in this store, and naming a term across an \
-                     attachment is not implemented yet (quipu #76). Refused \
-                     rather than matched-against-nothing, because an empty \
-                     result here is indistinguishable from a misspelt IRI. \
-                     `GRAPH ?g` ranges attached graphs today and does work.",
-                    a.path, a.alias
-                )));
-            }
-        }
-        Ok(())
-    }
-
     /// Every id this IRI denotes across the composition — the local id and
     /// each attached layer's id for the same IRI (quipu #76).
     ///
