@@ -1,0 +1,13 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+
+# Scalar identifiers emitted by the repository and episode ingestion paths.
+# Quipu's bitemporal write path supersedes an earlier current value when OWL
+# validation is enabled; two distinct values in one transaction remain an
+# error.  rdfs:label is deliberately absent: it has multiple producers and is
+# not an identifier.
+aegis:filePath   a owl:FunctionalProperty .
+aegis:sha        a owl:FunctionalProperty .
+aegis:hash       a owl:FunctionalProperty .
+aegis:contentHash a owl:FunctionalProperty .
+aegis:groupId    a owl:FunctionalProperty .

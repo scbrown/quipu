@@ -1,0 +1,13 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+
+# These are domain distinctions, not a one-type-per-entity policy. Services
+# may also be SystemdService and WebApplication; those compatible types are
+# intentionally not declared disjoint.
+aegis:Host owl:disjointWith aegis:Service,
+                              aegis:Document .
+
+aegis:Service owl:disjointWith aegis:Document .
+
+# A metric measures a requirement; it is not itself the requirement.
+aegis:Metric owl:disjointWith aegis:NonFunctionalRequirement .
