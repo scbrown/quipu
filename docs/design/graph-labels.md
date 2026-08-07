@@ -124,6 +124,57 @@ time-series system.* That is why it belongs here as a store primitive rather tha
 as a private field on some domain class: every consumer needing it so far has
 hand-rolled it, which is the same observation motivating this whole document.
 
+### 2.6 Refresh cadence — expiry is DE-DECLARATION, not a new value (NOT BUILT)
+
+> **Status:** ⬜ proposed 2026-08-07. Nothing implemented.
+
+Every declared label records what a producer asserted **at write time**.
+`fresh` becomes stale; `reproducible` becomes `soleRecord` when its source
+rotates. The store cannot detect either, so a label with no cadence is a claim
+that silently outlives its own truth.
+
+**The obvious model walks into a regress.** If the fix is "track how fresh the
+freshness claim is", that meta-label is itself a claim needing a cadence, and so
+on. The regress is what makes this look harder than it is.
+
+**It stops on the §2.5 distinction.** There are exactly two kinds of label:
+
+| kind | how it refreshes | why no regress |
+|---|---|---|
+| **computable** — carries `quipu:derivedBy` | re-run the method on an interval | the method IS the ground truth; nothing is being asserted |
+| **declared** — no method | a principal must re-assert before it expires | the expiry is a *fact about the assertion*, not another assertion |
+
+**Model expiry as `valid_to` on the label assertion — the store is already
+bitemporal, so this needs no new machinery.** Past `valid_to` the assertion
+simply leaves the current view, and the label becomes **undeclared**, which §2.1
+already handles exactly: coverage drops to `partial`, the fold reports
+*undeclared*, and nothing downstream fakes a value.
+
+That is the property worth having: **an expired label is not false, and not a new
+`unknown` — it is absent.** No fourth coverage value, no new lattice point, no
+consumer changes. And "as of last Tuesday, what was declared" comes free from
+bitemporality, which is the audit question §2.4 exists to answer.
+
+**Cadence belongs to the axis, not to one global timer.** Sensible defaults
+differ by orders of magnitude — `policyClass` changes on governance decisions,
+`trust` on evidence, `freshness` per recompute. One knob for all four would be
+wrong for three of them.
+
+**⚠ One hard constraint, and it is not stylistic:** a `reproducible` durability
+claim **must expire no later than its source's retention window**. Otherwise the
+claim outlives the source it depends on and reports recoverable for a fact that
+is already sole-record. Where the retention is unknown — which is the common
+case, measured — the honest expiry is short, not long.
+
+**The actionable query is the point of the whole mechanism:**
+
+```text
+which declarations expire within <N days>, and who owns re-asserting them?
+```
+
+Same shape as *which facts are `soleRecord`* (§2.4): a list someone can act on,
+rather than a property that quietly stops being true.
+
 ### 2.1 Undeclared is not a lattice value
 
 Every graph in every existing deployment is unlabelled, so the default decides
