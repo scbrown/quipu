@@ -57,13 +57,30 @@ This is easy to miss, and worth stating plainly.
 | `impact()` (`src/impact.rs:79`) | BFS using one indexed `entity_facts()` lookup per frontier node | **O(nodes reached)** |
 | SPARQL `eval_bgp` | Per-pattern SQL, nested-loop join | **O(n²)** |
 
-Measured on the same stores:
+Measured on the same stores, **warm page cache**:
 
 | Episodes | `project()` | `impact()` 3 hops | SPARQL 2-hop |
 |---:|---:|---:|---:|
-| 1,000 | 118 ms (3,054n / 8,050e) | **1.5 ms** | 6,779 ms |
-| 4,000 | 745 ms (12,054n / 32,050e) | **3.2 ms** | 133,037 ms |
-| 10,000 | 2,768 ms (30,054n / 80,050e) | **8.3 ms** | timeout |
+| 1,000 | 13.0 ms (3,054n / 8,050e) | **1.1 ms** | 4,709 ms |
+| 2,000 | 24.2 ms (6,054n / 16,050e) | — | 20,630 ms |
+| 4,000 | 48.5 ms (12,054n / 32,050e) | **1.8 ms** | 84,444 ms |
+| 10,000 | 134.5 ms (30,054n / 80,050e) | **4.3 ms** | timeout |
+
+**Correction, worth stating plainly:** an earlier revision of this document
+reported `project()` at 118 / 745 / 2,768 ms and called it "roughly O(n^1.3)".
+Those were **cold** measurements — first touch of an 83 MB file — and the
+apparent superlinearity was page-cache cost, not an algorithmic property. Warm,
+`project()` is linear (1.86×, 2.00× and 2.77× for 2×, 2× and 2.5× the data) and
+about 20× faster than the figure that was published. It does not resolve per
+fact; it builds the petgraph from term ids alone.
+
+The SPARQL column is `examples/scale_bench.rs` throughout, so it is comparable
+with §1 rather than being a second measurement of the same query in a different
+context.
+
+What remains true of `project()` is that it is **uncached** and pays a full scan
+per call. Fine against a small derived graph, not against a large ROOT — scoping
+it to a named graph composes with §7 and is tracked as `quipu-tz5`.
 
 So the codebase already contains a full in-memory materialization
 (`graph::project`) and an anchored walk that scales (`impact`). What it lacks is
