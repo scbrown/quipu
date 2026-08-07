@@ -28,6 +28,17 @@ const DEFAULT_LIMIT: usize = 250;
 /// Hard ceiling on the node budget a caller may request.
 const MAX_LIMIT: usize = 2000;
 
+/// Default edge budget. The node cap alone stopped bounding the payload once
+/// OWL materialization densified the store: renderers pay O(edges) per frame
+/// (spring attraction and line drawing both walk the whole edge list), so
+/// edges are what hang the tab. Measured live 2026-08-07: 2000 nodes carried
+/// 105,230 edges (2.4MB) and the UI would not load; 250 nodes still carried
+/// 15,554.
+const DEFAULT_EDGE_BUDGET: usize = 4_000;
+
+/// Hard ceiling on the edge budget a caller may request.
+const MAX_EDGE_BUDGET: usize = 50_000;
+
 /// A predicate is a domain *relation* — a drawable edge — when it is none of
 /// the scaffolding vocabularies. `rdf:type` is a node attribute, `rdfs:*` is
 /// labels/comments, and `prov:*` is the provenance spine that otherwise buries
@@ -49,7 +60,7 @@ struct NodeAcc {
 /// MCP tool / `POST /graph`: project the store into a render-ready node-link
 /// payload.
 ///
-/// Input: `{ "limit": N, "type": "<IRI>", "include_episodes": bool }`
+/// Input: `{ "limit": N, "edge_budget": N, "type": "<IRI>", "include_episodes": bool }`
 ///
 /// Output:
 /// ```json
@@ -71,6 +82,10 @@ pub fn tool_graph_view(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         .get("limit")
         .and_then(serde_json::Value::as_u64)
         .map_or(DEFAULT_LIMIT, |n| (n as usize).min(MAX_LIMIT));
+    let edge_budget = input
+        .get("edge_budget")
+        .and_then(serde_json::Value::as_u64)
+        .map_or(DEFAULT_EDGE_BUDGET, |n| (n as usize).min(MAX_EDGE_BUDGET));
     let type_filter = input.get("type").and_then(|v| v.as_str());
     let include_episodes = input
         .get("include_episodes")
@@ -182,13 +197,26 @@ pub fn tool_graph_view(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 
     // Only edges whose BOTH endpoints survived the cap. An edge to a dropped
     // node would render as an arrow into empty space.
-    let edges: Vec<JsonValue> = raw_edges
+    let mut kept: Vec<(usize, usize, &str)> = raw_edges
         .iter()
         .filter_map(|(s, t, p)| match (index.get(s), index.get(t)) {
-            (Some(si), Some(ti)) => Some(json!([si, ti, p])),
+            (Some(&si), Some(&ti)) => Some((si, ti, p.as_str())),
             _ => None,
         })
         .collect();
+    let edges_total = kept.len();
+    // Over budget, keep the edges among the highest-ranked nodes (index IS the
+    // degree rank), dropping periphery first — deterministic, so the same
+    // store always draws the same graph.
+    if kept.len() > edge_budget {
+        kept.sort_by(|a, b| {
+            a.0.max(a.1)
+                .cmp(&b.0.max(b.1))
+                .then_with(|| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)))
+        });
+        kept.truncate(edge_budget);
+    }
+    let edges: Vec<JsonValue> = kept.iter().map(|(si, ti, p)| json!([si, ti, p])).collect();
 
     // Type census over the DRAWN nodes, descending — the UI assigns its fixed
     // eight-slot categorical order by this rank and folds the tail into one
@@ -211,7 +239,12 @@ pub fn tool_graph_view(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         "edges": edges,
         "types": types,
         // Never a silent cap: the UI says so on screen when this fires.
-        "truncated": {"shown": candidates.len(), "of": total_candidates},
+        "truncated": {
+            "shown": candidates.len(),
+            "of": total_candidates,
+            "edges_shown": edges.len(),
+            "edges_of": edges_total,
+        },
         "stats": {"nodes": nodes.len(), "edges": edges.len()},
     }))
 }

@@ -196,3 +196,32 @@ fn limit_is_capped_at_the_hard_ceiling() {
     // observable effect is simply that it succeeds and stays bounded.
     assert!(g["nodes"].as_array().unwrap().len() <= MAX_LIMIT);
 }
+
+#[test]
+fn edge_budget_drops_periphery_first_and_reports_honestly() {
+    let store = store_with(FIXTURE);
+    let g = view(&store, &json!({"edge_budget": 2}));
+
+    let edges = g["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 2, "budget respected");
+    assert_eq!(g["truncated"]["edges_shown"], 2);
+    assert_eq!(g["truncated"]["edges_of"], 3);
+
+    // All three fixture nodes tie at degree 2, so rank falls back to IRI
+    // order, giving indices 0..2 alphabetically. The dropped edge must be
+    // the one whose worst endpoint ranks lowest — (2, 0) — never an edge
+    // touching only higher-ranked nodes.
+    let pairs: Vec<(u64, u64)> = edges
+        .iter()
+        .map(|e| (e[0].as_u64().unwrap(), e[1].as_u64().unwrap()))
+        .collect();
+    assert!(!pairs.contains(&(2, 0)), "periphery edge dropped, got {pairs:?}");
+}
+
+#[test]
+fn under_budget_edge_counts_report_no_truncation() {
+    let store = store_with(FIXTURE);
+    let g = view(&store, &json!({}));
+    assert_eq!(g["truncated"]["edges_shown"], g["truncated"]["edges_of"]);
+    assert_eq!(g["truncated"]["edges_of"], 3, "all fixture edges drawn");
+}
