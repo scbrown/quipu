@@ -11,6 +11,8 @@ pub mod overlays;
 pub mod push;
 pub mod queries;
 pub mod respace;
+pub mod terms;
+pub(crate) use terms::TermCache;
 #[cfg(test)]
 mod term_space_tests;
 #[cfg(test)]
@@ -148,6 +150,8 @@ pub struct Store {
     /// [`attach::build_resolve_sql`]. Exactly today's single-table query with
     /// no attachments.
     pub(crate) resolve_sql: String,
+    /// Memoized term dictionary — see [`TermCache`].
+    pub(crate) term_cache: std::cell::RefCell<TermCache>,
 }
 
 /// An advisory event observed before a write and appended with it (P3).
@@ -546,6 +550,7 @@ impl Store {
             pack_manifests: Vec::new(),
             facts_source: "facts".to_string(),
             resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
+            term_cache: std::cell::RefCell::new(TermCache::default()),
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
         }
@@ -1375,129 +1380,6 @@ impl Store {
                  ON dataset_members(dataset, ord);",
         )?;
         Ok(())
-    }
-
-    pub fn intern(&self, iri: &str) -> Result<i64> {
-        intern_in_space(&self.conn, iri)
-    }
-
-    /// The space this database allocates term ids from (quipu #74).
-    ///
-    /// Exactly one row carries `local = 1` (enforced by a partial unique index).
-    /// A store with no such row predates the registry and is space 0 by
-    /// definition — see `migrate_term_spaces`.
-    ///
-    /// # Errors
-    /// Store errors reading the registry.
-    pub fn local_term_space(&self) -> Result<i64> {
-        local_term_space(&self.conn)
-    }
-
-    /// Seed the term-space registry (quipu #74).
-    ///
-    /// Idempotent and respace-safe: seeds `(0, 'main', 1)` only when the store
-    /// has no local row at all. A store respaced into space 7 already has one,
-    /// and re-seeding space 0 here would leave two rows claiming to be local —
-    /// which is why this is not an `INSERT OR IGNORE` in `schema::INIT_SQL`.
-    ///
-    /// **A legacy store is space 0 by definition, so this is a one-row insert
-    /// and never a rewrite.** Its ids are `1..n`, exactly the range space 0
-    /// owns; that is the property the whole migration story rests on.
-    fn migrate_term_spaces(conn: &Connection) -> Result<()> {
-        let has_local: bool = conn
-            .prepare("SELECT 1 FROM term_spaces WHERE local = 1")?
-            .exists([])?;
-        if !has_local {
-            conn.execute(
-                "INSERT INTO term_spaces (space, db, local) VALUES (0, 'main', 1)",
-                [],
-            )?;
-        }
-        Ok(())
-    }
-
-    /// Resolve a term id back to its IRI.
-    ///
-    /// With attachments mounted this also reads their `terms` tables — see
-    /// [`Self::resolve_sql`] for why that is unambiguous, and why the
-    /// *opposite* direction is deliberately not done here.
-    pub fn resolve(&self, id: i64) -> Result<String> {
-        self.conn
-            .query_row(&self.resolve_sql, params![id], |row| row.get(0))
-            .map_err(|_| Error::UnknownTerm(id))
-    }
-
-    /// Every id this IRI denotes across the composition — the local id and
-    /// each attached layer's id for the same IRI (quipu #76).
-    ///
-    /// The canonical (local) id comes FIRST when there is one, so a caller
-    /// taking `.first()` gets the id the local store can resolve, label and
-    /// write against.
-    ///
-    /// For a store with no attachments this returns exactly what
-    /// [`Self::lookup`] returns, as zero or one element — and the predicate
-    /// built from it is byte-identical to the pre-#76 SQL.
-    ///
-    /// # Errors
-    /// [`Error::Sqlite`] if the lookup fails.
-    pub fn lookup_all(&self, iri: &str) -> Result<Vec<i64>> {
-        let local = self.lookup(iri)?;
-        if self.attachments.is_empty() {
-            return Ok(local.into_iter().collect());
-        }
-        let mut ids: Vec<i64> = local.into_iter().collect();
-        for a in &self.attachments {
-            let mut stmt = self
-                .conn
-                .prepare(&format!("SELECT id FROM {}.terms WHERE iri = ?1", a.alias))?;
-            let mut rows = stmt.query(params![iri])?;
-            while let Some(r) = rows.next()? {
-                let id: i64 = r.get(0)?;
-                if !ids.contains(&id) {
-                    ids.push(id);
-                }
-            }
-        }
-        Ok(ids)
-    }
-
-    /// Map an id to the one the LOCAL store uses for the same IRI.
-    ///
-    /// An id with no alias row — every id on an unattached store, and every
-    /// local id — is returned unchanged, so this is an identity function until
-    /// a composition actually contains an alias.
-    ///
-    /// This is the *"sharp edge"* of `multi-db-composition.md` §1.2. SQL
-    /// `DISTINCT` runs over raw ids, so an entity present in both files
-    /// survives it as two rows that are semantically one. Canonicalising in
-    /// Rust **after** the SQL DISTINCT is what collapses them, and it costs
-    /// the size of the result set rather than the size of the store.
-    ///
-    /// # Errors
-    /// [`Error::Sqlite`] if the lookup fails.
-    pub fn canonical_id(&self, id: i64) -> Result<i64> {
-        if self.attachments.is_empty() {
-            return Ok(id);
-        }
-        Ok(self
-            .conn
-            .query_row(
-                "SELECT canonical_id FROM term_alias WHERE alias_id = ?1",
-                params![id],
-                |r| r.get(0),
-            )
-            .optional()?
-            .unwrap_or(id))
-    }
-
-    /// Look up a term id by IRI, returning None if not interned.
-    pub fn lookup(&self, iri: &str) -> Result<Option<i64>> {
-        let mut stmt = self.conn.prepare("SELECT id FROM terms WHERE iri = ?1")?;
-        let mut rows = stmt.query(params![iri])?;
-        match rows.next()? {
-            Some(row) => Ok(Some(row.get(0)?)),
-            None => Ok(None),
-        }
     }
 
     /// Cheap graph-size counts for the /metrics gauges: (entities, facts,

@@ -1,10 +1,15 @@
 # Design: In-Memory Read Model — query in memory, write to SQLite
 
-> **Implementation status (2026-08-07):** 🔬 **Designed and prototyped, not
-> implemented.** Every number below was measured on this branch, native x86-64,
+> **Implementation status (2026-08-07):** 🚧 **Phase 1 landed; Phases 2–5
+> designed.** Every number below was measured on this branch, native x86-64,
 > `--release`, `--no-default-features`. The prototype read model is
 > `examples/mem_read_model.rs`; the baseline it is compared against is
-> `examples/scale_bench.rs`. Neither the `Store` nor `eval_bgp` has been changed.
+> `examples/scale_bench.rs`.
+>
+> `Store` now carries a memoizing `TermCache` (§8 Phase 1, `quipu-yzf`) — worth
+> ~4× on the 2-hop join on its own. `eval_bgp` is otherwise unchanged and still
+> does a nested-loop join; the §1 and §4 tables are pre-cache figures, kept as
+> the baseline the remaining phases are measured against.
 
 **Thesis:** SQLite should be Quipu's durable write log and archive. Queries
 should be answered from an in-memory read model built over it. Measured, that
@@ -208,10 +213,41 @@ a cache: the two layers hold different things, for different reasons.
 
 ## 8. Plan
 
-**Phase 1 — Bulk dictionary load.** Replace per-term `resolve()` with a single
-`SELECT id, iri FROM terms` sweep. Standalone win: it speeds up
-`graph::project()` and the existing `eval_bgp` binding path, with no new
-architecture and no scope questions. Do this first regardless of what follows.
+**Phase 1 — Term dictionary memoization. ✅ LANDED** (`quipu-yzf`).
+
+The dictionary round-trips turned out to be in the `eval_bgp` binding path
+(`resolve()` + `lookup()` per result row per pattern), the `graph.rs` output
+paths (per result *node*, not per fact — `project()` itself builds from term ids
+alone), and `impact.rs` per frontier node. Building a dictionary per query would
+have cost more than it saved for small result sets, so this landed as a
+**memoizing `TermCache` on `Store`** consulted by `resolve()` and `lookup()`,
+plus a `warm_term_cache()` bulk sweep for callers that will touch most of the
+store.
+
+The cache needs no invalidation, and that is a property worth stating: `terms`
+is **append-only while a store is open** — `INSERT OR IGNORE` is the only write,
+and `respace_file` `VACUUM INTO`s a copy and rewrites the *destination*, never
+the open database. A mapping already observed cannot become wrong. Only positive
+lookups are cached; a miss must stay a miss, because the next `intern` can
+create it. The test `terms_table_is_append_only` is the tripwire if that
+premise ever changes.
+
+Measured (`examples/scale_bench.rs`, same stores):
+
+| Episodes | 2-hop join before | after | Type scan before | after |
+|---:|---:|---:|---:|---:|
+| 1,000 | 4,709 ms | **954 ms** | 5.7 ms | 4.5 ms |
+| 2,000 | 20,630 ms | **5,354 ms** | 13.3 ms | 8.9 ms |
+| 4,000 | 84,444 ms | **21,886 ms** | 24.4 ms | 17.7 ms |
+
+**~3.9–4.9× on the join, ~1.4× on the type scan, ingest unchanged**
+(368–373 episodes/s against 315–390 before). Still quadratic — Phase 1 removes a
+constant factor, not the nested loop. That is Phase 3's job.
+
+One consequence to watch: the cache is unbounded, growing at roughly the term
+count. ~7 MB at 30k terms is nothing; a 1M-episode raw log's ~3M terms would be
+several hundred MB in a long-lived server. Tracked as `quipu-h03`, and another
+reason §7's derived-layer scoping is the right target.
 
 **Phase 2 — `ReadModel` behind a `Store` accessor.** Build, incremental apply,
 invalidate. Tested against the SQL path for equivalence on the in-scope subset.

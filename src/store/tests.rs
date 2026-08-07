@@ -2456,3 +2456,105 @@ fn the_retraction_tx_migration_is_idempotent() {
         .unwrap();
     assert_eq!(cols, 1);
 }
+
+// --- Term cache (quipu-yzf) ------------------------------------------------
+
+/// The safety argument for [`TermCache`] is that `terms` is append-only while a
+/// store is open, so a memoized mapping can never go stale. That is a property
+/// of the SQL in this file, not a law — this test is the tripwire. If a write
+/// path ever starts mutating `terms` in place, the cache becomes incorrect and
+/// must gain invalidation; this failing is the signal to go do that.
+#[test]
+fn terms_table_is_append_only() {
+    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/store/mod.rs"))
+        .expect("store source readable");
+    for forbidden in ["UPDATE terms", "DELETE FROM terms", "REPLACE INTO terms"] {
+        assert!(
+            !src.contains(forbidden),
+            "`{forbidden}` would make the memoized TermCache stale — see TermCache docs"
+        );
+    }
+}
+
+#[test]
+fn resolve_memoizes_and_agrees_with_sql() {
+    let store = test_store();
+    let id = store.intern("http://example.org/Memo").unwrap();
+    assert_eq!(store.term_cache.borrow().len(), 0, "cold before first read");
+
+    let first = store.resolve(id).unwrap();
+    assert_eq!(store.term_cache.borrow().len(), 1, "populated by resolve");
+
+    // Second read comes from the cache and must be identical.
+    assert_eq!(store.resolve(id).unwrap(), first);
+
+    // And identical to what the uncached SQL would have returned.
+    let direct: String = store
+        .conn
+        .query_row("SELECT iri FROM terms WHERE id = ?1", params![id], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(first, direct);
+}
+
+#[test]
+fn lookup_memoizes_hits_and_stays_consistent() {
+    let store = test_store();
+    let id = store.intern("http://example.org/Hit").unwrap();
+    assert_eq!(store.lookup("http://example.org/Hit").unwrap(), Some(id));
+    // Served from cache the second time, same answer.
+    assert_eq!(store.lookup("http://example.org/Hit").unwrap(), Some(id));
+    assert_eq!(store.resolve(id).unwrap(), "http://example.org/Hit");
+}
+
+/// A miss must NOT be cached. Interning after a failed lookup has to become
+/// visible immediately — caching the `None` would hide the write from a reader
+/// that happened to ask first.
+#[test]
+fn a_lookup_miss_is_not_cached() {
+    let store = test_store();
+    assert_eq!(store.lookup("http://example.org/Later").unwrap(), None);
+    let id = store.intern("http://example.org/Later").unwrap();
+    assert_eq!(
+        store.lookup("http://example.org/Later").unwrap(),
+        Some(id),
+        "the intern must be visible to a reader that already missed"
+    );
+}
+
+#[test]
+fn warm_term_cache_matches_per_term_resolution() {
+    let store = test_store();
+    let iris = [
+        "http://example.org/A",
+        "http://example.org/B",
+        "http://example.org/C",
+    ];
+    let ids: Vec<i64> = iris.iter().map(|i| store.intern(i).unwrap()).collect();
+
+    // A fresh store already interns bootstrap terms, so the invariant is
+    // "every row in `terms`", not "the three we just added".
+    let rows: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    let warmed = store.warm_term_cache().unwrap();
+    assert_eq!(warmed as i64, rows, "one cache entry per row in `terms`");
+
+    // Every warmed entry equals what a cold per-term resolve would return.
+    for (id, iri) in ids.iter().zip(iris.iter()) {
+        assert_eq!(store.resolve(*id).unwrap(), *iri);
+        assert_eq!(store.lookup(iri).unwrap(), Some(*id));
+    }
+}
+
+/// Warming twice is idempotent — it must not double-count or diverge.
+#[test]
+fn warm_term_cache_is_idempotent() {
+    let store = test_store();
+    store.intern("http://example.org/Once").unwrap();
+    let first = store.warm_term_cache().unwrap();
+    let second = store.warm_term_cache().unwrap();
+    assert_eq!(first, second);
+}
