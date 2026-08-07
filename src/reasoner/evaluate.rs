@@ -42,6 +42,19 @@ pub struct EvalReport {
 /// that disappeared are retracted. Within a single call this looks like a
 /// normal bitemporal write — unchanged facts stay untouched.
 pub fn evaluate(store: &mut Store, ruleset: &RuleSet, timestamp: &str) -> Result<EvalReport> {
+    evaluate_in_graph(store, ruleset, timestamp, crate::schema::ROOT_GRAPH)
+}
+
+/// Run the ruleset against one graph and write every derivation back to it.
+///
+/// Premises and prior `reasoner:<rule-id>` output are both graph-scoped, so an
+/// overlay cannot derive facts into its parent or retract a sibling's output.
+pub fn evaluate_in_graph(
+    store: &mut Store,
+    ruleset: &RuleSet,
+    timestamp: &str,
+    graph: i64,
+) -> Result<EvalReport> {
     if ruleset.is_empty() {
         return Ok(EvalReport::default());
     }
@@ -54,7 +67,7 @@ pub fn evaluate(store: &mut Store, ruleset: &RuleSet, timestamp: &str) -> Result
     // Build the shared term-id cache. Constants appearing in rule heads
     // need to be interned (so we can write them as `Value::Ref`). Predicate
     // IRIs are interned too so they become attribute ids.
-    let mut world = World::load(store, ruleset)?;
+    let mut world = World::load_graph(store, ruleset, graph)?;
 
     // Per-rule accumulator: fully derived (entity, value) sets for each
     // rule, collected across strata so we can diff + write them at the end.
@@ -74,7 +87,7 @@ pub fn evaluate(store: &mut Store, ruleset: &RuleSet, timestamp: &str) -> Result
     for (rule_idx, new_tuples) in &derived_by_rule {
         let rule = &ruleset.rules[*rule_idx];
         let (asserted, retracted) =
-            write_rule_delta(store, rule, new_tuples, timestamp, &mut world)?;
+            write_rule_delta(store, rule, new_tuples, timestamp, graph, &mut world)?;
         report.asserted += asserted;
         report.retracted += retracted;
         report.per_rule.push((rule.id.clone(), asserted));
@@ -297,7 +310,12 @@ pub(crate) struct World {
 }
 
 impl World {
+    #[cfg(feature = "reactive-reasoner")]
     pub(crate) fn load(store: &Store, ruleset: &RuleSet) -> Result<Self> {
+        Self::load_graph(store, ruleset, crate::schema::ROOT_GRAPH)
+    }
+
+    fn load_graph(store: &Store, ruleset: &RuleSet, graph: i64) -> Result<Self> {
         let mut preds: BTreeSet<String> = BTreeSet::new();
         for rule in &ruleset.rules {
             preds.insert(rule.head.predicate.clone());
@@ -323,7 +341,7 @@ impl World {
         }
 
         // Load all current facts once; partition by predicate.
-        let facts = store.current_facts()?;
+        let facts = store.current_facts_in_graph(graph)?;
         for fact in facts {
             if let Some(pred) = attr_to_pred.get(&fact.attribute)
                 && let Value::Ref(target) = fact.value
@@ -386,12 +404,13 @@ fn write_rule_delta(
     rule: &super::ast::Rule,
     new_tuples: &BTreeSet<(i64, i64)>,
     timestamp: &str,
+    graph: i64,
     world: &mut World,
 ) -> Result<(usize, usize)> {
     let attr_id = world.ensure_attr(store, &rule.head.predicate)?;
     let source = format!("reasoner:{}", rule.id);
 
-    let old_tuples = load_existing_derivations(store, attr_id, &source)?;
+    let old_tuples = load_existing_derivations_in_graph(store, attr_id, &source, graph)?;
 
     let mut datums: Vec<Datum> = Vec::new();
     // Retract anything that used to hold and no longer does.
@@ -423,7 +442,7 @@ fn write_rule_delta(
 
     let asserted = datums.iter().filter(|d| d.op == Op::Assert).count();
     let retracted = datums.iter().filter(|d| d.op == Op::Retract).count();
-    store.transact(&datums, timestamp, Some("reasoner"), Some(&source))?;
+    store.transact_to_graph(&datums, timestamp, Some("reasoner"), Some(&source), graph)?;
     Ok((asserted, retracted))
 }
 
@@ -431,10 +450,20 @@ fn write_rule_delta(
 /// `reasoner:<rule-id>`). Only reference-valued facts on the rule's head
 /// attribute are considered — other shapes cannot be produced by Phase 2
 /// and must not exist under this source.
+#[cfg(feature = "reactive-reasoner")]
 pub(crate) fn load_existing_derivations(
     store: &Store,
     attr_id: i64,
     source: &str,
+) -> Result<BTreeSet<(i64, i64)>> {
+    load_existing_derivations_in_graph(store, attr_id, source, crate::schema::ROOT_GRAPH)
+}
+
+fn load_existing_derivations_in_graph(
+    store: &Store,
+    attr_id: i64,
+    source: &str,
+    graph: i64,
 ) -> Result<BTreeSet<(i64, i64)>> {
     let mut stmt = store
         .conn
@@ -442,11 +471,11 @@ pub(crate) fn load_existing_derivations(
             "SELECT f.e, f.v FROM facts f \
              JOIN transactions t ON f.tx = t.id \
              WHERE f.op = 1 AND f.valid_to IS NULL \
-               AND f.a = ?1 AND t.source = ?2",
+               AND f.a = ?1 AND t.source = ?2 AND f.g = ?3",
         )
         .map_err(crate::Error::from)?;
     let mut rows = stmt
-        .query(params![attr_id, source])
+        .query(params![attr_id, source, graph])
         .map_err(crate::Error::from)?;
     let mut out: BTreeSet<(i64, i64)> = BTreeSet::new();
     while let Some(row) = rows.next().map_err(crate::Error::from)? {

@@ -43,7 +43,7 @@ mod reactive_tests;
 mod stratify_tests;
 
 pub use ast::{Atom, BodyAtom, Rule, Term};
-pub use evaluate::{EvalReport, evaluate};
+pub use evaluate::{EvalReport, evaluate, evaluate_in_graph};
 pub use parse::{RuleSet, parse_rules};
 
 /// Namespace for the reasoner rule vocabulary.

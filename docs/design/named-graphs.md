@@ -238,7 +238,7 @@ decision is therefore about the **write gate**, not the validator:
 - [x] The half-ghost guard does not count overlay facts as survivors (#56)
 - [x] Time travel and contradiction detection are ROOT-scoped (#56)
 - [x] Overlay compose still sees the overlay (regression guard, #56)
-- [ ] A ruleset run against a branch writes its conclusions into that branch
+- [x] A ruleset run against a branch writes its conclusions into that branch
 - [ ] An overlay asserting a laxer shape does not relax validation of its parent
 
 ## 8. Scope boundaries / follow-ups (honest)

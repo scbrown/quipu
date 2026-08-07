@@ -6,7 +6,7 @@
 //! provenance tag.
 
 use super::parse::parse_rules;
-use super::{RULE_NS, evaluate};
+use super::{RULE_NS, evaluate, evaluate_in_graph};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -89,6 +89,55 @@ ex:r1 a rule:Rule ;
     assert_eq!(report.asserted, 2);
     assert_eq!(report.retracted, 0);
     assert_eq!(count_derived(&store, &format!("{PFX}h"), "reasoner:R1"), 2);
+}
+
+#[test]
+fn graph_scoped_evaluation_reads_and_writes_only_that_graph() {
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r1 a rule:Rule ;
+    rule:id "R1" ;
+    rule:head "h(?x, ?y)" ;
+    rule:body "p(?x, ?y)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:root-a", &format!("{PFX}p"), "ex:root-b");
+
+    let graph = store.overlay_create("http://ex/branch", 0).unwrap();
+    let branch_a = store.intern("ex:branch-a").unwrap();
+    let branch_b = store.intern("ex:branch-b").unwrap();
+    let predicate = store.lookup(&format!("{PFX}p")).unwrap().unwrap();
+    store
+        .overlay_write(
+            graph,
+            Op::Assert,
+            branch_a,
+            predicate,
+            Value::Ref(branch_b),
+            TS,
+        )
+        .unwrap();
+
+    let report = evaluate_in_graph(&mut store, &rs, TS, graph).unwrap();
+    assert_eq!(report.asserted, 1);
+    let head = store.lookup(&format!("{PFX}h")).unwrap().unwrap();
+    let branch_facts = store.current_facts_in_graph(graph).unwrap();
+    assert!(branch_facts.iter().any(|fact| {
+        fact.entity == branch_a && fact.attribute == head && fact.value == Value::Ref(branch_b)
+    }));
+    assert!(
+        !store
+            .current_facts()
+            .unwrap()
+            .iter()
+            .any(|fact| fact.attribute == head),
+        "branch derivations must not be written into ROOT"
+    );
 }
 
 #[test]
