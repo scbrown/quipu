@@ -1083,26 +1083,17 @@ fn an_attached_layers_meta_graph_is_not_ranged_by_graph_var() {
 }
 
 #[test]
-fn naming_an_attached_graph_by_iri_is_refused_not_silently_empty() {
-    // The honest limit of this increment. `lookup` is main-only by design
-    // (quipu #76 owns IRI -> id across spaces), so `GRAPH <attached-iri>`
-    // cannot resolve. What it must NOT do is return zero rows: that is
-    // indistinguishable from a typo and from "the attach did not work", and it
-    // is the silent-wrong-answer shape this design refuses everywhere else.
+fn naming_an_attached_graph_by_iri_reads_it() {
+    // quipu #76 removes #75's deliberate refusal: IRI lookup now ranges every
+    // term space, so naming an attached graph is the ordinary successful path.
     let scratch = Scratch::new("e2ename");
     let (plain, with, layer_iri) = composed(&scratch, 8);
 
     let q = format!("SELECT ?s WHERE {{ GRAPH <{layer_iri}> {{ ?s ?p ?o }} }}");
-    let err = crate::sparql::query(&with, &q)
-        .expect_err("naming an attached graph must be refused, not empty")
-        .to_string();
+    let named = rows_of(&with, &q);
     assert!(
-        err.contains("#76"),
-        "the refusal must name the issue: {err}"
-    );
-    assert!(
-        err.contains(&layer_iri) && err.contains("shared"),
-        "the refusal must name the IRI and the layer: {err}"
+        !named.is_empty(),
+        "the attached graph must be readable by IRI"
     );
 
     // A genuinely unknown IRI keeps today's match-nothing behaviour, on the
@@ -1113,10 +1104,7 @@ fn naming_an_attached_graph_by_iri_is_refused_not_silently_empty() {
     assert!(rows_of(&with, unknown).is_empty());
     assert!(rows_of(&plain, unknown).is_empty());
 
-    // FROM names graphs by IRI too, and had the same silent-empty path.
+    // FROM names graphs by IRI through the same multi-space lookup.
     let from_q = format!("SELECT ?s FROM <{layer_iri}> WHERE {{ ?s ?p ?o }}");
-    let err = crate::sparql::query(&with, &from_q)
-        .expect_err("FROM naming an attached graph must be refused")
-        .to_string();
-    assert!(err.contains("#76"), "{err}");
+    assert!(!rows_of(&with, &from_q).is_empty());
 }

@@ -86,7 +86,7 @@ pub enum GraphScope {
     /// A single named graph by its interned graph id — `GRAPH <iri> { … }`.
     /// An unknown graph IRI resolves to an id that matches nothing (empty
     /// result), never a silent fall-through to the default graph.
-    Named(i64),
+    Named(Vec<i64>),
     /// Named graphs binding `var` to each match's graph IRI — `GRAPH ?g { … }`.
     /// `restrict` is `None` for every named graph (`g <> 0`), or the `FROM NAMED`
     /// id set when the query restricts the active named graphs.
@@ -379,7 +379,7 @@ pub fn dataset_member_ids(store: &Store, sparql: &str, ctx: &TemporalContext) ->
 
     let member_ids: Vec<i64> = match &scoped.graph {
         GraphScope::Default(ids) => ids.clone(),
-        GraphScope::Named(id) => vec![*id],
+        GraphScope::Named(ids) => ids.clone(),
         // `GRAPH ?g` with no `FROM NAMED` ranges every named graph, so the fold
         // does too — the label has to cover what the query could read.
         GraphScope::AnyNamed { restrict, .. } => match restrict {
@@ -538,14 +538,8 @@ fn apply_dataset(
             let iri = nn.as_str();
             if store.is_dataset(iri)? {
                 ids.extend(store.dataset_member_ids(iri)?);
-            } else if let Some(g) = store.lookup(iri)? {
-                ids.push(g);
             } else {
-                // quipu #75: same reason as the `GRAPH <iri>` site — a
-                // `FROM`/`FROM NAMED` naming an ATTACHED graph is not an
-                // unknown graph, and contributing nothing would read as an
-                // empty layer rather than an unimplemented lookup.
-                store.refuse_if_attached_only(iri)?;
+                ids.extend(store.lookup_all(iri)?);
             }
         }
         Ok(ids)

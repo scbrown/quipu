@@ -291,19 +291,9 @@ pub(crate) const RESOLVE_SQL_LOCAL: &str = "SELECT iri FROM terms WHERE id = ?1"
 /// composition whose spaces collide, so an id belongs to exactly one file. The
 /// branches cannot disagree; `LIMIT 1` is a bound, not a tie-break.
 ///
-/// **IRI → id is NOT, and is deliberately left alone (quipu #76).** The same
-/// IRI interned in two spaces has two ids — an alias, not a collision — so a
-/// `lookup` that returned the first match would be silently incomplete exactly
-/// when two layers share vocabulary, which is the normal case for the
-/// shared-reference-layer deployment this design exists for. That needs
-/// `lookup_all`, `IN`-predicates and post-`DISTINCT` canonicalisation, which
-/// is #76's whole subject. Guessing here would produce a wrong join rather
-/// than a missing one, and this design refuses silent wrong answers.
-///
-/// The visible consequence today, pinned by
-/// `naming_an_attached_graph_by_iri_is_not_resolvable_yet`: naming an attached
-/// graph as `GRAPH <iri>` matches nothing, because the IRI is interned in the
-/// layer and `lookup` reads `main` only.
+/// The opposite direction is intentionally handled by `Store::lookup_all`:
+/// one IRI may denote several ids, and query predicates must match all of them
+/// before canonicalising bindings back toward the local id (quipu #76).
 pub(crate) fn build_resolve_sql(attachments: &[Attachment]) -> String {
     if attachments.is_empty() {
         return RESOLVE_SQL_LOCAL.to_string();

@@ -114,6 +114,7 @@ fn adversarial(scratch: &Scratch) -> (Store, String, String, String) {
             &[
                 fact(sh, attr, Value::Str("layer says".into())),
                 fact(lo, attr, Value::Str("layer only".into())),
+                fact(lo, attr, Value::Ref(sh)),
             ],
             T0,
             None,
@@ -250,6 +251,92 @@ fn canonical_id_maps_towards_main_and_is_identity_otherwise() {
     assert_eq!(store.canonical_id(lo).unwrap(), lo);
     let layer_only_id = store.lookup_all(&layer_only).unwrap()[0];
     assert_eq!(store.canonical_id(layer_only_id).unwrap(), layer_only_id);
+}
+
+fn select_rows(store: &Store, query: &str) -> Vec<crate::sparql::Bindings> {
+    let crate::sparql::QueryResult::Select { rows, .. } =
+        crate::sparql::query(store, query).unwrap()
+    else {
+        panic!("expected SELECT rows");
+    };
+    rows
+}
+
+#[test]
+fn cross_layer_join_uses_iri_aliases_not_raw_ids() {
+    let scratch = Scratch::new("join");
+    let (store, _, _, _) = adversarial(&scratch);
+
+    let rows = select_rows(
+        &store,
+        "SELECT ?s WHERE { \
+             ?s <urn:p:local> \"local says\" . \
+             GRAPH <urn:layer:graph> { ?s <urn:p:layer> \"layer says\" } \
+         }",
+    );
+    assert_eq!(rows.len(), 1, "the shared IRI must join across term spaces");
+
+    // The fixture deliberately gives the local-only IRI the same within-space
+    // rowid as the layer's shared IRI. Raw-id equality would manufacture this
+    // row; IRI-based aliases must not.
+    let wrong = select_rows(
+        &store,
+        "SELECT ?s WHERE { \
+             ?s <urn:p:local> \"local only\" . \
+             GRAPH <urn:layer:graph> { ?s <urn:p:layer> \"layer says\" } \
+         }",
+    );
+    assert!(
+        wrong.is_empty(),
+        "equal rowids for different IRIs must not join"
+    );
+}
+
+#[test]
+fn aliases_collapse_to_one_distinct_solution() {
+    let scratch = Scratch::new("dedup");
+    let (store, _, _, _) = adversarial(&scratch);
+    let rows = select_rows(
+        &store,
+        "SELECT DISTINCT ?s WHERE { \
+             { ?s <urn:p:local> \"local says\" } \
+             UNION \
+             { GRAPH <urn:layer:graph> { ?s <urn:p:layer> \"layer says\" } } \
+         }",
+    );
+    assert_eq!(
+        rows.len(),
+        1,
+        "two raw ids denoting one IRI must become one semantic solution"
+    );
+}
+
+#[test]
+fn attached_only_graph_is_nameable_by_iri() {
+    let scratch = Scratch::new("named");
+    let (store, _, _, _) = adversarial(&scratch);
+    let rows = select_rows(
+        &store,
+        "SELECT ?s WHERE { \
+             GRAPH <urn:layer:graph> { ?s <urn:p:layer> \"layer says\" } \
+         }",
+    );
+    assert_eq!(rows.len(), 1);
+}
+
+#[test]
+fn constants_resolve_across_subject_predicate_and_ref_object_positions() {
+    let scratch = Scratch::new("constants");
+    let (store, _, _, _) = adversarial(&scratch);
+    let rows = select_rows(
+        &store,
+        "SELECT ?s WHERE { \
+             GRAPH <urn:layer:graph> { \
+                 <urn:layer:only> <urn:p:layer> <urn:shared:thing> \
+             } \
+         }",
+    );
+    assert_eq!(rows.len(), 1, "all three Ref-bearing positions must widen");
 }
 
 #[test]

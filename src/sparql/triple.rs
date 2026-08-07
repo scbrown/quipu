@@ -78,6 +78,48 @@ fn sql_graph_in(gids: &[i64], sql_params: &mut Vec<Box<dyn rusqlite::types::ToSq
     }
 }
 
+/// Build an equality/IN predicate for a term-id column. The one-id spelling is
+/// intentionally the pre-#76 plan; only composed stores widen it.
+fn sql_id_in(
+    column: &str,
+    ids: &[i64],
+    sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
+) -> String {
+    if ids.is_empty() {
+        return "0 = 1".to_string();
+    }
+    let placeholders: Vec<String> = ids
+        .iter()
+        .map(|id| {
+            sql_params.push(Box::new(*id));
+            format!("?{}", sql_params.len())
+        })
+        .collect();
+    if placeholders.len() == 1 {
+        format!("{column} = {}", placeholders[0])
+    } else {
+        format!("{column} IN ({})", placeholders.join(", "))
+    }
+}
+
+fn sql_ref_in(ids: &[i64], sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>) -> String {
+    if ids.is_empty() {
+        return "0 = 1".to_string();
+    }
+    let placeholders: Vec<String> = ids
+        .iter()
+        .map(|id| {
+            sql_params.push(Box::new(Value::Ref(*id).to_bytes()));
+            format!("?{}", sql_params.len())
+        })
+        .collect();
+    if placeholders.len() == 1 {
+        format!("v = {}", placeholders[0])
+    } else {
+        format!("v IN ({})", placeholders.join(", "))
+    }
+}
+
 /// Evaluate a single triple pattern against the store, extending existing bindings.
 pub fn eval_triple_pattern(
     store: &Store,
@@ -105,29 +147,35 @@ pub fn eval_triple_pattern(
 
     // Subject
     if let Some(iri) = resolve_subject_pattern(&tp.subject, bindings) {
-        if let Some(id) = store.lookup(&iri)? {
-            conditions.push(format!("e = ?{}", sql_params.len() + 1));
-            sql_params.push(Box::new(id));
-        } else {
+        let ids = store.lookup_all(&iri)?;
+        if ids.is_empty() {
             return Ok(vec![]); // IRI not in dictionary -> no matches
         }
+        conditions.push(sql_id_in("e", &ids, &mut sql_params));
     }
 
     // Predicate
     if let Some(iri) = resolve_predicate_pattern(&tp.predicate, bindings) {
-        if let Some(id) = store.lookup(&iri)? {
-            conditions.push(format!("a = ?{}", sql_params.len() + 1));
-            sql_params.push(Box::new(id));
-        } else {
+        let ids = store.lookup_all(&iri)?;
+        if ids.is_empty() {
             return Ok(vec![]);
         }
+        conditions.push(sql_id_in("a", &ids, &mut sql_params));
     }
 
     // Object (only if it's a concrete value, not a variable)
     if let Some(value) = resolve_object_pattern(store, &tp.object, bindings)? {
-        let bytes = value.to_bytes();
-        conditions.push(format!("v = ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(bytes));
+        if let Value::Ref(id) = value
+            && id != -1
+        {
+            let iri = store.resolve(id)?;
+            let ids = store.lookup_all(&iri)?;
+            conditions.push(sql_ref_in(&ids, &mut sql_params));
+        } else {
+            let bytes = value.to_bytes();
+            conditions.push(format!("v = ?{}", sql_params.len() + 1));
+            sql_params.push(Box::new(bytes));
+        }
     }
 
     // Temporal filtering.
@@ -141,9 +189,8 @@ pub fn eval_triple_pattern(
             conditions.push(sql_graph_in(gids, &mut sql_params));
             None
         }
-        GraphScope::Named(gid) => {
-            conditions.push(format!("g = ?{}", sql_params.len() + 1));
-            sql_params.push(Box::new(*gid));
+        GraphScope::Named(gids) => {
+            conditions.push(sql_graph_in(gids, &mut sql_params));
             None
         }
         GraphScope::AnyNamed { var, restrict } => {
@@ -252,11 +299,18 @@ pub fn eval_triple_pattern(
 
     let mut results = Vec::new();
     while let Some(row) = rows.next()? {
-        let e_id: i64 = row.get(0)?;
-        let a_id: i64 = row.get(1)?;
+        let e_id = store.canonical_id(row.get(0)?)?;
+        let a_id = store.canonical_id(row.get(1)?)?;
         let v_bytes: Vec<u8> = row.get(2)?;
-        let v = Value::from_bytes(&v_bytes)?;
-        let g_id: Option<i64> = if want_g { Some(row.get(3)?) } else { None };
+        let v = match Value::from_bytes(&v_bytes)? {
+            Value::Ref(id) => Value::Ref(store.canonical_id(id)?),
+            other => other,
+        };
+        let g_id: Option<i64> = if want_g {
+            Some(store.canonical_id(row.get(3)?)?)
+        } else {
+            None
+        };
 
         let mut new_bindings = bindings.clone();
         let mut compatible = true;
@@ -330,7 +384,7 @@ pub fn eval_triple_pattern(
             }
         }
 
-        if compatible {
+        if compatible && !results.contains(&new_bindings) {
             results.push(new_bindings);
         }
     }

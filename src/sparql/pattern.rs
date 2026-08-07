@@ -331,22 +331,14 @@ pub fn eval_pattern_seeded(
                 // silent fall-through. A FROM NAMED restriction that excludes
                 // this graph likewise makes it invisible (id -1).
                 NamedNodePattern::NamedNode(iri) => {
-                    let gid = match store.lookup(iri.as_str())? {
-                        Some(g) => g,
-                        None => {
-                            // quipu #75: on a COMPOSED store, "unknown locally"
-                            // may mean "lives in an attached layer", which is a
-                            // real graph and not a typo. Refuse rather than
-                            // match nothing; unattached stores are untouched.
-                            store.refuse_if_attached_only(iri.as_str())?;
-                            -1
-                        }
-                    };
-                    let visible = ctx
-                        .named_dataset
-                        .as_ref()
-                        .is_none_or(|set| set.contains(&gid));
-                    GraphScope::Named(if visible { gid } else { -1 })
+                    let mut gids = store.lookup_all(iri.as_str())?;
+                    if let Some(visible) = &ctx.named_dataset {
+                        gids.retain(|gid| visible.contains(gid));
+                    }
+                    if gids.is_empty() {
+                        gids.push(-1);
+                    }
+                    GraphScope::Named(gids)
                 }
                 // GRAPH ?g ranges the active named graphs — all of them, or the
                 // FROM NAMED restriction when the query set one.
