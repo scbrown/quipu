@@ -267,14 +267,16 @@ pub(super) fn classify_live_schema(conn: &Connection) -> Result<Vec<ClassifiedCo
             .query_map(params![table], |r| r.get(0))?
             .collect::<std::result::Result<_, _>>()?;
         for column in columns {
-            match COLUMN_CLASSIFICATION
+            let kind = COLUMN_CLASSIFICATION
                 .iter()
                 .find(|(t, c, _)| *t == table && *c == column)
-            {
-                Some((_, _, kind)) => classified.push(ClassifiedColumn {
+                .map(|(_, _, kind)| *kind)
+                .or_else(|| classify_optional_column(&table, &column));
+            match kind {
+                Some(kind) => classified.push(ClassifiedColumn {
                     table: table.clone(),
                     column,
-                    kind: *kind,
+                    kind,
                 }),
                 None => unclassified.push(format!("{table}.{column}")),
             }
@@ -294,6 +296,25 @@ pub(super) fn classify_live_schema(conn: &Connection) -> Result<Vec<ClassifiedCo
         )));
     }
     Ok(classified)
+}
+
+/// Artifact-only tables are absent from an ordinary store, so putting them in
+/// `COLUMN_CLASSIFICATION` would break its exact-schema invariant. They still
+/// get a closed vocabulary here: a future added column refuses until named.
+fn classify_optional_column(table: &str, column: &str) -> Option<TermIdKind> {
+    const PACK_MANIFEST: &[&str] = &[
+        "id",
+        "pack_format",
+        "name",
+        "version",
+        "term_space",
+        "content_hash",
+        "created_at",
+        "source_graph",
+        "producer",
+        "counts",
+    ];
+    (table == "pack_manifest" && PACK_MANIFEST.contains(&column)).then_some(TermIdKind::None)
 }
 
 /// Map one id from the source space into the destination space. **The
@@ -461,6 +482,18 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
         "UPDATE term_spaces SET space = ?1 WHERE local = 1",
         params![to_space],
     )?;
+    // A pack manifest declares the store's term space as operator-facing
+    // metadata. It is a space NUMBER, not a term id, so it is classified None
+    // above but must follow the registry when the whole pack is respaced.
+    let has_manifest = tx
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pack_manifest'")?
+        .exists([])?;
+    if has_manifest {
+        tx.execute(
+            "UPDATE pack_manifest SET term_space=?1 WHERE id=1",
+            params![to_space],
+        )?;
+    }
     tx.commit()?;
 
     let report = RespaceReport {

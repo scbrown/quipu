@@ -210,6 +210,139 @@ fn shapes_and_queries_named_on_the_command_travel_with_the_pack() {
 }
 
 #[test]
+fn unpack_materializes_and_versions_registries_beside_existing_entries() {
+    let source = producer(0);
+    source
+        .load_shapes("shared", "# producer shape", TS)
+        .unwrap();
+    source
+        .query_load(
+            &crate::store::queries::StoredQuery {
+                name: "shared".into(),
+                description: "producer".into(),
+                template: "SELECT ?s WHERE { ?s ?p ?o }".into(),
+                dataset: None,
+                params: vec![],
+            },
+            TS,
+        )
+        .unwrap();
+    let artifact = tmp("unpack-pack");
+    pack(
+        &source,
+        "urn:g:pack",
+        &artifact,
+        &PackOptions {
+            shapes: vec!["shared".into()],
+            queries: vec!["shared".into()],
+            ..Default::default()
+        },
+        TS,
+    )
+    .unwrap();
+
+    let destination = tmp("unpack-dest");
+    let consumer = Store::open(&destination).unwrap();
+    consumer
+        .load_shapes("shared", "# consumer shape", "2025-01-01T00:00:00Z")
+        .unwrap();
+    consumer
+        .query_load(
+            &crate::store::queries::StoredQuery {
+                name: "shared".into(),
+                description: "consumer".into(),
+                template: "SELECT ?o WHERE { ?s ?p ?o }".into(),
+                dataset: None,
+                params: vec![],
+            },
+            "2025-01-01T00:00:00Z",
+        )
+        .unwrap();
+    drop(consumer);
+
+    let report = unpack(
+        &artifact,
+        &destination,
+        Some("urn:g:materialized"),
+        "2026-01-01T00:00:00Z",
+    )
+    .unwrap();
+    assert!(report.facts > 0);
+    let opened = Store::open(&destination).unwrap();
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(
+        &opened,
+        "SELECT ?o WHERE { GRAPH <urn:g:materialized> { <http://example.org/s> <http://example.org/p> ?o } }",
+    )
+    .unwrap() else { panic!("expected SELECT") };
+    assert_eq!(
+        rows.len(),
+        1,
+        "materialized pack graph is locally queryable"
+    );
+    assert_eq!(opened.list_shapes().unwrap()[0].1, "# producer shape");
+    assert_eq!(
+        opened.query_get("shared").unwrap().unwrap().description,
+        "producer"
+    );
+
+    let as_of = crate::store::AsOf {
+        tx: None,
+        valid_at: Some("2025-06-01T00:00:00Z".into()),
+    };
+    assert_eq!(
+        opened.list_shapes_as_of(&as_of).unwrap()[0].1,
+        "# consumer shape"
+    );
+    for path in [artifact, destination] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[test]
+fn a_respaced_pack_attaches_surfaces_its_manifest_and_spans_queries() {
+    let mut source = producer(0);
+    source.embedding_config_mut().model_path = Some("models/producer.onnx".into());
+    source.embedding_config_mut().dimension = 768;
+    let pack0 = tmp("attach-pack0");
+    pack(&source, "urn:g:pack", &pack0, &PackOptions::default(), TS).unwrap();
+    let pack7 = tmp("attach-pack7");
+    crate::store::respace::respace_file(
+        std::path::Path::new(&pack0),
+        std::path::Path::new(&pack7),
+        7,
+    )
+    .unwrap();
+    let local = tmp("attach-consumer");
+    let opened = Store::open_with_attachments(
+        &local,
+        &[crate::store::attach::Attachment::read_only("pack", &pack7)],
+    )
+    .unwrap();
+    assert_eq!(opened.pack_manifests().len(), 1);
+    assert_eq!(opened.pack_manifests()[0].0, "pack");
+    assert_eq!(opened.pack_manifests()[0].1.term_space, 7);
+    assert_eq!(opened.pack_embedding_warnings().len(), 1);
+    assert!(opened.pack_embedding_warnings()[0].contains("not converted"));
+    assert_eq!(
+        opened.verify_attached_pack_hashes().unwrap(),
+        vec![("pack".into(), true)]
+    );
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(
+        &opened,
+        "SELECT ?o WHERE { GRAPH <urn:g:pack> { <http://example.org/s> <http://example.org/p> ?o } }",
+    )
+    .unwrap() else { panic!("expected SELECT") };
+    assert_eq!(
+        rows.len(),
+        1,
+        "acceptance requires the attached pack to be queryable"
+    );
+    for path in [pack0, pack7, local] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[test]
 fn naming_a_shape_that_does_not_exist_is_refused() {
     let store = producer(0);
     let out = tmp("badshape");

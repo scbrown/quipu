@@ -764,3 +764,21 @@ pub fn cmd_graph(args: &[String], db_path: &str) {
         }
     }
 }
+
+/// `quipu unpack <pack> [--into <graph-iri>]` (quipu #82).
+pub fn cmd_unpack(args: &[String], db_path: &str) {
+    let Some(pack) = args.get(2).filter(|s| !s.starts_with("--")) else {
+        eprintln!("usage: quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]");
+        std::process::exit(1);
+    };
+    match quipu::pack::unpack(pack, db_path, flag_value(args, "--into"), &chrono_now()) {
+        Ok(r) => println!(
+            "unpacked {pack} into {}\n  facts: {}\n  shapes: {}\n  queries: {}",
+            r.graph, r.facts, r.shapes, r.queries
+        ),
+        Err(e) => {
+            eprintln!("unpack error: {e}");
+            std::process::exit(1);
+        }
+    }
+}

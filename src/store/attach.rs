@@ -391,6 +391,49 @@ pub(crate) fn verify_attached_schema(
     Ok(())
 }
 
+/// Read manifests from attachments that are knowledge packs (quipu #82).
+/// Ordinary stores have no `pack_manifest` table and are omitted.
+pub(crate) fn attached_pack_manifests(
+    conn: &Connection,
+    attachments: &[Attachment],
+) -> Result<Vec<(String, crate::pack::Manifest)>> {
+    let mut out = Vec::new();
+    for a in attachments {
+        let alias = &a.alias;
+        let present = conn
+            .prepare(&format!(
+                "SELECT 1 FROM {alias}.sqlite_master WHERE type='table' AND name='pack_manifest'"
+            ))?
+            .exists([])?;
+        if !present {
+            continue;
+        }
+        let manifest = conn.query_row(
+            &format!(
+                "SELECT pack_format,name,version,term_space,content_hash,created_at,source_graph,producer,counts \
+                 FROM {alias}.pack_manifest WHERE id=1"
+            ),
+            [],
+            |r| Ok(crate::pack::Manifest {
+                pack_format: r.get(0)?, name: r.get(1)?, version: r.get(2)?,
+                term_space: r.get(3)?, content_hash: r.get(4)?, created_at: r.get(5)?,
+                source_graph: r.get(6)?, producer: r.get(7)?, counts: r.get(8)?,
+            }),
+        ).map_err(|e| Error::InvalidValue(format!(
+            "cannot attach pack {:?} as {alias}: unreadable pack_manifest: {e}", a.path
+        )))?;
+        let actual = attached_term_space(conn, alias)?;
+        if manifest.term_space != actual {
+            return Err(Error::Store(format!(
+                "cannot attach pack {:?} as {alias}: manifest declares term space {} but the store owns {actual}",
+                a.path, manifest.term_space
+            )));
+        }
+        out.push((alias.clone(), manifest));
+    }
+    Ok(out)
+}
+
 /// Additive migration for attachment provenance (quipu #75): `graphs.source`.
 ///
 /// Names the attachment alias a graph came from; NULL means local. **Not a

@@ -132,6 +132,8 @@ pub struct Store {
     /// every store that did not ask for attachments, which is the default and
     /// must stay indistinguishable from before the feature existed.
     pub(crate) attachments: Vec<attach::Attachment>,
+    /// Manifests surfaced from attached knowledge packs (quipu #82).
+    pub(crate) pack_manifests: Vec<(String, crate::pack::Manifest)>,
     /// The table source a composed query reads `facts` from — see
     /// [`attach::build_facts_source`]. Exactly `"facts"` with no attachments,
     /// which is the byte-identical SQL every query built before quipu #75.
@@ -381,6 +383,7 @@ impl Store {
             attach::verify_attached_schema(&conn, attachments, local_space)?;
             attach::register_attached_graphs(&conn, attachments)?;
         }
+        let pack_manifests = attach::attached_pack_manifests(&conn, attachments)?;
 
         // AFTER verification and registration: the source it builds is only
         // meaningful for attachments quipu has agreed to compose, and it reads
@@ -394,6 +397,7 @@ impl Store {
 
         let mut store = Self::with_connection(conn);
         store.attachments = attachments.to_vec();
+        store.pack_manifests = pack_manifests;
         store.facts_source = facts_source;
         store.resolve_sql = resolve_sql;
         Ok(store)
@@ -423,6 +427,53 @@ impl Store {
     #[must_use]
     pub fn attachments(&self) -> &[attach::Attachment] {
         &self.attachments
+    }
+
+    /// Knowledge-pack manifests contributed by attachments, paired with alias.
+    #[must_use]
+    pub fn pack_manifests(&self) -> &[(String, crate::pack::Manifest)] {
+        &self.pack_manifests
+    }
+
+    /// Advisory embedding model/dimension mismatches for attached packs.
+    #[must_use]
+    pub fn pack_embedding_warnings(&self) -> Vec<String> {
+        let consumer_model = self
+            .embedding_config
+            .model_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|p| p.to_string_lossy().to_string());
+        self.pack_manifests.iter().filter_map(|(alias, manifest)| {
+            let counts: serde_json::Value = serde_json::from_str(&manifest.counts).ok()?;
+            let model = counts.get("embedding_model").and_then(|v| v.as_str()).map(str::to_string);
+            let dim = counts.get("embedding_dimension").and_then(serde_json::Value::as_u64)
+                .and_then(|n| usize::try_from(n).ok());
+            if model != consumer_model || dim != Some(self.embedding_config.dimension) {
+                Some(format!(
+                    "attached pack {alias} embedding model/dimension {:?}/{:?} differs from consumer {:?}/{}; vectors are not converted",
+                    model, dim, consumer_model, self.embedding_config.dimension
+                ))
+            } else { None }
+        }).collect()
+    }
+
+    /// Recompute content hashes for every attached pack on explicit request.
+    pub fn verify_attached_pack_hashes(&self) -> Result<Vec<(String, bool)>> {
+        self.pack_manifests
+            .iter()
+            .map(|(alias, _)| {
+                let attachment = self
+                    .attachments
+                    .iter()
+                    .find(|a| &a.alias == alias)
+                    .ok_or_else(|| {
+                        Error::Store(format!("pack manifest has no attachment: {alias}"))
+                    })?;
+                let (_, _, ok) = crate::pack::verify(&attachment.path)?;
+                Ok((alias.clone(), ok))
+            })
+            .collect()
     }
 
     /// Refuse a write aimed at a graph that lives in an attached database.
@@ -492,6 +543,7 @@ impl Store {
             defer_auto_embed: false,
             pending_embed: None,
             attachments: Vec::new(),
+            pack_manifests: Vec::new(),
             facts_source: "facts".to_string(),
             resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
             #[cfg(feature = "reactive-reasoner")]
