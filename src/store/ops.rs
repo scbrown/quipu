@@ -197,6 +197,15 @@ impl Store {
         )?;
         let tx_id = self.conn.last_insert_rowid();
 
+        // Domain/range axioms are not merely a one-time migration at ontology
+        // load. Apply them to every newly asserted edge so a range such as
+        // `runs_on -> Host` stays true for facts ingested after the load
+        // (aegis-qfncf). The inferred datums join this same transaction: guards,
+        // events and reactive observers see the post-inference write atomically.
+        let mut staged_datums = datums.to_vec();
+        #[cfg(feature = "owl")]
+        staged_datums.extend(self.owl_domain_range_inferences(datums, timestamp)?);
+
         // Collect the datums actually written (for observer notification),
         // classified by op. Overlay view-markers (Tombstone) are excluded from
         // the committed reactive stream (#36).
@@ -216,7 +225,7 @@ impl Store {
         // reject the write — which is exactly the bug, an ordinary update turned
         // into an HTTP 400.
         #[cfg(feature = "owl")]
-        self.supersede_functional_values(datums, timestamp, graph, tx_id)?;
+        self.supersede_functional_values(&staged_datums, timestamp, graph, tx_id)?;
 
         {
             let mut insert = self.conn.prepare(
@@ -240,7 +249,7 @@ impl Store {
                  WHERE e = ?1 AND a = ?2 AND v = ?3 AND g = ?4 AND op = 1 AND valid_to IS NULL \
                  LIMIT 1",
             )?;
-            for d in datums {
+            for d in &staged_datums {
                 let v_bytes = d.value.to_bytes();
                 if d.op == Op::Retract {
                     close_assertion.execute(params![
@@ -288,12 +297,12 @@ impl Store {
         // writes that define or amend a policy: a malformed constraint must be
         // refused before it can be evaluated, or the very next write is judged
         // by a rule whose class and enforcement point disagree.
-        self.validate_policy_placement(datums, graph)?;
+        self.validate_policy_placement(&staged_datums, graph)?;
 
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.
-        self.enforce_write_policies(datums, graph)?;
+        self.enforce_write_policies(&staged_datums, graph)?;
 
         // OWL write-time constraints (aegis-bmqup): disjointWith and
         // FunctionalProperty. Same contract as the policy guard above — an Err
@@ -301,7 +310,7 @@ impl Store {
         // Placed AFTER the policy gate so authority and governance still decide
         // first, and BEFORE emit_events so a rejected write emits nothing.
         #[cfg(feature = "owl")]
-        self.enforce_owl_constraints(datums)?;
+        self.enforce_owl_constraints(&staged_datums)?;
 
         // Event log (event-log P1): append this tx's semantic events INSIDE the
         // savepoint, AFTER the policy guard — a denied write emits nothing, a

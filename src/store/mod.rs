@@ -815,6 +815,58 @@ impl Store {
         Ok(())
     }
 
+    /// Derive the rdf:type facts implied by loaded rdfs:domain/rdfs:range
+    /// axioms for one pending write (aegis-qfncf).
+    #[cfg(feature = "owl")]
+    pub(crate) fn owl_domain_range_inferences(
+        &mut self,
+        datums: &[Datum],
+        timestamp: &str,
+    ) -> Result<Vec<Datum>> {
+        self.ensure_owl_cache()?;
+        let Some(ontology) = self.owl_cache.take() else {
+            return Ok(Vec::new());
+        };
+        let domains = ontology.axioms.domains.clone();
+        let ranges = ontology.axioms.ranges.clone();
+        self.owl_cache = Some(ontology);
+
+        if domains.is_empty() && ranges.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let rdf_type = self.intern(crate::namespace::RDF_TYPE)?;
+        let mut out = Vec::new();
+        for datum in datums.iter().filter(|d| d.op == Op::Assert) {
+            let Ok(predicate) = self.resolve(datum.attribute) else {
+                continue;
+            };
+            for (_, class) in domains.iter().filter(|(prop, _)| prop == &predicate) {
+                out.push(Datum {
+                    entity: datum.entity,
+                    attribute: rdf_type,
+                    value: Value::Ref(self.intern(class)?),
+                    valid_from: timestamp.to_string(),
+                    valid_to: None,
+                    op: Op::Assert,
+                });
+            }
+            if let Value::Ref(target) = &datum.value {
+                for (_, class) in ranges.iter().filter(|(prop, _)| prop == &predicate) {
+                    out.push(Datum {
+                        entity: *target,
+                        attribute: rdf_type,
+                        value: Value::Ref(self.intern(class)?),
+                        valid_from: timestamp.to_string(),
+                        valid_to: None,
+                        op: Op::Assert,
+                    });
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// Reject a write that violates `owl:disjointWith` or `owl:FunctionalProperty`
     /// (aegis-bmqup).
     ///

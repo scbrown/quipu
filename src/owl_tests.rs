@@ -53,6 +53,41 @@ fn parse_ontology_extracts_axioms() {
 }
 
 #[test]
+fn loaded_range_applies_to_facts_written_after_ontology_load() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .load_ontology("range", TEST_ONTOLOGY, "2026-01-01T00:00:00Z")
+        .unwrap();
+
+    let alice = store.intern("http://example.org/alice").unwrap();
+    let bob = store.intern("http://example.org/bob").unwrap();
+    let knows = store.intern("http://example.org/knows").unwrap();
+    store
+        .transact(
+            &[Datum {
+                entity: alice,
+                attribute: knows,
+                value: Value::Ref(bob),
+                valid_from: "2026-01-02T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-01-02T00:00:00Z",
+            Some("test"),
+            Some("post-load-range-probe"),
+        )
+        .unwrap();
+
+    let result = crate::sparql::query(
+        &store,
+        "ASK { <http://example.org/alice> a <http://example.org/Person> . \
+               <http://example.org/bob> a <http://example.org/Person> }",
+    )
+    .unwrap();
+    assert!(matches!(result, crate::sparql::QueryResult::Ask(true)));
+}
+
+#[test]
 fn materialize_subclass_transitive_closure() {
     let ont = Ontology::from_turtle(TEST_ONTOLOGY).unwrap();
     let mut store = Store::open_in_memory().unwrap();
