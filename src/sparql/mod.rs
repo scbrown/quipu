@@ -426,6 +426,15 @@ impl Drop for ProgressGuard<'_> {
 /// connection; a nested `query_temporal` without its own deadline runs under
 /// the outer query's handler and budget, which is the intended accounting.
 pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Result<QueryResult> {
+    if ctx.as_of_tx.is_some() && !store.attachments().is_empty() {
+        return Err(Error::Store(
+            "as_of_tx is refused for a store with attached databases: transaction IDs are \
+             file-local and have no cross-file ordering; see \
+             docs/design/multi-db-composition.md §6"
+                .to_string(),
+        ));
+    }
+
     let parsed = SparqlParser::new()
         .parse_query(sparql)
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;

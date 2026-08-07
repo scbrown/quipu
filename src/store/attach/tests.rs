@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use super::{Attachment, validate_alias};
+use crate::sparql::{TemporalContext, query_temporal};
 use crate::store::Store;
 use crate::types::Value;
 use crate::{Datum, Op};
@@ -978,6 +979,99 @@ fn an_attached_graph_is_readable_through_graph_var() {
             "composition dropped a local solution {r:?}: {composed_rows:?}"
         );
     }
+}
+
+#[test]
+fn as_of_tx_is_refused_when_attachments_are_mounted_but_main_only_is_unchanged() {
+    let scratch = Scratch::new("e2easofrefusal");
+    let (plain, with, _) = composed(&scratch, 8);
+    let ctx = TemporalContext {
+        as_of_tx: Some(1),
+        ..Default::default()
+    };
+    let q = "SELECT ?s ?o WHERE { ?s ?p ?o }";
+
+    assert!(
+        query_temporal(&plain, q, &ctx).is_ok(),
+        "as_of_tx on one database must keep working"
+    );
+    let err = query_temporal(&with, q, &ctx).unwrap_err().to_string();
+    assert!(
+        err.contains("as_of_tx"),
+        "the refusal must name the feature: {err}"
+    );
+    assert!(
+        err.contains("multi-db-composition.md §6"),
+        "the refusal must name the governing design section: {err}"
+    );
+    assert!(
+        err.contains("file-local"),
+        "the refusal must explain why no comparison is valid: {err}"
+    );
+}
+
+#[test]
+fn valid_time_filters_attached_graphs() {
+    let scratch = Scratch::new("e2evalidtime");
+    let (_, with, _) = composed(&scratch, 8);
+    let q = "SELECT ?g ?s ?o WHERE { GRAPH ?g { ?s ?p ?o } }";
+
+    let present = query_temporal(
+        &with,
+        q,
+        &TemporalContext {
+            valid_at: Some("2026-01-02T00:00:00Z".to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        present.rows().iter().any(|row| {
+            row.values()
+                .any(|value| value == &Value::Str("s named".to_string()))
+        }),
+        "portable valid-time must include the attached fact inside its interval"
+    );
+
+    let absent = query_temporal(
+        &with,
+        q,
+        &TemporalContext {
+            valid_at: Some("2025-12-31T00:00:00Z".to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        !absent.rows().iter().any(|row| {
+            row.values()
+                .any(|value| value == &Value::Str("s named".to_string()))
+        }),
+        "portable valid-time must exclude the attached fact before valid_from"
+    );
+}
+
+#[test]
+fn event_log_stays_main_only_when_attachments_are_mounted() {
+    let scratch = Scratch::new("e2eeventsmainonly");
+    let (plain, with, _) = composed(&scratch, 8);
+
+    let local = plain.events_after(0, 1_000, None, None).unwrap();
+    let composed = with.events_after(0, 1_000, None, None).unwrap();
+    assert!(!local.is_empty(), "the main fixture must emit events");
+    assert_eq!(
+        composed.len(),
+        local.len(),
+        "mounting an attachment must not union its file-local event log"
+    );
+    assert_eq!(
+        composed
+            .iter()
+            .map(|event| event.offset)
+            .collect::<Vec<_>>(),
+        local.iter().map(|event| event.offset).collect::<Vec<_>>(),
+        "event offsets remain the main database's cursor currency"
+    );
 }
 
 #[test]
