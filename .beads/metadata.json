@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "quipu",
+  "project_id": "53d8c3bd-c423-453b-9401-faf450c6ef75"
+}

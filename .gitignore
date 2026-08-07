@@ -70,3 +70,9 @@ data/*.log
 docs/book/src/datalinks/datalinks.js
 docs/book/src/datalinks/graph-canvas.js
 docs/book/src/datalinks/vendor/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
