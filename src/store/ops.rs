@@ -883,9 +883,9 @@ impl Store {
         Ok(facts
             .into_iter()
             .filter(|f| {
-                !orphans.iter().any(|o| {
-                    o.entity == f.entity && o.lost_label && Some(f.attribute) == label_id
-                })
+                !orphans
+                    .iter()
+                    .any(|o| o.entity == f.entity && o.lost_label && Some(f.attribute) == label_id)
             })
             .map(|f| Datum {
                 entity: f.entity,
