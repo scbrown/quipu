@@ -10,6 +10,7 @@ pub mod ops;
 pub mod overlays;
 pub mod push;
 pub mod queries;
+pub mod read_model;
 pub mod respace;
 pub mod terms;
 pub(crate) use terms::TermCache;

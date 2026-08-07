@@ -1,20 +1,22 @@
 # Design: In-Memory Read Model — query in memory, write to SQLite
 
-> **Implementation status (2026-08-07):** 🚧 **Phase 1 landed; Phases 2–5
+> **Implementation status (2026-08-07):** 🚧 **Phases 1–2 landed; 3–5
 > designed.** Every number below was measured on this branch, native x86-64,
-> `--release`, `--no-default-features`. The prototype read model is
+> `--release`, `--no-default-features`. The model is exercised by
 > `examples/mem_read_model.rs`; the baseline it is compared against is
 > `examples/scale_bench.rs`.
 >
-> `Store` now carries a memoizing `TermCache` (§8 Phase 1, `quipu-yzf`) — worth
-> ~4× on the 2-hop join on its own. `eval_bgp` is otherwise unchanged and still
-> does a nested-loop join; the §1 and §4 tables are pre-cache figures, kept as
-> the baseline the remaining phases are measured against.
+> `Store` carries a memoizing `TermCache` (`quipu-yzf`) and
+> `src/store/read_model.rs` holds the `ReadModel` itself (`quipu-d6x`).
+> **`eval_bgp` still does a nested-loop join and does not consult the model** —
+> routing it there, behind the §5 scope guard, is Phase 3. The §1 table is the
+> pre-cache SPARQL baseline the remaining phases are measured against.
 
 **Thesis:** SQLite should be Quipu's durable write log and archive. Queries
 should be answered from an in-memory read model built over it. Measured, that
-converts the 2-hop join from quadratic to linear and from 133 seconds to 0.15
-milliseconds, at a cost of ~385 bytes per fact of resident memory.
+converts the 2-hop join from quadratic to linear — measured at 0.26 ms against
+a SQL path that times out on the same store — at a cost of ~320 bytes per triple
+of resident memory.
 
 ---
 
@@ -75,14 +77,17 @@ Three permutation indexes over current facts plus a two-way term dictionary —
 the same access patterns `facts`' SQL indexes serve, held in memory:
 
 ```rust
-struct ReadModel {
+pub struct ReadModel {
+    graph: i64,                                  // the graph this covers; 0 is ROOT
     spo: HashMap<i64, Vec<(i64, Value)>>,        // <s> ?p ?o
     pso: HashMap<i64, Vec<(i64, Value)>>,        // ?s <p> ?o
     pos: HashMap<(i64, Vec<u8>), Vec<i64>>,      // ?s <p> <o>  /  ?s a <T>
-    id_to_iri: HashMap<i64, String>,
-    iri_to_id: HashMap<String, i64>,
 }
 ```
+
+Keyed by term id throughout, holding no strings: the `id <-> IRI` dictionary
+lives on `Store` (Phase 1) and is shared by every read path rather than
+duplicated per model.
 
 `eval_bgp` then becomes: resolve each pattern against the matching index, and
 join on shared variables with a **hash join** — build a set from the smaller
@@ -91,38 +96,40 @@ also becomes available for free, because index cardinalities are now known
 without a round-trip.
 
 The dictionary matters as much as the indexes. Two thirds of the prototype's
-build cost was per-term `store.resolve()` calls; in the query path those same
-round-trips are what make row binding expensive. Resident, they are hash lookups.
+build cost was per-term `store.resolve()` calls, and in the query path those same
+round-trips are what make row binding expensive. Resident, they are hash lookups
+— which is why Phase 1 shipped first and why Phase 2 came in faster than the
+prototype it replaced.
 
-## 4. Measured — the prototype
+## 4. Measured
 
-`examples/mem_read_model.rs`, warm page cache, same stores as §1:
+`examples/mem_read_model.rs`, warm page cache, same stores as §1. This drives
+the real `ReadModel` as of Phase 2; the figures below replace the standalone
+prototype's.
 
-| Episodes | Facts | Build | Resident | **2-hop hash join** | SPARQL equivalent |
+| Episodes | Triples | Build | Resident | **2-hop hash join** | SPARQL equivalent |
 |---:|---:|---:|---:|---:|---:|
-| 1,000 | 17,150 | 34.7 ms | 9.2 MB | **0.034 ms** (1,000 rows) | 6,779 ms |
-| 2,000 | 34,150 | 63.6 ms | 15.1 MB | **0.086 ms** (2,000 rows) | 20,630 ms |
-| 4,000 | 68,150 | 135.7 ms | 26.0 MB | **0.115 ms** (4,000 rows) | 133,037 ms |
-| 10,000 | 170,150 | 337.3 ms | 59.7 MB | **0.294 ms** (10,000 rows) | timeout |
+| 1,000 | 17,150 | 19.3 ms | 8.7 MB | **0.022 ms** (1,000 rows) | 4,709 ms |
+| 2,000 | 34,150 | 40.5 ms | 14.5 MB | **0.082 ms** (2,000 rows) | 20,630 ms |
+| 4,000 | 68,150 | 78.8 ms | 24.7 MB | **0.101 ms** (4,000 rows) | 84,444 ms |
+| 10,000 | 170,150 | 246.5 ms | 55.5 MB | **0.259 ms** (10,000 rows) | timeout |
 
-Everything is linear. Build is ~2.0 µs/fact and the join is ~30 ns per candidate
-edge. Resident growth is **~350 bytes/fact** at the margin — the per-fact figure
-the example prints is higher at small sizes because RSS includes fixed process
-overhead — which is ~6 KB/episode.
+Everything is linear. Build is ~1.45 µs/triple; the join is ~25 ns per candidate
+edge. Resident growth is **~320 bytes/triple** at the margin — the per-triple
+figure the example prints is higher at small sizes because RSS includes fixed
+process overhead.
 
 The comparison understates the gap: the hash join returns **every** row (10,000
-at 10k episodes) while the SPARQL query had `LIMIT 100` and still timed out. At
-4,000 episodes the speedup on like-for-like work is roughly **900,000×**.
+at 10k episodes) while the SPARQL query had `LIMIT 100` and still timed out.
 
-Two caveats on these numbers:
+Two notes on how these moved:
 
-- **Build time above is warm.** Cold, the 10k build was ~2,650 ms, dominated by
-  reading 83 MB off disk — page-cache cost, not indexing cost. The breakdown at
-  10k warm: ~118 ms for `current_facts()`, ~82 ms to build the three indexes,
-  ~180 ms for dictionary `resolve()` round-trips.
-- **That 180 ms is an artifact of the prototype**, which calls `resolve()` per
-  new term. A single `SELECT id, iri FROM terms` sweep replaces 30,063
-  statements with one and should remove most of it.
+- **Faster and smaller than the prototype**, which built at 337 ms / 59.7 MB for
+  the same store. The model no longer carries its own term dictionary — that
+  lives on `Store` as of Phase 1 and is shared by every read path, so Phase 1
+  paid for part of Phase 2 before it was written.
+- **Build time above is warm.** Cold, the 10k build is dominated by reading
+  83 MB off disk — page-cache cost, not indexing cost.
 
 ## 5. Correctness — what the read model may and may not answer
 
@@ -249,9 +256,23 @@ count. ~7 MB at 30k terms is nothing; a 1M-episode raw log's ~3M terms would be
 several hundred MB in a long-lived server. Tracked as `quipu-h03`, and another
 reason §7's derived-layer scoping is the right target.
 
-**Phase 2 — `ReadModel` behind a `Store` accessor.** Build, incremental apply,
-invalidate. Tested against the SQL path for equivalence on the in-scope subset.
-Not yet wired to the query engine.
+**Phase 2 — `ReadModel`. ✅ LANDED** (`quipu-d6x`). `src/store/read_model.rs`:
+three permutation indexes over one graph's current facts, built via
+`Store::build_read_model(graph)`, with `apply`/`apply_all` for incremental
+maintenance. 12 tests, the load-bearing ones differential — after every write
+shape, an incrementally-updated model must hold exactly what a rebuilt one
+holds.
+
+Deliberately **inert**: nothing consults it yet. It is not stored on `Store`
+either, because residency and invalidation policy belong with the scope guard
+that makes consulting it safe — that is Phase 3.
+
+Three things the tests pin down, each of which would be a silent wrong answer:
+retraction and tombstones must *remove* from all three indexes rather than
+append; a repeated assert must not double-count, because SQL's `SELECT DISTINCT`
+never produced duplicate rows; and a datum arriving with `valid_to` already set
+is not current, so indexing it would make the incremental path disagree with the
+build.
 
 **Phase 3 — Route `eval_bgp` through it.** Guarded by the §5 scope check, with
 fallback to SQL. Hash joins plus selectivity-ordered patterns. The acceptance
