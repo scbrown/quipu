@@ -1,0 +1,11 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Runtime placement always terminates at infrastructure. Container and host
+# subtypes remain useful, while this range supplies the common Host retrieval
+# type when an ingesting producer omits it.
+aegis:runs_on rdfs:range aegis:Host .
+
+# No rdfs:domain is declared deliberately. Scripts, services, probes, agents,
+# and containers can all have a runtime placement; typing every subject as one
+# class would be a false inference.
