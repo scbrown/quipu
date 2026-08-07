@@ -237,7 +237,7 @@ impl RespaceReport {
 }
 
 /// A column of the live schema, paired with its classification.
-struct ClassifiedColumn {
+pub(super) struct ClassifiedColumn {
     table: String,
     column: String,
     kind: TermIdKind,
@@ -250,7 +250,7 @@ struct ClassifiedColumn {
 /// [`COLUMN_CLASSIFICATION`] does not. Deliberately reports **all** of them
 /// rather than the first: an operator who has added three columns should learn
 /// that in one run, not three.
-fn classify_live_schema(conn: &Connection) -> Result<Vec<ClassifiedColumn>> {
+pub(super) fn classify_live_schema(conn: &Connection) -> Result<Vec<ClassifiedColumn>> {
     let tables: Vec<String> = conn
         .prepare(
             "SELECT name FROM sqlite_master \

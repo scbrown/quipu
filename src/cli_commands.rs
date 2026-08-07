@@ -734,3 +734,33 @@ pub fn cmd_db(args: &[String], db_path: &str) {
         }
     }
 }
+
+/// `quipu graph import <db> --as <iri>` (quipu #85).
+pub fn cmd_graph(args: &[String], db_path: &str) {
+    if args.get(2).map(String::as_str) != Some("import") {
+        eprintln!("usage: quipu graph import <db> --as <iri> [--db <path>]");
+        std::process::exit(1);
+    }
+    let Some(source) = args.get(3).filter(|s| !s.starts_with("--")) else {
+        eprintln!("quipu graph import requires a source database");
+        std::process::exit(1);
+    };
+    let Some(graph) = flag_value(args, "--as") else {
+        eprintln!("quipu graph import requires --as <iri>");
+        std::process::exit(1);
+    };
+    match quipu::store::import::import_graph(
+        std::path::Path::new(db_path),
+        std::path::Path::new(source),
+        graph,
+    ) {
+        Ok(r) => println!(
+            "imported {source} as {graph}\n  graph id: {}\n  terms: {}\n  transactions: {}\n  facts: {}",
+            r.graph, r.terms, r.transactions, r.facts
+        ),
+        Err(e) => {
+            eprintln!("graph import error: {e}");
+            std::process::exit(1);
+        }
+    }
+}

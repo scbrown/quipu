@@ -76,6 +76,7 @@ fn main() {
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_commands::cmd_pack(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
+        "graph" => cli_commands::cmd_graph(&args, db_path),
         "migrate-vectors" => cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
         _ => {
@@ -226,6 +227,7 @@ COMMANDS:
     quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     quipu pack --verify <file.qpack.db>
     quipu db respace --into <space> --out <file> [--db <path>]
+    quipu graph import <db> --as <iri> [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
