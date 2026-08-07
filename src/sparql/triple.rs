@@ -126,6 +126,14 @@ pub fn eval_triple_pattern(
     bindings: &Bindings,
     ctx: &TemporalContext,
 ) -> Result<Vec<Bindings>> {
+    // The read model answers this exact question when the guard admits, with
+    // no SQL and no per-row dictionary round-trips. Everything it cannot answer
+    // — time travel, non-ROOT graphs, attachments — falls through to the SQL
+    // below, unchanged.
+    if crate::store::read_model::read_model_applicable(store, ctx) {
+        return eval_triple_pattern_from_model(store, tp, bindings);
+    }
+
     // Build SQL query with conditions based on bound values.
     let mut conditions = Vec::new();
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -303,83 +311,222 @@ pub fn eval_triple_pattern(
         if !canonical_rows.insert(canonical_key) {
             continue;
         }
-
-        let mut new_bindings = bindings.clone();
-        let mut compatible = true;
-
-        // Bind subject variable (or blank node used as join variable).
-        match &tp.subject {
-            TermPattern::Variable(var) => {
-                let e_iri = store.resolve(e_id)?;
-                let e_val = if e_iri.starts_with("_:") {
-                    Value::Str(e_iri)
-                } else if let Some(term_id) = store.lookup(&e_iri)? {
-                    Value::Ref(term_id)
-                } else {
-                    Value::Str(e_iri)
-                };
-                if !bind_var(&mut new_bindings, var.as_str(), e_val, &mut compatible) {
-                    continue;
-                }
-            }
-            TermPattern::BlankNode(b) => {
-                let e_iri = store.resolve(e_id)?;
-                let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
-                    Value::Ref(term_id)
-                } else {
-                    Value::Str(e_iri)
-                };
-                if !bind_var(&mut new_bindings, b.as_str(), e_val, &mut compatible) {
-                    continue;
-                }
-            }
-            _ => {}
-        }
-
-        // Bind predicate variable.
-        if let NamedNodePattern::Variable(var) = &tp.predicate {
-            let a_iri = store.resolve(a_id)?;
-            let a_val = if let Some(term_id) = store.lookup(&a_iri)? {
-                Value::Ref(term_id)
-            } else {
-                Value::Str(a_iri)
-            };
-            if !bind_var(&mut new_bindings, var.as_str(), a_val, &mut compatible) {
-                continue;
-            }
-        }
-
-        // Bind object variable (or blank node used as join variable).
-        match &tp.object {
-            TermPattern::Variable(var) => {
-                if !bind_var(&mut new_bindings, var.as_str(), v, &mut compatible) {
-                    continue;
-                }
-            }
-            TermPattern::BlankNode(b)
-                if !bind_var(&mut new_bindings, b.as_str(), v, &mut compatible) =>
-            {
-                continue;
-            }
-            _ => {}
-        }
-
-        // Bind the graph variable for `GRAPH ?g { … }` (quipu #36): ?g resolves
-        // to the graph's IRI (g is the interned id of that IRI). Same ?g across
-        // a BGP is enforced by the join in eval_bgp via bind_var compatibility.
-        if let (Some(g_var), Some(gid)) = (&bind_graph_var, g_id) {
-            // g is the interned term id of the graph IRI (schema.rs), and this
-            // branch only runs for named graphs (g<>0), so gid is always a
-            // valid term id — bind ?g to it directly as a ref.
-            if !bind_var(&mut new_bindings, g_var, Value::Ref(gid), &mut compatible) {
-                continue;
-            }
-        }
-
-        if compatible {
-            results.push(new_bindings);
+        let matched = MatchedRow {
+            e_id,
+            a_id,
+            v,
+            g_id,
+        };
+        if let Some(row) = bind_row(store, tp, bindings, matched, bind_graph_var.as_deref())? {
+            results.push(row);
         }
     }
 
+    Ok(results)
+}
+
+/// Turn one matched `(e, a, v, g)` row into extended bindings, or `None` when
+/// the row is incompatible with what is already bound.
+///
+/// **Extracted so the SQL path and the read-model path cannot drift.** This is
+/// where a triple becomes a `Value`, and the rules are subtle enough that two
+/// copies would diverge: a subject resolving to a blank node binds as
+/// `Value::Str`, everything else re-looks-up its IRI to decide between
+/// `Value::Ref` and `Value::Str`, and the predicate has no blank-node case at
+/// all. Any read model consulted instead of SQL must produce identical
+/// bindings, and sharing this is how that is guaranteed rather than hoped for.
+/// The matched row a [`bind_row`] call is binding — grouped so the function
+/// stays under the argument limit and so the four values that describe ONE
+/// triple travel together.
+struct MatchedRow {
+    e_id: i64,
+    a_id: i64,
+    v: Value,
+    g_id: Option<i64>,
+}
+
+fn bind_row(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    row: MatchedRow,
+    bind_graph_var: Option<&str>,
+) -> Result<Option<Bindings>> {
+    let MatchedRow {
+        e_id,
+        a_id,
+        v,
+        g_id,
+    } = row;
+    let mut new_bindings = bindings.clone();
+    let mut compatible = true;
+
+    // Bind subject variable (or blank node used as join variable).
+    match &tp.subject {
+        TermPattern::Variable(var) => {
+            let e_iri = store.resolve(e_id)?;
+            let e_val = if e_iri.starts_with("_:") {
+                Value::Str(e_iri)
+            } else if let Some(term_id) = store.lookup(&e_iri)? {
+                Value::Ref(term_id)
+            } else {
+                Value::Str(e_iri)
+            };
+            if !bind_var(&mut new_bindings, var.as_str(), e_val, &mut compatible) {
+                return Ok(None);
+            }
+        }
+        TermPattern::BlankNode(b) => {
+            let e_iri = store.resolve(e_id)?;
+            let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
+                Value::Ref(term_id)
+            } else {
+                Value::Str(e_iri)
+            };
+            if !bind_var(&mut new_bindings, b.as_str(), e_val, &mut compatible) {
+                return Ok(None);
+            }
+        }
+        _ => {}
+    }
+
+    // Bind predicate variable.
+    if let NamedNodePattern::Variable(var) = &tp.predicate {
+        let a_iri = store.resolve(a_id)?;
+        let a_val = if let Some(term_id) = store.lookup(&a_iri)? {
+            Value::Ref(term_id)
+        } else {
+            Value::Str(a_iri)
+        };
+        if !bind_var(&mut new_bindings, var.as_str(), a_val, &mut compatible) {
+            return Ok(None);
+        }
+    }
+
+    // Bind object variable (or blank node used as join variable).
+    match &tp.object {
+        TermPattern::Variable(var) => {
+            if !bind_var(&mut new_bindings, var.as_str(), v, &mut compatible) {
+                return Ok(None);
+            }
+        }
+        TermPattern::BlankNode(b)
+            if !bind_var(&mut new_bindings, b.as_str(), v, &mut compatible) =>
+        {
+            return Ok(None);
+        }
+        _ => {}
+    }
+
+    // Bind the graph variable for `GRAPH ?g { … }` (quipu #36): ?g resolves
+    // to the graph's IRI (g is the interned id of that IRI). Same ?g across
+    // a BGP is enforced by the join in eval_bgp via bind_var compatibility.
+    if let (Some(g_var), Some(gid)) = (bind_graph_var, g_id) {
+        // g is the interned term id of the graph IRI (schema.rs), and this
+        // branch only runs for named graphs (g<>0), so gid is always a
+        // valid term id — bind ?g to it directly as a ref.
+        if !bind_var(&mut new_bindings, g_var, Value::Ref(gid), &mut compatible) {
+            return Ok(None);
+        }
+    }
+
+    Ok(if compatible { Some(new_bindings) } else { None })
+}
+
+/// Evaluate one triple pattern against the resident read model instead of SQL.
+///
+/// Only ever reached when `read_model_applicable` admits (see
+/// `src/store/read_model.rs`), which is what makes the shortcuts here sound:
+/// the graph is plain ROOT so no graph variable binds and `g_id` is always
+/// `None`, and there are no attachments so `canonical_id` is the identity and
+/// `lookup_all` degenerates to `lookup`.
+///
+/// Rows go through the same [`bind_row`] as the SQL path, so the two cannot
+/// disagree about what a triple binds to.
+///
+/// Candidates are sorted by `(e, a, v)`. The SQL this replaces carries no
+/// `ORDER BY`, so its order was incidental — index order, usually `idx_eavt`.
+/// Sorting makes the fast path deterministic rather than merely different.
+fn eval_triple_pattern_from_model(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+) -> Result<Vec<Bindings>> {
+    let subject = match resolve_subject_pattern(&tp.subject, bindings) {
+        Some(iri) => match store.lookup(&iri)? {
+            Some(id) => Some(id),
+            None => return Ok(vec![]), // not in the dictionary -> no matches
+        },
+        None => None,
+    };
+    let predicate = match resolve_predicate_pattern(&tp.predicate, bindings) {
+        Some(iri) => match store.lookup(&iri)? {
+            Some(id) => Some(id),
+            None => return Ok(vec![]),
+        },
+        None => None,
+    };
+    let object = resolve_object_pattern(store, &tp.object, bindings)?;
+
+    let model = store.read_model()?;
+    let mut candidates: Vec<(i64, i64, Value)> = match (subject, predicate, &object) {
+        (Some(e), Some(a), Some(v)) => {
+            if model.contains(e, a, v) {
+                vec![(e, a, v.clone())]
+            } else {
+                vec![]
+            }
+        }
+        (Some(e), Some(a), None) => model
+            .by_subject(e)
+            .iter()
+            .filter(|(pa, _)| *pa == a)
+            .map(|(pa, v)| (e, *pa, v.clone()))
+            .collect(),
+        (Some(e), None, Some(v)) => model
+            .by_subject(e)
+            .iter()
+            .filter(|(_, pv)| *pv == *v)
+            .map(|(pa, pv)| (e, *pa, pv.clone()))
+            .collect(),
+        (Some(e), None, None) => model
+            .by_subject(e)
+            .iter()
+            .map(|(pa, pv)| (e, *pa, pv.clone()))
+            .collect(),
+        (None, Some(a), Some(v)) => model
+            .by_predicate_object(a, v)
+            .iter()
+            .map(|e| (*e, a, v.clone()))
+            .collect(),
+        (None, Some(a), None) => model
+            .by_predicate(a)
+            .iter()
+            .map(|(e, pv)| (*e, a, pv.clone()))
+            .collect(),
+        (None, None, Some(v)) => model
+            .by_object(v)
+            .iter()
+            .map(|(e, a)| (*e, *a, v.clone()))
+            .collect(),
+        (None, None, None) => model
+            .iter_triples()
+            .map(|(e, a, v)| (e, a, v.clone()))
+            .collect(),
+    };
+    candidates.sort_unstable_by(|l, r| (l.0, l.1, l.2.to_bytes()).cmp(&(r.0, r.1, r.2.to_bytes())));
+
+    let mut results = Vec::with_capacity(candidates.len());
+    for (e_id, a_id, v) in candidates {
+        let matched = MatchedRow {
+            e_id,
+            a_id,
+            v,
+            g_id: None,
+        };
+        if let Some(row) = bind_row(store, tp, bindings, matched, None)? {
+            results.push(row);
+        }
+    }
     Ok(results)
 }

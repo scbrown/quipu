@@ -146,6 +146,14 @@ impl Store {
         // make should not reach the policy gate, the placement check, or the
         // fact table. SARC I5.
         self.enforce_graph_authority(graph)?;
+        // Drop the read model BEFORE staging, not just after committing. The
+        // write-time policy guard runs INSIDE the savepoint and queries the
+        // pending post-state, so it must see the staged rows — a model cached
+        // by some earlier read predates them and would judge a compliant write
+        // against a store missing the very facts that make it compliant.
+        // Caught by deny_blocks_noncompliant_write, which was denied a write it
+        // had just satisfied.
+        self.invalidate_read_model();
         self.conn.execute_batch("SAVEPOINT quipu_transact")?;
         match self.stage_and_guard(datums, timestamp, actor, source, graph) {
             Ok(staged) => {
@@ -172,6 +180,14 @@ impl Store {
                 let _ = self
                     .conn
                     .execute_batch("ROLLBACK TO quipu_transact; RELEASE quipu_transact");
+                // The guard runs INSIDE the savepoint and may have answered a
+                // query from the read model, building it from rows this
+                // rollback has just discarded. Without this, a DENIED write
+                // leaves a model holding facts SQL no longer has — the store is
+                // byte-identical but the index is not, which is worse than
+                // either being wrong consistently. Caught by
+                // deny_blocks_noncompliant_write.
+                self.invalidate_read_model();
                 // AFTER the rollback, deliberately. The verdict of a denial is
                 // the one worth keeping — an accepted write leaves its own
                 // evidence in the facts it wrote, a refused one leaves nothing.

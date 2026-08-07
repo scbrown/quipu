@@ -51,6 +51,11 @@ pub struct ReadModel {
     pso: HashMap<i64, Vec<(i64, Value)>>,
     /// (attribute, value-bytes) → entities. Serves `?s <p> <o>` and `?s a <T>`.
     pos: HashMap<(i64, Vec<u8>), Vec<i64>>,
+    /// value-bytes → (entity, attribute). Serves `?s ?p <o>`, which the other
+    /// three cannot without a scan — SQL reaches for `idx_vaet` here, so a model
+    /// without this index would be a REGRESSION on that shape rather than a
+    /// speedup.
+    osp: HashMap<Vec<u8>, Vec<(i64, i64)>>,
     /// Distinct triples held, maintained incrementally so `len` is not a scan.
     triples: usize,
 }
@@ -111,6 +116,20 @@ impl ReadModel {
             .map_or(&[], Vec::as_slice)
     }
 
+    /// `?s ?p <o>` — every (subject, predicate) pointing at this object.
+    #[must_use]
+    pub fn by_object(&self, value: &Value) -> &[(i64, i64)] {
+        self.osp.get(&value.to_bytes()).map_or(&[], Vec::as_slice)
+    }
+
+    /// Every triple held, as `(entity, attribute, value)`. The unbound-pattern
+    /// fallback, and O(store) exactly as the SQL scan it replaces is.
+    pub fn iter_triples(&self) -> impl Iterator<Item = (i64, i64, &Value)> {
+        self.spo
+            .iter()
+            .flat_map(|(e, entries)| entries.iter().map(move |(a, v)| (*e, *a, v)))
+    }
+
     /// Whether a specific triple is present.
     #[must_use]
     pub fn contains(&self, entity: i64, attribute: i64, value: &Value) -> bool {
@@ -161,6 +180,10 @@ impl ReadModel {
             return;
         }
         subjects.push(entity);
+        self.osp
+            .entry(value.to_bytes())
+            .or_default()
+            .push((entity, attribute));
         self.spo
             .entry(entity)
             .or_default()
@@ -207,6 +230,18 @@ impl ReadModel {
             }
             if entries.is_empty() {
                 self.pso.remove(&attribute);
+            }
+        }
+        let obj_key = value.to_bytes();
+        if let Some(entries) = self.osp.get_mut(&obj_key) {
+            if let Some(i) = entries
+                .iter()
+                .position(|(e, a)| *e == entity && *a == attribute)
+            {
+                entries.swap_remove(i);
+            }
+            if entries.is_empty() {
+                self.osp.remove(&obj_key);
             }
         }
         self.triples -= 1;
@@ -256,7 +291,8 @@ impl ReadModel {
 /// missing.
 #[must_use]
 pub fn read_model_applicable(store: &Store, ctx: &crate::sparql::TemporalContext) -> bool {
-    ctx.valid_at.is_none()
+    store.read_model_enabled()
+        && ctx.valid_at.is_none()
         && ctx.as_of_tx.is_none()
         && ctx.named_dataset.is_none()
         && ctx.graph.is_root_default()
@@ -308,6 +344,40 @@ impl Store {
     #[must_use]
     pub fn read_model_is_resident(&self) -> bool {
         self.read_model.borrow().is_some()
+    }
+
+    /// Whether SPARQL may answer from the read model. **Off by default.**
+    #[must_use]
+    pub fn read_model_enabled(&self) -> bool {
+        self.read_model_enabled.get()
+    }
+
+    /// Turn the read-model fast path on or off for SPARQL evaluation.
+    ///
+    /// # Why this defaults to OFF
+    ///
+    /// Measured on `examples/scale_bench.rs`, routing `eval_triple_pattern`
+    /// through the model is **4–5× faster on the 2-hop join and ~2,600× slower
+    /// on a point lookup** — 0.12 ms to 320 ms at 10k episodes. Two causes,
+    /// both structural rather than tuning:
+    ///
+    /// - The first query after any write pays the whole build (246 ms at 10k),
+    ///   because the model is dropped on every write rather than maintained
+    ///   (`quipu-m9h`). Write-then-read, which is the ordinary agent loop, pays
+    ///   it every time.
+    /// - The join is still quadratic. Swapping SQL for hash lookups at the leaf
+    ///   makes each probe cheap but leaves `eval_bgp`'s nested loop intact, and
+    ///   that loop is where the O(n²) lives (`quipu-att`).
+    ///
+    /// A fast path that is three orders of magnitude slower on the most common
+    /// query shape is not a fast path. Both causes have beads; when they land
+    /// this can default on, and the flag is here so the change can be measured
+    /// rather than argued about.
+    pub fn set_read_model_enabled(&self, on: bool) {
+        self.read_model_enabled.set(on);
+        if !on {
+            self.invalidate_read_model();
+        }
     }
 }
 

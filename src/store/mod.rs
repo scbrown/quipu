@@ -156,6 +156,9 @@ pub struct Store {
     /// Resident ROOT read model, built on demand and dropped on every write —
     /// see [`read_model::ReadModel`] and [`Store::read_model`].
     pub(crate) read_model: std::cell::RefCell<Option<read_model::ReadModel>>,
+    /// Whether SPARQL consults the read model. Off by default — see
+    /// [`Store::set_read_model_enabled`] for the measurements that decided it.
+    pub(crate) read_model_enabled: std::cell::Cell<bool>,
 }
 
 /// An advisory event observed before a write and appended with it (P3).
@@ -556,6 +559,7 @@ impl Store {
             resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
             term_cache: std::cell::RefCell::new(TermCache::default()),
             read_model: std::cell::RefCell::new(None),
+            read_model_enabled: std::cell::Cell::new(false),
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
         }

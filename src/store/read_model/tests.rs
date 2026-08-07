@@ -366,10 +366,32 @@ fn a_write_invalidates_the_resident_model() {
     assert_eq!(s.read_model().unwrap().len(), 1);
 }
 
+/// Off by default, so the guard refuses even a query it could answer. See
+/// `Store::set_read_model_enabled` for the measurements behind that default.
 #[test]
-fn the_guard_admits_a_plain_current_root_read() {
+fn the_fast_path_is_off_by_default() {
     let s = store();
+    assert!(!s.read_model_enabled());
+    assert!(!read_model_applicable(&s, &TemporalContext::default()));
+}
+
+#[test]
+fn the_guard_admits_a_plain_current_root_read_when_enabled() {
+    let s = store();
+    s.set_read_model_enabled(true);
     assert!(read_model_applicable(&s, &TemporalContext::default()));
+}
+
+/// Disabling drops whatever is resident, so a later re-enable cannot serve
+/// from a model built under different conditions.
+#[test]
+fn disabling_drops_the_resident_model() {
+    let s = store();
+    s.set_read_model_enabled(true);
+    let _ = s.read_model().unwrap().len();
+    assert!(s.read_model_is_resident());
+    s.set_read_model_enabled(false);
+    assert!(!s.read_model_is_resident());
 }
 
 /// Time travel in either axis must reach SQL: the model was built from
@@ -378,6 +400,9 @@ fn the_guard_admits_a_plain_current_root_read() {
 #[test]
 fn the_guard_refuses_time_travel() {
     let s = store();
+    // Enable it, or these would pass because the flag is off rather than
+    // because the dimension is refused.
+    s.set_read_model_enabled(true);
     let valid_at = TemporalContext {
         valid_at: Some("2020-01-01T00:00:00Z".to_string()),
         ..Default::default()
@@ -396,6 +421,9 @@ fn the_guard_refuses_time_travel() {
 #[test]
 fn the_guard_refuses_every_non_root_graph_scope() {
     let s = store();
+    // Enable it, or these would pass because the flag is off rather than
+    // because the dimension is refused.
+    s.set_read_model_enabled(true);
     for scope in [
         GraphScope::Default(vec![]),
         GraphScope::Default(vec![7]),
@@ -421,6 +449,9 @@ fn the_guard_refuses_every_non_root_graph_scope() {
 #[test]
 fn the_guard_refuses_a_from_named_restriction() {
     let s = store();
+    // Enable it, or these would pass because the flag is off rather than
+    // because the dimension is refused.
+    s.set_read_model_enabled(true);
     let ctx = TemporalContext {
         named_dataset: Some(vec![7]),
         ..Default::default()
@@ -434,6 +465,158 @@ fn the_guard_refuses_a_from_named_restriction() {
 #[test]
 fn the_guard_keys_on_attachments_for_composition_and_aliasing() {
     let s = store();
+    // Enable it, or these would pass because the flag is off rather than
+    // because the dimension is refused.
+    s.set_read_model_enabled(true);
     assert!(!s.has_attachments());
     assert!(read_model_applicable(&s, &TemporalContext::default()));
+}
+
+/// `?s ?p <o>` is the shape SQL serves from `idx_vaet`. Without the osp index
+/// the model would have to scan for it, making that pattern a regression rather
+/// than a speedup.
+#[test]
+fn the_object_index_answers_and_de_indexes() {
+    let s = store();
+    let mut model = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
+    let d = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/b",
+        Op::Assert,
+    );
+    let (e, a, v) = (d.entity, d.attribute, d.value.clone());
+    model.apply(&d);
+    assert_eq!(model.by_object(&v), [(e, a)]);
+
+    model.apply(&Datum {
+        op: Op::Retract,
+        ..d
+    });
+    assert!(model.by_object(&v).is_empty(), "osp still holds it");
+}
+
+/// The unbound fallback must enumerate exactly the triples the other indexes
+/// agree on.
+#[test]
+fn iter_triples_matches_the_other_indexes() {
+    let mut s = store();
+    let mut model = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
+    let ds = vec![
+        datum(
+            &s,
+            "http://example.org/a",
+            "http://example.org/p",
+            "http://example.org/b",
+            Op::Assert,
+        ),
+        datum(
+            &s,
+            "http://example.org/a",
+            "http://example.org/q",
+            "http://example.org/c",
+            Op::Assert,
+        ),
+    ];
+    assert_incremental_matches_rebuild(&mut s, &mut model, &ds);
+
+    let mut seen: Vec<(i64, i64, Vec<u8>)> = model
+        .iter_triples()
+        .map(|(e, a, v)| (e, a, v.to_bytes()))
+        .collect();
+    seen.sort_unstable();
+    assert_eq!(seen, model.triples_sorted());
+    assert_eq!(seen.len(), 2);
+}
+
+/// The acceptance bar for the fast path: the same query, both ways, identical
+/// answers. Covers every pattern shape the model indexes differently, because
+/// the shape is what selects the index and therefore what could diverge.
+#[test]
+fn the_model_path_answers_identically_to_sql() {
+    let mut s = store();
+    let ds = vec![
+        datum(
+            &s,
+            "http://example.org/a",
+            "http://example.org/p",
+            "http://example.org/b",
+            Op::Assert,
+        ),
+        datum(
+            &s,
+            "http://example.org/a",
+            "http://example.org/q",
+            "http://example.org/c",
+            Op::Assert,
+        ),
+        datum(
+            &s,
+            "http://example.org/d",
+            "http://example.org/p",
+            "http://example.org/b",
+            Op::Assert,
+        ),
+    ];
+    s.transact(&ds, "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+
+    let queries = [
+        // fully unbound
+        "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+        // subject bound
+        "SELECT ?p ?o WHERE { <http://example.org/a> ?p ?o }",
+        // predicate bound
+        "SELECT ?s ?o WHERE { ?s <http://example.org/p> ?o }",
+        // predicate + object bound
+        "SELECT ?s WHERE { ?s <http://example.org/p> <http://example.org/b> }",
+        // object only bound — the shape that needs the osp index
+        "SELECT ?s ?p WHERE { ?s ?p <http://example.org/b> }",
+        // subject + object bound
+        "SELECT ?p WHERE { <http://example.org/a> ?p <http://example.org/b> }",
+        // all three bound
+        "SELECT * WHERE { <http://example.org/a> <http://example.org/p> <http://example.org/b> }",
+        // a two-pattern join on a shared variable
+        "SELECT ?s ?o WHERE { ?s <http://example.org/p> ?o . ?s <http://example.org/q> ?c }",
+    ];
+
+    for q in queries {
+        s.set_read_model_enabled(false);
+        let via_sql = crate::sparql::query(&s, q).unwrap();
+        s.set_read_model_enabled(true);
+        let via_model = crate::sparql::query(&s, q).unwrap();
+
+        // Bindings are HashMaps, so Debug key order is per-map and meaningless.
+        // Canonicalise each row to sorted (var, value) pairs before comparing,
+        // or the test fails on formatting rather than on results.
+        let canonical = |r: &crate::sparql::QueryResult| -> Vec<Vec<(String, String)>> {
+            let mut rows: Vec<Vec<(String, String)>> = r
+                .rows()
+                .iter()
+                .map(|b| {
+                    let mut pairs: Vec<(String, String)> = b
+                        .iter()
+                        .map(|(k, v)| (k.clone(), format!("{v:?}")))
+                        .collect();
+                    pairs.sort();
+                    pairs
+                })
+                .collect();
+            rows.sort();
+            rows
+        };
+        let sql_rows = canonical(&via_sql);
+        let model_rows = canonical(&via_model);
+        assert_eq!(
+            sql_rows, model_rows,
+            "read model disagreed with SQL for: {q}"
+        );
+        assert_eq!(
+            via_sql.variables(),
+            via_model.variables(),
+            "variable list differed for: {q}"
+        );
+    }
+    s.set_read_model_enabled(false);
 }
