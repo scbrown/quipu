@@ -178,6 +178,21 @@ fn catalogue_expectation(id: &str) -> String {
     catalogue::plants(id)
 }
 
+/// The agent arm: founding + an external writer's recording, nothing else.
+pub fn run_agent(ctx: &mut Ctx, out_dir: &str, recording: &str) {
+    let _iris = phase1_founding(ctx, out_dir);
+    let (accepted, refused) = crate::agent::replay_recording(ctx, recording);
+    ctx.probe(
+        "CEN-AG",
+        2,
+        "external-writer recording replayed through the gate",
+        &format!(
+            "{accepted} accepted, {refused} refused (structured feedback in per-action probes)"
+        ),
+        "RQ2-agent",
+    );
+}
+
 pub fn run_all(ctx: &mut Ctx, out_dir: &str) {
     let iris = phase1_founding(ctx, out_dir);
     crate::phase2::run(ctx, &iris);

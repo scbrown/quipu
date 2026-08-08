@@ -271,28 +271,30 @@ pub const PROBES: &[(&str, u8, &str, &str, &str, &str)] = &[
 
 fn row(
     id: &str,
-) -> &'static (
+) -> Option<&'static (
     &'static str,
     u8,
     &'static str,
     &'static str,
     &'static str,
     &'static str,
-) {
-    PROBES
-        .iter()
-        .find(|r| r.0 == id)
-        .unwrap_or_else(|| panic!("probe {id} is not in the catalogue"))
+)> {
+    PROBES.iter().find(|r| r.0 == id)
 }
 
+/// Ad-hoc probes (the agent arm's CEN-AG.*) are not in the catalogue;
+/// their ground truth is the recording, not this table.
 pub fn plants(id: &str) -> String {
-    row(id).2.to_string()
+    row(id).map_or_else(
+        || "ad-hoc probe (see recording)".to_string(),
+        |r| r.2.to_string(),
+    )
 }
 
 pub fn expected_gated(id: &str) -> String {
-    row(id).3.to_string()
+    row(id).map_or_else(|| "per recording".to_string(), |r| r.3.to_string())
 }
 
 pub fn expected_control(id: &str) -> String {
-    row(id).4.to_string()
+    row(id).map_or_else(|| "per recording".to_string(), |r| r.4.to_string())
 }

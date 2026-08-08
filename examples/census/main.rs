@@ -17,6 +17,7 @@
 //! just bench census --arm control        # same script, gates off
 //! ```
 
+mod agent;
 mod catalogue;
 mod manifest;
 mod phase2;
@@ -41,6 +42,7 @@ fn main() {
     let mut seed: u64 = 42;
     let mut arm = Arm::Gated;
     let mut out = String::from("benchmark/census/out");
+    let mut recording: Option<String> = None;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -63,6 +65,10 @@ fn main() {
                 i += 1;
                 out = args.get(i).cloned().unwrap_or_else(|| usage());
             }
+            "--recording" => {
+                i += 1;
+                recording = Some(args.get(i).cloned().unwrap_or_else(|| usage()));
+            }
             _ => usage(),
         }
         i += 1;
@@ -75,7 +81,10 @@ fn main() {
     let store = quipu::Store::open(&db_path).expect("open census store");
 
     let mut ctx = Ctx::new(store, rng::SplitMix64::new(seed), arm, db_path);
-    phases::run_all(&mut ctx, &out);
+    match &recording {
+        Some(path) => phases::run_agent(&mut ctx, &out, path),
+        None => phases::run_all(&mut ctx, &out),
+    }
 
     let manifest = Manifest {
         run: RunInfo {
