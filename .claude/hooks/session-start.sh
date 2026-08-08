@@ -23,6 +23,15 @@ if ! command -v mdbook-mermaid >/dev/null 2>&1; then
   cargo install mdbook-mermaid --locked
 fi
 
+# TeX for `just paper` (docs/paper/). Tectonic's bundle CDN is blocked
+# by the egress proxy, so pdflatex is the working engine here; lmodern
+# provides the scalable fonts microtype requires.
+if ! command -v pdflatex >/dev/null 2>&1; then
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    texlive-latex-base texlive-latex-recommended texlive-latex-extra \
+    texlive-bibtex-extra texlive-fonts-recommended lmodern
+fi
+
 # Build the quipu CLI (shacl matches the gate's middle clippy pass and
 # what `just demo` uses) and put it on the session PATH so agents can
 # run `quipu` without cargo-run ceremony.
