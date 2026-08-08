@@ -1,16 +1,13 @@
 # Design: Quipu paper plan — a governed bitemporal knowledge graph store
 
-> **Implementation status (2026-08-08):** ⬜ **Planning, revised.** No paper
-> text exists yet. This revision reframes the plan around the three things
-> the paper is about — **governance, bitemporality, and strictness** — and
-> the two mechanisms that deliver them: **named-graph partitioning** and the
-> **label lattice**. The intellectual anchor is SARC (Besanson,
-> arXiv:2605.07728): the paper's claim is that SARC-style
-> governance-by-architecture can be compiled into the store itself. The
-> earlier draft's structural mimicry of arXiv:2605.09184 is dropped; the
-> paper follows the conventional shape of knowledge-graph systems papers.
-> We keep that project's evaluation hygiene (§5) without inheriting its
-> outline.
+> **Implementation status (2026-08-08):** ⬜ **Planning, third revision.**
+> No paper text exists yet. This revision raises the altitude: the paper
+> now contributes a **named contract** (the Governed Store invariants,
+> GS1–GS6, extending SARC from the agent loop to the store), with Quipu as
+> the reference implementation and **one deterministic lifecycle benchmark
+> — Census — whose single run scores every research question.** Successors
+> can implement the contract on other substrates and run the same
+> benchmark, the way SARC's successors build on SARC.
 
 ## Status
 
@@ -28,248 +25,273 @@
 **"Start strict. Use agents to bear the cost of strictness."**
 (`README.md`, `docs/design/vision.md`.)
 
-SARC argues that governance controls attached to prompts, dashboards, or
-post-hoc documentation are structurally mismatched with obligations that
-must constrain *execution*: it compiles constraints into four enforcement
-points in the agent loop, bound by invariants whose joint effect is a
-decidable audit `T ⊨ Σ`. SARC stops at the agent loop, and its reference
-artifact keeps Σ in a JSON file beside the system it governs.
+SARC (Besanson, arXiv:2605.07728) compiles governance obligations into
+four enforcement points in the *agent loop*, bound by invariants whose
+joint effect is a decidable audit `T ⊨ Σ`. But SARC stops at the loop:
+its Σ lives in a file beside the system, its trace is exported, and the
+knowledge the agents act on sits in an ungoverned store underneath.
 
-Quipu's claim goes one step further: **the knowledge graph store is the
-right compilation target for governance.** When Σ, the trace T, the
-verdicts, the authority chains, and the dispatch inventory are all
-first-class bitemporal facts in the same store the policy governs:
-
-- the Pre-Action Gate becomes the **write path itself** — a denied write
-  never becomes a fact, and its signed verdict survives the rollback
-  (`src/governance/guard.rs`, `src/governance/verdict_facts.rs`);
-- the audit reads Σ **from the graph**, not from a snapshot beside it
-  (`src/governance/audit.rs`);
-- **bitemporality** makes "what was known, and what was allowed, at time
-  T" a query rather than an archaeology project;
-- **partitioning** (named graphs) gives governance its unit of authority,
-  trust, and isolation — who may write where, what a graph's contents are
-  worth, which graphs a query may see;
-- the **label lattice** makes composition of partitions safe: freshness
-  and trust meet, obligations join, and the single invariant —
-  *composition never widens* — is machine-checked
-  (`src/lattice.rs`).
-
-Strictness is what falls out: the store refuses invalid, untagged,
-unauthorized, or policy-violating writes at the gate, and agents — not
-curators — absorb the retry cost.
+This paper's claim: **the store is the right compilation target.** When
+Σ, the trace, the verdicts, the authority grants, and the data are all
+bitemporal facts in one store, enforcement is the write path, audit is a
+query, and history is replayable. Partitioning (named graphs) supplies
+the unit of authority and trust; the label lattice makes composition of
+partitions safe. Strictness — refusing invalid, untagged, unauthorized,
+or policy-violating writes at the gate, with agents absorbing the retry
+cost — is the operating posture that falls out.
 
 ### Working titles
 
-1. *Quipu: A Governed Bitemporal Knowledge Graph Store*
-2. *Start Strict: Compiling Governance into a Bitemporal Knowledge Graph*
-3. *Governance as a Store Primitive: Bitemporal Facts, Partitioned Trust,
-   and Decidable Audit in Quipu*
+1. *The Governed Store: Compiling Governance into a Bitemporal
+   Knowledge Graph*
+2. *Start Strict: Store-Level Governance Invariants for Agent-Written
+   Knowledge Graphs*
+3. *Quipu: A Governed Bitemporal Knowledge Graph Store*
 
-Preference: (2). It names the thesis and the SARC lineage ("compiling")
-in one line.
+Preference: (1). It leads with the contract — the thing successors
+build on — and names the mechanism in the subtitle.
 
 ## 2. Contributions
 
-Four, one per pillar; each is either measured or mechanically checked.
+The classic triple: a model, a system, a benchmark.
 
-### C1 — Governance compiled into the store (SARC as store primitives)
+### C1 — The Governed Store contract (GS1–GS6)
 
-The constraint object `⟨src, class, pred, verif, resp⟩ + θ` is an
-`aegis:Policy` in the graph, SHACL-validated at definition time,
-including the class↔placement discipline of SARC §4.2 that SHACL core
-cannot state (`src/governance/placement.rs`). Enforcement is not a layer
-over the store; it is the write path: claims run as SPARQL ASK against
-the pending post-state inside the open savepoint, authority intersects
-along the call chain and refuses on empty (`src/governance/authority.rs`),
-escalation mints a `DecisionRequest` whose hold is the agent retrying —
-not the engine waiting (`src/governance/router.rs`), and every outcome is
-an ed25519-signed verdict against a human-authored root of trust
-(`src/governance/signing.rs`). The audit `T ⊨ Σ` is decided in
-`O(|T|·|C|)`, deterministically, never by an LLM, with the
-violation-vs-incompleteness distinction preserved end-to-end through
-audit, inventory, inheritance, and replay (`src/governance/`).
-Conformance is documented jointly with hank
-(`hank/docs/book/src/design/sarc-conformance.md`).
+A store-level analogue of SARC's loop invariants. A store is *governed*
+iff:
 
-### C2 — Bitemporality as the governance substrate
+- **GS1 — Gated writes.** No fact enters except through the gate;
+  constraint predicates evaluate against the pending **post-state**,
+  not the pre-state or the request.
+- **GS2 — Verdict permanence.** Every gate outcome — allow, deny,
+  unknown — persists as a **signed, bitemporal fact that survives
+  rollback** of the write it judges. No signing identity ⇒ no verdict,
+  never an unsigned one.
+- **GS3 — Partitioned authority.** Authority attaches to partitions;
+  delegation only narrows (intersection); empty intersection refuses.
+  Changing a partition's standing requires authority over the
+  meta-partition, not the partition itself.
+- **GS4 — Non-widening composition.** A view composed from partitions
+  carries a label no stronger than the fold of its parts; undeclared
+  parts degrade coverage — they never strengthen the result, and they
+  fail enforcement floors.
+- **GS5 — In-store decidable audit.** Σ, T, and verdicts live in the
+  store they govern; `T ⊨ Σ` is decidable in `O(|T|·|C|)` without the
+  model or its prompts, and violation is never collapsed with
+  incompleteness.
+- **GS6 — As-of replay.** Every governance decision is reproducible
+  against the store *as of its transaction* — the facts, labels, **and
+  rules** in force at the time.
 
-Transaction time × valid time on an append-only EAVT log
-(`src/schema.rs`) is usually sold as time-travel for data. Here it is
-what makes governance auditable: verdicts, decisions, escalations, and
-authority grants are bitemporal facts, so the auditor can replay a past
-decision with the evidence that existed *then*; label expiry is
-`valid_to` on the label assertion — an expired label is absent, not
-false (`docs/design/graph-labels.md`); promotion moves a fact between
-graphs as a bitemporal, reversible, auditable event. The one place the
-store is not yet bitemporal — shapes and ontologies are latest-only
-(`docs/design/shape-versioning.md`) — is exactly the gap RQ5 targets,
-and closing it is in scope for the paper (§6, item 5).
+Quipu satisfies GS1–GS5 today (`src/governance/`, `src/lattice.rs`);
+GS6 is the one gap — rules are latest-only
+(`docs/design/shape-versioning.md`) — and closing it is in-plan work
+(§6 item 4), so the reference implementation meets its own contract by
+submission. The contract is the extension point: it is
+substrate-agnostic (nothing in GS1–GS6 names SQLite, RDF, or EAVT), so
+a successor can claim it for a property-graph store, a relational
+system, or a lakehouse and run the same benchmark.
 
-### C3 — Partitioning: named graphs as the unit of authority and trust
+### C2 — Quipu: the reference implementation
 
-Named graph × valid time × transaction time as three orthogonal axes on
-one fact log; overlays bind once to a parent and cannot forge presence
-in a base they were never bound to; tombstones mark absence in a
-composed view without mutating the lower layer (`src/types.rs`,
-`src/store/overlays.rs`); datasets name arbitrary graph-sets as a
-semilattice distinct from the branch tree (`src/store/datasets.rs`).
-Authority is graph-scoped — relabelling requires authority over the
-meta-graph, not the graph being labelled — which is what turns
-partitioning from a namespacing feature into the governance unit.
-Term spaces and ATTACH/pack composition extend the same partition
-discipline across store boundaries without id rewriting
-(`src/store/attach.rs`, `src/pack.rs`).
+The mechanisms, mapped to invariants:
 
-### C4 — The label lattice: safe composition of partitions
+- Bitemporal EAVT log, three-valued `op`, named graphs, overlays,
+  tombstones, datasets, term spaces (`src/schema.rs`, `src/types.rs`,
+  `src/store/`) — the substrate for GS2/GS3/GS6.
+- Write gate evaluating SPARQL ASK against the pending post-state
+  inside the open savepoint; target-type pre-filter so ungoverned
+  writes run zero checks (`src/governance/guard.rs`) — GS1.
+- Verdict staging that survives the denied write's rollback; ed25519
+  signatures against a human-authored root of trust
+  (`src/governance/verdict_facts.rs`, `signing.rs`) — GS2.
+- Authority intersection over named graphs; escalation router whose
+  hold is the agent retrying (`authority.rs`, `router.rs`) — GS3.
+- The label lattice: meet for freshness/trust, join for obligations,
+  Coverage for the undeclared, homomorphism
+  `label(A ∪ B) = label(A) ⊓ label(B)` under proptest
+  (`src/lattice.rs`, quipu #66) — GS4.
+- Audit passes preserving violation vs incompleteness; dispatch
+  inventory; attribution tree; replay harness (`audit.rs`,
+  `inventory.rs`, `tree.rs`, `replay.rs`) — GS5.
+- Shape/ontology versioning (to build) — GS6.
 
-Freshness and trust compose by meet, obligations by join, under the one
-named invariant **composition never widens**. Undeclared is not a
-lattice value: a composed label is a pair (fold, Coverage), and partial
-coverage fails an enforcement floor — fail-safe at enforcement, honest
-at reporting. The homomorphism `label(A ∪ B) = label(A) ⊓ label(B)` is
-machine-checked by proptest (quipu #66). Trust ranks are comparable only
-within a declared chain; cross-chain comparison is an error naming both
-chains. Precedence is data (`quipu:trustRank`), so promotion is a graph
-move, not a rank edit. (`src/lattice.rs`, `src/store/labels.rs`,
-`docs/design/graph-labels.md`.)
+### C3 — Census: one lifecycle, every question
+
+A single deterministic benchmark — named for the quipu's original job —
+that exercises all six invariants in one recorded run and scores every
+RQ from the same artifacts. See §4.
 
 ## 3. Research questions
 
-| RQ | Pillar | Question | Measured where |
+Each RQ is one invariant-cluster, one number, one arm of the same
+Census run. Ground truth is free because the scenario is scripted: the
+injector knows every defect it planted.
+
+| RQ | Uniqueness claimed | Question | Metric (from the Census run) |
 | --- | --- | --- | --- |
-| RQ1 | Strictness (cost) | What does write-time enforcement cost, and does the target-type pre-filter keep ungoverned writes at zero marginal cost? | new `governance_cost` bench: gate on/off × policy count × governed-type selectivity; `examples/shacl_cost.rs` is the template |
-| RQ2 | Strictness (value) | Does a gated store produce a better graph than accept-and-clean-later, with agents absorbing the retry cost? | same agent, same ingestion task, gated vs ungated store; oracle = camayoc competency suites + the untagged-probe refusal; measure acceptance of fabricated/untagged facts, retries, final quality |
-| RQ3 | Governance | Can specification–trace correspondence `T ⊨ Σ` be decided in-store on real traces, preserving violation vs incompleteness — and how does it compare to SARC's external reference checker on the same Σ and T? | `quipu audit` over recorded hank-promotion and shantytown-consumer traces; port Σ/T to the checker at `besanson/sarc-governance` for the comparison arm |
-| RQ4 | Partitioning + lattice | Does composition never widen, adversarially? Do fail-safe Coverage floors refuse what fail-open (⊤) and floor-dragging (⊥) designs mishandle, with zero false refusals on clean compositions? | adversarial suite generated from lattice structure: undeclared graphs, cross-chain trust pairs, expired labels, partial folds; homomorphism proptest as the base case |
-| RQ5 | Bitemporality | Can the auditor decide `T ⊨ Σ` *as of* a past transaction — replaying a decision against the facts, labels, and rules in force at the time? | as-of replay over the RQ3 corpus; facts/verdicts/labels already bitemporal; **requires shape/ontology versioning** (§6 item 5) for the rules half |
+| RQ1 | Post-state gating with zero-cost abstention (GS1) | Does enforcement cost scale only with governed writes? | per-write latency, gated vs control arm; overhead on ungoverned writes (target ≈ 0) |
+| RQ2 | Refusal-with-feedback beats accept-and-clean (strictness) | Does the gated store end cleaner than the ungated one, at what retry cost? | planted defects present in final graph: gated (target 0) vs control (all land); retries consumed |
+| RQ3 | Σ and T live in the store they govern (GS2/GS5) | Does in-store `T ⊨ Σ` decide identically to SARC's external checker, and what does in-store add? | agreement with `besanson/sarc-governance` checker on exported Σ/T; violation/incompleteness counts vs planted ground truth |
+| RQ4 | Coverage-aware lattice composition (GS3/GS4) | Are all widening attempts refused and all clean compositions admitted? | adversarial probes refused m/m; clean probes passed n/n; false refusals (target 0) |
+| RQ5 | Bitemporal Σ, T, labels, and data in one store (GS6) | What fraction of historical decisions replays bit-identically as-of its transaction? | replay fidelity across the mid-run rule amendment; pre-GS6 the pre-amendment window fails, post-GS6 target 100% |
 
-RQ5 is the forcing function for shape versioning: without it, "the rules
-in force at time T" is unanswerable and the replay degrades to
-facts-only. Building it is in the plan, not in the limitations section.
+Every metric is a count or a latency — no judge, no rubric. The one
+optional LLM arm (RQ2 with a real agent instead of the scripted writer)
+is an extension, not the core result.
 
-## 4. Paper outline
+## 4. The Census benchmark
 
-The conventional shape of a knowledge-graph systems paper (system paper
-with a formal core), not a benchmark paper:
+One scripted, seeded, multi-writer lifecycle; one command
+(`just bench census`); outputs a trace, a final store, and one metrics
+JSON per RQ. No LLM in the core loop — the writers are deterministic
+drivers, so the whole run is a deterministic oracle.
 
-1. **Introduction** — the governance gap for agent-written knowledge
-   graphs; the strict-at-write thesis; contributions C1–C4.
-2. **Background and requirements** — SARC's constraint model,
-   enforcement points, and decidable audit; bitemporal data models
-   (transaction/valid time); named graphs; what regulated, multi-writer,
-   agent-driven ingestion demands of a store.
-3. **Data model** — bitemporal EAVT, three-valued `op`, named graphs,
-   overlays and tombstones, datasets, term spaces (C2 substrate, C3).
-4. **The label lattice** — axes, meet/join asymmetry, Coverage, the
-   homomorphism, authority over the meta-graph (C4).
-5. **The governance plane** — compiling constraint objects into the
-   write path; verdict ordering under rollback; escalation; authority
-   intersection; the audit passes; inventory and replay (C1).
-6. **Implementation** — SQLite substrate, savepoints as speculation,
-   signing, ATTACH/pack composition, serving surfaces (crate, CLI,
-   REST, MCP); microbenchmarks (storage linearity, gate cost) reported
-   here, in context, as engineering characterization.
-7. **Evaluation** — RQ1–RQ5.
+**Cast.** A handful of recorder identities with different authority
+grants and trust-chain positions; one human decision role (scripted);
+two stores (the census store and a provincial pack to import).
+
+**Timeline (six phases, mirroring real census mechanics):**
+
+1. **Founding** — register partitions (districts), writers, authority
+   grants, trust chains, shapes, and Σ. GS3 setup.
+2. **Recording** — writers assert facts across districts. The injector
+   plants labeled defects: untagged facts, out-of-authority writes,
+   policy-violating writes, fabricated vocabulary. Gated arm refuses
+   each with a signed verdict; control arm (gate off) lets everything
+   land. GS1, GS2 → RQ1, RQ2.
+3. **Correction** — retractions, supersessions, a promotion between
+   trust planes, one escalation that mints a `DecisionRequest` and gets
+   a scripted human `Decision`. GS2, GS3.
+4. **Composition** — import the provincial pack, ATTACH a read-only
+   layer, run composed queries; adversarial composition probes
+   (undeclared graph, cross-chain trust pair, expired label, partial
+   fold) alongside clean ones. GS4 → RQ4.
+5. **Amendment** — Σ and one shape change mid-run; recording continues
+   under the new rules. This is what makes GS6 non-trivial: decisions
+   from phase 2 must replay under the *old* rules. → RQ5.
+6. **Audit** — all audit passes in-store; Σ/T exported to the SARC
+   reference checker; as-of replay of every verdict. GS5, GS6 → RQ3,
+   RQ5.
+
+**Reproducibility.** Deterministic seed; sorted traversals; set-hash of
+the final store and of the trace published in the determinism note; the
+control arm is the same script with one flag. `BUILD_REPORT.md` records
+the defect catalogue and every discarded design.
+
+**Realism anchors.** Census is synthetic by design (that is what makes
+it an oracle), but its shape is taken from the stack's real traffic:
+hank promotion (governed writer), shantytown's subscriber (consumer),
+NeuralAmplifier's three-plane trust precedence (the lattice's motivating
+case). A short "Census-in-the-wild" subsection replays the hank
+promotion trace through the same audit to show the benchmark's shape is
+not a strawman.
+
+## 5. Paper outline
+
+Conventional knowledge-graph systems paper:
+
+1. **Introduction** — the governance gap for agent-written graphs; the
+   strict-at-write thesis; C1–C3.
+2. **Background and requirements** — SARC's constraint model and
+   decidable audit; bitemporal models; named graphs; what multi-writer
+   agent ingestion demands of a store.
+3. **The Governed Store contract** — GS1–GS6, each with its failure
+   mode when absent (motivating example per invariant).
+4. **Quipu: data model and mechanisms** — bitemporal EAVT, partitions,
+   lattice, governance plane; how each mechanism discharges its
+   invariant.
+5. **Implementation** — SQLite substrate, savepoints, signing,
+   ATTACH/packs, serving surfaces; engineering characterization
+   (storage linearity, gate microbenchmarks) as context, no
+   comparative query-performance claims.
+6. **The Census benchmark** — scenario, defect catalogue, oracle
+   construction, reproducibility.
+7. **Evaluation** — RQ1–RQ5 from the Census run + Census-in-the-wild.
 8. **Related work** — bitemporal stores (Datomic, XTDB); named-graph
-   provenance and trust (Carroll/Bizer/Hayes/Stickler, WWW 2005);
+   provenance and trust (Carroll et al., WWW 2005);
    information-flow lattices (Denning, CACM 1976); annotated
-   RDF/semiring provenance; validation-centric stores and shape
-   languages (SHACL); governance for agentic systems (SARC and its
-   successors); LLM-driven ontology/KG construction (arXiv:2605.09184,
-   arXiv:2411.09601) as the workload that motivates strictness; survey
-   base already written in `vision.md` and `graph-labels.md` §9.
-9. **Conclusion.**
-
-Related work goes late, per systems-paper convention; §2 carries only
-the background the reader needs to parse §3–§5.
-
-## 5. Evaluation hygiene
-
-Commitments, each a checkable artifact in the repo:
-
-1. **One scorer per comparison**, shared across all conditions; any
-   corrected number keeps a `--legacy` flag reproducing the old value.
-2. **Deterministic oracle wherever the property is checkable** (audit,
-   labels, vocabulary); where a judge is unavoidable (RQ2 quality),
-   verdict + rationale + judge identity are persisted as bitemporal
-   facts in the store itself.
-3. **Determinism note**: set-hashes of repeated runs for every reported
-   number; sort every hash-derived traversal.
-4. **`BUILD_REPORT.md` per benchmark artifact**: provenance of inputs,
-   construction of synthetic items, discarded runs and why, what the
-   claim does not cover.
-5. **Adversarial generation from structure** (RQ4 probes derive from
-   the lattice, not random sampling).
-6. **Real workloads over synthetic**: hank promotion as the governed
-   writer, shantytown's subscriber as the consumer, NeuralAmplifier's
-   three-plane `smac:` graph as the lattice's motivating case, camayoc
-   competency questions as the acceptance oracle, bobbin ingest for
-   scale.
+   RDF/semiring provenance; SHACL and validation-centric stores;
+   governance for agentic systems (SARC and successors); LLM-driven KG
+   construction (arXiv:2605.09184, arXiv:2411.09601) as the workload
+   motivating strictness. Survey base: `vision.md`,
+   `graph-labels.md` §9.
+9. **Conclusion** — the contract as the extension point.
 
 ## 6. Build order
 
 `[U]` unblocks later items, `[P]` parallel-safe. File beads (`bd`) per
-item when work starts; this list is the plan, not the tracker.
+item when work starts.
 
-1. `[U]` Benchmark skeleton: `benchmark/` layout, shared-scorer
-   convention, `BUILD_REPORT.md` template, `just bench` subcommand,
-   CI cheap-subset job.
-2. `[P]` RQ1 governance-cost bench.
-3. `[P]` RQ4 adversarial lattice suite.
-4. `[U]` RQ3 trace corpus: record hank promotion + shantytown
-   consumption; port Σ and T to SARC's reference checker for the
-   comparison arm.
-5. `[U]` **Shape/ontology versioning** (`shape-versioning.md`) — the
-   one new store feature the paper requires; gates RQ5's rules half.
-6. RQ5 as-of replay harness (facts half can start after item 4; rules
-   half after item 5).
-7. RQ2 strictness experiment — coordinate with camayoc on the
-   competency runner; the untagged-probe gate test already exists
-   there.
-8. Draft §3–§5 from the design docs (close to camera-ready prose
-   already); §7 last, from measured results only.
-9. Paper source in `docs/paper/` (LaTeX, outside the book and its lint
-   globs), `just paper` recipe; target venue class: knowledge-graph /
-   data-systems (ISWC resource/systems track, or arXiv cs.DB with
-   cs.AI cross-list).
+1. `[U]` Write the GS1–GS6 statement precisely (one page, each
+   invariant with its failure mode) — it drives both §3 of the paper
+   and the Census defect catalogue.
+2. `[U]` Census skeleton: `benchmark/census/` with the scripted
+   timeline, defect injector, seed discipline, metrics emitters,
+   `just bench census`, `BUILD_REPORT.md`.
+3. `[P]` Census phases 1–4 (scores RQ1, RQ2, RQ4 immediately; RQ3's
+   in-store half).
+4. `[U]` **Shape/ontology versioning** (`shape-versioning.md`) — the
+   GS6 feature; unblocks phase 5/6 fully.
+5. RQ3 external arm: exporter for Σ/T to the `besanson/sarc-governance`
+   checker format.
+6. RQ5 as-of replay scoring across the amendment boundary.
+7. Census-in-the-wild: replay a recorded hank-promotion trace through
+   the audit.
+8. `[P]` Optional RQ2 agent arm (real agent vs scripted writer, camayoc
+   competency oracle) — extension section only.
+9. Draft §3–§6 from this doc and the design docs; §7 last, from
+   measured results only.
+10. Paper source in `docs/paper/` (LaTeX, outside the book's lint
+    globs), `just paper` recipe; venue class: knowledge-graph /
+    data-systems (ISWC resources/systems, or arXiv cs.DB + cs.AI).
 
-## 7. Scope boundaries (honest)
+## 7. Evaluation hygiene
 
-Stated in the paper, not discovered by reviewers:
+1. One scorer per comparison, shared across arms; corrected numbers
+   keep a `--legacy` flag reproducing the old value.
+2. Deterministic oracle for the core; the optional agent arm persists
+   judge verdict + rationale + identity as bitemporal facts.
+3. Determinism note: set-hashes of repeated runs for every reported
+   number; sort every hash-derived traversal.
+4. `BUILD_REPORT.md` per artifact: input provenance, synthetic-item
+   construction, discarded runs, what the claim does not cover.
+5. Adversarial probes derived from structure (the lattice, the
+   authority graph), not random sampling.
 
-- **No comparative query-performance claims.** Quipu's evaluator is a
-  nested-loop join over SQLite; storage and gate costs are
-  characterized in §6 (Implementation) as engineering context, and no
-  benchmark against dedicated SPARQL engines is run or implied. The
-  paper's evaluation is about governance, composition, and audit.
+## 8. Scope boundaries (honest)
+
+- **No comparative query-performance claims**; storage and gate costs
+  are characterized in §5 as engineering context only.
 - **Labels are not access control** — a floor refuses a query, it does
   not hide rows (`graph-labels.md` §11).
 - **Trust propagation, not trust evaluation** — the boundary predicate
   over imported content is declared and reported, never evaluated.
 - **Coverage audit is half-decidable** (`src/governance/audit.rs`); the
-  paper states which passes are total and which are not.
-- **No Action-Time Monitor** — of SARC's four enforcement points the
-  stack implements PAG, PAA, and ER; the ATM is out of scope for the
-  store (it belongs to the executing harness) and the paper says so.
+  paper states which passes are total.
+- **No Action-Time Monitor** — the ATM belongs to the executing
+  harness, not the store; the contract deliberately scopes to what a
+  store can guarantee.
+- **Census is synthetic by construction** — that is what makes it an
+  oracle; the in-the-wild replay bounds, but does not eliminate, the
+  external-validity gap.
 - **Single-store scale** — no clustering/replication.
-- **LLM-in-the-loop results (RQ2) are single-model unless stated.**
 
-## 8. Related
+## 9. Related
 
 - [vision.md](vision.md) — thesis and competitive survey.
-- [graph-labels.md](graph-labels.md) — C4 in full, prior art in §9.
-- [policy-edit-hooks.md](policy-edit-hooks.md) — C1 backlog, SARC
-  citation and conformance pointers.
+- [graph-labels.md](graph-labels.md) — GS4 in full, prior art in §9.
+- [policy-edit-hooks.md](policy-edit-hooks.md) — governance backlog,
+  SARC citation and conformance pointers.
 - [named-graphs.md](named-graphs.md),
   [multi-db-composition.md](multi-db-composition.md),
-  [knowledge-packs.md](knowledge-packs.md) — C3.
-- [shape-versioning.md](shape-versioning.md) — the feature RQ5 forces.
-- hank `docs/book/src/design/sarc-conformance.md` — the joint SARC
-  conformance map and gap list (ATM, θ calibration, W_q, trust
-  predicate).
+  [knowledge-packs.md](knowledge-packs.md) — GS3 substrate and
+  composition.
+- [shape-versioning.md](shape-versioning.md) — the GS6 feature.
+- hank `docs/book/src/design/sarc-conformance.md` — joint conformance
+  map and gap list.
 - SARC: Besanson, arXiv:2605.07728; reference artifacts at
-  `besanson/sarc-governance` (the RQ3 comparison arm).
-- Evaluation-hygiene lineage: the practices in §5 are adapted from the
+  `besanson/sarc-governance` (RQ3's comparison arm).
+- Evaluation-hygiene lineage: practices in §7 adapted from the
   benchmarking discipline of arXiv:2605.09184's companion repository
   (`fabio-rovai/open-ontologies`).
