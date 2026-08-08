@@ -36,7 +36,7 @@ The census setting:
 - Types: urn:census:Tally, urn:census:Resident, urn:census:Record
 - Subject conventions: urn:census:household:h1,
   urn:census:resident:r10, urn:census:summary:week1
-- Label predicate: http://www.w3.org/2000/01/rdf-schema#label
+- Label predicate: `http://www.w3.org/2000/01/rdf-schema#label`
 - Census vocabulary (urn:census:vocab:*): placedIn, recordedBy,
   households, notes
 - Recorders: amaru, chaski, scribe, quilla
