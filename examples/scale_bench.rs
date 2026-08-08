@@ -98,6 +98,13 @@ fn main() {
     // Without this the join reports a timeout rather than a duration past
     // ~2,500 episodes, which hides the shape of the curve.
     store.search_config_mut().query_timeout_ms = 600_000;
+    // QUIPU_READ_MODEL=1 measures the read-model fast path against the same
+    // store, which is the comparison docs/design/in-memory-read-model.md §8
+    // Phase 3 reports.
+    if std::env::var("QUIPU_READ_MODEL").is_ok() {
+        store.set_read_model_enabled(true);
+        println!("(read model ENABLED)");
+    }
 
     let queries = [
         (

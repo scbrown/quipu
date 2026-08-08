@@ -159,6 +159,12 @@ pub struct Store {
     /// Whether SPARQL consults the read model. Off by default — see
     /// [`Store::set_read_model_enabled`] for the measurements that decided it.
     pub(crate) read_model_enabled: std::cell::Cell<bool>,
+    /// Set while a write holds an open savepoint. See
+    /// [`Store::write_in_progress`].
+    pub(crate) write_in_progress: std::cell::Cell<bool>,
+    /// Ceiling on the resident read model's size — see
+    /// [`Store::set_read_model_max_triples`].
+    pub(crate) read_model_max_triples: std::cell::Cell<usize>,
 }
 
 /// An advisory event observed before a write and appended with it (P3).
@@ -559,7 +565,11 @@ impl Store {
             resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
             term_cache: std::cell::RefCell::new(TermCache::default()),
             read_model: std::cell::RefCell::new(None),
-            read_model_enabled: std::cell::Cell::new(false),
+            read_model_enabled: std::cell::Cell::new(true),
+            write_in_progress: std::cell::Cell::new(false),
+            read_model_max_triples: std::cell::Cell::new(
+                read_model::DEFAULT_READ_MODEL_MAX_TRIPLES,
+            ),
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
         }

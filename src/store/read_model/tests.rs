@@ -340,10 +340,11 @@ fn the_resident_model_is_built_lazily() {
     assert_eq!(s.read_model().unwrap().len(), len, "second use reuses it");
 }
 
-/// Every committed write drops it. A stale index that survives a write is the
-/// failure mode this whole design has to avoid.
+/// A write MAINTAINS the resident model rather than dropping it (quipu-m9h),
+/// and the maintained model equals a rebuild. Dropping was the first cut; the
+/// rebuild it forced was the whole reason the fast path could not be default.
 #[test]
-fn a_write_invalidates_the_resident_model() {
+fn a_write_maintains_the_resident_model() {
     let mut s = store();
     let _ = s.read_model().unwrap().len();
     assert!(s.read_model_is_resident());
@@ -357,28 +358,103 @@ fn a_write_invalidates_the_resident_model() {
     );
     s.transact(&[d], "2026-01-01T00:00:00Z", Some("test"), None)
         .unwrap();
-    assert!(
-        !s.read_model_is_resident(),
-        "the write left a stale model resident"
-    );
 
-    // And the rebuild sees the new fact.
-    assert_eq!(s.read_model().unwrap().len(), 1);
+    assert!(
+        s.read_model_is_resident(),
+        "the write dropped the model instead of maintaining it"
+    );
+    assert_eq!(s.read_model().unwrap().len(), 1, "the write is not visible");
+
+    let rebuilt = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
+    assert_eq!(
+        s.read_model().unwrap().triples_sorted(),
+        rebuilt.triples_sorted(),
+        "maintained model diverged from a rebuild"
+    );
 }
 
-/// Off by default, so the guard refuses even a query it could answer. See
-/// `Store::set_read_model_enabled` for the measurements behind that default.
+/// A write to a DIFFERENT graph leaves a ROOT model alone —
+/// `current_facts_in_graph(0)` never sees those rows, so there is nothing to
+/// invalidate.
 #[test]
-fn the_fast_path_is_off_by_default() {
+fn a_write_to_another_graph_does_not_disturb_the_root_model() {
+    let mut s = store();
+    let _ = s.read_model().unwrap().len();
+    let before = s.read_model().unwrap().len();
+
+    let d = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/b",
+        Op::Assert,
+    );
+    let g = s
+        .overlay_create("http://example.org/g", crate::schema::ROOT_GRAPH)
+        .unwrap();
+    s.overlay_write(
+        g,
+        Op::Assert,
+        d.entity,
+        d.attribute,
+        d.value.clone(),
+        "2026-01-01T00:00:00Z",
+    )
+    .unwrap();
+
+    assert!(s.read_model_is_resident(), "an unrelated graph dropped it");
+    assert_eq!(s.read_model().unwrap().len(), before);
+}
+
+/// The model must not be consulted while a write holds an open savepoint: the
+/// policy guard queries the pending post-state, which the model has not seen.
+#[test]
+fn the_guard_refuses_while_a_write_is_in_progress() {
     let s = store();
-    assert!(!s.read_model_enabled());
+    s.set_read_model_enabled(true);
+    assert!(read_model_applicable(&s, &TemporalContext::default()));
+    s.set_write_in_progress(true);
+    assert!(
+        !read_model_applicable(&s, &TemporalContext::default()),
+        "the model was consulted mid-write"
+    );
+    s.set_write_in_progress(false);
+}
+
+/// On by default — see `Store::set_read_model_enabled` for the measurements.
+#[test]
+fn the_fast_path_is_on_by_default() {
+    let s = store();
+    assert!(s.read_model_enabled());
+    assert!(read_model_applicable(&s, &TemporalContext::default()));
+}
+
+#[test]
+fn disabling_makes_the_guard_refuse() {
+    let s = store();
+    s.set_read_model_enabled(false);
     assert!(!read_model_applicable(&s, &TemporalContext::default()));
 }
 
+/// A store larger than the budget keeps the SQL path rather than building a
+/// model it cannot afford — checked with a COUNT, so an oversized store never
+/// pays a build to discover it is oversized.
 #[test]
-fn the_guard_admits_a_plain_current_root_read_when_enabled() {
-    let s = store();
-    s.set_read_model_enabled(true);
+fn the_guard_refuses_a_store_over_the_size_budget() {
+    let mut s = store();
+    s.set_read_model_max_triples(0);
+    let d = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/b",
+        Op::Assert,
+    );
+    s.transact(&[d], "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    assert!(!read_model_applicable(&s, &TemporalContext::default()));
+
+    s.set_read_model_max_triples(crate::store::read_model::DEFAULT_READ_MODEL_MAX_TRIPLES);
     assert!(read_model_applicable(&s, &TemporalContext::default()));
 }
 
@@ -387,7 +463,6 @@ fn the_guard_admits_a_plain_current_root_read_when_enabled() {
 #[test]
 fn disabling_drops_the_resident_model() {
     let s = store();
-    s.set_read_model_enabled(true);
     let _ = s.read_model().unwrap().len();
     assert!(s.read_model_is_resident());
     s.set_read_model_enabled(false);
@@ -562,23 +637,33 @@ fn the_model_path_answers_identically_to_sql() {
     s.transact(&ds, "2026-01-01T00:00:00Z", Some("test"), None)
         .unwrap();
 
+    // Every query here has TWO patterns, because a single-pattern BGP is routed
+    // to SQL in both modes now (the model is only worth building for a join) —
+    // so a one-pattern query would compare SQL against SQL and prove nothing.
+    // Each case varies the FIRST pattern's shape, which is what selects the
+    // index and therefore what could diverge.
     let queries = [
         // fully unbound
-        "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+        "SELECT ?s ?p ?o WHERE { ?s ?p ?o . ?s <http://example.org/p> ?z }",
         // subject bound
-        "SELECT ?p ?o WHERE { <http://example.org/a> ?p ?o }",
+        "SELECT ?p ?o WHERE { <http://example.org/a> ?p ?o . ?o ?p2 ?o2 }",
         // predicate bound
-        "SELECT ?s ?o WHERE { ?s <http://example.org/p> ?o }",
+        "SELECT ?s ?o WHERE { ?s <http://example.org/p> ?o . ?s ?p2 ?o2 }",
         // predicate + object bound
-        "SELECT ?s WHERE { ?s <http://example.org/p> <http://example.org/b> }",
+        "SELECT ?s WHERE { ?s <http://example.org/p> <http://example.org/b> . ?s ?p2 ?o2 }",
         // object only bound — the shape that needs the osp index
-        "SELECT ?s ?p WHERE { ?s ?p <http://example.org/b> }",
+        "SELECT ?s ?p WHERE { ?s ?p <http://example.org/b> . ?s ?p2 ?o2 }",
         // subject + object bound
-        "SELECT ?p WHERE { <http://example.org/a> ?p <http://example.org/b> }",
+        "SELECT ?p WHERE { <http://example.org/a> ?p <http://example.org/b> . ?p ?p2 ?o2 }",
         // all three bound
-        "SELECT * WHERE { <http://example.org/a> <http://example.org/p> <http://example.org/b> }",
-        // a two-pattern join on a shared variable
+        "SELECT ?z WHERE { <http://example.org/a> <http://example.org/p> <http://example.org/b> . ?z ?p2 ?o2 }",
+        // a join on a shared variable
         "SELECT ?s ?o WHERE { ?s <http://example.org/p> ?o . ?s <http://example.org/q> ?c }",
+        // a join with NO shared variable — a cartesian product, which the
+        // nested loop also produced
+        "SELECT ?s ?d WHERE { ?s <http://example.org/q> ?o . ?d <http://example.org/p> ?e }",
+        // three patterns, so the join folds more than once
+        "SELECT ?s WHERE { ?s <http://example.org/p> ?o . ?s <http://example.org/q> ?c . ?o ?p3 ?o3 }",
     ];
 
     for q in queries {

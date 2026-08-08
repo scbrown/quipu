@@ -12,6 +12,17 @@ use super::{AsOf, Datum, Store};
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
 struct Staged {
     tx_id: i64,
+    /// The COMPLETE set of changes this write made to the current-fact view, or
+    /// `None` when the write path cannot vouch that it is complete.
+    ///
+    /// `Some` lets the resident read model be maintained instead of rebuilt.
+    /// It is `None` whenever something closed or added facts that are not in
+    /// this list — OWL domain/range inference extends the batch, and
+    /// functional-property supersede closes prior values with a bulk
+    /// `UPDATE ... WHERE v != ?` that never enumerates what it hit. Neither is
+    /// reconstructible from the caller's datums, so the honest answer is to say
+    /// so and let the model rebuild.
+    effective: Option<Vec<Datum>>,
     /// Datums actually asserted (skipping idempotent no-ops), for reactive
     /// observer notification.
     #[cfg(feature = "reactive-reasoner")]
@@ -146,26 +157,31 @@ impl Store {
         // make should not reach the policy gate, the placement check, or the
         // fact table. SARC I5.
         self.enforce_graph_authority(graph)?;
-        // Drop the read model BEFORE staging, not just after committing. The
-        // write-time policy guard runs INSIDE the savepoint and queries the
-        // pending post-state, so it must see the staged rows — a model cached
-        // by some earlier read predates them and would judge a compliant write
-        // against a store missing the very facts that make it compliant.
-        // Caught by deny_blocks_noncompliant_write, which was denied a write it
-        // had just satisfied.
-        self.invalidate_read_model();
+        // SUSPEND read-model consultation for the duration of this write rather
+        // than dropping the model. The write-time policy guard runs INSIDE the
+        // savepoint and queries the pending post-state, so it must see staged
+        // rows — the model holds the pre-write state and would answer without
+        // them, denying a write it had just satisfied
+        // (deny_blocks_noncompliant_write). Suspending rather than dropping is
+        // what lets the commit below MAINTAIN the model instead of forcing a
+        // rebuild, and it means a rolled-back write cannot poison it either:
+        // the model never observed the staged rows at all.
+        self.set_write_in_progress(true);
         self.conn.execute_batch("SAVEPOINT quipu_transact")?;
         match self.stage_and_guard(datums, timestamp, actor, source, graph) {
-            Ok(staged) => {
+            Ok(mut staged) => {
                 let tx_id = staged.tx_id;
+                // Taken before `staged` moves into after_commit_hooks below.
+                let effective = staged.effective.take();
                 self.conn.execute_batch("RELEASE quipu_transact")?;
                 self.after_commit_hooks(datums, staged, timestamp, source)?;
                 // A write that defined or amended a policy makes the cached
                 // registry stale.
                 self.invalidate_policy_registry_if_governance(datums)?;
-                // Any committed write makes the resident read model stale. See
-                // Store::read_model for why this drops rather than applies.
-                self.invalidate_read_model();
+                // Bring the resident model up to date: apply the change set when
+                // the write vouched for it, drop when it could not (quipu-m9h).
+                self.set_write_in_progress(false);
+                self.maintain_read_model(graph, effective.as_deref());
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
                 crate::metrics::metrics().observe_write(datums.len() as u64);
@@ -180,14 +196,12 @@ impl Store {
                 let _ = self
                     .conn
                     .execute_batch("ROLLBACK TO quipu_transact; RELEASE quipu_transact");
-                // The guard runs INSIDE the savepoint and may have answered a
-                // query from the read model, building it from rows this
-                // rollback has just discarded. Without this, a DENIED write
-                // leaves a model holding facts SQL no longer has — the store is
-                // byte-identical but the index is not, which is worse than
-                // either being wrong consistently. Caught by
-                // deny_blocks_noncompliant_write.
-                self.invalidate_read_model();
+                // Nothing to invalidate: the model was suspended for the whole
+                // write, so it never observed the rows this rollback discarded.
+                // That is the structural version of the fix — the earlier one
+                // dropped the model here to undo poisoning that could no longer
+                // happen.
+                self.set_write_in_progress(false);
                 // AFTER the rollback, deliberately. The verdict of a denial is
                 // the one worth keeping — an accepted write leaves its own
                 // evidence in the facts it wrote, a refused one leaves nothing.
@@ -229,6 +243,8 @@ impl Store {
         };
         #[cfg(not(feature = "owl"))]
         let staged_datums = datums.to_vec();
+        // Whether anything beyond the caller's datums entered this write.
+        let inferred = staged_datums.len() != datums.len();
 
         // Collect the datums actually written (for observer notification),
         // classified by op. Overlay view-markers (Tombstone) are excluded from
@@ -249,7 +265,12 @@ impl Store {
         // reject the write — which is exactly the bug, an ordinary update turned
         // into an HTTP 400.
         #[cfg(feature = "owl")]
-        self.supersede_functional_values(&staged_datums, timestamp, graph, tx_id)?;
+        let superseded =
+            self.supersede_functional_values(&staged_datums, timestamp, graph, tx_id)?;
+        // Without `owl` there is no functional-property supersede at all, so
+        // nothing outside the caller's datums can close a fact.
+        #[cfg(not(feature = "owl"))]
+        let superseded = 0usize;
 
         {
             let mut insert = self.conn.prepare(
@@ -349,8 +370,22 @@ impl Store {
             graph,
         )?;
 
+        // Only vouch for the change set when nothing outside it touched the
+        // current-fact view. `superseded` counts functional-property closures;
+        // `inferred` is true when OWL inference extended the batch.
+        let effective = if superseded == 0 && !inferred {
+            let mut all: Vec<Datum> =
+                Vec::with_capacity(written_asserts.len() + written_retracts.len());
+            all.extend(written_asserts.iter().map(|d| (*d).clone()));
+            all.extend(written_retracts.iter().map(|d| (*d).clone()));
+            Some(all)
+        } else {
+            None
+        };
+
         Ok(Staged {
             tx_id,
+            effective,
             #[cfg(feature = "reactive-reasoner")]
             asserts,
             #[cfg(feature = "reactive-reasoner")]

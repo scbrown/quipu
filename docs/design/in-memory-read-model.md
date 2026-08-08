@@ -1,16 +1,16 @@
 # Design: In-Memory Read Model — query in memory, write to SQLite
 
-> **Implementation status (2026-08-07):** 🚧 **Phases 1–2 landed; 3–5
-> designed.** Every number below was measured on this branch, native x86-64,
+> **Implementation status (2026-08-07):** 🚧 **Phases 1–3 landed; 4–5
+> designed.** The read model is **on by default** and SPARQL joins run through
+> it. Every number below was measured on this branch, native x86-64,
 > `--release`, `--no-default-features`. The model is exercised by
 > `examples/mem_read_model.rs`; the baseline it is compared against is
 > `examples/scale_bench.rs`.
 >
-> `Store` carries a memoizing `TermCache` (`quipu-yzf`) and
-> `src/store/read_model.rs` holds the `ReadModel` itself (`quipu-d6x`).
-> **`eval_bgp` still does a nested-loop join and does not consult the model** —
-> routing it there, behind the §5 scope guard, is Phase 3. The §1 table is the
-> pre-cache SPARQL baseline the remaining phases are measured against.
+> `Store` carries a memoizing `TermCache` (`quipu-yzf`),
+> `src/store/read_model.rs` holds the `ReadModel` (`quipu-d6x`), and `eval_bgp`
+> hash-joins through it for multi-pattern BGPs (`quipu-syt`). The §1 table is
+> the original SQL baseline the phases are measured against.
 
 **Thesis:** SQLite should be Quipu's durable write log and archive. Queries
 should be answered from an in-memory read model built over it. Measured, that
@@ -99,8 +99,13 @@ pub struct ReadModel {
     spo: HashMap<i64, Vec<(i64, Value)>>,        // <s> ?p ?o
     pso: HashMap<i64, Vec<(i64, Value)>>,        // ?s <p> ?o
     pos: HashMap<(i64, Vec<u8>), Vec<i64>>,      // ?s <p> <o>  /  ?s a <T>
+    osp: HashMap<Vec<u8>, Vec<(i64, i64)>>,      // ?s ?p <o>
 }
 ```
+
+`osp` exists because SQL serves `?s ?p <o>` from `idx_vaet`; without it the
+model would have to scan for that shape, making it a regression rather than a
+speedup.
 
 Keyed by term id throughout, holding no strings: the `id <-> IRI` dictionary
 lives on `Store` (Phase 1) and is shared by every read path rather than
@@ -163,7 +168,9 @@ in exactly the dimensions Quipu exists to get right.
 | `GRAPH <iri>` / named graphs | ⚠️ | Needs a per-graph model, or `current_facts_in_graph(g)` |
 | Overlays + tombstones | ❌ | Composition is a resolution rule, not a row filter |
 | Attached DBs (`facts_source()` UNION) | ❌ | The model is built from one database |
-| Alias / `canonical_id` rewriting | ⚠️ | Must be applied at build time or preserved at probe time |
+| Alias / `canonical_id` rewriting | ⚠️ | Covered by the attachment check — `canonical_id` is the identity without them |
+| A write holding an open savepoint | ❌ | The policy guard queries staged rows the model has not seen |
+| A graph past the size budget | ❌ | Building it would cost more memory than configured |
 
 **The rule: the read model is a fast path, never a substitute.** `eval_bgp`
 should consult it only when the `TemporalContext` is current-time, the dataset
@@ -297,13 +304,60 @@ never produced duplicate rows; and a datum arriving with `valid_to` already set
 is not current, so indexing it would make the incremental path disagree with the
 build.
 
-**Phase 3 — Route `eval_bgp` through it.** Guarded by the §5 scope check, with
-fallback to SQL. Hash joins plus selectivity-ordered patterns. The acceptance
-bar is differential: for every query in the existing suite, the read-model answer
-must equal the SQL answer.
+**Phase 3 — Route `eval_bgp` through it.** ✅ **LANDED, and ON by default**
+(`quipu-syt`, `quipu-att`, `quipu-m9h`).
+
+`eval_bgp` hash-joins through the model when the guard admits, falling back to
+SQL otherwise. Three things had to be true before the default could flip:
+
+1. **The join is a hash join.** Each pattern is evaluated once and joined on
+   shared variables, rather than re-evaluated per accumulated row. That nested
+   loop was the O(n²); making each evaluation cheap only shrank its constant.
+2. **Writes maintain the model** instead of dropping it. The write path vouches
+   for its complete change set when it can — it cannot when OWL inference
+   extends the batch, or when functional-property supersede closes prior values
+   with a bulk `UPDATE … WHERE v != ?` that never enumerates what it hit — and
+   only then is the model rebuilt. A write to a *different* graph leaves a ROOT
+   model untouched entirely.
+3. **Only multi-pattern BGPs use it.** A single pattern is the shape SQL is
+   already fast at, and routing it through the model made it pay to build one —
+   a 0.12 ms → 320 ms regression on the most common query shape.
+
+Measured, with no shape regressing:
+
+| Episodes | Point lookup | Type scan | 2-hop join |
+|---:|---|---|---|
+| 1,000 | 0.11 → 0.14 ms | 4.6 → 5.4 ms | 1,016 → **38 ms** |
+| 4,000 | 0.10 → 0.13 ms | 18.8 → 18.5 ms | 26,233 → **225 ms** |
+| 10,000 | 0.16 → 0.12 ms | 56.2 → 46.8 ms | 173,803 → **560 ms** |
+
+**27×–310× on the join**, now linear where it was quadratic. Those figures
+include the model build, which the first join pays for.
+
+Size is bounded by `DEFAULT_READ_MODEL_MAX_TRIPLES` (1M triples, ~320 MB),
+checked with a `COUNT` so an oversized store never pays a build to discover it
+is oversized. Past the ceiling queries keep the SQL path — slower on joins, but
+the behaviour they already had.
+
+Binding is shared with the SQL path through one extracted `bind_row`, so the two
+cannot drift on the subtle part: a subject resolving to a blank node binds as
+`Value::Str`, everything else re-looks-up its IRI to choose between `Ref` and
+`Str`, and the predicate has no blank-node case at all.
+
+**Two invalidation bugs, and the structural fix that retired both.** The
+write-time policy guard queries *inside* the savepoint, against staged rows. A
+model built there survived a rollback still holding facts SQL no longer had; and
+a model cached *before* staging made the guard deny a write that was compliant.
+The first fix dropped the model at both points — correct, and it forced a
+rebuild per write. The real fix is to **suspend consultation for the duration of
+a write**: the guard uses SQL, the model never observes staged rows, and there
+is nothing to invalidate on rollback. That is also what makes maintenance
+possible, because the model is still there when the commit lands.
 
 **Phase 4 — Selectivity-ordered join planning** and `LIMIT` pushdown, now that
-cardinalities are free.
+cardinalities are free. The hash join already picks the smaller side to build
+from; what remains is ordering the patterns themselves and stopping a bounded
+query before it materialises the whole result.
 
 **Phase 5 — Scope to the derived graph.** Per-graph read models so the resident
 set is the distilled layer, with the episode log left in SQLite.
@@ -315,11 +369,10 @@ governance model needs exactly those columns.
 
 ## 9. Open questions
 
-1. **Is the read model always-resident or lazily built per query?** Always-on
-   makes the first query fast and costs steady memory; lazy costs ~380 ms on the
-   first join after any write that invalidates. Recommendation: always-on for a
-   server, gated by a config budget, with lazy as the fallback when the budget is
-   exceeded.
+1. ~~**Is the read model always-resident or lazily built per query?**~~
+   **Settled:** built on first use, maintained across writes, bounded by a
+   triple budget, and only for multi-pattern BGPs. A store past the budget keeps
+   the SQL path.
 2. **Per-graph or whole-store?** §7 argues per-graph, which also makes the
    `GRAPH <iri>` case work rather than fall back.
 3. **Does the fast path need to be visible in results?** A query answered from

@@ -4,8 +4,8 @@ Quipu stores facts in SQLite and answers SPARQL by compiling each triple pattern
 into SQL. The read model is an optional in-memory index over the same facts,
 built so that joins do not have to go back to SQL for every row.
 
-It is **off by default**. This page explains what it is, why it is off, and when
-to turn it on.
+It is **on by default** for multi-pattern queries. This page explains what it
+is, what it deliberately cannot answer, and when you might turn it off.
 
 ## What it holds
 
@@ -18,6 +18,10 @@ an object index:
 | `pso` | `?s <p> ?o` — everything using a predicate |
 | `pos` | `?s <p> <o>` and `?s a <Type>` |
 | `osp` | `?s ?p <o>` — everything pointing at an object |
+
+Joins are hash joins: each pattern is evaluated once and joined on the variables
+it shares with the rows so far, rather than re-evaluated once per accumulated
+row.
 
 Everything is keyed by term id. The `id ↔ IRI` dictionary lives on the store
 itself and is shared with every other read path rather than duplicated here.
@@ -35,51 +39,51 @@ paper over — it is the point.
 | `GRAPH <iri>`, `GRAPH ?g`, `FROM` | SQL |
 | Overlays and tombstones | SQL |
 | A store with attached databases | SQL |
+| Anything, while a write holds an open transaction | SQL |
+| A graph past the size budget | SQL |
 
 A guard checks every one of these before the model is consulted, and anything
 outside its scope falls through to the SQL path unchanged. **A query that time
 travels is not slower because an optimization is missing — it is a different
 question, asked of data the model does not hold.**
 
-## Why it is off by default
+## What it costs, and what it buys
 
-Measured on a store of 10,000 synthetic episodes (170,150 facts):
+Measured on stores of synthetic episodes, SQL path → read model:
 
-| Query shape | SQL path | Read model |
-|---|---:|---:|
-| Point lookup (`<s> ?p ?o`) | 0.12 ms | **320 ms** |
-| Type scan (`?s a <T>`, LIMIT 100) | 47 ms | 47 ms |
-| 2-hop join | timeout | 30 s |
+| Episodes | Point lookup | Type scan | 2-hop join |
+|---:|---|---|---|
+| 1,000 | 0.11 → 0.14 ms | 4.6 → 5.4 ms | 1,016 → **38 ms** |
+| 4,000 | 0.10 → 0.13 ms | 18.8 → 18.5 ms | 26,233 → **225 ms** |
+| 10,000 | 0.16 → 0.12 ms | 56.2 → 46.8 ms | 173,803 → **560 ms** |
 
-The join improves by 4–5×. The point lookup gets roughly 2,600× worse. Two
-reasons, both structural:
+**27× to 310× on joins**, which are also linear now rather than quadratic, and
+no measured regression on the other shapes.
 
-- **The first query after any write rebuilds the whole model** — about 250 ms at
-  this size. The model is dropped on every write rather than maintained
-  incrementally, so a write-then-read loop pays that rebuild every time.
-- **Joining is still quadratic.** Consulting the model makes each individual
-  pattern lookup cheap, but the surrounding join still evaluates one pattern per
-  row of the previous pattern's results. Moving the *leaf* to memory does not
-  change the *shape* of the join.
+Three design choices are what make that true, and each was a measured failure
+before it was a choice:
 
-A path that is three orders of magnitude slower on the most common query shape
-is not a fast path. Both causes are tracked and the default flips once they are
-fixed.
+- **Only multi-pattern queries use it.** A single pattern is what SQL is already
+  fast at — a bound-subject lookup is a tenth of a millisecond against an index.
+  Routing those through the model made them pay to build one, which measured as
+  0.12 ms → 320 ms.
+- **Writes maintain the model** rather than dropping it, so a write-then-read
+  loop does not pay a rebuild every time.
+- **Size is bounded** at one million triples (roughly 320 MB), checked with a
+  `COUNT` so an oversized store never pays a build to discover it is oversized.
+  Past that ceiling queries use SQL — slower on joins, but exactly the behaviour
+  they had before.
 
-## Turning it on
+## Turning it off
 
 ```rust
-let store = Store::open("my.db")?;
-store.set_read_model_enabled(true);
+store.set_read_model_enabled(false);          // SQL for everything
+store.set_read_model_max_triples(200_000);    // or just lower the ceiling
 ```
 
-Worth doing when your workload is **join-heavy and read-mostly**: many
-multi-pattern queries between writes, so the rebuild is amortised. Worth
-avoiding when writes and reads interleave, or when queries are dominated by
-bound-subject lookups — which are already fast.
-
-The model is built on first use and dropped on every write, so nothing needs to
-be invalidated by hand.
+Worth considering if your process is memory-constrained, or if your workload is
+almost entirely single-pattern lookups on a large store — there the model is
+built for joins that never come.
 
 ## Correctness
 
@@ -101,9 +105,17 @@ what this kind of index has to get right:
   so the guard would judge a write against a store lacking the very facts that
   made it valid.
 
-Both are fixed by dropping the model on entry to a write as well as on exit. The
-general rule: the model is never consulted across a transaction boundary it did
-not observe.
+The first fix dropped the model at both points. It worked, and it forced a
+rebuild after every write — which is why the fast path could not be the default
+at first.
+
+The structural fix is to **suspend** the model for the duration of a write
+instead: the guard uses SQL, so the model never observes staged rows, and there
+is nothing to poison on rollback. That is also what makes maintenance possible,
+because the model is still there when the commit lands.
+
+The general rule either way: the model is never consulted across a transaction
+boundary it did not observe.
 
 ## See also
 

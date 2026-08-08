@@ -4,7 +4,9 @@
 //! SPARQL algebra over rows, while everything here turns a triple pattern into
 //! `SQL` over `facts` and binds the variables in the rows that come back.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+use super::pattern_util::check_eval_budget;
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
@@ -27,6 +29,20 @@ pub fn eval_bgp(
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
     if patterns.is_empty() {
         return Ok((vec![seed.clone()], vec![]));
+    }
+
+    // The read model turns a pattern into hash lookups, which makes evaluating
+    // it ONCE and joining cheap — so when it is available, take the hash join
+    // and leave the nested loop below for SQL. The loop is where the O(n^2)
+    // lives: re-evaluating each pattern per accumulated row is quadratic no
+    // matter how fast an individual evaluation gets.
+    // Only for a BGP that actually JOINS. A single pattern is the shape SQL is
+    // already fast at — a bound-subject lookup is ~0.1ms against an index — and
+    // routing it through the model would make it pay for building one, which
+    // measured as a 0.12ms -> 320ms regression. Two or more patterns is exactly
+    // where the nested loop turns quadratic and the build pays for itself.
+    if patterns.len() >= 2 && crate::store::read_model::read_model_applicable(store, ctx) {
+        return eval_bgp_hash_join(store, patterns, ctx, seed);
     }
 
     let mut result_rows: Vec<Bindings> = vec![seed.clone()];
@@ -126,14 +142,6 @@ pub fn eval_triple_pattern(
     bindings: &Bindings,
     ctx: &TemporalContext,
 ) -> Result<Vec<Bindings>> {
-    // The read model answers this exact question when the guard admits, with
-    // no SQL and no per-row dictionary round-trips. Everything it cannot answer
-    // — time travel, non-ROOT graphs, attachments — falls through to the SQL
-    // below, unchanged.
-    if crate::store::read_model::read_model_applicable(store, ctx) {
-        return eval_triple_pattern_from_model(store, tp, bindings);
-    }
-
     // Build SQL query with conditions based on bound values.
     let mut conditions = Vec::new();
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -529,4 +537,120 @@ fn eval_triple_pattern_from_model(
         }
     }
     Ok(results)
+}
+
+/// Evaluate a BGP by hash-joining each pattern's rows, rather than re-evaluating
+/// the pattern once per accumulated row.
+///
+/// The nested loop in [`eval_bgp`] is quadratic by construction: pattern *k* is
+/// evaluated once for every row pattern *k-1* produced. Making each evaluation
+/// cheap — which the read model does — shrinks the constant and leaves the
+/// shape. This changes the shape.
+///
+/// Each pattern is evaluated ONCE against the seed, then joined to the
+/// accumulated rows on whatever variables they share. Only used when the read
+/// model is applicable, because there an unbound evaluation is a hash lookup;
+/// against SQL it would trade a selective indexed query for a table scan.
+fn eval_bgp_hash_join(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<(Vec<Bindings>, Vec<String>)> {
+    let mut result_rows: Vec<Bindings> = vec![seed.clone()];
+    let mut all_vars: Vec<String> = Vec::new();
+
+    for (i, tp) in patterns.iter().enumerate() {
+        check_eval_budget(ctx, i, result_rows.len())?;
+        let pattern_rows = eval_triple_pattern_from_model(store, tp, seed)?;
+        result_rows = hash_join_bindings(&result_rows, &pattern_rows, ctx)?;
+
+        for var in triple_pattern_vars(tp) {
+            if !all_vars.contains(&var) {
+                all_vars.push(var);
+            }
+        }
+        // An empty intermediate can never grow again, so stop rather than
+        // evaluating the remaining patterns for nothing.
+        if result_rows.is_empty() {
+            break;
+        }
+    }
+
+    Ok((result_rows, all_vars))
+}
+
+/// Join two binding sets on the variables they share.
+///
+/// With no shared variables this is a cartesian product, which is what the
+/// nested loop produced too — an unconnected BGP genuinely has that many
+/// solutions. The row cap is what stops it running away.
+fn hash_join_bindings(
+    left: &[Bindings],
+    right: &[Bindings],
+    ctx: &TemporalContext,
+) -> Result<Vec<Bindings>> {
+    if left.is_empty() || right.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Every row of a BGP result binds the same variables, so one row of each
+    // side is enough to find the join keys.
+    let mut shared: Vec<&String> = left[0]
+        .keys()
+        .filter(|k| right[0].contains_key(*k))
+        .collect();
+    shared.sort_unstable();
+
+    if shared.is_empty() {
+        let mut out = Vec::new();
+        for (i, l) in left.iter().enumerate() {
+            check_eval_budget(ctx, i, out.len())?;
+            for r in right {
+                let mut merged = l.clone();
+                merged.extend(r.iter().map(|(k, v)| (k.clone(), v.clone())));
+                out.push(merged);
+            }
+        }
+        return Ok(out);
+    }
+
+    // Build from the smaller side, probe with the larger — the standard choice,
+    // and the one that keeps the hash table off the hot path when one side is a
+    // whole-store scan and the other is a handful of rows.
+    let key_of = |b: &Bindings| -> Vec<Vec<u8>> {
+        shared
+            .iter()
+            .map(|k| b.get(*k).map(Value::to_bytes).unwrap_or_default())
+            .collect()
+    };
+
+    let (build, probe, build_is_left) = if right.len() <= left.len() {
+        (right, left, false)
+    } else {
+        (left, right, true)
+    };
+
+    let mut table: HashMap<Vec<Vec<u8>>, Vec<&Bindings>> = HashMap::new();
+    for b in build {
+        table.entry(key_of(b)).or_default().push(b);
+    }
+
+    let mut out = Vec::new();
+    for (i, p) in probe.iter().enumerate() {
+        check_eval_budget(ctx, i, out.len())?;
+        let Some(matches) = table.get(&key_of(p)) else {
+            continue;
+        };
+        for m in matches {
+            // Keep left-then-right precedence regardless of which side was
+            // built, so the merged row is identical either way. The shared keys
+            // are equal by construction, so only the non-shared ones matter.
+            let (l, r): (&Bindings, &Bindings) = if build_is_left { (m, p) } else { (p, m) };
+            let mut merged = l.clone();
+            merged.extend(r.iter().map(|(k, v)| (k.clone(), v.clone())));
+            out.push(merged);
+        }
+    }
+    Ok(out)
 }
