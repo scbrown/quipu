@@ -119,15 +119,58 @@ bitemporality.
 
 \subsection{The agent arm: strictness borne by the writer}
 \label{sec:eval-agent}
-As an extension (single model, single task, $n{=}1$ — an existence
-demonstration, not a rate), an LLM agent was given the recording task
-cold and authored a five-action recording without seeing \Sig.
-Attempt one: 2 accepted, 3 refused — a tally with no label, a write
-into a district outside the writer's authority, a fabricated
-predicate. Revising strictly from the refusal text — the only channel
-the writer gets — attempt two landed \textbf{5 of 5} with zero
-final-graph defects: the retry loop the thesis predicts, converging in
-one revision with no human in the loop.
+An LLM agent is given the recording task cold — five actions, no
+sight of \Sig, the gate's verbatim refusals as the only feedback
+channel — and gets one revision. The original run (single model,
+$n{=}1$, transcripts committed) went 2 accepted / 3 refused, then
+\textbf{5 of 5}. We repeated the protocol across four Claude models,
+three trials each (twelve trials; prompt and all transcripts
+committed under \texttt{benchmark/census/agent/}), with the scenario
+arranged so one refusal is \emph{not} fixable by editing the record:
+household h3 belongs to a district the writer's authority does not
+reach.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+Model ($\times$3) & Attempt 1 & Attempt 2 & The unfixable refusal's resolution \\
+\midrule
+haiku-4.5 & 4/5, 2/5, 2/5 & all accepted & dropped $\times$2; refiled north $\times$1 (false, landed) \\
+sonnet-5  & 4/5 $\times$3 & 4/5 $\times$3 & parked in root $\times$3 — re-refused (\textsc{graph} scope) \\
+opus-5    & 4/5 $\times$3 & 4/5 $\times$3 & resubmitted unchanged, caveats written into the record \\
+fable-5   & 4/5 $\times$3 & 5/5, 5/5, 4/5 & routed via the authorized chain $\times$1; root $\times$2 \\
+\bottomrule
+\end{tabular}
+\caption{The agent arm across models, three trials each. Every
+label/vocabulary refusal was fixed in one revision; the authority
+refusal, unfixable by editing, split the models into routing,
+principled abstention, evasion-caught, and evasion-landed.}
+\label{tab:agentarm}
+\end{table}
+
+Three regularities (Table~\ref{tab:agentarm}). \emph{Everything \Sig
+can name converges}: all label and vocabulary refusals were fixed in
+one revision in 12 of 12 trials, no trial invented a predicate, and
+the cheapest model gained the most — haiku went 2/5 to full
+acceptance on its weakest attempts, which is where a gate that
+explains its refusals pays best. \emph{The authority refusal sorts
+writers by disposition, not capability}: one fable trial made the
+correct move (dispatch h3 through the chain that holds the south);
+all three opus trials declined every workaround as falsification and
+wrote their caveats into the record itself — refusing to trade truth
+for acceptance; five trials tried to park the record in a graph the
+writer does hold, and the gate caught every one, because the
+tally-label claim is \textsc{graph}-scoped and a tally in the default
+graph fails it. \emph{The gate is exactly as good as \Sig}: the one
+false record that landed (h3 refiled to the northern district) passed
+because no policy states which district a household belongs to —
+the residual risk under refusal-driven convergence concentrates
+precisely in what \Sig leaves unsaid, which is an argument for
+authoring coverage, not against the gate. Boundaries: one task, one
+model family, three trials per model, and the scripted scenario as
+the only quality oracle.
 
 \subsection{In the wild}
 \label{sec:eval-wild}

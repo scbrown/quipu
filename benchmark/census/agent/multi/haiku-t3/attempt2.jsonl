@@ -1,0 +1,4 @@
+{"writer": "amaru", "graph": "urn:census:graph:district-north", "subject": "urn:census:household:h1", "type": "urn:census:Tally", "props": {"http://www.w3.org/2000/01/rdf-schema#label": "Household h1"}}
+{"writer": "amaru", "graph": "urn:census:graph:district-north", "subject": "urn:census:household:h2", "type": "urn:census:Tally", "props": {"http://www.w3.org/2000/01/rdf-schema#label": "Household h2"}}
+{"writer": "amaru", "graph": "urn:census:graph:district-north", "subject": "urn:census:resident:r10", "type": "urn:census:Resident", "props": {"urn:census:vocab:placedIn": "urn:census:household:h1"}}
+{"writer": "amaru", "graph": "urn:census:graph:district-north", "subject": "urn:census:summary:week1", "type": "urn:census:Record", "props": {"urn:census:vocab:recordedBy": "amaru", "urn:census:vocab:notes": "Population estimate: 1,240 people across 3 households"}}

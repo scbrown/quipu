@@ -41,12 +41,35 @@ pub fn replay_recording(ctx: &mut Ctx, path: &str) -> (usize, usize) {
         }
         let action: Action = serde_json::from_str(line).expect("recording line parses");
         let ts = ctx.tick();
-        let g = ctx
-            .store
-            .lookup(&action.graph)
-            .ok()
-            .flatten()
-            .expect("recording targets a founded graph");
+        // ROOT is graph 0, not a registered named graph — and the authority
+        // refusal names it among a chain's holdings, so a writer steering by
+        // refusal text may legitimately target it. Any other unknown graph is
+        // the writer's error, and it gets a refusal probe, not a crash: the
+        // arm's whole point is that feedback flows back as messages.
+        let g = if action.graph == crate::phases::ROOT_IRI {
+            Some(0)
+        } else {
+            ctx.store.lookup(&action.graph).ok().flatten()
+        };
+        let Some(g) = g else {
+            refused += 1;
+            ctx.probe(
+                &format!("CEN-AG.{}", i + 1),
+                2,
+                &format!(
+                    "agent action {} by {}: {}",
+                    i + 1,
+                    action.writer,
+                    action.subject
+                ),
+                &format!(
+                    "refused: unknown graph '{}' — graphs must be founded before use",
+                    action.graph
+                ),
+                "RQ2-agent",
+            );
+            continue;
+        };
         let mut datums = Vec::new();
         if let Some(t) = &action.type_iri {
             let type_id = ctx.store.intern(t).expect("intern type");
