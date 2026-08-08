@@ -28,6 +28,42 @@ use crate::types::{Fact, Op, Value};
 use super::{Datum, Store};
 
 impl Store {
+    /// Register a committed-class named graph. Returns its graph id (the
+    /// interned term id of `graph_iri`). Idempotent: re-creating an existing
+    /// committed graph is a no-op; a graph already registered as an overlay
+    /// is an error rather than a silent reclass — a graph's class is fixed at
+    /// create, exactly like the overlay↔branch binding below.
+    ///
+    /// This is the registration `set_graph_label` presumes: labelling refuses
+    /// unregistered graphs (facts the cache could never mirror), and until
+    /// this function the only registration paths were pack unpack and graph
+    /// import. Committed graphs are self-rooted (`parent_branch` NULL), like
+    /// ROOT and the label meta-graph.
+    pub fn graph_create(&self, graph_iri: &str) -> Result<i64> {
+        let g = self.intern(graph_iri)?;
+        let existing: Option<String> = self
+            .conn
+            .query_row("SELECT class FROM graphs WHERE g = ?1", params![g], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        if let Some(class) = existing {
+            if class != "committed" {
+                return Err(Error::InvalidValue(format!(
+                    "graph g={g} already exists as class '{class}'; a graph's \
+                     class is fixed at create"
+                )));
+            }
+            return Ok(g);
+        }
+        self.conn.execute(
+            "INSERT INTO graphs (g, class, parent_branch, created_at) \
+             VALUES (?1, 'committed', NULL, ?2)",
+            params![g, crate::time::now_iso()],
+        )?;
+        Ok(g)
+    }
+
     /// Register an overlay-class graph bound to a committed `parent_branch`
     /// (pass `0` for ROOT). Returns the overlay's graph id (the interned term id
     /// of `overlay_iri`). Idempotent: re-creating with the SAME parent is a

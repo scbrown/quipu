@@ -42,6 +42,9 @@ test-fixtures/*.db-shm
 !.claude/hooks/
 .logs/
 __pycache__/
+
+# Census benchmark run outputs (stores, manifests, metrics)
+benchmark/census/out/
 state.json
 CLAUDE.md
 CLAUDE.local.md

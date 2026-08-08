@@ -59,6 +59,14 @@ seed:
 serve-fixtures:
     cargo run --bin quipu-server --features shacl,onnx -- --db test-fixtures/test-store.db
 
+# Run a paper benchmark (see benchmark/<name>/README.md): just bench census [--arm control] [--seed N]
+bench name *args:
+    @if [ "{{ name }}" = "census" ]; then \
+        cargo run --quiet --release --example census -- {{ args }}; \
+    else \
+        echo "unknown benchmark '{{ name }}' (available: census)"; exit 1; \
+    fi
+
 # Load the fictional demo graph and serve the explorer on localhost:3030.
 # This is the dataset behind the README screenshot — see examples/demo-graph.
 demo:

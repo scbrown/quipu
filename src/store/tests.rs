@@ -1017,6 +1017,41 @@ fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
 }
 
 #[test]
+fn graph_create_registers_committed_and_never_reclasses() {
+    let mut store = Store::open_in_memory().unwrap();
+    let a = store.intern("http://ex/graph/committed").unwrap();
+    let g1 = store.graph_create("http://ex/graph/committed").unwrap();
+    let g2 = store.graph_create("http://ex/graph/committed").unwrap();
+    assert_eq!(g1, a);
+    assert_eq!(g1, g2, "re-create of a committed graph is idempotent");
+    assert_eq!(store.graph_class(g1).unwrap().as_deref(), Some("committed"));
+    // The registration set_graph_label presumes: a created graph is
+    // labelable (this call failed with "not a registered graph" before
+    // graph_create existed — the Census founding phase is the caller).
+    let label = crate::store::labels::GraphLabel {
+        freshness: Some(crate::lattice::Freshness::Fresh),
+        ..Default::default()
+    };
+    store
+        .set_graph_label(
+            "http://ex/graph/committed",
+            &label,
+            "2026-01-01T00:00:00Z",
+            None,
+        )
+        .expect("a created committed graph is labelable");
+    // Class is fixed at create: an overlay cannot be re-registered as
+    // committed, in either direction.
+    store.overlay_create("http://ex/graph/ov", 0).unwrap();
+    assert!(store.graph_create("http://ex/graph/ov").is_err());
+    assert!(
+        store
+            .overlay_create("http://ex/graph/committed", 0)
+            .is_err()
+    );
+}
+
+#[test]
 fn overlay_create_binds_once_and_rejects_rebind() {
     let store = Store::open_in_memory().unwrap();
     let a = store.intern("http://ex/graph/a").unwrap();
