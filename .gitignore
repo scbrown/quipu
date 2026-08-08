@@ -35,7 +35,11 @@ test-fixtures/*.db-shm
 
 # Gas Town (added by gt)
 .runtime/
-.claude/
+# .claude is local state except the shared session config, which is tracked
+# so Claude Code on the web sessions get the docs toolchain and quipu CLI.
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 .logs/
 __pycache__/
 state.json
