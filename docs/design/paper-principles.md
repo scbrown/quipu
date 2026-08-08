@@ -333,9 +333,15 @@ with the run's set-hash in the determinism note.
 
 ## 5. Open decisions
 
-1. **CEN-V1**: ship the closed-world vocabulary policy as a standard Σ
-   entry (preferred; zero new machinery — it is an ASK claim) or drop
-   the probe. Decide when the injector is built.
+1. ~~**CEN-V1**: ship the closed-world vocabulary policy as a standard
+   Σ entry or drop the probe.~~ **Decided (quipu-64q): shipped as a Σ
+   entry.** `urn:census:policy:closed-vocabulary` is a deny policy
+   whose ASK claim requires every predicate on a `census:Record` to be
+   typed `census:DeclaredPredicate`; the probe is refused in the gated
+   arm and lands in the control arm. One wrinkle worth keeping: claims
+   must scope their patterns with `GRAPH ?g` when the governed facts
+   live in named graphs — a plain BGP judges an empty view
+   (`benchmark/census/BUILD_REPORT.md`).
 2. **CEN-M2 sequencing**: whether Census lands before shape versioning
    (publishing the honest pre-GS6 failure first, then the fix) or
    after (only the clean 100% result). The former is the stronger

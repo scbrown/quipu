@@ -1,4 +1,4 @@
-//! Census — the paper's single lifecycle benchmark (quipu-zg0).
+//! Census — the paper's single lifecycle benchmark.
 //!
 //! One scripted, seeded, multi-writer lifecycle over a governed store; one
 //! run emits a ground-truth manifest and one metrics file per research
@@ -7,20 +7,24 @@
 //! catalogue: `docs/design/paper-principles.md` §4; plan:
 //! `docs/design/paper.md`.
 //!
-//! This is the SKELETON (bead quipu-zg0): the harness, the injector's
-//! manifest, the seed discipline, and the metrics emitters are real; phase 1
-//! (Founding) executes against a live store; phases 2–6 register their
-//! probes as `planned` for bead quipu-y41 to execute.
+//! Phases 1–4 execute (beads quipu-zg0, quipu-y41): founding, recording
+//! with the defect probes, correction with escalation, and composition.
+//! Phases 5–6 stay `planned` in the manifest for quipu-krv / quipu-tj0 /
+//! quipu-4mi.
 //!
 //! ```bash
-//! just bench census                # gated arm, seed 42
-//! just bench census -- --arm control --seed 7
+//! just bench census                       # gated arm, seed 42
+//! just bench census --arm control        # same script, gates off
 //! ```
 
 mod catalogue;
 mod manifest;
+mod phase2;
+mod phase3;
+mod phase4;
 mod phases;
 mod rng;
+mod score;
 
 use manifest::{Arm, Manifest, RunInfo};
 use phases::Ctx;
@@ -68,20 +72,20 @@ fn main() {
     let _ = std::fs::remove_file(&db_path);
     let store = quipu::Store::open(&db_path).expect("open census store");
 
-    let mut ctx = Ctx::new(store, rng::SplitMix64::new(seed), arm);
-    phases::run_all(&mut ctx);
+    let mut ctx = Ctx::new(store, rng::SplitMix64::new(seed), arm, db_path);
+    phases::run_all(&mut ctx, &out);
 
     let manifest = Manifest {
         run: RunInfo {
             seed,
             arm: arm.as_str().to_string(),
-            harness: "skeleton (quipu-zg0); phases 2-6 planned (quipu-y41)".to_string(),
+            harness: "phases 1-4 executed (quipu-zg0, quipu-y41); 5-6 planned".to_string(),
         },
-        entries: ctx.entries,
+        entries: std::mem::take(&mut ctx.entries),
     };
-    let path = format!("{out}/manifest.json");
+    score::write_metrics(&ctx, &manifest, &out);
+    let path = format!("{out}/manifest-{}.json", arm.as_str());
     std::fs::write(&path, manifest.to_json()).expect("write manifest");
-    manifest::write_metric_stubs(&out);
 
     let executed = manifest
         .entries

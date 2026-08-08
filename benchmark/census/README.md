@@ -21,15 +21,17 @@ just bench census --seed 7 --out /tmp/census
   `catalogue.rs` (the defect catalogue, transcribed from the design
   doc), `manifest.rs` (ground-truth manifest + metric stubs),
   `rng.rs` (SplitMix64; the seed is the only entropy).
-- `out/` (gitignored) — `census-<arm>.db`, `manifest.json`,
-  `metrics/rq{1..5}.json`.
+- `out/` (gitignored) — `census-<arm>.db`, `manifest-<arm>.json`,
+  `metrics/<arm>/rq{1..5}.json`.
 - `BUILD_REPORT.md` — the honesty record: inputs, construction,
   discarded designs, claim boundaries.
 
 ## Status
 
-Skeleton (bead `quipu-zg0`): phase 1 (Founding) executes against a live
-store; phases 2–6 are registered in the manifest as `planned`.
+Phases 1–4 execute (beads `quipu-zg0`, `quipu-y41`): founding,
+recording with all six defect probes, correction with the escalation
+round-trips, and the seven composition probes. Phases 5–6 remain
+`planned` in the manifest (`quipu-krv`, `quipu-tj0`, `quipu-4mi`).
 Implementation order and owners: `bd list -l paper`.
 
 ## Scoring discipline

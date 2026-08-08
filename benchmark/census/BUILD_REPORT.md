@@ -26,14 +26,32 @@ change — an out-of-date honesty record is worse than none.
 
 ## Discarded runs and designs
 
-_Record every discarded run and the reason here, with the seed and the
-git SHA. Nothing so far — the skeleton has produced no scored runs._
+- **Plain-BGP claims (discarded during quipu-y41).** Σ's claims were
+  first written without `GRAPH ?g`; every graph-scoped write was then
+  judged against the default-graph view, which is empty for district
+  facts — the tally-label claim denied a compliant write. All claims
+  now wrap their patterns in `GRAPH ?g`. Kept as a finding: a claim's
+  dataset scope is part of the claim, and the paper's governance
+  section gets a sentence on it.
+- **`urn:census:record_u1` as CEN-U1's subject (discarded).** The
+  episode path mints `urn:census:record-u1` (hyphen preserved); the
+  first control run scored 5/6 defects present because the scorer
+  asked about a subject that never existed. Corrected against the
+  store, not the script.
+
+## Findings the numbers carry
+
+- **Abstention is policy-gate-scoped.** The gated arm's ungoverned
+  writes are not free: authority intersection (GS3) runs on every
+  graph-scoped write by design and is not abstention-eligible. RQ1's
+  zero-overhead claim applies to the policy gate's target-type
+  pre-filter only; `metrics/<arm>/rq1.json` says so inline.
 
 ## What the results do not claim
 
-- The skeleton executes phase 1 only; every phase 2–6 entry in the
-  manifest is `planned`, and no RQ metric is produced yet (each
-  `metrics/rq*.json` says `pending` and names the bead that fills it).
+- Phases 5–6 entries in the manifest are `planned`; `rq5.json` is
+  `pending` and `rq3.json` is `partial` (verdict counts only) until
+  quipu-krv / quipu-tj0 / quipu-4mi land.
 - Census is synthetic by construction — that is what makes it an
   oracle. External validity is bounded, not eliminated, by the
   Census-in-the-wild replay (bead `quipu-0u4`).
