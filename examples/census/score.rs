@@ -13,7 +13,7 @@ pub fn write_metrics(ctx: &Ctx, manifest: &Manifest, out: &str) {
     rq2(ctx, manifest, &dir);
     rq3(ctx, &dir);
     rq4(manifest, &dir);
-    rq5_pending(&dir);
+    rq5(ctx, &dir);
 }
 
 fn stats(lat: &[u128]) -> serde_json::Value {
@@ -107,14 +107,22 @@ fn rq3(ctx: &Ctx, dir: &str) {
             }
         }
     }
+    let inv = ctx
+        .inventory_counts
+        .map(|(v, i)| serde_json::json!({"violations": v, "incompleteness": i}));
+    let aud = ctx
+        .audit_counts
+        .map(|(v, i)| serde_json::json!({"violations": v, "incompleteness": i}));
     let body = serde_json::json!({
         "rq": "rq3",
-        "title": "audit: signed verdicts as facts (in-store half)",
-        "status": "partial",
+        "title": "audit: in-store half - signed verdicts, inventory, trace audit",
+        "status": "measured (in-store half)",
         "arm": ctx.arm.as_str(),
         "verdicts_satisfied": satisfied,
         "verdicts_other": violated,
-        "pending_on": "quipu-tj0 (audit passes), quipu-4mi (external checker arm)",
+        "inventory": inv,
+        "trace_audit": aud,
+        "pending_on": "quipu-4mi (external checker arm, CEN-X1)",
     });
     write(dir, "rq3", &body);
 }
@@ -146,13 +154,27 @@ fn rq4(manifest: &Manifest, dir: &str) {
     write(dir, "rq4", &body);
 }
 
-fn rq5_pending(dir: &str) {
-    let body = serde_json::json!({
-        "rq": "rq5",
-        "title": "replay: as-of fidelity across the amendment boundary",
-        "status": "pending",
-        "pending_on": "quipu-krv (shape versioning), quipu-tj0 (replay scoring)",
-    });
+fn rq5(ctx: &Ctx, dir: &str) {
+    let body = match &ctx.replay_summary {
+        Some(summary) => serde_json::json!({
+            "rq": "rq5",
+            "title": "replay: as-of fidelity across the amendment boundary",
+            "status": "measured",
+            "arm": ctx.arm.as_str(),
+            "amendment_at": ctx.amendment_at,
+            "summary": summary,
+            "note": "satisfied verdicts re-derive fully (data + rules as-of); denials verify \
+                     rules-in-force only - the staged delta was rolled back by design (GS2 \
+                     keeps the verdict, not the attempt). See BUILD_REPORT.md.",
+        }),
+        None => serde_json::json!({
+            "rq": "rq5",
+            "title": "replay: as-of fidelity across the amendment boundary",
+            "status": "n/a",
+            "arm": ctx.arm.as_str(),
+            "note": "no verdicts recorded in this arm (gates off)",
+        }),
+    };
     write(dir, "rq5", &body);
 }
 

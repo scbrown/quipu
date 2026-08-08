@@ -24,6 +24,12 @@ pub const RECORDERS: [&str; 3] = [
     "urn:census:recorder:quilla",
 ];
 const TRUST_CHAIN: &str = "urn:census:chain:main";
+/// The tally policy's claim, v1 (founding) and v2 (the amendment).
+pub const TALLY_CLAIM_V1: &str =
+    "ASK { GRAPH ?g { $target <http://www.w3.org/2000/01/rdf-schema#label> ?l } }";
+pub const TALLY_CLAIM_V2: &str = "ASK { GRAPH ?g { \
+     $target <http://www.w3.org/2000/01/rdf-schema#label> ?l . \
+     $target <urn:census:vocab:recordedBy> ?w } }";
 const AEGIS: &str = "http://aegis.gastown.local/ontology/";
 pub const A_TARGETS: &str = "http://aegis.gastown.local/ontology/targets";
 pub const A_CLAIM: &str = "http://aegis.gastown.local/ontology/claim";
@@ -32,6 +38,15 @@ pub const ROOT_IRI: &str = "urn:quipu:graph:root";
 /// Interned district graph ids and the Σ policy IRIs the probes cite.
 pub struct CensusIris {
     pub district_g: [i64; 3],
+}
+
+/// One recorded decision phase 6 replays: which policy judged which
+/// target, with what outcome, at which scenario instant.
+pub struct ReplayItem {
+    pub policy: String,
+    pub target: String,
+    pub outcome: String,
+    pub at: String,
 }
 
 pub struct Ctx {
@@ -45,6 +60,16 @@ pub struct Ctx {
     pub lat_ungoverned: Vec<u128>,
     /// Per-write latencies (µs) for RQ1: compliant governed writes.
     pub lat_governed: Vec<u128>,
+    /// Decisions phase 6 replays (gated arm only).
+    pub replay: Vec<ReplayItem>,
+    /// Phase 6's replay summary, consumed by the RQ5 scorer.
+    pub replay_summary: Option<serde_json::Value>,
+    /// When the amendment landed (phase 5).
+    pub amendment_at: Option<String>,
+    /// (violations, incompleteness) from the dispatch inventory.
+    pub inventory_counts: Option<(usize, usize)>,
+    /// (violations, incompleteness) from the trace audit.
+    pub audit_counts: Option<(usize, usize)>,
     /// Logical minutes since the scenario epoch; every timestamp derives
     /// from this counter so no wall clock leaks into the run.
     minutes: u64,
@@ -60,6 +85,11 @@ impl Ctx {
             db_path,
             lat_ungoverned: Vec::new(),
             lat_governed: Vec::new(),
+            replay: Vec::new(),
+            replay_summary: None,
+            amendment_at: None,
+            inventory_counts: None,
+            audit_counts: None,
             minutes: 0,
         }
     }
@@ -147,8 +177,10 @@ pub fn run_all(ctx: &mut Ctx, out_dir: &str) {
     crate::phase2::run(ctx, &iris);
     crate::phase3::run(ctx, &iris);
     crate::phase4::run(ctx, &iris, out_dir);
-    ctx.entries.extend(catalogue::phase5_amendment());
-    ctx.entries.extend(catalogue::phase6_audit());
+    crate::phase5::run(ctx, &iris);
+    crate::phase6::run(ctx);
+    // The one probe still owned by a later bead: the external checker arm.
+    ctx.entries.extend(catalogue::planned_only(&["CEN-X1"]));
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +401,7 @@ fn found_sigma(ctx: &mut Ctx) {
         (
             "urn:census:policy:tally-label",
             "urn:census:Tally",
-            "ASK { GRAPH ?g { $target <http://www.w3.org/2000/01/rdf-schema#label> ?l } }",
+            TALLY_CLAIM_V1,
             "deny",
             None,
         ),

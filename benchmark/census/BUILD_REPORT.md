@@ -41,6 +41,24 @@ change — an out-of-date honesty record is worse than none.
 
 ## Findings the numbers carry
 
+- **Replay is asymmetric, and honestly so.** A *satisfied* verdict
+  re-derives fully as-of its instant — the facts persisted and both the
+  data and the rules are bitemporal. A *denied* verdict cannot be
+  re-derived from the store alone: the staged delta was rolled back by
+  design (GS2 keeps the verdict, deliberately not the attempt), so
+  replay for denials verifies the rules-in-force instead. Full denial
+  re-derivation would require the trace to carry the attempted delta —
+  which hank-style traces do, and the store deliberately does not.
+- **A latest-only replay would misreport every pre-amendment decision.**
+  All 50 phase-2 satisfied tally verdicts re-derive faithfully under
+  the claim in force at their instant, and all 50 evaluate *unsatisfied*
+  under the amended claim — the number that separates "the runtime got
+  it wrong" from "the spec moved."
+- **The audit's floor interaction.** Phase 4's freshness floor, left
+  set, refuses the audit's own evidence queries; phase 6 clears it. An
+  enforcement floor and an auditor are different readers with different
+  rights — worth a sentence in the paper.
+
 - **Abstention is policy-gate-scoped.** The gated arm's ungoverned
   writes are not free: authority intersection (GS3) runs on every
   graph-scoped write by design and is not abstention-eligible. RQ1's

@@ -211,7 +211,15 @@ pub const PROBES: &[(&str, u8, &str, &str, &str, &str)] = &[
         "same",
         "RQ4",
     ),
-    // Phase 5 — amendment (planned: quipu-krv, quipu-tj0).
+    // Phase 5 — amendment.
+    (
+        "CEN-M0",
+        5,
+        "the amendment itself: claim v1 superseded by v2; shape reloaded as v2",
+        "both versioned; v1 stays answerable as-of",
+        "same",
+        "setup",
+    ),
     (
         "CEN-M1",
         5,
@@ -291,10 +299,11 @@ pub fn expected_control(id: &str) -> String {
     row(id).4.to_string()
 }
 
-fn planned_for_phase(phase: u8) -> Vec<ManifestEntry> {
+/// Planned entries for exactly these probe ids (later beads' work).
+pub fn planned_only(ids: &[&str]) -> Vec<ManifestEntry> {
     PROBES
         .iter()
-        .filter(|r| r.1 == phase)
+        .filter(|r| ids.contains(&r.0))
         .map(|(id, phase, plants, eg, ec, rq)| ManifestEntry {
             id: (*id).to_string(),
             phase: *phase,
@@ -307,12 +316,4 @@ fn planned_for_phase(phase: u8) -> Vec<ManifestEntry> {
             defect_subject: None,
         })
         .collect()
-}
-
-pub fn phase5_amendment() -> Vec<ManifestEntry> {
-    planned_for_phase(5)
-}
-
-pub fn phase6_audit() -> Vec<ManifestEntry> {
-    planned_for_phase(6)
 }

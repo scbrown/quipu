@@ -1,8 +1,22 @@
 # Design: Shape Versioning — a bitemporal registry for shapes and ontologies
 
-> **Implementation status (2026-08-06):** ⬜ **Designed, not built.** The
-> `shapes` and `ontologies` tables are latest-only today; nothing here is
-> implemented.
+> **Implementation status (2026-08-08):** ✅ **§2.1–§2.2 implemented**
+> (quipu #71): `shapes` and `ontologies` are bitemporal with
+> `PRIMARY KEY (name, valid_from)` (additive migration; prior rows get
+> `valid_from = loaded_at`), `load_versioned` closes-then-inserts inside a
+> savepoint, `remove_shapes` closes rather than deletes, loads emit
+> `shapes.loaded` / `shapes.removed` registry events, and
+> `list_shapes_as_of` / `get_combined_shapes_as_of` plus `valid_at` /
+> `as_of_tx` on the MCP shapes tool serve the as-of reads — verified by
+> tests (`loading_a_second_version_closes_the_first_rather_than_overwriting`,
+> `validate_as_of_v1s_window_uses_v1_semantics`,
+> `a_reload_at_the_same_instant_replaces_that_instants_version`,
+> `validate_falls_back_to_stored_shapes_and_honours_as_of`,
+> `src/store/tests.rs`). **§2.3 (as-of Σ in audit/replay — fidelity vs
+> drift as separate columns) is NOT built**; it is the remaining half,
+> tracked for the Census amendment phase (`bd show quipu-tj0`). The body
+> below is kept as written; §1's description of the latest-only tables is
+> now historical.
 
 **Status:** The store's *data* is bitemporal; the *rules that validate it* are
 not. That asymmetry is currently invisible and it should not be: governance

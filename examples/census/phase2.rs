@@ -138,6 +138,14 @@ fn cen_p1(ctx: &mut Ctx, iris: &CensusIris) {
         iris.district_g[0],
     );
     let (observed, landed) = outcome(r);
+    if ctx.gated() && !landed {
+        ctx.replay.push(crate::phases::ReplayItem {
+            policy: "urn:census:policy:tally-label".to_string(),
+            target: subject.to_string(),
+            outcome: "unsatisfied".to_string(),
+            at: ts.clone(),
+        });
+    }
     ctx.probe_defect("CEN-P1", 2, subject, &observed, landed, "RQ2");
 }
 
@@ -192,6 +200,14 @@ fn cen_p2(ctx: &mut Ctx, iris: &CensusIris) {
     let (observed, landed) = outcome(r);
     // The defect is the SECOND placement value; score.rs special-cases the
     // presence check for this probe.
+    if ctx.gated() && !landed {
+        ctx.replay.push(crate::phases::ReplayItem {
+            policy: "urn:census:policy:single-placement".to_string(),
+            target: subject.to_string(),
+            outcome: "unsatisfied".to_string(),
+            at: ts2.clone(),
+        });
+    }
     ctx.probe_defect("CEN-P2", 2, subject, &observed, landed, "RQ2");
 }
 
@@ -234,6 +250,14 @@ fn cen_v1(ctx: &mut Ctx, iris: &CensusIris) {
         iris.district_g[0],
     );
     let (observed, landed) = outcome(r);
+    if ctx.gated() && !landed {
+        ctx.replay.push(crate::phases::ReplayItem {
+            policy: "urn:census:policy:closed-vocabulary".to_string(),
+            target: subject.to_string(),
+            outcome: "unsatisfied".to_string(),
+            at: ts.clone(),
+        });
+    }
     ctx.probe_defect("CEN-V1", 2, subject, &observed, landed, "RQ2");
 }
 
@@ -317,6 +341,14 @@ fn cen_n2(ctx: &mut Ctx, iris: &CensusIris) {
             )
             .expect("compliant governed writes land in both arms");
         ctx.lat_governed.push(start.elapsed().as_micros());
+        if ctx.gated() {
+            ctx.replay.push(crate::phases::ReplayItem {
+                policy: "urn:census:policy:tally-label".to_string(),
+                target: subject.clone(),
+                outcome: "satisfied".to_string(),
+                at: ts.clone(),
+            });
+        }
     }
     ctx.probe(
         "CEN-N2",

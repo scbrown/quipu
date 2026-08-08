@@ -22,6 +22,8 @@ mod manifest;
 mod phase2;
 mod phase3;
 mod phase4;
+mod phase5;
+mod phase6;
 mod phases;
 mod rng;
 mod score;
@@ -79,7 +81,8 @@ fn main() {
         run: RunInfo {
             seed,
             arm: arm.as_str().to_string(),
-            harness: "phases 1-4 executed (quipu-zg0, quipu-y41); 5-6 planned".to_string(),
+            harness: "phases 1-6 executed (quipu-zg0/y41/krv/tj0); CEN-X1 planned (quipu-4mi)"
+                .to_string(),
         },
         entries: std::mem::take(&mut ctx.entries),
     };
