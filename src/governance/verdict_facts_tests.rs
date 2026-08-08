@@ -214,6 +214,89 @@ fn the_evidence_hash_changes_with_the_outcome() {
         outcome: "unsatisfied".into(),
         ..satisfied.clone()
     };
-    assert_ne!(satisfied.evidence_hash(), unsatisfied.evidence_hash());
-    assert_eq!(satisfied.evidence_hash(), satisfied.evidence_hash());
+    let chain = vec!["amaru".to_string()];
+    assert_ne!(
+        satisfied.evidence_hash(Some("amaru"), &chain),
+        unsatisfied.evidence_hash(Some("amaru"), &chain)
+    );
+    assert_eq!(
+        satisfied.evidence_hash(Some("amaru"), &chain),
+        satisfied.evidence_hash(Some("amaru"), &chain)
+    );
+}
+
+#[test]
+fn the_evidence_hash_changes_with_the_attribution() {
+    // Q-VERDICT-ATTRIB. The attribution is inside what the signature seals:
+    // the same decision presented by a different writer, or under a different
+    // chain, is a different attestation — "who" is not swappable under a
+    // valid seal.
+    let verdict = PendingVerdict {
+        predicate_id: "p".into(),
+        target_ref: "t".into(),
+        outcome: "satisfied".into(),
+    };
+    let amaru = vec!["amaru".to_string()];
+    let delegated = vec!["chaski".to_string(), "scribe".to_string()];
+    assert_ne!(
+        verdict.evidence_hash(Some("amaru"), &amaru),
+        verdict.evidence_hash(Some("quilla"), &amaru)
+    );
+    assert_ne!(
+        verdict.evidence_hash(Some("amaru"), &amaru),
+        verdict.evidence_hash(Some("amaru"), &delegated)
+    );
+}
+
+#[test]
+fn a_denied_write_records_its_writer_and_chain() {
+    // The gap Q-VERDICT-ATTRIB closes. GS2 rolls a denial's delta back, so
+    // before this the persisted record of a refusal had no actor: "who was
+    // refused?" lived only in writer-side traces the store does not own.
+    let mut store = signed_store();
+    define_policy(&mut store, "http://ex/P1");
+    store.set_principal_chain(vec!["chaski".into(), "scribe".into()]);
+
+    let bad = vec![datum(
+        &store,
+        "http://ex/d1",
+        RDF_TYPE,
+        Value::Ref(store.intern(DOC_TYPE).unwrap()),
+    )];
+    assert!(store.transact(&bad, TS, Some("scribe"), None).is_err());
+
+    let q = format!(
+        "PREFIX a: <{DEFAULT_BASE_NS}> SELECT ?w ?c WHERE \
+         {{ ?v a a:Verdict ; a:attributedWriter ?w ; a:principalChain ?c }}"
+    );
+    let QueryResult::Select { rows, .. } = sparql::query(&store, &q).unwrap() else {
+        panic!("select");
+    };
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get("w"), Some(&Value::Str("scribe".into())));
+    assert_eq!(rows[0].get("c"), Some(&Value::Str("chaski,scribe".into())));
+}
+
+#[test]
+fn an_unattributed_write_records_no_attribution_fields() {
+    // Absence stays visible as absence: no actor presented means no
+    // attributedWriter fact, not an empty string dressed up as one. The
+    // audit counts that as incompleteness — which it is.
+    let mut store = signed_store();
+    define_policy(&mut store, "http://ex/P1");
+    let bad = vec![datum(
+        &store,
+        "http://ex/d1",
+        RDF_TYPE,
+        Value::Ref(store.intern(DOC_TYPE).unwrap()),
+    )];
+    let _ = store.transact(&bad, TS, None, None);
+
+    assert_eq!(verdict_outcomes(&store).len(), 1, "verdict recorded");
+    let q =
+        format!("PREFIX a: <{DEFAULT_BASE_NS}> ASK {{ ?v a a:Verdict ; a:attributedWriter ?w }}");
+    assert!(matches!(
+        sparql::query(&store, &q).unwrap(),
+        QueryResult::Ask(false)
+    ));
 }

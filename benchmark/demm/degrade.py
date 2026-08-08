@@ -33,9 +33,12 @@ def complete(record: Record) -> Record:
 
 
 def missing_delegation(record: Record) -> Record:
-    """Delegation evidence gone: no principal chain, no authority grants."""
-    out, guard, _, policy = _base(record)
+    """Delegation evidence gone: no principal chain in either plane, no
+    authority grants. The ledger's attributed writer survives — executor
+    identity is not delegation evidence."""
+    out, guard, verdict, policy = _base(record)
     guard.pop("principal_chain", None)
+    verdict.pop("principal_chain", None)
     policy.pop("authority_grants", None)
     return out
 

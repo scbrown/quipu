@@ -49,19 +49,29 @@ pub struct PendingVerdict {
 
 impl PendingVerdict {
     /// The evidence hash bound into the verdict: `sha256:<hex>` over the
-    /// canonical `predicate|target|outcome` triple.
+    /// canonical `predicate|target|outcome|writer|chain` tuple, where `writer`
+    /// is the write's actor (empty when none was presented) and `chain` the
+    /// comma-joined principal chain in force.
     ///
     /// NOT a hash of the graph state. The gate's evidence is a SPARQL ASK over
     /// the committed store, which has no stable serialisation to hash, and
     /// inventing one that changed with unrelated facts would make every verdict
     /// spuriously stale. Hashing what the verdict actually asserts keeps the
-    /// binding honest about its own scope — narrower than hank's, which hashes
-    /// the edit text it really did see.
+    /// binding honest about its own scope — and since Q-VERDICT-ATTRIB the
+    /// verdict asserts its attribution too: a signature that stopped at the
+    /// outcome would leave "who" swappable under a valid seal.
     #[must_use]
-    pub fn evidence_hash(&self) -> String {
+    pub fn evidence_hash(&self, writer: Option<&str>, chain: &[String]) -> String {
         // ring, not sha2: the signing path already depends on it, and adding a
         // second hashing crate for one call would be a dependency nobody needs.
-        let canonical = format!("{}|{}|{}", self.predicate_id, self.target_ref, self.outcome);
+        let canonical = format!(
+            "{}|{}|{}|{}|{}",
+            self.predicate_id,
+            self.target_ref,
+            self.outcome,
+            writer.unwrap_or(""),
+            chain.join(",")
+        );
         let digest = ring::digest::digest(&ring::digest::SHA256, canonical.as_bytes());
         format!("sha256:{}", hex::encode(digest.as_ref()))
     }
@@ -73,11 +83,24 @@ impl PendingVerdict {
 /// No identity means no verdict — never an unsigned one. A bare `satisfied`
 /// written into the record is forgeable by anyone who can write a fact, and the
 /// entire point of the verdict is that it is an attestation rather than a claim.
-pub fn datums_for(store: &Store, verdict: &PendingVerdict, timestamp: &str) -> Result<Vec<Datum>> {
+///
+/// `Q-VERDICT-ATTRIB`: the verdict carries the write's attribution — the actor
+/// presented at the gate and the principal chain in force — inside the evidence
+/// hash the signature seals. A denial rolls its delta back (GS2, deliberately),
+/// so before this the persisted record of a refusal had no actor at all:
+/// "who was refused?" was answerable only from a writer-side trace the store
+/// does not own. The attempt still is not kept; who made it now is.
+pub fn datums_for(
+    store: &Store,
+    verdict: &PendingVerdict,
+    timestamp: &str,
+    actor: Option<&str>,
+) -> Result<Vec<Datum>> {
     let Some(identity) = store.signing_identity() else {
         return Ok(Vec::new());
     };
-    let hash = verdict.evidence_hash();
+    let chain = store.principal_chain();
+    let hash = verdict.evidence_hash(actor, chain);
     let signature = identity.sign_verdict(
         &verdict.predicate_id,
         &verdict.target_ref,
@@ -99,7 +122,7 @@ pub fn datums_for(store: &Store, verdict: &PendingVerdict, timestamp: &str) -> R
         valid_to: None,
         op: Op::Assert,
     }];
-    for (field, value) in [
+    let mut fields = vec![
         ("predicateId", verdict.predicate_id.clone()),
         ("targetRef", verdict.target_ref.clone()),
         ("outcome", verdict.outcome.clone()),
@@ -107,7 +130,16 @@ pub fn datums_for(store: &Store, verdict: &PendingVerdict, timestamp: &str) -> R
         ("verifier", identity.verifier.clone()),
         ("signature", signature),
         ("tier", TIER.to_string()),
-    ] {
+    ];
+    // Absence stays visible as absence: an unattributed write records no
+    // attribution fields rather than an empty string dressed up as one.
+    if let Some(actor) = actor {
+        fields.push(("attributedWriter", actor.to_string()));
+    }
+    if !chain.is_empty() {
+        fields.push(("principalChain", chain.join(",")));
+    }
+    for (field, value) in fields {
         datums.push(Datum {
             entity: subject,
             attribute: store.intern(&format!("{DEFAULT_BASE_NS}{field}"))?,

@@ -21,14 +21,18 @@ say \textsc{graph} in its pattern, or it judges an empty default-graph
 view (\S\ref{sec:census}).
 
 \paragraph{Verdicts survive the rollback they record.}
-Every gate decision stages a verdict — policy, target, outcome,
-evidence hash, signature — and flushes it in its own transaction
-\emph{after} the write's savepoint resolves, so a denial's verdict
-outlives the denial's rollback. Verdicts are ed25519-signed
-attestations against a human-authored verifier registration; a store
-with no signing identity records no verdict rather than an unsigned
-one, and a re-entry guard prevents a policy targeting verdicts from
-denying the recording of its own denial.
+Every gate decision stages a verdict — policy, target, outcome, the
+write's attribution (actor and principal chain), evidence hash,
+signature — and flushes it in its own transaction \emph{after} the
+write's savepoint resolves, so a denial's verdict outlives the
+denial's rollback, and keeps its actor even though the attempted
+delta does not survive. The attribution sits inside the evidence hash
+the signature seals, so ``who'' is not swappable under a valid seal
+(\S\ref{sec:eval-demm}). Verdicts are ed25519-signed attestations
+against a human-authored verifier registration; a store with no
+signing identity records no verdict rather than an unsigned one, and
+a re-entry guard prevents a policy targeting verdicts from denying
+the recording of its own denial.
 
 \paragraph{Escalation without a waiting engine.}
 A refusal under \emph{require-approval} mints a decision request —

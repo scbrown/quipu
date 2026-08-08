@@ -39,24 +39,34 @@ def _planes(record: Record) -> tuple[Record, Record, Record]:
     )
 
 
-def _actor_conflict(guard: Record) -> bool:
+def _actor_conflict(guard: Record, verdict: Record) -> bool:
+    """Identity evidence disagreeing with itself, across either plane:
+    the trace's executor against the chain it arrived with, or against
+    the writer the signed ledger attributes (Q-VERDICT-ATTRIB)."""
     executor = guard.get("executor")
-    chain = guard.get("principal_chain")
-    return bool(executor) and isinstance(chain, list) and bool(chain) and executor not in chain
+    if not executor:
+        return False
+    chain = guard.get("principal_chain") or verdict.get("principal_chain")
+    if isinstance(chain, list) and chain and executor not in chain:
+        return True
+    attributed = verdict.get("attributed_writer")
+    return bool(attributed) and executor != attributed
 
 
 def actor_identity(record: Record) -> str:
-    guard, _, _ = _planes(record)
-    if _actor_conflict(guard):
+    guard, verdict, _ = _planes(record)
+    if _actor_conflict(guard, verdict):
         return "conflicting"
-    return "complete" if guard.get("executor") else "opaque"
+    if guard.get("executor") or verdict.get("attributed_writer"):
+        return "complete"
+    return "opaque"
 
 
 def principal_authority(record: Record) -> str:
-    guard, _, policy = _planes(record)
-    if _actor_conflict(guard):
+    guard, verdict, policy = _planes(record)
+    if _actor_conflict(guard, verdict):
         return "conflicting"
-    chain = guard.get("principal_chain")
+    chain = guard.get("principal_chain") or verdict.get("principal_chain")
     grants = policy.get("authority_grants")
     if chain and grants:
         # Authority is complete when nothing contradicts the chain-grant
@@ -165,18 +175,38 @@ def source_validator(record: Record) -> bool:
     )
     verdict_ok = all(
         verdict.get(k)
-        for k in ("predicate_id", "target_ref", "outcome", "evidence_hash", "verifier", "signature")
+        for k in (
+            "predicate_id",
+            "target_ref",
+            "outcome",
+            "attributed_writer",
+            "principal_chain",
+            "evidence_hash",
+            "verifier",
+            "signature",
+        )
     )
     policy_ok = all(
         policy.get(k) for k in ("iri", "as_of", "claim_as_of", "targets", "authority_grants")
     )
     if not (guard_ok and verdict_ok and policy_ok):
         return False
+    # Q-VERDICT-ATTRIB canonical: the hash — and through it the signature —
+    # seals the attribution, so a swapped writer fails recomputation rather
+    # than needing a convention to catch it.
     canonical = "|".join(
-        str(verdict[k]) for k in ("predicate_id", "target_ref", "outcome")
+        [
+            str(verdict["predicate_id"]),
+            str(verdict["target_ref"]),
+            str(verdict["outcome"]),
+            str(verdict["attributed_writer"]),
+            ",".join(verdict["principal_chain"]),
+        ]
     )
     digest = "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
     if verdict.get("evidence_hash") != digest:
+        return False
+    if guard["executor"] != verdict["attributed_writer"]:
         return False
     if guard["executor"] not in guard["principal_chain"]:
         return False

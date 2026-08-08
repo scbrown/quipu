@@ -187,7 +187,7 @@ impl Store {
                 crate::metrics::metrics().observe_write(datums.len() as u64);
                 // Q-VERDICT-PERSIST: outside the savepoint, so the accept case
                 // and the denial case below record identically.
-                self.flush_pending_verdicts(timestamp);
+                self.flush_pending_verdicts(timestamp, actor);
                 Ok(tx_id)
             }
             Err(e) => {
@@ -205,7 +205,7 @@ impl Store {
                 // AFTER the rollback, deliberately. The verdict of a denial is
                 // the one worth keeping — an accepted write leaves its own
                 // evidence in the facts it wrote, a refused one leaves nothing.
-                self.flush_pending_verdicts(timestamp);
+                self.flush_pending_verdicts(timestamp, actor);
                 Err(e)
             }
         }

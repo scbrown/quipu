@@ -6,13 +6,15 @@
 //! holding only what that plane really carries:
 //!
 //! - `guard_trace` — what the governed writer presented at the gate
-//!   (writer, principal chain, tool, target graph). The store does NOT
-//!   persist this for denials — GS2 rolls the attempt back — so the
-//!   writer-side trace is the only plane that has it, exactly as in the
-//!   wild traces `quipu audit` consumes.
+//!   (writer, principal chain, tool, target graph), in the same shape as
+//!   the wild traces `quipu audit` consumes. Since Q-VERDICT-ATTRIB the
+//!   ledger carries the writer and chain too; the guard trace remains
+//!   the only plane with the action surface (tool, graph, planner).
 //! - `verdict_ledger` — the signed `aegis:Verdict` fact as persisted:
-//!   policy, target, outcome, evidence hash, verifier, signature, tier.
-//!   Queried back from the store, not echoed from harness state.
+//!   policy, target, outcome, attribution (Q-VERDICT-ATTRIB: the writer
+//!   and chain, sealed inside the evidence hash), evidence hash,
+//!   verifier, signature, tier. Queried back from the store, not echoed
+//!   from harness state.
 //! - `policy_snapshot` — Σ as the store can serve it bitemporally: the
 //!   claim as of the decision instant, the claim now (the amendment makes
 //!   them differ for phase-2 decisions), targets, and the writer's
@@ -106,7 +108,7 @@ pub fn demm_export(ctx: &mut Ctx, out_dir: &str) {
 /// exported as an explicit absence rather than invented.
 fn verdict_ledger(ctx: &Ctx, item: &crate::phases::ReplayItem) -> serde_json::Value {
     let q = format!(
-        "SELECT ?v ?pred ?target ?outcome ?hash ?verifier ?sig ?tier WHERE {{ \
+        "SELECT ?v ?pred ?target ?outcome ?hash ?verifier ?sig ?tier ?writer ?chain WHERE {{ \
          ?v <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <{AEGIS}Verdict> . \
          ?v <{AEGIS}predicateId> ?pred . \
          ?v <{AEGIS}targetRef> ?target . \
@@ -114,7 +116,9 @@ fn verdict_ledger(ctx: &Ctx, item: &crate::phases::ReplayItem) -> serde_json::Va
          ?v <{AEGIS}evidenceHash> ?hash . \
          ?v <{AEGIS}verifier> ?verifier . \
          ?v <{AEGIS}signature> ?sig . \
-         ?v <{AEGIS}tier> ?tier }}"
+         ?v <{AEGIS}tier> ?tier . \
+         ?v <{AEGIS}attributedWriter> ?writer . \
+         ?v <{AEGIS}principalChain> ?chain }}"
     );
     let Ok(QueryResult::Select { rows, .. }) = sparql::query(&ctx.store, &q) else {
         return serde_json::json!({ "present": false });
@@ -135,12 +139,18 @@ fn verdict_ledger(ctx: &Ctx, item: &crate::phases::ReplayItem) -> serde_json::Va
         None => serde_json::json!(null),
     };
     let id = s("v");
+    let chain: Vec<String> = match str_of(row, "chain") {
+        Some(joined) => joined.split(',').map(str::to_string).collect(),
+        None => Vec::new(),
+    };
     serde_json::json!({
         "present": true,
         "id": id,
         "predicate_id": item.policy,
         "target_ref": item.target,
         "outcome": item.outcome,
+        "attributed_writer": s("writer"),
+        "principal_chain": chain,
         "evidence_hash": s("hash"),
         "verifier": s("verifier"),
         "signature": s("sig"),

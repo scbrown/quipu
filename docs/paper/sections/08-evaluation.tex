@@ -157,9 +157,21 @@ decidable from \sys's records because the guard trace names its
 tool, target, graph, and principal chain, and the signed verdict
 names its policy, whose claim the store serves as of the decision
 instant. What a degradation deletes is detectable \emph{as} absent,
-so sufficiency never has to be guessed from container presence. One
-asymmetry is itself corroborated by the export: the store
-deliberately does not persist the denied writer (GS2 rolls the
-attempt back), so actor identity for denials lives only in the
-writer-side trace plane — the same division of labour the wild-trace
-audit (\S\ref{sec:eval-wild}) reported as partial attribution.
+so sufficiency never has to be guessed from container presence.
+
+The run also changed the store. Its first pass surfaced two evidence
+gaps the benchmark's vocabulary made precise: the verdict signature
+sealed the outcome but not the writer binding, so a conflicting
+identity was catchable only by a consistency convention; and a
+denial's actor was not persisted at all — GS2 rolls the attempt back,
+so ``who was refused?''\ was answerable only from writer-side traces
+the store does not own, the same division of labour the wild-trace
+audit (\S\ref{sec:eval-wild}) reported as partial attribution. Both
+closed in one change (Q-VERDICT-ATTRIB): the verdict fact now carries
+the write's attribution — actor and principal chain — inside the
+evidence hash its signature seals, so a swapped writer fails hash
+recomputation rather than needing a rule to notice, and a refusal
+keeps its actor while the attempted delta still does not survive.
+The numbers above are from the improved store; the benchmark
+re-verifies them end-to-end, since the validator's recomputation of
+the extended hash is what certifies the eight intact cases.

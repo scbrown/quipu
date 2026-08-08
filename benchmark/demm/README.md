@@ -24,10 +24,11 @@ python3 -m venv /tmp/demm/.venv && /tmp/demm/.venv/bin/pip install -e /tmp/demm
 - `examples/census/demm.rs` (probe CEN-X2) — exports the census run's 56
   recorded decisions as quipu-native records, three evidence planes each:
   the writer-side `guard_trace` (writer, principal chain, tool, target
-  graph — the store deliberately does not persist these for denials),
-  the signed `verdict_ledger` fact queried back from the store, and the
-  bitemporal `policy_snapshot` (claim as-of vs current, authority
-  grants).
+  graph), the signed `verdict_ledger` fact queried back from the store —
+  which since Q-VERDICT-ATTRIB carries the write's attribution
+  (`attributedWriter`, `principalChain`) sealed inside the evidence hash,
+  so even a denial's actor survives GS2's rollback — and the bitemporal
+  `policy_snapshot` (claim as-of vs current, authority grants).
 - `degrade.py` — the benchmark's eight degradation conditions as
   content-level deletions (plus one contradiction) over those planes,
   mirroring its construction-oracle semantics.
@@ -96,6 +97,14 @@ explicitly.
   named policies with as-of claims, and explicit authority grants mean
   absence is detectable as absence, so a content-level reader never has
   to guess sufficiency from container presence.
+- The first run of this harness surfaced two store gaps, both closed by
+  Q-VERDICT-ATTRIB before the numbers above: the verdict signature
+  stopped at the outcome (a swapped writer was catchable only by
+  convention — now the attribution is inside the sealed hash, and the
+  validator's recomputation catches it cryptographically), and a
+  denial's actor was not persisted at all (GS2 rolls the attempt back;
+  the verdict fact now names the refused writer and chain while the
+  attempted delta still is not kept).
 - Evidence is synthetic-lifecycle (the seeded census run), one store,
   one Σ; this establishes decidability of quipu's record format under
   the benchmark's degradation semantics, not field prevalence.
