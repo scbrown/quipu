@@ -65,11 +65,30 @@ change — an out-of-date honesty record is worse than none.
   zero-overhead claim applies to the policy gate's target-type
   pre-filter only; `metrics/<arm>/rq1.json` says so inline.
 
+## External checker agreement (CEN-X1)
+
+Measured against `besanson/sarc-governance` (the SARC paper's reference
+checker) on the seed-42 gated run's export:
+
+- `trace-faithful.json` — 56 decisions, only the evaluations quipu
+  actually ran: **168 discrepancies, all `coverage`** (56 actions × 3
+  constraints the target-type pre-filter never evaluated), **zero**
+  verdict, placement, or response disagreements.
+- `trace-padded.json` — the same decisions with explicit not-fired
+  records for non-applicable constraints: **0 discrepancies, PASS**.
+
+The reference checker's per-action coverage invariant assumes
+evaluate-everything-per-action; quipu's zero-cost abstention (GS1) is
+invisible to it. The two checkers agree verdict-for-verdict and
+disagree only on coverage semantics — the RQ3 finding.
+
 ## What the results do not claim
 
-- Phases 5–6 entries in the manifest are `planned`; `rq5.json` is
-  `pending` and `rq3.json` is `partial` (verdict counts only) until
-  quipu-krv / quipu-tj0 / quipu-4mi land.
+- The external-checker comparison covers the decidable subset both
+  checkers share (fired/response/placement per decision). Quipu's
+  attribution and inventory passes have no counterpart in the reference
+  checker's flat-trace mode, and its per-action coverage invariant has
+  no counterpart in quipu; those asymmetries are reported, not scored.
 - Census is synthetic by construction — that is what makes it an
   oracle. External validity is bounded, not eliminated, by the
   Census-in-the-wild replay (bead `quipu-0u4`).

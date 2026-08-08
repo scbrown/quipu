@@ -15,13 +15,127 @@ use crate::phases::{Ctx, assert_datum, type_ref};
 
 const AEGIS: &str = "http://aegis.gastown.local/ontology/";
 
-pub fn run(ctx: &mut Ctx) {
+pub fn run(ctx: &mut Ctx, out_dir: &str) {
     // Phase 4's enforcement floor was a composition device; the audit must
     // see the whole store, not refuse its own evidence queries.
     ctx.store.labels_config_mut().min_freshness = None;
+    cen_x1_export(ctx, out_dir);
     cen_m2_replay(ctx);
     cen_g1_g2_inventory(ctx);
     cen_t1_attribution(ctx);
+}
+
+/// Σ's constraints in the reference checker's vocabulary:
+/// `(policy IRI, local id, class, response)`.
+const SARC_SPEC: [(&str, &str, &str, &str); 4] = [
+    (
+        "urn:census:policy:tally-label",
+        "tally-label",
+        "hard",
+        "block",
+    ),
+    (
+        "urn:census:policy:single-placement",
+        "single-placement",
+        "hard",
+        "block",
+    ),
+    (
+        "urn:census:policy:closed-vocabulary",
+        "closed-vocabulary",
+        "hard",
+        "block",
+    ),
+    (
+        "urn:census:policy:annex-approval",
+        "annex-approval",
+        "escalation",
+        "escalate",
+    ),
+];
+
+/// CEN-X1 — export Σ and the trace in the `besanson/sarc-governance`
+/// reference checker's formats. Two trace variants, deliberately:
+/// `trace-faithful.json` holds only the evaluations quipu actually ran
+/// (the target-type pre-filter means most constraints were never evaluated
+/// for most actions — GS1's zero-cost abstention), which the reference
+/// checker's per-action coverage invariant flags; `trace-padded.json` adds
+/// explicit not-fired records for the non-applicable constraints. The gap
+/// between the two IS the RQ3 finding: the checkers agree verdict-for-
+/// verdict and disagree on coverage semantics. Run
+/// `benchmark/census/sarc_check.py` on both.
+fn cen_x1_export(ctx: &mut Ctx, out_dir: &str) {
+    if ctx.replay.is_empty() {
+        ctx.probe(
+            "CEN-X1",
+            6,
+            "Sigma/trace export for the external checker",
+            "n/a: no decisions recorded in this arm",
+            "RQ3",
+        );
+        return;
+    }
+    let dir = format!("{out_dir}/sarc-export");
+    std::fs::create_dir_all(&dir).expect("create sarc-export dir");
+    let mut spec =
+        String::from("# Census Sigma in sarc-governance spec format (CEN-X1).\nconstraints:\n");
+    for (_, id, class, response) in SARC_SPEC {
+        spec.push_str(&format!(
+            "  - id: {id}\n    class: {class}\n    verif: PAG\n    response: {response}\n    predicate: quipu_claim_{pred}\n",
+            pred = id.replace('-', "_")
+        ));
+    }
+    std::fs::write(format!("{dir}/spec.yaml"), spec).expect("write spec.yaml");
+
+    let row = |action: usize, id: &str, class: &str, response: &str, fired: bool| {
+        serde_json::json!({
+            "action_id": format!("act-{action}"),
+            "tool": "quipu.transact_to_graph",
+            "point": "PAG",
+            "constraint_id": id,
+            "class": class,
+            "fired": fired,
+            "response": response,
+            "timestamp": action as f64,
+        })
+    };
+    let mut faithful = Vec::new();
+    let mut padded = Vec::new();
+    for (i, item) in ctx.replay.iter().enumerate() {
+        let (_, id, class, response) = SARC_SPEC
+            .iter()
+            .find(|(iri, ..)| *iri == item.policy)
+            .expect("replay item cites a Sigma policy");
+        let fired = item.outcome == "unsatisfied";
+        faithful.push(row(i, id, class, response, fired));
+        padded.push(row(i, id, class, response, fired));
+        for (_, oid, oclass, oresponse) in SARC_SPEC {
+            if oid != *id {
+                padded.push(row(i, oid, oclass, oresponse, false));
+            }
+        }
+    }
+    std::fs::write(
+        format!("{dir}/trace-faithful.json"),
+        serde_json::to_string_pretty(&faithful).expect("faithful serializes"),
+    )
+    .expect("write faithful trace");
+    std::fs::write(
+        format!("{dir}/trace-padded.json"),
+        serde_json::to_string_pretty(&padded).expect("padded serializes"),
+    )
+    .expect("write padded trace");
+    ctx.probe(
+        "CEN-X1",
+        6,
+        "Sigma/trace export for the external checker",
+        &format!(
+            "exported {} decisions to {dir}: spec.yaml, trace-faithful.json (abstention \
+             visible), trace-padded.json (abstention padded); score with sarc_check.py",
+            ctx.replay.len()
+        ),
+        "RQ3",
+    );
 }
 
 fn at(ts: &str) -> TemporalContext {

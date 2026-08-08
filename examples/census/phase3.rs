@@ -101,6 +101,14 @@ fn annex_write(ctx: &mut Ctx, subject: &str, iris: &CensusIris) -> Result<i64, q
 fn cen_e1(ctx: &mut Ctx, iris: &CensusIris) {
     let subject = "urn:census:subject:e1";
     let first = annex_write(ctx, subject, iris);
+    if ctx.gated() && first.is_err() {
+        ctx.replay.push(crate::phases::ReplayItem {
+            policy: "urn:census:policy:annex-approval".to_string(),
+            target: subject.to_string(),
+            outcome: "unsatisfied".to_string(),
+            at: ctx.last_ts(),
+        });
+    }
     decide(ctx, subject, "approve");
     let retry = annex_write(ctx, subject, iris);
     let observed = format!(
@@ -116,6 +124,14 @@ fn cen_e1(ctx: &mut Ctx, iris: &CensusIris) {
 fn cen_e2(ctx: &mut Ctx, iris: &CensusIris) {
     let subject = "urn:census:subject:e2";
     let first = annex_write(ctx, subject, iris);
+    if ctx.gated() && first.is_err() {
+        ctx.replay.push(crate::phases::ReplayItem {
+            policy: "urn:census:policy:annex-approval".to_string(),
+            target: subject.to_string(),
+            outcome: "unsatisfied".to_string(),
+            at: ctx.last_ts(),
+        });
+    }
     decide(ctx, subject, "reject");
     let retry = annex_write(ctx, subject, iris);
     let observed = format!(

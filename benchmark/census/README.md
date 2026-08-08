@@ -28,11 +28,24 @@ just bench census --seed 7 --out /tmp/census
 
 ## Status
 
-Phases 1–4 execute (beads `quipu-zg0`, `quipu-y41`): founding,
-recording with all six defect probes, correction with the escalation
-round-trips, and the seven composition probes. Phases 5–6 remain
-`planned` in the manifest (`quipu-krv`, `quipu-tj0`, `quipu-4mi`).
-Implementation order and owners: `bd list -l paper`.
+All six phases execute (beads `quipu-zg0`, `quipu-y41`, `quipu-krv`,
+`quipu-tj0`, `quipu-4mi`): founding, recording with all six defect
+probes, correction with the escalation round-trips, the seven
+composition probes, the mid-run amendment, and the audit — as-of
+replay, dispatch inventory, trace audit, and the external-checker
+export. Remaining paper work: `bd list -l paper`.
+
+## External checker (CEN-X1)
+
+The gated run exports `out/sarc-export/{spec.yaml, trace-faithful.json,
+trace-padded.json}`. Score against the SARC reference checker:
+
+```bash
+git clone --depth 1 https://github.com/besanson/sarc-governance /tmp/sarc
+python3 benchmark/census/sarc_check.py \
+    --export benchmark/census/out/sarc-export \
+    --sarc-src /tmp/sarc/src
+```
 
 ## Scoring discipline
 

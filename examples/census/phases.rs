@@ -110,6 +110,12 @@ impl Ctx {
         self.push_entry(id, 4, &catalogue::plants(id), None, &obs, "RQ4");
     }
 
+    /// The most recent scenario timestamp handed out.
+    pub fn last_ts(&self) -> String {
+        let (d, rem) = (self.minutes / (24 * 60), self.minutes % (24 * 60));
+        format!("2026-01-{:02}T{:02}:{:02}:00Z", d + 1, rem / 60, rem % 60)
+    }
+
     /// The next scenario timestamp: canonical UTC, strictly increasing.
     pub fn tick(&mut self) -> String {
         self.minutes += 1;
@@ -178,9 +184,7 @@ pub fn run_all(ctx: &mut Ctx, out_dir: &str) {
     crate::phase3::run(ctx, &iris);
     crate::phase4::run(ctx, &iris, out_dir);
     crate::phase5::run(ctx, &iris);
-    crate::phase6::run(ctx);
-    // The one probe still owned by a later bead: the external checker arm.
-    ctx.entries.extend(catalogue::planned_only(&["CEN-X1"]));
+    crate::phase6::run(ctx, out_dir);
 }
 
 // ---------------------------------------------------------------------------

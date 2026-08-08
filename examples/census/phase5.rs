@@ -111,5 +111,13 @@ fn cen_m1(ctx: &mut Ctx, iris: &CensusIris) {
         Ok(tx) => (format!("landed: tx {tx}"), true),
         Err(e) => (format!("refused: {e}"), false),
     };
+    if ctx.gated() && !landed {
+        ctx.replay.push(crate::phases::ReplayItem {
+            policy: "urn:census:policy:tally-label".to_string(),
+            target: subject.to_string(),
+            outcome: "unsatisfied".to_string(),
+            at: ts.clone(),
+        });
+    }
     ctx.probe_defect("CEN-M1", 5, subject, &observed, landed, "RQ5");
 }

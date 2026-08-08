@@ -3,8 +3,6 @@
 //! design doc's catalogue and this file disagree, that is a bug in whichever
 //! one changed without the other.
 
-use crate::manifest::ManifestEntry;
-
 /// `(id, phase, plants, expected_gated, expected_control, scored_by)`
 pub const PROBES: &[(&str, u8, &str, &str, &str, &str)] = &[
     // Phase 1 — founding (setup, executed identically in both arms).
@@ -297,23 +295,4 @@ pub fn expected_gated(id: &str) -> String {
 
 pub fn expected_control(id: &str) -> String {
     row(id).4.to_string()
-}
-
-/// Planned entries for exactly these probe ids (later beads' work).
-pub fn planned_only(ids: &[&str]) -> Vec<ManifestEntry> {
-    PROBES
-        .iter()
-        .filter(|r| ids.contains(&r.0))
-        .map(|(id, phase, plants, eg, ec, rq)| ManifestEntry {
-            id: (*id).to_string(),
-            phase: *phase,
-            plants: (*plants).to_string(),
-            expected_gated: (*eg).to_string(),
-            expected_control: (*ec).to_string(),
-            scored_by: (*rq).to_string(),
-            status: "planned".to_string(),
-            observed: None,
-            defect_subject: None,
-        })
-        .collect()
 }
