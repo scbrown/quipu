@@ -4,7 +4,38 @@
 All numbers are from the seed-42 \census run (release mode, native
 x86-64) unless stated; the manifest, metrics, and set-hashes are in the
 artifact, and repeat runs produce byte-identical manifests. Each
-research question scores one inversion from Table~\ref{tab:defaults}.
+research question scores one inversion from Table~\ref{tab:defaults};
+Table~\ref{tab:scorecard} is the run at a glance.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & Question & Result \\
+\midrule
+RQ1 & enforcement cost scales with governed writes?
+    & 0 claims off-target; 1.3 / 2.7\,ms medians (\S\ref{sec:eval}) \\
+RQ2 & gated store ends cleaner?
+    & \textbf{0 of 6} planted defects vs \textbf{6 of 6} ungated \\
+RQ3 & audit decidable; external checker agrees?
+    & planted counts exact; SARC agrees verdict-for-verdict \\
+RQ4 & composition never widens?
+    & \textbf{7 of 7} probes upheld; zero false refusals \\
+RQ5 & decisions replay as of their instant?
+    & \textbf{50 of 50} re-derive; 6 of 6 denials verify rules-in-force \\
+\midrule
+ext. & evidence sufficient, reader never overclaims?
+    & PSA \textbf{1.0}, overclaim \textbf{0.0} (\S\ref{sec:eval-demm},
+      Table~\ref{tab:demm}) \\
+\bottomrule
+\end{tabular}
+\caption{The evaluation at a glance: five research questions scored by
+the seeded \census run against planted ground truth, plus the external
+decision-evidence sufficiency benchmark over the run's exported
+records.}
+\label{tab:scorecard}
+\end{table}
 
 \subsection{RQ1 — does enforcement cost scale only with governed writes?}
 Partly, and the boundary is itself a result. Within the gated arm,
@@ -138,10 +169,62 @@ and the adapter are ours, so the result is a claim about \sys's
 record \emph{format}, not a leaderboard comparison against the
 benchmark's deliberately redacted-input reference scorer.
 
-Three findings, all deterministic. First, the container fallacy
-reproduces on \sys's evidence \emph{at its ceiling}: trace-, ledger-,
-and schema-presence baselines overclaim on 87.5\% of cases (the
-benchmark's own corpus: 50--75\%), precisely because \sys always
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+  \node[stage] (guard) at (0, 1.35) {guard trace\\\footnotesize writer, chain, tool,\\\footnotesize target, graph, instant};
+  \node[stage] (ledger) at (0, 0) {signed verdict\\\footnotesize policy, outcome,\\\footnotesize attribution, hash, sig};
+  \node[stage] (policy) at (0, -1.35) {policy snapshot\\\footnotesize claim as-of vs now,\\\footnotesize authority grants};
+  \node[draw, dashed, rounded corners=1pt, fit=(guard)(ledger)(policy),
+        inner sep=3pt, label={[note]above:{56 \census decisions $\times$ 3 planes}}] (native) {};
+  \node[stage] (degrade) at (4.1, 0) {8 degradations\\\footnotesize delete or contradict\\\footnotesize evidence content};
+  \node[stage] (presence) at (8.0, 1.2) {presence baselines\\\footnotesize is a container there?\\\footnotesize\itshape scores 0.875 overclaim};
+  \node[stage] (reader) at (8.0, -1.2) {property-level reader\\\footnotesize what does the content\\\footnotesize still establish?\\\footnotesize\itshape scores PSA 1.0, 0 overclaim};
+  \node[stage] (oracle) at (12.3, 0) {construction oracle\\\footnotesize benchmark's own\\\footnotesize ground truth};
+  \draw[flow] (native) -- (degrade);
+  \draw[flow] (degrade.east) -- (presence.west);
+  \draw[flow] (degrade.east) -- (reader.west);
+  \draw[flow] (presence.east) -- (oracle.west);
+  \draw[flow] (reader.east) -- (oracle.west);
+\end{tikzpicture}
+\caption{The DEMM run (\texttt{benchmark/demm/}): \census exports each
+decision as three evidence planes; deterministic degradations damage
+the content; two kinds of reader are scored against the benchmark's
+construction oracle over 64 cases (8 conditions $\times$ 8 question
+families).}
+\label{fig:demm}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Reader of \sys's evidence & Sufficient & Overclaim & Underclaim & PSA \\
+\midrule
+property-level reader           & 8/64  & \textbf{0.000} & 0.000 & \textbf{1.000} \\
+\sys-internal validity check    & 8/64  & 0.000 & 0.000 & --- \\
+container checklist (3 planes)  & 56/64 & 0.750 & 0.000 & --- \\
+trace- / ledger- / schema-present & 64/64 & 0.875 & 0.000 & --- \\
+\midrule
+\emph{always-sufficient anchor} & 64/64 & 0.875 & 0.000 & --- \\
+\emph{always-insufficient anchor} & 0/64 & 0.000 & 1.000 & --- \\
+\bottomrule
+\end{tabular}
+\caption{DEMM-Bench over \sys's exported evidence (64 cases; 512
+property judgements). Reference points on the benchmark's own corpus:
+presence baselines overclaim 0.50--0.75, its stricter validators
+0.00, and its redacted-input candidate scorer reaches PSA 0.5625 at
+zero overclaim. Comparisons across corpora are indicative only; the
+within-corpus contrast between rows is the finding.}
+\label{tab:demm}
+\end{table}
+
+Three findings, all deterministic
+(Figure~\ref{fig:demm}, Table~\ref{tab:demm}). First, the container
+fallacy reproduces on \sys's evidence \emph{at its ceiling}: trace-,
+ledger-, and schema-presence baselines overclaim on 87.5\% of cases
+(the benchmark's own corpus: 50--75\%), precisely because \sys always
 emits all three planes — content-level degradation leaves every
 container present, so presence carries no information at all. Second,
 mechanical validity checking is enough to stop overclaim but not to
@@ -158,6 +241,23 @@ tool, target, graph, and principal chain, and the signed verdict
 names its policy, whose claim the store serves as of the decision
 instant. What a degradation deletes is detectable \emph{as} absent,
 so sufficiency never has to be guessed from container presence.
+
+\paragraph{Impartiality by construction, not by administration.}
+The run is self-administered, and its impartiality rests on the same
+discipline as the \census itself, not on who pressed the button.
+Ground truth is the benchmark's own published construction oracle,
+unmodified; the degradation transforms and the reader are published
+in full alongside the store, and the reader consumes evidence content
+only — case identifiers are opaque, no degradation name reaches any
+scorer-facing field, and the benchmark's label-leakage rules are
+honoured. Every stage is deterministic: reruns from the census binary
+up reproduce byte-identical artifacts, so the numbers in
+Table~\ref{tab:demm} are a property of the published pipeline, not of
+a run we witnessed. Anyone can re-execute the whole chain — seeded
+census, export, degradation, scoring — from the repository in
+minutes, substitute their own reader for ours on the same manifests,
+or tighten the transforms and re-score; the claim survives exactly as
+far as those reruns agree.
 
 The run also changed the store. Its first pass surfaced two evidence
 gaps the benchmark's vocabulary made precise: the verdict signature
