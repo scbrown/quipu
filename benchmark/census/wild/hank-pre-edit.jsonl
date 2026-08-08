@@ -1,0 +1,5 @@
+{"constraints":[{"id":"max_impacted_files","outcome":"unsatisfied","response":"blocked"}],"duration_ms":4,"ext":"rs","kind":"guard","mode":"enforce","policy_freshness":"fresh","result":"deny","rule":"max_impacted_files","tool":"Edit","ts":1786164727}
+{"duration_ms":5,"ext":"rs","kind":"guard","mode":"enforce","result":"allow","tool":"Edit","ts":1786164727}
+{"agent":"polecat-7","duration_ms":4,"executor":"polecat-7","ext":"rs","kind":"guard","mode":"enforce","result":"allow","tenant":"polecat","tool":"Edit","ts":1786164743}
+{"agent":"polecat-7","constraints":[{"id":"max_impacted_files","outcome":"unsatisfied","response":"blocked"}],"duration_ms":4,"executor":"polecat-7","ext":"rs","kind":"guard","mode":"enforce","policy_freshness":"fresh","result":"deny","rule":"max_impacted_files","tenant":"polecat","tool":"Edit","ts":1786164743}
+{"agent":"polecat-7","duration_ms":5,"executor":"polecat-7","ext":"rs","kind":"guard","mode":"enforce","result":"allow","tenant":"polecat","tool":"Edit","ts":1786164743}

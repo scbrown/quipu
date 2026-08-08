@@ -91,7 +91,10 @@ disagree only on coverage semantics — the RQ3 finding.
   no counterpart in quipu; those asymmetries are reported, not scored.
 - Census is synthetic by construction — that is what makes it an
   oracle. External validity is bounded, not eliminated, by the
-  Census-in-the-wild replay (bead `quipu-0u4`).
+  Census-in-the-wild replay (`wild/README.md`): a genuine hank
+  pre-edit trace through the same audit, which surfaced a real
+  enforcement gap (a config-file rule outside the authored Σ) — T ⊭ Σ
+  with a remediation, unstaged.
 - Single-run latency numbers are not results; RQ1 reports
   distributions over repeats, per the determinism note (bead
   `quipu-02v`).
