@@ -56,7 +56,7 @@ BIN=quipu-server
 # a binary that builds, deploys, health-checks, and is quietly less capable than
 # the source it came from. Discovered wiring /ontology (aegis-06q1r): the route
 # would have deployed green and been inert.
-FEATURES="shacl,onnx,owl,reactive-reasoner"
+FEATURES="shacl,onnx,owl,reactive-reasoner,server"
 
 # The floor a deployable quipu-server must MEET, asserted INDEPENDENTLY of
 # FEATURES above (aegis-t1u2h). Deliberately not derived from it: if the gate
@@ -66,7 +66,7 @@ FEATURES="shacl,onnx,owl,reactive-reasoner"
 # dropping a feature from the build FAILS this gate instead of redefining it.
 # Escape hatch for a deliberate minimal build (mirrors bobbin's REQUIRE_KNOWLEDGE):
 #   REQUIRE_FEATURES="" disables the check entirely.
-REQUIRE_FEATURES="${REQUIRE_FEATURES-shacl,onnx,owl,reactive-reasoner}"
+REQUIRE_FEATURES="${REQUIRE_FEATURES-shacl,onnx,owl,reactive-reasoner,server}"
 BUILD_DIR="${BUILD_DIR:-$PWD}"
 INSTALL_TARGETS="${INSTALL_TARGETS:-/usr/local/bin/quipu-server}"
 SERVICE="${SERVICE-quipu}"
