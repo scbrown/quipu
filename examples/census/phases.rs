@@ -41,12 +41,19 @@ pub struct CensusIris {
 }
 
 /// One recorded decision phase 6 replays: which policy judged which
-/// target, with what outcome, at which scenario instant.
+/// target, with what outcome, at which scenario instant. The writer-side
+/// fields (`writer`, `chain`, `graph`) carry what the governed writer
+/// presented at the gate — the store deliberately does not persist them
+/// for denials (GS2 rolls the attempt back), so the DEMM export's guard
+/// trace is the only evidence plane that has them.
 pub struct ReplayItem {
     pub policy: String,
     pub target: String,
     pub outcome: String,
     pub at: String,
+    pub writer: String,
+    pub chain: Vec<String>,
+    pub graph: String,
 }
 
 pub struct Ctx {

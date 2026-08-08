@@ -47,6 +47,14 @@ python3 benchmark/census/sarc_check.py \
     --sarc-src /tmp/sarc/src
 ```
 
+## DEMM export (CEN-X2)
+
+The gated run also exports `out/demm-export/native_records.jsonl` — the
+run's 56 decisions as quipu-native evidence records (guard trace, signed
+verdict ledger, bitemporal policy snapshot) for the DEMM-Bench
+decision-evidence sufficiency benchmark. Degradation, adaptation, and
+scoring live in `benchmark/demm/`.
+
 ## Scoring discipline
 
 Every scorer reads `manifest.json` — the injector's declared ground

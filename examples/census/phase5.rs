@@ -117,6 +117,9 @@ fn cen_m1(ctx: &mut Ctx, iris: &CensusIris) {
             target: subject.to_string(),
             outcome: "unsatisfied".to_string(),
             at: ts.clone(),
+            writer: "amaru".to_string(),
+            chain: vec!["amaru".to_string()],
+            graph: crate::phases::DISTRICTS[0].to_string(),
         });
     }
     ctx.probe_defect("CEN-M1", 5, subject, &observed, landed, "RQ5");

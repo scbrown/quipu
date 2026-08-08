@@ -45,6 +45,9 @@ __pycache__/
 
 # Census benchmark run outputs (stores, manifests, metrics)
 benchmark/census/out/
+
+# DEMM-Bench run outputs (cases, scorer results, summaries)
+benchmark/demm/out/
 state.json
 CLAUDE.md
 CLAUDE.local.md

@@ -144,6 +144,9 @@ fn cen_p1(ctx: &mut Ctx, iris: &CensusIris) {
             target: subject.to_string(),
             outcome: "unsatisfied".to_string(),
             at: ts.clone(),
+            writer: "amaru".to_string(),
+            chain: vec!["amaru".to_string()],
+            graph: crate::phases::DISTRICTS[0].to_string(),
         });
     }
     ctx.probe_defect("CEN-P1", 2, subject, &observed, landed, "RQ2");
@@ -206,6 +209,9 @@ fn cen_p2(ctx: &mut Ctx, iris: &CensusIris) {
             target: subject.to_string(),
             outcome: "unsatisfied".to_string(),
             at: ts2.clone(),
+            writer: "amaru".to_string(),
+            chain: vec!["amaru".to_string()],
+            graph: crate::phases::DISTRICTS[0].to_string(),
         });
     }
     ctx.probe_defect("CEN-P2", 2, subject, &observed, landed, "RQ2");
@@ -256,6 +262,9 @@ fn cen_v1(ctx: &mut Ctx, iris: &CensusIris) {
             target: subject.to_string(),
             outcome: "unsatisfied".to_string(),
             at: ts.clone(),
+            writer: "amaru".to_string(),
+            chain: vec!["amaru".to_string()],
+            graph: crate::phases::DISTRICTS[0].to_string(),
         });
     }
     ctx.probe_defect("CEN-V1", 2, subject, &observed, landed, "RQ2");
@@ -347,6 +356,9 @@ fn cen_n2(ctx: &mut Ctx, iris: &CensusIris) {
                 target: subject.clone(),
                 outcome: "satisfied".to_string(),
                 at: ts.clone(),
+                writer: owner_of(d).to_string(),
+                chain: vec![owner_of(d).to_string()],
+                graph: crate::phases::DISTRICTS[d].to_string(),
             });
         }
     }

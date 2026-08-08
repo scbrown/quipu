@@ -112,3 +112,40 @@ constraints the window never exercised, undeclared placement on the
 config-file rule, and partial attribution the runtime never recorded.
 The synthetic \census confirms planted defects are caught; the wild
 trace shows the same machinery surfacing an unstaged enforcement gap.
+
+\subsection{Evidence sufficiency against an external benchmark}
+\label{sec:eval-demm}
+DEMM-Bench~\cite{solozobov2026demmbench} asks the converse of RQ3: not
+whether decisions were \emph{correct}, but whether the records a
+runtime emits \emph{suffice to reconstruct} eight decision-level
+properties (actor identity, principal authority, action boundary,
+policy basis, decision basis, data/resource touch, lifecycle context,
+verification strength) under eight controlled degradation conditions —
+and, centrally, whether a reader of that evidence \emph{overclaims}
+sufficiency it does not have. We add \sys as a ninth evidence regime
+(\texttt{benchmark/demm/}): the \census run exports its 56 recorded
+decisions as three-plane native records — the writer-side guard trace,
+the signed verdict fact queried back from the store, and the bitemporal
+policy snapshot (claim as-of versus current, authority grants) — the
+benchmark's degradations delete evidence content plane by plane, and a
+content-only adapter reconstructs the eight properties, scored against
+the benchmark's own construction oracle over 64 cases.
+
+The property-level reading of \sys's records reconstructs \textbf{512
+of 512} property cells (mean PSA 1.0) with \textbf{zero overclaim};
+the benchmark's five container-presence baselines, run over the same
+degraded evidence, overclaim on 62.5--87.5\% of cases (the
+benchmark's published reference: 50--75\% baseline overclaim, and
+56.25\% mean PSA for its container-indicator scorer at zero
+overclaim). The comparison measures what a record format
+\emph{preserves}, not scorer cleverness: \sys's planes carry explicit,
+separable markers per property — the signed verdict names its policy,
+the policy serves its claim as of the decision instant, authority is a
+queryable grant — so what a degradation deletes is detectable
+\emph{as} absent, and sufficiency never has to be guessed from
+container presence. One asymmetry is itself corroborated by the
+export: the store deliberately does not persist the denied writer
+(GS2 rolls the attempt back), so actor identity for denials lives
+only in the writer-side trace plane — the same division of labour the
+wild-trace audit (\S\ref{sec:eval-wild}) reported as partial
+attribution.

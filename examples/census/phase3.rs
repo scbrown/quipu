@@ -107,6 +107,9 @@ fn cen_e1(ctx: &mut Ctx, iris: &CensusIris) {
             target: subject.to_string(),
             outcome: "unsatisfied".to_string(),
             at: ctx.last_ts(),
+            writer: "amaru".to_string(),
+            chain: vec!["amaru".to_string()],
+            graph: crate::phases::DISTRICTS[0].to_string(),
         });
     }
     decide(ctx, subject, "approve");
@@ -130,6 +133,9 @@ fn cen_e2(ctx: &mut Ctx, iris: &CensusIris) {
             target: subject.to_string(),
             outcome: "unsatisfied".to_string(),
             at: ctx.last_ts(),
+            writer: "amaru".to_string(),
+            chain: vec!["amaru".to_string()],
+            graph: crate::phases::DISTRICTS[0].to_string(),
         });
     }
     decide(ctx, subject, "reject");

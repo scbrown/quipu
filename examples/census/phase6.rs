@@ -20,14 +20,16 @@ pub fn run(ctx: &mut Ctx, out_dir: &str) {
     // see the whole store, not refuse its own evidence queries.
     ctx.store.labels_config_mut().min_freshness = None;
     cen_x1_export(ctx, out_dir);
+    crate::demm::demm_export(ctx, out_dir);
     cen_m2_replay(ctx);
     cen_g1_g2_inventory(ctx);
     cen_t1_attribution(ctx);
 }
 
 /// Σ's constraints in the reference checker's vocabulary:
-/// `(policy IRI, local id, class, response)`.
-const SARC_SPEC: [(&str, &str, &str, &str); 4] = [
+/// `(policy IRI, local id, class, response)`. Shared with the DEMM
+/// export (`demm.rs`), which needs the same IRI → local-id mapping.
+pub(crate) const SARC_SPEC: [(&str, &str, &str, &str); 4] = [
     (
         "urn:census:policy:tally-label",
         "tally-label",

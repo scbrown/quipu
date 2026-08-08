@@ -19,6 +19,7 @@
 
 mod agent;
 mod catalogue;
+mod demm;
 mod manifest;
 mod phase2;
 mod phase3;
