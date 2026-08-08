@@ -83,3 +83,13 @@ docs/book/src/datalinks/vendor/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Paper build artifacts
+docs/paper/main.pdf
+docs/paper/*.aux
+docs/paper/*.bbl
+docs/paper/*.blg
+docs/paper/*.log
+docs/paper/*.out
+docs/paper/*.fls
+docs/paper/*.fdb_latexmk

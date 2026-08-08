@@ -59,6 +59,18 @@ seed:
 serve-fixtures:
     cargo run --bin quipu-server --features shacl,onnx -- --db test-fixtures/test-store.db
 
+# Build the paper PDF (docs/paper/): just paper [clean]
+paper cmd="build":
+    @if [ "{{ cmd }}" = "build" ]; then \
+        cd docs/paper && \
+        if command -v tectonic >/dev/null 2>&1; then tectonic main.tex; \
+        elif command -v latexmk >/dev/null 2>&1; then latexmk -pdf -interaction=nonstopmode main.tex; \
+        elif command -v pdflatex >/dev/null 2>&1; then pdflatex -interaction=nonstopmode main.tex && bibtex main && pdflatex -interaction=nonstopmode main.tex && pdflatex -interaction=nonstopmode main.tex; \
+        else echo "no TeX engine found (install tectonic, latexmk, or pdflatex)"; exit 1; fi; \
+    elif [ "{{ cmd }}" = "clean" ]; then \
+        cd docs/paper && rm -f main.aux main.bbl main.blg main.log main.out main.pdf main.fls main.fdb_latexmk; \
+    else echo "unknown paper command '{{ cmd }}' (available: build, clean)"; exit 1; fi
+
 # Run a paper benchmark (see benchmark/<name>/README.md): just bench census [--arm control] [--seed N]
 bench name *args:
     @if [ "{{ name }}" = "census" ]; then \

@@ -1,0 +1,28 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+The conventional knowledge graph was designed for a writer who no
+longer writes it alone. We presented \sys, a store that inverts the
+four defaults that assumption baked in — refuse at the gate,
+bitemporal everything, partitioned trust with non-widening
+composition, governance inside — and \census, a deterministic
+lifecycle that measures each inversion against planted ground truth
+and against a real writer's recorded trace. The measured story is
+consistent: strictness is affordable when its cost falls on agents who
+can read a refusal and retry; refusals are worth recording as signed
+facts precisely because they are the events audit needs; composition
+can be made safe without being made silent; and a store whose rules
+are as historical as its data can replay not just what it knew but
+what it required.
+
+Three boundaries are stated rather than hidden: no comparative
+query-performance claims (the evaluator's ceiling is characterized,
+not raced); labels are not access control (a floor refuses a query, it
+does not hide rows); and denials replay as attestation checks, not
+re-derivations, because refusal-by-rollback deliberately keeps the
+verdict and discards the attempt. Future work runs in two directions:
+the controlled agent-arm experiment (multiple tasks and models, with a
+competency-question oracle) and lifting GS1–GS6 from design principles
+to a portable contract — a governed-store specification other
+substrates can claim and this benchmark can score, extending SARC's
+compilation one layer further down for stores we have not built.

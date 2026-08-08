@@ -1,0 +1,52 @@
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Bitemporal stores.}
+Datomic established the immutable EAVT log with transaction time;
+XTDB adds valid time as a first-class axis. \sys's departure is not
+the axes but their reach: labels, verdicts, decisions, authority
+grants, and — via the versioned registry — the validation rules
+themselves are time-indexed, which is what makes governance replay
+(\S\ref{sec:eval-replay}) a query rather than an archaeology project.
+
+\paragraph{Named graphs, provenance, and information flow.}
+Carroll et al.~\cite{carroll2005named} attached provenance and trust
+to named graphs; annotated-RDF and semiring-provenance lines
+formalized per-triple annotations; Denning's
+lattice~\cite{denning1976lattice} is the ancestor of composing
+security-relevant labels by meet and join. \sys's contribution on
+this line is operational: coverage as an explicit third outcome
+(neither fail-open $\top$ nor floor-dragging $\bot$), refusal of
+cross-chain comparison by name, expiry-as-absence, and a
+machine-checked composition homomorphism — enforced at query time by
+floors rather than described.
+
+\paragraph{Validation-centric stores.}
+SHACL provides shape validation, and stores ship it as a callable
+service; \sys makes it (and policy claims) a write-path gate with
+episode scope, and pairs open-world shape validation with closed-world
+vocabulary policies expressed as ordinary \textsc{ask} claims —
+catching the fabricated-term case open-world validation silently
+accepts, a failure mode measured at scale by
+Rovai~\cite{rovai2026openontologies}.
+
+\paragraph{Governance for agentic systems.}
+SARC~\cite{besanson2026sarc} is the nearest ancestor and the frame we
+compile: constraints as specification objects, four enforcement
+points, decidable audit. \sys relocates the machinery into the store —
+\Sig as facts, the gate as the write path, verdicts as signed
+bitemporal facts, the audit reading \Sig from the graph it governs —
+and \S\ref{sec:eval-audit} measures agreement with SARC's own
+reference checker. Verification runtimes such as
+Tardygrada~\cite{rovai2026tardygrada} converge independently on
+three-valued verdicts and weakest-link aggregation, evidence that the
+violation/incompleteness distinction and least-confident-leaf rules
+are being rediscovered wherever agent output must be gated.
+
+\paragraph{LLM-driven knowledge-graph construction.}
+Tool-augmented ontology engineering~\cite{rovai2026openontologies,
+zhang2024accelerating} is the workload that motivates strictness:
+agents produce plausible, well-formed, sometimes fabricated structure
+at rates no curation pass matches. Where that line builds better
+construction tools, we build the store those tools should be made to
+convince.

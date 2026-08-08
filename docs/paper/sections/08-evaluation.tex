@@ -1,0 +1,114 @@
+\section{Evaluation}
+\label{sec:eval}
+
+All numbers are from the seed-42 \census run (release mode, native
+x86-64) unless stated; the manifest, metrics, and set-hashes are in the
+artifact, and repeat runs produce byte-identical manifests. Each
+research question scores one inversion from Table~\ref{tab:defaults}.
+
+\subsection{RQ1 — does enforcement cost scale only with governed writes?}
+Partly, and the boundary is itself a result. Within the gated arm,
+clean writes touching no governed type run zero policy claims (the
+target-type pre-filter) and median 1.3\,ms per write versus 2.7\,ms
+for compliant governed writes, which pay claim evaluation plus verdict
+signing and recording. But the gated arm's ungoverned writes are not
+free relative to the control arm's (median 0.7\,ms): authority
+intersection runs on every graph-scoped write \emph{by design} — GS3
+guards where facts may land at all and is deliberately not
+abstention-eligible. Zero-cost abstention is a property of the policy
+gate, not of governance as a whole, and we report it at that scope.
+
+\subsection{RQ2 — does the gated store end cleaner than the ungated one?}
+Completely, on the planted set: the gated arm's final graph contains
+\textbf{0 of 6} planted defects; the control arm — the same script,
+gates off — contains \textbf{6 of 6}. Each refusal names its ground:
+the SHACL episode gate names the missing provenance property; the
+authority refusals name the chain, the graph, and what the chain
+actually holds; the policy denial cites the policy; the post-state
+probe (CEN-P2) is refused by the combined-state claim a pre-state gate
+would pass; and the fabricated predicate is refused by the
+closed-world vocabulary policy, which is not new machinery but an
+ordinary \textsc{ask} claim in \Sig requiring every predicate on the
+record type to be declared.
+
+\subsection{RQ3 — is the audit decidable in-store, and does an external
+checker agree?}
+\label{sec:eval-audit}
+In-store, the four passes produce exactly the planted distinctions:
+the dispatch inventory reports \textbf{1 violation} (an executable
+tool class, ungoverned, no reason) and \textbf{1 incompleteness} (the
+same shape \emph{with} a declared reason — an acknowledged bypass, not
+an unknown hole); the trace audit over a five-record window reports
+\textbf{0 violations and 1 incompleteness} — the deliberately
+unattributed record, counted incomplete rather than misreported or
+placed at the attribution root.
+
+Against the SARC reference checker
+(\texttt{besanson/sarc-governance}), we export \Sig in its spec format
+and the run's 56 decisions in its flat-trace format, twice. The
+\emph{faithful} export — only the evaluations \sys actually ran —
+fails the reference checker with 168 discrepancies, \textbf{all of
+type coverage and none of verdict, placement, or response}: the
+reference invariant expects every constraint evaluated for every
+action, and \sys's target-type pre-filter is invisible to it. The
+\emph{padded} export, which adds explicit not-fired records for the
+non-applicable constraints, passes clean. The two checkers agree
+verdict-for-verdict and disagree only on coverage \emph{semantics} —
+whether abstention must be materialized to be auditable — which we
+report as the finding rather than resolving by fiat.
+
+\subsection{RQ4 — does composition never widen?}
+All \textbf{7 of 7} composition probes uphold the lattice contract:
+the undeclared member degrades coverage to \textsf{Partial} and the
+enforcement floor refuses the composed read; the cross-chain trust
+pair is refused with both chains named; the expired label reads as
+absent and degrades coverage; the \texttt{no-export} obligation joins
+across the set; all four clean compositions pass the floor —
+\textbf{zero false refusals}; the overlay rebind is refused bind-once;
+and the imported pack re-interns with its content hash stable across
+id spaces.
+
+\subsection{RQ5 — do decisions replay as of their instant?}
+\label{sec:eval-replay}
+The amendment supersedes the label policy's claim mid-run, so every
+phase-2 decision predates a rule change. Replaying all 56 recorded
+decisions: \textbf{50 of 50} satisfied verdicts re-derive faithfully
+under the claim and data as of their instant — and \textbf{all 50}
+evaluate \emph{unsatisfied} under the amended claim, the number that
+separates ``the runtime got it wrong'' from ``the spec moved,'' and
+exactly what a latest-only rule set would misreport. The
+\textbf{6} denials replay differently, and honestly so: their staged
+deltas were rolled back — GS2 keeps the verdict, deliberately not the
+attempt — so replay verifies the rules in force at the instant
+(6 of 6) rather than re-deriving the outcome. Full denial
+re-derivation would require traces to carry the attempted delta,
+which the governed writer's traces do and the store deliberately does
+not; the asymmetry is a property of refusal-by-rollback, not a gap in
+bitemporality.
+
+\subsection{The agent arm: strictness borne by the writer}
+\label{sec:eval-agent}
+As an extension (single model, single task, $n{=}1$ — an existence
+demonstration, not a rate), an LLM agent was given the recording task
+cold and authored a five-action recording without seeing \Sig.
+Attempt one: 2 accepted, 3 refused — a tally with no label, a write
+into a district outside the writer's authority, a fabricated
+predicate. Revising strictly from the refusal text — the only channel
+the writer gets — attempt two landed \textbf{5 of 5} with zero
+final-graph defects: the retry loop the thesis predicts, converging in
+one revision with no human in the loop.
+
+\subsection{In the wild}
+\label{sec:eval-wild}
+Replaying the recorded hank trace through the audit, with the shipped
+policy catalog as \Sig, yields $T \not\entails \Sig$: \textbf{2
+violations, 6 incompleteness findings} over 5 records. The violations
+are real and actionable — the guard enforced a locally-configured
+blast-radius rule that is not an authored policy in \Sig, and the
+finding's remediation is the thesis in one line: \emph{author it in
+the store so it can be audited, or stop enforcing it}. The
+incompleteness findings are the honest remainder: two catalog
+constraints the window never exercised, undeclared placement on the
+config-file rule, and partial attribution the runtime never recorded.
+The synthetic \census confirms planted defects are caught; the wild
+trace shows the same machinery surfacing an unstaged enforcement gap.

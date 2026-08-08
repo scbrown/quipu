@@ -1,0 +1,56 @@
+\section{Data Model}
+\label{sec:datamodel}
+
+\paragraph{Bitemporal EAVT with a three-valued operation.}
+The substrate is an append-only fact log
+$(e, a, v, g, tx, \mathit{valid\_from}, \mathit{valid\_to}, op)$:
+entity, attribute, value, named graph, transaction, valid interval,
+and operation. Transaction time comes from a transactions table
+carrying actor and source; current state is the open-interval subset.
+IRIs are interned in a term dictionary whose append-only discipline is
+itself an invariant under test. The operation is three-valued:
+\emph{assert}, \emph{retract} (a logical close of the valid interval —
+history survives), and \emph{tombstone}, which marks a triple
+\emph{absent in a composed view} without mutating the layer beneath —
+an operation neither Datomic-style logs nor RDF carry, and the piece
+that makes layered composition sound.
+
+\paragraph{Named graphs, overlays, datasets.}
+The graph coordinate $g$ partitions the log. Committed graphs are
+self-rooted; overlay-class graphs bind \emph{once} at creation to a
+committed parent branch, and rebinding is an error — the binding is
+unforgeable, which is what lets a composed view resolve
+nearest-overlay-wins without trusting the overlay's claims about its
+base. Datasets name arbitrary graph-sets; the branch tree and the
+dataset semilattice are different relations over the same nodes, and
+silence never widens a dataset.
+
+\paragraph{The label lattice.}
+Partitions carry labels on four axes — freshness, trust, durability,
+policy — stored as ordinary bitemporal facts in a reserved meta-graph
+(the cache columns are derived, re-computable state). Composition
+folds labels under one named invariant, \emph{composition never
+widens}: freshness and trust by meet, obligations by join. The
+composed result is a pair $(\mathit{fold}, \mathit{coverage})$ with
+coverage in $\{\textsf{Empty}, \textsf{None}, \textsf{Partial},
+\textsf{Full}\}$; \textsf{Empty} is the fold identity and distinct
+from \textsf{None}. The homomorphism
+$\mathit{label}(A \cup B) = \mathit{label}(A) \sqcap \mathit{label}(B)$
+is machine-checked by property test. Trust ranks compare only within a
+declared chain; cross-chain comparison returns an error naming both
+chains, because a silent integer comparison is exactly the bug that
+ranks a learned tactic above canon. Label expiry is a
+$\mathit{valid\_to}$ on the label assertion: an expired label is
+absent — it degrades coverage — not false and not unknown.
+
+\paragraph{Composition across stores.}
+Term identifiers are globally unique by construction (each store
+allocates from its own space, $s \cdot 2^{40} + k$), because reference
+values are opaque payloads no query-time remapping can rewrite.
+Read-only attachment mounts another store as a composed layer under
+three invariants: attaching changes no existing query's result, the
+host never writes into an attachment, and attachments are verified and
+refused rather than migrated. Knowledge packs move a graph between
+stores by \emph{re-interning} facts rather than copying rows, and a
+pack's identity is a content hash over sorted N-Triples — two stores
+with different id assignment hash the same.

@@ -1,0 +1,60 @@
+\section{The Governance Plane}
+\label{sec:governance}
+
+\sys compiles SARC's constraint machinery into the write path, with
+\Sig itself stored as facts.
+
+\paragraph{Policies are facts; the gate is the write path.}
+A policy is an entity in the graph: target type, a claim (a SPARQL
+\textsc{ask}), a boundary, an effect (\emph{deny},
+\emph{require-approval}, advisory effects), and, for escalations, a
+declared reversibility window; the full SARC constraint object —
+class and verification point — is SHACL-validated at \emph{definition}
+time, including the class-to-placement discipline plain SHACL cannot
+state. At write time, staged facts are evaluated inside the open
+savepoint: claims run against the pending post-state, indexed by
+target type so a write touching no governed type runs zero claims
+(GS1's zero-cost abstention). One consequence surfaced by the
+benchmark and worth stating as a rule: a claim's dataset scope is part
+of the claim — a policy governing facts that live in named graphs must
+say \textsc{graph} in its pattern, or it judges an empty default-graph
+view (\S\ref{sec:census}).
+
+\paragraph{Verdicts survive the rollback they record.}
+Every gate decision stages a verdict — policy, target, outcome,
+evidence hash, signature — and flushes it in its own transaction
+\emph{after} the write's savepoint resolves, so a denial's verdict
+outlives the denial's rollback. Verdicts are ed25519-signed
+attestations against a human-authored verifier registration; a store
+with no signing identity records no verdict rather than an unsigned
+one, and a re-entry guard prevents a policy targeting verdicts from
+denying the recording of its own denial.
+
+\paragraph{Escalation without a waiting engine.}
+A refusal under \emph{require-approval} mints a decision request —
+policy, target, evidence hash, expiry from the declared window — as
+facts that survive the refusal's rollback. A human answers with a
+decision bound to the same evidence hash; the \emph{next} attempt
+succeeds. The hold is the agent retrying, not the engine waiting;
+rejection outranks approval; an expired or zero window refuses rather
+than inventing a bound.
+
+\paragraph{Authority intersects.}
+Authority grants attach principals to graphs. Along a delegation chain
+the effective authority is the intersection of every link's; the
+wildcard is the identity; an empty intersection refuses with a message
+naming the chain, the graph, and what the chain actually holds.
+Relabelling a graph requires authority over the meta-graph, not the
+graph being labelled.
+
+\paragraph{The audit reads \Sig from the graph.}
+The checker decides $T \entails \Sig$ over four passes — coverage,
+class-placement, outcome consistency, attribution — reading \Sig from
+the store rather than a snapshot beside it, deterministically and
+never via a model. Violation and incompleteness are kept distinct
+end-to-end: the dispatch inventory reports an ungoverned executable
+tool class with no declared reason as a violation and the same class
+\emph{with} a reason as an acknowledged bypass; an unattributed trace
+record is counted incomplete, not placed at the attribution root.
+Coverage checking is half-decidable and the audit says which passes
+are total.

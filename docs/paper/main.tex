@@ -1,0 +1,48 @@
+% Quipu: A Governed Bitemporal Knowledge Graph Store
+%
+% arXiv-style systems paper. Build: `just paper` (tectonic, latexmk, or
+% pdflatex; the recipe tells you which it found). Plan and provenance:
+% docs/design/paper.md; principles and defect catalogue:
+% docs/design/paper-principles.md; every number: benchmark/census/.
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+\usepackage{xspace}
+
+\newcommand{\sys}{Quipu\xspace}
+\newcommand{\census}{Census\xspace}
+\newcommand{\entails}{\models}
+\newcommand{\Sig}{\ensuremath{\Sigma}\xspace}
+
+\title{\textbf{\sys: A Governed Bitemporal Knowledge Graph Store}\\
+\large Start strict: rethinking knowledge-graph defaults for agent-written knowledge}
+\author{S.~C.~Brown\thanks{With implementation and drafting assistance
+from Claude (Anthropic). Artifact: \texttt{github.com/scbrown/quipu},
+benchmark under \texttt{benchmark/census/}.}}
+\date{Draft — \today}
+
+\begin{document}
+\maketitle
+
+\input{sections/00-abstract}
+\input{sections/01-introduction}
+\input{sections/02-background}
+\input{sections/03-principles}
+\input{sections/04-datamodel}
+\input{sections/05-governance}
+\input{sections/06-implementation}
+\input{sections/07-census}
+\input{sections/08-evaluation}
+\input{sections/09-related}
+\input{sections/10-conclusion}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

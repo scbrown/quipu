@@ -1,0 +1,74 @@
+\section{Design Principles: the Governed Store}
+\label{sec:principles}
+
+Six principles, distilled from building \sys, each paired with the
+conventional failure it prevents. Nothing below names SQLite, RDF, or
+EAVT — the principles are substrate-agnostic on purpose, and stating
+them as a portable contract for other substrates is future work
+(\S\ref{sec:conclusion}).
+
+\begin{description}[leftmargin=1.4em,itemsep=0.35em]
+\item[GS1 — Gated writes.] No fact enters the store except through a
+  gate whose predicates evaluate against the pending
+  \emph{post-state}. Post-state, not pre-state and not the request: a
+  constraint like ``no entity holds two placements'' is checkable only
+  after the candidate facts are staged — a pre-state gate passes a
+  write that is valid alone and invalid in combination
+  (\census probe CEN-P2 separates the two). Writes touching no
+  governed target must incur no policy-evaluation cost, or strictness
+  becomes an argument against adoption. \emph{Prevents:} D1's
+  accept-then-clean debt.
+\item[GS2 — Verdict permanence.] Every gate outcome — allow, deny,
+  and unknown — persists as a signed, time-indexed fact that survives
+  rollback of the write it judges. The ordering is the content: a
+  denied write is rolled back, so verdicts are staged outside the
+  write's transaction and flushed after it resolves — the denial's
+  verdict is precisely the record worth keeping. No signing identity
+  means no verdict, never an unsigned one; signatures verify against a
+  human-authored root of trust the store cannot mint for itself.
+  \emph{Prevents:} unauditable refusal — the conventional store throws
+  away exactly the events an auditor needs most.
+\item[GS3 — Partitioned authority.] Authority attaches to partitions;
+  delegation only narrows (intersection along the principal chain,
+  with the wildcard as identity); an empty intersection refuses,
+  never falls back. Changing a partition's standing requires authority
+  over the \emph{meta}-partition — otherwise a tenant promotes itself
+  to attested. Overlays bind once to their parent, so a layer cannot
+  forge presence in a base it was never bound to. \emph{Prevents:}
+  D3's flat-trust escalation.
+\item[GS4 — Non-widening composition.] A view composed from
+  partitions carries a label no stronger than the fold of its parts.
+  Freshness and trust fold by meet; obligations by join (one
+  \texttt{no-export} member taints the set). Undeclared is not a
+  lattice value: the composed result is a pair of fold and
+  \emph{coverage}, and partial coverage fails enforcement floors —
+  fail-safe at enforcement, honest at reporting. Trust from different
+  declared chains refuses comparison by name rather than ordering
+  silently. Expiry is absence, not falsity. \emph{Prevents:} trust
+  laundering through views.
+\item[GS5 — In-store decidable audit.] \Sig, the trace $T$, and the
+  verdicts live in the store they govern; $T \entails \Sig$ decides in
+  $O(|T|\cdot|C|)$ without the model or its prompts, and a trace that
+  \emph{contradicts} \Sig (violation) is never conflated with a trace
+  that \emph{under-determines} it (incompleteness) — the two demand
+  different responses, and an audit that merges them invites both
+  being ignored. \emph{Prevents:} D4's governance-by-log-grepping.
+\item[GS6 — As-of replay.] Every governance decision is reproducible
+  against the store as of its transaction — the facts, the labels,
+  \emph{and the rules} in force at the time. The rules half is the
+  hard half: a store whose shapes and policies are latest-only can
+  replay what was known but not what was required, and a mid-lifecycle
+  amendment makes the difference observable
+  (\S\ref{sec:eval-replay}). \emph{Prevents:} D2's unanswerable
+  ``what was allowed when.''
+\end{description}
+
+The principles interlock rather than stack: GS1's gate is worth
+trusting because GS2 makes its outcomes permanent evidence; GS2's
+verdicts are believable because signing verifies against a root of
+trust GS3 keeps out of the store's own hands; GS4's lattice is
+enforceable because GS3 makes partitions the unit a floor can refuse;
+GS5's audit is decidable because GS1–GS2 already produced
+\Sig-shaped traces and verdicts as data; and GS6 makes every other
+guarantee historical rather than merely current. This interlocking is
+why the contribution is the conjunction, not the parts.
