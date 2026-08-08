@@ -130,8 +130,9 @@ fn cen_x1_export(ctx: &mut Ctx, out_dir: &str) {
         6,
         "Sigma/trace export for the external checker",
         &format!(
-            "exported {} decisions to {dir}: spec.yaml, trace-faithful.json (abstention \
-             visible), trace-padded.json (abstention padded); score with sarc_check.py",
+            "exported {} decisions to sarc-export/: spec.yaml, trace-faithful.json \
+             (abstention visible), trace-padded.json (abstention padded); score with \
+             sarc_check.py",
             ctx.replay.len()
         ),
         "RQ3",
