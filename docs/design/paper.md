@@ -209,11 +209,16 @@ Conventional knowledge-graph systems paper:
 
 ## 7. Build order
 
-`[U]` unblocks later items, `[P]` parallel-safe. File beads (`bd`) per
-item when work starts.
+`[U]` unblocks later items, `[P]` parallel-safe. Tracked as beads under
+the `paper` label (`bd list -l paper`): skeleton `quipu-zg0` → phases
+1–4 `quipu-y41` → {external arm `quipu-4mi`, replay `quipu-tj0` (also
+needs GS6 `quipu-krv`), in-the-wild `quipu-0u4`, agent arm `quipu-yr5`,
+determinism `quipu-02v`} → drafting `quipu-q89`; plus vocabulary policy
+`quipu-64q` and LaTeX scaffold `quipu-418`.
 
-1. `[U]` Write the comparison table and GS1–GS6 precisely (the paper's
-   §1 table + §3 page); it doubles as the Census defect catalogue.
+1. `[U]` ☑ Write the comparison table and GS1–GS6 precisely (the
+   paper's §1 table + §3 page); it doubles as the Census defect
+   catalogue. Done: [paper-principles.md](paper-principles.md).
 2. `[U]` Census skeleton: `benchmark/census/`, scripted timeline,
    defect injector, seed discipline, metrics emitters,
    `just bench census`, `BUILD_REPORT.md`.
