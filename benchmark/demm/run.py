@@ -163,11 +163,54 @@ def main() -> int:
         json.dumps(baseline_summary, indent=2, sort_keys=True) + "\n"
     )
 
+    # Asymmetry controls, per the benchmark's Table 5: Overclaim Rate
+    # alone cannot separate a conservative rule from a discriminating
+    # one, so report Underclaim and Sufficient-claim Rates plus the two
+    # trivial anchors.
+    truth = {case.case_id: case.ground_truth_sufficient() for case in cases}
+    truly_sufficient = sum(1 for v in truth.values() if v)
+
+    def asymmetry(verdicts: dict[str, str]) -> dict[str, float]:
+        sufficient = [cid for cid, v in verdicts.items() if v == "sufficient"]
+        overclaim = sum(1 for cid in sufficient if not truth[cid])
+        underclaim = sum(
+            1 for cid, v in verdicts.items() if v != "sufficient" and truth[cid]
+        )
+        n = len(verdicts)
+        return {
+            "sufficient_verdicts": len(sufficient),
+            "overclaim_rate": overclaim / n,
+            "underclaim_rate": (underclaim / truly_sufficient) if truly_sufficient else 0.0,
+            "sufficient_claim_rate": len(sufficient) / n,
+        }
+
+    scorer_verdicts = {o.case_id: o.verdict for o in outputs}
+    baseline_verdicts: dict[str, dict[str, str]] = {}
+    for row in baseline_rows:
+        baseline_verdicts.setdefault(row["scorer"], {})[row["case_id"]] = row["verdict"]
+    anchors = {
+        "always_sufficient": {cid: "sufficient" for cid in truth},
+        "always_insufficient": {cid: "insufficient" for cid in truth},
+    }
+
     scorer = evaluation["summary"]["scorers"]["decision_trace_reconstructor"]
+    psa_by_degradation = {
+        condition: stats["decision_trace_reconstructor"][
+            "mean_property_sufficiency_accuracy"
+        ]
+        for condition, stats in sorted(
+            evaluation["summary"]
+            .get("slices", {})
+            .get("degradation_condition", {})
+            .items()
+        )
+        if "decision_trace_reconstructor" in stats
+    }
     headline = {
         "cases": len(cases),
         "regime": "quipu",
         "native_decisions": len(natives),
+        "strictly_sufficient_cases": truly_sufficient,
         "scorer_valid": validation["valid"],
         "quipu_native_reconstructor": {
             "mean_property_sufficiency_accuracy": scorer[
@@ -175,14 +218,18 @@ def main() -> int:
             ],
             "overclaim_rate": scorer["overclaim_rate"],
             "overclaim_cases": scorer["overclaim_cases"],
+            **asymmetry(scorer_verdicts),
+            "psa_by_degradation_condition": psa_by_degradation,
         },
         "container_baselines": {
             name: {
                 "overclaim_rate": stats.get("overclaim_rate"),
                 "overclaim_cases": stats.get("overclaim_cases"),
+                **asymmetry(baseline_verdicts.get(name, {})),
             }
             for name, stats in sorted(baseline_summary["scorers"].items())
         },
+        "trivial_anchors": {name: asymmetry(v) for name, v in anchors.items()},
     }
     (out_dir / "quipu_headline.json").write_text(
         json.dumps(headline, indent=2, sort_keys=True) + "\n"

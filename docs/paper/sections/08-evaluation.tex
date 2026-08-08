@@ -120,32 +120,46 @@ whether decisions were \emph{correct}, but whether the records a
 runtime emits \emph{suffice to reconstruct} eight decision-level
 properties (actor identity, principal authority, action boundary,
 policy basis, decision basis, data/resource touch, lifecycle context,
-verification strength) under eight controlled degradation conditions —
-and, centrally, whether a reader of that evidence \emph{overclaims}
-sufficiency it does not have. We add \sys as a ninth evidence regime
-(\texttt{benchmark/demm/}): the \census run exports its 56 recorded
-decisions as three-plane native records — the writer-side guard trace,
-the signed verdict fact queried back from the store, and the bitemporal
-policy snapshot (claim as-of versus current, authority grants) — the
-benchmark's degradations delete evidence content plane by plane, and a
-content-only adapter reconstructs the eight properties, scored against
-the benchmark's own construction oracle over 64 cases.
+verification strength) under eight controlled degradation conditions.
+Its lead diagnostic is \emph{Overclaim Rate} — declaring a decision's
+evidence ``sufficient'' while a required property is not
+reconstructable — which operationalises the \emph{container fallacy}:
+inferring audit sufficiency from the presence of a trace, ledger, or
+schema. Following the benchmark's invitation to add regimes and
+scorers on its published contracts, we run \sys as a self-added ninth
+regime (\texttt{benchmark/demm/}): the \census run exports its 56
+recorded decisions as three-plane native records — writer-side guard
+trace, signed verdict fact queried back from the store, bitemporal
+policy snapshot — our transforms apply the benchmark's eight
+degradation semantics as content-level deletions, and a content-only
+reader reconstructs the eight properties, scored against the
+benchmark's own construction oracle over 64 cases. The degradations
+and the adapter are ours, so the result is a claim about \sys's
+record \emph{format}, not a leaderboard comparison against the
+benchmark's deliberately redacted-input reference scorer.
 
-The property-level reading of \sys's records reconstructs \textbf{512
-of 512} property cells (mean PSA 1.0) with \textbf{zero overclaim};
-the benchmark's five container-presence baselines, run over the same
-degraded evidence, overclaim on 62.5--87.5\% of cases (the
-benchmark's published reference: 50--75\% baseline overclaim, and
-56.25\% mean PSA for its container-indicator scorer at zero
-overclaim). The comparison measures what a record format
-\emph{preserves}, not scorer cleverness: \sys's planes carry explicit,
-separable markers per property — the signed verdict names its policy,
-the policy serves its claim as of the decision instant, authority is a
-queryable grant — so what a degradation deletes is detectable
-\emph{as} absent, and sufficiency never has to be guessed from
-container presence. One asymmetry is itself corroborated by the
-export: the store deliberately does not persist the denied writer
-(GS2 rolls the attempt back), so actor identity for denials lives
-only in the writer-side trace plane — the same division of labour the
-wild-trace audit (\S\ref{sec:eval-wild}) reported as partial
-attribution.
+Three findings, all deterministic. First, the container fallacy
+reproduces on \sys's evidence \emph{at its ceiling}: trace-, ledger-,
+and schema-presence baselines overclaim on 87.5\% of cases (the
+benchmark's own corpus: 50--75\%), precisely because \sys always
+emits all three planes — content-level degradation leaves every
+container present, so presence carries no information at all. Second,
+mechanical validity checking is enough to stop overclaim but not to
+localise it: a \sys-internal validator (field completeness,
+evidence-hash recomputation, executor--chain consistency, grant
+scope) reaches zero overclaim by refusing every degraded record
+outright, matching the benchmark's stricter baselines. Third, the
+property-level reading reconstructs \textbf{512 of 512} property
+cells (mean PSA 1.0, zero overclaim, zero underclaim) — including
+the two slices the benchmark reports as its candidate's hardest
+(conflicting identity and action boundary, PSA 0.25 there): both are
+decidable from \sys's records because the guard trace names its
+tool, target, graph, and principal chain, and the signed verdict
+names its policy, whose claim the store serves as of the decision
+instant. What a degradation deletes is detectable \emph{as} absent,
+so sufficiency never has to be guessed from container presence. One
+asymmetry is itself corroborated by the export: the store
+deliberately does not persist the denied writer (GS2 rolls the
+attempt back), so actor identity for denials lives only in the
+writer-side trace plane — the same division of labour the wild-trace
+audit (\S\ref{sec:eval-wild}) reported as partial attribution.

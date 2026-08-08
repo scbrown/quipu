@@ -43,19 +43,34 @@ python3 -m venv /tmp/demm/.venv && /tmp/demm/.venv/bin/pip install -e /tmp/demm
 
 ## Result (seed-42 census export, deterministic)
 
-| scorer | overclaim rate | mean PSA |
-|---|---|---|
-| quipu property-level reconstructor | **0.00** (0/64) | **1.00** |
-| trace-present baseline | 0.875 | — |
-| ledger-present baseline | 0.875 | — |
-| schema-present baseline | 0.875 | — |
-| container-checklist baseline | 0.625 | — |
-| source-specific validator baseline | 0.625 | — |
+| scorer | sufficient | overclaim | underclaim | mean PSA |
+|---|---|---|---|---|
+| quipu property-level reconstructor | 8/64 | **0.000** | 0.000 | **1.00** |
+| source-specific validator (quipu-internal validity) | 8/64 | 0.000 | 0.000 | — |
+| container-checklist (all three planes present) | 56/64 | 0.750 | 0.000 | — |
+| trace-present / ledger-present / schema-present | 64/64 | 0.875 | 0.000 | — |
 
-The benchmark's published reference on its own 64-case corpus:
-container-presence baselines overclaim on 50–75% of cases; its
-redacted property-level scorer reaches 56.25% mean PSA at zero
-overclaim. Repeat runs here are byte-identical.
+DEMM-Bench's published reference on its own 64-case corpus (its Tables
+4–5): trace/schema-present 0.75, ledger-present 0.50, its
+container-checklist and source-specific validators 0.00 — and its
+redacted-input candidate scorer 56.25% mean PSA at zero overclaim.
+Repeat runs here are byte-identical.
+
+Two contrasts carry the finding. **Presence predicates do worse on
+quipu than on the benchmark's own corpus** (0.875 vs 0.50–0.75):
+quipu always emits all three planes, so content-level degradation
+leaves every container present and presence carries no information —
+the container fallacy at its ceiling. **Validity and property-level
+reading both abstain correctly, but only the latter localizes**: the
+quipu-internal validator (field completeness, evidence-hash
+recomputation, executor–chain consistency, grant scope) reaches zero
+overclaim by refusing every degraded record outright, while the
+property-level reader additionally names which of the eight properties
+each degradation destroyed — including the two slices the benchmark's
+candidate found hardest (conflicting-identity, PSA 0.25 there; action
+boundary, PSA 0.25 overall), both decidable from quipu's guard trace
+because the record names its tool, target, graph, and chain
+explicitly.
 
 ## Scoring discipline and claim boundaries
 
@@ -67,13 +82,16 @@ overclaim. Repeat runs here are byte-identical.
   field, and predictions are computed from the degraded record before
   the case's labels exist in scope (the benchmark's label-leakage
   rules).
-- PSA 1.0 is a claim about *format decidability*, not reconstruction
-  difficulty: quipu's three evidence planes carry explicit, separable
+- PSA 1.0 is a claim about *format decidability*, not scorer
+  superiority: quipu's three evidence planes carry explicit, separable
   markers for each property, so content-level rules recover exactly
-  what each degradation left. The benchmark's own headline scorer is
-  restricted to redacted container indicators and tops out at 56.25%
-  PSA on evidence that collapses those distinctions — the comparison
-  measures what a record format preserves, not scorer cleverness.
+  what each degradation left. The benchmark's own candidate scorer is
+  deliberately restricted to redacted container indicators (its
+  conservative no-human configuration) and is not comparable
+  head-to-head; the degradations and the adapter here are also ours,
+  built to the oracle's published semantics — this is a self-run
+  ninth-regime extension in the direction the benchmark's future-work
+  F2 invites, not a leaderboard entry.
 - The zero-overclaim column is the load-bearing one: signed verdicts,
   named policies with as-of claims, and explicit authority grants mean
   absence is detectable as absence, so a content-level reader never has

@@ -14,6 +14,7 @@ with itself).
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 Record = dict[str, Any]
@@ -146,18 +147,56 @@ def property_categories(record: Record) -> dict[str, str]:
     return {name: fn(record) for name, fn in RECONSTRUCTORS.items()}
 
 
+def source_validator(record: Record) -> bool:
+    """quipu's source-specific validator, per the benchmark's Table 2
+    pattern (regime-internal validity, still not property-level scoring):
+    every expected field of every plane present, the verdict's evidence
+    hash recomputes from what it signs over, the executor is consistent
+    with the principal chain, and the target graph falls inside the
+    writer's grants. Passes only an intact record — like the benchmark's
+    delegation-validator ("signed delegation-chain integrity and
+    signature validity"), it certifies internal validity, not that the
+    record answers a given governance question.
+    """
+    guard, verdict, policy = _planes(record)
+    guard_ok = all(
+        guard.get(k)
+        for k in ("executor", "principal_chain", "tool", "target", "graph", "at", "constraints")
+    )
+    verdict_ok = all(
+        verdict.get(k)
+        for k in ("predicate_id", "target_ref", "outcome", "evidence_hash", "verifier", "signature")
+    )
+    policy_ok = all(
+        policy.get(k) for k in ("iri", "as_of", "claim_as_of", "targets", "authority_grants")
+    )
+    if not (guard_ok and verdict_ok and policy_ok):
+        return False
+    canonical = "|".join(
+        str(verdict[k]) for k in ("predicate_id", "target_ref", "outcome")
+    )
+    digest = "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
+    if verdict.get("evidence_hash") != digest:
+        return False
+    if guard["executor"] not in guard["principal_chain"]:
+        return False
+    grants = policy["authority_grants"]
+    return "*" in grants or guard["graph"] in grants
+
+
 def container_flags(record: Record) -> dict[str, Any]:
     """Container-presence indicators — what the presence baselines see.
 
-    Deliberately shallow: presence of a plane, not sufficiency of its
-    content. The gap between these flags and the property categories is
-    the benchmark's point.
+    The first four are deliberately shallow (a plane or bundle is
+    present, not sufficient); the fifth is the regime-internal validity
+    check above. The gap between these flags and the property categories
+    is the benchmark's point.
     """
     guard, verdict, policy = _planes(record)
     return {
         "trace_present": bool(guard),
         "ledger_present": bool(verdict.get("present")),
         "schema_valid": True,
-        "checklist_complete": bool(policy.get("iri") or verdict.get("predicate_id")),
-        "source_validator_passed": bool(verdict.get("signature")),
+        "checklist_complete": bool(guard) and bool(verdict) and bool(policy),
+        "source_validator_passed": source_validator(record),
     }
