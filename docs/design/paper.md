@@ -284,7 +284,18 @@ determinism `quipu-02v`} → drafting `quipu-q89`; plus vocabulary policy
 - hank `docs/book/src/design/sarc-conformance.md` — joint conformance
   map and gap list.
 - SARC: Besanson, arXiv:2605.07728; reference artifacts at
-  `besanson/sarc-governance` (RQ3's comparison arm).
+  `besanson/sarc-governance` (RQ3's comparison arm). Successors cited
+  in the paper's related work: Green SARC (arXiv:2606.15954) and
+  SARC-DQ (arXiv:2607.26313).
+- **Parked for a future paper** (Stiwi, 2026-08-09): WorldKernel
+  (Rovai, arXiv:2606.10934) casts a world model as a coupling kernel
+  over admissible possible worlds. The connection to explore: a named
+  graph / knowledge pack export is exactly an *admissible world
+  scoped to a task* — the encapsulated subgraph carrying what one
+  agent needs for one job, with labels bounding admissibility and
+  pack composition as the coupling between worlds. Out of scope for
+  the systems paper; candidate frame for the packs/composition
+  follow-up.
 - Evaluation-hygiene lineage: practices in §8 adapted from the
   benchmarking discipline of arXiv:2605.09184's companion repository
   (`fabio-rovai/open-ontologies`).

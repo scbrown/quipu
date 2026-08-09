@@ -37,7 +37,14 @@ points, decidable audit. \sys relocates the machinery into the store —
 \Sig as facts, the gate as the write path, verdicts as signed
 bitemporal facts, the audit reading \Sig from the graph it governs —
 and \S\ref{sec:eval-audit} measures agreement with SARC's own
-reference checker. Verification runtimes such as
+reference checker. SARC's successors specialise the same frame per
+domain: Green SARC~\cite{besanson2026greensarc} compiles cost and
+carbon budgets into the loop (a soft budget penalty breaches on
+91.5\% of seeds, the architectural gate on none — the
+accept-then-clean lesson restated in FinOps), and
+SARC-DQ~\cite{besanson2026sarcdq} gates evidence quality at the point
+of action, the loop-side counterpart of our write gate; \sys is the
+specialisation to the store. Verification runtimes such as
 Tardygrada~\cite{rovai2026tardygrada} converge independently on
 three-valued verdicts and weakest-link aggregation, evidence that the
 violation/incompleteness distinction and least-confident-leaf rules

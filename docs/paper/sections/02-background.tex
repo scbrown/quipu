@@ -9,9 +9,10 @@ constraint declares its source, class (\emph{hard} / \emph{soft} /
 compiles into four enforcement points in the agent loop — a Pre-Action
 Gate, an Action-Time Monitor, a Post-Action Auditor, and an Escalation
 Router — bound by invariants whose joint effect is a \emph{decidable
-audit}: given a specification \Sig and a trace $T$, a checker decides
-$T \entails \Sig$ in $O(|T|\cdot|C|)$ without access to the model or
-its prompts. SARC stops at the loop: its reference artifact keeps \Sig
+audit}: given a specification \Sig with constraint set $C$ and a
+trace $T$, a checker decides $T \entails \Sig$ — read: the trace
+satisfies the specification — in $O(|T|\cdot|C|)$, trace records
+times constraints, without access to the model or its prompts. SARC stops at the loop: its reference artifact keeps \Sig
 in a file beside the system and audits an exported trace with an
 external checker. The knowledge the agents act on sits in an
 ungoverned store underneath. Our position is that the store is the
