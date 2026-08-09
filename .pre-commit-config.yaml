@@ -6,10 +6,13 @@ repos:
       # it needs excluding here TOO: these two hooks REWRITE what they inspect,
       # so on every run they "fixed" `mermaid.min.js` and exited 1 with "files
       # were modified by this hook". That is why CI went red — see below.
+      # upstream-quipu-regime.patch is a `git am` artifact: blank context
+      # lines in a unified diff are a single space, which these two hooks
+      # strip, silently corrupting the byte-exact patch.
       - id: trailing-whitespace
-        exclude: ^docs/book/mermaid\.min\.js$
+        exclude: ^(docs/book/mermaid\.min\.js|benchmark/demm/upstream-quipu-regime\.patch)$
       - id: end-of-file-fixer
-        exclude: ^docs/book/mermaid\.min\.js$
+        exclude: ^(docs/book/mermaid\.min\.js|benchmark/demm/upstream-quipu-regime\.patch)$
       - id: check-yaml
       - id: check-json
         types: [json]
