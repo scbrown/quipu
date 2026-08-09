@@ -8,6 +8,7 @@ rolls back the attempted delta but not the decision's record.
 
 \begin{figure}[t]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[node distance=4mm and 8mm]
   \node[stage] (write) {write\\\footnotesize datums, instant,\\\footnotesize actor, chain, graph};
   \node[stage, right=of write] (auth) {authority\\\footnotesize intersection\\\footnotesize along chain (GS3)};
@@ -25,7 +26,7 @@ rolls back the attempted delta but not the decision's record.
   \draw[refused] (shacl) |- node[note, pos=0.25, right=1mm] {refuse} (rollback);
   \draw[flow] (commit) -- (verdict);
   \draw[flow] (rollback) -- node[note, below] {either way} (verdict);
-\end{tikzpicture}
+\end{tikzpicture}}
 \caption{The gated write path. Every gate decision — acceptance or
 refusal — flushes a signed, attributed verdict \emph{after} the
 savepoint resolves, so the verdict survives the rollback it records;

@@ -9,7 +9,7 @@ Table~\ref{tab:scorecard} is the run at a glance.
 
 \begin{table}[t]
 \centering
-\small
+\footnotesize
 \begin{tabular}{@{}lll@{}}
 \toprule
  & Question & Result \\
@@ -222,6 +222,7 @@ benchmark's deliberately redacted-input reference scorer.
 
 \begin{figure}[t]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}
   \node[stage] (guard) at (0, 1.35) {guard trace\\\footnotesize writer, chain, tool,\\\footnotesize target, graph, instant};
   \node[stage] (ledger) at (0, 0) {signed verdict\\\footnotesize policy, outcome,\\\footnotesize attribution, hash, sig};
@@ -237,7 +238,7 @@ benchmark's deliberately redacted-input reference scorer.
   \draw[flow] (degrade.east) -- (reader.west);
   \draw[flow] (presence.east) -- (oracle.west);
   \draw[flow] (reader.east) -- (oracle.west);
-\end{tikzpicture}
+\end{tikzpicture}}
 \caption{The DEMM run (\texttt{benchmark/demm/}): \census exports each
 decision as three evidence planes; deterministic degradations damage
 the content; two kinds of reader are scored against the benchmark's
