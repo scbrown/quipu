@@ -19,7 +19,7 @@
 - **Related:** [vision.md](vision.md), [graph-labels.md](graph-labels.md),
   [policy-edit-hooks.md](policy-edit-hooks.md),
   [named-graphs.md](named-graphs.md),
-  [shape-versioning.md](shape-versioning.md), and hank's
+  [shape-versioning.md](shape-versioning.md), and yupana's
   `docs/book/src/design/sarc-conformance.md` (the joint conformance map).
 
 ## 1. Intent and thesis
@@ -151,9 +151,9 @@ arm is the same script with one flag; `BUILD_REPORT.md` records the
 defect catalogue and discarded designs.
 
 **Census-in-the-wild.** A short subsection replays a recorded
-hank-promotion trace through the same audit, bounding the
+yupana-promotion trace through the same audit, bounding the
 external-validity gap of a synthetic scenario. The stack supplies the
-realism anchors: hank promotion (governed writer), shantytown's
+realism anchors: yupana promotion (governed writer), shantytown's
 subscriber (consumer), NeuralAmplifier's three-plane trust precedence
 (the lattice's motivating case).
 
@@ -228,7 +228,7 @@ determinism `quipu-02v`} → drafting `quipu-q89`; plus vocabulary policy
 5. RQ3 external arm: Σ/T exporter to the `besanson/sarc-governance`
    checker format.
 6. RQ5 as-of replay scoring across the amendment boundary.
-7. Census-in-the-wild: replay a recorded hank-promotion trace through
+7. Census-in-the-wild: replay a recorded yupana-promotion trace through
    the audit.
 8. `[P]` Optional RQ2 agent arm (real agent vs scripted writer).
 9. Draft §3–§6 from this doc and the design docs; §7 last, from
@@ -281,7 +281,7 @@ determinism `quipu-02v`} → drafting `quipu-q89`; plus vocabulary policy
   [knowledge-packs.md](knowledge-packs.md) — partitioning and
   composition substrate.
 - [shape-versioning.md](shape-versioning.md) — the GS6 feature.
-- hank `docs/book/src/design/sarc-conformance.md` — joint conformance
+- yupana `docs/book/src/design/sarc-conformance.md` — joint conformance
   map and gap list.
 - SARC: Besanson, arXiv:2605.07728; reference artifacts at
   `besanson/sarc-governance` (RQ3's comparison arm). Successors cited
