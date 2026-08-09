@@ -39,7 +39,12 @@ $\mathit{label}(A \cup B) = \mathit{label}(A) \sqcap \mathit{label}(B)$
 is machine-checked by property test. Trust ranks compare only within a
 declared chain; cross-chain comparison returns an error naming both
 chains, because a silent integer comparison is exactly the bug that
-ranks a learned tactic above canon. Label expiry is a
+ranks a learned tactic above canon.\footnote{The lattice's motivating
+deployment: NeuralAmplifier
+(\texttt{github.com/scbrown/NeuralAmplifier}), a game-playing harness
+whose knowledge divides into exactly such planes — canonical rules
+(datalinks), curated doctrine, learned memory — and whose correctness depends
+on the precedence between them never being decided by accident.} Label expiry is a
 $\mathit{valid\_to}$ on the label assertion: an expired label is
 absent — it degrades coverage — not false and not unknown.
 
