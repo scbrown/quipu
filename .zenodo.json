@@ -1,0 +1,33 @@
+{
+  "title": "Quipu: an AI-native knowledge graph with strict ontology enforcement",
+  "description": "<p>An embeddable, governed, bitemporal knowledge-graph store built for agent-written knowledge.</p><p>No fact enters except through a gate whose predicates evaluate the pending post-state. Data, trust labels, verdicts and the validation rules themselves are bitemporal. Named graphs are the unit of authority and trust, composed under a lattice whose single invariant is that composition never widens. The governance specification, the trace and signed verdicts are facts in the store they govern, which makes the audit a query rather than an external process.</p><p>Written in Rust. Exposes 28 Model Context Protocol tools. Evaluation harness and census data under <code>benchmark/census/</code>.</p>",
+  "upload_type": "software",
+  "license": "mit",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Brown, Steve",
+      "affiliation": "Independent"
+    }
+  ],
+  "keywords": [
+    "knowledge graph",
+    "bitemporal",
+    "RDF",
+    "SPARQL",
+    "SHACL",
+    "ontology",
+    "governance",
+    "agentic AI",
+    "provenance",
+    "Model Context Protocol",
+    "Rust"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/scbrown/quipu",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}

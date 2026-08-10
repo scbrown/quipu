@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use Quipu in your research, please cite it as below."
+title: "Quipu: an AI-native knowledge graph with strict ontology enforcement"
+abstract: >-
+  An embeddable, governed, bitemporal knowledge-graph store built for
+  agent-written knowledge. No fact enters except through a gate whose
+  predicates evaluate the pending post-state; data, trust labels, verdicts
+  and the validation rules themselves are bitemporal; named graphs are the
+  unit of authority and trust, composed under a lattice whose single
+  invariant is that composition never widens; and the governance
+  specification, the trace and signed verdicts are facts in the store they
+  govern, making the audit a query.
+type: software
+authors:
+  - given-names: Steve
+    family-names: Brown
+    email: scbrown3@gmail.com
+    city: Kennesaw
+    region: Georgia
+    country: US
+repository-code: "https://github.com/scbrown/quipu"
+license: MIT
+version: 0.3.19
+date-released: 2026-08-07
+keywords:
+  - knowledge graph
+  - bitemporal
+  - RDF
+  - SPARQL
+  - SHACL
+  - ontology
+  - governance
+  - agentic AI
+  - provenance
+  - Model Context Protocol
+  - Rust
