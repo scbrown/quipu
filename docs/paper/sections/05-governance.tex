@@ -16,14 +16,14 @@ rolls back the attempted delta but not the decision's record.
   \node[stage, right=of gate] (shacl) {SHACL\\\footnotesize episode\\\footnotesize shapes};
   \node[stage, right=of shacl] (commit) {commit\\\footnotesize bitemporal\\\footnotesize facts};
   \node[stage, below=7mm of gate] (rollback) {rollback\\\footnotesize attempted delta\\\footnotesize discarded (GS2)};
-  \node[stage, below=7mm of commit, xshift=2mm] (verdict) {signed verdict\\\footnotesize policy, target, outcome,\\\footnotesize actor + chain in sealed hash};
+  \node[stage, below=16mm of commit, xshift=2mm] (verdict) {signed verdict\\\footnotesize policy, target, outcome,\\\footnotesize actor + chain in sealed hash};
   \draw[flow] (write) -- (auth);
   \draw[flow] (auth) -- (gate);
   \draw[flow] (gate) -- (shacl);
   \draw[flow] (shacl) -- (commit);
   \draw[refused] (auth) |- node[note, pos=0.75, above] {refuse} (rollback);
-  \draw[refused] (gate) -- node[note, right] {refuse} (rollback);
-  \draw[refused] (shacl) |- node[note, pos=0.25, right=1mm] {refuse} (rollback);
+  \draw[refused] (gate) -- node[note, left=0.5mm] {refuse} (rollback);
+  \draw[refused] (shacl) |- node[note, pos=0.75, above] {refuse} (rollback);
   \draw[flow] (commit) -- (verdict);
   \draw[flow] (rollback) -- node[note, below] {either way} (verdict);
 \end{tikzpicture}}

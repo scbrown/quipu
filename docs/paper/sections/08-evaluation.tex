@@ -225,9 +225,12 @@ benchmark's deliberately redacted-input reference scorer.
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}
-  \node[stage] (guard) at (0, 1.35) {guard trace\\\footnotesize writer, chain, tool,\\\footnotesize target, graph, instant};
+  % Stacked relative to the centre node rather than at fixed y-coordinates:
+  % three lines of text are taller than the 1.35cm spacing allowed, so the
+  % boxes overlapped. `below=of` guarantees the gap whatever the content.
   \node[stage] (ledger) at (0, 0) {signed verdict\\\footnotesize policy, outcome,\\\footnotesize attribution, hash, sig};
-  \node[stage] (policy) at (0, -1.35) {policy snapshot\\\footnotesize claim as-of vs now,\\\footnotesize authority grants};
+  \node[stage, above=3mm of ledger] (guard) {guard trace\\\footnotesize writer, chain, tool,\\\footnotesize target, graph, instant};
+  \node[stage, below=3mm of ledger] (policy) {policy snapshot\\\footnotesize claim as-of vs now,\\\footnotesize authority grants};
   \node[draw, dashed, rounded corners=1pt, fit=(guard)(ledger)(policy),
         inner sep=3pt, label={[note]above:{56 \census decisions $\times$ 3 planes}}] (native) {};
   \node[stage] (degrade) at (4.1, 0) {8 degradations\\\footnotesize delete or contradict\\\footnotesize evidence content};
