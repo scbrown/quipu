@@ -7,7 +7,13 @@ All notable changes to this project will be documented in this file.
 ### Documentation
 
 - Add the Zenodo DOI badge([964accb](https://github.com/scbrown/quipu/commit/964accbf1f03126b721494da88cbab978df08fe0))
+- *(paper)* Cite the archived artifact DOI for the census numbers([313eeec](https://github.com/scbrown/quipu/commit/313eeec2b02087f33a52d80f47b174c85e74eb7b))
+- *(paper)* Drop the Draft label from the title page([6cb012b](https://github.com/scbrown/quipu/commit/6cb012b4140893915b4bb31c7647389346749a66))
 - Record the author ORCID, and catch CITATION.cff up to v0.3.20([cd7d12a](https://github.com/scbrown/quipu/commit/cd7d12abd7908c8c9274f2f21334e781b6652d35))
+
+### Fixed
+
+- *(paper)* Stop the figure boxes colliding([42adcd2](https://github.com/scbrown/quipu/commit/42adcd28ae18823821b4696335ab9c024201909c))
 
 ## [0.3.20] - 2026-08-10
 
