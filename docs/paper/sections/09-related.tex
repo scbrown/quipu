@@ -5,7 +5,7 @@
 Datomic established the immutable EAVT log with transaction time;
 XTDB adds valid time as a first-class axis. \sys's departure is not
 the axes but their reach: labels, verdicts, decisions, authority
-grants, and — via the versioned registry — the validation rules
+grants, and --- via the versioned registry --- the validation rules
 themselves are time-indexed, which is what makes governance replay
 (\S\ref{sec:eval-replay}) a query rather than an archaeology project.
 
@@ -18,14 +18,14 @@ security-relevant labels by meet and join. \sys's contribution on
 this line is operational: coverage as an explicit third outcome
 (neither fail-open $\top$ nor floor-dragging $\bot$), refusal of
 cross-chain comparison by name, expiry-as-absence, and a
-machine-checked composition homomorphism — enforced at query time by
+machine-checked composition homomorphism --- enforced at query time by
 floors rather than described.
 
 \paragraph{Validation-centric stores.}
 SHACL provides shape validation, and stores ship it as a callable
 service; \sys makes it (and policy claims) a write-path gate with
 episode scope, and pairs open-world shape validation with closed-world
-vocabulary policies expressed as ordinary \textsc{ask} claims —
+vocabulary policies expressed as ordinary \textsc{ask} claims ---
 catching the fabricated-term case open-world validation silently
 accepts, a failure mode measured at scale by
 Rovai~\cite{rovai2026openontologies}.
@@ -33,14 +33,14 @@ Rovai~\cite{rovai2026openontologies}.
 \paragraph{Governance for agentic systems.}
 SARC~\cite{besanson2026sarc} is the nearest ancestor and the frame we
 compile: constraints as specification objects, four enforcement
-points, decidable audit. \sys relocates the machinery into the store —
+points, decidable audit. \sys relocates the machinery into the store ---
 \Sig as facts, the gate as the write path, verdicts as signed
-bitemporal facts, the audit reading \Sig from the graph it governs —
+bitemporal facts, the audit reading \Sig from the graph it governs ---
 and \S\ref{sec:eval-audit} measures agreement with SARC's own
 reference checker. SARC's successors specialise the same frame per
 domain: Green SARC~\cite{besanson2026greensarc} compiles cost and
 carbon budgets into the loop (a soft budget penalty breaches on
-91.5\% of seeds, the architectural gate on none — the
+91.5\% of seeds, the architectural gate on none --- the
 accept-then-clean lesson restated in FinOps), and
 SARC-DQ~\cite{besanson2026sarcdq} gates evidence quality at the point
 of action, the loop-side counterpart of our write gate; \sys is the
@@ -51,8 +51,8 @@ violation/incompleteness distinction and least-confident-leaf rules
 are being rediscovered wherever agent output must be gated. The same
 migration is under way in practitioner harnesses:
 ForCoding~\cite{forcoding2026} rebuilt its orchestrator by
-consolidating sixty-odd prompt-embedded rules — ``polite requests''
-to the model, by its own changelog — into a thirty-one-rule
+consolidating sixty-odd prompt-embedded rules --- ``polite requests''
+to the model, by its own changelog --- into a thirty-one-rule
 deterministic policy engine with hash-chained audit records: the governance-outside default being
 abandoned in the field, at the harness layer, for the same reasons we
 abandon it in the store.

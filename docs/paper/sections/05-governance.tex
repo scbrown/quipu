@@ -27,8 +27,8 @@ rolls back the attempted delta but not the decision's record.
   \draw[flow] (commit) -- (verdict);
   \draw[flow] (rollback) -- node[note, below] {either way} (verdict);
 \end{tikzpicture}}
-\caption{The gated write path. Every gate decision — acceptance or
-refusal — flushes a signed, attributed verdict \emph{after} the
+\caption{The gated write path. Every gate decision --- acceptance or
+refusal --- flushes a signed, attributed verdict \emph{after} the
 savepoint resolves, so the verdict survives the rollback it records;
 the attempted delta deliberately does not.}
 \label{fig:writepath}
@@ -38,22 +38,22 @@ the attempted delta deliberately does not.}
 A policy is an entity in the graph: target type, a claim (a SPARQL
 \textsc{ask}), a boundary, an effect (\emph{deny},
 \emph{require-approval}, advisory effects), and, for escalations, a
-declared reversibility window; the full SARC constraint object —
-class and verification point — is SHACL-validated at \emph{definition}
+declared reversibility window; the full SARC constraint object ---
+class and verification point --- is SHACL-validated at \emph{definition}
 time, including the class-to-placement discipline plain SHACL cannot
 state. At write time, staged facts are evaluated inside the open
 savepoint: claims run against the pending post-state, indexed by
 target type so a write touching no governed type runs zero claims
 (GS1's zero-cost abstention). One consequence surfaced by the
 benchmark and worth stating as a rule: a claim's dataset scope is part
-of the claim — a policy governing facts that live in named graphs must
+of the claim --- a policy governing facts that live in named graphs must
 say \textsc{graph} in its pattern, or it judges an empty default-graph
 view (\S\ref{sec:census}).
 
 \paragraph{Verdicts survive the rollback they record.}
-Every gate decision stages a verdict — policy, target, outcome, the
+Every gate decision stages a verdict --- policy, target, outcome, the
 write's attribution (actor and principal chain), evidence hash,
-signature — and flushes it in its own transaction \emph{after} the
+signature --- and flushes it in its own transaction \emph{after} the
 write's savepoint resolves, so a denial's verdict outlives the
 denial's rollback, and keeps its actor even though the attempted
 delta does not survive. The attribution sits inside the evidence hash
@@ -65,8 +65,8 @@ a re-entry guard prevents a policy targeting verdicts from denying
 the recording of its own denial.
 
 \paragraph{Escalation without a waiting engine.}
-A refusal under \emph{require-approval} mints a decision request —
-policy, target, evidence hash, expiry from the declared window — as
+A refusal under \emph{require-approval} mints a decision request ---
+policy, target, evidence hash, expiry from the declared window --- as
 facts that survive the refusal's rollback. A human answers with a
 decision bound to the same evidence hash; the \emph{next} attempt
 succeeds. The hold is the agent retrying, not the engine waiting;
@@ -82,8 +82,8 @@ Relabelling a graph requires authority over the meta-graph, not the
 graph being labelled.
 
 \paragraph{The audit reads \Sig from the graph.}
-The checker decides $T \entails \Sig$ over four passes — coverage,
-class-placement, outcome consistency, attribution — reading \Sig from
+The checker decides $T \entails \Sig$ over four passes --- coverage,
+class-placement, outcome consistency, attribution --- reading \Sig from
 the store rather than a snapshot beside it, deterministically and
 never via a model. Violation and incompleteness are kept distinct
 end-to-end: the dispatch inventory reports an ungoverned executable

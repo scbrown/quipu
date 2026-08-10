@@ -6,12 +6,12 @@ SARC~\cite{besanson2026sarc} treats constraints as first-class
 specification objects alongside state, action space, and reward: a
 constraint declares its source, class (\emph{hard} / \emph{soft} /
 \emph{escalation}), predicate, verification point, and response, and
-compiles into four enforcement points in the agent loop — a Pre-Action
+compiles into four enforcement points in the agent loop --- a Pre-Action
 Gate, an Action-Time Monitor, a Post-Action Auditor, and an Escalation
-Router — bound by invariants whose joint effect is a \emph{decidable
+Router --- bound by invariants whose joint effect is a \emph{decidable
 audit}: given a specification \Sig with constraint set $C$ and a
-trace $T$, a checker decides $T \entails \Sig$ — read: the trace
-satisfies the specification — in $O(|T|\cdot|C|)$, trace records
+trace $T$, a checker decides $T \entails \Sig$ --- read: the trace
+satisfies the specification --- in $O(|T|\cdot|C|)$, trace records
 times constraints, without access to the model or its prompts. SARC stops at the loop: its reference artifact keeps \Sig
 in a file beside the system and audits an exported trace with an
 external checker. The knowledge the agents act on sits in an
@@ -24,8 +24,8 @@ learned something) and valid time (when it holds in the world), in the
 lineage of Datomic and XTDB. What conventional bitemporal systems do
 not do is extend the treatment beyond data: trust annotations, policy
 decisions, and the validation rules themselves remain latest-only, so
-the historical questions governance actually asks — what was believed,
-what was trusted, what was \emph{required} at $T$ — outrun the store's
+the historical questions governance actually asks --- what was believed,
+what was trusted, what was \emph{required} at $T$ --- outrun the store's
 memory.
 
 \paragraph{Named graphs and trust.}

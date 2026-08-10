@@ -13,17 +13,17 @@ well-formed, and sometimes wrong facts faster than any review process
 drains them, each of those defaults becomes a liability.
 
 We name four defaults and their failure modes
-(Table~\ref{tab:defaults}). \textbf{D1 — accept, then clean:}
+(Table~\ref{tab:defaults}). \textbf{D1 --- accept, then clean:}
 validation in conventional stores is optional, post-hoc, or the
 application's job; with agent writers the cleanup debt compounds and
 downstream readers consume the store in the window between write and
-review. \textbf{D2 — one time axis, or none:} even honestly bitemporal
+review. \textbf{D2 --- one time axis, or none:} even honestly bitemporal
 stores make only the \emph{data} bitemporal, so ``what was trusted at
 time $T$'' and ``what was \emph{allowed} at $T$'' are unanswerable, and
-audit degrades to log archaeology. \textbf{D3 — flat trust:} named
+audit degrades to log archaeology. \textbf{D3 --- flat trust:} named
 graphs exist, but composition is silent union; one query joins an
 attested graph with a quarantined one and the result inherits the
-prestige of the attested source. \textbf{D4 — governance outside:}
+prestige of the attested source. \textbf{D4 --- governance outside:}
 policy lives in dashboards, prompts, or middleware; the specification
 and the store drift independently, and no mechanical check connects
 them.
@@ -58,23 +58,23 @@ The operating posture that falls out is the thesis in one line:
 \emph{start strict; use agents to bear the cost of strictness.} A store
 that refuses invalid, untagged, unauthorized, or policy-violating
 writes is affordable exactly when the writer is an agent, because the
-refusal carries structured feedback and the agent — not a curator —
+refusal carries structured feedback and the agent --- not a curator ---
 absorbs the retry (\S\ref{sec:eval-agent} shows the loop converging in
 one revision).
 
 \paragraph{Contributions.}
 \begin{enumerate}[leftmargin=1.4em,itemsep=0.15em]
 \item \textbf{The system} (\S\ref{sec:datamodel}--\S\ref{sec:impl}):
-  a single-file, embeddable store implementing all four inversions —
+  a single-file, embeddable store implementing all four inversions ---
   a bitemporal EAVT log with a three-valued write operation,
   named-graph partitioning with bind-once overlays and tombstones, a
   machine-checked label lattice with explicit coverage, and an in-store
   governance plane with signed verdicts, escalation, authority
   intersection, and a deterministic audit.
-\item \textbf{The design principles} (\S\ref{sec:principles}): GS1–GS6,
+\item \textbf{The design principles} (\S\ref{sec:principles}): GS1--GS6,
   a one-page statement of what a store must guarantee before
   agent-written knowledge can be trusted, each principle paired with
-  the failure mode of the conventional default it replaces — distilled
+  the failure mode of the conventional default it replaces --- distilled
   from building \sys, and extending SARC's governance-by-architecture
   from the agent loop to the store.
 \item \textbf{The benchmark} (\S\ref{sec:census}): \census, a

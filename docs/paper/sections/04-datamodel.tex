@@ -9,16 +9,16 @@ and operation. Transaction time comes from a transactions table
 carrying actor and source; current state is the open-interval subset.
 IRIs are interned in a term dictionary whose append-only discipline is
 itself an invariant under test. The operation is three-valued:
-\emph{assert}, \emph{retract} (a logical close of the valid interval —
+\emph{assert}, \emph{retract} (a logical close of the valid interval ---
 history survives), and \emph{tombstone}, which marks a triple
-\emph{absent in a composed view} without mutating the layer beneath —
+\emph{absent in a composed view} without mutating the layer beneath ---
 an operation neither Datomic-style logs nor RDF carry, and the piece
 that makes layered composition sound.
 
 \paragraph{Named graphs, overlays, datasets.}
 The graph coordinate $g$ partitions the log. Committed graphs are
 self-rooted; overlay-class graphs bind \emph{once} at creation to a
-committed parent branch, and rebinding is an error — the binding is
+committed parent branch, and rebinding is an error --- the binding is
 unforgeable, which is what lets a composed view resolve
 nearest-overlay-wins without trusting the overlay's claims about its
 base. Datasets name arbitrary graph-sets; the branch tree and the
@@ -26,8 +26,8 @@ dataset semilattice are different relations over the same nodes, and
 silence never widens a dataset.
 
 \paragraph{The label lattice.}
-Partitions carry labels on four axes — freshness, trust, durability,
-policy — stored as ordinary bitemporal facts in a reserved meta-graph
+Partitions carry labels on four axes --- freshness, trust, durability,
+policy --- stored as ordinary bitemporal facts in a reserved meta-graph
 (the cache columns are derived, re-computable state). Composition
 folds labels under one named invariant, \emph{composition never
 widens}: freshness and trust by meet, obligations by join. The
@@ -42,11 +42,11 @@ chains, because a silent integer comparison is exactly the bug that
 ranks a learned tactic above canon.\footnote{The lattice's motivating
 deployment: NeuralAmplifier
 (\texttt{github.com/scbrown/NeuralAmplifier}), a game-playing harness
-whose knowledge divides into exactly such planes — canonical rules
-(datalinks), curated doctrine, learned memory — and whose correctness depends
+whose knowledge divides into exactly such planes --- canonical rules
+(datalinks), curated doctrine, learned memory --- and whose correctness depends
 on the precedence between them never being decided by accident.} Label expiry is a
 $\mathit{valid\_to}$ on the label assertion: an expired label is
-absent — it degrades coverage — not false and not unknown.
+absent --- it degrades coverage --- not false and not unknown.
 
 \paragraph{Composition across stores.}
 Term identifiers are globally unique by construction (each store
@@ -57,5 +57,5 @@ three invariants: attaching changes no existing query's result, the
 host never writes into an attachment, and attachments are verified and
 refused rather than migrated. Knowledge packs move a graph between
 stores by \emph{re-interning} facts rather than copying rows, and a
-pack's identity is a content hash over sorted N-Triples — two stores
+pack's identity is a content hash over sorted N-Triples --- two stores
 with different id assignment hash the same.

@@ -37,22 +37,22 @@ records.}
 \label{tab:scorecard}
 \end{table}
 
-\subsection{RQ1 — does enforcement cost scale only with governed writes?}
+\subsection{RQ1 --- does enforcement cost scale only with governed writes?}
 Partly, and the boundary is itself a result. Within the gated arm,
 clean writes touching no governed type run zero policy claims (the
 target-type pre-filter) and median 1.3\,ms per write versus 2.7\,ms
 for compliant governed writes, which pay claim evaluation plus verdict
 signing and recording. But the gated arm's ungoverned writes are not
 free relative to the control arm's (median 0.7\,ms): authority
-intersection runs on every graph-scoped write \emph{by design} — GS3
+intersection runs on every graph-scoped write \emph{by design} --- GS3
 guards where facts may land at all and is deliberately not
 abstention-eligible. Zero-cost abstention is a property of the policy
 gate, not of governance as a whole, and we report it at that scope.
 
-\subsection{RQ2 — does the gated store end cleaner than the ungated one?}
+\subsection{RQ2 --- does the gated store end cleaner than the ungated one?}
 Completely, on the planted set: the gated arm's final graph contains
-\textbf{0 of 6} planted defects; the control arm — the same script,
-gates off — contains \textbf{6 of 6}. Each refusal names its ground:
+\textbf{0 of 6} planted defects; the control arm --- the same script,
+gates off --- contains \textbf{6 of 6}. Each refusal names its ground:
 the SHACL episode gate names the missing provenance property; the
 authority refusals name the chain, the graph, and what the chain
 actually holds; the policy denial cites the policy; the post-state
@@ -62,55 +62,55 @@ closed-world vocabulary policy, which is not new machinery but an
 ordinary \textsc{ask} claim in \Sig requiring every predicate on the
 record type to be declared.
 
-\subsection{RQ3 — is the audit decidable in-store, and does an external
+\subsection{RQ3 --- is the audit decidable in-store, and does an external
 checker agree?}
 \label{sec:eval-audit}
 In-store, the four passes produce exactly the planted distinctions:
 the dispatch inventory reports \textbf{1 violation} (an executable
 tool class, ungoverned, no reason) and \textbf{1 incompleteness} (the
-same shape \emph{with} a declared reason — an acknowledged bypass, not
+same shape \emph{with} a declared reason --- an acknowledged bypass, not
 an unknown hole); the trace audit over a five-record window reports
-\textbf{0 violations and 1 incompleteness} — the deliberately
+\textbf{0 violations and 1 incompleteness} --- the deliberately
 unattributed record, counted incomplete rather than misreported or
 placed at the attribution root.
 
 Against the SARC reference checker
 (\texttt{besanson/sarc-governance}), we export \Sig in its spec format
 and the run's 56 decisions in its flat-trace format, twice. The
-\emph{faithful} export — only the evaluations \sys actually ran —
+\emph{faithful} export --- only the evaluations \sys actually ran ---
 fails the reference checker with 168 discrepancies, \textbf{all of
 type coverage and none of verdict, placement, or response}: the
 reference invariant expects every constraint evaluated for every
 action, and \sys's target-type pre-filter is invisible to it. The
 \emph{padded} export, which adds explicit not-fired records for the
 non-applicable constraints, passes clean. The two checkers agree
-verdict-for-verdict and disagree only on coverage \emph{semantics} —
-whether abstention must be materialized to be auditable — which we
+verdict-for-verdict and disagree only on coverage \emph{semantics} ---
+whether abstention must be materialized to be auditable --- which we
 report as the finding rather than resolving by fiat.
 
-\subsection{RQ4 — does composition never widen?}
+\subsection{RQ4 --- does composition never widen?}
 All \textbf{7 of 7} composition probes uphold the lattice contract:
 the undeclared member degrades coverage to \textsf{Partial} and the
 enforcement floor refuses the composed read; the cross-chain trust
 pair is refused with both chains named; the expired label reads as
 absent and degrades coverage; the \texttt{no-export} obligation joins
-across the set; all four clean compositions pass the floor —
+across the set; all four clean compositions pass the floor ---
 \textbf{zero false refusals}; the overlay rebind is refused bind-once;
 and the imported pack re-interns with its content hash stable across
 id spaces.
 
-\subsection{RQ5 — do decisions replay as of their instant?}
+\subsection{RQ5 --- do decisions replay as of their instant?}
 \label{sec:eval-replay}
 The amendment supersedes the label policy's claim mid-run, so every
 phase-2 decision predates a rule change. Replaying all 56 recorded
 decisions: \textbf{50 of 50} satisfied verdicts re-derive faithfully
-under the claim and data as of their instant — and \textbf{all 50}
+under the claim and data as of their instant --- and \textbf{all 50}
 evaluate \emph{unsatisfied} under the amended claim, the number that
 separates ``the runtime got it wrong'' from ``the spec moved,'' and
 exactly what a latest-only rule set would misreport. The
 \textbf{6} denials replay differently, and honestly so: their staged
-deltas were rolled back — GS2 keeps the verdict, deliberately not the
-attempt — so replay verifies the rules in force at the instant
+deltas were rolled back --- GS2 keeps the verdict, deliberately not the
+attempt --- so replay verifies the rules in force at the instant
 (6 of 6) rather than re-deriving the outcome. Full denial
 re-derivation would require traces to carry the attempted delta,
 which the governed writer's traces do and the store deliberately does
@@ -119,9 +119,9 @@ bitemporality.
 
 \subsection{The agent arm: strictness borne by the writer}
 \label{sec:eval-agent}
-An LLM agent is given the recording task cold — five actions, no
+An LLM agent is given the recording task cold --- five actions, no
 sight of \Sig, the gate's verbatim refusals as the only feedback
-channel — and gets one revision. The original run (single model,
+channel --- and gets one revision. The original run (single model,
 $n{=}1$, transcripts committed) went 2 accepted / 3 refused, then
 \textbf{5 of 5}. We repeated the protocol across four Claude models,
 three trials each (twelve trials; prompt and all transcripts
@@ -138,7 +138,7 @@ reach.
 Model ($\times$3) & Attempt 1 & Attempt 2 & The unfixable refusal's resolution \\
 \midrule
 haiku-4.5 & 4/5, 2/5, 2/5 & all accepted & dropped $\times$2; refiled north $\times$1 (false, landed) \\
-sonnet-5  & 4/5 $\times$3 & 4/5 $\times$3 & parked in root $\times$3 — re-refused (\textsc{graph} scope) \\
+sonnet-5  & 4/5 $\times$3 & 4/5 $\times$3 & parked in root $\times$3 --- re-refused (\textsc{graph} scope) \\
 opus-5    & 4/5 $\times$3 & 4/5 $\times$3 & resubmitted unchanged, caveats written into the record \\
 fable-5   & 4/5 $\times$3 & 5/5, 5/5, 4/5 & routed via the authorized chain $\times$1; root $\times$2 \\
 \bottomrule
@@ -153,26 +153,26 @@ principled abstention, evasion-caught, and evasion-landed.}
 Three regularities (Table~\ref{tab:agentarm}). \emph{Everything \Sig
 can name converges}: all label and vocabulary refusals were fixed in
 one revision in 12 of 12 trials, no trial invented a predicate, and
-the cheapest model gained the most — haiku went 2/5 to full
+the cheapest model gained the most --- haiku went 2/5 to full
 acceptance on its weakest attempts, which is where a gate that
 explains its refusals pays best. \emph{The authority refusal sorts
 writers by disposition, not capability}: one fable trial made the
 correct move (dispatch h3 through the chain that holds the south);
 all three opus trials declined every workaround as falsification and
-wrote their caveats into the record itself — refusing to trade truth
+wrote their caveats into the record itself --- refusing to trade truth
 for acceptance; five trials tried to park the record in a graph the
 writer does hold, and the gate caught every one, because the
 tally-label claim is \textsc{graph}-scoped and a tally in the default
 graph fails it. \emph{The gate is exactly as good as \Sig}: the one
 false record that landed (h3 refiled to the northern district) passed
-because no policy states which district a household belongs to —
+because no policy states which district a household belongs to ---
 the residual risk under refusal-driven convergence concentrates
 precisely in what \Sig leaves unsaid, which is an argument for
 authoring coverage, not against the gate. SARC-DQ~\cite{besanson2026sarcdq}
 reports the ungated complement of the same design: agents handed
 defective evidence convert it into costly actions at a rate flat
-across four model tiers spanning ${\sim}15\times$ in price —
-capability does not buy skepticism — so the convergence observed here
+across four model tiers spanning ${\sim}15\times$ in price ---
+capability does not buy skepticism --- so the convergence observed here
 is the gate's doing, not the models'. Boundaries: one task, one
 model family, three trials per model, and the scripted scenario as
 the only quality oracle.\footnote{A richer oracle is in progress:
@@ -185,7 +185,7 @@ those suites would replace the scripted scenario here.}
 Replaying the recorded Yupana trace through the audit, with the shipped
 policy catalog as \Sig, yields $T \not\entails \Sig$: \textbf{2
 violations, 6 incompleteness findings} over 5 records. The violations
-are real and actionable — the guard enforced a locally-configured
+are real and actionable --- the guard enforced a locally-configured
 blast-radius rule that is not an authored policy in \Sig, and the
 finding's remediation is the thesis in one line: \emph{author it in
 the store so it can be audited, or stop enforcing it}. The
@@ -203,16 +203,16 @@ runtime emits \emph{suffice to reconstruct} eight decision-level
 properties (actor identity, principal authority, action boundary,
 policy basis, decision basis, data/resource touch, lifecycle context,
 verification strength) under eight controlled degradation conditions.
-Its lead diagnostic is \emph{Overclaim Rate} — declaring a decision's
+Its lead diagnostic is \emph{Overclaim Rate} --- declaring a decision's
 evidence ``sufficient'' while a required property is not
-reconstructable — which operationalises the \emph{container fallacy}:
+reconstructable --- which operationalises the \emph{container fallacy}:
 inferring audit sufficiency from the presence of a trace, ledger, or
 schema. Following the benchmark's invitation to add regimes and
 scorers on its published contracts, we run \sys as a self-added ninth
 regime (\texttt{benchmark/demm/}): the \census run exports its 56
-recorded decisions as three-plane native records — writer-side guard
+recorded decisions as three-plane native records --- writer-side guard
 trace, signed verdict fact queried back from the store, bitemporal
-policy snapshot — our transforms apply the benchmark's eight
+policy snapshot --- our transforms apply the benchmark's eight
 degradation semantics as content-level deletions, and a content-only
 reader reconstructs the eight properties, scored against the
 benchmark's own construction oracle over 64 cases. The degradations
@@ -277,7 +277,7 @@ Three findings, all deterministic
 fallacy reproduces on \sys's evidence \emph{at its ceiling}: trace-,
 ledger-, and schema-presence baselines overclaim on 87.5\% of cases
 (the benchmark's own corpus: 50--75\%), precisely because \sys always
-emits all three planes — content-level degradation leaves every
+emits all three planes --- content-level degradation leaves every
 container present, so presence carries no information at all. Second,
 mechanical validity checking is enough to stop overclaim but not to
 localise it: a \sys-internal validator (field completeness,
@@ -285,7 +285,7 @@ evidence-hash recomputation, executor--chain consistency, grant
 scope) reaches zero overclaim by refusing every degraded record
 outright, matching the benchmark's stricter baselines. Third, the
 property-level reading reconstructs \textbf{512 of 512} property
-cells (mean PSA 1.0, zero overclaim, zero underclaim) — including
+cells (mean PSA 1.0, zero overclaim, zero underclaim) --- including
 the two slices the benchmark reports as its candidate's hardest
 (conflicting identity and action boundary, PSA 0.25 there): both are
 decidable from \sys's records because the guard trace names its
@@ -300,13 +300,13 @@ discipline as the \census itself, not on who pressed the button.
 Ground truth is the benchmark's own published construction oracle,
 unmodified; the degradation transforms and the reader are published
 in full alongside the store, and the reader consumes evidence content
-only — case identifiers are opaque, no degradation name reaches any
+only --- case identifiers are opaque, no degradation name reaches any
 scorer-facing field, and the benchmark's label-leakage rules are
 honoured. Every stage is deterministic: reruns from the census binary
 up reproduce byte-identical artifacts, so the numbers in
 Table~\ref{tab:demm} are a property of the published pipeline, not of
-a run we witnessed. Anyone can re-execute the whole chain — seeded
-census, export, degradation, scoring — from the repository in
+a run we witnessed. Anyone can re-execute the whole chain --- seeded
+census, export, degradation, scoring --- from the repository in
 minutes, substitute their own reader for ours on the same manifests,
 or tighten the transforms and re-score; the claim survives exactly as
 far as those reruns agree.
@@ -315,12 +315,12 @@ The run also changed the store. Its first pass surfaced two evidence
 gaps the benchmark's vocabulary made precise: the verdict signature
 sealed the outcome but not the writer binding, so a conflicting
 identity was catchable only by a consistency convention; and a
-denial's actor was not persisted at all — GS2 rolls the attempt back,
+denial's actor was not persisted at all --- GS2 rolls the attempt back,
 so ``who was refused?''\ was answerable only from writer-side traces
 the store does not own, the same division of labour the wild-trace
 audit (\S\ref{sec:eval-wild}) reported as partial attribution. Both
 closed in one change (Q-VERDICT-ATTRIB): the verdict fact now carries
-the write's attribution — actor and principal chain — inside the
+the write's attribution --- actor and principal chain --- inside the
 evidence hash its signature seals, so a swapped writer fails hash
 recomputation rather than needing a rule to notice, and a refusal
 keeps its actor while the attempted delta still does not survive.

@@ -2,11 +2,11 @@
 \label{sec:census}
 
 \census is one scripted, seeded, multi-writer lifecycle over a
-governed store — named for the quipu's original job. A single command
+governed store --- named for the quipu's original job. A single command
 runs one arm; the \emph{gated} arm enforces every gate and the
 \emph{control} arm is the same script with the gates off. No LLM runs
 anywhere in the core loop: the writers are deterministic drivers, so
-the run is its own oracle — the injector knows every defect it
+the run is its own oracle --- the injector knows every defect it
 planted, every metric is a count or a latency, and no judge or rubric
 appears anywhere.
 
@@ -17,12 +17,12 @@ distinct authority grants, and a scripted human decision role.
 \Sig (four policies: a label requirement, a single-placement
 constraint, a closed-world vocabulary policy requiring every predicate
 on a record type to be declared, and an escalation).
-\emph{Recording} plants six labeled defects — an episode missing its
+\emph{Recording} plants six labeled defects --- an episode missing its
 required provenance property, a write into a district outside the
 writer's authority, a delegated write exceeding the delegator's grant,
 a policy-violating write, a write valid against the \emph{pre}-state
 but invalid only in combination (the post-state discriminator), and a
-fact using a fabricated predicate — interleaved with 100 clean writes
+fact using a fabricated predicate --- interleaved with 100 clean writes
 (half touching governed types) whose latencies are RQ1's
 distributions. \emph{Correction} runs the escalation round-trips
 (approve and reject), a supersession, and a trust-plane promotion.
@@ -32,8 +32,8 @@ refusing comparison, an expired label reading as absent, an obligation
 joining across the set, clean compositions passing with zero false
 refusals, an overlay rebind refused bind-once, and a pack imported
 from a second store with a stable content hash. \emph{Amendment}
-supersedes one policy's claim mid-run — \Sig is ordinary bitemporal
-facts — and reloads the record shape through the versioned registry.
+supersedes one policy's claim mid-run --- \Sig is ordinary bitemporal
+facts --- and reloads the record shape through the versioned registry.
 \emph{Audit} replays every recorded decision as of its instant, runs
 the dispatch inventory over planted tool classes, audits a
 synthesized five-record trace with one deliberately unattributed
@@ -43,17 +43,17 @@ record, and exports \Sig and the decisions for the external checker.
 The only entropy input is the seed (a self-contained SplitMix64);
 timestamps are logical minutes from a fixed epoch, so no wall clock
 reaches the manifest. Manifests are byte-identical across repeat runs
-per (seed, arm) — measured, three consecutive runs, one hash — and the
+per (seed, arm) --- measured, three consecutive runs, one hash --- and the
 external-checker export is byte-stable. Writing the determinism note
 found one real divergence (an absolute output path embedded in an
 observed string); it was fixed and the finding kept in place. Scorers
-read the manifest — the injector's declared ground truth — never the
+read the manifest --- the injector's declared ground truth --- never the
 phase scripts.
 
 \paragraph{In the wild.}
 \census is synthetic by construction; to bound the external-validity
 gap we recorded five genuine Pre-Action Gate decisions from a real
-governed writer (the pre-edit guard of Yupana\footnote{\texttt{github.com/scbrown/yupana} — the stack's
+governed writer (the pre-edit guard of Yupana\footnote{\texttt{github.com/scbrown/yupana} --- the stack's
 code-analysis engine and \sys's governed structural writer; formerly
 \texttt{hank}.} in enforce mode: two denies
 against a blast-radius scope, three allows) and replayed the spool,
