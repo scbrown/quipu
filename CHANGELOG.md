@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.20] - 2026-08-10
+
+### Added
+
+- *(features)* Gate the HTTP stack behind `server` and `remote`([e05963a](https://github.com/scbrown/quipu/commit/e05963a9f614e5fe7680ddeace869ec80071a716))
+- *(store)* In-memory read model over one graph's current facts([72ffa13](https://github.com/scbrown/quipu/commit/72ffa1316e77a7aea1ef307a719652ab75c55ddd))
+- *(store)* Resident read model and the scope guard([848824f](https://github.com/scbrown/quipu/commit/848824fe6544f4ec850cb492d744eb325fbd04b5))
+- *(sparql)* Model-backed pattern evaluation, off by default([36ae6f0](https://github.com/scbrown/quipu/commit/36ae6f0a42247fda744b824baf9a6fb92c17f97d))
+- *(census)* Benchmark skeleton and committed-graph registration([f46829c](https://github.com/scbrown/quipu/commit/f46829cc4ab46e678672df3f029631f346e33a9e))
+- *(census)* Execute phases 2-4 - recording, correction, composition([1668e8a](https://github.com/scbrown/quipu/commit/1668e8a882b21db1c3a78fd75f8a9ec21eeea6d8))
+- *(census)* Phases 5-6 - amendment, as-of replay, in-store audit([c76c869](https://github.com/scbrown/quipu/commit/c76c869bd1fcab0fced74e4735762836040aab77))
+- *(census)* External SARC checker arm (CEN-X1)([fd20532](https://github.com/scbrown/quipu/commit/fd20532f24b550ee34b61104106d76291e0e027e))
+- *(census)* Census-in-the-wild - a real hank trace through the audit([fd8038c](https://github.com/scbrown/quipu/commit/fd8038c29e40856d614e6e5acdbb1293a6e6c493))
+- *(census)* Agent arm - external writer against the gate([32eadc9](https://github.com/scbrown/quipu/commit/32eadc99839574d72587d2e34f007e29f6037e01))
+- Run DEMM-Bench against quipu as a ninth evidence regime([38aced2](https://github.com/scbrown/quipu/commit/38aced23802c0b1c2d69c9698ccfff4629883e26))
+- *(governance)* Seal verdict attribution into the signed evidence hash (Q-VERDICT-ATTRIB)([674dec3](https://github.com/scbrown/quipu/commit/674dec3398acd6fa1c13602a863371571f433ea5))
+- *(census)* Repeat the agent arm across four models, three trials each([9346609](https://github.com/scbrown/quipu/commit/9346609a27d15110ec6bf47e1affb932c3b40060))
+
+### Documentation
+
+- Wasm support design — measured limits and the join ceiling([5859201](https://github.com/scbrown/quipu/commit/5859201b865ebddc30c86bb14b3c997ffc27d586))
+- In-memory read model — query in memory, write to SQLite([f2e6a8e](https://github.com/scbrown/quipu/commit/f2e6a8e9aec4f291add87d86149ab162bbb76cda))
+- Retract the project() superlinearity claim — it was cold-cache([2de8be7](https://github.com/scbrown/quipu/commit/2de8be767d3bd69f949daf6ea35df4e43685dc2a))
+- *(book)* Document the in-memory read model([20c4147](https://github.com/scbrown/quipu/commit/20c414734579fd74b3d0469235c3f602c693494f))
+- *(design)* Add defaults comparison and GS1-GS6 principles page([81cab7d](https://github.com/scbrown/quipu/commit/81cab7d2fa159c7bc1262bbaeaa6ba1471a109e3))
+- *(census)* Determinism note with measured hashes([107f57c](https://github.com/scbrown/quipu/commit/107f57c65b4850a9aee7f268bb8901077a94645e))
+- *(paper)* LaTeX source - full draft from measured results([7b1fb2b](https://github.com/scbrown/quipu/commit/7b1fb2b0dda8b504208d141de642bf3d054dd4e1))
+- *(paper)* Scalable fonts for pdflatex; TeX in the session hook([5226397](https://github.com/scbrown/quipu/commit/522639750c064157084ec893eb0710f08d385947))
+- *(demm)* Package the upstream DEMM-Bench regime contribution([59f95a5](https://github.com/scbrown/quipu/commit/59f95a5bfe5162a27f7234bd9437be08d2ed2ac6))
+
+### Fixed
+
+- *(ci)* Make the file-size check a working ratchet([89612a9](https://github.com/scbrown/quipu/commit/89612a90898d308d4e71e9029796b0cdc25df41d))
+- *(demm)* Match baseline semantics to the DEMM-Bench paper and temper the paper claim([cea41f7](https://github.com/scbrown/quipu/commit/cea41f71abe2e1fef102a25368205f65d8df4867))
+- *(ci)* Correct release changelogs automatically, and fix the 1.97 clippy lint([2bb770a](https://github.com/scbrown/quipu/commit/2bb770a1fa25e97e152ee3aec71f7339dddad59f))
+
+### Miscellaneous
+
+- *(beads)* Tidy bd init artifacts([1b080cf](https://github.com/scbrown/quipu/commit/1b080cf87f0090a81740df9cd38ca009df929770))
+- *(claude)* Install docs toolchain and build quipu in remote sessions([7caa122](https://github.com/scbrown/quipu/commit/7caa122df5f3bd29b03e1afef429594418b07e42))
+- Add citation and Zenodo deposit metadata([d0d5fb1](https://github.com/scbrown/quipu/commit/d0d5fb1d33ba6620d452436b1cde00a99bf55c02))
+
+### Perf
+
+- *(store)* Memoize the term dictionary([0f7d363](https://github.com/scbrown/quipu/commit/0f7d363906e66cdfb7b5dea0c16feb7b057689f4))
+- *(store)* Bound the term cache([ed4fcdd](https://github.com/scbrown/quipu/commit/ed4fcddbd801d367fe6553b6e0e8fc6dddaa7157))
+- *(sparql)* Hash-join BGPs through the read model, on by default([8872abd](https://github.com/scbrown/quipu/commit/8872abd3b07be1161c79f8316377dedafaec8b06))
+
 ## [0.3.19] - 2026-08-07
 
 ### Added
