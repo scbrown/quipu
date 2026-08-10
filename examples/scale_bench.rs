@@ -78,7 +78,7 @@ fn main() {
     let ingest = started.elapsed();
     drop(store);
 
-    let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    let bytes = std::fs::metadata(&path).map_or(0, |m| m.len());
 
     println!("episodes      : {n}");
     println!(
