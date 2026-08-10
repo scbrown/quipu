@@ -522,7 +522,7 @@ fn eval_triple_pattern_from_model(
             .map(|(e, a, v)| (e, a, v.clone()))
             .collect(),
     };
-    candidates.sort_unstable_by(|l, r| (l.0, l.1, l.2.to_bytes()).cmp(&(r.0, r.1, r.2.to_bytes())));
+    candidates.sort_unstable_by_key(|l| (l.0, l.1, l.2.to_bytes()));
 
     let mut results = Vec::with_capacity(candidates.len());
     for (e_id, a_id, v) in candidates {

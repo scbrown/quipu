@@ -68,6 +68,61 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      # Correct the section release-plz just wrote, in the same run that wrote it.
+      #
+      # This step exists because the two obvious alternatives do not work here:
+      #
+      #   Correcting by hand does not survive. release-plz ABANDONS a branch it did
+      #   not write — measured on #61, where a hand-correction was discarded three
+      #   seconds after the next push to main and a fresh PR opened carrying the
+      #   defect again (see the note at the top of changelog-check.yml).
+      #
+      #   A separate workflow triggered on `push` to `release-plz-**` would never
+      #   fire. release-plz pushes with GITHUB_TOKEN, and GitHub deliberately does
+      #   not re-trigger workflows from token-authored pushes — the same reason the
+      #   `artifacts` job below is a job here rather than a `release: published`
+      #   trigger.
+      #
+      # So it runs inline, right after the PR is (re)generated. fix-changelog.sh is
+      # idempotent and drops release-mechanics commits from the body, so its own
+      # correction commit does not become a new entry needing another correction.
+      - name: Correct the release PR's changelog section
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BR="$(gh pr list --state open --json headRefName \
+                  --jq '[.[] | select(.headRefName | startswith("release-plz"))][0].headRefName // ""')"
+          if [ -z "$BR" ]; then
+            echo "No open release PR — nothing to correct."
+            exit 0
+          fi
+          echo "Correcting release PR branch: ${BR}"
+          git fetch --quiet origin "$BR"
+          git checkout --quiet -B "$BR" "origin/$BR"
+
+          ./scripts/fix-changelog.sh
+
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "Section was already correct; nothing pushed."
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add CHANGELOG.md
+            git commit -m "chore: regenerate the release changelog section with git-cliff"
+            git push origin "$BR"
+            echo "Pushed a corrected section to ${BR}."
+          fi
+
+          # Fail loudly if the correction did not actually satisfy the verifier —
+          # a corrector that silently produces a still-wrong section is worse than
+          # no corrector, because the red check that used to catch it is gone.
+          ./scripts/verify-changelog.sh
+
   # The changelog guard, on a trigger that actually fires.
   #
   # `changelog-check.yml` runs this same script on `pull_request`, and it has NEVER

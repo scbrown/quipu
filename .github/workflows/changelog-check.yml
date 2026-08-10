@@ -16,7 +16,14 @@ name: Changelog check
 # So a human commit onto a release PR's branch un-darkens it, and this check then
 # runs before merge. It is a real gate again, just not an unattended one.
 #
-# ⚠ BUT A HAND-CORRECTION IS NOT DURABLE — CORRECT AND MERGE IN ONE SITTING.
+# ⚠ HAND-CORRECTION IS NO LONGER THE PROCEDURE. As of the `Correct the release PR's
+# changelog section` step in release.yml, the section is regenerated with git-cliff
+# automatically, in the same run that release-plz writes the PR. If that step is
+# working you should never need to touch a release changelog by hand, and this check
+# should be green without intervention. The history below is kept because it explains
+# WHY the correction had to be automatic rather than a documented manual step.
+#
+# ⚠ A HAND-CORRECTION IS NOT DURABLE — CORRECT AND MERGE IN ONE SITTING.
 # release-plz ABANDONS a branch it did not write. Measured: I corrected #61's section
 # by hand at 15:23Z; on the next push to main it closed #61 (15:40:56Z) and opened #62
 # on a fresh branch three seconds later, with the defective section back. The fix was
