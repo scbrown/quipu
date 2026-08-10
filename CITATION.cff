@@ -15,13 +15,14 @@ authors:
   - given-names: Steve
     family-names: Brown
     email: scbrown3@gmail.com
+    orcid: "https://orcid.org/0009-0009-1720-1785"
     city: Kennesaw
     region: Georgia
     country: US
 repository-code: "https://github.com/scbrown/quipu"
 license: MIT
-version: 0.3.19
-date-released: 2026-08-07
+version: 0.3.20
+date-released: 2026-08-10
 keywords:
   - knowledge graph
   - bitemporal
