@@ -25,23 +25,39 @@ All notable changes to this project will be documented in this file.
 - Wasm support design — measured limits and the join ceiling([5859201](https://github.com/scbrown/quipu/commit/5859201b865ebddc30c86bb14b3c997ffc27d586))
 - In-memory read model — query in memory, write to SQLite([f2e6a8e](https://github.com/scbrown/quipu/commit/f2e6a8e9aec4f291add87d86149ab162bbb76cda))
 - Retract the project() superlinearity claim — it was cold-cache([2de8be7](https://github.com/scbrown/quipu/commit/2de8be767d3bd69f949daf6ea35df4e43685dc2a))
+- *(design)* Add paper plan for a governed-bitemporal-store paper([3e8f515](https://github.com/scbrown/quipu/commit/3e8f5150b76b22c51bde408de8c18f7672e9d89b))
 - *(book)* Document the in-memory read model([20c4147](https://github.com/scbrown/quipu/commit/20c414734579fd74b3d0469235c3f602c693494f))
+- *(design)* Refocus paper plan on governance, bitemporality, strictness([83b4366](https://github.com/scbrown/quipu/commit/83b436630c42d6f132f23efda4b9cf034030831c))
+- *(design)* Raise paper plan to contract + system + benchmark([bf8e5fd](https://github.com/scbrown/quipu/commit/bf8e5fdb95888101f0dd5199f71e31a2a3521c84))
+- *(design)* Reframe paper plan as system-first([a95164c](https://github.com/scbrown/quipu/commit/a95164c912afac2b37288a457fe6680db1734bd0))
 - *(design)* Add defaults comparison and GS1-GS6 principles page([81cab7d](https://github.com/scbrown/quipu/commit/81cab7d2fa159c7bc1262bbaeaa6ba1471a109e3))
 - *(census)* Determinism note with measured hashes([107f57c](https://github.com/scbrown/quipu/commit/107f57c65b4850a9aee7f268bb8901077a94645e))
 - *(paper)* LaTeX source - full draft from measured results([7b1fb2b](https://github.com/scbrown/quipu/commit/7b1fb2b0dda8b504208d141de642bf3d054dd4e1))
 - *(paper)* Scalable fonts for pdflatex; TeX in the session hook([5226397](https://github.com/scbrown/quipu/commit/522639750c064157084ec893eb0710f08d385947))
+- Change paper author to Steve Brown([1fc4742](https://github.com/scbrown/quipu/commit/1fc47426f0e946af626bdc69a55e0edfa8c108f9))
+- *(paper)* Figures, tables, and the impartiality framing for the DEMM run([4bbe270](https://github.com/scbrown/quipu/commit/4bbe270a0585e31a347e4b106b63a1295bcda710))
 - *(demm)* Package the upstream DEMM-Bench regime contribution([59f95a5](https://github.com/scbrown/quipu/commit/59f95a5bfe5162a27f7234bd9437be08d2ed2ac6))
+- *(paper)* Cite the SARC successor line and gloss the audit notation([4d72cbe](https://github.com/scbrown/quipu/commit/4d72cbed39659ce8dca7edeebda49c31cf33d2ea))
+- *(paper)* Cite ForCoding as practitioner-side D4 convergence([8b2210d](https://github.com/scbrown/quipu/commit/8b2210d64c83f864daf8ed36d10ba022510c4e94))
+- *(paper)* The governed structural writer is now Yupana([99e996e](https://github.com/scbrown/quipu/commit/99e996e0f4e9eea0bbf2d567cf857e297a77e208))
+- *(paper)* Footnote the stack's deployments, kept light([c8f4760](https://github.com/scbrown/quipu/commit/c8f47602e532e186d35d8181c4fc7654ba0dc4ce))
+- *(paper)* Address adversarial-review findings([f132da2](https://github.com/scbrown/quipu/commit/f132da2e8b983e14f98a8f1cbc446963ce358d60))
+- *(design)* The signing plane — governing the trust root like everything else([fd96239](https://github.com/scbrown/quipu/commit/fd962394d08664be702a6ca0ae8fffc6d3ee5b3b))
 
 ### Fixed
 
 - *(ci)* Make the file-size check a working ratchet([89612a9](https://github.com/scbrown/quipu/commit/89612a90898d308d4e71e9029796b0cdc25df41d))
+- *(deploy)* Carry the 'server' required-feature in FEATURES and the t1u2h gate floor([c5a4755](https://github.com/scbrown/quipu/commit/c5a475598295d47b6180fea15757e774f7e0d8d8))
 - *(demm)* Match baseline semantics to the DEMM-Bench paper and temper the paper claim([cea41f7](https://github.com/scbrown/quipu/commit/cea41f71abe2e1fef102a25368205f65d8df4867))
+- *(hooks)* Exclude the upstream demm patch from whitespace fixers([a956fe9](https://github.com/scbrown/quipu/commit/a956fe9567a2540358b75e5fd48846b7ae1e9073))
+- *(paper)* Render dashes that were silently dropped from the PDF([f825dc9](https://github.com/scbrown/quipu/commit/f825dc9d2085ff8c8c9a043f370e246c9c167545))
 
 ### Miscellaneous
 
 - *(beads)* Tidy bd init artifacts([1b080cf](https://github.com/scbrown/quipu/commit/1b080cf87f0090a81740df9cd38ca009df929770))
 - *(claude)* Install docs toolchain and build quipu in remote sessions([7caa122](https://github.com/scbrown/quipu/commit/7caa122df5f3bd29b03e1afef429594418b07e42))
 - Add citation and Zenodo deposit metadata([d0d5fb1](https://github.com/scbrown/quipu/commit/d0d5fb1d33ba6620d452436b1cde00a99bf55c02))
+- Release v0.3.20([eccd1df](https://github.com/scbrown/quipu/commit/eccd1dffc60d7a5a66cc51093e3705cdbea29866))
 
 ### Perf
 
