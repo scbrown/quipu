@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.21] - 2026-08-10
+
+### Documentation
+
+- Add the Zenodo DOI badge([964accb](https://github.com/scbrown/quipu/commit/964accbf1f03126b721494da88cbab978df08fe0))
+- Record the author ORCID, and catch CITATION.cff up to v0.3.20([cd7d12a](https://github.com/scbrown/quipu/commit/cd7d12abd7908c8c9274f2f21334e781b6652d35))
+
 ## [0.3.20] - 2026-08-10
 
 ### Added
