@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+mod federation;
+pub use federation::{FederationConfig, RemoteEndpoint};
+
 use crate::namespace;
 
 /// The single source of truth for how aggressively search layers oversample
@@ -411,14 +414,6 @@ impl Default for ServerConfig {
     }
 }
 
-/// Federation configuration for connecting to remote Quipu instances.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(default)]
-pub struct FederationConfig {
-    /// List of remote Quipu endpoints.
-    pub remotes: Vec<RemoteEndpoint>,
-}
-
 /// Embedding configuration for auto-embedding on write.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -455,16 +450,6 @@ impl Default for EmbeddingConfig {
             max_sequence_length: 256,
         }
     }
-}
-
-/// A remote Quipu endpoint for federation.
-#[derive(Debug, Clone, Deserialize)]
-pub struct RemoteEndpoint {
-    /// Human-readable name for this remote.
-    pub name: String,
-
-    /// URL of the remote Quipu REST API (e.g., `http://quipu.example:3030`).
-    pub url: String,
 }
 
 impl QuipuConfig {
@@ -720,10 +705,9 @@ mod tests {
         // NOT warn". Kept rather than deleted: a warning that outlives its
         // subject is worse than no warning — it trains readers to ignore the
         // channel, and the next genuinely-inert knob is the one they miss.
-        cfg.federation.remotes.push(RemoteEndpoint {
-            name: "prod".into(),
-            url: "http://example:3030".into(),
-        });
+        cfg.federation
+            .remotes
+            .push(RemoteEndpoint::new("prod", "http://x:1"));
         assert!(
             !cfg.unwired_warnings()
                 .iter()

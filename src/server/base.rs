@@ -253,6 +253,7 @@ pub(crate) async fn query(
         // (aegis-vxl81). The two are separated here rather than at the HTTP
         // boundary because that boundary cannot tell them apart, and conflating
         // them is what makes a queued caller look like an expensive one.
+        let federation = store.federation.clone();
         let lock_t0 = std::time::Instant::now();
         // POOLED READ. SPARQL is read-only, so this takes a
         // read-only connection instead of the writer's mutex. `wait_secs` keeps
@@ -263,6 +264,79 @@ pub(crate) async fn query(
         let started = std::time::Instant::now();
 
         let run = |store: &quipu::Store| -> Result<axum::response::Response, AppError> {
+            // quipu-tkh: `"federated": true` fans the WHOLE query text out
+            // through the federated provider — the local store plus every
+            // configured remote — and reports who answered (`providers` /
+            // `complete`). Bespoke JSON shape only, and the temporal/graph
+            // params are refused rather than dropped: they shape the LOCAL
+            // evaluator's context and are not forwarded, so accepting them
+            // would mean something different per member — silently.
+            if input
+                .get("federated")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false)
+            {
+                if let Some(p) = ["valid_at", "tx", "graph", "row_labels"]
+                    .iter()
+                    .find(|p| input.get(**p).is_some())
+                {
+                    return Err(quipu::Error::InvalidValue(format!(
+                        "'{p}' is not supported on a federated query — federation \
+                         fans the whole query text out to every member unchanged"
+                    ))
+                    .into());
+                }
+                let text = input.get("query").and_then(|v| v.as_str()).ok_or_else(|| {
+                    quipu::Error::InvalidValue("missing 'query' parameter".into())
+                })?;
+                let fed = quipu::provider::federated_from_config(store, "local", &federation);
+                let fq = fed.query_all(text);
+                let quipu::QueryResult::Select {
+                    variables,
+                    mut rows,
+                } = fq.result
+                else {
+                    unreachable!("query_all always merges into a SELECT row set");
+                };
+                // The same ceiling the local path applies (hq-gkd): a federated
+                // union must not become the way around max_sparql_rows.
+                let max_rows = store.search_config().max_sparql_rows;
+                let truncated = rows.len() > max_rows;
+                if truncated {
+                    rows.truncate(max_rows);
+                }
+                let json_rows: Vec<JsonValue> = rows
+                    .iter()
+                    .map(|row| {
+                        JsonValue::Object(
+                            row.iter()
+                                .map(|(k, v)| (k.clone(), quipu::value_to_json(store, v)))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+                let providers: Vec<JsonValue> = fq
+                    .providers
+                    .iter()
+                    .map(|o| {
+                        json!({
+                            "name": o.name, "ok": o.ok, "rows": o.rows, "error": o.error,
+                        })
+                    })
+                    .collect();
+                let mut body = json!({
+                    "variables": variables,
+                    "rows": json_rows,
+                    "count": json_rows.len(),
+                    "providers": providers,
+                    "complete": fq.complete,
+                });
+                if truncated {
+                    body["truncated"] = json!(true);
+                }
+                return Ok(axum::Json(body).into_response());
+            }
+
             if let Some(fmt) = quipu::w3c::negotiate(&accept) {
                 let (result, _truncated) = quipu::query_result(store, &input)?;
                 if let Some((content_type, body)) = quipu::w3c::serialize(store, &result, fmt)? {
@@ -390,6 +464,7 @@ pub(crate) async fn knot(
 // then: if a tool calls a mutating store method, register it rw_handler! AND add
 // its route to WRITE_ENDPOINTS.
 
+#[derive(Debug)]
 pub(crate) struct AppError(quipu::Error);
 
 impl From<quipu::Error> for AppError {

@@ -13,126 +13,6 @@ use axum::{
 };
 use quipu::EmbeddingProvider;
 
-/// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
-/// sustained stream of episode writers could re-acquire the lock ahead of
-/// readers indefinitely — during the mfg0 incident a `SELECT ... LIMIT 1`
-/// measured a 38.5s wait behind a write flood. `FairMutex` hands the lock to
-/// the longest waiter, bounding every request's wait to the queue ahead of
-/// it. (`parking_lot`'s `lock()` has no poison Result — a panic while holding
-/// the lock simply unlocks, which is fine: Store keeps its invariants in
-/// `SQLite` transactions, not in Rust-visible state.)
-type SharedStore = Arc<StoreHandle>;
-
-/// The store as the handlers see it: ONE writer connection, plus a pool of
-/// read-only connections.
-///
-/// WAL already permits N concurrent readers alongside one writer. Before this,
-/// every read took the writer's mutex, so `SQLite`'s concurrency was present and
-/// unused — measured at effective parallelism **1.0** for N = 1, 2, 4, 8 on a
-/// quiet store, i.e. 8 concurrent queries cost 8x one query's wall time
-/// the pre-pool measurement this replaced.
-///
-/// `lock()` keeps its exact former meaning — the writer, behind the same
-/// `FairMutex` — so every existing call site is unchanged and writes are still
-/// serialised. `read()` is the new path.
-struct StoreHandle {
-    writer: FairMutex<quipu::Store>,
-    readers: ReadPool,
-}
-
-/// A fixed set of read-only connections, each owned exclusively while in use.
-///
-/// `rusqlite::Connection` is `Send` but **not** `Sync`, so this cannot be an
-/// `RwLock` over one connection however much the access pattern looks like one:
-/// the shape has to be N connections, not a smarter lock over one.
-///
-/// **What happens when every connection is busy** — the question the design has
-/// to answer out loud, because it is where the starvation the `FairMutex` was
-/// introduced to bound would come back wearing a new name:
-///
-/// 1. Fast path: take any connection that is free right now. Work-conserving —
-///    a reader never queues while a connection sits idle.
-/// 2. Otherwise: queue on ONE connection chosen round-robin, and wait on its
-///    `FairMutex`, which is FIFO. So a reader's wait is bounded by the queue on
-///    its own connection — roughly 1/N of today's single queue — and it cannot
-///    be starved indefinitely by later arrivals.
-///
-/// The writer keeps its own `FairMutex` and is never in this pool, so the mfg0
-/// case that motivated fairness (a `SELECT ... LIMIT 1` measured waiting 38.5s
-/// behind a write flood) improves strictly: readers leave the writer's queue
-/// entirely rather than sharing it more politely.
-///
-/// An EMPTY pool is a supported configuration, not a degenerate one: `read()`
-/// falls back to the writer lock, which is exactly today's behaviour. In-memory
-/// stores take that path because each `:memory:` connection would be a
-/// different, empty database — a pool there would not be slow, it would be
-/// wrong.
-struct ReadPool {
-    conns: Vec<FairMutex<quipu::Store>>,
-    next: std::sync::atomic::AtomicUsize,
-}
-
-impl ReadPool {
-    fn empty() -> Self {
-        Self {
-            conns: Vec::new(),
-            next: std::sync::atomic::AtomicUsize::new(0),
-        }
-    }
-
-    fn len(&self) -> usize {
-        self.conns.len()
-    }
-}
-
-impl StoreHandle {
-    /// A handle with NO read pool: every read takes the writer lock, which is
-    /// the pre-pool behaviour. Used by the in-memory server tests, where a pool
-    /// is not merely unhelpful but wrong — each `:memory:` connection would be
-    /// its own empty database.
-    #[cfg(test)]
-    fn writer_only(store: quipu::Store) -> Self {
-        Self {
-            writer: FairMutex::new(store),
-            readers: ReadPool::empty(),
-        }
-    }
-
-    /// The WRITER connection. Unchanged semantics: one at a time, FIFO-fair.
-    /// Every pre-existing `.lock()` call site means exactly what it meant
-    /// before, which is why this refactor does not have to audit them.
-    fn lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        self.writer.lock()
-    }
-
-    /// A READ connection from the pool, or the writer when the pool is empty.
-    ///
-    /// Only call this where the work is genuinely read-only: the connection is
-    /// opened `SQLITE_OPEN_READ_ONLY` with `PRAGMA query_only`, so a write
-    /// attempted through it fails at `SQLite` rather than corrupting anything —
-    /// but failing a request is still a bug, and the borrow checker cannot
-    /// catch it here the way `&Store` vs `&mut Store` does in the tool layer.
-    fn read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        if self.readers.conns.is_empty() {
-            return self.writer.lock();
-        }
-        // Work-conserving fast path.
-        for c in &self.readers.conns {
-            if let Some(g) = c.try_lock() {
-                return g;
-            }
-        }
-        // All busy: queue FIFO on one connection. Relaxed is right — this is a
-        // load-spreading hint, not a synchronisation edge.
-        let i = self
-            .readers
-            .next
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            % self.readers.conns.len();
-        self.readers.conns[i].lock()
-    }
-}
-
 const UI_HTML: &str = include_str!("../ui/index.html");
 const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
 const GRAPH_CANVAS_JS: &str = include_str!("../ui/graph-canvas.js");
@@ -148,6 +28,8 @@ const THREE_JS: &str = include_str!("../ui/vendor/three.module.min.js");
 mod base;
 #[path = "server/entity.rs"]
 mod entity;
+#[path = "server/handle.rs"]
+mod handle;
 #[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
@@ -163,6 +45,7 @@ use entity::{
     events_get, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
     transactions,
 };
+pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use tools::ontology;
 use tools::{
     accept_proposal, ask, context, cooccurrence, cord, datasets, embed_backfill, episode,
@@ -464,6 +347,7 @@ async fn main() {
     let state: SharedStore = Arc::new(StoreHandle {
         writer: FairMutex::new(store),
         readers: read_pool,
+        federation: config.federation.clone(),
     });
     let push_store_outer = state.clone();
 
