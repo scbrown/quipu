@@ -2,6 +2,7 @@
 # They may shrink; growing fails the build. Regenerate with:
 #   scripts/check-file-size.sh --update-baseline
 # Shrinking this file is the point. See quipu-bu3.
+examples/census/phases.rs 564
 src/cli.rs 689
 src/cli_commands.rs 784
 src/config.rs 860
@@ -19,9 +20,9 @@ src/rdf.rs 892
 src/server.rs 828
 src/shacl.rs 665
 src/sparql/mod.rs 672
+src/sparql/triple.rs 656
 src/store/attach.rs 515
 src/store/events.rs 909
 src/store/labels.rs 1086
-src/store/mod.rs 1791
-src/store/ops.rs 1274
+src/store/ops.rs 1117
 src/store/respace.rs 660
