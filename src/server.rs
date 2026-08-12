@@ -756,7 +756,7 @@ async fn main() {
     // sync). Cursor semantics make every tick idempotent, so the loop needs no
     // state of its own and a missed tick delays, never loses.
     {
-        let push_store = push_store_outer;
+        let push_store = push_store_outer.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -786,6 +786,35 @@ async fn main() {
                             }
                         }
                         Err(e) => eprintln!("push: tick error: {e}"),
+                    }
+                })
+                .await;
+            }
+        });
+    }
+
+    // Event-log retention (quipu-9z9). Opt-in via `[quipu.events]
+    // retention_days`; unset keeps today's keep-forever behaviour and spawns
+    // nothing. An hourly cadence (first tick immediate) is plenty: the policy
+    // is measured in days, and `prune_events` never touches an offset a
+    // registered consumer has not committed past, so an aggressive cadence
+    // could not break replay anyway — it would only burn cycles.
+    if let Some(days) = config.events.retention_days {
+        let prune_store = push_store_outer;
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                tick.tick().await;
+                let store = prune_store.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    let cutoff = quipu::time::iso_days_ago(u64::from(days));
+                    let store = store.lock();
+                    match store.prune_events(&cutoff) {
+                        Ok(0) => {}
+                        Ok(n) => eprintln!(
+                            "events: retention pruned {n} event(s) older than {cutoff} ({days}d)"
+                        ),
+                        Err(e) => eprintln!("events: retention prune failed: {e}"),
                     }
                 })
                 .await;

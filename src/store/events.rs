@@ -288,6 +288,42 @@ impl Store {
         Ok(())
     }
 
+    // -- Retention --------------------------------------------------------
+
+    /// Prune the event log (quipu-9z9) without breaking the replay contract.
+    ///
+    /// Deletes events whose `ts` is strictly older than `older_than`
+    /// (ISO-8601) AND that every registered consumer has already committed
+    /// past: with any rows in `consumers`, only offsets at or below
+    /// `MIN(committed_offset)` are eligible — an event a consumer has not yet
+    /// consumed is retained no matter how old, so a committed cursor never
+    /// points at a hole and the reactor-down-6wk guarantee survives retention
+    /// (the lagging consumer's backlog just stays on disk). With NO
+    /// registered consumers there is no cursor to honour and age alone
+    /// decides — the browser-pack case the design calls pure overhead.
+    ///
+    /// Offsets are `AUTOINCREMENT`, so pruning never causes offset reuse.
+    /// What retention DOES give up is genesis replay: a consumer registering
+    /// after a prune replays from the retained prefix, not from the
+    /// beginning. A deployment that needs full-history replay for
+    /// yet-unknown consumers must not enable retention.
+    ///
+    /// Nothing calls this by default — retention is opt-in via
+    /// `[quipu.events] retention_days` (see [`crate::config::EventsConfig`])
+    /// or a deliberate caller. Returns the number of events deleted.
+    pub fn prune_events(&self, older_than: &str) -> Result<u64> {
+        let safe: i64 = self.conn.query_row(
+            "SELECT COALESCE(MIN(committed_offset), ?1) FROM consumers",
+            params![i64::MAX],
+            |r| r.get(0),
+        )?;
+        let deleted = self.conn.execute(
+            "DELETE FROM events WHERE ts < ?1 AND \"offset\" <= ?2",
+            params![older_than, safe],
+        )?;
+        Ok(deleted as u64)
+    }
+
     // -- Pull API ---------------------------------------------------------
 
     /// Events with offset strictly AFTER `since`, in offset order, capped at
@@ -905,5 +941,108 @@ aegis:SoftSizeShape a sh:NodeShape ;
             assert_eq!(evs.len(), 1);
             assert!(!evs[0].subject.as_deref().unwrap_or("").contains("ghost"));
         }
+    }
+
+    /// ACCEPTANCE (quipu-9z9): age prunes, but a registered consumer's
+    /// uncommitted backlog is retained no matter how old — the committed
+    /// offset is never invalidated.
+    #[test]
+    fn retention_prunes_by_age_but_never_past_a_consumer() {
+        let mut store = Store::open_in_memory().unwrap();
+        let ing = |store: &mut Store, name: &str, entity: &str, ts: &str| {
+            ingest_episode(
+                store,
+                &ep(name, vec![node(entity, "T")], vec![]),
+                ts,
+                DEFAULT_BASE_NS,
+            )
+            .unwrap();
+        };
+        ing(&mut store, "old-1", "a", "2026-01-01T00:00:00Z");
+        ing(&mut store, "old-2", "b", "2026-01-02T00:00:00Z");
+        ing(&mut store, "new-1", "c", "2026-08-01T00:00:00Z");
+        let all = all_events(&store);
+
+        // The consumer has committed through old-1 only; old-2 is its backlog.
+        let mid = all
+            .iter()
+            .filter(|e| e.ts.starts_with("2026-01-01"))
+            .map(|e| e.offset)
+            .max()
+            .unwrap();
+        store
+            .commit_consumer("lagger", mid, "2026-08-01T00:00:00Z")
+            .unwrap();
+
+        let deleted = store.prune_events("2026-07-01T00:00:00Z").unwrap();
+        let old1_count = all
+            .iter()
+            .filter(|e| e.ts.starts_with("2026-01-01"))
+            .count() as u64;
+        assert_eq!(deleted, old1_count, "only the committed-past prefix goes");
+
+        // The lagger's replay from its committed cursor is exactly intact:
+        // old-2's events (older than the cutoff!) are still there, in order.
+        let replay = store.events_after(mid, 100, None, None).unwrap();
+        assert!(replay.iter().any(|e| e.ts.starts_with("2026-01-02")));
+        assert!(replay.iter().any(|e| e.ts.starts_with("2026-08-01")));
+
+        // Once the consumer commits forward, the aged backlog becomes eligible;
+        // recent events survive on age.
+        let latest = store.latest_event_offset().unwrap();
+        store
+            .commit_consumer("lagger", latest, "2026-08-01T00:00:01Z")
+            .unwrap();
+        let deleted2 = store.prune_events("2026-07-01T00:00:00Z").unwrap();
+        assert!(deleted2 > 0);
+        let remaining = all_events(&store);
+        assert!(remaining.iter().all(|e| e.ts.starts_with("2026-08")));
+        assert!(!remaining.is_empty(), "recent events are retained");
+    }
+
+    /// With no registered consumers there is no cursor to honour: age alone
+    /// decides (the browser-pack / no-consumers deployment).
+    #[test]
+    fn retention_with_no_consumers_prunes_by_age_alone() {
+        let mut store = Store::open_in_memory().unwrap();
+        ingest_episode(
+            &mut store,
+            &ep("old", vec![node("a", "T")], vec![]),
+            "2026-01-01T00:00:00Z",
+            DEFAULT_BASE_NS,
+        )
+        .unwrap();
+        let before = all_events(&store).len();
+        assert!(before > 0);
+        let deleted = store.prune_events("2026-07-01T00:00:00Z").unwrap();
+        assert_eq!(deleted as usize, before, "everything aged out");
+
+        // AUTOINCREMENT: offsets continue past the pruned range, never reused.
+        let pruned_max = store.latest_event_offset().unwrap(); // MAX over empty = 0
+        assert_eq!(pruned_max, 0);
+        ingest_episode(
+            &mut store,
+            &ep("new", vec![node("b", "T")], vec![]),
+            "2026-08-01T00:00:00Z",
+            DEFAULT_BASE_NS,
+        )
+        .unwrap();
+        let evs = all_events(&store);
+        assert!(
+            evs.iter()
+                .all(|e| usize::try_from(e.offset).unwrap_or(0) > before),
+            "pruned offsets must never be reissued"
+        );
+    }
+
+    /// Default behaviour is untouched: nothing prunes unless asked.
+    #[test]
+    fn retention_is_opt_in() {
+        assert!(
+            crate::config::EventsConfig::default()
+                .retention_days
+                .is_none(),
+            "default must be keep-forever"
+        );
     }
 }

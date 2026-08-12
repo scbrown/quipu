@@ -200,6 +200,19 @@ pub struct GovernanceConfig {
     pub enforce_authority: bool,
 }
 
+/// Event-log retention policy (quipu-9z9).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct EventsConfig {
+    /// Prune events older than this many days, provided every registered
+    /// consumer has committed past them (`Store::prune_events` — a lagging
+    /// consumer's backlog is retained regardless of age). Unset = keep
+    /// forever, today's behaviour and the reactor-down-6wk guarantee.
+    /// Measured cost of forever at 10k episodes: the log is 30% of the
+    /// database (`docs/design/wasm-support.md` §5.1).
+    pub retention_days: Option<u32>,
+}
+
 /// Vector storage backend selection.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -322,6 +335,9 @@ pub struct QuipuConfig {
 
     /// Governance enforcement policy (write-path gate).
     pub governance: GovernanceConfig,
+
+    /// Event-log retention (quipu-9z9). Default: keep forever.
+    pub events: EventsConfig,
 }
 
 impl Default for QuipuConfig {
@@ -339,6 +355,7 @@ impl Default for QuipuConfig {
             shacl: ShaclConfig::default(),
             owl: OwlConfig::default(),
             governance: GovernanceConfig::default(),
+            events: EventsConfig::default(),
         }
     }
 }
