@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.23] - 2026-08-12
+
+### Added
+
+- *(portability)* Wasm-safe clock shim and std::fs gating (quipu-gsg)([8d573b8](https://github.com/scbrown/quipu/commit/8d573b8ce60b238a7621410f2606843e65e4c744))
+- *(read-model)* Per-graph read models scoped to the derived layer (quipu-nip)([02c9a33](https://github.com/scbrown/quipu/commit/02c9a3354ef07688f87db18365b5c11143846615))
+- *(graph)* PageRank write-back and PPR re-ranking (quipu-mq7, phases 3-4)([4aaad19](https://github.com/scbrown/quipu/commit/4aaad19ce3b529e21a2dba2110c913b3dbede21a))
+- *(graph)* Temporal and counterfactual PageRank (quipu-bli, phase 5)([2b01ac1](https://github.com/scbrown/quipu/commit/2b01ac1e7b34cf6a940ef583c1565518d3ea393e))
+
+### Documentation
+
+- *(book)* Pages for the six shipped subsystems the book omitted (quipu-a08)([885f811](https://github.com/scbrown/quipu/commit/885f811626e5e9f0fdac732d57d3e37835cdf882))
+
+### Miscellaneous
+
+- *(ui)* Remove the unwired Leptos scaffold, record the decision (quipu-dzd)([1c35f8b](https://github.com/scbrown/quipu/commit/1c35f8b14a513ee8a3f1b031cc418d0b87fe8b9f))
+- *(beads)* Triage quipu-qd2 as blocked on a wasm runtime([2df5635](https://github.com/scbrown/quipu/commit/2df5635e8d5f91276bd847308950d63910c7511b))
+
+### Perf
+
+- *(store)* Drop the never-chosen idx_eavt fact index (quipu-fcg)([e37eb74](https://github.com/scbrown/quipu/commit/e37eb7430b9845a8072bab7d72bb8373d62867be))
+
 ## [0.3.22] - 2026-08-12
 
 ### Added
