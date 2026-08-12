@@ -3168,7 +3168,7 @@ fn join_plan_ignores_source_order() {
     let none = HashSet::new();
 
     // good order: tiny (10), linked (100), huge (10_000)
-    let good = super::triple::join_plan(
+    let good = super::join::join_plan(
         &[vars(&["x"]), vars(&["x", "y"]), vars(&["y", "z"])],
         &[10, 100, 10_000],
         &none,
@@ -3176,7 +3176,7 @@ fn join_plan_ignores_source_order() {
     assert_eq!(good, vec![0, 1, 2]);
 
     // pathological order: same patterns listed huge-first
-    let bad = super::triple::join_plan(
+    let bad = super::join::join_plan(
         &[vars(&["y", "z"]), vars(&["x", "y"]), vars(&["x"])],
         &[10_000, 100, 10],
         &none,
@@ -3185,7 +3185,7 @@ fn join_plan_ignores_source_order() {
 
     // A disconnected small pattern must not bait the planner into a cartesian
     // while a connected alternative exists.
-    let plan = super::triple::join_plan(
+    let plan = super::join::join_plan(
         &[vars(&["a"]), vars(&["a", "b"]), vars(&["q"])],
         &[50, 500, 2],
         &none,
