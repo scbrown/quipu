@@ -354,10 +354,15 @@ a write**: the guard uses SQL, the model never observes staged rows, and there
 is nothing to invalidate on rollback. That is also what makes maintenance
 possible, because the model is still there when the commit lands.
 
-**Phase 4 — Selectivity-ordered join planning** and `LIMIT` pushdown, now that
-cardinalities are free. The hash join already picks the smaller side to build
-from; what remains is ordering the patterns themselves and stopping a bounded
-query before it materialises the whole result.
+**Phase 4 — Selectivity-ordered join planning** and `LIMIT` pushdown — **built
+(quipu-0lr)**. The hash join evaluates every pattern once either way, so the
+fold order is planned from MEASURED cardinalities (`join_plan` in
+`src/sparql/triple.rs`): smallest first, then connected-smallest, cartesian
+only when the query genuinely contains one — a pathological source ordering
+folds the same joins as a good one. `LIMIT` is pushed through prefix-safe
+subtrees (`Project`/`Reduced` only) into the BGP leaf, which stops the scan
+once it has bound enough rows. Measured: the `LIMIT 100` type scan went from
+linear (0.51 ms at 1k episodes, 100.2 ms at 10k) to flat (0.63 ms at 10k).
 
 **Phase 5 — Scope to the derived graph.** Per-graph read models so the resident
 set is the distilled layer, with the episode log left in SQLite.

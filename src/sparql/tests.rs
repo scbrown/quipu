@@ -3076,3 +3076,123 @@ fn graph_var_excludes_the_meta_graph_but_it_stays_reachable_by_name() {
         "explicitly named, it is fully readable"
     );
 }
+
+// -- quipu-0lr: LIMIT pushdown and selectivity-ordered joins ----------------
+
+/// A bounded single-pattern scan returns exactly LIMIT rows, each a real
+/// solution of the unbounded query (the pushdown may reorder nothing).
+#[test]
+fn limit_pushdown_returns_a_correct_prefix() {
+    let store = test_store_with_data();
+    let full = query(
+        &store,
+        "SELECT ?s WHERE { ?s a <http://example.org/Person> }",
+    )
+    .unwrap();
+    assert_eq!(full.rows().len(), 2);
+    let limited = query(
+        &store,
+        "SELECT ?s WHERE { ?s a <http://example.org/Person> } LIMIT 1",
+    )
+    .unwrap();
+    assert_eq!(limited.rows().len(), 1);
+    assert!(
+        full.rows().contains(&limited.rows()[0]),
+        "the limited row must be one of the full query's solutions"
+    );
+}
+
+/// OFFSET participates in the pushed cap (start + length), so a paged read
+/// still sees the row the offset points at.
+#[test]
+fn limit_pushdown_respects_offset() {
+    let store = test_store_with_data();
+    let full = query(&store, "SELECT ?s WHERE { ?s ?p ?o }").unwrap();
+    let paged = query(&store, "SELECT ?s WHERE { ?s ?p ?o } OFFSET 2 LIMIT 3").unwrap();
+    assert_eq!(paged.rows().len(), 3);
+    assert_eq!(
+        paged.rows(),
+        &full.rows()[2..5],
+        "same rows as slicing the full set"
+    );
+}
+
+/// A FILTER between LIMIT and the BGP blocks the pushdown — the filtered
+/// query must still find every matching row, not a capped prefix of inputs.
+#[test]
+fn limit_does_not_push_through_filter() {
+    let store = test_store_with_data();
+    let rows = query(
+        &store,
+        "SELECT ?s WHERE { ?s <http://example.org/age> ?age . FILTER(?age > 26) } LIMIT 5",
+    )
+    .unwrap();
+    // alice (30) and carol (35): a naive cap of 5 SQL rows could have stopped
+    // on bob (25) rows and missed one.
+    assert_eq!(rows.rows().len(), 2);
+}
+
+/// ACCEPTANCE (quipu-0lr): the same join written pathologically (broad scan
+/// first) and well (selective pattern first) returns identical solutions, and
+/// the planner provably folds them in the same order.
+#[test]
+fn join_order_is_planned_not_inherited() {
+    let store = test_store_with_data();
+    // Broad-first: ?s ?p ?o style scan, then the selective name lookup.
+    let bad = query(
+        &store,
+        r#"SELECT ?s ?o WHERE { ?s <http://example.org/knows> ?o . ?s <http://example.org/name> "Alice" }"#,
+    )
+    .unwrap();
+    let good = query(
+        &store,
+        r#"SELECT ?s ?o WHERE { ?s <http://example.org/name> "Alice" . ?s <http://example.org/knows> ?o }"#,
+    )
+    .unwrap();
+    let norm = |r: &QueryResult| {
+        let mut v = r.rows().to_vec();
+        v.sort_by_key(|row| format!("{row:?}"));
+        v
+    };
+    assert_eq!(norm(&bad), norm(&good));
+    assert_eq!(bad.rows().len(), 1, "alice knows bob");
+}
+
+/// The pure planner: a pathological source ordering yields the same plan as a
+/// good one — smallest first, then connected-smallest, cartesian only when
+/// the query genuinely contains one.
+#[test]
+fn join_plan_ignores_source_order() {
+    use std::collections::HashSet;
+    let vars = |names: &[&str]| -> Vec<String> { names.iter().map(ToString::to_string).collect() };
+    let none = HashSet::new();
+
+    // good order: tiny (10), linked (100), huge (10_000)
+    let good = super::triple::join_plan(
+        &[vars(&["x"]), vars(&["x", "y"]), vars(&["y", "z"])],
+        &[10, 100, 10_000],
+        &none,
+    );
+    assert_eq!(good, vec![0, 1, 2]);
+
+    // pathological order: same patterns listed huge-first
+    let bad = super::triple::join_plan(
+        &[vars(&["y", "z"]), vars(&["x", "y"]), vars(&["x"])],
+        &[10_000, 100, 10],
+        &none,
+    );
+    assert_eq!(bad, vec![2, 1, 0], "the fold sequence is identical");
+
+    // A disconnected small pattern must not bait the planner into a cartesian
+    // while a connected alternative exists.
+    let plan = super::triple::join_plan(
+        &[vars(&["a"]), vars(&["a", "b"]), vars(&["q"])],
+        &[50, 500, 2],
+        &none,
+    );
+    assert_eq!(
+        plan,
+        vec![2, 0, 1],
+        "smallest starts; then the connected chain beats staying small"
+    );
+}

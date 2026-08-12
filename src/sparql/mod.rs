@@ -143,6 +143,13 @@ pub struct TemporalContext {
     /// disables). A join explosion is stopped the moment it is recognizable
     /// instead of burning the whole wall-clock budget at 100% CPU.
     pub row_cap: Option<usize>,
+    /// LIMIT pushdown (quipu-0lr): stop producing BGP solutions once this
+    /// many exist. Installed by the `Slice` operator ONLY when every operator
+    /// between it and the BGP leaf is prefix-safe (`Project`/`Reduced`), so
+    /// stopping early cannot change the answer — a bounded query stops
+    /// scanning once it has enough rows instead of completing the scan and
+    /// discarding. `None` = no cap (every pre-existing path).
+    pub row_limit: Option<usize>,
 }
 
 /// Execute a SPARQL query against the store (current state).
