@@ -156,9 +156,13 @@ pub struct Store {
     pub(crate) resolve_sql: String,
     /// Memoized term dictionary — see [`TermCache`].
     pub(crate) term_cache: std::cell::RefCell<TermCache>,
-    /// Resident ROOT read model, built on demand and dropped on every write —
-    /// see [`read_model::ReadModel`] and [`Store::read_model`].
-    pub(crate) read_model: std::cell::RefCell<Option<read_model::ReadModel>>,
+    /// Resident read models, one per graph, built on demand (quipu-nip) —
+    /// see [`read_model::ReadModel`] and [`Store::read_model_for`]. The
+    /// combined size is bounded by `read_model_max_triples`, so a large ROOT
+    /// past the budget keeps the SQL path while a small derived graph stays
+    /// resident.
+    pub(crate) read_model:
+        std::cell::RefCell<std::collections::HashMap<i64, read_model::ReadModel>>,
     /// Last graph projection, memoized with a tx stamp (quipu-tz5) — see
     /// [`crate::graph::project_cached`].
     pub(crate) projected_graph: std::cell::RefCell<Option<crate::graph::ProjectionCacheEntry>>,

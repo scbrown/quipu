@@ -364,8 +364,17 @@ subtrees (`Project`/`Reduced` only) into the BGP leaf, which stops the scan
 once it has bound enough rows. Measured: the `LIMIT 100` type scan went from
 linear (0.51 ms at 1k episodes, 100.2 ms at 10k) to flat (0.63 ms at 10k).
 
-**Phase 5 — Scope to the derived graph.** Per-graph read models so the resident
-set is the distilled layer, with the episode log left in SQLite.
+**Phase 5 — Scope to the derived graph. ✅ LANDED** (`quipu-nip`). The
+resident slot became a per-graph map: the applicability guard admits any
+SINGLE graph scope (`GRAPH <iri>`, a one-graph `FROM`, or the `graph`
+request param), each graph builds its own model on first use, writes
+maintain only the written graph's model, and the size budget bounds the
+COMBINED resident set — so a ROOT past the budget keeps the SQL path while
+a small derived graph stays resident (the §7 shape). Unions and `GRAPH ?g`
+keep SQL: one model holds one graph and no per-row g. **Measured** on the
+scale-bench store: a 10,000-triple derived graph beside a 170k-fact ROOT
+costs **4.2 MiB resident (~433 bytes/triple)** — the ROOT model over the
+same store would cost 70 MiB, and past the budget is simply never built.
 
 Deliberately **not** in this plan: replacing SQLite, changing the EAVT schema,
 or touching the write path. Storage is not the problem — 8.3 KB/episode, linear,
@@ -378,8 +387,9 @@ governance model needs exactly those columns.
    **Settled:** built on first use, maintained across writes, bounded by a
    triple budget, and only for multi-pattern BGPs. A store past the budget keeps
    the SQL path.
-2. **Per-graph or whole-store?** §7 argues per-graph, which also makes the
-   `GRAPH <iri>` case work rather than fall back.
+2. ~~**Per-graph or whole-store?**~~ **Settled per-graph** (`quipu-nip`):
+   §7's argument held, and the `GRAPH <iri>` case now takes the fast path
+   rather than falling back.
 3. **Does the fast path need to be visible in results?** A query answered from
    memory and one answered from SQL should be indistinguishable in content — but
    if they ever are not, that is a bug we would want surfaced rather than

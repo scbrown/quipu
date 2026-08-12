@@ -333,7 +333,7 @@ impl Store {
             facts_source: "facts".to_string(),
             resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
             term_cache: std::cell::RefCell::new(TermCache::default()),
-            read_model: std::cell::RefCell::new(None),
+            read_model: std::cell::RefCell::new(std::collections::HashMap::new()),
             projected_graph: std::cell::RefCell::new(None),
             read_model_enabled: std::cell::Cell::new(true),
             write_in_progress: std::cell::Cell::new(false),

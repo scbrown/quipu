@@ -48,10 +48,16 @@ pub(super) fn eval_bgp_hash_join(
         }
     }
 
+    // The one graph this BGP is scoped to — the applicability guard admits
+    // only single-graph scopes, so the fallback is unreachable in practice.
+    let graph = ctx
+        .graph
+        .single_graph()
+        .unwrap_or(crate::schema::ROOT_GRAPH);
     let mut evaluated: Vec<Vec<Bindings>> = Vec::with_capacity(patterns.len());
     for (i, tp) in patterns.iter().enumerate() {
         check_eval_budget(ctx, i, 0)?;
-        let rows = eval_triple_pattern_from_model(store, tp, seed)?;
+        let rows = eval_triple_pattern_from_model(store, tp, seed, graph)?;
         // An empty pattern empties every join it participates in.
         if rows.is_empty() {
             return Ok((Vec::new(), all_vars));

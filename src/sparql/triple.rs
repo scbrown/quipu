@@ -496,6 +496,7 @@ pub(super) fn eval_triple_pattern_from_model(
     store: &Store,
     tp: &TriplePattern,
     bindings: &Bindings,
+    graph: i64,
 ) -> Result<Vec<Bindings>> {
     let subject = match resolve_subject_pattern(&tp.subject, bindings) {
         Some(iri) => match store.lookup(&iri)? {
@@ -513,7 +514,7 @@ pub(super) fn eval_triple_pattern_from_model(
     };
     let object = resolve_object_pattern(store, &tp.object, bindings)?;
 
-    let model = store.read_model()?;
+    let model = store.read_model_for(graph)?;
     let mut candidates: Vec<(i64, i64, Value)> = match (subject, predicate, &object) {
         (Some(e), Some(a), Some(v)) => {
             if model.contains(e, a, v) {

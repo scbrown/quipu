@@ -491,19 +491,21 @@ fn the_guard_refuses_time_travel() {
     assert!(!read_model_applicable(&s, &as_of), "as_of_tx admitted");
 }
 
-/// Any graph scope but the plain ROOT default reads a different fact set.
-/// Overlays need no separate case — an overlay is a named graph.
+/// Multi-graph and variable scopes read fact sets one model cannot hold —
+/// still refused. Single-graph scopes (ROOT or named, quipu-nip) are
+/// admitted: a model answers exactly one graph's own facts, which is what a
+/// single-graph scope reads. Overlays need no separate case — an overlay is
+/// a named graph, and the model holds its RAW rows, the same rows the SQL
+/// path's `g IN (…)` filter reads (composition is a different operation).
 #[test]
-fn the_guard_refuses_every_non_root_graph_scope() {
+fn the_guard_refuses_unions_and_graph_variables_but_admits_single_graphs() {
     let s = store();
     // Enable it, or these would pass because the flag is off rather than
     // because the dimension is refused.
     s.set_read_model_enabled(true);
     for scope in [
         GraphScope::Default(vec![]),
-        GraphScope::Default(vec![7]),
         GraphScope::Default(vec![0, 7]),
-        GraphScope::Named(vec![7]),
         GraphScope::AnyNamed {
             var: "g".to_string(),
             restrict: None,
@@ -515,7 +517,18 @@ fn the_guard_refuses_every_non_root_graph_scope() {
         };
         assert!(
             !read_model_applicable(&s, &ctx),
-            "a non-ROOT scope was admitted: {:?}",
+            "a non-single scope was admitted: {:?}",
+            ctx.graph
+        );
+    }
+    for scope in [GraphScope::Default(vec![7]), GraphScope::Named(vec![7])] {
+        let ctx = TemporalContext {
+            graph: scope,
+            ..Default::default()
+        };
+        assert!(
+            read_model_applicable(&s, &ctx),
+            "a single-graph scope was refused (quipu-nip): {:?}",
             ctx.graph
         );
     }
@@ -704,4 +717,217 @@ fn the_model_path_answers_identically_to_sql() {
         );
     }
     s.set_read_model_enabled(false);
+}
+
+/// quipu-nip: the guard admits any SINGLE graph scope, and the query path
+/// builds that graph its own model — ROOT is not involved.
+#[test]
+fn a_named_graph_scope_builds_its_own_model() {
+    let mut s = store();
+    let d = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/b",
+        Op::Assert,
+    );
+    let g = s
+        .overlay_create("http://example.org/derived", crate::schema::ROOT_GRAPH)
+        .unwrap();
+    s.overlay_write(
+        g,
+        Op::Assert,
+        d.entity,
+        d.attribute,
+        d.value.clone(),
+        "2026-01-01T00:00:00Z",
+    )
+    .unwrap();
+
+    let ctx = TemporalContext {
+        graph: crate::sparql::GraphScope::Named(vec![g]),
+        ..Default::default()
+    };
+    assert!(
+        read_model_applicable(&s, &ctx),
+        "a single named-graph scope must be admitted"
+    );
+    let len = s.read_model_for(g).unwrap().len();
+    assert_eq!(len, 1, "the graph's own fact is in its model");
+    assert!(s.read_model_is_resident_for(g));
+    assert!(
+        !s.read_model_is_resident_for(crate::schema::ROOT_GRAPH),
+        "consulting a named graph must not build ROOT's model"
+    );
+}
+
+/// quipu-nip acceptance: a store with a ROOT past the budget and a small
+/// derived graph holds ONLY the derived graph resident — ROOT queries keep
+/// the SQL path, derived-graph queries get the fast path.
+#[test]
+fn only_the_affordable_graph_goes_resident() {
+    let mut s = store();
+    for i in 0..3 {
+        let d = datum(
+            &s,
+            &format!("http://example.org/e{i}"),
+            "http://example.org/p",
+            "http://example.org/o",
+            Op::Assert,
+        );
+        s.transact(&[d], "2026-01-01T00:00:00Z", Some("test"), None)
+            .unwrap();
+    }
+    let d = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/b",
+        Op::Assert,
+    );
+    let g = s
+        .overlay_create("http://example.org/derived", crate::schema::ROOT_GRAPH)
+        .unwrap();
+    s.overlay_write(
+        g,
+        Op::Assert,
+        d.entity,
+        d.attribute,
+        d.value.clone(),
+        "2026-01-01T00:00:00Z",
+    )
+    .unwrap();
+
+    s.set_read_model_max_triples(1);
+
+    assert!(
+        !read_model_applicable(&s, &TemporalContext::default()),
+        "ROOT (3 triples) is past the 1-triple budget"
+    );
+    let ctx = TemporalContext {
+        graph: crate::sparql::GraphScope::Named(vec![g]),
+        ..Default::default()
+    };
+    assert!(
+        read_model_applicable(&s, &ctx),
+        "the 1-triple derived graph fits the budget"
+    );
+    let _ = s.read_model_for(g).unwrap().len();
+    assert!(s.read_model_is_resident_for(g));
+    assert!(
+        !s.read_model_is_resident_for(crate::schema::ROOT_GRAPH),
+        "only the derived graph is resident"
+    );
+}
+
+/// quipu-nip: the budget bounds the COMBINED resident size — a second model
+/// is affordable only if it fits alongside what is already held.
+#[test]
+fn the_budget_bounds_the_combined_resident_size() {
+    let mut s = store();
+    let d = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/b",
+        Op::Assert,
+    );
+    let g1 = s
+        .overlay_create("http://example.org/g1", crate::schema::ROOT_GRAPH)
+        .unwrap();
+    s.overlay_write(
+        g1,
+        Op::Assert,
+        d.entity,
+        d.attribute,
+        d.value.clone(),
+        "2026-01-01T00:00:00Z",
+    )
+    .unwrap();
+    let g2 = s
+        .overlay_create("http://example.org/g2", crate::schema::ROOT_GRAPH)
+        .unwrap();
+    for i in 0..2 {
+        let d2 = datum(
+            &s,
+            &format!("http://example.org/x{i}"),
+            "http://example.org/p",
+            "http://example.org/o",
+            Op::Assert,
+        );
+        s.overlay_write(
+            g2,
+            Op::Assert,
+            d2.entity,
+            d2.attribute,
+            d2.value.clone(),
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+    }
+
+    s.set_read_model_max_triples(2);
+    let _ = s.read_model_for(g1).unwrap().len(); // 1 triple resident
+    assert!(
+        !s.read_model_affordable(g2),
+        "g2's 2 triples do not fit beside g1's resident 1 under a budget of 2"
+    );
+    assert!(
+        s.read_model_affordable(g1),
+        "already-resident stays affordable"
+    );
+}
+
+/// quipu-nip: a write to one graph maintains that graph's model and leaves
+/// every other graph's model untouched.
+#[test]
+fn per_graph_models_are_maintained_independently() {
+    let mut s = store();
+    let d_root = datum(
+        &s,
+        "http://example.org/r",
+        "http://example.org/p",
+        "http://example.org/o",
+        Op::Assert,
+    );
+    s.transact(&[d_root], "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+
+    let d = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/b",
+        Op::Assert,
+    );
+    let g = s
+        .overlay_create("http://example.org/derived", crate::schema::ROOT_GRAPH)
+        .unwrap();
+    s.overlay_write(
+        g,
+        Op::Assert,
+        d.entity,
+        d.attribute,
+        d.value.clone(),
+        "2026-01-01T00:00:00Z",
+    )
+    .unwrap();
+
+    let root_len = s.read_model().unwrap().len();
+    let g_len = s.read_model_for(g).unwrap().len();
+    assert_eq!((root_len, g_len), (1, 1));
+
+    // A ROOT write: ROOT's model follows it, g's is untouched.
+    let d2 = datum(
+        &s,
+        "http://example.org/r2",
+        "http://example.org/p",
+        "http://example.org/o",
+        Op::Assert,
+    );
+    s.transact(&[d2], "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    assert_eq!(s.read_model().unwrap().len(), 2, "ROOT model maintained");
+    assert!(s.read_model_is_resident_for(g), "g's model survived");
+    assert_eq!(s.read_model_for(g).unwrap().len(), 1);
 }

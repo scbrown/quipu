@@ -306,11 +306,18 @@ pub const DEFAULT_READ_MODEL_MAX_TRIPLES: usize = 1_000_000;
 pub fn read_model_applicable(store: &Store, ctx: &crate::sparql::TemporalContext) -> bool {
     store.read_model_enabled()
         && !store.write_in_progress()
-        && store.read_model_affordable(crate::schema::ROOT_GRAPH)
         && ctx.valid_at.is_none()
         && ctx.as_of_tx.is_none()
         && ctx.named_dataset.is_none()
-        && ctx.graph.is_root_default()
+        // Any SINGLE graph, not just ROOT (quipu-nip): the model answers one
+        // graph's own facts — the same scope the SQL path's `g IN (…)` filter
+        // reads — so a query scoped to a small derived graph gets the fast
+        // path even when ROOT is past the budget. Unions and `GRAPH ?g` keep
+        // SQL: a model holds one graph and no per-row g.
+        && ctx
+            .graph
+            .single_graph()
+            .is_some_and(|g| store.read_model_affordable(g))
         && !store.has_attachments()
 }
 
@@ -347,11 +354,16 @@ impl Store {
     /// cost being avoided.
     #[must_use]
     pub fn read_model_affordable(&self, graph: i64) -> bool {
-        if self.read_model.borrow().is_some() {
+        let models = self.read_model.borrow();
+        if models.contains_key(&graph) {
             return true; // already paid for
         }
+        // The budget bounds the COMBINED resident size (quipu-nip): a second
+        // graph's model is affordable only if it fits alongside what is
+        // already held, so per-graph models cannot multiply past the ceiling.
+        let resident: usize = models.values().map(ReadModel::len).sum();
         self.current_fact_count(graph)
-            .is_ok_and(|n| n <= self.read_model_max_triples.get())
+            .is_ok_and(|n| n.saturating_add(resident) <= self.read_model_max_triples.get())
     }
 
     /// Ceiling on how many triples a resident read model may hold.
@@ -387,18 +399,31 @@ impl Store {
     /// # Errors
     /// [`crate::Error::Sqlite`] if the build's fact scan fails.
     pub fn read_model(&self) -> Result<std::cell::Ref<'_, ReadModel>> {
-        if self.read_model.borrow().is_none() {
-            let built = ReadModel::build(self, crate::schema::ROOT_GRAPH)?;
-            *self.read_model.borrow_mut() = Some(built);
+        self.read_model_for(crate::schema::ROOT_GRAPH)
+    }
+
+    /// The resident read model for ONE graph, built on first use (quipu-nip).
+    ///
+    /// Each graph gets its own model; the combined size is bounded by
+    /// [`Self::read_model_affordable`]'s budget check at the applicability
+    /// guard, so a store with a large ROOT and a small derived graph holds
+    /// only the derived graph resident.
+    ///
+    /// # Errors
+    /// [`crate::Error::Sqlite`] if the fact scan fails.
+    pub fn read_model_for(&self, graph: i64) -> Result<std::cell::Ref<'_, ReadModel>> {
+        if !self.read_model.borrow().contains_key(&graph) {
+            let built = ReadModel::build(self, graph)?;
+            self.read_model.borrow_mut().insert(graph, built);
         }
         Ok(std::cell::Ref::map(self.read_model.borrow(), |m| {
-            m.as_ref().expect("just built")
+            m.get(&graph).expect("just built")
         }))
     }
 
-    /// Drop the resident read model.
+    /// Drop every resident read model.
     pub(crate) fn invalidate_read_model(&self) {
-        *self.read_model.borrow_mut() = None;
+        self.read_model.borrow_mut().clear();
     }
 
     /// Whether a write currently holds an open savepoint, during which the
@@ -425,23 +450,31 @@ impl Store {
     /// - It could not vouch (OWL inference, functional supersede): drop, and
     ///   let the next read rebuild. Correct by construction.
     pub(crate) fn maintain_read_model(&self, graph: i64, effective: Option<&[Datum]>) {
-        let mut slot = self.read_model.borrow_mut();
-        let Some(model) = slot.as_mut() else {
+        let mut models = self.read_model.borrow_mut();
+        // Only the WRITTEN graph's model is touched (quipu-nip): a model over
+        // ROOT is genuinely unaffected by a write to graph 7, because
+        // `current_facts_in_graph(0)` never sees those rows.
+        let Some(model) = models.get_mut(&graph) else {
             return;
         };
-        if model.graph() != graph {
-            return;
-        }
         match effective {
             Some(datums) => model.apply_all(datums),
-            None => *slot = None,
+            None => {
+                models.remove(&graph);
+            }
         }
     }
 
-    /// Whether a resident model is currently built. Test surface.
+    /// Whether any resident model is currently built. Test surface.
     #[must_use]
     pub fn read_model_is_resident(&self) -> bool {
-        self.read_model.borrow().is_some()
+        !self.read_model.borrow().is_empty()
+    }
+
+    /// Whether a resident model is built for this graph. Test surface.
+    #[must_use]
+    pub fn read_model_is_resident_for(&self, graph: i64) -> bool {
+        self.read_model.borrow().contains_key(&graph)
     }
 
     /// Whether SPARQL may answer from the read model. **On by default.**

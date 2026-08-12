@@ -116,6 +116,17 @@ impl GraphScope {
     pub(crate) fn is_root_default(&self) -> bool {
         matches!(self, GraphScope::Default(g) if g.as_slice() == [0])
     }
+
+    /// The one graph a single-graph scope names (quipu-nip): `Some(g)` for a
+    /// one-element `Default` (the service default, a one-graph `FROM`, or the
+    /// `graph` request param) or `Named` (`GRAPH <iri>`), `None` for unions
+    /// and `GRAPH ?g`.
+    pub(crate) fn single_graph(&self) -> Option<i64> {
+        match self {
+            GraphScope::Default(g) | GraphScope::Named(g) if g.len() == 1 => Some(g[0]),
+            _ => None,
+        }
+    }
 }
 
 /// Temporal context for time-travel SPARQL queries.
