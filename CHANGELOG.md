@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.22] - 2026-08-12
+
+### Added
+
+- *(graph)* Scope project() to a named graph and memoize it (quipu-tz5)([7c35d8f](https://github.com/scbrown/quipu/commit/7c35d8f98024709d56c00a061123a30d11f0ca5e))
+- *(events)* Opt-in event-log retention that honours consumer offsets (quipu-9z9)([77c0d68](https://github.com/scbrown/quipu/commit/77c0d6876961d47084ea0e651cfc36ee8c551c81))
+- *(mcp)* Advertise the seven REST-only governance/overlay tools (quipu-227)([a717057](https://github.com/scbrown/quipu/commit/a7170578cdb010df921050bc2b59b31a4eca59e4))
+- *(federation)* Route queries through the federated provider (quipu-tkh)([6d52884](https://github.com/scbrown/quipu/commit/6d52884db1d165b19a3e1aae2c3c7ebe272f8d31))
+
+### Changed
+
+- *(store)* Split mod.rs and ops.rs along their seams (quipu-bu3)([f459f57](https://github.com/scbrown/quipu/commit/f459f57eccc7b320cd1338617a351f63100a64a2))
+- Green the file-size full scan — 6 files back under baseline (quipu-sd1)([835c9c8](https://github.com/scbrown/quipu/commit/835c9c8315c83006017017aed9a4b7c1f79b0f7d))
+
+### Documentation
+
+- Catch the stale banners and rosters up to the code([1e9ab04](https://github.com/scbrown/quipu/commit/1e9ab0464f9738ebc393aa2e123e0a5fa69b2259))
+- *(book)* Document the 11 CLI commands the reference omitted([21d0078](https://github.com/scbrown/quipu/commit/21d0078e71970fe7699d82e347e880a612998754))
+- *(book)* REST reference covers every route, pinned by a test (quipu-83v)([6f465d2](https://github.com/scbrown/quipu/commit/6f465d20de58a3e23a7e04145e634f8345930afd))
+
+
+
+### Perf
+
+- *(sparql)* LIMIT pushdown and selectivity-ordered joins (quipu-0lr)([bc4eec6](https://github.com/scbrown/quipu/commit/bc4eec6f69c0cd35c2d7a30679c33c0d79e04457))
+
 ## [0.3.21] - 2026-08-10
 
 ### Documentation
