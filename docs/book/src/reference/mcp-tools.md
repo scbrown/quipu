@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **30 tools** in a default build, or
-**31** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **37 tools** in a default build, or
+**38** when built with the `owl` feature (which adds `quipu_load_ontology`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -271,6 +271,101 @@ Returns three sections:
 Plus a `graph` summary (`nodes`, `edges`, `communities`, `modularity`).
 Communities here are emergent clustering for surfacing, **not** an access
 boundary.
+
+### `quipu_policy_check`
+
+Committed-tier evaluation of a governance Policy over the graph of record.
+Evaluates the policy's `aegis:claim` (a SPARQL ASK, optionally with a `$target`
+placeholder) and returns a Verdict — `outcome` ∈ `satisfied | unsatisfied |
+unknown` bound to a reproducible `evidence_hash`. Deterministic: any verifier
+re-running the same ASK over the same committed evidence gets the same verdict
+(checked, not trusted). The verdict is returned **unsigned** unless the store
+has a signing identity attached.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `policy` | One of policy/claim | Policy IRI whose `aegis:claim` to evaluate |
+| `claim` | One of policy/claim | Inline SPARQL ASK claim |
+| `target` | Yes | Target IRI bound to the `$target` placeholder |
+| `predicate_id` | No | Predicate identifier recorded in the verdict (inline claims; default `inline`) |
+| `evidence_probe` | No | Inline ASK for "does the evidence exist?" — false yields `unknown` |
+| `valid_at` | No | ISO-8601 point-in-time for valid-time evaluation |
+
+### `quipu_verdict_verify`
+
+Verify a signed Verdict against the Phase-0 root of trust: the signature must
+be valid under the verifier's **registered** public key, and the verifier must
+be authorized to attest the predicate. `trusted` is the conjunction — the
+property a consumer should gate on.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `predicate_id` | Yes | Predicate the verdict attests |
+| `target_ref` | Yes | Target the verdict is about |
+| `outcome` | Yes | Verdict outcome |
+| `evidence_hash` | Yes | Evidence hash the signature seals |
+| `tier` | No | Evidence tier (default: `committed`) |
+| `verifier` | Yes | Verifier IRI whose registered key verifies the signature |
+| `signature` | Yes | Hex ed25519 signature over the verdict message |
+
+### `quipu_verifier_authorized`
+
+Check the Phase-0 verifier registry: may this verifier attest this predicate?
+The discovery half of the governance gate.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `verifier` | Yes | Verifier IRI |
+| `predicate` | Yes | Predicate IRI to attest |
+
+### `quipu_cooccurrence`
+
+Deterministic, auditable work-item co-occurrence: given a work-item (`Bead`)
+IRI, returns the other work-items that share at least one touched code entity
+via the provenance chain `Bead ←implements− GitCommit −modifies→ entity`.
+A graph query over typed provenance edges, ordered by overlap strength.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `work_item` | Yes | Work-item (Bead) IRI |
+| `valid_at` | No | ISO-8601 point-in-time for valid-time filtering |
+| `tx` | No | Maximum transaction ID to consider |
+
+### `quipu_overlay_create`
+
+Register an overlay-class named graph bound (bind-once) to a committed parent
+branch. Overlays are scratch layers over the committed graph: write hypotheses
+into an overlay, read the composed view, and the committed layer stays
+untouched.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `overlay` | Yes | Overlay graph IRI to register |
+| `parent_branch` | No | Committed parent-branch IRI (omit for ROOT) |
+
+### `quipu_overlay_write`
+
+Write one overlay primitive: `assert`, `retract`, or `tombstone` a triple in an
+overlay graph. Tombstone masks the parent branch's fact in the composed view
+without touching the committed layer.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `overlay` | Yes | Overlay graph IRI |
+| `op` | Yes | `assert`, `retract`, or `tombstone` |
+| `subject` | Yes | Subject IRI |
+| `predicate` | Yes | Predicate IRI |
+| `object` | Yes | Object value (IRI string, literal, or typed JSON value) |
+| `timestamp` | No | ISO-8601 valid-time (default: now) |
+
+### `quipu_overlay_compose`
+
+Resolve an overlay's composed view over `[overlay > parent-branch-root]`:
+asserted-and-not-tombstoned, nearest wins. Read-only.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `overlay` | Yes | Overlay graph IRI |
 
 ### `quipu_search_nodes`
 

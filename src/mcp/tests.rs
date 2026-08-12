@@ -1287,14 +1287,24 @@ fn test_tool_definitions() {
     // bring the base to 28.
     assert!(names.contains(&"quipu_export"));
     assert!(names.contains(&"quipu_graph"));
+    // Governance + overlay tools, previously REST-only (quipu-227): the
+    // difference between an agent being able to DISCOVER the governance gate
+    // and not.
+    assert!(names.contains(&"quipu_policy_check"));
+    assert!(names.contains(&"quipu_verdict_verify"));
+    assert!(names.contains(&"quipu_verifier_authorized"));
+    assert!(names.contains(&"quipu_cooccurrence"));
+    assert!(names.contains(&"quipu_overlay_create"));
+    assert!(names.contains(&"quipu_overlay_write"));
+    assert!(names.contains(&"quipu_overlay_compose"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 31);
+        assert_eq!(defs.len(), 38);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 30);
+        assert_eq!(defs.len(), 37);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 
