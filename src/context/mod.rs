@@ -104,6 +104,8 @@ impl EmbeddingStatus {
     }
 }
 
+mod rerank;
+
 /// Configuration for the context pipeline.
 #[derive(Debug, Clone)]
 pub struct ContextPipelineConfig {
@@ -115,6 +117,9 @@ pub struct ContextPipelineConfig {
     pub expand_links: bool,
     /// Maximum link expansion depth (1 = immediate neighbors only).
     pub link_depth: u32,
+    /// Re-order candidates by Personalized `PageRank` seeded at the direct hits
+    /// before the `max_entities` truncation (quipu-mq7). Off by default.
+    pub ppr_rerank: bool,
 }
 
 impl Default for ContextPipelineConfig {
@@ -124,6 +129,7 @@ impl Default for ContextPipelineConfig {
             max_facts_per_entity: 20,
             expand_links: true,
             link_depth: 1,
+            ppr_rerank: false,
         }
     }
 }
@@ -261,12 +267,17 @@ impl<'a> ContextPipeline<'a> {
             }
         }
 
-        // Step 3: Sort by score descending, truncate.
-        entities.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        // Step 3: Rank and truncate. Optionally by PPR from the direct hits
+        // (quipu-mq7); otherwise by each entity's own relevance score.
+        if self.config.ppr_rerank {
+            rerank::apply_ppr(self.store, &mut entities)?;
+        } else {
+            entities.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
         entities.truncate(self.config.max_entities);
 
         let total_facts: usize = entities.iter().map(|e| e.facts.len()).sum();

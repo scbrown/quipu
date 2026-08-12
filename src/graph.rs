@@ -653,63 +653,7 @@ pub fn tool_project(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 "count": results.len()
             }))
         }
-        "pagerank" | "ppr" => {
-            let damping = input
-                .get("damping")
-                .and_then(serde_json::Value::as_f64)
-                .map_or(0.85, |v| v as f32);
-            let max_iters = input
-                .get("max_iters")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(100) as u32;
-            let tolerance = input
-                .get("tolerance")
-                .and_then(serde_json::Value::as_f64)
-                .map_or(1e-6, |v| v as f32);
-            let limit = input
-                .get("limit")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(20) as usize;
-
-            // Seeds accepted as IRIs (resolved to term IDs) or raw integer IDs.
-            let mut seeds: Vec<i64> = Vec::new();
-            if let Some(arr) = input.get("seeds").and_then(|v| v.as_array()) {
-                for s in arr {
-                    if let Some(iri) = s.as_str() {
-                        if let Some(id) = store.lookup(iri)? {
-                            seeds.push(id);
-                        }
-                    } else if let Some(id) = s.as_i64() {
-                        seeds.push(id);
-                    }
-                }
-            }
-
-            let personalized = !seeds.is_empty();
-            let cfg = PageRankConfig {
-                damping,
-                seeds,
-                max_iters,
-                tolerance,
-            };
-            let ranked = page_rank(&pg, &cfg)?;
-            let results: Vec<JsonValue> = ranked
-                .into_iter()
-                .take(limit)
-                .map(|(entity_id, score)| {
-                    let iri = store
-                        .resolve(entity_id)
-                        .unwrap_or_else(|_| format!("ref:{entity_id}"));
-                    serde_json::json!({"entity": iri, "score": score})
-                })
-                .collect();
-            Ok(serde_json::json!({
-                "algorithm": "pagerank",
-                "personalized": personalized,
-                "results": results,
-                "count": results.len()
-            }))
-        }
+        "pagerank" | "ppr" => rank::run_pagerank(store, &pg, input),
         "components" => {
             let components = connected_components(&pg);
             let results: Vec<JsonValue> = components
@@ -872,6 +816,9 @@ pub fn persist_communities(
     store.transact(&datums, timestamp, None, Some("algo:louvain"))?;
     Ok(total)
 }
+
+mod rank;
+pub use rank::persist_pagerank;
 
 #[cfg(test)]
 #[path = "graph_tests.rs"]

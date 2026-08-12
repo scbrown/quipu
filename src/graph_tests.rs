@@ -421,3 +421,135 @@ fn persist_supersedes_prior_membership() {
         );
     }
 }
+
+/// Phase 3 (quipu-mq7): persisting `PageRank` supersedes prior scores the same
+/// way community persistence does — one active `quipu:pageRank` per entity,
+/// never accumulation — and an unchanged score is left alone.
+#[test]
+fn persist_pagerank_supersedes_prior_scores() {
+    let mut store = Store::open_in_memory().unwrap();
+    let e1 = store.intern("http://example.org/e1").unwrap();
+    let e2 = store.intern("http://example.org/e2").unwrap();
+
+    persist_pagerank(&mut store, &[(e1, 0.7), (e2, 0.3)], "2026-01-01T00:00:00Z").unwrap();
+    // Run 2: e1's score changes, e2's is identical.
+    persist_pagerank(&mut store, &[(e1, 0.6), (e2, 0.3)], "2026-01-02T00:00:00Z").unwrap();
+
+    let pred_id = store
+        .lookup(&format!("{}pageRank", namespace::QUIPU))
+        .unwrap()
+        .unwrap();
+    let active: Vec<_> = store
+        .current_facts()
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == pred_id)
+        .collect();
+    assert_eq!(active.len(), 2, "one active score per entity");
+    for f in &active {
+        let expected = if f.entity == e1 { 0.6f64 } else { 0.3f64 };
+        assert!(
+            matches!(f.value, Value::Float(v) if (v - expected).abs() < 1e-6),
+            "score reflects the latest run: {:?}",
+            f.value
+        );
+    }
+
+    // e2's identical score must NOT have been superseded: its fact is still
+    // the one from run 1 (tx unchanged), so history shows one assertion.
+    let e2_history = store.entity_history(e2).unwrap();
+    let e2_pr: Vec<_> = e2_history
+        .iter()
+        .filter(|f| f.attribute == pred_id)
+        .collect();
+    assert_eq!(
+        e2_pr.len(),
+        1,
+        "an unchanged score is left alone, not churned: {e2_pr:?}"
+    );
+}
+
+/// Phase 3: `tool_project` refuses to persist a PERSONALIZED run — persisting
+/// one query's neighbourhood as the store's global importance would be wrong
+/// silently, so it is wrong loudly.
+#[test]
+fn tool_project_refuses_to_persist_a_seeded_run() {
+    let mut store = Store::open_in_memory().unwrap();
+    let d = seed_edge(&mut store, "http://example.org/a", "http://example.org/b");
+    let _ = d;
+
+    let err = tool_project(
+        &mut store,
+        &serde_json::json!({
+            "algorithm": "ppr",
+            "seeds": ["http://example.org/a"],
+            "persist": true,
+        }),
+    );
+    assert!(err.is_err(), "seeded persist must be refused");
+
+    // The global run persists fine, and reports how many scores are current.
+    let ok = tool_project(
+        &mut store,
+        &serde_json::json!({"algorithm": "pagerank", "persist": true}),
+    )
+    .unwrap();
+    assert!(ok["persisted"].as_u64().unwrap() > 0);
+}
+
+/// Phase 4 (quipu-mq7): `rank_by_ppr` orders impact's reached set by
+/// Personalized `PageRank` seeded at the root, and each entry carries its score.
+#[test]
+fn impact_reached_set_is_rerankable_by_ppr() {
+    let mut store = Store::open_in_memory().unwrap();
+    // hub -> a, hub -> b, and b is ALSO pointed at by two extra entities, so
+    // b out-ranks a under PPR from hub's neighbourhood mass.
+    seed_edge(&mut store, "http://example.org/hub", "http://example.org/a");
+    seed_edge(&mut store, "http://example.org/hub", "http://example.org/b");
+    seed_edge(&mut store, "http://example.org/x1", "http://example.org/b");
+    seed_edge(&mut store, "http://example.org/x2", "http://example.org/b");
+
+    let out = crate::mcp::impact::tool_impact(
+        &mut store,
+        &serde_json::json!({
+            "entity": "http://example.org/hub",
+            "rank_by_ppr": true,
+        }),
+    )
+    .unwrap();
+    assert_eq!(out["ranked_by_ppr"], serde_json::json!(true));
+    let reached = out["reached"].as_array().unwrap();
+    assert!(!reached.is_empty());
+    // Scores are attached and non-increasing.
+    let scores: Vec<f64> = reached
+        .iter()
+        .map(|r| r["ppr"].as_f64().expect("every entry carries a ppr score"))
+        .collect();
+    assert!(
+        scores.windows(2).all(|w| w[0] >= w[1]),
+        "reached set is ordered by ppr: {scores:?}"
+    );
+}
+
+/// Helper: assert `a --links--> b` through the store's write path.
+fn seed_edge(store: &mut Store, from: &str, to: &str) -> (i64, i64) {
+    let f = store.intern(from).unwrap();
+    let t = store.intern(to).unwrap();
+    let p = store.intern("http://example.org/links").unwrap();
+    store
+        .transact(
+            &[crate::store::Datum {
+                entity: f,
+                attribute: p,
+                value: Value::Ref(t),
+                valid_from: "2026-01-01T00:00:00Z".to_string(),
+                valid_to: None,
+                op: crate::types::Op::Assert,
+            }],
+            "2026-01-01T00:00:00Z",
+            Some("test"),
+            None,
+        )
+        .unwrap();
+    (f, t)
+}

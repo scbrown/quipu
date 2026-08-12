@@ -5,14 +5,18 @@
 > PR (`src/graph.rs`); `tool_project` `pagerank`/`ppr` exposure (MCP algorithm enum
 > `src/mcp/mod.rs`, REST `/project`, CLI); and Louvain community detection *with*
 > bitemporal `quipu:memberOfCommunity` persistence (`src/graph.rs` `louvain` /
-> `persist_communities`, both-outcomes tested). **Unbuilt:** Phase 3 PageRank
-> write-back — Louvain persists but PageRank has no `quipu:pageRank` persist; Phase 4
-> PPR re-ranking of `tool_impact` / the context pipeline (no `rank_by_ppr`); Phase 5
-> temporal / counterfactual PR. The remaining phases are tracked for follow-up
-> (design-open per the Open Questions below — persist-by-default and per-predicate
-> weights), so filed as a tracked task rather than implemented unilaterally.
+> `persist_communities`, both-outcomes tested). **Phases 3–4 landed
+> (quipu-mq7):** `persist_pagerank` (`src/graph/rank.rs`) writes
+> `quipu:pageRank` scores behind `persist: true` on a GLOBAL run with the same
+> supersede-reconcile discipline as Louvain (a seeded run refuses to persist —
+> one query's neighbourhood is not the store's importance); `tool_impact`
+> gains `rank_by_ppr` (reached set ordered by PPR seeded at the root, `ppr`
+> score per entry) and the context pipeline gains `ppr_rerank` (candidates
+> re-ordered by PPR from the direct hits before truncation). **Unbuilt:**
+> Phase 5 temporal / counterfactual PR (quipu-bli), persist-by-default and
+> per-predicate weights stay design-open.
 >
-> Status: **Delivered (Phases 1–2: in_degree, PageRank/PPR, Louvain); Phase 3 write-back unbuilt** · Origin: agent (strider), prompted by Stiwi ·
+> Status: **Delivered (Phases 1–4)** · Origin: agent (strider), prompted by Stiwi ·
 > Date: 2026-06-21
 >
 > Fulfils the graph-algorithm intent in [`vision.md`](./vision.md) §9 and the

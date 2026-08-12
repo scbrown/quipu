@@ -828,6 +828,7 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "entity": { "type": "string", "description": "IRI of the entity to analyse" },
                     "remove": { "type": "boolean", "description": "If true, speculatively retract the entity before walking (counterfactual mode). Default: false." },
                     "hops": { "type": "integer", "description": "Maximum edge hops to follow (default: 5)" },
+                    "rank_by_ppr": { "type": "boolean", "description": "Order the reached set by Personalized PageRank seeded at the root (each entry gains a 'ppr' score) instead of BFS discovery order (default: false)" },
                     "predicates": { "type": "array", "items": { "type": "string" }, "description": "Restrict walk to these predicate IRIs. Empty = all edges." },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the speculative retraction (used only when remove=true)" }
                 },
@@ -970,7 +971,8 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                 "properties": {
                     "query": { "type": "string", "description": "Natural language query to find relevant knowledge context" },
                     "max_entities": { "type": "integer", "description": "Maximum entities to return (default from pipeline config)" },
-                    "expand_links": { "type": "boolean", "description": "Whether to expand to entities linked from the matches" }
+                    "expand_links": { "type": "boolean", "description": "Whether to expand to entities linked from the matches" },
+                    "ppr_rerank": { "type": "boolean", "description": "Re-order candidates by Personalized PageRank seeded at the direct hits before truncation (default: false)" }
                 },
                 "required": ["query"]
             }

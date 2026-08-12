@@ -67,11 +67,17 @@ pub fn tool_unified_search(store: &Store, input: &serde_json::Value) -> Result<s
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(10) as usize;
 
+    let ppr_rerank = input
+        .get("ppr_rerank")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+
     let config = ContextPipelineConfig {
         max_entities: limit,
         max_facts_per_entity: max_facts,
         expand_links,
         link_depth: 1,
+        ppr_rerank,
     };
 
     let pipeline = ContextPipeline::new(store, config);

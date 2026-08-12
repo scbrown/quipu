@@ -225,7 +225,7 @@ Graph projection and algorithms.
 | `max_iters` | No | PageRank max iterations (default: 100) |
 | `tolerance` | No | PageRank convergence tolerance (default: 1e-6) |
 | `from` / `to` | No | Source/target entity IRIs for `shortest_path` |
-| `persist` | No | `louvain` only: persist `quipu:memberOfCommunity` facts, superseding any prior derivation (default: `false`). Emergent clustering, **not** an access boundary. |
+| `persist` | No | `louvain`: persist `quipu:memberOfCommunity` facts; `pagerank` (global runs only — a seeded run refuses): persist `quipu:pageRank` scores. Both supersede any prior derivation (default: `false`). Communities are emergent clustering, **not** an access boundary. |
 
 The `louvain` algorithm runs deterministic modularity-based community detection
 and returns `{ communities: [{ community, entities, size }], modularity }`.
@@ -240,6 +240,7 @@ Unified knowledge context pipeline.
 | `query` | Yes | Search query string |
 | `max_entities` | No | Max entities (default from pipeline config) |
 | `expand_links` | No | Follow relationships to linked entities |
+| `ppr_rerank` | No | Re-order candidates by Personalized PageRank seeded at the direct hits before truncation (default: false) |
 
 The `summary` includes an `embeddings` block (`configured`,
 `embedded_entities`) reporting whether semantic retrieval was possible.
@@ -415,6 +416,7 @@ mutated.
 | `remove` | No | Speculatively retract before walking (default: false) |
 | `hops` | No | Max edge hops to follow (default: 5) |
 | `predicates` | No | Restrict walk to these predicate IRIs (empty = all) |
+| `rank_by_ppr` | No | Order the reached set by Personalized PageRank seeded at the root — each entry gains a `ppr` score (default: false) |
 | `timestamp` | No | Timestamp for the speculative retraction (used when `remove=true`) |
 
 ### `quipu_unified_search`

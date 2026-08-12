@@ -54,16 +54,58 @@ pub fn tool_impact(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         crate::impact::impact(store, entity_iri, &opts)?
     };
 
-    let reached: Vec<JsonValue> = report
-        .reached
+    // Optional PPR re-rank (quipu-mq7, pagerank design Phase 4): order the
+    // reached set by Personalized `PageRank` seeded at the root, so the most
+    // structurally entangled entities lead instead of BFS discovery order.
+    // Each entry carries its `ppr` score; an entity outside the projected
+    // graph scores 0 and sorts last, which is itself informative.
+    let rank_by_ppr = input
+        .get("rank_by_ppr")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let ppr_scores: Option<std::collections::HashMap<String, f32>> = if rank_by_ppr {
+        let pg = crate::graph::project_cached(store, None, None, None)?;
+        let seed = store.lookup(entity_iri)?.into_iter().collect::<Vec<_>>();
+        let cfg = crate::graph::PageRankConfig {
+            seeds: seed,
+            ..Default::default()
+        };
+        let ranked = crate::graph::page_rank(&pg, &cfg)?;
+        Some(
+            ranked
+                .into_iter()
+                .filter_map(|(id, score)| store.resolve(id).ok().map(|iri| (iri, score)))
+                .collect(),
+        )
+    } else {
+        None
+    };
+
+    let mut nodes: Vec<&crate::impact::ImpactNode> = report.reached.iter().collect();
+    if let Some(scores) = &ppr_scores {
+        nodes.sort_by(|a, b| {
+            let (sa, sb) = (
+                scores.get(&a.iri).copied().unwrap_or(0.0),
+                scores.get(&b.iri).copied().unwrap_or(0.0),
+            );
+            sb.partial_cmp(&sa)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.iri.cmp(&b.iri))
+        });
+    }
+    let reached: Vec<JsonValue> = nodes
         .iter()
         .map(|n| {
-            serde_json::json!({
+            let mut entry = serde_json::json!({
                 "iri": n.iri,
                 "depth": n.depth,
                 "via_predicate": n.via_predicate,
                 "via_subject": n.via_subject,
-            })
+            });
+            if let Some(scores) = &ppr_scores {
+                entry["ppr"] = serde_json::json!(scores.get(&n.iri).copied().unwrap_or(0.0));
+            }
+            entry
         })
         .collect();
 
@@ -74,5 +116,6 @@ pub fn tool_impact(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         "hops": report.hops,
         "edges": report.edges_traversed,
         "counterfactual": remove,
+        "ranked_by_ppr": rank_by_ppr,
     }))
 }
