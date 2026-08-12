@@ -12,6 +12,10 @@
 
 - [Triples and the Knowledge Graph](concepts/triples.md)
 - [The Temporal Model](concepts/temporal-model.md)
+- [Named Graphs, Overlays & Datasets](concepts/named-graphs.md)
+- [Graph Labels & the Trust Lattice](concepts/graph-labels.md)
+- [Governance: Policies, Verdicts & the Write Gate](concepts/governance.md)
+- [Knowledge Packs](concepts/knowledge-packs.md)
 - [SHACL Validation](concepts/shacl-validation.md)
 - [Schema Evolution](concepts/schema-evolution.md)
 - [OWL Ontology Layer](concepts/owl.md)
@@ -47,6 +51,8 @@
 - [LanceDB Vector Backend](architecture/lancedb.md)
 - [Context Pipeline](architecture/context-pipeline.md)
 - [Graph Projection](architecture/graph-projection.md)
+- [Entity Resolution](architecture/entity-resolution.md)
+- [Multi-DB Composition](architecture/multi-db.md)
 - [Federation](architecture/federation.md)
 
 # Recipes
