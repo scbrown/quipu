@@ -112,7 +112,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 **⚙️ Infrastructure**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
-- **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup; queries do not yet route through the federated provider.
+- **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup, and `POST /query` with `"federated": true` fans out through the federated provider, reporting which members answered.
 - **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.
 - **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 37 MCP tools for agent integration (38 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
@@ -391,7 +391,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Python bindings | 🔜 | Planned |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |
-| GraphProvider federation trait | 🔩 | `RemoteProvider` built + startup health checks; queries not yet routed through it |
+| GraphProvider federation trait | ✅ | `RemoteProvider`, startup health checks, `federated: true` on `/query` |
 | Bobbin integration | ✅ | Namespace, IRI patterns, search |
 | Automated releases (release-plz) | ✅ | |
 | Clustering / replication | 🔜 | Planned |

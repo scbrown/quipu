@@ -11,13 +11,12 @@ src/governance/audit/passes.rs 521
 src/graph.rs 1138
 src/http_auth.rs 518
 src/lattice.rs 582
-src/mcp/mod.rs 1135
+src/mcp/mod.rs 1134
 src/mcp/named_query.rs 544
 src/metrics.rs 652
 src/pack.rs 624
-src/provider.rs 646
 src/rdf.rs 892
-src/server.rs 828
+src/server.rs 741
 src/shacl.rs 665
 src/sparql/mod.rs 672
 src/sparql/triple.rs 656

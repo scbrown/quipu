@@ -104,7 +104,12 @@ pub use onnx_embedder::OnnxEmbeddingProvider;
 #[cfg(feature = "owl")]
 pub use owl::{MaterializeReport, Ontology, OwlViolation};
 pub use proposal::{NewProposal, Proposal, ProposalKind, ProposalStatus};
-pub use provider::{FederatedProvider, GraphProvider, LocalProvider, ProviderStatus};
+pub use provider::{
+    FederatedProvider, FederatedQuery, GraphProvider, LocalProvider, ProviderOutcome,
+    ProviderStatus,
+};
+#[cfg(feature = "remote")]
+pub use provider::{RemoteProvider, federated_from_config};
 pub use rdf::{export_rdf, export_rdf_subset, ingest_rdf};
 #[cfg(feature = "reactive-reasoner")]
 pub use reasoner::reactive::ReactiveReasoner;

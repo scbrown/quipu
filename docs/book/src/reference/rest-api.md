@@ -126,6 +126,13 @@ curl -s localhost:3030/query -X POST \
 
 Optional fields: `valid_at` (ISO-8601), `tx` (integer).
 
+With `"federated": true` the whole query text fans out through the federated
+provider — the local store plus every `[[quipu.federation.remotes]]` — and the
+response adds a per-member `providers` list and a `complete` flag, with every
+row `_provider`-tagged. The temporal/graph fields are refused on a federated
+query (they only shape the local evaluator's context). See
+[Federation](../architecture/federation.md).
+
 ### `POST /knot`
 
 Assert facts from Turtle data.

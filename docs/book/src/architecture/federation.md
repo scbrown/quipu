@@ -1,18 +1,13 @@
 # Federation
 
-> **Implementation status (2026-08-12):** 🟡 **Partial — remote provider
-> built, health-checked at startup, not yet on the query path.** Built &
-> tested in `src/provider.rs`: the `GraphProvider` trait, `ProviderStatus`,
-> `LocalProvider`, `FederatedProvider`, and — behind the `remote` feature —
-> `RemoteProvider` plus `federated_from_config()`. `quipu-server` constructs
-> the federated provider from `[[quipu.federation.remotes]]` at startup and
-> health-checks every remote (the config key is consumed, and the old
-> "federation is unimplemented" warning is gone — `src/config.rs` now tests
-> that it must NOT warn). **Gap:** no query route dispatches through the
-> federated provider yet — a remote's facts are reachable to an embedder
-> calling `query_all`, not to a `quipu-server` client — and
-> `RemoteProvider`/`federated_from_config` are not re-exported from `lib.rs`.
-> See `docs/design/federation-remote-provider.md`.
+> **Implementation status (2026-08-12):** ✅ **Built.** In `src/provider/`
+> (with tests): the `GraphProvider` trait, `ProviderStatus`, `LocalProvider`,
+> `FederatedProvider` with outcome-reporting `query_all`, and — behind the
+> `remote` feature — `RemoteProvider` plus `federated_from_config()`
+> (re-exported from `lib.rs`). `quipu-server` health-checks every configured
+> remote at startup, and `POST /query` with `"federated": true` fans the query
+> out through the federated provider per request (quipu-tkh). See
+> `docs/design/federation-remote-provider.md`.
 
 Quipu defines federated queries across multiple graph providers through
 the `GraphProvider` trait, so that a host embedding quipu can query a local store
@@ -56,8 +51,9 @@ let mut federation = FederatedProvider::new();
 federation.add(Box::new(LocalProvider::new(&store, "local")));
 // Add remote providers as they become available
 
-// Query all providers, results tagged with _provider field
-let result = federation.query_all("SELECT ?s ?p ?o WHERE { ?s ?p ?o }").unwrap();
+// Query all providers; the outcome reports who answered.
+let fq = federation.query_all("SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
+assert!(fq.complete, "every member contributed: {:?}", fq.providers);
 
 // Health check all
 let statuses = federation.health_all();
@@ -66,35 +62,65 @@ for s in &statuses {
 }
 ```
 
-## Configuration (planned — currently inert)
+`query_all` never aborts because one member is down — a dead peer must not
+deny the whole result — but it never *hides* it either: the returned
+`FederatedQuery` carries the merged rows plus a `ProviderOutcome` per member
+(row count, or the failure reason), and `complete` is the one-field answer to
+"can I trust this result set as exhaustive?". A member that errors, answers a
+non-SELECT shape, or disagrees on the variable list is a reported failure,
+never a silent merge.
 
-> **These keys are read by nothing.** They are shown as the *intended*
-> shape for when a remote provider exists. Today, writing them into
-> `.bobbin/config.toml` parses and does nothing, and the binaries warn. Do not rely
-> on them.
+### RemoteProvider
 
-The intended form:
+Behind the `remote` feature (a default of the shipped binaries): another
+`quipu-server`, reached over its REST API — `POST /query`, `POST /cord`, and
+`GET /stats` as the health probe.
+
+## Configuration
 
 ```toml
-[quipu]
-store_path = ".bobbin/quipu/quipu.db"
-
-# NOT YET IMPLEMENTED — remotes are ignored.
 [[quipu.federation.remotes]]
-name = "prod"
-url = "http://quipu.example:3030"
+name       = "prod"
+url        = "http://quipu.example:3030"
+auth_token = "…"     # optional; sent as `Authorization: Bearer …`
+timeout_ms = 5000    # optional; default 5000
 ```
 
-## Result Tagging (intended)
+`quipu-server` builds the federated provider from these at startup and
+health-checks every remote (reported on stderr), so a dead peer or a wrong
+token is visible without waiting for a federated query to be issued.
 
-Federated query results include a `_provider` field so you can tell
-which source each result came from:
+## Federated queries over REST
+
+`POST /query` with `"federated": true` fans the whole query text out to the
+local store and every configured remote:
+
+```json
+{ "query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o }", "federated": true }
+```
+
+The response carries the merged rows — each tagged with a `_provider` field —
+plus the per-member account:
 
 ```json
 {
+  "variables": ["s", "p", "o", "_provider"],
   "rows": [
     { "s": "ex:traefik", "p": "ex:port", "o": "443", "_provider": "local" },
     { "s": "ex:nginx", "p": "ex:port", "o": "80", "_provider": "prod" }
-  ]
+  ],
+  "count": 2,
+  "providers": [
+    { "name": "local", "ok": true, "rows": 1, "error": null },
+    { "name": "prod", "ok": true, "rows": 1, "error": null }
+  ],
+  "complete": true
 }
 ```
+
+Whole-query federation only: every member gets the same query text and the
+results are unioned, not joined across members. The temporal/graph parameters
+(`valid_at`, `tx`, `graph`, `row_labels`) shape the *local* evaluator's
+context and are refused on a federated query rather than silently meaning
+something different per member. SPARQL 1.1 `SERVICE` and write federation are
+deliberately out of scope (design §7).

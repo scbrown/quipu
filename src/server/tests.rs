@@ -96,7 +96,6 @@ async fn stats_uses_generation_cache_and_invalidates_on_write() {
     *STATS_CACHE.lock().unwrap() = None;
     let base = stats(State(shared.clone()))
         .await
-        .ok()
         .expect("stats handler should succeed")
         .0;
     assert_eq!(
@@ -114,7 +113,6 @@ async fn stats_uses_generation_cache_and_invalidates_on_write() {
     });
     let hit = stats(State(shared.clone()))
         .await
-        .ok()
         .expect("stats handler should succeed")
         .0;
     assert_eq!(
@@ -131,7 +129,6 @@ async fn stats_uses_generation_cache_and_invalidates_on_write() {
     });
     let fresh = stats(State(shared.clone()))
         .await
-        .ok()
         .expect("stats handler should succeed")
         .0;
     assert_eq!(
@@ -340,6 +337,7 @@ fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreHandle) {
     }
     let handle = super::StoreHandle {
         writer: parking_lot::FairMutex::new(store),
+        federation: quipu::config::FederationConfig::default(),
         readers: super::ReadPool {
             conns,
             next: std::sync::atomic::AtomicUsize::new(0),
@@ -626,4 +624,65 @@ fn every_pooled_tool_survives_a_read_only_connection() {
              Got: {got:?}"
         );
     }
+}
+
+/// quipu-tkh: `"federated": true` on /query fans out through the federated
+/// provider and REPORTS who answered. With no remotes configured the
+/// federation is the local store alone, so the surface — `_provider` tagging,
+/// the outcome list, `complete`, and the params refusal — is testable without
+/// a network.
+#[tokio::test]
+async fn a_federated_query_reports_its_providers() {
+    let mut store = Store::open_in_memory().unwrap();
+    quipu::tool_knot(
+        &mut store,
+        &json!({
+            "turtle": "@prefix ex: <http://example.org/> .\nex:a ex:name \"A\" .",
+        }),
+    )
+    .unwrap();
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+
+    let resp = super::query(
+        State(shared.clone()),
+        axum::http::HeaderMap::new(),
+        axum::Json(json!({
+            "query": "SELECT ?s ?o WHERE { ?s <http://example.org/name> ?o }",
+            "federated": true,
+        })),
+    )
+    .await
+    .expect("a federated query over the local member alone must succeed");
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    assert_eq!(body["complete"], json!(true));
+    assert_eq!(body["count"], json!(1));
+    assert_eq!(body["providers"][0]["name"], json!("local"));
+    assert_eq!(body["providers"][0]["ok"], json!(true));
+    assert_eq!(body["providers"][0]["rows"], json!(1));
+    assert_eq!(
+        body["rows"][0]["_provider"],
+        json!("local"),
+        "every federated row names its source"
+    );
+
+    // The temporal/graph params shape the LOCAL evaluator's context and are
+    // not forwarded to members — refused loudly, never silently dropped.
+    let refused = super::query(
+        State(shared),
+        axum::http::HeaderMap::new(),
+        axum::Json(json!({
+            "query": "SELECT ?s WHERE { ?s ?p ?o }",
+            "federated": true,
+            "valid_at": "2026-01-01T00:00:00Z",
+        })),
+    )
+    .await;
+    assert!(
+        refused.is_err(),
+        "valid_at on a federated query must be refused"
+    );
 }

@@ -1,12 +1,14 @@
 # Design: `RemoteProvider` — reaching remote Quipu instances
 
-> **Implementation status (2026-08-12):** 🟨 **Built; wired for startup health
-> only.** `RemoteProvider` and `federated_from_config()` exist in
-> `src/provider.rs` behind the `remote` feature (with tests), and
-> `quipu-server` consumes `[[quipu.federation.remotes]]` at startup for a
-> health check — the config key is wired, not warned about. What remains: no
-> QUERY path routes through the federated provider yet, and
-> `RemoteProvider`/`federated_from_config` are not re-exported from `lib.rs`.
+> **Implementation status (2026-08-12):** ✅ **Built (quipu-tkh).**
+> `RemoteProvider` and `federated_from_config()` live in
+> `src/provider/remote.rs` behind the `remote` feature and are re-exported
+> from `lib.rs`; `RemoteEndpoint` grew the §3 `auth_token`/`timeout_ms`
+> fields; `query_all` reports per-provider outcomes with the §4.1 bugs fixed;
+> and `POST /query` with `"federated": true` fans out through the federated
+> provider per request, returning `providers` + `complete` alongside the
+> `_provider`-tagged rows. Startup still health-checks every configured
+> remote.
 
 ## 1. The dependency question is already answered
 
@@ -94,7 +96,7 @@ silently incomplete.
 
 ```json
 {
-  "results": [ … ],
+  "rows": [ … ],
   "providers": [
     {"name": "local", "ok": true,  "rows": 12},
     {"name": "kota",  "ok": false, "error": "timeout after 5000ms"}
@@ -143,16 +145,19 @@ interop test** (kota is memory-contended, aegis-vj9g). A tiny
 `std::net::TcpListener` on an ephemeral port serving canned responses is
 sufficient and adds no dependency:
 
-- [ ] `query` round-trips a `QueryResult` from a canned `/query` response
+- [x] `query` round-trips a `QueryResult` from a canned `/query` response
+      (shape-level `parse_query_response` tests + through the mock remote)
 - [ ] `entities` round-trips a `/cord` response
 - [ ] `health` maps `/stats` to `ProviderStatus` with `fact_count`
-- [ ] Unreachable remote → `healthy: false`, and `query_all` still returns the
+- [x] Unreachable remote → `healthy: false`, and `query_all` still returns the
       local rows with `complete: false` and a named failure
 - [ ] Timeout is bounded by `timeout_ms`, not by the OS default
-- [ ] `auth_token` is sent as `Authorization: Bearer …`
-- [ ] Non-2xx and malformed JSON are provider failures, not panics
-- [ ] Variable-list mismatch is a provider failure, not a silent merge
-- [ ] `_provider` tagging is correct when the first provider already has the key
+- [x] `auth_token` is sent as `Authorization: Bearer …` (mock-server test, via
+      `federated_from_config` so the config wiring is what is proven)
+- [x] Non-2xx and malformed JSON are provider failures, not panics (every
+      provider error becomes a `ProviderOutcome`, asserted in provider tests)
+- [x] Variable-list mismatch is a provider failure, not a silent merge
+- [x] `_provider` tagging is correct when the first provider already has the key
 
 ## 7. Deliberately out of scope
 

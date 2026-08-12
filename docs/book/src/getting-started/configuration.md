@@ -69,7 +69,7 @@ stops being read.
 | `embedding.model_path` / `tokenizer_path` | unset | ONNX model + tokenizer for embeddings |
 | `embedding.dimension` / `max_sequence_length` / `embed_batch_size` | `384` / `256` / `32` | Embedding runtime parameters |
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb` (embedder-only; see below) |
-| `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url}`); health-checked at startup |
+| `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 
 ## Not wired into the `quipu` CLI / `quipu-server`
 
@@ -79,8 +79,11 @@ embedders that drive quipu as a library, or are planned. The binaries print a
 
 | Field | Status |
 |-------|--------|
-| `federation.remotes` | **Partially wired.** `quipu-server` builds a federated provider from it and health-checks each remote at startup; no query route dispatches through it yet. See [Federation](../architecture/federation.md). |
 | `vector.backend = "lancedb"` | **Embedder-only.** The CLI/server never install a non-SQLite backend; queries always use the SQLite vectors table. A host embedding quipu can install one via `Store::set_local_vector_backend`. |
+
+(`federation.remotes` used to sit here; it is fully wired now — health-checked
+at startup and queried per-request via `federated: true` on `POST /query`. See
+[Federation](../architecture/federation.md).)
 
 ## Priority Order
 
