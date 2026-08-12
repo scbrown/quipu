@@ -686,3 +686,42 @@ async fn a_federated_query_reports_its_providers() {
         "valid_at on a federated query must be refused"
     );
 }
+
+/// Every route in the router has a presence in the book's REST reference
+/// (quipu-83v) — the same pinning the MCP roster got after drifting to 25/26
+/// while the manifest grew. The page documented 34 of 63 routes when this
+/// test was written; a new route without a doc section (or a place in the
+/// UI-assets exclusion note) fails here, not in a docs audit months later.
+#[test]
+fn book_rest_reference_covers_every_route() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let server_src = std::fs::read_to_string(root.join("src/server.rs")).unwrap();
+    let page = std::fs::read_to_string(root.join("docs/book/src/reference/rest-api.md")).unwrap();
+
+    let mut paths = Vec::new();
+    for line in server_src.lines() {
+        if let Some(idx) = line.find(".route(\"") {
+            let rest = &line[idx + ".route(\"".len()..];
+            if let Some(end) = rest.find('"') {
+                paths.push(&rest[..end]);
+            }
+        }
+    }
+    assert!(
+        paths.len() >= 60,
+        "route extraction broke — found only {} routes; fix the parser before \
+         trusting the assertions below",
+        paths.len()
+    );
+
+    for path in paths {
+        // "/" is the UI root; its coverage is the UI-assets exclusion note,
+        // asserted via "/ui" (a bare "/" matches any page trivially).
+        let probe = if path == "/" { "`GET /` " } else { path };
+        assert!(
+            page.contains(probe),
+            "route {path} has no presence in rest-api.md — document it or add \
+             it to the UI-assets exclusion note"
+        );
+    }
+}
