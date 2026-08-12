@@ -163,6 +163,59 @@ with `source = "reasoner:<rule-id>"` provenance.
 See [Reasoner Reference](reasoner.md) for full details on rule syntax and
 the evaluation model.
 
+### `quipu impact <entity-IRI>`
+
+Bounded BFS over entity edges: what is downstream of this entity? With
+`--remove`, speculatively retracts the entity (SQLite savepoint, no mutation),
+re-runs the reasoner inside the fork, and walks the result — "what would break
+if I removed this?".
+
+```bash
+quipu impact http://example.org/traefik --hops 3 --db my.db
+quipu impact http://example.org/traefik --remove --db my.db
+```
+
+| Flag | Description |
+|------|-------------|
+| `--remove` | Counterfactual: impact of removing the entity |
+| `--hops <N>` | Walk depth (default from `DEFAULT_HOPS`) |
+| `--predicate <IRI>` | Restrict to these predicates (repeatable) |
+
+### `quipu project`
+
+Run graph algorithms over the projected knowledge graph: `stats`, `in_degree`,
+`pagerank`/`ppr`, `components`, `louvain`, `shortest_path`.
+
+```bash
+quipu project --algorithm pagerank --limit 10 --db my.db
+quipu project --algorithm pagerank --seed http://example.org/alice --db my.db  # PPR
+quipu project --algorithm shortest_path --from <IRI> --to <IRI> --db my.db
+```
+
+| Flag | Description |
+|------|-------------|
+| `--algorithm <name>` | Algorithm to run (default: `stats`) |
+| `--type <IRI>` / `--predicate <IRI>` | Restrict the projection |
+| `--graph <IRI>` | Project one named graph's own facts instead of ROOT |
+| `--seed <IRI>` | PPR seed (repeatable; switches pagerank to personalized) |
+| `--damping` / `--max-iters` / `--tolerance` | PageRank parameters |
+| `--limit <N>` | Max results (default: 20) |
+| `--from` / `--to` | Endpoints for `shortest_path` |
+
+### `quipu report`
+
+Graph health report: hub entities (god-nodes), surprising connections, and
+suggested competency questions.
+
+```bash
+quipu report --hubs 10 --surprises 5 --db my.db
+```
+
+| Flag | Description |
+|------|-------------|
+| `--hubs` / `--surprises` / `--questions` | How many of each to return |
+| `--type <IRI>` / `--predicate <IRI>` | Restrict the underlying projection |
+
 ### `quipu repl`
 
 Interactive SPARQL prompt.
@@ -381,3 +434,91 @@ one an agent escapes by dispatching into a context where the evidence is absent.
 A Σ where no constraint declares `inheritedByDelegates` reports an
 incompleteness, never a clean pass: "nothing is inherited" and "nothing has said
 whether anything is inherited" are different states.
+
+### `quipu propose`
+
+Schema-change proposal queue: submit a shapes/ontology change for review
+rather than applying it directly.
+
+```bash
+quipu propose list --status pending --db my.db
+quipu propose submit shape ex:PersonShape new-shape.ttl --proposer agent-1 --rationale "tighten cardinality"
+quipu propose accept 3 --note "LGTM" --db my.db
+quipu propose reject 4 --note "breaks existing data" --db my.db
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `list [--status pending]` | List proposals |
+| `submit <kind> <target> <file.ttl> --proposer <id> [--rationale <text>] [--trigger <ref>]` | Queue a change |
+| `accept <id> [--note <text>]` | Apply and record the decision |
+| `reject <id> --note <reason>` | Reject with a reason |
+
+### `quipu ontology`
+
+Manage stored OWL ontologies (versioned: re-loading a name closes the prior
+version). Requires the `owl` feature.
+
+```bash
+quipu ontology load my-domain domain.ttl --db my.db
+quipu ontology list --db my.db
+quipu ontology remove my-domain --db my.db
+```
+
+### `quipu doctor labels`
+
+Diagnose graph-label state: which graphs carry freshness/trust/policy labels
+and which are undeclared.
+
+```bash
+quipu doctor labels --db my.db
+```
+
+### `quipu pack` / `quipu unpack`
+
+Knowledge packs: export one named graph as a self-describing, attachable
+`.qpack.db` artifact (facts, manifest, shapes, stored queries, optionally
+vectors), verify one, or import one into a local graph.
+
+```bash
+quipu pack urn:example:graph --out domain.qpack.db --name "domain" --version 1.0.0
+quipu pack urn:example:graph --out domain.qpack.db --shapes s.ttl --queries q.json --with-vectors
+quipu pack --verify domain.qpack.db
+quipu unpack domain.qpack.db --into urn:local:domain --db my.db
+```
+
+| Flag | Description |
+|------|-------------|
+| `--out <file>` | Output pack path (required for pack) |
+| `--name` / `--version` | Manifest metadata |
+| `--shapes <S>` / `--queries <Q>` | Ship shape sets / stored queries (repeatable) |
+| `--with-vectors` | Include embeddings (refused unless the SQLite vector backend is active) |
+| `--format turtle` | Also embed a Turtle serialization |
+| `--verify <file>` | Recompute and check the pack's content hash |
+| `--into <graph-iri>` | Unpack target graph (default: the pack's own graph IRI) |
+
+### `quipu db respace`
+
+Move a store into a fresh term space so it can be attached to another store
+without id collisions. Reads the source read-only; writes a new file.
+
+```bash
+quipu db respace --into 7 --out respace.db --db my.db
+```
+
+### `quipu graph import <db>`
+
+Import another quipu database's ROOT graph as a named graph in this store.
+
+```bash
+quipu graph import other.db --as urn:import:other --db my.db
+```
+
+### `quipu migrate-vectors`
+
+Migrate stored embeddings between vector backends (requires the `lancedb`
+feature).
+
+```bash
+quipu migrate-vectors --from sqlite --to lancedb --dry-run --db my.db
+```
