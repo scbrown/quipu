@@ -260,6 +260,16 @@ Two things stand out. **The fact indexes cost 3.4× the facts themselves.** And
 reactor-down-6wk fix), which is correct for a server with consumers and pure
 overhead for a browser that has none. A pack export carries neither.
 
+> **Retention landed (quipu-9z9).** `Store::prune_events` deletes events by
+> age but never past any registered consumer's committed offset, so the
+> durable-replay guarantee survives — a lagging consumer's backlog is retained
+> regardless of age. Opt-in via `[quipu.events] retention_days` (server prunes
+> hourly); unset keeps today's keep-forever behaviour. **Measured on this
+> table's 10k-episode store:** pruning all 100,012 events (the no-consumers
+> deployment this section calls pure overhead) takes the database from
+> 83.3 MB to 53.5 MB after `VACUUM` — a **35.8% reduction**, matching the
+> dbstat share above plus freed overhead.
+
 At 1M episodes that is **~8.3 GB** — a server artifact, decisively not a browser
 one.
 

@@ -21,6 +21,15 @@ base_ns = "http://example.org/kb/"
 enabled = false
 # Bind address
 bind = "127.0.0.1:3030"
+
+[quipu.events]
+# Event-log retention. Unset (the default) keeps every event forever.
+# When set, the server hourly deletes events older than this many days —
+# but never an event a registered consumer has not yet committed past, so
+# a lagging consumer's replay is never broken (its backlog just stays on
+# disk). A consumer registering AFTER a prune replays from the retained
+# prefix, not from genesis.
+# retention_days = 90
 ```
 
 ## Config Fields
@@ -31,6 +40,7 @@ bind = "127.0.0.1:3030"
 | `base_ns` | aegis ontology NS | Base namespace for minted IRIs (set before first write; `--base-ns` overrides per CLI call) |
 | `server.enabled` | `false` | Enable REST API server |
 | `server.bind` | `127.0.0.1:3030` | Server bind address |
+| `events.retention_days` | unset (keep forever) | Prune events older than N days, never past any registered consumer's committed offset |
 
 ## Not wired into the `quipu` CLI / `quipu-server`
 

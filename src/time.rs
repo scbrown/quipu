@@ -17,6 +17,17 @@ pub fn now_iso() -> String {
     format_iso(secs)
 }
 
+/// The instant `days` days before now, as `YYYY-MM-DDTHH:MM:SSZ`.
+///
+/// Retention cutoffs (quipu-9z9): `prune_events(&iso_days_ago(n))` deletes
+/// what is older than n days. Saturates at the epoch rather than wrapping.
+pub fn iso_days_ago(days: u64) -> String {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    format_iso(secs.saturating_sub(days.saturating_mul(86_400)))
+}
+
 /// Format Unix-epoch seconds as an ISO-8601 UTC timestamp.
 fn format_iso(secs: u64) -> String {
     let days = (secs / 86_400) as i64;
