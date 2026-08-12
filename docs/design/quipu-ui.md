@@ -1,12 +1,22 @@
 # Quipu UI: Knowledge Graph Visualization & Exploration
 
-> **Implementation status (2026-07-23, kelly):** 🟡 **Partial.** The UI ships and is
-> served at `/` (`src/server.rs` `UI_HTML` / `COMPONENTS_JS` from `ui/index.html` +
+> **Implementation status (2026-08-12):** 🟡 **Partial — built on a different
+> stack than this design specs.** The UI ships and is served at `/`
+> (`src/server.rs` `UI_HTML` / `COMPONENTS_JS` from `ui/index.html` +
 > `ui/quipu-components.js`), with **5 of the 8** specced web components built:
 > `<quipu-entity>`, `<quipu-graph>`, `<quipu-schema>`, `<quipu-sparql>`,
 > `<quipu-timeline>`. **Gap:** `<quipu-context>`, `<quipu-mapping>`, and
-> `<quipu-search>` are specced but not implemented (verified by grep of
-> `ui/quipu-components.js`).
+> `<quipu-search>` are specced but not implemented.
+>
+> **The Leptos shell and Sigma.js/WebGL renderer this design specs were NOT
+> built.** What shipped instead is hand-rolled vanilla JS: canvas Barnes-Hut
+> force layout (`ui/graph-canvas.js`), no CDN, everything vendored in the
+> binary. A parallel Leptos 0.8 + Trunk scaffold (`quipu-ui/`, ~2.7k lines,
+> qp-m2g phases 1–4) existed but was excluded from the package, served by
+> nothing, and referenced by no recipe or doc — **removed 2026-08-12
+> (quipu-dzd)**; recover it from git history at `89612a9` if the Leptos route
+> is ever revived. The 3D successor direction is
+> [`datalinks-3d.md`](./datalinks-3d.md).
 >
 > Quipu owns its visual identity. Bobbin enables it — doesn't reimagine it.
 
