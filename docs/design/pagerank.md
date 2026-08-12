@@ -12,11 +12,14 @@
 > one query's neighbourhood is not the store's importance); `tool_impact`
 > gains `rank_by_ppr` (reached set ordered by PPR seeded at the root, `ppr`
 > score per entry) and the context pipeline gains `ppr_rerank` (candidates
-> re-ordered by PPR from the direct hits before truncation). **Unbuilt:**
-> Phase 5 temporal / counterfactual PR (quipu-bli), persist-by-default and
+> re-ordered by PPR from the direct hits before truncation). **Phase 5 landed
+> (quipu-bli):** `project_as_of` projects ROOT as it stood at a bitemporal
+> point (ranking the past graph's shape), and `rank_counterfactual` runs
+> projection + `PageRank` inside a `speculate()` fork — influence shifts under
+> hypothetical facts, the store never mutates. Persist-by-default and
 > per-predicate weights stay design-open.
 >
-> Status: **Delivered (Phases 1–4)** · Origin: agent (strider), prompted by Stiwi ·
+> Status: **Delivered (Phases 1–5)** · Origin: agent (strider), prompted by Stiwi ·
 > Date: 2026-06-21
 >
 > Fulfils the graph-algorithm intent in [`vision.md`](./vision.md) §9 and the

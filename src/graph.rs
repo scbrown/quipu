@@ -72,7 +72,18 @@ pub fn project_in_graph(
 ) -> Result<ProjectedGraph> {
     let g = resolve_graph(store, graph)?;
     let facts = store.current_facts_in_graph(g)?;
+    project_facts(store, &facts, type_filter, predicate_filter)
+}
 
+/// Build a projection from an explicit fact set — the shared body of
+/// [`project_in_graph`] and the as-of projection (quipu-bli), so the temporal
+/// variant cannot drift from the current-state one.
+fn project_facts(
+    store: &Store,
+    facts: &[crate::types::Fact],
+    type_filter: Option<&str>,
+    predicate_filter: Option<&str>,
+) -> Result<ProjectedGraph> {
     // If type filter is set, find matching entity IDs.
     let type_entity_ids: Option<std::collections::HashSet<i64>> =
         if let Some(type_iri) = type_filter {
@@ -115,7 +126,7 @@ pub fn project_in_graph(
         })
     };
 
-    for fact in &facts {
+    for fact in facts {
         // Only create edges for Ref values (entity-to-entity relationships).
         if let Value::Ref(target_id) = &fact.value {
             let source_id = fact.entity;
@@ -818,7 +829,7 @@ pub fn persist_communities(
 }
 
 mod rank;
-pub use rank::persist_pagerank;
+pub use rank::{persist_pagerank, project_as_of, rank_counterfactual};
 
 #[cfg(test)]
 #[path = "graph_tests.rs"]

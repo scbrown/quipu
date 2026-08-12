@@ -553,3 +553,90 @@ fn seed_edge(store: &mut Store, from: &str, to: &str) -> (i64, i64) {
         .unwrap();
     (f, t)
 }
+
+/// Phase 5 (quipu-bli): `page_rank` over an as-of projection matches the
+/// graph AS IT STOOD — an edge added later is invisible at the earlier tx.
+#[test]
+fn pagerank_over_an_as_of_projection_matches_the_graph_as_it_stood() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_edge(&mut store, "http://example.org/a", "http://example.org/b");
+    let tx1 = store.latest_tx_id().unwrap();
+    seed_edge(&mut store, "http://example.org/c", "http://example.org/b");
+    seed_edge(&mut store, "http://example.org/d", "http://example.org/b");
+
+    let then = project_as_of(
+        &store,
+        None,
+        None,
+        &crate::store::AsOf {
+            tx: Some(tx1),
+            valid_at: None,
+        },
+    )
+    .unwrap();
+    let now = project_in_graph(&store, None, None, None).unwrap();
+    assert_eq!(then.edge_count(), 1, "one edge existed at tx1");
+    assert_eq!(now.edge_count(), 3);
+
+    // Ranking the past graph runs over the past shape.
+    let ranked = page_rank(&then, &PageRankConfig::default()).unwrap();
+    assert_eq!(ranked.len(), then.node_count());
+}
+
+/// Phase 5 (quipu-bli): a `speculate()` counterfactual projection ranks
+/// WITHOUT mutating — influence shifts inside the fork, and the store is
+/// byte-identical afterwards.
+#[test]
+fn counterfactual_ranking_shifts_influence_without_mutating() {
+    let mut store = Store::open_in_memory().unwrap();
+    seed_edge(&mut store, "http://example.org/a", "http://example.org/b");
+    seed_edge(&mut store, "http://example.org/a", "http://example.org/c");
+    let b = store.lookup("http://example.org/b").unwrap().unwrap();
+    let c = store.lookup("http://example.org/c").unwrap().unwrap();
+    let facts_before = store.current_facts().unwrap().len();
+    let tx_before = store.latest_tx_id().unwrap();
+
+    // Hypothetical: two more entities point at c.
+    let p = store.intern("http://example.org/links").unwrap();
+    let hypothetical: Vec<crate::store::Datum> = ["x1", "x2"]
+        .iter()
+        .map(|n| {
+            let e = store.intern(&format!("http://example.org/{n}")).unwrap();
+            crate::store::Datum {
+                entity: e,
+                attribute: p,
+                value: Value::Ref(c),
+                valid_from: "2026-01-02T00:00:00Z".to_string(),
+                valid_to: None,
+                op: crate::types::Op::Assert,
+            }
+        })
+        .collect();
+
+    let ranked = rank_counterfactual(
+        &mut store,
+        &hypothetical,
+        "2026-01-02T00:00:00Z",
+        None,
+        None,
+        &PageRankConfig::default(),
+    )
+    .unwrap();
+
+    let score = |id: i64| {
+        ranked
+            .iter()
+            .find(|(e, _)| *e == id)
+            .map_or(0.0, |(_, s)| *s)
+    };
+    assert!(
+        score(c) > score(b),
+        "with two extra in-edges in the fork, c out-ranks b: c={} b={}",
+        score(c),
+        score(b)
+    );
+
+    // The fork rolled back: nothing landed.
+    assert_eq!(store.current_facts().unwrap().len(), facts_before);
+    assert_eq!(store.latest_tx_id().unwrap(), tx_before);
+}

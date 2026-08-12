@@ -174,3 +174,43 @@ pub fn persist_pagerank(
     }
     Ok(total)
 }
+
+/// Project the ROOT graph AS IT STOOD at a bitemporal point (quipu-bli,
+/// pagerank design Phase 5) — `page_rank` over the result ranks the graph as
+/// it was, not as it is.
+///
+/// ROOT-scoped like [`crate::store::AsOf`] reads generally are: time travel
+/// scopes within a graph (`docs/design/named-graphs.md` §1).
+///
+/// # Errors
+/// Store errors from the as-of fact scan.
+pub fn project_as_of(
+    store: &Store,
+    type_filter: Option<&str>,
+    predicate_filter: Option<&str>,
+    as_of: &crate::store::AsOf,
+) -> Result<ProjectedGraph> {
+    let facts = store.facts_as_of(as_of)?;
+    super::project_facts(store, &facts, type_filter, predicate_filter)
+}
+
+/// Rank a COUNTERFACTUAL: "how would influence shift if these facts landed?"
+/// (quipu-bli, Phase 5). The hypothetical datums are applied inside
+/// [`Store::speculate`]'s savepoint, the projection and `PageRank` run against
+/// that fork, and the savepoint rolls back — the store is never mutated.
+///
+/// # Errors
+/// Store errors from the speculative write or the projection.
+pub fn rank_counterfactual(
+    store: &mut Store,
+    hypothetical: &[Datum],
+    timestamp: &str,
+    type_filter: Option<&str>,
+    predicate_filter: Option<&str>,
+    cfg: &PageRankConfig,
+) -> Result<Vec<(i64, f32)>> {
+    store.speculate(hypothetical, timestamp, |s| {
+        let pg = super::project_in_graph(s, type_filter, predicate_filter, None)?;
+        page_rank(&pg, cfg)
+    })
+}
