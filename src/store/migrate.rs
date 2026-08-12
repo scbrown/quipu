@@ -36,6 +36,24 @@ impl Store {
         Ok(())
     }
 
+    /// Drop the redundant `idx_eavt` permutation (quipu-fcg).
+    ///
+    /// Once `idx_geav (g, e, a, v)` exists (the migration above), `idx_eavt
+    /// (e, a, v, valid_from)` is never the plan: every hot read path binds `g`
+    /// alongside `e` — SPARQL pushes a graph condition on every triple pattern,
+    /// and the direct read paths are ROOT-scoped (quipu #56) — and the one
+    /// e-only probe (the event log's prior-fact check) is a covering lookup on
+    /// the `(e, a, v, tx)` PK autoindex. Measured at 10k episodes (83MB store):
+    /// every representative plan identical without it, and the file is 14.1MB
+    /// (16.9%) smaller. Verified against the full suite.
+    ///
+    /// Runs AFTER `migrate_named_graphs`, which is what guarantees `idx_geav`
+    /// exists before the fallback it provides is removed. Idempotent.
+    pub(super) fn migrate_drop_eavt(conn: &Connection) -> Result<()> {
+        conn.execute_batch("DROP INDEX IF EXISTS idx_eavt;")?;
+        Ok(())
+    }
+
     /// Additive migration for graph labels (quipu #65). Adds the five nullable
     /// cache columns to `graphs` and reserves the label meta-graph.
     ///

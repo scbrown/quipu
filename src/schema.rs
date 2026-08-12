@@ -43,8 +43,16 @@ CREATE TABLE IF NOT EXISTS facts (
     PRIMARY KEY (e, a, v, tx)
 );
 
--- Index permutations for the four standard Datomic-style access patterns.
-CREATE INDEX IF NOT EXISTS idx_eavt ON facts(e, a, v, valid_from);
+-- Index permutations for the standard Datomic-style access patterns.
+-- NOTE: idx_eavt ON facts(e, a, v, valid_from) used to sit here too. It has
+-- been REMOVED (quipu-fcg): since idx_geav landed (quipu #36) every hot read
+-- path binds g alongside e — SPARQL always pushes a graph condition, and the
+-- direct read paths are ROOT-scoped (quipu #56) — so the planner served every
+-- e-bound shape from idx_geav (g, e, a, v), and the rare e-only probe (the
+-- event-log prior-fact check) is a covering lookup on the (e, a, v, tx) PK
+-- autoindex. Measured at 10k episodes: identical query plans across the whole
+-- representative mix with idx_eavt absent, 14.1MB (16.9%) smaller file.
+-- Store::migrate_drop_eavt drops it from existing stores.
 CREATE INDEX IF NOT EXISTS idx_aevt ON facts(a, e, v, valid_from);
 CREATE INDEX IF NOT EXISTS idx_vaet ON facts(v, a, e, valid_from);
 CREATE INDEX IF NOT EXISTS idx_tx   ON facts(tx);

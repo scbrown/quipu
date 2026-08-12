@@ -260,6 +260,29 @@ Two things stand out. **The fact indexes cost 3.4× the facts themselves.** And
 reactor-down-6wk fix), which is correct for a server with consumers and pure
 overhead for a browser that has none. A pack export carries neither.
 
+> **`idx_eavt` dropped (quipu-fcg).** Measured per-index at 10k episodes:
+> eavt 9.6 MB, vaet 9.4 MB, aevt 9.3 MB, the `(e,a,v,tx)` PK autoindex
+> 6.3 MB, geav 5.9 MB, tx 2.0 MB. `EXPLAIN QUERY PLAN` across the
+> representative mix (point lookup, e+a, predicate scan, reverse-v, a+v,
+> unbound default-graph, `GRAPH ?g`, valid-time travel, facts-by-tx, the
+> write path's close/exists probes, the event log's e-only prior-fact check)
+> chose `idx_eavt` for **nothing**: since `idx_geav (g,e,a,v)` landed
+> (quipu #36) every hot path binds `g` alongside `e` — SPARQL pushes a graph
+> condition on every triple pattern and the direct read paths are ROOT-scoped
+> (quipu #56) — and the one e-only probe is a covering lookup on the PK
+> autoindex. Every plan is **identical** with it absent. A fresh 10k ingest
+> lands at 73.3 MB vs 83.3 (−12.0%, 7,329 bytes/episode) at a slightly
+> faster 332 episodes/s (one fewer index to maintain per write); dropping
+> the index from an existing 10k store and vacuuming lands at 69.2 MB
+> (**−16.9%**). Removed from `INIT_SQL`;
+> `migrate_drop_eavt` drops it from existing stores on open, after
+> `migrate_named_graphs` guarantees `idx_geav` exists. The remaining
+> permutations each own an access pattern the others cannot serve (aevt:
+> predicate scans; vaet: reverse value lookups; geav: everything g-scoped;
+> tx: retraction/event paths) — **keep**. Timestamp re-encoding
+> (TEXT→INTEGER, ~20 bytes → 8 per bound) is deliberately NOT smuggled into
+> this change; it touches the bitemporal core and needs its own bead.
+>
 > **Retention landed (quipu-9z9).** `Store::prune_events` deletes events by
 > age but never past any registered consumer's committed offset, so the
 > durable-replay guarantee survives — a lagging consumer's backlog is retained
