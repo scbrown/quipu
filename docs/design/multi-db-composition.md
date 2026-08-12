@@ -1,7 +1,11 @@
 # Design: Multi-DB Composition — term spaces, ATTACH, and the blob sidecar
 
-> **Implementation status (2026-08-06):** 🟩 **§2–§4 are built and composed
-> reads work; §1.2 aliases and §5 cross-DB limits are not.** What exists:
+> **Implementation status (2026-08-12):** 🟩 **§1–§4 are built and composed
+> reads work; §5 cross-DB limits are not (quipu #77).** §1.2 aliases landed
+> as `src/store/alias.rs` (quipu #76) with one documented deviation: the
+> alias table is TEMP and rebuilt at open rather than the design's persisted
+> `CREATE TABLE term_alias` — it is derived data, and persisting it would
+> add a respace-rewrite surface. What exists:
 >
 > - **§1.1 term spaces — BUILT.** `term_spaces` registry, space-aware
 >   allocation (`s · 2^40 + k`, `k` derived from the table), legacy stores

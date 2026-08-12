@@ -1,7 +1,10 @@
 # Design: Quipu paper plan — a governed bitemporal knowledge graph store
 
-> **Implementation status (2026-08-08):** ⬜ **Planning, fourth revision.**
-> No paper text exists yet. This revision settles the intent: a
+> **Implementation status (2026-08-12):** 🟩 **Drafted.** The full paper text
+> exists in `docs/paper/` (`main.tex` + 11 section files + references), built
+> with `just paper`; every measured number traces to `benchmark/census`
+> artifacts (quipu-418, quipu-q89). This document remains the plan the draft
+> was written to. The settled intent: a
 > **system-first paper** — Quipu as evidence that knowledge graphs can be
 > better than they conventionally are, now that agents write them. The
 > spine is a four-row comparison (conventional defaults vs Quipu's

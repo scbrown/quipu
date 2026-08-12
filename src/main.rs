@@ -207,7 +207,7 @@ fn print_usage() {
         "quipu -- AI-native knowledge graph
 
 COMMANDS:
-    quipu knot <file.ttl> [--shapes <shapes.ttl>] [--db <path>]
+    quipu knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
     quipu read \"<sparql>\" [--db <path>]
     quipu cord [--type <IRI>] [--limit N] [--db <path>]
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
@@ -215,7 +215,7 @@ COMMANDS:
     quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85] [--predicate <IRI>] [--graph <IRI>] [--db <path>]
     quipu report [--hubs N] [--surprises N] [--questions N] [--type <IRI>] [--predicate <IRI>] [--db <path>]
     quipu reason [--rules <file.ttl>] [--db <path>]
-    quipu episode <file.json> [--db <path>]
+    quipu episode <file.json> [--base-ns <ns>] [--timestamp <ISO-8601>] [--db <path>]
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
     quipu shapes load|list|remove [--db <path>]
     quipu propose list|submit|accept|reject [--status pending] [--db <path>]

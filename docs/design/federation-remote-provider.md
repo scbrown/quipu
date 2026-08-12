@@ -1,11 +1,12 @@
 # Design: `RemoteProvider` — reaching remote Quipu instances
 
-> **Implementation status (2026-08-01):** ⬜ **Designed, not built.**
-> `GraphProvider`, `ProviderStatus`, `LocalProvider` and `FederatedProvider`
-> exist in `src/provider.rs`; `[[quipu.federation.remotes]]` parses in
-> `src/config.rs` and warns loudly because nothing consumes it. This document
-> settles the decisions [quipu#47](https://github.com/scbrown/quipu/issues/47)
-> lists as open so the implementation is mechanical.
+> **Implementation status (2026-08-12):** 🟨 **Built; wired for startup health
+> only.** `RemoteProvider` and `federated_from_config()` exist in
+> `src/provider.rs` behind the `remote` feature (with tests), and
+> `quipu-server` consumes `[[quipu.federation.remotes]]` at startup for a
+> health check — the config key is wired, not warned about. What remains: no
+> QUERY path routes through the federated provider yet, and
+> `RemoteProvider`/`federated_from_config` are not re-exported from `lib.rs`.
 
 ## 1. The dependency question is already answered
 

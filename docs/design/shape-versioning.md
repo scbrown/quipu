@@ -12,11 +12,12 @@
 > `validate_as_of_v1s_window_uses_v1_semantics`,
 > `a_reload_at_the_same_instant_replaces_that_instants_version`,
 > `validate_falls_back_to_stored_shapes_and_honours_as_of`,
-> `src/store/tests.rs`). **§2.3 (as-of Σ in audit/replay — fidelity vs
-> drift as separate columns) is NOT built**; it is the remaining half,
-> tracked for the Census amendment phase (`bd show quipu-tj0`). The body
-> below is kept as written; §1's description of the latest-only tables is
-> now historical.
+> `src/store/tests.rs`). **§2.3 (as-of Σ in audit/replay) is now built too**
+> (quipu-tj0, closed): `replay_as_of` in `src/governance/replay.rs` scores
+> fidelity against Σ as-of the trace's own window and reports Σ-then vs Σ-now
+> drift in its own `ReplayReport::drift` column (`SpecDrift`), exercised by
+> Census phases 5–6. The body below is kept as written; §1's description of
+> the latest-only tables is now historical.
 
 **Status:** The store's *data* is bitemporal; the *rules that validate it* are
 not. That asymmetry is currently invisible and it should not be: governance

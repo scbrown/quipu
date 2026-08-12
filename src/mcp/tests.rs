@@ -1366,6 +1366,38 @@ fn readme_mcp_tool_counts_match_the_manifest() {
     );
 }
 
+/// The book's MCP reference drifted to 25/26 while the manifest grew to 30/31
+/// — the README never drifted because a test pins it. Pin the book page the
+/// same way: the stated counts must match `tool_definitions()`, and every
+/// registered tool must have a section heading of its own.
+#[cfg(not(feature = "owl"))]
+#[test]
+fn book_mcp_reference_matches_the_manifest() {
+    let base = tool_definitions().len();
+    let with_owl = base + 1;
+    let page = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("docs/book/src/reference/mcp-tools.md"),
+    )
+    .unwrap();
+
+    assert!(
+        page.contains(&format!("**{base} tools**")),
+        "book page must state the {base}-tool default count"
+    );
+    assert!(
+        page.contains(&format!("**{with_owl}**")),
+        "book page must state the {with_owl}-tool owl count"
+    );
+    for def in tool_definitions() {
+        let name = def["name"].as_str().unwrap();
+        assert!(
+            page.contains(&format!("### `{name}`")),
+            "book page is missing a section for registered tool {name}"
+        );
+    }
+}
+
 /// Every integer that appears immediately before each occurrence of `marker`.
 /// Avoids a regex dep — the tool-count mentions are always `<digits><marker>`.
 #[cfg(not(feature = "owl"))]

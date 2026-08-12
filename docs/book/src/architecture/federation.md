@@ -1,24 +1,18 @@
 # Federation
 
-> **Implementation status (2026-07-23, weaver):** 🟡 **Partial.** Built &
-> tested: the `GraphProvider` trait, `ProviderStatus`, `LocalProvider`, and
-> `FederatedProvider` (`query_all` with `_provider` tagging, `health_all`) in
-> `src/provider.rs`; the `[[quipu.federation.remotes]]` config schema parses in
-> `src/config.rs` and **warns loudly when set** (federation is unimplemented —
-> config.rs, with a test). **Gap:** no `RemoteProvider`, so the local+remote
-> headline is not real and `federation.remotes` is inert — tracked in
-> [quipu#47](https://github.com/scbrown/quipu/issues/47). Verified by grep
-> against `main` (fcf75c2). See the detailed banner below.
->
-> **Status: trait-only, not wired.** The `GraphProvider` trait and
-> `FederatedProvider` exist as library primitives, but quipu ships **no remote
-> provider** — only `LocalProvider`. Nothing constructs a `FederatedProvider` from
-> config, and the `[[quipu.federation.remotes]]` keys below are **read by
-> nothing**: setting them does not federate anything, and the `quipu`/`quipu-server`
-> binaries print a `warning:` if you do. Everything past this banner describes the
-> trait surface an embedder could build on, and the *intended* result shape — not a
-> capability the shipped binaries provide. "Query local and remote instances in a
-> single operation" is not yet true; the remote half does not exist.
+> **Implementation status (2026-08-12):** 🟡 **Partial — remote provider
+> built, health-checked at startup, not yet on the query path.** Built &
+> tested in `src/provider.rs`: the `GraphProvider` trait, `ProviderStatus`,
+> `LocalProvider`, `FederatedProvider`, and — behind the `remote` feature —
+> `RemoteProvider` plus `federated_from_config()`. `quipu-server` constructs
+> the federated provider from `[[quipu.federation.remotes]]` at startup and
+> health-checks every remote (the config key is consumed, and the old
+> "federation is unimplemented" warning is gone — `src/config.rs` now tests
+> that it must NOT warn). **Gap:** no query route dispatches through the
+> federated provider yet — a remote's facts are reachable to an embedder
+> calling `query_all`, not to a `quipu-server` client — and
+> `RemoteProvider`/`federated_from_config` are not re-exported from `lib.rs`.
+> See `docs/design/federation-remote-provider.md`.
 
 Quipu defines federated queries across multiple graph providers through
 the `GraphProvider` trait, so that a host embedding quipu can query a local store

@@ -1,12 +1,15 @@
 # Design: Knowledge Packs — a graph, its shapes, its queries, and its retrieval policy as one artifact
 
-> **Implementation status (2026-08-06):** ⬜ **Designed, not built.** Depends on
-> unbuilt substrate: term spaces and attach
-> ([multi-db-composition.md](multi-db-composition.md), quipu #74/#75), graph
-> labels ([graph-labels.md](graph-labels.md), #65), named datasets (#69), and
-> the versioned shape registry ([shape-versioning.md](shape-versioning.md),
-> #71). The stored-query registry (§2) has no dependencies and can start
-> immediately.
+> **Implementation status (2026-08-12):** 🟩 **§1 pack/unpack/verify built**
+> (quipu #81/#82): `src/pack.rs` — `Manifest`, `pack`, `pack_turtle`,
+> `unpack` (re-interned through `transact_to_graph`, so term ids are correct
+> by construction), `verify`, `content_hash` — with the `quipu pack` /
+> `quipu pack --verify` / `quipu unpack` CLI. The stored-query registry (§2)
+> is also built (`src/store/queries.rs`, quipu #79). The substrate it layers
+> on landed too: term spaces + attach (#74/#75), graph labels (#65), named
+> datasets (#69), the versioned shape registry (#71). Still open:
+> `--space <term-space>` on pack export (deferred to a follow-up; see
+> `src/pack.rs` module docs).
 
 **Status:** The layering designs make knowledge *attachable*; nothing yet makes
 it *distributable*. A knowledge layer should be a single artifact you can pack,
