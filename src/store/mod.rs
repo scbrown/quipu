@@ -159,6 +159,9 @@ pub struct Store {
     /// Resident ROOT read model, built on demand and dropped on every write —
     /// see [`read_model::ReadModel`] and [`Store::read_model`].
     pub(crate) read_model: std::cell::RefCell<Option<read_model::ReadModel>>,
+    /// Last graph projection, memoized with a tx stamp (quipu-tz5) — see
+    /// [`crate::graph::project_cached`].
+    pub(crate) projected_graph: std::cell::RefCell<Option<crate::graph::ProjectionCacheEntry>>,
     /// Whether SPARQL consults the read model. Off by default — see
     /// [`Store::set_read_model_enabled`] for the measurements that decided it.
     pub(crate) read_model_enabled: std::cell::Cell<bool>,

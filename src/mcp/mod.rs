@@ -1395,6 +1395,7 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "algorithm": { "type": "string", "enum": ["stats", "in_degree", "pagerank", "ppr", "components", "louvain", "shortest_path"], "description": "Algorithm to run (default: stats)" },
                     "type": { "type": "string", "description": "Restrict the projection to nodes of this rdf:type IRI" },
                     "predicate": { "type": "string", "description": "Restrict the projection to edges with this predicate IRI" },
+                    "graph": { "type": "string", "description": "Project ONE named graph's own facts instead of ROOT (quipu-tz5) — cheap against a small derived layer even when the episode log is large" },
                     "limit": { "type": "integer", "description": "Max results for in_degree/pagerank (default: 20)" },
                     "seeds": { "type": "array", "items": { "type": "string" }, "description": "Seed entity IRIs (or raw term IDs) for personalized PageRank; non-empty switches pagerank to PPR" },
                     "damping": { "type": "number", "description": "PageRank damping factor (default: 0.85)" },
