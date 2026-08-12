@@ -8,7 +8,8 @@
 > **but inert in the shipped binaries** — embedder-only), graph projection with
 > PageRank/Louvain, the stratified-datalog reasoner, entity resolution, episode
 > retraction, and `speculate()` counterfactuals — all in `src/`. Federation is partial
-> (trait-only). For granular per-feature status see the design docs in `docs/design/`
+> (remote provider built and health-checked at startup; queries not yet routed
+> through it). For granular per-feature status see the design docs in `docs/design/`
 > and `docs/book/src/architecture/`, each now carrying its own status block.
 >
 > Created: 2026-04-04, crew/braino session (aegis-6ct6)

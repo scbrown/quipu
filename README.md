@@ -112,7 +112,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 **⚙️ Infrastructure**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
-- **Federation** — a `GraphProvider` trait for multi-source queries. Trait-only today: quipu ships a `LocalProvider` but no remote provider, so remote federation is not yet available from the CLI/server, and `federation.remotes` config is inert.
+- **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup; queries do not yet route through the federated provider.
 - **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.
 - **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 30 MCP tools for agent integration (31 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
@@ -220,7 +220,7 @@ quipu reason --rules rules.ttl --db ops.db
 
 The reasoner adds forward-chaining inference over the EAVT fact log:
 
-- **Datalog rule engine** — rules written in Turtle DSL, evaluated with semi-naive `datafrog`. Stratified negation-as-failure. Derived facts written back via `Store::transact()` with full provenance.
+- **Datalog rule engine** — rules written in Turtle DSL, evaluated with semi-naive `datafrog`. Negation is parsed and stratified, but evaluation of negated body atoms is not yet implemented (the evaluator rejects `not` rules). Derived facts written back via `Store::transact()` with full provenance.
 - **Reactive evaluation** — `TransactObserver` keeps derived facts fresh as base facts change. Delta-aware: only affected rules re-run. Optional `reactive-reasoner` feature.
 - **Counterfactual queries** — `Store::speculate()` forks a view (SQLite SAVEPOINT) to answer "what if?" without mutation.
 - **Impact analysis** — BFS walk over entity edges with configurable hop depth and predicate filters. Available as CLI, REST endpoint (`POST /impact`), and MCP tool.
@@ -391,7 +391,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Python bindings | 🔜 | Planned |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |
-| GraphProvider federation trait | 🔩 | Trait + `LocalProvider` only; no remote provider, `federation.remotes` inert |
+| GraphProvider federation trait | 🔩 | `RemoteProvider` built + startup health checks; queries not yet routed through it |
 | Bobbin integration | ✅ | Namespace, IRI patterns, search |
 | Automated releases (release-plz) | ✅ | |
 | Clustering / replication | 🔜 | Planned |

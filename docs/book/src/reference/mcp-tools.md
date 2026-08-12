@@ -4,8 +4,10 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **25 tools** in a default build, or
-**26** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **30 tools** in a default build, or
+**31** when built with the `owl` feature (which adds `quipu_load_ontology`).
+(The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
+page and the README against the manifest.)
 
 ## Tool Reference
 
@@ -18,6 +20,16 @@ Execute a SPARQL SELECT query.
 | `query` | Yes | SPARQL query string |
 | `valid_at` | No | ISO-8601 timestamp for time-travel |
 | `tx` | No | Transaction ID for time-travel |
+
+### `quipu_export`
+
+Export a scoped subset of the graph as RDF: one named graph's facts, or the
+ROOT default graph when `graph` is omitted.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `graph` | No | Named-graph IRI to export (omit for ROOT; unknown IRI is an error) |
+| `format` | No | `turtle` (default) or `ntriples` |
 
 ### `quipu_knot`
 
@@ -86,6 +98,21 @@ Retract facts for an entity.
 | `predicate` | No | Only retract this predicate |
 | `timestamp` | No | Retraction timestamp |
 | `actor` | No | Who is retracting |
+
+### `quipu_set`
+
+Atomically set `(entity, predicate)` to exactly one value: retracts every
+current object on that predicate and asserts the new one in a single
+transaction — the supersede primitive. Single-value semantics: to add without
+removing, assert via `quipu_knot`.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `entity` | Yes | IRI of the entity (must exist) |
+| `predicate` | Yes | Predicate IRI to set (may be new) |
+| `value` | Yes | Bare string = literal; `{"iri": …}` for an edge; typed forms for int/float/bool/lang/datatype |
+| `timestamp` | No | ISO-8601 valid-time for the supersede |
+| `actor` | No | Who is performing the set |
 
 ### `quipu_retract_episode`
 
@@ -168,6 +195,19 @@ without one it errors naming the missing `[quipu.embedding]` configuration.
 The response carries an `embeddings` block (`configured`, `embedded_entities`)
 so zero results are distinguishable from an unembedded store — see
 [Embeddings and Semantic Search](../concepts/embeddings.md).
+
+### `quipu_graph`
+
+Project the knowledge graph into a render-ready node-link payload in one
+response: nodes (IRI, label, type, degree), index-addressed edges, and a type
+census. Episode/provenance scaffolding is excluded by default; nodes are
+ranked by degree and capped, and the response states what was dropped.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `limit` | No | Max nodes, ranked by degree (default 250, hard max 2000) |
+| `type` | No | Restrict to nodes of this rdf:type IRI |
+| `include_episodes` | No | Include `prov:Activity` episode nodes (default false) |
 
 ### `quipu_project`
 
@@ -326,6 +366,37 @@ result `columns`, and `rows`.
 ```json
 { "name": "service_deps", "params": { "entity": "http://example.org/traefik" } }
 ```
+
+### `quipu_queries`
+
+Manage stored named queries — competency questions a consumer ships with its
+domain, callable through `quipu_ask` alongside the compiled-in catalog.
+Definitions are validated at load and versioned (re-loading a name closes the
+prior version rather than overwriting it).
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `action` | No | `load`, `list` (default), `get`, or `remove` |
+| `name` | For load/get/remove | Query name |
+| `description` | For load | What the query answers |
+| `template` | For load | SPARQL template with `{param}` placeholders |
+| `dataset` | No | Dataset IRI this query is scoped to |
+| `params` | No | Ordered param specs `{name, type, required, default, description}` |
+| `timestamp` | No | ISO-8601 timestamp |
+
+### `quipu_datasets`
+
+Manage named datasets — a reusable name for an arbitrary set of graphs, so it
+can be labelled, governed and handed to another agent. `FROM <dataset-iri>`
+then means `FROM` over its members.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `action` | No | `create`, `list` (default), `show`, or `remove` |
+| `name` | For create/show/remove | Dataset IRI |
+| `members` | For create | Graph IRIs, or `{"graph": …, "ord": N}` for a declared ordering |
+| `timestamp` | No | ISO-8601 timestamp |
+| `actor` | No | Who is creating the dataset |
 
 ### `quipu_propose_schema_change`
 

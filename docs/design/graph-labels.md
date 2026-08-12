@@ -5,8 +5,11 @@
 > meta-graph, #66 `src/lattice.rs` meet/join + homomorphism proptest, #67 dataset
 > labels on the query path, #68 label floors, #70 per-row labels under `GRAPH ?g`).
 > `Freshness`, `Trust`, `PolicyClass`, `Coverage` and `Composed<T>` exist in code.
-> **§2.4 (durability) and §2.5 (derivation) are NOT built** — they are the open
-> extension, and each carries its own status line. #73 (statement-level labels)
+> **§2.4 (durability) and §2.5 (derivation) are now BUILT too** — `Durability`
+> in `src/lattice.rs`, the `durability_rank` column and composed durability in
+> `src/store/labels.rs`, and `DerivationMethod`/`Rederivation` in
+> `src/derivation.rs`; the section headings below carry their own (BUILT)
+> lines. The one open extension is #73 (statement-level labels), which
 > remains design-only. The substrate it builds on — named graphs, the
 > `graphs` registry, `GRAPH`/`FROM`/`FROM NAMED`, graph-scoped authority — is
 > built (see [named-graphs.md](named-graphs.md) for its own partial-status
