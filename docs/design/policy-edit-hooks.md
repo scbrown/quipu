@@ -5,7 +5,9 @@
 > gate is `src/governance/guard.rs` (`PolicyGuard::build` + `evaluate_write`), invoked
 > on the write path via `stage_and_guard` (`src/store/ops.rs`) and runtime-gated by
 > `[quipu.governance] enforce_on_write` (`src/store/mod.rs`, `src/config.rs`); the
-> read-only `quipu_policy_check` MCP/REST call also exists. Phase B (hank-side
+> read-only `quipu_policy_check` MCP/REST call also exists (REST-only until
+> quipu-227 registered it, with the six other governance/overlay tools, in
+> `tool_definitions()` — agents can now discover the gate). Phase B (hank-side
 > structural-policy projection) is a separate system, blocked on hank↔quipu wiring —
 > outside quipu's code.
 
@@ -19,7 +21,7 @@ Quipu carries a rich *declarative* governance vocabulary — a `Policy`
 (`shapes/governance.ttl`) `targets` an entity **type**, carries a SPARQL-ASK
 `claim`, declares a `boundary ∈ {action (pre-edit), transition}` and an
 `effect ∈ {allow, warn, require-approval, deny, escalate, record}`. But the
-evaluator (`quipu_policy_check`, `src/mcp/mod.rs`) is a **read-only, on-demand**
+evaluator (`quipu_policy_check`, `src/mcp/governance.rs`) is a **read-only, on-demand**
 MCP/REST call: it is registered as `ro_handler!(policy_check, …)` and nothing on
 the write path invokes it. So `boundary:"action"` is declarative *intent* with
 no engine binding — an edit that leaves a governed entity non-compliant is
