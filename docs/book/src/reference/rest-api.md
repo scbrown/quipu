@@ -721,3 +721,204 @@ without the capability it was asked for.
 ### `GET /preview/{iri}`
 
 Return a preview rendering of an entity by IRI.
+
+## Service Metadata
+
+### `GET /version`
+
+What build is actually running: `{"version", "git_sha", "git_dirty",
+"features"}`. The git SHA is the field that matters for "is the fix
+deployed?" — a semantic version does not move when a fix lands. `features`
+maps every declared Cargo feature to whether this binary compiled it in.
+
+### `GET /metrics`
+
+Prometheus scrape endpoint (`text/plain; version=0.0.4`). Request counters
+come from the middleware; graph-size gauges cost one cheap SQL aggregate —
+deliberately not `/stats`' full scan.
+
+### UI assets (not documented individually)
+
+`GET /` and `GET /ui` serve the built-in web UI; `GET /quipu-components.js`,
+`GET /graph-canvas.js`, `GET /datalinks.js` and
+`GET /vendor/three.module.min.js` serve its static assets, vendored so the UI
+renders on an air-gapped deploy. They are part of the UI, not the API surface.
+
+## Export
+
+### `POST /export`
+
+Export a scoped subset of the graph as RDF — one named graph's facts, or the
+ROOT default graph when `graph` is omitted (the "pull a scoped slice"
+primitive; mirrors the `quipu_export` MCP tool).
+
+```bash
+curl -s localhost:3030/export -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"graph": "http://example.org/graphs/derived", "format": "turtle"}'
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `graph` | No | Named-graph IRI (omit for ROOT; unknown IRI → 400) |
+| `format` | No | `turtle` (default) or `ntriples` |
+
+Returns the RDF document itself with the matching content-type, not JSON.
+
+## Registries
+
+These mirror their MCP tools (see the [MCP reference](./mcp-tools.md)) —
+action-style managers where an unknown `action` errors rather than falling
+through to `list`.
+
+### `POST /ontology`
+
+Manage OWL ontologies: `{"action": "load"|"list"|"remove", "name",
+"turtle", "timestamp"}` (mirrors `quipu_load_ontology`). Registered even
+without the `owl` feature — a build without it answers with an explicit
+error naming the missing feature rather than a 404, so "not compiled in"
+and "no such route" stay distinguishable.
+
+### `POST /subscriptions`
+
+Event-push subscription registry: `{"action": "create"|"list"|"delete", ...}`
+— register an HTTP endpoint to receive graph-change events pushed by the
+server's delivery worker (mirrors `quipu_subscriptions`).
+
+### `POST /datasets`
+
+Named dataset registry: `{"action": ..., "name", "members", ...}` — declare a
+named set of graphs queryable as one unit via `FROM <dataset>` or the `graph`
+query param (mirrors `quipu_datasets`).
+
+### `POST /queries`
+
+Stored named-query registry: `{"action": "load"|"list"|"get"|"remove",
+"name", "template", "params", ...}` — competency questions callable through
+`/ask` alongside the compiled-in catalog; definitions are validated at load
+and versioned (mirrors `quipu_queries`).
+
+## Governance
+
+The REST half of the governance gate; each mirrors its MCP tool, where the
+semantics are documented in full.
+
+### `POST /policy/check`
+
+Committed-tier evaluation of a governance Policy against a target: returns a
+Verdict — `outcome` ∈ `satisfied | unsatisfied | unknown` bound to a
+reproducible `evidence_hash` — signed when the store has a signing identity.
+
+```bash
+curl -s localhost:3030/policy/check -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"policy": "http://example.org/policy/has-owner", "target": "http://example.org/svc"}'
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `policy` | One of policy/claim | Policy IRI whose `aegis:claim` to evaluate |
+| `claim` | One of policy/claim | Inline SPARQL ASK |
+| `target` | Yes | Target IRI bound to `$target` |
+| `predicate_id` | No | Recorded predicate id for inline claims |
+| `evidence_probe` | No | ASK for "does the evidence exist?" → `unknown` |
+| `valid_at` | No | ISO-8601 point-in-time |
+
+### `POST /verifier/authorized`
+
+`{"verifier", "predicate"}` → `{"authorized": bool}`: may this verifier
+attest this predicate, per the Phase-0 verifier registry?
+
+### `POST /verdict/verify`
+
+Verify a signed Verdict against the Phase-0 root of trust:
+`{"predicate_id", "target_ref", "outcome", "evidence_hash", "tier"?,
+"verifier", "signature"}` → `{"signature_valid", "verifier_registered",
+"verifier_authorized", "trusted"}` — `trusted` is the conjunction to gate on.
+
+## Overlays
+
+Scratch layers over the committed graph (bind-once to a parent branch):
+hypotheses go in the overlay, the committed layer stays untouched. Mirror
+the `quipu_overlay_*` MCP tools.
+
+### `POST /overlay/create`
+
+`{"overlay": "<iri>", "parent_branch": "<iri>"?}` → `{"g", "parent_branch"}`.
+Omitted `parent_branch` binds to ROOT.
+
+### `POST /overlay/write`
+
+`{"overlay", "op": "assert"|"retract"|"tombstone", "subject", "predicate",
+"object", "timestamp"?}` → `{"tx_id"}`. `tombstone` masks the parent's fact
+in the composed view.
+
+### `POST /overlay/compose`
+
+`{"overlay": "<iri>"}` → `{"triples": [{subject, predicate, object}],
+"count"}`: the resolved view over `[overlay > parent-branch-root]`,
+asserted-and-not-tombstoned, nearest wins.
+
+## Provenance Analytics
+
+### `POST /cooccurrence`
+
+`{"work_item": "<iri>", "valid_at"?, "tx"?}` → the other work-items sharing
+at least one touched code entity, via `Bead ←implements− GitCommit
+−modifies→ entity`, ordered by overlap strength (mirrors
+`quipu_cooccurrence`).
+
+## Events
+
+The durable graph-change event log (at-least-once delivery; consumers dedup
+by offset).
+
+### `GET /events`
+
+Pull a batch of events in offset order.
+
+| Param | Effect |
+|---|---|
+| `since=<offset>` | start after this offset |
+| `consumer=<id>` | omit `since` to resume from this consumer's committed offset |
+| `limit=<n>` | batch size, clamped to `1..=10_000` (default 100) |
+| `types=<a,b>` | filter by event type |
+| `group=<g>` | filter by provenance group |
+
+Returns `{events, next_offset, lag, committed_offset?}`; pass `next_offset`
+back as `since` (or commit it) to page forward — polling is a fixpoint, not a
+rewind.
+
+### `POST /events/commit`
+
+`{"consumer_id", "offset"}` — durably record a consumer's cursor. Any offset
+≥ 0 is accepted, including a **lower** one: that is the explicit replay knob.
+
+## Linked-Data Surface
+
+Standards-flavoured read endpoints for semantic-web tooling.
+
+### `GET /entity/{iri}`
+
+Content-negotiated entity page: `Accept: application/ld+json` → JSON-LD,
+`text/turtle` → Turtle, anything else → the web UI's HTML page for the
+entity. `GET /entity/{iri}/json`, `GET /entity/{iri}/ttl` and
+`GET /entity/{iri}/html` pin the format in the path instead of the header.
+
+### `POST /spotlight`
+
+DBpedia-Spotlight-style annotation: `{"text", "confidence"?}` → mentions of
+known entities found in the text, with offsets and IRIs. The labeled-entity
+list it scans against is generation-cached, so a burst pays the expensive
+fetch once.
+
+### `GET /fragments`
+
+Triple Pattern Fragments: `?subject=&predicate=&object=&page=&pageSize=`
+selectors, each optional — a paged triple-pattern read for TPF clients.
+
+### `POST /reconcile`
+
+OpenRefine Reconciliation API: a body without `queries` returns the service
+manifest; `{"queries": {...}}` runs the batch and returns candidates per
+query, scored the way `/resolve` scores.
