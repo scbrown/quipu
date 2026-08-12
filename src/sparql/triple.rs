@@ -48,14 +48,30 @@ pub fn eval_bgp(
     let mut result_rows: Vec<Bindings> = vec![seed.clone()];
     let mut all_vars = Vec::new();
 
-    for tp in patterns {
+    for (pi, tp) in patterns.iter().enumerate() {
+        // LIMIT pushdown (quipu-0lr): only the LAST pattern may stop early —
+        // an earlier pattern's rows are join input, and any of them might
+        // survive the remaining patterns. For the last one, every bound row
+        // IS a solution, so `row_limit` of them is enough; rusqlite steps the
+        // statement lazily, so breaking out genuinely stops the scan instead
+        // of discarding a completed one.
+        let last = pi + 1 == patterns.len();
         let mut new_rows = Vec::new();
         for (i, existing) in result_rows.iter().enumerate() {
             // BGP accumulation multiplies row counts pattern-by-pattern —
             // the SQLite handler interrupts a grinding statement, but the
             // row-count explosion itself is only visible here.
             super::pattern_util::check_eval_budget(ctx, i, new_rows.len())?;
-            let matches = eval_triple_pattern(store, tp, existing, ctx)?;
+            let remaining = match (last, ctx.row_limit) {
+                (true, Some(cap)) => {
+                    if new_rows.len() >= cap {
+                        break;
+                    }
+                    Some(cap - new_rows.len())
+                }
+                _ => None,
+            };
+            let matches = eval_triple_pattern_limited(store, tp, existing, ctx, remaining)?;
             new_rows.extend(matches);
         }
         result_rows = new_rows;
@@ -142,6 +158,26 @@ pub fn eval_triple_pattern(
     bindings: &Bindings,
     ctx: &TemporalContext,
 ) -> Result<Vec<Bindings>> {
+    eval_triple_pattern_limited(store, tp, bindings, ctx, None)
+}
+
+/// [`eval_triple_pattern`] that stops after `limit` BOUND rows (quipu-0lr).
+///
+/// The cap counts rows that actually bound — not SQL rows — so a row the
+/// binding step rejects (e.g. a repeated variable the SQL cannot express)
+/// never causes an undershoot. Enforced in the row loop rather than as a SQL
+/// `LIMIT` because rusqlite steps lazily: breaking out stops the scan just as
+/// surely, and stays correct for the reject-a-row case.
+fn eval_triple_pattern_limited(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    ctx: &TemporalContext,
+    limit: Option<usize>,
+) -> Result<Vec<Bindings>> {
+    if limit == Some(0) {
+        return Ok(vec![]);
+    }
     // Build SQL query with conditions based on bound values.
     let mut conditions = Vec::new();
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -327,6 +363,9 @@ pub fn eval_triple_pattern(
         };
         if let Some(row) = bind_row(store, tp, bindings, matched, bind_graph_var.as_deref())? {
             results.push(row);
+            if limit.is_some_and(|cap| results.len() >= cap) {
+                break;
+            }
         }
     }
 
@@ -557,27 +596,101 @@ fn eval_bgp_hash_join(
     ctx: &TemporalContext,
     seed: &Bindings,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
-    let mut result_rows: Vec<Bindings> = vec![seed.clone()];
+    // Every pattern is evaluated exactly once either way, so ORDERING the
+    // joins by measured cardinality is free (quipu-0lr): the counts are not
+    // estimates from index statistics, they are the actual row sets. Source
+    // order stops mattering — a pathological ordering folds the same joins as
+    // a good one. Variables are still collected in SOURCE order so the
+    // projection header does not depend on the plan.
     let mut all_vars: Vec<String> = Vec::new();
-
-    for (i, tp) in patterns.iter().enumerate() {
-        check_eval_budget(ctx, i, result_rows.len())?;
-        let pattern_rows = eval_triple_pattern_from_model(store, tp, seed)?;
-        result_rows = hash_join_bindings(&result_rows, &pattern_rows, ctx)?;
-
+    for tp in patterns {
         for var in triple_pattern_vars(tp) {
             if !all_vars.contains(&var) {
                 all_vars.push(var);
             }
         }
+    }
+
+    let mut evaluated: Vec<Vec<Bindings>> = Vec::with_capacity(patterns.len());
+    for (i, tp) in patterns.iter().enumerate() {
+        check_eval_budget(ctx, i, 0)?;
+        let rows = eval_triple_pattern_from_model(store, tp, seed)?;
+        // An empty pattern empties every join it participates in.
+        if rows.is_empty() {
+            return Ok((Vec::new(), all_vars));
+        }
+        evaluated.push(rows);
+    }
+
+    let pattern_vars: Vec<Vec<String>> = patterns.iter().map(triple_pattern_vars).collect();
+    let cardinalities: Vec<usize> = evaluated.iter().map(Vec::len).collect();
+    let bound: HashSet<String> = seed.keys().cloned().collect();
+    let plan = join_plan(&pattern_vars, &cardinalities, &bound);
+
+    let mut result_rows: Vec<Bindings> = vec![seed.clone()];
+    for (step, idx) in plan.into_iter().enumerate() {
+        check_eval_budget(ctx, step, result_rows.len())?;
+        result_rows = hash_join_bindings(&result_rows, &evaluated[idx], ctx)?;
         // An empty intermediate can never grow again, so stop rather than
-        // evaluating the remaining patterns for nothing.
+        // joining the remaining patterns for nothing.
         if result_rows.is_empty() {
             break;
         }
     }
+    // The BGP is the whole prefix-safe subtree here, so a pushed-down LIMIT
+    // may truncate the final solution set (never an intermediate — every row
+    // above could still have survived or multiplied through later joins).
+    if let Some(cap) = ctx.row_limit {
+        result_rows.truncate(cap);
+    }
 
     Ok((result_rows, all_vars))
+}
+
+/// Choose the hash-join fold order (quipu-0lr): smallest measured row set
+/// first, then greedily the smallest pattern CONNECTED to a variable already
+/// bound, falling back to the smallest disconnected pattern only when nothing
+/// connects (that cartesian is then genuinely in the query). Ties break on
+/// source index, so the plan is deterministic.
+///
+/// Pure over (per-pattern variables, per-pattern cardinalities, initially
+/// bound variables) exactly so the acceptance is testable: a pathological
+/// source ordering must produce the same plan as a good one.
+pub(crate) fn join_plan(
+    pattern_vars: &[Vec<String>],
+    cardinalities: &[usize],
+    initially_bound: &HashSet<String>,
+) -> Vec<usize> {
+    let n = cardinalities.len();
+    let mut bound: HashSet<String> = initially_bound.clone();
+    let mut remaining: Vec<usize> = (0..n).collect();
+    let mut order = Vec::with_capacity(n);
+    while !remaining.is_empty() {
+        let connected = |i: &usize| pattern_vars[*i].iter().any(|v| bound.contains(v));
+        // `order.is_empty()` starts from the smallest pattern outright; the
+        // seed's bindings count as connections because those patterns were
+        // evaluated under the seed and are already selective.
+        let candidates: Vec<usize> = if order.is_empty() && bound.is_empty() {
+            remaining.clone()
+        } else {
+            let conn: Vec<usize> = remaining.iter().filter(|i| connected(i)).copied().collect();
+            if conn.is_empty() {
+                remaining.clone()
+            } else {
+                conn
+            }
+        };
+        let pick = candidates
+            .into_iter()
+            .min_by_key(|&i| (cardinalities[i], i))
+            .expect("candidates cannot be empty while remaining is not");
+        remaining.retain(|&i| i != pick);
+        for v in &pattern_vars[pick] {
+            bound.insert(v.clone());
+        }
+        order.push(pick);
+    }
+    order
 }
 
 /// Join two binding sets on the variables they share.

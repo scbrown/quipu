@@ -19,6 +19,27 @@ use super::triple::eval_bgp as eval_bgp_inner;
 use super::values::eval_values;
 use super::{Bindings, GraphScope, TemporalContext};
 
+/// Whether a `Slice` cap may be pushed through this subtree to the BGP leaf
+/// (quipu-0lr).
+///
+/// True only for chains where every intermediate operator is row-monotonic
+/// AND prefix-safe — it passes each input row through at most once, in order,
+/// dropping none: `Project` (1:1 column projection) and `Reduced` (advisory).
+/// Everything else is a hard no: `Filter` drops rows (the leaf would need to
+/// overshoot by an unknowable factor), `Distinct` collapses them, `OrderBy`
+/// needs the full set before any row is final, joins multiply, and `Union`
+/// concatenates two branches that would each need their own budget. When this
+/// says no, evaluation is exactly what it was before the pushdown existed.
+fn limit_pushdown_safe(pattern: &GraphPattern) -> bool {
+    match pattern {
+        GraphPattern::Bgp { .. } => true,
+        GraphPattern::Project { inner, .. } | GraphPattern::Reduced { inner } => {
+            limit_pushdown_safe(inner)
+        }
+        _ => false,
+    }
+}
+
 /// Evaluate a graph pattern, returning rows and the variable names encountered.
 pub fn eval_pattern(
     store: &Store,
@@ -140,7 +161,22 @@ pub fn eval_pattern_seeded(
             start,
             length,
         } => {
-            let (rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
+            // LIMIT pushdown (quipu-0lr): when the subtree between here and
+            // the BGP is prefix-safe, the leaf may stop after start+len rows —
+            // solution order is unchanged, only completion is earlier. An
+            // OFFSET-only slice (no length) has no cap to push.
+            let capped;
+            let inner_ctx = match length {
+                Some(len) if limit_pushdown_safe(inner) => {
+                    capped = TemporalContext {
+                        row_limit: Some(start.saturating_add(*len)),
+                        ..ctx.clone()
+                    };
+                    &capped
+                }
+                _ => ctx,
+            };
+            let (rows, vars) = eval_pattern_seeded(store, inner, inner_ctx, seed)?;
             let sliced: Vec<Bindings> = match length {
                 Some(len) => rows.into_iter().skip(*start).take(*len).collect(),
                 None => rows.into_iter().skip(*start).collect(),
