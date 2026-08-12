@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 - *(book)* Document the 11 CLI commands the reference omitted([21d0078](https://github.com/scbrown/quipu/commit/21d0078e71970fe7699d82e347e880a612998754))
 - *(book)* REST reference covers every route, pinned by a test (quipu-83v)([6f465d2](https://github.com/scbrown/quipu/commit/6f465d20de58a3e23a7e04145e634f8345930afd))
 
+
+
 ### Perf
 
 - *(sparql)* LIMIT pushdown and selectivity-ordered joins (quipu-0lr)([bc4eec6](https://github.com/scbrown/quipu/commit/bc4eec6f69c0cd35c2d7a30679c33c0d79e04457))
