@@ -10,6 +10,7 @@
 //! on community membership.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use petgraph::algo;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -39,7 +40,7 @@ impl ProjectedGraph {
     }
 }
 
-/// Project the current fact store into a directed graph.
+/// Project the current fact store (ROOT graph) into a directed graph.
 ///
 /// Nodes are entities (term IDs). Edges exist where a fact's value is a Ref
 /// (i.e., entity-to-entity relationship). The edge weight is the predicate ID.
@@ -52,7 +53,25 @@ pub fn project(
     type_filter: Option<&str>,
     predicate_filter: Option<&str>,
 ) -> Result<ProjectedGraph> {
-    let facts = store.current_facts()?;
+    project_in_graph(store, type_filter, predicate_filter, None)
+}
+
+/// Project ONE graph's current facts into a directed graph (quipu-tz5).
+///
+/// `graph = None` is ROOT — byte-for-byte the projection [`project`] always
+/// built. `Some(iri)` scopes the scan to that named graph's OWN facts (the
+/// same scope a `GRAPH <iri> { … }` read sees, not a composed overlay view),
+/// which is what makes projecting a small derived layer cheap against a large
+/// episode log. An unknown graph IRI is an error rather than an empty graph:
+/// a typo that silently ranks nothing is worse than a refusal.
+pub fn project_in_graph(
+    store: &Store,
+    type_filter: Option<&str>,
+    predicate_filter: Option<&str>,
+    graph: Option<&str>,
+) -> Result<ProjectedGraph> {
+    let g = resolve_graph(store, graph)?;
+    let facts = store.current_facts_in_graph(g)?;
 
     // If type filter is set, find matching entity IDs.
     let type_entity_ids: Option<std::collections::HashSet<i64>> =
@@ -137,6 +156,72 @@ pub fn project(
         entity_to_node,
         node_to_entity,
     })
+}
+
+/// Resolve an optional graph IRI to its `g` id (`None` = ROOT).
+fn resolve_graph(store: &Store, graph: Option<&str>) -> Result<i64> {
+    match graph {
+        None => Ok(crate::schema::ROOT_GRAPH),
+        Some(iri) => store.lookup(iri)?.ok_or_else(|| {
+            crate::error::Error::Store(format!("unknown graph: {iri} (never written to)"))
+        }),
+    }
+}
+
+/// One memoized projection, resident on [`Store`] (quipu-tz5).
+///
+/// Single-entry by design: the observed access pattern is repeated calls with
+/// the same shape (an agent iterating pagerank/communities over one layer),
+/// not a working set of distinct projections. The tx stamp does the
+/// invalidation — [`Store::latest_tx_id`] is monotonic and cheap, and its docs
+/// exist for exactly this rebuild-when-it-moves pattern — so no write-path
+/// hook is needed. Valid-time passage cannot stale the entry because the scan
+/// only reads facts with `valid_to IS NULL`.
+pub(crate) struct ProjectionCacheEntry {
+    key: (i64, Option<String>, Option<String>),
+    tx: i64,
+    pg: Arc<ProjectedGraph>,
+}
+
+/// [`project_in_graph`], memoized on the store (quipu-tz5).
+///
+/// A hit returns the resident [`Arc`] without touching SQL; anything else
+/// (different graph or filters, or any committed transaction since the entry
+/// was built) rebuilds and replaces the entry. The projection holds only term
+/// ids and petgraph indices — a fraction of the fact rows it was scanned
+/// from — so keeping one resident is far cheaper than the read model this
+/// pattern is borrowed from.
+pub fn project_cached(
+    store: &Store,
+    type_filter: Option<&str>,
+    predicate_filter: Option<&str>,
+    graph: Option<&str>,
+) -> Result<Arc<ProjectedGraph>> {
+    let g = resolve_graph(store, graph)?;
+    let key = (
+        g,
+        type_filter.map(str::to_string),
+        predicate_filter.map(str::to_string),
+    );
+    let tx = store.latest_tx_id()?;
+    if let Some(entry) = store.projected_graph.borrow().as_ref()
+        && entry.key == key
+        && entry.tx == tx
+    {
+        return Ok(Arc::clone(&entry.pg));
+    }
+    let pg = Arc::new(project_in_graph(
+        store,
+        type_filter,
+        predicate_filter,
+        graph,
+    )?);
+    *store.projected_graph.borrow_mut() = Some(ProjectionCacheEntry {
+        key,
+        tx,
+        pg: Arc::clone(&pg),
+    });
+    Ok(pg)
 }
 
 /// Compute in-degree for each node (simple influence metric).
@@ -523,6 +608,7 @@ pub fn shortest_path(
 /// MCP tool: `quipu_project` — Project the knowledge graph and run algorithms.
 ///
 /// Input: `{ "type": "<optional IRI>", "predicate": "<optional IRI>",
+///           "graph": "<optional named-graph IRI, default ROOT>",
 ///           "algorithm": "stats|in_degree|pagerank|components|louvain|shortest_path",
 ///           "from": "<IRI>", "to": "<IRI>", "persist": <bool> }`
 ///
@@ -532,12 +618,13 @@ pub fn shortest_path(
 pub fn tool_project(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let type_filter = input.get("type").and_then(|v| v.as_str());
     let pred_filter = input.get("predicate").and_then(|v| v.as_str());
+    let graph = input.get("graph").and_then(|v| v.as_str());
     let algorithm = input
         .get("algorithm")
         .and_then(|v| v.as_str())
         .unwrap_or("stats");
 
-    let pg = project(store, type_filter, pred_filter)?;
+    let pg = project_cached(store, type_filter, pred_filter, graph)?;
 
     match algorithm {
         "stats" => Ok(serde_json::json!({
@@ -821,6 +908,83 @@ ex:app1 a ex:App ; ex:uses ex:server1 .
         let pg = project(&store, None, None).unwrap();
         assert!(pg.node_count() >= 6);
         assert!(pg.edge_count() >= 10); // includes rdf:type edges
+    }
+
+    #[test]
+    fn test_project_scoped_to_named_graph() {
+        let mut store = test_graph_store();
+        let overlay = "urn:test:graph:derived";
+        let g = store.graph_create(overlay).unwrap();
+        let turtle = r"
+@prefix ex: <http://example.org/> .
+ex:x a ex:Person ; ex:knows ex:y .
+ex:y a ex:Person .
+";
+        crate::rdf::ingest_rdf_to_graph(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+
+        // The scoped projection sees ONLY the overlay's facts…
+        let pg = project_in_graph(&store, None, None, Some(overlay)).unwrap();
+        assert_eq!(pg.node_count(), 3); // x, y, ex:Person (type edges)
+        // …and ROOT's projection is untouched by the overlay write.
+        let root = project(&store, None, None).unwrap();
+        let x = store.lookup("http://example.org/x").unwrap().unwrap();
+        assert!(!root.entity_to_node.contains_key(&x));
+    }
+
+    #[test]
+    fn test_project_unknown_graph_is_an_error() {
+        let store = test_graph_store();
+        let err = project_in_graph(&store, None, None, Some("urn:no:such:graph"));
+        assert!(err.is_err(), "a typo'd graph must refuse, not rank nothing");
+    }
+
+    #[test]
+    fn test_project_cached_reuses_until_a_write() {
+        let mut store = test_graph_store();
+        let first = project_cached(&store, None, None, None).unwrap();
+        let again = project_cached(&store, None, None, None).unwrap();
+        assert!(
+            Arc::ptr_eq(&first, &again),
+            "unchanged store must hit the resident projection"
+        );
+
+        // A different shape is a miss (single-entry cache) — and does not
+        // corrupt the earlier Arc, which the caller still holds.
+        let filtered =
+            project_cached(&store, Some("http://example.org/Person"), None, None).unwrap();
+        assert!(!Arc::ptr_eq(&first, &filtered));
+        assert_eq!(first.node_count(), again.node_count());
+
+        // Any committed transaction invalidates: the rebuild sees the new fact.
+        let turtle = r"
+@prefix ex: <http://example.org/> .
+ex:new a ex:Person ; ex:knows ex:alice .
+";
+        crate::rdf::ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-04-05T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let rebuilt = project_cached(&store, None, None, None).unwrap();
+        assert!(!Arc::ptr_eq(&first, &rebuilt));
+        let new = store.lookup("http://example.org/new").unwrap().unwrap();
+        assert!(rebuilt.entity_to_node.contains_key(&new));
+        assert!(!first.entity_to_node.contains_key(&new));
     }
 
     #[test]

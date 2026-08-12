@@ -298,7 +298,8 @@ pub fn cmd_unravel(args: &[String], db_path: &str) {
 /// Usage:
 ///   quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85]
 ///                 [--max-iters 100] [--tolerance 1e-6] [--type <IRI>]
-///                 [--predicate <IRI>] [--limit 20] [--from <IRI>] [--to <IRI>]
+///                 [--predicate <IRI>] [--graph <IRI>] [--limit 20]
+///                 [--from <IRI>] [--to <IRI>]
 pub fn cmd_project(args: &[String], db_path: &str) {
     let get_val = |flag: &str| -> Option<String> {
         args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
@@ -312,6 +313,9 @@ pub fn cmd_project(args: &[String], db_path: &str) {
     }
     if let Some(p) = get_val("--predicate") {
         input["predicate"] = serde_json::Value::String(p);
+    }
+    if let Some(g) = get_val("--graph") {
+        input["graph"] = serde_json::Value::String(g);
     }
     if let Some(l) = get_val("--limit").and_then(|v| v.parse::<u64>().ok()) {
         input["limit"] = serde_json::json!(l);

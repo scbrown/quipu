@@ -178,6 +178,7 @@ Graph projection and algorithms.
 | `algorithm` | No | `stats`, `in_degree`, `pagerank`/`ppr`, `components`, `louvain`, or `shortest_path` (default: `stats`) |
 | `type` | No | Restrict projection to this rdf:type IRI |
 | `predicate` | No | Restrict projection to edges with this predicate IRI |
+| `graph` | No | Project one named graph's own facts instead of ROOT — cheap against a small derived layer even when the episode log is large |
 | `limit` | No | Max results for in_degree/pagerank (default: 20) |
 | `seeds` | No | Seed entity IRIs for personalized PageRank (non-empty switches pagerank to PPR) |
 | `damping` | No | PageRank damping factor (default: 0.85) |

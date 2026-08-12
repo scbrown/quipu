@@ -25,6 +25,14 @@ Optional filters narrow the projection:
 |--------|-------------|
 | `type_filter` | Only include entities of a given `rdf:type` |
 | `predicate_filter` | Only include edges with a given predicate |
+| `graph` | Project one named graph's own facts instead of ROOT |
+
+Scoping to a named graph (`project_in_graph` / the tool's `graph` parameter)
+reads the same scope a `GRAPH <iri> { … }` query sees, so projecting a small
+derived layer stays cheap even when the ROOT episode log is large. Projections
+are also memoized on the store (`project_cached`): repeat calls with the same
+shape return the resident projection until any transaction commits, using the
+`latest_tx_id` change stamp — an unchanged graph is never re-scanned.
 
 ## Available Algorithms
 
