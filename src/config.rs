@@ -457,6 +457,7 @@ impl QuipuConfig {
     ///
     /// Resolution: `.bobbin/config.toml` in `project_dir`, then `~/.config/bobbin/config.toml`.
     /// Returns defaults if no config file is found.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(project_dir: &Path) -> Self {
         // Try project-local config first.
         let local_path = project_dir.join(".bobbin/config.toml");
@@ -476,6 +477,7 @@ impl QuipuConfig {
     }
 
     /// Load from a specific TOML file. Returns `None` if file doesn't exist or has no `[quipu]` section.
+    #[cfg(not(target_arch = "wasm32"))]
     fn load_from(path: &Path) -> Option<Self> {
         let content = std::fs::read_to_string(path).ok()?;
         let file: ConfigFile = toml::from_str(&content).ok()?;

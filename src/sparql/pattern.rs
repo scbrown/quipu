@@ -68,10 +68,7 @@ pub fn eval_pattern_seeded(
     // intermediate rows cannot outlive the budget by more than one operator.
     // The zeros are placeholders: `query_temporal` rewrites any past-deadline
     // failure with the real elapsed/limit.
-    if ctx
-        .deadline
-        .is_some_and(|dl| std::time::Instant::now() >= dl)
-    {
+    if ctx.deadline.is_some_and(|dl| dl.passed()) {
         return Err(crate::error::Error::QueryTimeout {
             elapsed_ms: 0,
             limit_ms: 0,
@@ -108,11 +105,7 @@ pub fn eval_pattern_seeded(
                 // A pure-Rust filter over pre-materialized rows touches
                 // neither SQLite (no progress handler) nor another operator
                 // (no entry check) — poll the deadline in-loop, cheaply.
-                if i % 1024 == 0
-                    && ctx
-                        .deadline
-                        .is_some_and(|dl| std::time::Instant::now() >= dl)
-                {
+                if i % 1024 == 0 && ctx.deadline.is_some_and(|dl| dl.passed()) {
                     return Err(crate::error::Error::QueryTimeout {
                         elapsed_ms: 0,
                         limit_ms: 0,

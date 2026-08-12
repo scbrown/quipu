@@ -57,10 +57,9 @@ static START_UNIX: OnceLock<f64> = OnceLock::new();
 /// Absent beats wrong: a missing series is visibly missing, whereas a plausible
 /// wrong one silently corrupts every restart calculation built on it.
 pub fn init_start_time() {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0.0, |d| d.as_secs_f64());
-    let _ = START_UNIX.set(now);
+    // Whole seconds via the wasm-safe clock shim (quipu-gsg); sub-second
+    // start-time precision buys nothing for restart detection.
+    let _ = START_UNIX.set(crate::time::epoch_secs() as f64);
 }
 
 /// Normalise a caller identity into a bounded metric label (aegis-ma1hy).

@@ -283,9 +283,9 @@ fn evaluate_one(
 
 /// Unix seconds, or 0 before the epoch.
 fn now_secs() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+    // Through the wasm-safe clock shim (quipu-gsg): SystemTime panics on
+    // wasm32, and the guard sits on the write path a wasm store still runs.
+    i64::try_from(crate::time::epoch_secs()).unwrap_or(i64::MAX)
 }
 
 /// Run a SPARQL ASK and return its boolean, erroring if the query is not an ASK.

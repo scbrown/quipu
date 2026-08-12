@@ -210,15 +210,27 @@ episodes, governance, the label lattice — sits on that connection. Two routes:
 ### 4.4 Source-level work
 
 - **`getrandom`**: both 0.2 (via `ring`) and 0.3 need their `js`/`wasm_js`
-  features *plus* `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'`.
-- **Clocks**: `Instant::now`/`SystemTime::now` panic on
-  `wasm32-unknown-unknown`. Ten sites outside tests and server, including the
-  SPARQL deadline in `src/sparql/mod.rs:406` and the hot loop in
-  `src/sparql/pattern.rs:52,93`, plus `src/time.rs:14`, `src/metrics.rs:60`,
-  `src/governance/guard.rs:286`. Needs a `quipu::time` shim over
-  `Date`/`performance.now`.
-- **`std::fs`**: `pack.rs`, `signing.rs`, `store/events.rs`, `store/respace.rs`,
-  `config.rs`, `metrics.rs`.
+  features *plus* `RUSTFLAGS='--cfg getrandom_backend="wasm_js"'` (the §4.3
+  build line above carries the flag).
+- **Clocks** — ✅ **shimmed (quipu-gsg).** `Instant::now`/`SystemTime::now`
+  panic on `wasm32-unknown-unknown`; every lib clock read now routes through
+  `quipu::time` — `epoch_secs()` (wall clock), `Deadline` (the SPARQL query
+  budget: `TemporalContext.deadline`, the progress handler, and the evaluator's
+  in-loop polls), and `Stopwatch` (elapsed reporting). Native arms keep
+  `SystemTime`/`Instant`; the wasm32 arms read `js_sys::Date::now()`
+  (target-gated `js-sys` dep — wall-clock, which a query budget tolerates).
+  Direct `Instant`/`SystemTime` calls remain only in `src/server.rs` (never
+  compiles for wasm) and tests. Unverifiable against a real wasm build until
+  the §4.2 SQLite blocker (quipu-qd2) falls — revisit the wasm arms then.
+- **`std::fs`** — ✅ **gated (quipu-gsg).** The file-IO surface is
+  `#[cfg(not(target_arch = "wasm32"))]`: `pack`/`unpack`/`read_manifest`/
+  `verify`/`pack_turtle` (the in-memory pack halves — `canonical_content`,
+  `content_hash`, `Manifest` — stay portable), `signing::load_or_generate`
+  (construct a `SigningIdentity` from key bytes instead on wasm),
+  `respace_file`, and `QuipuConfig::load`/`load_from` (configure
+  programmatically on wasm). `metrics::process_memory` was already
+  Linux-gated. `store/events.rs` no longer touches `std::fs` (the push
+  delivery moved).
 - **Threading**: single-threaded. The `open_read_only` reader pool
   (`src/store/mod.rs:273`) is moot in a tab. `parking_lot` compiles, but
   blocking on contention traps on the browser main thread — run the store in a

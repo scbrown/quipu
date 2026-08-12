@@ -5157,6 +5157,7 @@ dependencies = [
  "datafrog",
  "futures",
  "hex",
+ "js-sys",
  "lancedb",
  "ndarray 0.16.1",
  "ort",

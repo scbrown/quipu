@@ -1196,11 +1196,8 @@ fn str_of_a_lang_literal_drops_the_tag() {
 fn query_timeout_expired_deadline_errors() {
     let store = test_store_with_data();
     let ctx = TemporalContext {
-        deadline: Some(
-            std::time::Instant::now()
-                .checked_sub(std::time::Duration::from_secs(1))
-                .unwrap(),
-        ),
+        // after_millis(0) is already expired: `passed` compares with >=.
+        deadline: Some(crate::time::Deadline::after_millis(0)),
         ..Default::default()
     };
     let err = query_temporal(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }", &ctx).unwrap_err();
@@ -1325,11 +1322,8 @@ fn expired_deadline_stops_pure_rust_join_loop() {
     // second operator either way; mfg0 proved the loops are where CPU goes).
     store.search_config_mut().max_join_rows = 0;
     let ctx = TemporalContext {
-        deadline: Some(
-            std::time::Instant::now()
-                .checked_sub(std::time::Duration::from_secs(1))
-                .unwrap(),
-        ),
+        // after_millis(0) is already expired: `passed` compares with >=.
+        deadline: Some(crate::time::Deadline::after_millis(0)),
         ..Default::default()
     };
     let err = query_temporal(

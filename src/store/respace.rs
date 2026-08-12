@@ -366,6 +366,7 @@ fn id_remap_sql(column: &str) -> String {
 ///   source holds ids from a space it does not own, or if the rewritten file
 ///   fails its post-conditions.
 /// - [`Error::Sqlite`] for underlying store errors.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn respace_file(src: &Path, dst: &Path, to_space: i64) -> Result<RespaceReport> {
     if !(0..=MAX_SPACE).contains(&to_space) {
         return Err(Error::Store(format!(

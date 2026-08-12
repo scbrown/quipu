@@ -90,6 +90,7 @@ pub struct UnpackReport {
 /// # Errors
 /// The pack is invalid, import-with-remap fails, or a carried registry entry
 /// does not validate in the destination.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn unpack(
     pack_path: &str,
     destination: &str,
@@ -255,6 +256,7 @@ fn local_name(iri: &str) -> String {
 /// # Errors
 /// Unknown graph, a named shape or query that does not exist, `--with-vectors`
 /// against a non-SQLite backend, or any store/IO error.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn pack(
     store: &Store,
     graph_iri: &str,
@@ -458,6 +460,7 @@ pub fn pack(
 ///
 /// # Errors
 /// The file is not a pack, or cannot be opened.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn read_manifest(path: &str) -> Result<Manifest> {
     let conn = rusqlite::Connection::open(path)?;
     conn.query_row(
@@ -487,6 +490,7 @@ pub fn read_manifest(path: &str) -> Result<Manifest> {
 ///
 /// # Errors
 /// The file is not a pack, or cannot be opened as a store.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn verify(path: &str) -> Result<(String, String, bool)> {
     let manifest = read_manifest(path)?;
     let store = Store::open(path)?;
@@ -523,6 +527,7 @@ mod tests;
 ///
 /// # Errors
 /// Unknown graph, a named shape or query that does not exist, or any IO error.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn pack_turtle(
     store: &Store,
     graph_iri: &str,

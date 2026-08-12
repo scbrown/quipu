@@ -114,7 +114,7 @@ pub fn triple_pattern_vars(tp: &TriplePattern) -> Vec<String> {
 }
 
 /// How many pure-Rust loop iterations between deadline polls. Row-cap checks
-/// are a usize compare and run every iteration; `Instant::now()` is the only
+/// are a usize compare and run every iteration; the deadline poll (`Deadline::passed`) is the only
 /// cost worth amortizing.
 pub const BUDGET_POLL_STRIDE: usize = 1024;
 
@@ -141,11 +141,7 @@ pub fn check_eval_budget(
     {
         return Err(crate::error::Error::QueryComplexity { limit: cap });
     }
-    if i.is_multiple_of(BUDGET_POLL_STRIDE)
-        && ctx
-            .deadline
-            .is_some_and(|dl| std::time::Instant::now() >= dl)
-    {
+    if i.is_multiple_of(BUDGET_POLL_STRIDE) && ctx.deadline.is_some_and(|dl| dl.passed()) {
         return Err(crate::error::Error::QueryTimeout {
             elapsed_ms: 0,
             limit_ms: 0,

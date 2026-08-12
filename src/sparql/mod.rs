@@ -140,7 +140,7 @@ pub struct TemporalContext {
     /// CPU for hours without touching either of the other two checks), and,
     /// via a `SQLite` progress handler, inside long-running `sqlite3_step`
     /// calls.
-    pub deadline: Option<std::time::Instant>,
+    pub deadline: Option<crate::time::Deadline>,
     /// Abort evaluation when an intermediate binding set exceeds this many
     /// rows (None = derive from the store's `max_join_rows`; 0 there
     /// disables). A join explosion is stopped the moment it is recognizable
@@ -412,8 +412,8 @@ impl<'a> ProgressGuard<'a> {
     /// ~4096 VM instructions between checks: coarse enough to be free on
     /// healthy queries, fine enough to stop a grinding scan within
     /// milliseconds of the deadline.
-    fn install(conn: &'a rusqlite::Connection, deadline: std::time::Instant) -> Self {
-        conn.progress_handler(4096, Some(move || std::time::Instant::now() >= deadline));
+    fn install(conn: &'a rusqlite::Connection, deadline: crate::time::Deadline) -> Self {
+        conn.progress_handler(4096, Some(move || deadline.passed()));
         Self { conn }
     }
 }
@@ -449,10 +449,10 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         .parse_query(sparql)
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 
-    let started = std::time::Instant::now();
+    let started = crate::time::Stopwatch::start();
     let deadline = ctx.deadline.or_else(|| {
         let limit_ms = store.search_config().query_timeout_ms;
-        (limit_ms > 0).then(|| started + std::time::Duration::from_millis(limit_ms))
+        (limit_ms > 0).then(|| crate::time::Deadline::after_millis(limit_ms))
     });
     let row_cap = ctx.row_cap.or_else(|| {
         let cap = store.search_config().max_join_rows;
@@ -470,14 +470,12 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         // Any failure past the deadline is reported as the timeout it is: the
         // proximate error (a SQLITE_INTERRUPT, or the evaluator's own check)
         // is just the mechanism that stopped the query.
-        Err(_) if deadline.is_some_and(|dl| std::time::Instant::now() >= dl) => {
-            Err(Error::QueryTimeout {
-                elapsed_ms: started.elapsed().as_millis(),
-                limit_ms: deadline
-                    .map(|dl| dl.saturating_duration_since(started).as_millis())
-                    .unwrap_or_default(),
-            })
-        }
+        Err(_) if deadline.is_some_and(|dl| dl.passed()) => Err(Error::QueryTimeout {
+            elapsed_ms: started.elapsed_ms(),
+            limit_ms: deadline
+                .map(|dl| dl.millis_from(&started))
+                .unwrap_or_default(),
+        }),
         other => other,
     }
 }

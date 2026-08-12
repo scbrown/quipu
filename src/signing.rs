@@ -30,6 +30,7 @@ use crate::error::{Error, Result};
 /// persisting a fresh one (0600) if the file does not exist. v1 host-file
 /// custody — the private key sits on disk; protect the path with filesystem
 /// permissions until a real secret store lands.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn load_or_generate(path: &Path) -> Result<Ed25519KeyPair> {
     let pkcs8: Vec<u8> = if path.exists() {
         std::fs::read(path).map_err(|e| Error::Store(format!("read signing key: {e}")))?

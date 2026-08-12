@@ -7,14 +7,115 @@
 //! proleptic-Gregorian days-from-civil algorithm, so dates are correct across
 //! leap years (unlike the older approximate `/365,/30` formatter).
 
-use std::time::{SystemTime, UNIX_EPOCH};
+/// Seconds since the Unix epoch — the ONE place the crate reads the wall
+/// clock (quipu-gsg).
+///
+/// `std::time::SystemTime::now()` panics on wasm32-unknown-unknown, so every
+/// lib path routes through here: the wasm arm reads `js_sys::Date::now()`
+/// (milliseconds as f64) instead. Design: `docs/design/wasm-support.md` §4.4.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn epoch_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn epoch_secs() -> u64 {
+    (js_sys::Date::now() / 1000.0) as u64
+}
+
+/// A cancellation deadline usable on wasm32, where `std::time::Instant::now()`
+/// panics (quipu-gsg). Native keeps `Instant` (monotonic); the wasm arm uses
+/// `Date.now()` milliseconds — wall-clock, but a query budget does not need
+/// monotonicity, it needs "roughly N ms from now".
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Deadline(
+    #[cfg(not(target_arch = "wasm32"))] std::time::Instant,
+    #[cfg(target_arch = "wasm32")] f64,
+);
+
+impl Deadline {
+    /// A deadline `ms` milliseconds from now.
+    #[must_use]
+    pub fn after_millis(ms: u64) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self(std::time::Instant::now() + std::time::Duration::from_millis(ms))
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Self(js_sys::Date::now() + ms as f64)
+        }
+    }
+
+    /// Has the deadline passed?
+    #[must_use]
+    pub fn passed(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            std::time::Instant::now() >= self.0
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            js_sys::Date::now() >= self.0
+        }
+    }
+
+    /// Milliseconds between `start` and this deadline (saturating) — the
+    /// effective budget a query ran under, for timeout reporting.
+    #[must_use]
+    pub fn millis_from(&self, start: &Stopwatch) -> u128 {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.0.saturating_duration_since(start.0).as_millis()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            (self.0 - start.0).max(0.0) as u128
+        }
+    }
+}
+
+/// Elapsed-time measurement usable on wasm32 (quipu-gsg). Native wraps the
+/// monotonic `Instant`; the wasm arm uses `Date.now()` milliseconds.
+#[derive(Clone, Copy, Debug)]
+pub struct Stopwatch(
+    #[cfg(not(target_arch = "wasm32"))] std::time::Instant,
+    #[cfg(target_arch = "wasm32")] f64,
+);
+
+impl Stopwatch {
+    /// Start measuring now.
+    #[must_use]
+    pub fn start() -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Self(std::time::Instant::now())
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            Self(js_sys::Date::now())
+        }
+    }
+
+    /// Milliseconds since [`Stopwatch::start`].
+    #[must_use]
+    pub fn elapsed_ms(&self) -> u128 {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.0.elapsed().as_millis()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            (js_sys::Date::now() - self.0).max(0.0) as u128
+        }
+    }
+}
 
 /// Current UTC instant as `YYYY-MM-DDTHH:MM:SSZ`.
 pub fn now_iso() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    format_iso(secs)
+    format_iso(epoch_secs())
 }
 
 /// The instant `days` days before now, as `YYYY-MM-DDTHH:MM:SSZ`.
@@ -22,10 +123,7 @@ pub fn now_iso() -> String {
 /// Retention cutoffs (quipu-9z9): `prune_events(&iso_days_ago(n))` deletes
 /// what is older than n days. Saturates at the epoch rather than wrapping.
 pub fn iso_days_ago(days: u64) -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    format_iso(secs.saturating_sub(days.saturating_mul(86_400)))
+    format_iso(epoch_secs().saturating_sub(days.saturating_mul(86_400)))
 }
 
 /// Format Unix-epoch seconds as an ISO-8601 UTC timestamp.

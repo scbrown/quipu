@@ -89,6 +89,12 @@ ort = { version = "=2.0.0-rc.11", default-features = false, features = ["std", "
 tokenizers = { version = "0.21", optional = true }
 ndarray = { version = "0.16", optional = true }
 
+# The wasm clock shim (quipu-gsg): `SystemTime::now`/`Instant::now` panic on
+# wasm32-unknown-unknown, so `src/time.rs` reads `js_sys::Date::now()` there.
+# Target-gated — native builds never see it. See docs/design/wasm-support.md §4.4.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+
 [features]
 default = ["shacl"]
 shacl = ["dep:rudof_lib"]
