@@ -157,7 +157,7 @@ pub fn persist_pagerank(
 
     // Assert the changed/new scores (deterministic order).
     let mut to_assert: Vec<(i64, f64)> = desired.into_iter().collect();
-    to_assert.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    to_assert.sort_unstable_by_key(|a| a.0);
     for (entity, score) in to_assert {
         datums.push(Datum {
             entity,
