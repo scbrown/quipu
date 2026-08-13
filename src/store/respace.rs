@@ -37,13 +37,20 @@
 //! respace promises to leave alone — it is a file respace holds no write
 //! handle to. `original_is_byte_identical_after_respace` pins it by digest.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::collections::HashSet;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
-use rusqlite::{Connection, OpenFlags, params};
+#[cfg(not(target_arch = "wasm32"))]
+use rusqlite::OpenFlags;
+use rusqlite::{Connection, params};
 
 use crate::error::{Error, Result};
-use crate::schema::{ROOT_GRAPH, SPACE_SIZE};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::schema::ROOT_GRAPH;
+use crate::schema::SPACE_SIZE;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::types::{TAG_REF, Value};
 
 /// The largest space a database can be moved into: space `s` owns
@@ -324,6 +331,7 @@ fn classify_optional_column(table: &str, column: &str) -> Option<TermIdKind> {
 ///
 /// [`ROOT_GRAPH`] is the reserved default-graph sentinel in every space and is
 /// returned unchanged; see [`TermIdKind::Id`].
+#[cfg(not(target_arch = "wasm32"))]
 const fn remap(id: i64, from_lo: i64, to_lo: i64) -> i64 {
     if id == ROOT_GRAPH {
         ROOT_GRAPH
@@ -344,6 +352,7 @@ const fn remap(id: i64, from_lo: i64, to_lo: i64) -> i64 {
 /// exemption was this string. `sql_and_rust_remap_agree` executes this
 /// expression against `SQLite` and compares it to [`remap`] id for id, so the
 /// two cannot drift apart silently again.
+#[cfg(not(target_arch = "wasm32"))]
 fn id_remap_sql(column: &str) -> String {
     format!(
         "CASE WHEN \"{column}\" = {ROOT_GRAPH} THEN {ROOT_GRAPH} \
@@ -420,11 +429,13 @@ pub fn respace_file(src: &Path, dst: &Path, to_space: i64) -> Result<RespaceRepo
 /// `VACUUM INTO` takes an expression, but rusqlite cannot bind a parameter to
 /// it on every `SQLite` build, and a path is attacker-adjacent input often enough
 /// to be worth quoting properly rather than trusting.
+#[cfg(not(target_arch = "wasm32"))]
 fn sql_quote(s: &str) -> String {
     s.replace('\'', "''")
 }
 
 /// The rewrite half, against a file this function owns exclusively.
+#[cfg(not(target_arch = "wasm32"))]
 fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
     let path = db.to_string_lossy().to_string();
     // Bring the copy to the current schema first, so the enumeration below sees
@@ -515,6 +526,7 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
 /// splicing bytes, so the rewrite follows the codec instead of duplicating it.
 /// Walks forward by rowid in chunks: the store is not required to fit in
 /// memory, and a statement cannot stay open across updates to its own table.
+#[cfg(not(target_arch = "wasm32"))]
 fn rewrite_ref_blobs(
     tx: &rusqlite::Transaction<'_>,
     table: &str,
@@ -566,6 +578,7 @@ fn rewrite_ref_blobs(
 /// holding ids from two spaces has been composed by some other means, and
 /// shifting it would move the foreign ids to addresses that belong to nobody —
 /// silently, like every other failure in this file.
+#[cfg(not(target_arch = "wasm32"))]
 fn assert_source_ids_are_in_space(conn: &Connection, from_space: i64) -> Result<()> {
     let lo = from_space * SPACE_SIZE;
     let hi = lo + SPACE_SIZE;
@@ -591,6 +604,7 @@ fn assert_source_ids_are_in_space(conn: &Connection, from_space: i64) -> Result<
 /// Not a restatement of the UPDATEs: it re-derives the property from the data,
 /// so an UPDATE that silently matched no rows, or a column the enumeration
 /// skipped, shows up here rather than in a query months later.
+#[cfg(not(target_arch = "wasm32"))]
 fn assert_respaced(
     conn: &Connection,
     classified: &[ClassifiedColumn],

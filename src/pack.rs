@@ -26,6 +26,7 @@
 //! records `term_space: 0` and the flag lands with #74.
 
 use std::collections::BTreeSet;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 use crate::error::{Error, Result};
@@ -230,6 +231,7 @@ pub fn content_hash(canonical: &str) -> String {
 }
 
 /// The `pack_manifest` DDL. One row, by construction.
+#[cfg(not(target_arch = "wasm32"))]
 const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest (
      id           INTEGER PRIMARY KEY CHECK (id = 1),
      pack_format  TEXT NOT NULL,
@@ -243,6 +245,7 @@ const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest (
      counts       TEXT NOT NULL
  );";
 
+#[cfg(not(target_arch = "wasm32"))]
 fn local_name(iri: &str) -> String {
     iri.rsplit(['#', '/', ':'])
         .next()

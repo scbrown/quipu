@@ -6,7 +6,9 @@
 //! 3. `~/.config/bobbin/config.toml`
 //! 4. Built-in defaults
 
-use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::Path;
+use std::path::PathBuf;
 
 use serde::Deserialize;
 
@@ -278,6 +280,7 @@ impl Default for VectorConfig {
 }
 
 /// Top-level config file structure — we only care about the `[quipu]` section.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Default, Deserialize)]
 struct ConfigFile {
     #[serde(default)]

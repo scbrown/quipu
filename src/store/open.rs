@@ -245,6 +245,7 @@ impl Store {
     }
 
     /// Recompute content hashes for every attached pack on explicit request.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn verify_attached_pack_hashes(&self) -> Result<Vec<(String, bool)>> {
         self.pack_manifests
             .iter()

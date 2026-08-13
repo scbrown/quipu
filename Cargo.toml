@@ -31,6 +31,7 @@ exclude = [
     "CHANGELOG.md",
     "release-plz.toml",
     "scripts/",
+    "wasm/",
 ]
 
 [[bin]]
@@ -61,7 +62,7 @@ required-features = ["shacl"]
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
 parking_lot = "0.12"
 ureq = { version = "2", default-features = false, optional = true }
-rusqlite = { version = "0.33", features = ["bundled", "hooks"] }
+rusqlite = { version = "0.40", features = ["bundled", "hooks"] }
 thiserror = "2"
 oxrdf = "0.3"
 oxttl = "0.2"
@@ -94,6 +95,13 @@ ndarray = { version = "0.16", optional = true }
 # Target-gated — native builds never see it. See docs/design/wasm-support.md §4.4.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
+# getrandom's wasm backends are opt-in (docs/design/wasm-support.md §4.4): the
+# 0.3 series needs its `wasm_js` feature (plus the `getrandom_backend` cfg the
+# §4.4 build line carries), and `ring` gates its own getrandom-0.2 JS entropy
+# behind this feature. Both entries only ADD features to deps the native build
+# already has — nothing new ships natively.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
 
 [features]
 default = ["shacl"]

@@ -49,6 +49,26 @@ fmt:
     cargo fmt
 
 
+# === Wasm ===
+
+# Browser harness (quipu-qd2): just wasm <cmd>
+# Commands: check (compile the lib for wasm32), build (harness + JS glue),
+# test (Playwright scenarios incl. OPFS reload persistence).
+# Prereqs for build/test: wasm-bindgen-cli matching wasm/harness/Cargo.lock,
+# and a `playwright` resolvable from wasm/harness (see wasm/harness/README.md).
+wasm cmd="check":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+        check) RUSTFLAGS='--cfg getrandom_backend="wasm_js"' \
+               cargo check --target wasm32-unknown-unknown --no-default-features --lib ;;
+        build) cd wasm/harness && cargo build --release && \
+               wasm-bindgen --target web --out-dir www/pkg \
+                   target/wasm32-unknown-unknown/release/quipu_wasm_harness.wasm ;;
+        test)  just wasm build && cd wasm/harness && node run.mjs ;;
+        *)     echo "unknown wasm command: {{cmd}} (check|build|test)"; exit 1 ;;
+    esac
+
 # === Fixtures ===
 
 # Generate test-fixtures/test-store.db from static assets

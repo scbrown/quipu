@@ -1,0 +1,25 @@
+<!doctype html>
+<title>quipu wasm harness</title>
+<script>
+  // Relay between the Playwright driver (page.evaluate → window.ask) and the
+  // module worker that hosts the wasm store.
+  const worker = new Worker("./worker.js", { type: "module" });
+  let nextId = 1;
+  const pending = new Map();
+  worker.onmessage = (e) => {
+    const { id, ok, value, error } = e.data;
+    const p = pending.get(id);
+    pending.delete(id);
+    if (!p) return;
+    ok ? p.resolve(value) : p.reject(new Error(error));
+  };
+  window.ask = (msg) =>
+    new Promise((resolve, reject) => {
+      const id = nextId++;
+      pending.set(id, { resolve, reject });
+      worker.postMessage({ id, ...msg });
+    });
+</script>
+<body>
+  quipu wasm harness — drive me with <code>run.mjs</code>
+</body>

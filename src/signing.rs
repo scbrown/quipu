@@ -19,11 +19,14 @@
 //!
 //! These are deliberate v1 defaults (Stiwi: "do v1 to harden"), not oversights.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
+#[cfg(not(target_arch = "wasm32"))]
 use ring::rand::SystemRandom;
 use ring::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::error::{Error, Result};
 
 /// Load the ed25519 signing keypair from `path` (PKCS#8), generating and
@@ -114,6 +117,9 @@ impl SigningIdentity {
     }
 
     /// Load (or generate) a host-file key and wrap it as `verifier`.
+    /// On wasm there is no host file — construct via [`SigningIdentity::new`]
+    /// from key bytes instead.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(path: &Path, verifier: impl Into<String>) -> Result<Self> {
         Ok(Self::new(load_or_generate(path)?, verifier))
     }

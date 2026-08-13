@@ -423,15 +423,21 @@ impl<'a> ProgressGuard<'a> {
     /// ~4096 VM instructions between checks: coarse enough to be free on
     /// healthy queries, fine enough to stop a grinding scan within
     /// milliseconds of the deadline.
-    fn install(conn: &'a rusqlite::Connection, deadline: crate::time::Deadline) -> Self {
-        conn.progress_handler(4096, Some(move || deadline.passed()));
-        Self { conn }
+    fn install(
+        conn: &'a rusqlite::Connection,
+        deadline: crate::time::Deadline,
+    ) -> rusqlite::Result<Self> {
+        conn.progress_handler(4096, Some(move || deadline.passed()))?;
+        Ok(Self { conn })
     }
 }
 
 impl Drop for ProgressGuard<'_> {
     fn drop(&mut self) {
-        self.conn.progress_handler(0, None::<fn() -> bool>);
+        // Nothing to do if clearing fails — the handler only fires between VM
+        // instructions of a running statement, and this connection isn't
+        // running one during drop.
+        let _ = self.conn.progress_handler(0, None::<fn() -> bool>);
     }
 }
 
@@ -474,7 +480,9 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         row_cap,
         ..ctx.clone()
     };
-    let _guard = deadline.map(|dl| ProgressGuard::install(&store.conn, dl));
+    let _guard = deadline
+        .map(|dl| ProgressGuard::install(&store.conn, dl))
+        .transpose()?;
 
     let result = eval_parsed(store, parsed, &ctx);
     match result {

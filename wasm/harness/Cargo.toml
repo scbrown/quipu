@@ -1,0 +1,37 @@
+# Browser test harness for quipu on wasm32-unknown-unknown (quipu-qd2).
+#
+# A separate crate, not a member of any workspace: it only ever builds for
+# wasm32 (`.cargo/config.toml` pins the target), while the parent crate's
+# tests, benches and binaries only build natively. See wasm/harness/README.md
+# for how to run it.
+[package]
+name = "quipu-wasm-harness"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+quipu = { path = "../..", default-features = false }
+# Direct dep only for the journal-mode probe (`journal_mode` export) — quipu
+# owns the store's connection and does not expose raw pragmas.
+rusqlite = "0.40"
+wasm-bindgen = "0.2"
+# Required by #[wasm_bindgen] on async fns (the OPFS install is async).
+wasm-bindgen-futures = "0.4"
+serde_json = "1"
+# The ffi layer rusqlite already rides on wasm32 (rusqlite's
+# `ffi-sqlite-wasm-rs` default), named here for `WasmOsCallback`.
+sqlite-wasm-rs = { version = "0.5.2", default-features = false }
+# The OPFS (opfs-sahpool) VFS. Registered at runtime as the default VFS, so
+# quipu's ordinary `Store::open(path)` lands on OPFS with no quipu changes.
+sqlite-wasm-vfs = "0.2"
+
+[profile.release]
+# Trades compile time for wasm module size; harness builds are rare.
+opt-level = "s"
+lto = true

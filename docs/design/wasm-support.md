@@ -1,13 +1,13 @@
 # Design: WebAssembly Support — running Quipu without a server
 
-> **Implementation status (2026-08-13):** 🚧 **Phases 1–2 landed; the rest
-> designed.** Every blocker below was verified by building against
-> `wasm32-unknown-unknown`, not inferred from the manifest. Every performance
-> number was measured on this branch, native x86-64, `--release`,
-> `--no-default-features`. The one number NOT measured is wasm-vs-native
-> throughput; obtaining it is Phase 0. The browser test harness the remaining
-> phases need is verified and documented in §9 — including in the headless
-> remote container this work was previously triaged as blocked in.
+> **Implementation status (2026-08-13):** 🚧 **Phases 1–3 landed** (the VFS —
+> quipu-qd2 — via the rusqlite 0.40 route, §4.2); export/import (Phase 4), CI
+> (Phase 5) and the Phase 0 measurement remain. Every blocker below was
+> verified by building against `wasm32-unknown-unknown`, not inferred from
+> the manifest. Every performance number was measured on this branch, native
+> x86-64, `--release`, `--no-default-features`. The one number NOT measured
+> is wasm-vs-native throughput; obtaining it is Phase 0 — the `wasm/harness`
+> browser harness (§9) that quipu-qd2's acceptance ran on is the vehicle.
 >
 > **Depends on [in-memory-read-model.md](in-memory-read-model.md).** The query
 > architecture is decided there; this document is downstream of it.
@@ -170,7 +170,7 @@ A probe crate carrying `parking_lot`, `oxrdf`, `oxttl`, `oxrdfio`, `sparesults`,
 **The entire RDF, reasoning and signing core is already portable** — Ed25519
 signing included.
 
-### 4.2 The one hard blocker: bundled SQLite
+### 4.2 The one hard blocker: bundled SQLite — ✅ RESOLVED (quipu-qd2)
 
 ```text
 sqlite3/sqlite3.c:14884:10: fatal error: 'stdio.h' file not found
@@ -178,12 +178,37 @@ sqlite3/sqlite3.c:14884:10: fatal error: 'stdio.h' file not found
 
 `libsqlite3-sys` with `bundled` compiles SQLite's C through `cc`, and
 `wasm32-unknown-unknown` has no libc. Everything Quipu is — `Store`, SPARQL,
-episodes, governance, the label lattice — sits on that connection. Two routes:
+episodes, governance, the label lattice — sits on that connection.
 
-| Route | Target | Notes |
-|---|---|---|
-| **`sqlite-wasm-rs`** via `[patch]` | `wasm32-unknown-unknown` | libsqlite3-sys-compatible shim, memory + OPFS VFS. Browser-native. **Recommended.** |
-| wasi-sdk sysroot | `wasm32-wasip1` | `libsqlite3-sys`'s own build.rs already special-cases wasi targets and ships `wasm32-wasi-vfs.c`; rusqlite exposes a matching `wasm32-wasi-vfs` feature. Good for wasmtime, not for a tab. |
+**Resolved by a route cheaper than either one this section planned.** The
+original options were a `[patch]`-level `sqlite-wasm-rs` shim (browser) or a
+wasi-sdk sysroot (wasmtime, not a tab). Between this doc's first draft and
+the implementation, rusqlite grew first-class support: from 0.40 its wasm32
+arm swaps `libsqlite3-sys` for `sqlite-wasm-rs` natively (the
+`ffi-sqlite-wasm-rs` default feature; `bundled` degrades to a no-op there via
+`libsqlite3-sys?/bundled`). So the fix was **upgrading rusqlite 0.33 → 0.40**
+— no `[patch]`, no shim crate, native builds byte-for-byte on the same
+`libsqlite3-sys` path as before. The upgrade's whole API surface cost was
+`progress_handler` now returning `Result` (one guard in `src/sparql/mod.rs`);
+the full native suite passed unchanged.
+
+`sqlite-wasm-rs` compiles SQLite's C with its own bundled musl shim headers
+(needs a wasm32-capable clang; no emscripten), tuned single-threaded
+(`SQLITE_THREADSAFE=0`) — consistent with §4.4's run-it-in-a-Worker rule. The
+memory VFS is its default; OPFS (opfs-sahpool, via the `sqlite-wasm-vfs`
+crate) registers at runtime as the default VFS, after which quipu's ordinary
+`Store::open(path)` lands on OPFS **with no quipu code knowing wasm exists**
+— the registration lives in the embedder (see `wasm/harness/`). Verified in
+the §9 harness: ingest + the three representative reads pass under both VFS,
+and OPFS data survives a page reload and a full browser relaunch.
+
+One measured caveat: `Store::init` issues `PRAGMA journal_mode=WAL`, and
+neither wasm VFS supports WAL (no shared memory in a tab). SQLite treats the
+pragma as a request — measured via the harness's `journal_mode` probe, the
+request returns `delete` and the connection stays on a rollback journal, on
+both the memory VFS and OPFS. No error, everything passes; but a browser
+store runs journaled, not WAL, and any future wasm figure (Phase 0) carries
+that difference.
 
 ### 4.3 Blocked by construction, fixed by feature-gating
 
@@ -222,8 +247,10 @@ episodes, governance, the label lattice — sits on that connection. Two routes:
   `SystemTime`/`Instant`; the wasm32 arms read `js_sys::Date::now()`
   (target-gated `js-sys` dep — wall-clock, which a query budget tolerates).
   Direct `Instant`/`SystemTime` calls remain only in `src/server.rs` (never
-  compiles for wasm) and tests. Unverifiable against a real wasm build until
-  the §4.2 SQLite blocker (quipu-qd2) falls — revisit the wasm arms then.
+  compiles for wasm) and tests. Verified against a real wasm build once
+  quipu-qd2 fell: the §9 harness runs full SPARQL queries in the browser,
+  which exercises the `Deadline` wasm arm (every query derives a budget
+  deadline from config), and nothing panics.
 - **`std::fs`** — ✅ **gated (quipu-gsg).** The file-IO surface is
   `#[cfg(not(target_arch = "wasm32"))]`: `pack`/`unpack`/`read_manifest`/
   `verify`/`pack_turtle` (the in-memory pack halves — `canonical_content`,
@@ -418,9 +445,12 @@ that the whole HTTP stack is now absent from a default build.
 **Phase 2 — Portability shims.** `quipu::time` over the ten clock sites; gate
 `std::fs`; wire the `getrandom` features and the `RUSTFLAGS` cfg.
 
-**Phase 3 — VFS.** `sqlite-wasm-rs` via `[patch]`. Memory VFS first, OPFS
-second. The reload-persistence acceptance runs headless via §9.3; the unit
-suite via §9.4.
+**Phase 3 — VFS. ✅ LANDED** (quipu-qd2). Not via `[patch]` in the end —
+rusqlite 0.40 carries the `sqlite-wasm-rs` arm natively; see §4.2 for the
+route and the measured journal-mode caveat. Memory VFS and OPFS both pass
+ingest + the three representative reads in the `wasm/harness` browser
+harness (`just wasm test`), and OPFS data survives a page reload and a full
+browser relaunch — run headless via §9.3.
 
 **Phase 4 — Export/import.** rusqlite `serialize`/`deserialize`, plus a pack
 round-trip test that asserts a browser-produced pack opens natively.
@@ -495,15 +525,18 @@ Two details matter for reproducing this:
 ### 9.3 Route A — Playwright harness (the Phase 3 acceptance test)
 
 `wasm-bindgen-test` has no page-reload concept, so the persistence criterion
-cannot be expressed in it at all. Drive it from Node instead:
+cannot be expressed in it at all. Drive it from Node instead — **implemented
+at `wasm/harness/`** (`just wasm test`; prereqs in its README):
 
-1. `wasm-pack build --target web` (or `wasm-bindgen` directly) a small
-   harness crate that opens a store on the OPFS VFS, transacts, and reads
-   back — the wasm side stays dumb, assertions live in the driver.
-2. Serve the pkg over a localhost HTTP server (any static server; OPFS needs
-   the secure context, `http://localhost` qualifies — `file://` does not).
-3. From Playwright: `launchPersistentContext` → load page → transact →
-   `page.reload()` → assert the read → close the context, relaunch on the
+1. A small harness crate (`wasm/harness/src/lib.rs`) exposes
+   `install_opfs` / `scenario_write` / `scenario_read` over wasm-bindgen and
+   runs in a dedicated Worker (opfs-sahpool requires
+   `FileSystemSyncAccessHandle`, worker-only). The wasm side reports counts;
+   assertions live in the driver.
+2. `run.mjs` serves `www/` over localhost HTTP (OPFS needs the secure
+   context, `http://localhost` qualifies — `file://` does not).
+3. Playwright: `launchPersistentContext` → load page → ingest →
+   `page.reload()` → assert the reads → close the context, relaunch on the
    same profile → assert again. The relaunch leg is stronger than the stated
    acceptance and costs one extra line.
 
