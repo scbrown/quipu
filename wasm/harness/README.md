@@ -55,3 +55,12 @@ cargo run --release --no-default-features \
 
 Both halves are methodology-identical by construction (same episode shape,
 same cold-then-warm query loops) — change one, change the other.
+
+## Round-trip (quipu-2l5)
+
+`roundtrip.mjs` proves the `.db` bytes are the interchange format in every
+direction (`just wasm roundtrip`): a store exported from the tab opens in
+the `quipu` CLI (and `sqlite3` where installed) unchanged; a pack produced
+in the tab respaces and attaches to a native store
+(`examples/attach_pack_check.rs`); a native `.db` file's bytes open in the
+tab. It builds the native examples through cargo on first run.

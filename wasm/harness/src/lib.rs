@@ -146,6 +146,65 @@ pub fn scenario_bench(path: &str, n: u32, read_model: bool) -> Result<String, Js
     Ok(out)
 }
 
+/// Export the store at `path` as the exact bytes of a `.db` file
+/// (quipu-2l5). The driver writes them to disk and proves they open in the
+/// `quipu` CLI and `sqlite3` unchanged.
+#[wasm_bindgen]
+pub fn scenario_export(path: &str) -> Result<Vec<u8>, JsValue> {
+    let store = quipu::Store::open(path).map_err(err_js)?;
+    store.serialize_db().map_err(err_js)
+}
+
+/// Round-trip the other direction: import `bytes` as a store and report the
+/// three read counts, proving a native-produced `.db` opens in the browser.
+#[wasm_bindgen]
+pub fn scenario_import(bytes: &[u8]) -> Result<String, JsValue> {
+    let store = quipu::Store::open_from_bytes(bytes)
+        .map_err(|e| JsValue::from_str(&format!("open_from_bytes: {e}")))?;
+    let count = |sparql: &str| -> Result<usize, JsValue> {
+        match quipu::sparql::query(&store, sparql).map_err(err_js)? {
+            quipu::sparql::QueryResult::Select { rows, .. } => Ok(rows.len()),
+            _ => Err(JsValue::from_str("expected SELECT result")),
+        }
+    };
+    let scan = count(&format!("SELECT ?s WHERE {{ ?s a <{NS}Service> }} LIMIT 100"))?;
+    Ok(format!(r#"{{"scan":{scan}}}"#))
+}
+
+/// Produce a pack IN THE BROWSER (quipu-2l5): a labelled overlay graph with
+/// two facts — one an object-position `Ref`, the case re-interning exists
+/// for — packed to `.db` bytes via the same `pack_to_bytes` the native tests
+/// cover. The driver ships the bytes out and attaches them to a native
+/// store.
+#[wasm_bindgen]
+pub fn scenario_pack(path: &str) -> Result<Vec<u8>, JsValue> {
+    use quipu::types::{Op, Value};
+    let mut store = quipu::Store::open(path).map_err(err_js)?;
+    let g = store
+        .overlay_create("urn:g:browser-pack", 0)
+        .map_err(err_js)?;
+    let s = store.intern("http://example.org/s").map_err(err_js)?;
+    let p = store.intern("http://example.org/p").map_err(err_js)?;
+    let q = store.intern("http://example.org/q").map_err(err_js)?;
+    let o = store.intern("http://example.org/o").map_err(err_js)?;
+    store
+        .overlay_write(g, Op::Assert, s, p, Value::Str("from-a-tab".into()), TS)
+        .map_err(err_js)?;
+    store
+        .overlay_write(g, Op::Assert, s, q, Value::Ref(o), TS)
+        .map_err(err_js)?;
+    let (_manifest, bytes) = quipu::pack::pack_to_bytes(
+        &store,
+        "urn:g:browser-pack",
+        &quipu::pack::PackOptions::default(),
+        TS,
+    )
+    .map_err(err_js)?;
+    Ok(bytes)
+}
+
+const TS: &str = "2026-08-13T00:00:00Z";
+
 /// What journal mode does a store on this VFS actually get? `Store::init`
 /// requests WAL; a VFS without shared-memory support keeps the prior mode
 /// instead of erroring, and this pins which mode that is. Opens a THROWAWAY

@@ -1,9 +1,11 @@
 # Design: WebAssembly Support — running Quipu without a server
 
-> **Implementation status (2026-08-13):** 🚧 **Phases 0–3 landed** (the VFS —
+> **Implementation status (2026-08-13):** 🚧 **Phases 0–4 landed** (the VFS —
 > quipu-qd2 — via the rusqlite 0.40 route, §4.2; the wasm-vs-native
-> measurement — quipu-ajz — in §5.5); export/import (Phase 4) and CI
-> (Phase 5) remain. Every blocker below was verified by building against
+> measurement — quipu-ajz — §5.5; export/import and the pack round-trip —
+> quipu-2l5 — §6); CI (Phase 5, quipu-ame) remains — nothing here is in the
+> matrix yet, so per AGENTS.md the feature has not shipped until it is.
+> Every blocker below was verified by building against
 > `wasm32-unknown-unknown`, not inferred from the manifest. Performance
 > numbers are measured on this branch — §5.1–5.3 native x86-64, §5.5 both
 > native and wasm (headless Chromium, the `wasm/harness` browser harness,
@@ -426,24 +428,36 @@ when porting tests, not just benches.
 Reproduce: `just wasm bench` against
 `cargo run --release --no-default-features --example wasm_native_baseline -- 5000`.
 
-## 6. Export to SQLite — preserved, and nearly free
+## 6. Export to SQLite — ✅ LANDED (quipu-2l5)
 
-The `.db` file stays the interchange format.
+The `.db` file stays the interchange format, now proven in every direction
+by `just wasm roundtrip` (`wasm/harness/roundtrip.mjs`):
 
 - **In-browser persistence**: OPFS gives SQLite real random-access file storage
-  that survives refresh and browser close.
-- **Export**: rusqlite's own `serialize` feature (not currently enabled here)
-  wraps `sqlite3_serialize` — hand it a connection, get the exact bytes of a `.db`
-  file, hand those to a `Blob`, and it downloads. The result opens in `sqlite3`
-  and in `quipu` unchanged.
-- **Import**: `sqlite3_deserialize` takes the bytes back.
-- **Packs work as-is.** `src/pack.rs` re-interns every fact through
-  `transact_to_graph` rather than copying rows, so term ids and `Value::Ref`
-  payloads are correct by construction — a browser-produced pack is portable to
-  any other store with no remapping.
+  that survives refresh and browser close (§4.2, verified).
+- **Export**: `Store::serialize_db` (rusqlite's `serialize` feature, now
+  enabled) — the exact bytes of a `.db` file. Verified: a store built in a
+  tab, exported, and written to disk answers the same type scan in the
+  `quipu` CLI, row for row.
+- **Import**: `Store::open_from_bytes` wraps `sqlite3_deserialize` and runs
+  the ordinary `init`, so imports migrate like file opens. **One measured
+  trap**: SQLite refuses to deserialize a WAL-format image, and native quipu
+  stores run WAL — so the bytes of every native `.db` were un-importable
+  until `open_from_bytes` learned to normalize header bytes 18/19 (the edit
+  `journal_mode=DELETE` makes; valid only for a checkpointed database, which
+  a cleanly closed store is). Pinned natively by
+  `the_bytes_of_a_wal_mode_file_import_cleanly`.
+- **Packs work as-is — now as bytes too.** `pack_to_bytes` shares the whole
+  build with `pack` (`pack_into` re-interns through `transact_to_graph`, so
+  term ids and `Value::Ref` payloads are correct by construction) and
+  serializes instead of touching a filesystem. Verified: identical manifest
+  and content hash to the file path, and a pack produced inside a tab —
+  `Ref` blob included — respaces, attaches to a native store, hash-verifies,
+  and answers a `GRAPH` query (`examples/attach_pack_check.rs`).
 
-Round trip: browser → OPFS → serialize → download → `quipu attach`. No exporter
-to write, no format divergence.
+Round trip: browser → OPFS → serialize → download → `quipu attach` — and the
+reverse, a native `.db`'s bytes opening in a tab. No exporter to write, no
+format divergence.
 
 ## 7. SHACL — resolved by the distillation split
 
@@ -491,8 +505,9 @@ ingest + the three representative reads in the `wasm/harness` browser
 harness (`just wasm test`), and OPFS data survives a page reload and a full
 browser relaunch — run headless via §9.3.
 
-**Phase 4 — Export/import.** rusqlite `serialize`/`deserialize`, plus a pack
-round-trip test that asserts a browser-produced pack opens natively.
+**Phase 4 — Export/import. ✅ LANDED** (quipu-2l5). §6 has the shape and the
+WAL-header trap; `just wasm roundtrip` is the acceptance. Wiring it into CI
+belongs to Phase 5.
 
 **Phase 5 — CI.** A `wasm32-unknown-unknown` job in the matrix. Per
 `AGENTS.md`, the feature does not ship dark — this lands *with* the feature, not

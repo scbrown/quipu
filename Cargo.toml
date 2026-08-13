@@ -62,7 +62,10 @@ required-features = ["shacl"]
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
 parking_lot = "0.12"
 ureq = { version = "2", default-features = false, optional = true }
-rusqlite = { version = "0.40", features = ["bundled", "hooks"] }
+# `serialize` carries the wasm export/import story (quipu-2l5,
+# docs/design/wasm-support.md §6): sqlite3_serialize IS the .db interchange
+# format, on native and wasm alike.
+rusqlite = { version = "0.40", features = ["bundled", "hooks", "serialize"] }
 thiserror = "2"
 oxrdf = "0.3"
 oxttl = "0.2"

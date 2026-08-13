@@ -231,7 +231,6 @@ pub fn content_hash(canonical: &str) -> String {
 }
 
 /// The `pack_manifest` DDL. One row, by construction.
-#[cfg(not(target_arch = "wasm32"))]
 const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest (
      id           INTEGER PRIMARY KEY CHECK (id = 1),
      pack_format  TEXT NOT NULL,
@@ -245,7 +244,6 @@ const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest (
      counts       TEXT NOT NULL
  );";
 
-#[cfg(not(target_arch = "wasm32"))]
 fn local_name(iri: &str) -> String {
     iri.rsplit(['#', '/', ':'])
         .next()
@@ -266,6 +264,71 @@ pub fn pack(
     out_path: &str,
     opts: &PackOptions,
     timestamp: &str,
+) -> Result<Manifest> {
+    // Build into a sibling, then VACUUM INTO the shipped path. WAL would
+    // otherwise leave `-wal`/`-shm` next to the file people actually copy, and
+    // a pack that needs three files is not "a single attachable artifact".
+    let build_path = format!("{out_path}.building");
+    for p in [&build_path, out_path] {
+        if Path::new(p).exists() {
+            std::fs::remove_file(p)
+                .map_err(|e| Error::Store(format!("pack: cannot replace {p}: {e}")))?;
+        }
+    }
+
+    {
+        let mut out = Store::open(&build_path)?;
+        pack_into(store, graph_iri, opts, timestamp, &mut out)?;
+        // VACUUM INTO produces a single clean file with no WAL siblings.
+        out.conn
+            .execute("VACUUM INTO ?1", rusqlite::params![out_path])?;
+        drop(out);
+    }
+    // Remove the build artifact and ITS wal/shm siblings, so only the shipped
+    // file remains.
+    for suffix in ["", "-wal", "-shm"] {
+        let p = format!("{build_path}{suffix}");
+        if Path::new(&p).exists() {
+            let _ = std::fs::remove_file(&p);
+        }
+    }
+
+    read_manifest(out_path)
+}
+
+/// Export `graph_iri` from `store` as the exact bytes of a pack `.db` file
+/// (quipu-2l5). The browser-side counterpart of [`pack`]: the same build via
+/// [`pack_into`], serialized with `sqlite3_serialize` instead of written to
+/// disk. The bytes attach to a native store like any pack file.
+///
+/// # Errors
+/// Same as [`pack`], minus the file IO.
+pub fn pack_to_bytes(
+    store: &Store,
+    graph_iri: &str,
+    opts: &PackOptions,
+    timestamp: &str,
+) -> Result<(Manifest, Vec<u8>)> {
+    let mut out = Store::open_in_memory()?;
+    let manifest = pack_into(store, graph_iri, opts, timestamp, &mut out)?;
+    let bytes = out.serialize_db()?;
+    Ok((manifest, bytes))
+}
+
+/// The pack build itself: re-intern `graph_iri`'s current facts (plus opted
+/// shapes/queries/vectors, the graph label, and the manifest) into `out`.
+/// Shared by [`pack`] (native, builds into a file store) and
+/// [`pack_to_bytes`] (any target, builds into memory and serializes).
+///
+/// # Errors
+/// Unknown graph, a named shape or query that does not exist, or
+/// `with_vectors` against a non-SQLite backend.
+fn pack_into(
+    store: &Store,
+    graph_iri: &str,
+    opts: &PackOptions,
+    timestamp: &str,
+    out: &mut Store,
 ) -> Result<Manifest> {
     if store.lookup(graph_iri)?.is_none() {
         return Err(Error::InvalidValue(format!(
@@ -289,21 +352,9 @@ pub fn pack(
     let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
     let hash = content_hash(&canonical);
 
-    // Build into a sibling, then VACUUM INTO the shipped path. WAL would
-    // otherwise leave `-wal`/`-shm` next to the file people actually copy, and
-    // a pack that needs three files is not "a single attachable artifact".
-    let build_path = format!("{out_path}.building");
-    for p in [&build_path, out_path] {
-        if Path::new(p).exists() {
-            std::fs::remove_file(p)
-                .map_err(|e| Error::Store(format!("pack: cannot replace {p}: {e}")))?;
-        }
-    }
-
     let facts = store.current_facts_in_graph(store.lookup(graph_iri)?.unwrap_or(0))?;
     let fact_count = facts.len();
     {
-        let mut out = Store::open(&build_path)?;
         // Re-intern through the ordinary write path: ids and `Ref` BLOBs come
         // out correct by construction rather than by remapping.
         let g = out.overlay_create(graph_iri, 0)?;
@@ -442,21 +493,8 @@ pub fn pack(
             ],
         )?;
 
-        // VACUUM INTO produces a single clean file with no WAL siblings.
-        out.conn
-            .execute("VACUUM INTO ?1", rusqlite::params![out_path])?;
-        drop(out);
+        Ok(manifest)
     }
-    // Remove the build artifact and ITS wal/shm siblings, so only the shipped
-    // file remains.
-    for suffix in ["", "-wal", "-shm"] {
-        let p = format!("{build_path}{suffix}");
-        if Path::new(&p).exists() {
-            let _ = std::fs::remove_file(&p);
-        }
-    }
-
-    read_manifest(out_path)
 }
 
 /// Read a pack's manifest.

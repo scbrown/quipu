@@ -17,6 +17,7 @@ pub mod read_model;
 mod reads;
 mod registry;
 pub mod respace;
+mod serialize;
 mod settings;
 pub mod terms;
 pub(crate) use terms::TermCache;

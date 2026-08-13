@@ -343,6 +343,77 @@ fn a_respaced_pack_attaches_surfaces_its_manifest_and_spans_queries() {
 }
 
 #[test]
+fn pack_to_bytes_agrees_with_pack_and_the_bytes_are_a_pack_file() {
+    // quipu-2l5: the browser-side pack is the SAME build as the file-side
+    // pack, so its manifest — content hash included — must be identical, and
+    // writing the bytes to disk must yield a file `verify` accepts.
+    let store = producer(0);
+    let out = tmp("bytes-vs-file");
+    let file_manifest = pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
+    let (bytes_manifest, bytes) =
+        pack_to_bytes(&store, "urn:g:pack", &PackOptions::default(), TS).unwrap();
+
+    assert_eq!(bytes_manifest.content_hash, file_manifest.content_hash);
+    assert_eq!(bytes_manifest.source_graph, file_manifest.source_graph);
+    assert_eq!(bytes_manifest.counts, file_manifest.counts);
+
+    let from_bytes = tmp("bytes-written");
+    std::fs::write(&from_bytes, &bytes).unwrap();
+    let (stored, recomputed, ok) = verify(&from_bytes).unwrap();
+    assert!(ok, "stored {stored} != recomputed {recomputed}");
+
+    for path in [out, from_bytes] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[test]
+fn a_pack_built_as_bytes_attaches_to_a_native_store() {
+    // quipu-2l5 acceptance: "a pack produced in a browser attaches to a
+    // native store." This is the native leg of that claim — the wasm leg
+    // (wasm/harness roundtrip) produces bytes through the identical
+    // `pack_to_bytes` call and ships them out of the tab.
+    let store = producer(0);
+    let (_, bytes) = pack_to_bytes(&store, "urn:g:pack", &PackOptions::default(), TS).unwrap();
+
+    let pack0 = tmp("bytes-attach-pack0");
+    std::fs::write(&pack0, &bytes).unwrap();
+    // Same composition rule as any pack file: respace out of the consumer's
+    // term space before attaching (multi-db-composition.md).
+    let pack9 = tmp("bytes-attach-pack9");
+    crate::store::respace::respace_file(
+        std::path::Path::new(&pack0),
+        std::path::Path::new(&pack9),
+        9,
+    )
+    .unwrap();
+
+    let local = tmp("bytes-attach-consumer");
+    let opened = Store::open_with_attachments(
+        &local,
+        &[crate::store::attach::Attachment::read_only("pack", &pack9)],
+    )
+    .unwrap();
+    assert_eq!(opened.pack_manifests().len(), 1);
+    assert_eq!(
+        opened.verify_attached_pack_hashes().unwrap(),
+        vec![("pack".into(), true)]
+    );
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(
+        &opened,
+        "SELECT ?o WHERE { GRAPH <urn:g:pack> { <http://example.org/s> <http://example.org/p> ?o } }",
+    )
+    .unwrap() else {
+        panic!("expected SELECT")
+    };
+    assert_eq!(rows.len(), 1, "the byte-built pack must be queryable");
+
+    for path in [pack0, pack9, local] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[test]
 fn naming_a_shape_that_does_not_exist_is_refused() {
     let store = producer(0);
     let out = tmp("badshape");

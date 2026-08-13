@@ -6,13 +6,16 @@ import init, {
   scenario_write,
   scenario_read,
   scenario_bench,
+  scenario_export,
+  scenario_import,
+  scenario_pack,
   journal_mode,
 } from "./pkg/quipu_wasm_harness.js";
 
 const ready = init();
 
 onmessage = async (e) => {
-  const { id, cmd, path, n, read_model } = e.data;
+  const { id, cmd, path, n, read_model, bytes } = e.data;
   try {
     await ready;
     let value = null;
@@ -24,6 +27,12 @@ onmessage = async (e) => {
       value = JSON.parse(scenario_read(path));
     } else if (cmd === "bench") {
       value = JSON.parse(scenario_bench(path, n, read_model));
+    } else if (cmd === "export") {
+      value = Array.from(scenario_export(path));
+    } else if (cmd === "import") {
+      value = JSON.parse(scenario_import(new Uint8Array(bytes)));
+    } else if (cmd === "pack") {
+      value = Array.from(scenario_pack(path));
     } else if (cmd === "journal_mode") {
       value = JSON.parse(journal_mode(path));
     } else {

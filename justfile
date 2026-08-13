@@ -51,11 +51,13 @@ fmt:
 
 # === Wasm ===
 
-# Browser harness (quipu-qd2/ajz): just wasm <cmd>
+# Browser harness (quipu-qd2/ajz/2l5): just wasm <cmd>
 # Commands: check (compile the lib for wasm32), build (harness + JS glue),
 # test (Playwright scenarios incl. OPFS reload persistence), bench (the
 # wasm half of the §5.5 throughput comparison; pair with the
-# wasm_native_baseline example at the same episode count).
+# wasm_native_baseline example at the same episode count), roundtrip
+# (.db interchange: browser export → quipu CLI/sqlite3, browser pack →
+# native attach, native .db → browser import).
 # Prereqs for build/test/bench: wasm-bindgen-cli matching
 # wasm/harness/Cargo.lock, and a `playwright` resolvable from wasm/harness
 # (see wasm/harness/README.md).
@@ -70,7 +72,8 @@ wasm cmd="check" n="1000":
                    target/wasm32-unknown-unknown/release/quipu_wasm_harness.wasm ;;
         test)  just wasm build && cd wasm/harness && node run.mjs ;;
         bench) just wasm build && cd wasm/harness && node bench.mjs {{n}} ;;
-        *)     echo "unknown wasm command: {{cmd}} (check|build|test|bench)"; exit 1 ;;
+        roundtrip) just wasm build && cd wasm/harness && node roundtrip.mjs ;;
+        *)     echo "unknown wasm command: {{cmd}} (check|build|test|bench|roundtrip)"; exit 1 ;;
     esac
 
 # === Fixtures ===
