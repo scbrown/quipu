@@ -129,6 +129,74 @@ jobs:
             ${{ runner.os }}-cargo-full-
       - run: cargo build --locked --features full --bin quipu --bin quipu-server
 
+  # The wasm32 target and browser harness (docs/design/wasm-support.md;
+  # quipu-qd2/ajz/2l5). Per AGENTS.md a feature does not ship dark: this job
+  # IS the wasm feature's presence in the matrix (quipu-ame). Three legs:
+  # the library compiles for wasm32-unknown-unknown; the browser acceptance
+  # passes (store on memory VFS and OPFS, data surviving a page reload and a
+  # browser relaunch); and the .db interchange round-trips (browser export →
+  # quipu CLI + sqlite3, browser-produced pack → native attach, native .db →
+  # browser import). Steps mirror `just wasm check|test|roundtrip` without a
+  # just dependency, matching the raw-cargo style of the other jobs.
+  wasm:
+    name: Wasm (browser harness)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/wasm-bindgen
+            target
+            wasm/harness/target
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-wasm-
+            ${{ runner.os }}-cargo-
+      # Leg 1: the library builds for the target, warnings and all gates as
+      # the native builds run them.
+      - name: Check wasm32 target
+        run: RUSTFLAGS='--cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown --no-default-features --lib
+      # The CLI matching wasm/harness/Cargo.lock — the generated JS glue must
+      # come from the exact wasm-bindgen the harness compiled against.
+      - name: Install wasm-bindgen-cli
+        run: |
+          V=$(grep -A1 '^name = "wasm-bindgen"$' wasm/harness/Cargo.lock | grep '^version' | cut -d'"' -f2)
+          if ! command -v wasm-bindgen >/dev/null || ! wasm-bindgen --version | grep -qF "$V"; then
+            cargo install wasm-bindgen-cli --version "$V" --locked --force
+          fi
+      - name: Install Playwright Chromium
+        working-directory: wasm/harness
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save playwright@1.56
+          npx playwright install --with-deps chromium
+      - name: Build harness
+        working-directory: wasm/harness
+        run: |
+          cargo build --release
+          wasm-bindgen --target web --out-dir www/pkg \
+            target/wasm32-unknown-unknown/release/quipu_wasm_harness.wasm
+      # Leg 2: the quipu-qd2 acceptance — OPFS reload persistence included.
+      - name: Browser acceptance (run.mjs)
+        working-directory: wasm/harness
+        run: node run.mjs
+      # Leg 3: the quipu-2l5 acceptance. Builds the native examples and the
+      # shacl-featured quipu CLI through cargo; sqlite3 ships on the runner,
+      # so the integrity-check leg runs rather than skipping.
+      - name: Interchange round-trip (roundtrip.mjs)
+        working-directory: wasm/harness
+        run: node roundtrip.mjs
+
   check:
     name: Pre-commit checks
     runs-on: ubuntu-latest

@@ -1,10 +1,11 @@
 # Design: WebAssembly Support — running Quipu without a server
 
-> **Implementation status (2026-08-13):** 🚧 **Phases 0–4 landed** (the VFS —
-> quipu-qd2 — via the rusqlite 0.40 route, §4.2; the wasm-vs-native
-> measurement — quipu-ajz — §5.5; export/import and the pack round-trip —
-> quipu-2l5 — §6); CI (Phase 5, quipu-ame) remains — nothing here is in the
-> matrix yet, so per AGENTS.md the feature has not shipped until it is.
+> **Implementation status (2026-08-13):** ✅ **All phases (0–5) landed.** The
+> VFS (quipu-qd2, via the rusqlite 0.40 route, §4.2), the wasm-vs-native
+> measurement (quipu-ajz, §5.5), export/import and the pack round-trip
+> (quipu-2l5, §6), and the CI matrix job (quipu-ame, §8 Phase 5). What
+> remains is product work, not porting: §3's knowledge-pack distribution
+> story and anything downstream of it are designed here but not built.
 > Every blocker below was verified by building against
 > `wasm32-unknown-unknown`, not inferred from the manifest. Performance
 > numbers are measured on this branch — §5.1–5.3 native x86-64, §5.5 both
@@ -509,9 +510,12 @@ browser relaunch — run headless via §9.3.
 WAL-header trap; `just wasm roundtrip` is the acceptance. Wiring it into CI
 belongs to Phase 5.
 
-**Phase 5 — CI.** A `wasm32-unknown-unknown` job in the matrix. Per
-`AGENTS.md`, the feature does not ship dark — this lands *with* the feature, not
-after it.
+**Phase 5 — CI. ✅ LANDED** (quipu-ame). The `wasm` job in `ci.yml` runs all
+three legs on every push and PR: the wasm32 target check, the browser
+acceptance (`run.mjs`, OPFS reload persistence included), and the
+interchange round-trip (`roundtrip.mjs` — where the runner's `sqlite3`
+executes the leg this container had to skip). Per `AGENTS.md`, the feature
+does not ship dark — with this, the whole track is in the matrix.
 
 ### 8.1 Ordering against the read model
 
