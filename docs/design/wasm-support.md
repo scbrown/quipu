@@ -1,11 +1,13 @@
 # Design: WebAssembly Support — running Quipu without a server
 
-> **Implementation status (2026-08-07):** 🚧 **Phase 1 landed; the rest
+> **Implementation status (2026-08-13):** 🚧 **Phases 1–2 landed; the rest
 > designed.** Every blocker below was verified by building against
 > `wasm32-unknown-unknown`, not inferred from the manifest. Every performance
 > number was measured on this branch, native x86-64, `--release`,
 > `--no-default-features`. The one number NOT measured is wasm-vs-native
-> throughput; obtaining it is Phase 0.
+> throughput; obtaining it is Phase 0. The browser test harness the remaining
+> phases need is verified and documented in §9 — including in the headless
+> remote container this work was previously triaged as blocked in.
 >
 > **Depends on [in-memory-read-model.md](in-memory-read-model.md).** The query
 > architecture is decided there; this document is downstream of it.
@@ -407,7 +409,7 @@ to be explicit in the response, not inferred.
 
 **Phase 0 — Measure.** Get the wasm-vs-native number. A minimal
 `sqlite-wasm-rs` harness ingesting episodes and running the three queries above.
-Everything downstream is scoped by this result.
+Everything downstream is scoped by this result. Runnable headless — §9.3.
 
 **Phase 1 — Decouple. ✅ LANDED** (`quipu-as2`). Split into `server` and
 `remote` rather than one feature — see §4.3 for why, and for the verification
@@ -417,7 +419,8 @@ that the whole HTTP stack is now absent from a default build.
 `std::fs`; wire the `getrandom` features and the `RUSTFLAGS` cfg.
 
 **Phase 3 — VFS.** `sqlite-wasm-rs` via `[patch]`. Memory VFS first, OPFS
-second.
+second. The reload-persistence acceptance runs headless via §9.3; the unit
+suite via §9.4.
 
 **Phase 4 — Export/import.** rusqlite `serialize`/`deserialize`, plus a pack
 round-trip test that asserts a browser-produced pack opens natively.
@@ -438,6 +441,97 @@ the worst place to discover it. Shipping after means the browser build inherits
 a linear join and a resident model sized for exactly the artifact it carries.
 
 The dependency runs one way only: nothing in the read model needs wasm.
+
+## 9. Running the browser tests headless — verified in the remote container
+
+Phases 0, 3 and 4 all need a real browser: Phase 3's acceptance is **OPFS
+persistence across a page reload**, and §5.5's missing number is meaningless
+unless measured against the OPFS VFS it would ship with. The 2026-08-12 bead
+triage (quipu-qd2, quipu-ajz) marked this "not feasible in the current
+container." That triage is **wrong for the Claude Code remote container** —
+everything required is preinstalled or reachable, and the two load-bearing
+claims below were verified by running them, not by reading compatibility
+tables. Re-verify the inventory before trusting this section in a different
+container image.
+
+### 9.1 What the container provides (verified 2026-08-13)
+
+| Piece | Where | Status |
+|---|---|---|
+| Chromium 141 headless | `/opt/pw-browsers/chromium-1194/chrome-linux/chrome` | ✅ preinstalled (Playwright-managed) |
+| Playwright 1.56 | `/opt/node22/lib/node_modules/playwright` | ✅ preinstalled, matched to the Chromium above |
+| chromedriver 147 | `/opt/node22/bin/chromedriver` | ⚠️ preinstalled, **6 majors ahead of the browser** — see §9.4 |
+| `wasm32-unknown-unknown` | `rustup target add` | ✅ `static.rust-lang.org` is proxy-open |
+| Crates | `index.crates.io` / `static.crates.io` | ✅ proxy-open; `sqlite-wasm-rs`'s `precompiled` feature means no emscripten needed |
+| Matched chromedriver 141 | `googlechromelabs.github.io`, `storage.googleapis.com`, npm mirrors | ❌ proxy-blocked — a matched driver **cannot be downloaded**, which is why §9.4 needs the build-check bypass |
+
+### 9.2 Verified: OPFS survives reload and relaunch in headless Chromium
+
+The exact API `sqlite-wasm-rs`'s `opfs-sahpool` VFS sits on —
+`navigator.storage.getDirectory()` → `FileSystemFileHandle.createSyncAccessHandle()`
+inside a Web Worker — works in this headless Chromium, served over
+`http://localhost` (a secure context, which OPFS requires). Probe: a worker
+writes a marker file via a sync access handle; the page is reloaded and the
+worker reads it back; the browser is then fully closed and relaunched on the
+same persistent profile and reads it back again.
+
+```text
+write: wrote
+after reload, read:quipu-opfs-ok
+after browser restart, read:quipu-opfs-ok
+```
+
+Two details matter for reproducing this:
+
+- **Persistence lives in the profile.** OPFS is per-origin storage inside the
+  browser profile. Playwright's default `launch()` uses a throwaway profile,
+  so the acceptance test must use `launchPersistentContext(profileDir, ...)`
+  — with a throwaway profile a relaunch would (correctly) read nothing and
+  the test would be asserting the wrong thing.
+- **Headless args.** `{ headless: true, args: ['--no-sandbox'] }` sufficed;
+  Chromium 141's headless is the new unified mode, no `--headless=new`
+  incantation needed under Playwright.
+
+### 9.3 Route A — Playwright harness (the Phase 3 acceptance test)
+
+`wasm-bindgen-test` has no page-reload concept, so the persistence criterion
+cannot be expressed in it at all. Drive it from Node instead:
+
+1. `wasm-pack build --target web` (or `wasm-bindgen` directly) a small
+   harness crate that opens a store on the OPFS VFS, transacts, and reads
+   back — the wasm side stays dumb, assertions live in the driver.
+2. Serve the pkg over a localhost HTTP server (any static server; OPFS needs
+   the secure context, `http://localhost` qualifies — `file://` does not).
+3. From Playwright: `launchPersistentContext` → load page → transact →
+   `page.reload()` → assert the read → close the context, relaunch on the
+   same profile → assert again. The relaunch leg is stronger than the stated
+   acceptance and costs one extra line.
+
+This is also the natural home for the **Phase 0 spike** (quipu-ajz): the same
+harness page timing ingest and the three §5 queries, once against the memory
+VFS and once against OPFS, browser relaunch between runs to defeat caching.
+
+### 9.4 Route B — `wasm-pack test` for the unit suite
+
+For ordinary `#[wasm_bindgen_test]` tests (no reload), the standard
+`wasm-pack test --headless --chrome` flow works, with two shims for the
+version mismatch (§9.1 — a matched driver is not downloadable here):
+
+- **`CHROMEDRIVER`** pointed at a wrapper script that execs the preinstalled
+  chromedriver with `--disable-build-check` prepended — chromedriver 147
+  refuses Chromium 141 otherwise. Verified: with the flag, a WebDriver
+  session against the Playwright Chromium binary creates cleanly and reports
+  `browserVersion: 141.0.7390.37`.
+- **`webdriver.json`** in the crate root, setting `goog:chromeOptions.binary`
+  to the §9.1 Chromium path and args
+  `["--headless=new", "--no-sandbox", "--disable-dev-shm-usage"]` (the last
+  two are the stock fixes for Chrome-in-container failures).
+
+The bypass is a container-local expedient, not a pattern to ship: six majors
+of WebDriver drift means an obscure protocol quirk is *possible*, so if Route
+B misbehaves, suspect the mismatch first and fall back to Route A. **Phase 5
+CI is unaffected** — GitHub Actions installs matched Chrome + chromedriver
+pairs natively, so the workflow (quipu-ame) uses none of this.
 
 ---
 
