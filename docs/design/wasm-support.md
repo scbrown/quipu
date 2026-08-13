@@ -1,13 +1,13 @@
 # Design: WebAssembly Support — running Quipu without a server
 
-> **Implementation status (2026-08-13):** 🚧 **Phases 1–3 landed** (the VFS —
-> quipu-qd2 — via the rusqlite 0.40 route, §4.2); export/import (Phase 4), CI
-> (Phase 5) and the Phase 0 measurement remain. Every blocker below was
-> verified by building against `wasm32-unknown-unknown`, not inferred from
-> the manifest. Every performance number was measured on this branch, native
-> x86-64, `--release`, `--no-default-features`. The one number NOT measured
-> is wasm-vs-native throughput; obtaining it is Phase 0 — the `wasm/harness`
-> browser harness (§9) that quipu-qd2's acceptance ran on is the vehicle.
+> **Implementation status (2026-08-13):** 🚧 **Phases 0–3 landed** (the VFS —
+> quipu-qd2 — via the rusqlite 0.40 route, §4.2; the wasm-vs-native
+> measurement — quipu-ajz — in §5.5); export/import (Phase 4) and CI
+> (Phase 5) remain. Every blocker below was verified by building against
+> `wasm32-unknown-unknown`, not inferred from the manifest. Performance
+> numbers are measured on this branch — §5.1–5.3 native x86-64, §5.5 both
+> native and wasm (headless Chromium, the `wasm/harness` browser harness,
+> §9), all `--release`.
 >
 > **Depends on [in-memory-read-model.md](in-memory-read-model.md).** The query
 > architecture is decided there; this document is downstream of it.
@@ -382,11 +382,49 @@ Resident cost of the read model is **~350 bytes/fact** (measured,
 
 **OPFS is the target.** The memory VFS is a development convenience.
 
-### 5.5 The number we do not have
+### 5.5 Wasm-vs-native throughput — measured (quipu-ajz)
 
-**Wasm-vs-native throughput has not been measured.** Expect SQLite-in-wasm and
-the read model build to be slower than native, but no figure in this document is
-a wasm figure and none should be quoted as one. Producing it is Phase 0.
+Measured 2026-08-13 with two methodology-identical halves — the harness's
+`scenario_bench` (wasm, headless Chromium 141) and
+`examples/wasm_native_baseline.rs` (native x86-64) — same container CPU, same
+episode shape as §5.1, `--release` and `opt-level = 3` on both sides. Each
+query runs once cold, then warm iterations until 300ms cumulative (wasm times
+with `Date.now()`, so warm means are the comparable numbers). At 5,000
+episodes / 100k triples; the 1,000-episode runs agree within the ranges
+quoted:
+
+| Measure | Native | Wasm memory VFS | Wasm OPFS |
+|---|---:|---:|---:|
+| Ingest, durable (episodes/s) | 335 (file, WAL) | — | 94 (**3.6× slower**) |
+| Ingest, RAM-to-RAM (episodes/s) | 1,248 (`:memory:`) | 744 (**1.7× slower**) | — |
+| Read-model build, 1k episodes | 25.4 ms | 34 ms (1.3×) | 33 ms (1.3×) |
+| Point lookup, warm | 0.021 ms | 0.033 ms (1.6×) | 0.033 ms |
+| Type scan, warm | 0.145 ms | 0.233 ms (1.6×) | 0.267 ms |
+| 2-hop join, warm | 11.2 ms | 8.5 ms (**0.76×**) | 8.3 ms |
+| 2-hop join, cold | 227 ms | 285 ms (1.26×) | 272 ms |
+
+**The headline: the compute engine runs at roughly half native speed, and
+reads are near parity.** Ingest with storage held equal (RAM on both sides)
+is 1.7–2.1× slower in wasm — that is the SQLite + RDF-interning CPU cost of
+the platform. Query warm means sit in a 0.8–2.8× band — and the sub-0.1ms
+entries are quantized (30 iterations against a 1ms clock), so treat the
+point/scan ratios as coarse — while the 2-hop join, the one query long
+enough to measure cleanly, sits at parity or better. No §5.2-style query
+cliff is hiding in the platform. The scary-looking number, OPFS ingest at 3.6× native
+file, buys full durability through OPFS sync-access handles and carries a
+confound the §4.2 caveat pins: native runs WAL, the wasm VFS runs a `delete`
+rollback journal, which is the more write-amplified mode.
+
+Two methodology notes for whoever re-runs this. The native `:memory:` run's
+query section is void — the bench's drop-and-reopen empties an in-memory
+database, so RAM-to-RAM is an ingest-only comparison and the query ratios
+come from the data-bearing runs (all row counts asserted equal across
+sides). And the wasm memory VFS *survives* that same reopen (its files live
+per-process, not per-connection) — a VFS behavior difference to keep in mind
+when porting tests, not just benches.
+
+Reproduce: `just wasm bench` against
+`cargo run --release --no-default-features --example wasm_native_baseline -- 5000`.
 
 ## 6. Export to SQLite — preserved, and nearly free
 
@@ -434,9 +472,10 @@ to be explicit in the response, not inferred.
 
 ## 8. Plan
 
-**Phase 0 — Measure.** Get the wasm-vs-native number. A minimal
-`sqlite-wasm-rs` harness ingesting episodes and running the three queries above.
-Everything downstream is scoped by this result. Runnable headless — §9.3.
+**Phase 0 — Measure. ✅ LANDED** (quipu-ajz, after Phase 3 — the harness it
+needed IS the Phase 3 harness). The numbers are §5.5: compute ~½ native,
+reads near parity, durable OPFS ingest 3.6× native file. Nothing downstream
+is invalidated by them.
 
 **Phase 1 — Decouple. ✅ LANDED** (`quipu-as2`). Split into `server` and
 `remote` rather than one feature — see §4.3 for why, and for the verification
@@ -540,9 +579,10 @@ at `wasm/harness/`** (`just wasm test`; prereqs in its README):
    same profile → assert again. The relaunch leg is stronger than the stated
    acceptance and costs one extra line.
 
-This is also the natural home for the **Phase 0 spike** (quipu-ajz): the same
-harness page timing ingest and the three §5 queries, once against the memory
-VFS and once against OPFS, browser relaunch between runs to defeat caching.
+The **Phase 0 spike** (quipu-ajz) ran on the same harness: `scenario_bench`
+with `bench.mjs` (wasm) against `examples/wasm_native_baseline.rs` (native),
+fresh page per configuration. Results and methodology caveats are §5.5;
+`just wasm bench` re-runs the wasm half.
 
 ### 9.4 Route B — `wasm-pack test` for the unit suite
 

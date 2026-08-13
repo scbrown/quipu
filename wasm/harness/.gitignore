@@ -1,6 +1,7 @@
 target/
 www/pkg/
 .profile/
+.bench-profile/
 node_modules/
 package.json
 package-lock.json

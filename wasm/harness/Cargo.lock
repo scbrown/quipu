@@ -644,6 +644,7 @@ dependencies = [
 name = "quipu-wasm-harness"
 version = "0.0.0"
 dependencies = [
+ "js-sys",
  "quipu",
  "rusqlite",
  "serde_json",

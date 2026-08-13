@@ -41,3 +41,17 @@ Or from the repo root: `just wasm build` / `just wasm test`.
 OPFS state lives in `.profile/` (the Chromium user profile). Delete it for a
 clean slate; the relaunch checks depend on it persisting between runs of the
 same invocation only.
+
+## Benchmarking (quipu-ajz)
+
+`bench.mjs` is the wasm half of the §5.5 wasm-vs-native comparison — memory
+VFS and OPFS, read model off and on, fresh page per configuration:
+
+```bash
+node bench.mjs 5000            # or: just wasm bench 5000
+cargo run --release --no-default-features \
+  --example wasm_native_baseline -- 5000   # the native half, from repo root
+```
+
+Both halves are methodology-identical by construction (same episode shape,
+same cold-then-warm query loops) — change one, change the other.

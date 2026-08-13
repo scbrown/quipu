@@ -70,6 +70,82 @@ pub fn scenario_write(path: &str, n: u32) -> Result<String, JsValue> {
     Ok(format!(r#"{{"triples":{triples}}}"#))
 }
 
+/// Timed bench for the quipu-ajz spike — the wasm half of the wasm-vs-native
+/// ratio. MUST stay methodology-identical to
+/// `examples/wasm_native_baseline.rs`: ingest `n` episodes; reopen; if
+/// `read_model`, time the build explicitly; run each `scale_bench` query
+/// once cold, then warm iterations until 300ms cumulative or 30 iters.
+/// Timing is `Date.now()` (ms) — the iteration policy exists because of it.
+#[wasm_bindgen]
+pub fn scenario_bench(path: &str, n: u32, read_model: bool) -> Result<String, JsValue> {
+    let now = js_sys::Date::now;
+
+    let t0 = now();
+    let mut store = quipu::Store::open(path).map_err(err_js)?;
+    let mut triples = 0usize;
+    for i in 0..n as usize {
+        let episode: quipu::episode::Episode =
+            serde_json::from_str(&episode_json(i)).map_err(err_js)?;
+        let ts = format!("2026-08-13T{:02}:{:02}:{:02}Z", i % 24, i % 60, (i / 60) % 60);
+        let (_tx, count, _outcome) =
+            quipu::episode::ingest_episode_outcome(&mut store, &episode, &ts, NS)
+                .map_err(err_js)?;
+        triples += count;
+    }
+    let ingest_ms = now() - t0;
+    drop(store);
+
+    let mut store = quipu::Store::open(path).map_err(err_js)?;
+    store.search_config_mut().query_timeout_ms = 600_000;
+    let rm_build_ms = if read_model {
+        store.set_read_model_enabled(true);
+        let t = now();
+        let _ = store.read_model().map_err(err_js)?;
+        Some(now() - t)
+    } else {
+        None
+    };
+
+    let mut out = format!(
+        r#"{{"episodes":{n},"triples":{triples},"ingest_ms":{ingest_ms:.1},"rm_build_ms":{},"queries":{{"#,
+        rm_build_ms.map_or("null".into(), |ms| format!("{ms:.1}")),
+    );
+    let queries = [
+        ("point", format!("SELECT ?p ?o WHERE {{ <{NS}service-1> ?p ?o }}")),
+        ("scan", format!("SELECT ?s WHERE {{ ?s a <{NS}Service> }} LIMIT 100")),
+        (
+            "join",
+            format!("SELECT ?d ?s WHERE {{ ?d <{NS}targets> ?s . ?s a <{NS}Service> }} LIMIT 100"),
+        ),
+    ];
+    for (idx, (label, sparql)) in queries.iter().enumerate() {
+        let run = |sparql: &str| -> Result<usize, JsValue> {
+            match quipu::sparql::query(&store, sparql).map_err(err_js)? {
+                quipu::sparql::QueryResult::Select { rows, .. } => Ok(rows.len()),
+                _ => Err(JsValue::from_str("expected SELECT")),
+            }
+        };
+        let t = now();
+        let rows = run(sparql)?;
+        let cold_ms = now() - t;
+        let mut iters = 0u32;
+        let warm_t = now();
+        while iters < 30 && now() - warm_t < 300.0 {
+            run(sparql)?;
+            iters += 1;
+        }
+        let warm_mean_ms = (now() - warm_t) / f64::from(iters.max(1));
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push_str(&format!(
+            r#""{label}":{{"rows":{rows},"cold_ms":{cold_ms:.1},"warm_mean_ms":{warm_mean_ms:.3},"iters":{iters}}}"#
+        ));
+    }
+    out.push_str("}}");
+    Ok(out)
+}
+
 /// What journal mode does a store on this VFS actually get? `Store::init`
 /// requests WAL; a VFS without shared-memory support keeps the prior mode
 /// instead of erroring, and this pins which mode that is. Opens a THROWAWAY

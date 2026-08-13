@@ -5,13 +5,14 @@ import init, {
   install_opfs,
   scenario_write,
   scenario_read,
+  scenario_bench,
   journal_mode,
 } from "./pkg/quipu_wasm_harness.js";
 
 const ready = init();
 
 onmessage = async (e) => {
-  const { id, cmd, path, n } = e.data;
+  const { id, cmd, path, n, read_model } = e.data;
   try {
     await ready;
     let value = null;
@@ -21,6 +22,8 @@ onmessage = async (e) => {
       value = JSON.parse(scenario_write(path, n));
     } else if (cmd === "read") {
       value = JSON.parse(scenario_read(path));
+    } else if (cmd === "bench") {
+      value = JSON.parse(scenario_bench(path, n, read_model));
     } else if (cmd === "journal_mode") {
       value = JSON.parse(journal_mode(path));
     } else {
