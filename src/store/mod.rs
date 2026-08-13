@@ -17,6 +17,7 @@ pub mod read_model;
 mod reads;
 mod registry;
 pub mod respace;
+mod respace_map;
 mod serialize;
 mod settings;
 pub mod terms;

@@ -4,6 +4,7 @@
 //! designed as a foundation for agent-enforced knowledge graphs.
 
 pub mod config;
+mod config_load;
 pub mod context;
 pub mod derivation;
 pub mod embedding;
@@ -25,6 +26,7 @@ pub mod onnx_embedder;
 #[cfg(feature = "owl")]
 pub mod owl;
 pub mod pack;
+mod pack_turtle;
 pub mod proposal;
 pub mod provider;
 pub mod rdf;

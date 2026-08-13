@@ -1,4 +1,9 @@
+use std::path::Path;
+
 use super::*;
+// `ConfigFile` moved to `config_load` in the size-ratchet split; the loader
+// round-trip tests below still deserialize it directly.
+use crate::config_load::ConfigFile;
 
 /// Top-level `pub` fields of `QuipuConfig` that this repo deliberately does NOT
 /// consume — documented capabilities that are unwired here. Each

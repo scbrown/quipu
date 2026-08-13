@@ -85,69 +85,8 @@ pub fn eval_bgp(
     Ok((result_rows, all_vars))
 }
 
-/// Build a graph-membership SQL condition over `facts.g`, pushing the ids as
-/// bound params (quipu #36). An EMPTY set yields `0 = 1` — match nothing, never
-/// a silent fall-through (e.g. a `FROM NAMED` with no `FROM` has an empty
-/// default graph). A single id yields `g = ?N`; several yield `g IN (…)`.
-fn sql_graph_in(gids: &[i64], sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>) -> String {
-    if gids.is_empty() {
-        return "0 = 1".to_string();
-    }
-    let placeholders: Vec<String> = gids
-        .iter()
-        .map(|gid| {
-            sql_params.push(Box::new(*gid));
-            format!("?{}", sql_params.len())
-        })
-        .collect();
-    if placeholders.len() == 1 {
-        format!("g = {}", placeholders[0])
-    } else {
-        format!("g IN ({})", placeholders.join(", "))
-    }
-}
-
-/// Build an equality/IN predicate for a term-id column. The one-id spelling is
-/// intentionally the pre-#76 plan; only composed stores widen it.
-fn sql_id_in(
-    column: &str,
-    ids: &[i64],
-    sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
-) -> String {
-    if ids.is_empty() {
-        return "0 = 1".to_string();
-    }
-    let placeholders: Vec<String> = ids
-        .iter()
-        .map(|id| {
-            sql_params.push(Box::new(*id));
-            format!("?{}", sql_params.len())
-        })
-        .collect();
-    if placeholders.len() == 1 {
-        format!("{column} = {}", placeholders[0])
-    } else {
-        format!("{column} IN ({})", placeholders.join(", "))
-    }
-}
-
-fn sql_ref_in(ids: &[i64], sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>) -> String {
-    if ids.is_empty() {
-        return "0 = 1".to_string();
-    }
-    let placeholders: Vec<String> = ids
-        .iter()
-        .map(|id| {
-            sql_params.push(Box::new(Value::Ref(*id).to_bytes()));
-            format!("?{}", sql_params.len())
-        })
-        .collect();
-    if placeholders.len() == 1 {
-        format!("v = {}", placeholders[0])
-    } else {
-        format!("v IN ({})", placeholders.join(", "))
-    }
-}
+// The SQL `IN`-clause builders live in `sql_in` (size ratchet split).
+use super::sql_in::{sql_graph_in, sql_id_in, sql_ref_in};
 
 /// Evaluate a single triple pattern against the store, extending existing bindings.
 pub fn eval_triple_pattern(
