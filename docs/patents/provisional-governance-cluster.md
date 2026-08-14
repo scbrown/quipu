@@ -15,7 +15,7 @@ and more particularly to mechanisms for governing writes made to a knowledge
 store by autonomous software agents: recording tamper-evident attestations of
 policy decisions such that the record of a refused write survives the
 transactional rollback of that write; routing refused writes to asynchronous
-human decision with content-bound, expiring approval; composing
+human decision with request-bound, expiring approval; composing
 trustworthiness, freshness, durability, and obligation labels over named
 graphs under a lattice algebra that never fabricates values for undeclared
 members; versioning validation rules bitemporally so that data may be
@@ -39,8 +39,14 @@ attempt to log the rejection into the same store — is rolled back with it. An
 accepted write leaves its own evidence in the facts it wrote; a refused write
 leaves nothing at all. The question "did this policy ever actually stop
 anything?" is then unanswerable from the store the policy lives in. Systems
-that answer it at all do so with a separate audit log, which raises the
-second problem.
+that answer it commonly do so with a separate audit log, which raises the
+second problem. Some relational engines offer *autonomous transactions* —
+an inner transaction, opened from within the judged session, that commits
+independently of the outer transaction's fate and is conventionally used to
+persist audit rows across a rollback. That mechanism commits *during* the
+judged scope, from what is in effect a separate session, and typically into
+a log table that sits outside the governed data's temporal model and query
+surface — which raises the same second problem.
 
 **Second, audit logs are separable from the data they govern.** An external
 audit log has an independent lifecycle, an independent access-control
@@ -67,7 +73,7 @@ answer.
 
 **Fourth, label composition fabricates values for undeclared members.**
 Systems that attach trust, freshness, or sensitivity labels to data
-partitions must compose those labels when a query spans partitions. Existing
+partitions must compose those labels when a query spans partitions. Common
 approaches default undeclared partitions to a top element (fail-open: an
 unlabelled partition reads as fully trusted) or a bottom element (fail-closed
 in a way that destroys utility: one unlabelled partition drags every query to
@@ -103,8 +109,8 @@ enforcement window silently falsifies every replayed enforcement number for
 that window; and an audit cannot distinguish "the runtime got it wrong at the
 time" from "the specification moved afterwards."
 
-No known system addresses these problems together, in-store, with the
-properties described herein. The SARC governance framework (G. Besanson,
+The inventor is not aware of a system that addresses these problems
+together, in-store, with the properties described herein. The SARC governance framework (G. Besanson,
 "SARC: A Governance-by-Architecture Framework for Agentic AI," arXiv
 preprint arXiv:2605.07728) is acknowledged as prior art for a *taxonomy* of
 constraint classes, verification points, and audit decidability for agentic
@@ -141,17 +147,21 @@ re-entrancy flag exempts the verdict-recording write itself from governance,
 so that no policy can deny the recording of its own denial; and absence of a
 signing identity yields no verdict rather than an unsigned one.
 
-In another aspect, the invention provides a content-bound escalation router
+In another aspect, the invention provides a request-bound escalation router
 in which a write refused under an escalating policy mints a durable decision
 request whose identifier is derived deterministically from a hash over the
-policy and target, whose expiry is derived from the policy's declared
-reversibility window, and which is satisfied only by a decision record bound
-to the same content hash — so that approving one request cannot authorize a
-modified one. The "hold" is realized as the writing agent retrying rather
-than the engine waiting; an unserviced request past its expiry is a denial
-rather than a retryable timeout; a rejection outranks a concurrent approval;
-and a policy that escalates without declaring a reversibility window is
-refused at definition time rather than being given a default.
+policy identifier and the target identifier, whose expiry is derived from
+the policy's declared reversibility window, and which is satisfied only by a
+decision record bound to the same request hash — so that an approval
+recorded for one (policy, target) pair cannot authorize a different pair.
+The "hold" is realized as the writing agent retrying rather than the engine
+waiting; an unserviced request past its expiry is a denial rather than a
+retryable timeout — in the reference embodiment a denial that stands for
+that policy-and-target pair until a human records a decision or retracts
+the request; a rejection outranks a concurrent approval; and a policy
+declaring the escalation constraint class without declaring a reversibility
+window is refused at definition time, when definition-time placement
+validation is enabled, rather than being given a default.
 
 In another aspect, the invention provides a multi-axis label lattice over
 named graphs in which freshness, durability, and trust compose in a
@@ -167,8 +177,8 @@ set; undeclared is reported as undeclared, never fabricated; enforcement
 floors treat less-than-full coverage as failure; label expiry is a
 bitemporal de-declaration reading back as absence; and labels are stored
 authoritatively as facts in a reserved meta-graph with denormalized cache
-columns whose drift is detected and answered with refusal rather than with a
-possibly-wrong answer.
+columns whose drift on the compared axes is detected and answered with
+refusal rather than with a possibly-wrong answer.
 
 In another aspect, the invention provides bitemporal versioning of
 validation rules (shapes and ontologies), keyed on (name, valid-from), in
@@ -193,14 +203,18 @@ permissive direction while never weakening any constraint a payload alone
 would violate.
 
 In further aspects, the invention provides: authority over named graphs
-computed as the intersection along a principal-and-agent chain, where an
-empty chain yields no authority and relabelling a graph requires authority
-over the meta-graph rather than over the graph being labelled;
-definition-time placement validation refusing, at write time and against the
-pending post-state, policies whose declared constraint class is incompatible
-with their declared enforcement point, whose escalation lacks a declared
-window or timeout disposition, or whose safety-critical fields are ambiguous
-or hold forbidden values; and an audit reporting discipline that separates
+computed as the intersection along a principal-and-agent chain, where the
+intersection function maps an empty chain to no authority, the write gate
+applies the check once a caller adopts a chain (opt-in per caller, binding
+once supplied), and relabelling a graph requires authority over the
+meta-graph rather than over the graph being labelled; definition-time
+placement validation refusing, at write time and against the pending
+post-state, policies whose declared constraint class is incompatible with
+their declared enforcement point, whose declared escalation class lacks a
+declared window or timeout disposition, whose safety-critical fields are
+ambiguous, or whose timeout disposition holds a forbidden non-deny value —
+with refusal of a forbidden hosting-layer value as a further contemplated
+rule (§ 7.2); and an audit reporting discipline that separates
 *violation* (the trace contradicts the specification) from *incompleteness*
 (the trace does not say enough to decide), refusing to let either stand in
 for the other.
@@ -221,18 +235,20 @@ and the subsequent flush (114) of the signed verdict (118) in its own
 transaction.
 
 **FIG. 3** is a state diagram of the escalation router (126), showing the
-minting of a content-bound decision request (128), the pending state with a
-declared expiry, transitions to approved, rejected, and expired states, and
-the rule that expiry is a denial and rejection outranks approval.
+minting of a deterministically identified, request-bound decision request
+(128), the pending state with a declared expiry, transitions to approved,
+rejected, and expired states, and the rules that expiry is a denial —
+standing, in the reference embodiment, until a human decides or retracts —
+and that rejection outranks approval.
 
 **FIG. 4** is a diagram of the label lattice, showing the four axes —
 freshness (130), durability (132), trust (134), and obligations (136) —
 their composition directions, and the dataset fold (138) producing a
 composed value paired with coverage (140).
 
-**FIG. 5** is a table-form diagram of the coverage composition operation,
-showing the distinguished Empty identity element and the absorbing Partial
-element.
+**FIG. 5** is a diagram of the coverage composition rules, stated in
+rule-node form, showing the distinguished Empty identity element and the
+absorbing Partial element.
 
 **FIG. 6** is a timeline diagram of the bitemporal shape registry (124),
 showing successive versions of a named shape set with closed validity
@@ -246,7 +262,8 @@ on conformance, the bounded store-type context fetch (152), the second pass
 
 **FIG. 8** is a diagram of authority intersection along a principal chain,
 showing per-principal authority sets, the chain intersection (160), the
-empty-chain and empty-intersection refusals, and the meta-graph authority
+empty-intersection refusal, the empty-chain behavior at the
+intersection-function and write-gate levels, and the meta-graph authority
 requirement for relabelling (162).
 
 ## Detailed Description of the Invention
@@ -319,7 +336,9 @@ subject, predicate-like attribute, value, partition, and temporal validity.
 Governance policies are themselves ordinary facts in the store: a policy
 entity carries a target type, a claim expressed as a boolean query (in one
 embodiment, a SPARQL ASK with a `$target` placeholder), an effect (deny,
-require-approval, escalate, warn, record, allow), optionally an evidence
+require-approval, escalate, warn, record, allow, throttle — of which only
+the first three block, and only blocking effects are evaluated, at the
+write gate in the reference implementation), optionally an evidence
 probe (a second boolean query asking whether evidence to judge exists at
 all), and constraint metadata (constraint class, verification point,
 reversibility window, timeout disposition, hosting layer). Because policies
@@ -401,9 +420,14 @@ In one embodiment the operation proceeds as follows:
    removes P from an existing X — both judgments require seeing the write's
    effect, not the pre-state.
 
-4. **Stage, do not write, the decisions.** Every outcome — satisfied,
-   unsatisfied, and unknown — is recorded as a pending verdict in an
-   in-memory buffer (110) held on the store object. Escalation requests are
+4. **Stage, do not write, the decisions.** Every outcome the gate computes
+   for a blocking policy — satisfied, unsatisfied, and unknown — is
+   recorded as a pending verdict in an in-memory buffer (110) held on the
+   store object. Advisory effects (warn, record, allow, throttle) are not
+   evaluated at the write gate in the reference implementation — there is
+   nothing to enforce there — and accordingly stage no verdict; evaluating
+   advisory policies at the gate and recording their outcomes is an
+   alternative embodiment. Escalation requests are
    staged into a parallel buffer (112) (see § 3). Nothing is written to the
    fact table for these decisions inside the savepoint.
 
@@ -472,8 +496,10 @@ Deterministic field order makes the signature reproducible: any verifier
 re-derives the exact message from the verdict's stored fields and checks the
 signature against the registered public key — checked, not trusted. In one
 embodiment the signature scheme is Ed25519 and the tier tag is `committed`,
-attesting that the gate read the committed graph rather than a live buffer
-or approximation. In alternative embodiments any digital signature scheme
+denoting that the gate evaluated against the durable store as it would
+stand upon commit — the savepoint-staged post-state on the durable
+connection — as distinct from an in-memory read model or approximation. In
+alternative embodiments any digital signature scheme
 may be used — ECDSA, RSA-PSS, post-quantum schemes such as ML-DSA, or, in
 deployments where asymmetric signing is unavailable, an HMAC under a key
 held by a trusted recorder — and the canonical message may be any
@@ -535,12 +561,30 @@ policy surface.
 - *Recording satisfied outcomes too, not only denials*: liveness and
   two-sidedness of a policy (has it ever fired? has it ever passed?) are
   promotion gates for advisory-to-enforcing transitions (§ 5.3), and both
-  require the passing records.
+  require the passing records. In the reference implementation the gate
+  evaluates and records outcomes only for blocking policies, and the
+  promotion analysis of § 5.3 consumes recorded enforcement traces — a
+  separate artifact — rather than the verdict facts; an embodiment that
+  evaluates advisory policies at the gate and feeds their verdicts to the
+  promotion analysis directly is contemplated.
 - *Swallowing flush failures*: the alternative converts an audit-plane
   failure into a data-plane failure, which inverts the dependency the design
   intends.
 
-### 3. Content-bound escalation with expiry-as-denial (FIG. 3)
+The closest prior mechanism for a rollback-surviving audit record — the
+autonomous transaction offered by some relational engines — is distinguished
+as follows. An autonomous transaction commits *during* the judged scope,
+from what is in effect a separate session, and typically into a log table
+outside the governed data's temporal model and query surface; its record
+can land even though the judged scope has not yet resolved, and it lives
+apart from the data it judges. The present mechanism buffers the decision
+and writes it only *after* the judged scope has resolved — commit and
+rollback recording identically — and lands it in the same governed,
+bitemporal, queryable store as the data it judges, as a signed,
+content-idempotent attestation subject to the same temporal semantics as
+everything else.
+
+### 3. Request-bound escalation with expiry-as-denial (FIG. 3)
 
 #### 3.1 The problem
 
@@ -554,15 +598,16 @@ human decides would convert an approval gate into a lock on the store.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Minted : refused write mints<br/>DecisionRequest (128)
+    [*] --> Minted : refused write mints DecisionRequest (128)
     Minted --> Pending : expiresAt = now + declared window
-    Pending --> Approved : Decision(outcome=approve)<br/>bound to same evidenceHash
-    Pending --> Rejected : Decision(outcome=reject/changes)
-    Pending --> Expired : now >= expiresAt
-    Approved --> Rejected : rejection outranks<br/>concurrent approval
+    Pending --> Approved : Decision(approve) bound to same evidenceHash
+    Pending --> Rejected : Decision(reject or changes)
+    Pending --> Expired : now >= expiresAt with no ruling
+    Approved --> Rejected : rejection outranks concurrent approval
     Approved --> [*] : next attempt proceeds
     Rejected --> [*] : refusal with named decider
-    Expired --> [*] : DENIED (not a retryable timeout);<br/>a new attempt opens a NEW request
+    Expired --> Approved : late Decision(approve) is still honored
+    Expired --> [*] : DENIED (not a retryable timeout) — stands for this (policy, target) pair until a human decides or retracts
 ```
 
 In one embodiment:
@@ -576,21 +621,36 @@ In one embodiment:
    The post-resolution flush mints the durable decision request (128): a
    typed record carrying the policy identifier, the target identifier, an
    evidence hash, an expiry, and optionally the operator group routed to.
+   The routed-group field is part of the record's schema but is unexercised
+   on the reference implementation's in-store flush path, which supplies no
+   group; embodiments that deliver requests to operator groups populate it.
 
 2. **Deterministic request identity.** The request's subject identifier is
    derived from a cryptographic digest over `policy-id | target-id` (in one
    embodiment, SHA-256, taking a fixed-length substring of the hex digest).
-   A retry that is still refused therefore *updates the same request* rather
-   than accumulating one request per attempt.
+   On the common path a retry while the request is pending stages nothing
+   further — the router's ruling is simply returned. The deterministic
+   identity matters in the edge cases: where a prior flush failed to land
+   the request, or where several escalating policies cover one target
+   across attempts, re-minting maps to the *same* subject and updates the
+   existing request rather than accumulating one per attempt.
 
 3. **Expiry from the declared window.** The request's `expiresAt` is
    computed as the escalation time plus the policy's *declared*
    reversibility window. There is deliberately no default window: a policy
-   that escalates without declaring one is refused at definition time by the
-   placement check (§ 7.2). Reaching the router without a window means that
-   check was disabled, and the router then treats the zero window as already
-   expired rather than inventing the bound the design requires be declared.
-   The rationale: an escalation without a bound is not oversight, it is
+   declaring the escalation constraint class at the action boundary without
+   declaring one is refused at definition time by the placement check
+   (§ 7.2), when that check is enabled — it is opt-in in the reference
+   implementation, disabled by default. The definition-time rule is scoped
+   by declared *class*, while the router is entered by declared *effect*:
+   a policy whose effect escalates but whose declared class is hard or
+   soft, or absent, is not reached by the rule even with the check
+   enabled. Either way, a policy arriving at the router without a window
+   is given a zero window — treated as already expired rather than being
+   handed an invented default — which, combined with the standing reading
+   of expiry (item 8), denies the pair immediately and permanently unless
+   and until a human records a decision or retracts the request. The
+   rationale: an escalation without a bound is not oversight, it is
    deferred autonomy — there is no time by which the absence of a ruling
    becomes an answer.
 
@@ -600,16 +660,35 @@ In one embodiment:
    part of the store. Delivering the request to the routed group is a
    consumer of the record, not a function of the store.
 
-5. **Content-bound approval.** A human records a decision fact carrying an
+5. **Request-bound approval.** A human records a decision fact carrying an
    outcome, the decider's identity, and an evidence hash. The decision
    satisfies the request only when its evidence hash equals the request's.
-   Change what was approved — different target, different policy — and the
-   hash changes, so the approval no longer applies. Approve-then-change is
-   defeated *by construction*, using the same binding mechanism as verdicts
-   rather than a second one. The hash is scoped to exactly what the request
-   identifies: widening it to graph state would make every approval
-   spuriously stale the moment anything unrelated changed; narrowing it
-   would let one approval cover a different target.
+   The hash is a digest over the policy identifier and the target
+   identifier, so the binding is to the request's *identity*: an approval
+   recorded for one (policy, target) pair cannot authorize a different
+   pair — a different target or a different policy changes the hash, and
+   the approval no longer applies. The binding uses the same mechanism as
+   the verdicts' evidence hash rather than a second one, and is scoped to
+   exactly what the request identifies: widening it to graph state would
+   make every approval spuriously stale the moment anything unrelated
+   changed. The binding does not extend to the *contents* of the retried
+   write — an approval for the pair permits the next attempt whatever its
+   payload. In another embodiment the digest additionally covers a
+   canonical encoding of the proposed write's payload or delta, so that
+   changing what would be written voids the approval and
+   approve-then-change is defeated in the payload dimension as well.
+
+   In the primary contemplated embodiment the decision fact is itself an
+   authenticated record: a signed attestation under § 2.3's scheme by a
+   registered decider identity, or a fact written under a principal chain
+   holding authority over the surface where decisions live, so that only
+   an authenticated decider can produce a decision the router will honor.
+   In the reference implementation as it stands, the router accepts any
+   decision fact bound to the request's hash without verifying a
+   signature; authenticating deciders is there delegated to the write
+   path's own controls over the graphs holding decision facts, and the
+   signed-decision embodiment closes the gap in which the refused writer
+   could record the approving decision itself.
 
 6. **Resolution on the next attempt.** The next write attempt consults the
    router before refusing. The ruling is one of: *Approved* (proceed);
@@ -623,21 +702,31 @@ In one embodiment:
    rejection. A disagreement about whether to permit something is not a
    state to resolve by row order, and the safe reading of it is "no."
 
-8. **Expired is a denial, not a timeout.** Past `expiresAt`, an unserviced
-   request is a denial: a declared default-deny, not a transient error to
-   retry through. A new attempt opens a new request with a new window. This
-   realizes the principle that under operator unavailability the constraint
-   must deny, because default-allow converts the constraint into a no-op
-   exactly under the load that made it matter.
+8. **Expired is a denial, not a timeout — and in the reference embodiment
+   a standing one.** Past `expiresAt`, an unserviced request is a denial: a
+   declared default-deny, not a transient error to retry through. Because a
+   request is minted only when none exists for the (policy, target) pair,
+   and an existing request past its expiry resolves to the expired ruling
+   on every subsequent attempt, retrying does not open a new request: the
+   pair remains denied until a human acts — by recording a decision bound
+   to the request's hash, which the router consults before checking expiry
+   and honors even after it, or by retracting or superseding the request.
+   This realizes the principle that under operator unavailability the
+   constraint must deny, because default-allow converts the constraint
+   into a no-op exactly under the load that made it matter. In an
+   alternative embodiment, the first attempt after expiry retracts the
+   expired request and opens a new one with a fresh window, so that expiry
+   bounds each round of escalation rather than ending escalation for the
+   pair.
 
 In alternative embodiments the request and decision records live in any
 durable store queryable by the gate; the digest is any collision-resistant
 hash; the window is expressed in any time unit or as an absolute deadline;
-decisions may additionally be signed attestations under § 2.3's scheme; and
-the router may be consulted at admission points other than a write gate
-(tool dispatch, job scheduling, deployment promotion) wherever an
-asynchronous, content-bound, expiring human approval over a refused
-automated action is required.
+decision authentication is realized by any signature scheme or
+authenticated write path (item 5); and the router may be consulted at
+admission points other than a write gate (tool dispatch, job scheduling,
+deployment promotion) wherever an asynchronous, request-bound, expiring
+human approval over a refused automated action is required.
 
 ### 4. The label lattice: composition never widens, coverage as fold identity (FIGS. 4–5)
 
@@ -646,8 +735,8 @@ automated action is required.
 ```mermaid
 flowchart LR
     subgraph axes["Per-graph declared labels"]
-        F["Freshness (130)<br/>stale < recomputing < fresh<br/>composes by MEET (min)"]
-        D["Durability (132)<br/>soleRecord < reproducible < backed<br/>composes by MEET (min)"]
+        F["Freshness (130)<br/>stale &lt; recomputing &lt; fresh<br/>composes by MEET (min)"]
+        D["Durability (132)<br/>soleRecord &lt; reproducible &lt; backed<br/>composes by MEET (min)"]
         T["Trust (134)<br/>IRI + rank + ranking chain<br/>composes by MEET within one chain;<br/>cross-chain = ERROR"]
         P["Obligations (136)<br/>token set, e.g. pii, no-export<br/>composes by JOIN (union)"]
     end
@@ -729,9 +818,10 @@ the design refuses. `Empty` is a fourth value beyond the natural
 {full, partial, none} vocabulary; it is the algebraic identity, and *no
 graph can declare it*. In one embodiment the homomorphism (that folding raw
 members equals composing already-composed labels) is pinned by
-property-based tests; the fold and the pairwise composition share one
-implementation of the rule "undeclared contributes to coverage, never to
-value," because if the two ever disagreed, associativity would fail
+property-based tests; the fold and the pairwise composition are two
+implementations sharing one rule — "undeclared contributes to coverage,
+never to value" — whose agreement is itself pinned by the property-based
+tests, because if the two ever disagreed, associativity would fail
 silently.
 
 A composed label whose value is absent is reported as *undeclared* — never
@@ -742,9 +832,14 @@ as a fabricated fresh/top/bottom. Silence must not flatter.
 A deployment may configure floors: minimum freshness, minimum trust rank
 *together with the chain the floor is expressed in* (a rank floor without a
 chain is refused as configuration error), and denied obligation tokens.
-Enforcement is fail-safe while reporting stays honest: an *undeclared* axis
-fails a configured floor — absence is not read as permission — while
-read-back still reports undeclared rather than inventing a value. Floors
+Enforcement is fail-safe while reporting stays honest: under a configured
+freshness or trust floor, an *undeclared* axis fails the floor — absence is
+not read as permission — while read-back still reports undeclared rather
+than inventing a value. Denied obligation tokens are matched against the
+*declared* obligation set: in the reference implementation a dataset whose
+obligations axis is wholly undeclared is not refused by a token floor,
+there being no declared token to match; refusing an undeclared obligations
+axis under a token floor is an alternative embodiment. Floors
 refuse the *query* and name the specific member graph that dragged the
 label down (the fold says the dataset is stale; only the members say which
 one); they are expressly not access control — a caller naming a graph
@@ -785,10 +880,15 @@ partial failure; labelling an unregistered graph is refused (an update
 matching no registry row would otherwise silently create permanent drift).
 
 Reads defend the cache's honesty in three ways. (a) A **drift sweep**
-recomputes every label from the meta-graph facts and reports each
-disagreement (graph, axis, authoritative value, cached value); the facts
-are the source of truth and a non-empty report means the cache is wrong,
-never the reverse. (b) A cached trust rank with no corresponding trust fact,
+recomputes labels from the meta-graph facts and reports disagreements
+(graph, axis, authoritative value, cached value); in the reference
+implementation the sweep compares the freshness value, the durability
+value, the trust *chain* identity, and the obligation token set — the
+cached trust *rank* itself is not among the compared fields, and a
+current-label read serves the cached rank subject to checks (b) and (c)
+below; a sweep extended to every cached field, the rank included, is an
+alternative embodiment. The facts are the source of truth and a non-empty
+report means the cache is wrong, never the reverse. (b) A cached trust rank with no corresponding trust fact,
 or a half-written trust cache (rank without chain), is answered with an
 **error**, not with either value presented as agreed. (c) If the chain that
 ranks a cached trust value has been *redefined* since the cache was written,
@@ -824,15 +924,21 @@ flowchart TB
         V1["'governance' v1<br/>valid_from t1, valid_to t2"]
         V2["'governance' v2<br/>valid_from t2, valid_to t3"]
         V3["'governance' v3<br/>valid_from t3, valid_to NULL (open)"]
+        V1 -- "closed by load at t2" --> V2
+        V2 -- "closed by load at t3" --> V3
     end
     LOAD["load(name, turtle, t3):<br/>CLOSE prior open row at t3,<br/>INSERT new open row,<br/>EMIT 'shapes.loaded' event with tx watermark"]
     LOAD --> V3
-    ASOF["as-of read (142):<br/>valid_from <= T < valid_to<br/>(or by tx watermark)"] --> V2
+    ASOF["as-of read (142):<br/>valid_from &lt;= T &lt; valid_to<br/>(or by tx watermark)"] --> V2
     ASOF --> VAL["validate payload under the<br/>rules in force at T"]
     subgraph replay["Replay (144)"]
         FID["FIDELITY: trace vs Σ as of the<br/>trace's own window —<br/>was enforcement right THEN?"]
         DRIFT["DRIFT: Σ-then vs Σ-now,<br/>reported as spec movement,<br/>never as trace violation"]
     end
+    TRACE["recorded enforcement trace<br/>(its own window)"] --> FID
+    TRACE --> DRIFT
+    ASOF -. "Σ-then (as of the window)" .-> FID
+    V3 -. "Σ-now" .-> DRIFT
 ```
 
 In one embodiment shapes and ontologies share one versioned implementation
@@ -857,14 +963,19 @@ serialized shape text and is version-agnostic: versioning lives entirely in
 *which text is selected*, so the validation engine is untouched, and a
 content-hashed validator cache makes two versions two cache keys that
 coexist. Validation endpoints gain optional as-of parameters defaulting to
-now — zero behavior change for existing callers. A *declared shape version*
-also supplies exactly the stable reference that verdicts (§ 2.3) can cite,
-where hashing raw graph state was rejected as unstable.
+now — zero behavior change for existing callers. In a contemplated
+embodiment a *declared shape version* supplies exactly the stable reference
+for a verdict (§ 2.3) to cite, where hashing raw graph state was rejected
+as unstable; the reference implementation's verdict record does not yet
+carry a shape-version field.
 
 #### 5.3 Replay: fidelity separated from drift
 
-The store records enforcement traces (which policies were evaluated, with
-what outcome, with what response) and can replay a recorded window to answer
+Recorded enforcement traces (which policies were evaluated, with what
+outcome, with what response — in the reference implementation an
+append-only record consumed by the audit and replay passes as a separate
+artifact from the verdict facts) can be replayed over a recorded window to
+answer
 "if this rule started blocking, what would it have stopped?" — a promotion
 gate for advisory-to-enforcing transitions, measuring liveness (did it ever
 fire?), two-sidedness (did it record both outcomes?), new blocks,
@@ -916,7 +1027,7 @@ of 71, every one a correct fact about a module already typed in the store. A
 validator whose answer depends on submission order is not reporting
 conformance; it is reporting an accident of framing.
 
-The obvious fix — add store context and re-validate — has a converse hazard,
+A natural first approach — add store context and re-validate — has a converse hazard,
 also measured: adding a referenced node's type can make that node a
 *target* of a node shape, whose other constraints (e.g. a minimum-count on
 some property) the payload has nothing to satisfy, refusing a write for a
@@ -1003,9 +1114,10 @@ flowchart LR
     P1["delegate p1<br/>authority: {g2, g3, g4}"] --> I
     P2["executor p2<br/>authority: * (wildcard)"] --> I
     I --> R["effective: {g2, g3}<br/>wildcard is identity: declines to narrow,<br/>never widens"]
-    E0["EMPTY CHAIN → authority NONE<br/>(never wildcard)"]
-    E1["empty intersection → REFUSAL,<br/>never fallback to any link's own authority"]
-    M["relabelling a graph requires authority<br/>over the META-graph (162),<br/>not over the graph being labelled"]
+    I -- "chain narrowed to nothing" --> E1["empty intersection → REFUSAL,<br/>never fallback to any link's own authority"]
+    EC["empty chain"] -- "intersection function" --> E0["authority NONE<br/>(never wildcard)"]
+    EC -- "write gate (reference implementation)" --> NG["no chain adopted →<br/>check not applied;<br/>a chain, once adopted, is BINDING"]
+    R -- "label write targets the meta-graph" --> M["relabelling a graph requires authority<br/>over the META-graph (162),<br/>not over the graph being labelled"]
 ```
 
 Writes may carry a principal-and-agent chain, ordered outermost-first
@@ -1017,11 +1129,23 @@ caller's: the executor's credentials are not what applies; the intersection
 is. A wildcard authority is the identity of intersection: it declines to
 narrow and can never widen, which is how a single-tenant deployment (every
 principal holds the wildcard) behaves exactly as before the mechanism
-existed. Two refusal rules are deliberate: an **empty chain** yields *no*
-authority, not the wildcard — "nobody said who is acting" must not mean
-"anybody may act" — and an **empty intersection** is a refusal, never a
-fallback to any single link's authority, since the fallback is precisely the
-escalation the rule exists to stop. A principal with no declared authority
+existed. Two rules operate at two deliberately distinct levels. At the
+level of the intersection *function*, an **empty chain** yields *no*
+authority, not the wildcard — the fold's identity is deliberately not the
+wildcard, so no code path can derive permission from an absence of
+principals. At the level of the write *gate*, the reference implementation
+applies the authority check only when a caller has adopted a chain, and
+only when authority enforcement is enabled (it is opt-in, disabled by
+default): an unattributed write is the shape every pre-existing caller has,
+and turning attribution into a hard requirement beneath a running
+deployment would break every one of them at once. What the gate guarantees
+is that a chain, once supplied, is *binding* — adopting attribution is
+opt-in per caller and cannot silently widen. In another embodiment the
+gate refuses unattributed writes outright, realizing "nobody said who is
+acting must not mean anybody may act" at the gate as well as within the
+function. Separately, an **empty intersection** is a refusal, never a
+fallback to any single link's authority, since the fallback is precisely
+the escalation the rule exists to stop. A principal with no declared authority
 grant holds nothing: absence read as permission is how an access-control
 layer becomes decorative. Refusal messages name the chain, the graph, and
 what the chain actually holds, so the narrowest link is identifiable in one
@@ -1043,26 +1167,48 @@ or during dispatch; soft constraints only where completed-action data
 exists; escalations only where a human ruling has a seam) is enforced *at
 definition time*: when a write defines or amends a policy, the check runs
 inside the same savepoint against the pending post-state, and a malformed
-policy is refused with a reason naming the specific incompatibility. A hard
+policy is refused with a reason naming the specific incompatibility. In the
+reference embodiment the matrix is:
+
+| Constraint class | Permitted verification points |
+| ---------------- | ----------------------------- |
+| hard | pre-action gate, action-time monitor, tool layer, policy layer |
+| soft | action-time monitor, post-action auditor |
+| escalation | pre-action gate, post-action auditor |
+
+A hard
 constraint declared at a post-action auditor is the canonical catch: it
 reads as governed, validates against every field-level shape, and is
 evaluated only after the action it was meant to prevent — present,
 plausible, and incapable of failing. Further definition-time rules: an
-action-boundary policy must declare a class and a point; an escalation must
-declare a reversibility window and a timeout disposition (§ 3.2); the only
-permitted timeout disposition is deny; there is deliberately no
-"prompt-layer" hosting value (a constraint expressed as an instruction a
-model may reinterpret is not enforcement); and a policy whose safety-
-critical field resolves to *multiple* distinct values (e.g., two constraint
-classes concurrently asserted) is refused as ambiguous rather than resolved
-by row order — a re-class must retract the stale value in the same
-transaction that asserts the new one. Because evaluation is against the
-pending post-state, a write supplying the missing field in the same
-transaction passes, and one removing it fails. The check is deliberately
-separate from evaluation-time enforcement gating: definitions may be
-validated while enforcement is still in advisory mode. Policies already
-stored are not retroactively re-validated; enabling the check cannot break a
-running store, only refuse the next malformed definition.
+action-boundary policy must declare a class and a point; a policy declaring
+the escalation class at the action boundary must declare a reversibility
+window and a timeout disposition (§ 3.2); the only permitted timeout
+disposition is deny; and a policy whose safety-critical field resolves to
+*multiple* distinct values (e.g., two constraint classes concurrently
+asserted) is refused as ambiguous rather than resolved by row order — a
+re-class must retract the stale value in the same transaction that asserts
+the new one. The design further reserves no "prompt-layer" hosting value —
+a constraint expressed as an instruction a model may reinterpret is not
+enforcement — and contemplates refusing, at definition time, a policy
+declaring a hosting layer outside the permitted vocabulary. In the
+reference implementation that hosting-layer refusal is design intent rather
+than operative behavior: the read that assembles a policy's placement
+metadata does not project the hosting-layer field, so the forbidden-layer
+branch is unreachable from the write path, while the timeout-disposition
+refusal is operative. In another embodiment the hosting-layer field is read
+back like the others and the refusal fires as described. Because evaluation
+is against the pending post-state, a write supplying the missing field in
+the same transaction passes, and one removing it fails. The check is
+opt-in in the reference implementation (disabled by default) and is
+deliberately separate from evaluation-time enforcement gating: definitions
+may be validated while enforcement is still in advisory mode, and — as
+noted in § 3.2 — the definition-time rules are scoped by declared
+constraint class, so a policy whose *effect* escalates while its declared
+class is hard or soft is not reached by the escalation-window rule.
+Policies already stored are not retroactively re-validated; enabling the
+check cannot break a running store, only refuse the next malformed
+definition.
 
 #### 7.3 Violation versus incompleteness in audit
 
@@ -1130,7 +1276,7 @@ and each mechanism above is expressly contemplated in each generalized form:
 Nothing in the mechanisms requires that the writers be machine-learning
 agents; the mechanisms govern any writer. The agentic setting is the
 motivating deployment because it maximizes write volume, minimizes
-per-write human review, and makes the refusal record, the content-bound
+per-write human review, and makes the refusal record, the request-bound
 approval, and the honest label the load-bearing artifacts.
 
 ## Exemplary Aspects
@@ -1198,9 +1344,12 @@ non-limiting.
     a concurrently existing decision recording approval over the same
     digest.
 
-11. The method of aspect 9, wherein a policy declaring an escalating effect
-    without declaring a reversibility window is refused at definition time,
-    no default window being supplied.
+11. The method of aspect 9, wherein a policy declaring an escalation
+    constraint class at an action boundary without declaring a
+    reversibility window is refused at definition time, no default window
+    being supplied, and wherein a policy that nonetheless reaches
+    escalation without a declared window is treated as already expired
+    rather than being given a default.
 
 12. The method of aspect 9, wherein the minting is buffered during the
     refused action's transactional scope and durably written only after
@@ -1227,8 +1376,9 @@ non-limiting.
 
 15. The method of aspect 13, wherein an axis with no declared value in a
     dataset is reported as undeclared, no default value being fabricated,
-    and wherein a configured enforcement floor treats an undeclared axis
-    and less-than-full coverage as failing the floor.
+    and wherein a configured minimum-value floor on a narrowing axis
+    treats an undeclared axis and less-than-full coverage as failing the
+    floor.
 
 16. The method of aspect 13, wherein a label declared with an expiry reads
     back, after the expiry, as undeclared on every axis of the declaration,
@@ -1251,17 +1401,24 @@ non-limiting.
     storing rule sets keyed by name and validity-start; upon loading a rule
     set under an existing name, closing the validity interval of the prior
     version rather than deleting or overwriting it; recording each load in
-    an append-only event record with a transaction watermark; and serving,
-    for a supplied time or transaction, the rule versions in force at that
-    time or transaction, whereby data may be validated under the rules in
-    force at any past moment.
+    an append-only event record with a transaction watermark; maintaining
+    validator instances keyed by a content address of the rule text,
+    whereby two versions of one rule-set name coexist as distinct
+    validator cache entries; and serving, for a supplied time or
+    transaction, the rule versions in force at that time or transaction,
+    whereby data may be validated under the rules in force at any past
+    moment.
 
-20. The method of aspect 19, further comprising replaying a recorded
-    enforcement trace and reporting separately (i) fidelity, being the
-    trace judged against the rules as of the trace's own window, and (ii)
-    drift, being field-wise differences, including presence, between the
-    rules as of the window and the rules current at replay, drift being
-    reported as rule movement and never as trace violation.
+20. A method of auditing a recorded enforcement trace against versioned
+    rules, comprising: retrieving the rules in force as of the trace's own
+    recorded window; and reporting separately (i) fidelity, being the
+    trace judged against the rules as of that window, and (ii) drift,
+    being field-wise differences, including presence, between the rules as
+    of the window and the rules current at replay, drift being reported as
+    rule movement and never as trace violation, and outcomes recorded as
+    unknown being counted as neither satisfaction nor violation;
+    optionally wherein the versioned rules are stored per the method of
+    aspect 19.
 
 21. A method of validating a partial payload against constraints,
     comprising: validating the payload alone in a first pass whose result
@@ -1281,27 +1438,36 @@ non-limiting.
     wherein reported violation counts are recomputed from the retained
     issues.
 
-23. A method of authorizing writes to partitions of a data store,
-    comprising computing an effective authority as the intersection of
-    declared per-principal authorities along a principal-and-agent chain
-    ordered from originating principal to executor, wherein an empty chain
-    yields no authority, an empty intersection yields refusal without
-    fallback to any single principal's authority, and a wildcard authority
-    acts as the identity of intersection, declining to narrow and unable to
-    widen.
+23. A method of authorizing writes to partitions of a bitemporal data
+    store, comprising: storing per-principal authority grants as bitemporal
+    facts in the same store whose writes they govern; computing, within
+    the write's transactional scope, an effective authority as the
+    intersection of the granted authorities along a principal-and-agent
+    chain ordered from originating principal to executor, wherein the
+    intersection over an empty chain is no authority, an empty
+    intersection yields refusal without fallback to any single principal's
+    authority, and a wildcard authority acts as the identity of
+    intersection, declining to narrow and unable to widen; and authorizing
+    a write that labels a partition against a reserved metadata partition
+    rather than against the partition being labelled.
 
 24. A method of validating governance-policy definitions at write time,
     comprising evaluating, within the defining write's transactional scope
     and against its pending post-state, a compatibility matrix between a
-    policy's declared constraint class and its declared enforcement point,
-    and refusing the write when the class cannot be enforced at the point,
+    policy's declared constraint class and its declared enforcement point —
+    in one embodiment, hard constraints permitted at a pre-action gate, an
+    action-time monitor, a tool layer, or a policy layer; soft constraints
+    at an action-time monitor or a post-action auditor; and escalation
+    constraints at a pre-action gate or a post-action auditor — and
+    refusing the write when the class cannot be enforced at the point,
     when a required field including an escalation's reversibility window or
     timeout disposition is absent, when a forbidden value including a
     non-deny timeout disposition or a prompt-layer hosting is declared, or
     when a safety-critical field resolves to multiple distinct concurrent
     values.
 
-25. A data store comprising means for performing the methods of any of
+25. A data store comprising a processor and storage configured to perform
+    the methods of any of
     aspects 1, 9, 13, 19, 21, 23, and 24 in combination, wherein policy
     decisions, their signed records, escalation requests and decisions,
     partition labels, and versioned validation rules are stored as facts in
@@ -1312,9 +1478,7 @@ non-limiting.
 
 *The foregoing is a provisional disclosure. No formal claims are presented;
 the Exemplary Aspects above illustrate the subject matter regarded as the
-invention. The reference implementation is publicly available under the MIT
-license at github.com/scbrown/quipu; this disclosure generalizes it as
-described. The SARC framework (Besanson, arXiv:2605.07728) is acknowledged
+invention. The SARC framework (Besanson, arXiv:2605.07728) is acknowledged
 as prior art for the constraint taxonomy referenced herein; the mechanisms
 disclosed and aspected above are in-store mechanisms distinct from that
 model.*
