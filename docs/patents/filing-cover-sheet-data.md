@@ -45,6 +45,16 @@ on filing day.
 | Upload as | Single specification PDF with figures rendered inline |
 | Statutory deadline protected | 2027-01-02 for combination/coupling-expansion claims; individual mechanisms per the disclosure timeline |
 
+## Application 3 — Provisional C
+
+| Field | Value |
+|---|---|
+| Title | Deadline-Fenced Delegation of Decision Surfaces from a Synchronous Engine to an Asynchronous External Decision-Maker with Fallback-Gated Tiering |
+| Suggested docket number | SCB-003-PRV |
+| Specification source | `NeuralAmplifier` repo, `docs/patents/provisional-decision-delegation.md` (~15,000 words, 8 figures) |
+| Upload as | Single specification PDF with figures rendered inline |
+| Statutory deadline protected | 2027-07-26 (the contract disclosure; combination claims inherit it) |
+
 ## Filing-day sequence (per application)
 
 1. Sign in to [Patent Center](https://patentcenter.uspto.gov) (verified
