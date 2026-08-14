@@ -80,6 +80,28 @@ narrow mechanisms hold their own later dates, but any claim reciting
 coupling expansion as an element — including the combination claim —
 inherits the January date.
 
+## Provisional C — NeuralAmplifier decision-delegation cluster
+
+Repository history begins 2026-07-26; the youngest cluster by a wide margin.
+
+| Mechanism | First disclosure | Evidence | US filing deadline |
+|---|---|---|---|
+| World-view / action-space / deadline contract | 2026-07-26 | `cf47912` (`docs/contract.md`) | **2027-07-26** |
+| Fallback-gated per-surface tiering; frozen registry; NO_AI_PATH | 2026-07-29 | `ee00e99` (`surfaces.py`) | 2027-07-29 |
+| Derived fairness ledger with drift detection | 2026-07-29 | `1b7f245` (`handicap_drift`) | 2027-07-29 |
+| Traceparent-correlated outcome accounting | 2026-07-29 | `f05f032` (observability design + contract telemetry fields) | 2027-07-29 |
+| Grounding-utilisation unmeasurable-not-zero | 2026-07-29 | `87471f0` | 2027-07-29 |
+| Directives (closed vocabulary, `unmeasurable` status, `setback_turns`) | 2026-07-30 | `2cc9b30`; `directives.py` added same day | 2027-07-30 |
+| Agent-as-brain MCP; injection-safe doorbell | 2026-07-31 | `f471f95` (doorbell); `agent_brain.py` added same day | 2027-07-31 |
+| Two-clock deadline margin; `run_id` generation fencing | 2026-08-01 | `9cc3efc` (`decision_deadline_ms`), `b13c0f2` (retire pendings of a dead game process) | 2027-08-01 |
+| Two-door command channel (4 Hz poll, consume-before-act) | 2026-08-02 | `1b1a4a7` (`docs/turn-scoped-play.md`) | 2027-08-02 |
+
+**Controlling statutory deadline for cluster C: 2027-07-26** (the contract
+disclosure; any combination claim inherits it). All C citations were
+spot-checked against commit content after the rev-1 false-hit lesson; the
+07-29 `unmeasurable` hit was verified to concern grounding utilisation (its
+own row), not the directive status, which correctly dates to 07-30.
+
 ## Practical deadline
 
 Both provisionals should be **filed by 2026-08-31** — the inventor begins
