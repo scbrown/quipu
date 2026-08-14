@@ -82,25 +82,41 @@ inherits the January date.
 
 ## Provisional C — NeuralAmplifier decision-delegation cluster
 
-Repository history begins 2026-07-26; the youngest cluster by a wide margin.
+Repository history begins 2026-07-26, but two C-relevant mechanisms were
+pre-disclosed in sibling repos (rows marked), so the cluster is NOT cleanly
+"the youngest." This section is rev 2 of these rows: an independent
+adversarial re-derivation found four citation errors in the first version
+(bundled mechanisms under commits that disclosed only part of them, and two
+wrong hashes); all rows below are re-verified against commit content.
 
 | Mechanism | First disclosure | Evidence | US filing deadline |
 |---|---|---|---|
-| World-view / action-space / deadline contract | 2026-07-26 | `cf47912` (`docs/contract.md`) | **2027-07-26** |
-| Fallback-gated per-surface tiering; frozen registry; NO_AI_PATH | 2026-07-29 | `ee00e99` (`surfaces.py`) | 2027-07-29 |
+| Closed-tier anti-masquerade fact tagging (generic) | **2026-07-18** | **yupana** FR-3, `docs/yupana-spec.md` (repo begins `41519e9`): served facts carry a closed `tier`, never presenting an approximation as precise — pre-dates NA's `ruleTier` | **2027-07-18** for claims reaching tier tagging generally |
+| Agent-nudge transport (tmux literal-mode send + unprompted notify) | **2026-07-15 / 07-20** | **shantytown** `9106fb0` (dispatch), `0b0d448` (blocked-worker notify) | 2027-07-15 for claims reaching the transport |
+| World-view / action-space contract | 2026-07-26 | `cf47912` (`docs/contract.md` — no deadline field yet) | **2027-07-26** |
+| Provenance plane (ruleTier / appliesToEngine / sourcedFrom, read-side filter) | 2026-07-26 | `cb27fb9` | 2027-07-26 |
+| Frozen surface registry; NO_AI_PATH partition | 2026-07-29 | `ee00e99` (`surfaces.py`) | 2027-07-29 |
 | Derived fairness ledger with drift detection | 2026-07-29 | `1b7f245` (`handicap_drift`) | 2027-07-29 |
-| Traceparent-correlated outcome accounting | 2026-07-29 | `f05f032` (observability design + contract telemetry fields) | 2027-07-29 |
+| Traceparent telemetry stamping | 2026-07-29 | `f05f032` | 2027-07-29 |
 | Grounding-utilisation unmeasurable-not-zero | 2026-07-29 | `87471f0` | 2027-07-29 |
 | Directives (closed vocabulary, `unmeasurable` status, `setback_turns`) | 2026-07-30 | `2cc9b30`; `directives.py` added same day | 2027-07-30 |
-| Agent-as-brain MCP; injection-safe doorbell | 2026-07-31 | `f471f95` (doorbell); `agent_brain.py` added same day | 2027-07-31 |
-| Two-clock deadline margin; `run_id` generation fencing | 2026-08-01 | `9cc3efc` (`decision_deadline_ms`), `b13c0f2` (retire pendings of a dead game process) | 2027-08-01 |
-| Two-door command channel (4 Hz poll, consume-before-act) | 2026-08-02 | `1b1a4a7` (`docs/turn-scoped-play.md`) | 2027-08-02 |
+| Agent-as-brain MCP; doorbell | 2026-07-31 | `f471f95` (doorbell); `agent_brain.py` added same day | 2027-07-31 |
+| Per-surface LLM policy gate (`surface_default`, `[surfaces]`) | 2026-08-01 | `87a76e6`, `e91d0d2` | 2027-08-01 |
+| `decision_deadline_ms` two-clock margin | 2026-08-01 | `bf3170e` | 2027-08-01 |
+| `run_id` generation fencing | 2026-08-01 | `b13c0f2` | 2027-08-01 |
+| Two-door command channel (4 Hz poll, consume-before-act) | 2026-08-02 | `35b7715` (`docs/turn-scoped-play.md` content) | 2027-08-02 |
+| Outcome accounting (divergence-wins, unknown-never-applied) | 2026-08-03 | `2c4d04a` (`outcomes.py`) | 2027-08-03 |
 
-**Controlling statutory deadline for cluster C: 2027-07-26** (the contract
-disclosure; any combination claim inherits it). All C citations were
-spot-checked against commit content after the rev-1 false-hit lesson; the
-07-29 `unmeasurable` hit was verified to concern grounding utilisation (its
-own row), not the directive status, which correctly dates to 07-30.
+Mechanisms recited in Provisional C but not separately rowed (state guard,
+bounded repair, fog control, turn store) all first appear inside the repo's
+2026-07-26 → 2026-08-07 window; none can pre-date 2026-07-26 in NA. The
+sibling rows above are the only known earlier clocks.
+
+**Controlling statutory deadline for cluster C: 2027-07-26** for the NA-only
+subject matter — but **2027-07-15 / 2027-07-18** govern any claim whose
+scope reaches the sibling-disclosed generic mechanisms (tier tagging per se,
+agent-nudge transport per se). The provisional's aspects were scoped during
+review to avoid resting novelty on those generic elements.
 
 ## Practical deadline
 
