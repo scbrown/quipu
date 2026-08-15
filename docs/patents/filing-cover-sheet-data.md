@@ -16,7 +16,7 @@ on filing day.
 | Inventor (sole) | Legal name `[VERIFY — "Stephen C. Brown" was inferred from the GitHub handle; use the name on your government ID]` |
 | Inventor residence | `[FILL AT FILING — city, state, country]` |
 | Inventor mailing address | `[FILL AT FILING]` |
-| Correspondence email | scbrown3@gmail.com |
+| Correspondence email | `scbrown3@gmail.com` |
 | Correspondence address | `[FILL AT FILING — same as mailing address is fine]` |
 | Entity status | **Small entity** (deliberate choice: a signed employment agreement may create an assignment obligation, which would defeat micro-entity certification; overpaying small-entity is always safe, undercertifying is not) |
 | Provisional filing fee | $130 at the small-entity rate (verify on filing day) |

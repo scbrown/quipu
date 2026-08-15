@@ -223,7 +223,8 @@ for the other.
 
 **FIG. 1** is a block diagram of a governed knowledge store (100) according
 to one embodiment, showing the write path (102), the transactional savepoint
-(104), the write-policy gate (106), the staged verdict and request buffers
+(104), the write-policy gate (106) with its policy registry (108), the
+staged verdict and request buffers
 (110, 112), the post-resolution flush (114), the signing identity (116), the
 named-graph fact table (120), the label meta-graph (122), the bitemporal
 shape registry (124), and the escalation router (126).
