@@ -163,6 +163,21 @@ stays the only hard tier; every verdict carries
 score/threshold/model/corpus-watermark; anything written lands
 `inferred` and quarantined.
 
+**Ordering principle: identify and inform before refusing.** Yupana's
+edit seam answers *"what is this?"* first — fast entity identification
+plus surfaced context (the governed entity being touched, its attached
+policies, nearest precedents, nearby lessons and denials) — before the
+slower, heavier evaluation that may refuse under quipu policy. Stage 1
+is advisory, always-on, and hot-plane cheap (membership lookups and
+brute-force cosine, microseconds to low milliseconds); stage 2 is the
+policy verdict, which may consult projections, run heavier analysis, or
+route to escalation. The ordering is load-bearing twice: an agent that
+sees the context self-corrects before tripping policy, making refusals
+rarer; and when a refusal does land, the stage-1 context is already in
+the loop, so the refusal arrives explained rather than bare. All six
+applications below are stage-1 citizens except where a grounded exact
+match feeds a hard stage-2 rule.
+
 1. **Claimed-linkage verification** (grounding-integrity, strongest).
    A commit or bead-close *claims* `aegis:implements` — check the
    diff/commit content's similarity against the cited item's
