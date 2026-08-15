@@ -114,6 +114,35 @@ aegis:policy_no_ticket_in_comment a aegis:Policy ;
     aegis:latencyBudgetMs 5 .
 
 # ═══════════════════════════════════════════════════════════════════
+# no-ticket-in-comment v2 — the ENTITY-GROUNDED successor (design:
+# docs/design/semantic-grounded-edit-policies.md). No regex: candidates are
+# the tokens of the introduced text, and truth is membership in the graph's
+# own work-item id set — the groundingQuery names it, the projection machinery
+# serves it hot. Evaluation has THREE outcomes (grounded / unresolvable /
+# no-candidate); an agent that invents QUIP-999 is caught by the graph as a
+# fabricated reference, not by a reviewer.
+#
+# Not yet bound into a policy: the grounding-set projection and three-outcome
+# evaluation are sequencing step 2 (yupana-side). The v1 pair above stays live
+# until then; this predicate is the catalog's exemplar of the vocabulary so
+# the shapes are exercised by shipped data, not only by fixtures.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:pred_no_ticket_in_comment_v2 a aegis:Predicate ;
+    aegis:name "no-ticket-in-comment" ;
+    # For a grounded predicate the evidence is the projected work-item id set
+    # itself, not a pattern — provenance, per evidenceSource's contract: an
+    # evaluator must be able to say WHERE the membership answer came from.
+    aegis:evidenceSource "graph:work-item-id-set" ;
+    # Candidates are simply the introduced text's tokens. A pattern value here
+    # would be a narrowing optimization only, never authority — the id set
+    # alone defines ticket-shape.
+    aegis:candidateSource "token" ;
+    aegis:groundingQuery "SELECT ?id WHERE { ?w a aegis:WorkItem ; aegis:identifier ?id }" ;
+    aegis:matchType "must-not-ground" ;
+    aegis:tier "tree-sitter+graph" .
+
+# ═══════════════════════════════════════════════════════════════════
 # VerifierRegistration — the root of trust for Hank's edit-time verdicts.
 # Registers the `hank` verifier identity as authorized to attest these two
 # structural predicates, so a promoted aegis:Verdict is accepted (Phase 4,

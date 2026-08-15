@@ -290,7 +290,19 @@ aegis:matchType a owl:DatatypeProperty ;
     rdfs:label "match type" ;
     rdfs:domain aegis:Predicate ;
     rdfs:range xsd:string ;
-    rdfs:comment "How the predicate's evidence is read: \"must-match\", \"must-not-match\", or \"must-exist\". `must-exist` is the one that cannot be evaluated over an edit fragment — it is a question about the whole subject — which is why it belongs at the post-action point." .
+    rdfs:comment "How the predicate's evidence is read. The lexical trio — \"must-match\", \"must-not-match\", \"must-exist\" — tests text against a pattern (`must-exist` is the one that cannot be evaluated over an edit fragment, which is why it belongs at the post-action point). The grounded pair — \"must-ground\", \"must-not-ground\" — tests candidates for MEMBERSHIP in the id set the predicate's aegis:groundingQuery names, with three outcomes: grounded, unresolvable (a fabricated reference, its own violation class), and no-candidate." .
+
+aegis:candidateSource a owl:DatatypeProperty ;
+    rdfs:label "candidate source" ;
+    rdfs:domain aegis:Predicate ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Where a grounded predicate's candidates come from. \"token\" — the shipped value — means the tokens of the introduced text, which the parser has already produced and which assume no lexical shape. A pattern value remains expressible purely as a narrowing optimization (fewer membership probes); it is NEVER authority. Whatever picked the candidates, one grounds if and only if the graph holds it: the groundingQuery's id set alone defines what a reference looks like." .
+
+aegis:groundingQuery a owl:DatatypeProperty ;
+    rdfs:label "grounding query" ;
+    rdfs:domain aegis:Predicate ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The authoritative id set behind a grounded match type, as a SPARQL SELECT (e.g. every aegis:WorkItem's identifier). Truth is membership in its result, not resemblance to a pattern. Evaluators never run it per candidate: it is projected into the hot plane as a membership set under the existing freshness machinery, and a missing or failed projection renders the rule UNEVALUATED and loud — never \"empty set, nothing grounds, allow\", which would convert an outage of the grounding plane into silent permission." .
 
 aegis:gate a owl:DatatypeProperty ;
     rdfs:label "gate" ;
@@ -300,7 +312,7 @@ aegis:gate a owl:DatatypeProperty ;
 aegis:tier a owl:DatatypeProperty ;
     rdfs:label "tier" ;
     rdfs:range xsd:string ;
-    rdfs:comment "How precise the evidence behind a fact is: \"live\", \"lsp\", \"tree-sitter\", \"committed\" or \"attested\". Carried by Selector, Predicate AND Verdict, so no rdfs:domain. Every fact this stack serves is tagged, and a tree-sitter approximation is never presented as LSP-precise." .
+    rdfs:comment "How precise the evidence behind a fact is: \"live\", \"lsp\", \"tree-sitter\", \"committed\" or \"attested\" — plus, on a Predicate only, the grounded ladder of \"tree-sitter+graph\" (exact membership, hard-capable), \"embedding\" (reproducible but approximate; advisory or escalate, never a hard PAG deny) and \"model\" (generative judgment, last resort). Carried by Selector, Predicate AND Verdict, so no rdfs:domain. Every fact this stack serves is tagged, and an approximation is never presented as exact." .
 
 # ── Verdict and the root of trust ──────────────────────────────────
 

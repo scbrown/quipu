@@ -417,19 +417,62 @@ aegis:PredicateShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
+        # Three values beyond the Selector's set, forming the predicate ladder
+        # of docs/design/semantic-grounded-edit-policies.md — weakest authority
+        # to strongest claim:
+        #   "tree-sitter+graph"  exact membership of parsed text in a projected
+        #                        id set — deterministic, hard-capable;
+        #   "embedding"          similarity against a pinned model + corpus
+        #                        snapshot — REPRODUCIBLE but approximate, so
+        #                        advisory/escalate only, never a hard PAG deny;
+        #   "model"              generative judgment — last resort, advisory
+        #                        only, its recorded facts quarantined.
+        # A closed enum as ever: a semantic verdict can never masquerade as an
+        # exact one, because the tier that would let it is not a value the
+        # vocabulary can express for it.
         sh:path aegis:tier ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
-        sh:in ( "live" "lsp" "tree-sitter" "committed" "attested" ) ;
+        sh:in ( "live" "lsp" "tree-sitter" "tree-sitter+graph" "embedding" "model" "committed" "attested" ) ;
     ] ;
     sh:property [
-        # The predicate direction for a tree-sitter-tier rule — mirrors Hank's
-        # rules::MatchType so a projected policy round-trips. Optional: a
-        # SPARQL-ASK predicate encodes its own direction.
+        # The predicate direction. The lexical trio mirrors Hank's
+        # rules::MatchType so a projected policy round-trips; a SPARQL-ASK
+        # predicate encodes its own direction and carries none. The GROUNDED
+        # pair tests candidates for MEMBERSHIP in the id set named by
+        # aegis:groundingQuery rather than against a pattern, with three
+        # outcomes, not two: grounded (resolves to a real entity), unresolvable
+        # (a fabricated reference — its own violation class, never folded into
+        # a neighbour), and no-candidate. A grounded match type without a
+        # groundingQuery cannot be evaluated and is refused at definition time
+        # (src/governance/placement.rs).
         sh:path aegis:matchType ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
-        sh:in ( "must-match" "must-not-match" "must-exist" ) ;
+        sh:in ( "must-match" "must-not-match" "must-exist" "must-ground" "must-not-ground" ) ;
+    ] ;
+    sh:property [
+        # Where a grounded predicate's CANDIDATES come from. "token" is the
+        # shipped value: candidates are simply the tokens of the introduced
+        # text — the parser has already produced them, and tokenization assumes
+        # no lexical shape. A pattern value remains expressible purely as a
+        # NARROWING OPTIMIZATION (fewer membership probes), never as authority:
+        # whatever picked the candidates, a candidate grounds if and only if
+        # the graph holds it. The id set alone defines ticket-shape.
+        sh:path aegis:candidateSource ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Truth for a grounded predicate: a SPARQL SELECT naming the
+        # authoritative id set (e.g. every aegis:WorkItem's identifier).
+        # Evaluators do not run it per candidate — it is projected into the hot
+        # plane as a membership set under the existing freshness/cache-age
+        # machinery, and a missing or failed projection renders the rule
+        # UNEVALUATED (loud), never "empty set, nothing grounds, allow".
+        sh:path aegis:groundingQuery ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
     ] ;
     sh:property [
         # An optional pre-filter regex: only captures whose text matches the gate

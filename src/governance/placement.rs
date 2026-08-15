@@ -32,6 +32,24 @@
 //!   because an escalation without a bound is not oversight, it is deferred
 //!   autonomy (SARC I4, §5.3).
 //!
+//! The entity-grounded and similarity-tier vocabulary
+//! (docs/design/semantic-grounded-edit-policies.md) adds two more families:
+//!
+//! - a predicate with a **grounded match type** (`must-ground` /
+//!   `must-not-ground`) must declare an `aegis:groundingQuery` — without one
+//!   there is no id set for candidates to be members OF, and the failure mode
+//!   is not an error but silence: an evaluator with no projection sees an
+//!   empty set, nothing grounds, and a deny-on-grounding rule allows
+//!   everything. Missing grounding must be loud at definition time, never
+//!   discovered as an allow at evaluation time;
+//! - a policy whose predicate carries tier **`embedding`** or **`model`** is a
+//!   classifier, and a classifier does not hard-deny before the action: effect
+//!   `deny` at the PAG is refused (the PAA and the escalation router are its
+//!   seams), and the policy must carry an `OperatingPoint` with a NONZERO
+//!   false-positive tolerance — 0.0/0.0 is the exact tiers' claim, and an
+//!   approximate predicate declaring it is asserting an error rate it cannot
+//!   have.
+//!
 //! ## Definition-time, not evaluation-time
 //!
 //! This runs when a write DEFINES OR AMENDS a policy, against the pending
@@ -92,6 +110,18 @@ struct Placement {
     reversibility_window: Option<String>,
     on_timeout: Option<String>,
     hosted_at_layer: Option<String>,
+    /// The tier(s) of the predicate this policy composes, read through
+    /// `aegis:predicate`. A Vec, not an Option: a policy mid-re-composition can
+    /// see two predicates (or one re-tiered predicate) in the pending state,
+    /// and the inexact-tier rules apply if ANY of them is a classifier — the
+    /// conservative reading, since the policy would evaluate that predicate.
+    predicate_tiers: Vec<String>,
+    /// Whether the policy carries an `aegis:operatingPoint` at all.
+    has_operating_point: bool,
+    /// Every distinct `aegis:falsePositiveTolerance` reachable through the
+    /// policy's operating point(s). All must be nonzero for an inexact-tier
+    /// predicate: one zero among several is still a claim of exactness.
+    fp_tolerances: Vec<f64>,
     /// Fields that resolved to more than one distinct value, as
     /// `(field, values)`. See [`Placement::violation`] — this is checked first.
     ambiguous: Vec<(&'static str, Vec<String>)>,
@@ -172,6 +202,68 @@ impl Placement {
                  reinterpret or route around is not enforcement, and hosting one \
                  there is what SARC I6 forbids."
             ));
+        }
+
+        // ── Inexact-tier predicates (design B/C: "embedding", "model") ──
+        //
+        // BEFORE the boundary exemption, like the value checks above, because
+        // both rules are about honesty rather than placement geometry: a
+        // classifier claiming exactness, or hard-denying on a score, is wrong
+        // wherever the policy binds. Keyed on the PREDICATE's tier read
+        // through `aegis:predicate` — the policy is where effect, point and
+        // operating point live, so the policy is what gets refused.
+        if let Some(tier) = self
+            .predicate_tiers
+            .iter()
+            .find(|t| matches!(t.as_str(), "embedding" | "model"))
+        {
+            // A similarity score or a generative judgment trades FP against
+            // FN; letting it hard-deny before the action makes a threshold
+            // choice into an unappealable refusal. The latency budget agrees:
+            // neither an embedding pass nor a model call fits a 5 ms hook.
+            if self.effect.as_deref() == Some("deny") && self.point.as_deref() == Some("PAG") {
+                return Some(format!(
+                    "policy '{iri}' hard-denies at the Pre-Action Gate on a \
+                     \"{tier}\"-tier predicate. A classifier's verdict is a \
+                     score against a threshold, not a fact, and a hard PAG \
+                     denial makes its false positives unappealable before the \
+                     action even exists to inspect. Place it at the PAA \
+                     (advisory over the completed action) or use an escalating \
+                     effect through the router — exact tiers alone may deny at \
+                     the gate."
+                ));
+            }
+            if !self.has_operating_point {
+                return Some(format!(
+                    "policy '{iri}' composes a \"{tier}\"-tier predicate but \
+                     declares no aegis:operatingPoint. An approximate predicate \
+                     without a declared FP/FN posture is uncalibrated — nobody \
+                     decided what error rate this deployment accepts. Declare \
+                     an aegis:OperatingPoint with a NONZERO \
+                     falsePositiveTolerance."
+                ));
+            }
+            if self.fp_tolerances.is_empty() {
+                return Some(format!(
+                    "policy '{iri}' composes a \"{tier}\"-tier predicate but \
+                     its operating point declares no \
+                     aegis:falsePositiveTolerance. A classifier has a false- \
+                     positive rate whether or not it is written down; declare \
+                     a tolerant, NONZERO number rather than leaving the \
+                     trade-off to whoever tuned the threshold."
+                ));
+            }
+            if self.fp_tolerances.contains(&0.0) {
+                return Some(format!(
+                    "policy '{iri}' composes a \"{tier}\"-tier predicate whose \
+                     operating point claims falsePositiveTolerance 0.0. \
+                     Exactness belongs to the exact tiers — an exact predicate \
+                     carries 0.0/0.0 because it has no classifier error, and a \
+                     similarity or model judgment declaring the same number is \
+                     asserting an error rate it cannot have. Declare a \
+                     tolerant, nonzero falsePositiveTolerance."
+                ));
+            }
         }
 
         if self.boundary.as_deref() != Some("action") {
@@ -301,40 +393,104 @@ fn why_not(class: &str, point: &str) -> &'static str {
     }
 }
 
-/// Validate every policy this write defines or amends. `Err(PolicyDenied)` on
-/// the first malformed one; the caller rolls the savepoint back.
+/// The grounding-relevant fields of one Predicate, as read back from the
+/// pending post-state. The rule is a pure function over this, mirroring
+/// [`Placement`], so the table in `placement_tests.rs` can exercise it without
+/// a store.
+#[derive(Debug, Default, Clone)]
+struct Grounding {
+    /// Every distinct `aegis:matchType` on the predicate. A Vec for the same
+    /// reason as [`Placement::predicate_tiers`]: a predicate mid-amendment can
+    /// carry two, and the grounding requirement applies if ANY is grounded.
+    match_types: Vec<String>,
+    /// Whether the predicate declares an `aegis:groundingQuery`.
+    has_grounding_query: bool,
+}
+
+impl Grounding {
+    /// Check this predicate against the grounding rule, returning the reason
+    /// it is malformed. `None` means conformant.
+    fn violation(&self, iri: &str) -> Option<String> {
+        let grounded = self
+            .match_types
+            .iter()
+            .find(|m| matches!(m.as_str(), "must-ground" | "must-not-ground"))?;
+        if self.has_grounding_query {
+            return None;
+        }
+        // The failure this refusal pre-empts is not an evaluation error — it
+        // is an evaluation SUCCESS with the wrong answer. A grounded match
+        // type with no query gives the projector nothing to project; the
+        // evaluator then sees an empty membership set, no candidate grounds,
+        // and a must-not-ground deny rule allows everything, silently. The
+        // design's contract is "missing projection => unevaluated, loud"; a
+        // predicate that cannot even NAME its projection has to be refused
+        // before it exists to mis-evaluate.
+        Some(format!(
+            "predicate '{iri}' declares aegis:matchType \"{grounded}\" but no \
+             aegis:groundingQuery. A grounded match type tests candidates for \
+             membership in an id set, and without a query there is no set to \
+             be a member of — the rule would evaluate against emptiness, where \
+             nothing grounds and a deny-on-grounding policy allows everything. \
+             Declare aegis:groundingQuery (a SPARQL SELECT naming the \
+             authoritative id set), or use a lexical matchType."
+        ))
+    }
+}
+
+/// Validate every policy AND predicate this write defines or amends.
+/// `Err(PolicyDenied)` on the first malformed one; the caller rolls the
+/// savepoint back.
 ///
 /// Reads the *pending* post-state — the datums are already staged in the open
 /// savepoint — so a write that supplies the missing field in the same
 /// transaction passes, and one that removes it fails.
 pub fn validate_write(store: &Store, datums: &[Datum], graph: i64) -> Result<()> {
-    let touched = touched_policies(store, datums, graph)?;
-    if touched.is_empty() {
-        return Ok(());
+    let policies = touched_of_type(store, datums, graph, "Policy")?;
+    if !policies.is_empty() {
+        let placements = read_placements(store, &policies)?;
+        for iri in &policies {
+            let placement = placements.get(iri).cloned().unwrap_or_default();
+            if let Some(reason) = placement.violation(iri) {
+                return Err(Error::PolicyDenied(reason));
+            }
+        }
     }
-    let placements = read_placements(store, &touched)?;
-    for iri in &touched {
-        let placement = placements.get(iri).cloned().unwrap_or_default();
-        if let Some(reason) = placement.violation(iri) {
-            return Err(Error::PolicyDenied(reason));
+    // Predicates are validated as entities in their own right, not only
+    // through the policies composing them: a grounded predicate with no query
+    // is malformed before any policy names it, and catching it at ITS
+    // definition is what keeps the refusal adjacent to the author's mistake.
+    let predicates = touched_of_type(store, datums, graph, "Predicate")?;
+    if !predicates.is_empty() {
+        let groundings = read_groundings(store, &predicates)?;
+        for iri in &predicates {
+            let grounding = groundings.get(iri).cloned().unwrap_or_default();
+            if let Some(reason) = grounding.violation(iri) {
+                return Err(Error::PolicyDenied(reason));
+            }
         }
     }
     Ok(())
 }
 
-/// The IRIs of entities this write touched that are `aegis:Policy` in the
+/// The IRIs of entities this write touched that are `aegis:<class>` in the
 /// pending post-state.
 ///
-/// Deliberately keyed on the entity being a Policy *after* this write rather
-/// than on the attributes written: amending an unrelated field of a malformed
-/// policy should still surface the malformation, and adding `rdf:type
-/// aegis:Policy` to an existing node is itself a definition.
-fn touched_policies(store: &Store, datums: &[Datum], graph: i64) -> Result<Vec<String>> {
-    let (Some(rdf_type_id), Some(policy_type_id)) = (
+/// Deliberately keyed on the entity's type *after* this write rather than on
+/// the attributes written: amending an unrelated field of a malformed
+/// definition should still surface the malformation, and adding the rdf:type
+/// to an existing node is itself a definition.
+fn touched_of_type(
+    store: &Store,
+    datums: &[Datum],
+    graph: i64,
+    class: &str,
+) -> Result<Vec<String>> {
+    let (Some(rdf_type_id), Some(class_type_id)) = (
         store.lookup(RDF_TYPE)?,
-        store.lookup(&format!("{DEFAULT_BASE_NS}Policy"))?,
+        store.lookup(&format!("{DEFAULT_BASE_NS}{class}"))?,
     ) else {
-        // Neither term interned => no policy can exist yet.
+        // Either term un-interned => no instance can exist yet.
         return Ok(Vec::new());
     };
 
@@ -344,19 +500,20 @@ fn touched_policies(store: &Store, datums: &[Datum], graph: i64) -> Result<Vec<S
 
     let mut out = Vec::new();
     for e in entities {
-        if is_policy(store, e, rdf_type_id, policy_type_id, graph)? {
+        if is_typed(store, e, rdf_type_id, class_type_id, graph)? {
             out.push(store.resolve(e)?);
         }
     }
     Ok(out)
 }
 
-/// Whether `entity` is an active `aegis:Policy` in its own graph or ROOT.
-fn is_policy(
+/// Whether `entity` actively carries the given rdf:type in its own graph or
+/// ROOT.
+fn is_typed(
     store: &Store,
     entity: i64,
     rdf_type_id: i64,
-    policy_type_id: i64,
+    class_type_id: i64,
     graph: i64,
 ) -> Result<bool> {
     let mut stmt = store.prepare(
@@ -364,7 +521,7 @@ fn is_policy(
          WHERE e = ?1 AND a = ?2 AND v = ?3 AND op = 1 AND valid_to IS NULL \
            AND (g = ?4 OR g = 0) LIMIT 1",
     )?;
-    let value = Value::Ref(policy_type_id).to_bytes();
+    let value = Value::Ref(class_type_id).to_bytes();
     let found = stmt
         .query_row(rusqlite::params![entity, rdf_type_id, value, graph], |_| {
             Ok(true)
@@ -381,7 +538,8 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
     // was dead code (quipu-sio).
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
-         SELECT ?p ?boundary ?class ?point ?effect ?window ?timeout ?layer WHERE {{ \
+         SELECT ?p ?boundary ?class ?point ?effect ?window ?timeout ?layer \
+                ?ptier ?op ?fp WHERE {{ \
             ?p a a:Policy . \
             OPTIONAL {{ ?p a:boundary ?boundary }} \
             OPTIONAL {{ ?p a:constraintClass ?class }} \
@@ -390,12 +548,23 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
             OPTIONAL {{ ?p a:reversibilityWindowSeconds ?window }} \
             OPTIONAL {{ ?p a:onTimeout ?timeout }} \
             OPTIONAL {{ ?p a:hostedAtLayer ?layer }} \
+            OPTIONAL {{ ?p a:predicate ?pred . ?pred a:tier ?ptier }} \
+            OPTIONAL {{ ?p a:operatingPoint ?op }} \
+            OPTIONAL {{ ?p a:operatingPoint ?opfp . \
+                        ?opfp a:falsePositiveTolerance ?fp }} \
          }}"
     );
     // Collect the DISTINCT values each field resolved to, rather than the last
     // row's value: a multi-valued field produces one row per value, and taking
     // whichever arrived last is how a re-classed policy would slip through.
+    //
+    // The policy's OWN seven fields feed the ambiguity refusal; the DERIVED
+    // bindings (?ptier, ?op, ?fp — read through the predicate and operating
+    // point) are kept apart, because two values there are not an amendment
+    // race on the policy but a fact about what it composes, and the inexact-
+    // tier rules already treat every collected value conservatively.
     let mut fields: HashMap<String, HashMap<&'static str, Vec<String>>> = HashMap::new();
+    let mut derived: HashMap<String, HashMap<&'static str, Vec<String>>> = HashMap::new();
     if let QueryResult::Select { rows, .. } = sparql::query(store, &q)? {
         for row in rows {
             let Some(iri) = iri_of(store, row.get("p")) else {
@@ -404,7 +573,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
             if !touched.contains(&iri) {
                 continue;
             }
-            let entry = fields.entry(iri).or_default();
+            let entry = fields.entry(iri.clone()).or_default();
             for (field, binding) in [
                 ("boundary", "boundary"),
                 ("constraintClass", "class"),
@@ -415,6 +584,19 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 ("hostedAtLayer", "layer"),
             ] {
                 if let Some(v) = lexical(row.get(binding)) {
+                    let seen = entry.entry(field).or_default();
+                    if !seen.contains(&v) {
+                        seen.push(v);
+                    }
+                }
+            }
+            let entry = derived.entry(iri).or_default();
+            for (field, value) in [
+                ("predicateTier", lexical(row.get("ptier"))),
+                ("operatingPoint", iri_of(store, row.get("op"))),
+                ("falsePositiveTolerance", numeric_lexical(row.get("fp"))),
+            ] {
+                if let Some(v) = value {
                     let seen = entry.entry(field).or_default();
                     if !seen.contains(&v) {
                         seen.push(v);
@@ -437,6 +619,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
             .filter(|(_, vs)| vs.len() > 1)
             .map(|(f, vs)| (*f, vs.clone()))
             .collect();
+        let composed = derived.remove(&iri).unwrap_or_default();
         out.insert(
             iri,
             Placement {
@@ -447,9 +630,49 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 reversibility_window: single("reversibilityWindowSeconds"),
                 on_timeout: single("onTimeout"),
                 hosted_at_layer: single("hostedAtLayer"),
+                predicate_tiers: composed.get("predicateTier").cloned().unwrap_or_default(),
+                has_operating_point: composed.contains_key("operatingPoint"),
+                fp_tolerances: composed
+                    .get("falsePositiveTolerance")
+                    .map(|vs| vs.iter().filter_map(|v| v.parse().ok()).collect())
+                    .unwrap_or_default(),
                 ambiguous,
             },
         );
+    }
+    Ok(out)
+}
+
+/// Read the grounding metadata of the touched predicates in one SPARQL pass,
+/// over the same pending post-state as [`read_placements`].
+fn read_groundings(store: &Store, touched: &[String]) -> Result<HashMap<String, Grounding>> {
+    let q = format!(
+        "PREFIX a: <{DEFAULT_BASE_NS}> \
+         SELECT ?pr ?match ?query WHERE {{ \
+            ?pr a a:Predicate . \
+            OPTIONAL {{ ?pr a:matchType ?match }} \
+            OPTIONAL {{ ?pr a:groundingQuery ?query }} \
+         }}"
+    );
+    let mut out: HashMap<String, Grounding> = HashMap::new();
+    if let QueryResult::Select { rows, .. } = sparql::query(store, &q)? {
+        for row in rows {
+            let Some(iri) = iri_of(store, row.get("pr")) else {
+                continue;
+            };
+            if !touched.contains(&iri) {
+                continue;
+            }
+            let entry = out.entry(iri).or_default();
+            if let Some(m) = lexical(row.get("match"))
+                && !entry.match_types.contains(&m)
+            {
+                entry.match_types.push(m);
+            }
+            if lexical(row.get("query")).is_some() {
+                entry.has_grounding_query = true;
+            }
+        }
     }
     Ok(out)
 }
@@ -461,6 +684,21 @@ fn lexical(v: Option<&Value>) -> Option<String> {
     match v {
         Some(Value::Str(s)) => Some(s.clone()),
         Some(Value::Int(i)) => Some(i.to_string()),
+        _ => None,
+    }
+}
+
+/// The lexical form of a bound NUMERIC value. Wider than [`lexical`] because
+/// the tolerances arrive differently by route: a Turtle ingest keeps
+/// `xsd:decimal` as a typed literal ([`Value::Typed`], exactness preserved),
+/// while a direct transact writes [`Value::Float`]. Both are the same declared
+/// tolerance, and the rule must read whichever the author's path produced.
+fn numeric_lexical(v: Option<&Value>) -> Option<String> {
+    match v {
+        Some(Value::Str(s)) => Some(s.clone()),
+        Some(Value::Int(i)) => Some(i.to_string()),
+        Some(Value::Float(f)) => Some(f.to_string()),
+        Some(Value::Typed { lexical, .. }) => Some(lexical.clone()),
         _ => None,
     }
 }

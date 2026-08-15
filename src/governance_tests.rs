@@ -350,6 +350,83 @@ fn predicate_match_type_out_of_enum_is_rejected() {
     );
 }
 
+// ── Entity-grounded and inexact-tier predicate vocabulary (quipu-3aj) ─────────
+// Design: docs/design/semantic-grounded-edit-policies.md. The shapes admit the
+// vocabulary; the definition-time rules in src/governance/placement.rs enforce
+// the cross-field requirements (grounded matchType => groundingQuery, inexact
+// tier => nonzero OperatingPoint, no hard PAG deny) that SHACL core cannot.
+
+#[test]
+fn a_grounded_predicate_conforms() {
+    // Both grounded directions, carrying the full grounded vocabulary: token
+    // candidates, the id-set query, and the exact grounded tier.
+    for mt in ["must-ground", "must-not-ground"] {
+        let data = format!(
+            "{NS}\naegis:pr a aegis:Predicate ; aegis:name \"no-ticket-in-comment\" ; \
+             aegis:evidenceSource \"graph:work-item-id-set\" ; \
+             aegis:candidateSource \"token\" ; \
+             aegis:groundingQuery \"SELECT ?id WHERE {{ ?w a aegis:WorkItem ; aegis:identifier ?id }}\" ; \
+             aegis:matchType \"{mt}\" ; aegis:tier \"tree-sitter+graph\" .\n"
+        );
+        let fb = validate_shapes(SHAPES, &data).unwrap();
+        assert!(
+            fb.conforms,
+            "a grounded predicate ({mt}) should conform: {:#?}",
+            fb.results
+        );
+    }
+}
+
+#[test]
+fn an_inexact_tier_predicate_conforms() {
+    // The similarity and generative tiers are admitted by the SHAPE; their
+    // placement discipline (no hard PAG deny, nonzero OperatingPoint) is the
+    // placement check's job, not this enum's.
+    for tier in ["embedding", "model"] {
+        let data = format!(
+            "{NS}\naegis:pr a aegis:Predicate ; aegis:name \"references-tracked-work\" ; \
+             aegis:evidenceSource \"bobbin:beads-index\" ; aegis:tier \"{tier}\" .\n"
+        );
+        let fb = validate_shapes(SHAPES, &data).unwrap();
+        assert!(
+            fb.conforms,
+            "an {tier}-tier predicate should conform: {:#?}",
+            fb.results
+        );
+    }
+}
+
+#[test]
+fn predicate_tier_out_of_enum_is_rejected() {
+    // The enum was EXTENDED, not unhinged: a value outside the widened set is
+    // still refused, which is what keeps "the tier rides the verdict" a claim
+    // with teeth.
+    let data = format!(
+        "{NS}\naegis:pr a aegis:Predicate ; aegis:name \"t\" ; \
+         aegis:evidenceSource \"x\" ; aegis:tier \"vibes\" .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(!fb.conforms, "a tier outside the enum must be rejected");
+}
+
+#[test]
+fn the_catalog_v2_grounded_predicate_names_its_id_set() {
+    // The shipped exemplar has to model the discipline it documents: token
+    // candidates (never a pattern as authority), the grounding query, the
+    // grounded direction, and the exact grounded tier.
+    let block = TREESITTER_CATALOG
+        .split("aegis:pred_no_ticket_in_comment_v2 a aegis:Predicate")
+        .nth(1)
+        .expect("catalog no longer defines pred_no_ticket_in_comment_v2")
+        .split(" .\n")
+        .next()
+        .unwrap();
+    assert!(block.contains("aegis:candidateSource \"token\""));
+    assert!(block.contains("aegis:groundingQuery"));
+    assert!(block.contains("aegis:matchType \"must-not-ground\""));
+    assert!(block.contains("aegis:tier \"tree-sitter+graph\""));
+}
+
 #[test]
 fn policy_selector_must_point_at_a_selector() {
     // sh:class aegis:Selector — selector pointing at a non-Selector is malformed.

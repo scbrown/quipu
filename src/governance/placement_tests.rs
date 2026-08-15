@@ -13,11 +13,7 @@ fn action(class: Option<&str>, point: Option<&str>) -> Placement {
         boundary: Some("action".to_string()),
         class: class.map(str::to_string),
         point: point.map(str::to_string),
-        effect: None,
-        reversibility_window: None,
-        on_timeout: None,
-        hosted_at_layer: None,
-        ambiguous: Vec::new(),
+        ..Placement::default()
     }
 }
 
@@ -26,11 +22,9 @@ fn escalation(point: &str, window: Option<&str>, timeout: Option<&str>) -> Place
         boundary: Some("action".to_string()),
         class: Some("escalation".to_string()),
         point: Some(point.to_string()),
-        effect: None,
         reversibility_window: window.map(str::to_string),
         on_timeout: timeout.map(str::to_string),
-        hosted_at_layer: None,
-        ambiguous: Vec::new(),
+        ..Placement::default()
     }
 }
 
@@ -579,4 +573,334 @@ fn an_escalating_effect_without_the_escalation_class_is_refused_at_the_write_pat
         matches!(err, Err(Error::PolicyDenied(_))),
         "an escalate-effect hard-class policy must be refused at definition time, got {err:?}"
     );
+}
+
+// ── Entity-grounded and inexact-tier vocabulary (quipu-3aj) ──────────────────
+//
+// Design: docs/design/semantic-grounded-edit-policies.md. Two rule families:
+// a grounded match type must NAME its id set (a query-less grounded rule
+// evaluates against emptiness, where nothing grounds and a deny-on-grounding
+// policy allows everything, silently), and a classifier-tier predicate must
+// neither hard-deny at the gate nor claim an exact operating point.
+
+fn grounded(match_type: &str, has_query: bool) -> Grounding {
+    Grounding {
+        match_types: vec![match_type.to_string()],
+        has_grounding_query: has_query,
+    }
+}
+
+#[test]
+fn a_grounded_match_type_without_a_grounding_query_is_rejected() {
+    for mt in ["must-ground", "must-not-ground"] {
+        let why = grounded(mt, false).violation("aegis:pr").unwrap();
+        assert!(why.contains("aegis:pr"), "names the predicate: {why}");
+        assert!(why.contains(mt), "names the grounded match type: {why}");
+        assert!(
+            why.contains("groundingQuery"),
+            "names the missing field: {why}"
+        );
+        assert!(
+            why.contains("allows everything"),
+            "names the SILENT failure mode — empty set, nothing grounds: {why}"
+        );
+        assert!(why.contains("Declare"), "names the remedy: {why}");
+    }
+}
+
+#[test]
+fn a_grounded_predicate_with_its_query_conforms() {
+    // The green half: the rule demands the query, not the impossibility of
+    // grounded match types.
+    for mt in ["must-ground", "must-not-ground"] {
+        assert!(grounded(mt, true).violation("p").is_none());
+    }
+}
+
+#[test]
+fn a_lexical_match_type_needs_no_grounding_query() {
+    // The v1 regex predicates must keep landing untouched, and a predicate
+    // with no matchType at all (a SPARQL-ASK one) has no direction to ground.
+    for mt in ["must-match", "must-not-match", "must-exist"] {
+        assert!(grounded(mt, false).violation("p").is_none());
+    }
+    assert!(Grounding::default().violation("p").is_none());
+}
+
+/// A well-calibrated inexact-tier policy: advisory at the PAA, operating
+/// point present, tolerant FP number. The conformant case the rejection
+/// tests perturb.
+fn inexact(tier: &str) -> Placement {
+    Placement {
+        boundary: Some("action".to_string()),
+        class: Some("soft".to_string()),
+        point: Some("PAA".to_string()),
+        effect: Some("warn".to_string()),
+        predicate_tiers: vec![tier.to_string()],
+        has_operating_point: true,
+        fp_tolerances: vec![0.05],
+        ..Placement::default()
+    }
+}
+
+#[test]
+fn a_calibrated_inexact_policy_at_the_paa_conforms() {
+    for tier in ["embedding", "model"] {
+        assert!(
+            inexact(tier).violation("p").is_none(),
+            "advisory {tier}-tier with a nonzero operating point must conform"
+        );
+    }
+}
+
+#[test]
+fn an_inexact_tier_predicate_must_not_hard_deny_at_the_pag() {
+    for tier in ["embedding", "model"] {
+        let mut p = inexact(tier);
+        p.class = Some("hard".to_string());
+        p.point = Some("PAG".to_string());
+        p.effect = Some("deny".to_string());
+        let why = p.violation("aegis:p").unwrap();
+        assert!(why.contains("aegis:p"), "names the policy: {why}");
+        assert!(why.contains(tier), "names the tier: {why}");
+        assert!(
+            why.contains("PAA") && why.contains("escalat"),
+            "names both permitted routes — PAA placement or escalation: {why}"
+        );
+    }
+    // The control: EXACT membership stays hard-capable. tree-sitter+graph is
+    // deterministic — the whole point of the grounded tier is that it may
+    // deny at the gate where similarity may not.
+    let mut exact = action(Some("hard"), Some("PAG"));
+    exact.effect = Some("deny".to_string());
+    exact.predicate_tiers = vec!["tree-sitter+graph".to_string()];
+    exact.has_operating_point = true;
+    exact.fp_tolerances = vec![0.0];
+    assert!(
+        exact.violation("p").is_none(),
+        "exact grounded membership may hard-deny at the PAG"
+    );
+}
+
+#[test]
+fn an_inexact_tier_policy_without_an_operating_point_is_rejected() {
+    let mut p = inexact("embedding");
+    p.has_operating_point = false;
+    p.fp_tolerances = Vec::new();
+    let why = p.violation("aegis:p").unwrap();
+    assert!(why.contains("aegis:p"), "{why}");
+    assert!(why.contains("operatingPoint"), "{why}");
+    assert!(
+        why.contains("NONZERO"),
+        "the remedy states the calibration must be tolerant, not merely present: {why}"
+    );
+}
+
+#[test]
+fn an_inexact_tier_policy_claiming_exactness_is_rejected() {
+    // falsePositiveTolerance 0.0 on a classifier asserts an error rate it
+    // cannot have — the exact tiers' claim, worn by an approximate predicate.
+    let mut p = inexact("model");
+    p.fp_tolerances = vec![0.0];
+    let why = p.violation("aegis:p").unwrap();
+    assert!(why.contains("falsePositiveTolerance"), "{why}");
+    assert!(why.contains("nonzero"), "names the remedy: {why}");
+
+    // And an operating point that simply omits the FP number is refused too:
+    // an undeclared tolerance is not a tolerant one.
+    let mut p = inexact("embedding");
+    p.fp_tolerances = Vec::new();
+    let why = p.violation("aegis:p").unwrap();
+    assert!(why.contains("falsePositiveTolerance"), "{why}");
+}
+
+#[test]
+fn the_inexact_rules_apply_outside_the_action_boundary_too() {
+    // Like the onTimeout/hostedAtLayer value checks, these run BEFORE the
+    // boundary exemption: an uncalibrated classifier is dishonest wherever
+    // the policy binds, not only at a dispatch seam.
+    let p = Placement {
+        boundary: Some("transition".to_string()),
+        predicate_tiers: vec!["embedding".to_string()],
+        ..Placement::default()
+    };
+    assert!(
+        p.violation("p").is_some(),
+        "a transition-boundary embedding policy still needs its operating point"
+    );
+}
+
+// ── Liveness for the grounded and inexact rules, through the write path ──────
+
+/// Stage an `aegis:Predicate` with the given string fields, as one transaction.
+fn define_predicate(
+    store: &mut Store,
+    iri: &str,
+    fields: &[(&str, &str)],
+) -> crate::error::Result<i64> {
+    let predicate_class = format!("{DEFAULT_BASE_NS}Predicate");
+    let mut datums = vec![Datum {
+        entity: store.intern(iri).unwrap(),
+        attribute: store.intern(RDF_TYPE).unwrap(),
+        value: Value::Ref(store.intern(&predicate_class).unwrap()),
+        valid_from: TS.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    }];
+    for (k, v) in fields {
+        datums.push(Datum {
+            entity: store.intern(iri).unwrap(),
+            attribute: store.intern(&format!("{DEFAULT_BASE_NS}{k}")).unwrap(),
+            value: Value::Str((*v).to_string()),
+            valid_from: TS.to_string(),
+            valid_to: None,
+            op: Op::Assert,
+        });
+    }
+    store.transact(&datums, TS, None, None)
+}
+
+#[test]
+fn a_grounded_predicate_without_a_query_is_refused_at_the_write_path() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    let err = define_predicate(
+        &mut store,
+        "http://ex/pr",
+        &[
+            ("name", "no-ticket-in-comment"),
+            ("evidenceSource", "graph:work-item-id-set"),
+            ("candidateSource", "token"),
+            ("matchType", "must-not-ground"),
+        ],
+    );
+    let Err(Error::PolicyDenied(why)) = err else {
+        panic!("a query-less grounded predicate must be refused at write, got {err:?}");
+    };
+    assert!(
+        why.contains("groundingQuery") && why.contains("http://ex/pr"),
+        "the refusal names the field and the predicate: {why}"
+    );
+}
+
+#[test]
+fn a_grounded_predicate_with_its_query_lands() {
+    // The green half of the write-path pair, and the shape of the shipped
+    // exemplar (aegis:pred_no_ticket_in_comment_v2).
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    define_predicate(
+        &mut store,
+        "http://ex/pr",
+        &[
+            ("name", "no-ticket-in-comment"),
+            ("evidenceSource", "graph:work-item-id-set"),
+            ("candidateSource", "token"),
+            (
+                "groundingQuery",
+                "SELECT ?id WHERE { ?w a aegis:WorkItem ; aegis:identifier ?id }",
+            ),
+            ("matchType", "must-not-ground"),
+            ("tier", "tree-sitter+graph"),
+        ],
+    )
+    .expect("a grounded predicate naming its id set must land");
+}
+
+/// Stage predicate + operating point + composing policy in ONE transaction,
+/// so the placement read sees the whole composition in the pending state.
+fn define_inexact_policy(
+    store: &mut Store,
+    tier: &str,
+    effect: &str,
+    class: &str,
+    point: &str,
+    fp_tolerance: Option<f64>,
+) -> crate::error::Result<i64> {
+    let mut datums = Vec::new();
+    let ts = |k: &str, store: &mut Store| store.intern(&format!("{DEFAULT_BASE_NS}{k}")).unwrap();
+
+    let pred = store.intern("http://ex/pred").unwrap();
+    let pred_class = format!("{DEFAULT_BASE_NS}Predicate");
+    let pred_class_id = store.intern(&pred_class).unwrap();
+    let rdf_type = store.intern(RDF_TYPE).unwrap();
+    let mk = |entity: i64, attribute: i64, value: Value| Datum {
+        entity,
+        attribute,
+        value,
+        valid_from: TS.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    datums.push(mk(pred, rdf_type, Value::Ref(pred_class_id)));
+    let tier_attr = ts("tier", store);
+    datums.push(mk(pred, tier_attr, Value::Str(tier.to_string())));
+
+    let op = store.intern("http://ex/op").unwrap();
+    if let Some(fp) = fp_tolerance {
+        let fp_attr = ts("falsePositiveTolerance", store);
+        datums.push(mk(op, fp_attr, Value::Float(fp)));
+    }
+
+    let policy = store.intern("http://ex/p").unwrap();
+    let policy_class = format!("{DEFAULT_BASE_NS}Policy");
+    let policy_class_id = store.intern(&policy_class).unwrap();
+    datums.push(mk(policy, rdf_type, Value::Ref(policy_class_id)));
+    for (k, v) in [
+        ("targets", "CodeModule"),
+        ("claim", "c"),
+        ("boundary", "action"),
+        ("effect", effect),
+        ("constraintClass", class),
+        ("verificationPoint", point),
+    ] {
+        let attr = ts(k, store);
+        datums.push(mk(policy, attr, Value::Str(v.to_string())));
+    }
+    let pred_attr = ts("predicate", store);
+    datums.push(mk(policy, pred_attr, Value::Ref(pred)));
+    let op_attr = ts("operatingPoint", store);
+    datums.push(mk(policy, op_attr, Value::Ref(op)));
+
+    store.transact(&datums, TS, None, None)
+}
+
+#[test]
+fn an_inexact_policy_hard_denying_at_the_gate_is_refused_at_the_write_path() {
+    // Liveness through the predicate-tier join: this fails if read_placements
+    // stops projecting ?ptier, the same way the ?layer projection once
+    // regressed (quipu-sio).
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    let err = define_inexact_policy(&mut store, "embedding", "deny", "hard", "PAG", Some(0.08));
+    let Err(Error::PolicyDenied(why)) = err else {
+        panic!("an embedding-tier hard PAG deny must be refused at write, got {err:?}");
+    };
+    assert!(
+        why.contains("embedding") && why.contains("PAA"),
+        "the refusal names the tier and the permitted seam: {why}"
+    );
+}
+
+#[test]
+fn an_inexact_policy_claiming_exactness_is_refused_at_the_write_path() {
+    // Liveness through the operating-point join, with the tolerance written
+    // as a Float — the direct-transact route for a decimal.
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    let err = define_inexact_policy(&mut store, "model", "warn", "soft", "PAA", Some(0.0));
+    assert!(
+        matches!(err, Err(Error::PolicyDenied(_))),
+        "a model-tier policy claiming falsePositiveTolerance 0.0 must be refused, got {err:?}"
+    );
+}
+
+#[test]
+fn a_calibrated_inexact_policy_lands_at_the_paa() {
+    // The GREEN case for the whole composition: soft, advisory, at the PAA,
+    // with a tolerant operating point — the placement design B prescribes.
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    define_inexact_policy(&mut store, "embedding", "warn", "soft", "PAA", Some(0.08))
+        .expect("an advisory, calibrated embedding-tier policy must land");
 }
