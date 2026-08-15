@@ -286,6 +286,12 @@ aegis:predicate a owl:ObjectProperty ;
     rdfs:range aegis:Predicate ;
     rdfs:comment "What must be true at the selected sites — the WHAT half. SARC's `pred` field, and the only part of a constraint whose language is deliberately unconstrained: the audit checker is predicate-language-agnostic by design." .
 
+aegis:exemplar a owl:DatatypeProperty ;
+    rdfs:label "exemplar" ;
+    rdfs:domain aegis:Policy ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The concrete record that motivated this policy — a Verdict, a DecisionRequest, a verdict-spool entry, an edit someone ruled \"never again\" on — as an IRI string. Policy-by-example provenance (docs/design/policy-by-example.md): a drafted rule records its motivating case so a later refusal under it can cite the example that birthed it, completing identify-and-inform-before-refusing. A string rather than an object reference because the exemplar may live outside this graph (yupana's spool), and optional because a hand-authored policy has none — an absent exemplar is honest absence, never forged provenance." .
+
 aegis:assignsWorkflow a owl:ObjectProperty ;
     rdfs:label "assigns workflow" ;
     rdfs:domain aegis:Policy ;

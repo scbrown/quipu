@@ -12,6 +12,7 @@
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
 //!   quipu stats [--db <path>]            Show store statistics
+//!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
 //!
@@ -20,6 +21,7 @@
 mod cli;
 mod cli_audit;
 mod cli_commands;
+mod cli_policy;
 mod cli_propose;
 
 fn main() {
@@ -66,6 +68,7 @@ fn main() {
         "episode" => cli_commands::cmd_episode(&args, db_path, &config.base_ns),
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
+        "policy" => cli_policy::cmd_policy(&args, db_path),
         "propose" => cli_propose::cmd_propose(&args, db_path),
         "audit" => cli_audit::cmd_audit(&args, db_path),
         "ontology" => cmd_ontology(&args, db_path),
@@ -218,6 +221,8 @@ COMMANDS:
     quipu episode <file.json> [--base-ns <ns>] [--timestamp <ISO-8601>] [--db <path>]
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
     quipu shapes load|list|remove [--db <path>]
+    quipu policy draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-IRI> --claim <ask> [--out <file.ttl>]
+    quipu policy backtest <candidate.ttl> [--last-txs N] [--from-tx A --to-tx B] [--db <path>]
     quipu propose list|submit|accept|reject [--status pending] [--db <path>]
     quipu ontology load|list|remove [--db <path>]
     quipu validate --shapes <shapes.ttl> --data <data.ttl>

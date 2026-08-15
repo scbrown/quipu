@@ -303,3 +303,98 @@ fn registry_invalidated_when_a_policy_is_added() {
         "a newly-added policy must be honored on the next write, got {err:?}"
     );
 }
+
+#[test]
+fn a_refusal_under_an_exemplar_carrying_policy_cites_the_exemplar() {
+    // Policy-by-example provenance (docs/design/policy-by-example.md): a rule
+    // drafted from a motivating case must explain its refusals BY that case, so
+    // the refused party reads why the rule exists rather than only that it
+    // fired. The citation rides the compiled registry — no per-denial lookup.
+    let exemplar = "http://ex/verdict_the_motivating_edit";
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().enforce_on_write = true;
+    define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
+    let link = vec![assert_datum(
+        &store,
+        "http://ex/P1",
+        &format!("{DEFAULT_BASE_NS}exemplar"),
+        Value::Str(exemplar.into()),
+    )];
+    store.transact(&link, TS, None, None).unwrap();
+
+    let bad = vec![assert_datum(
+        &store,
+        "http://ex/d1",
+        RDF_TYPE,
+        type_ref(&store, DOC_TYPE),
+    )];
+    let Err(Error::PolicyDenied(msg)) = store.transact(&bad, TS, None, None) else {
+        panic!("the non-compliant write must still be denied");
+    };
+    assert!(
+        msg.contains(exemplar) && msg.contains("motivating case"),
+        "the refusal must cite the exemplar by IRI: {msg}"
+    );
+}
+
+#[test]
+fn a_refusal_under_a_hand_authored_policy_cites_nothing() {
+    // The paired green case: no exemplar, no citation — an empty suffix, never
+    // a placeholder. Citing an absent motivating case would be forged
+    // provenance in the message channel.
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().enforce_on_write = true;
+    define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
+    let bad = vec![assert_datum(
+        &store,
+        "http://ex/d1",
+        RDF_TYPE,
+        type_ref(&store, DOC_TYPE),
+    )];
+    let Err(Error::PolicyDenied(msg)) = store.transact(&bad, TS, None, None) else {
+        panic!("the non-compliant write must be denied");
+    };
+    assert!(
+        !msg.contains("motivating case") && !msg.contains("exemplar"),
+        "no exemplar, no citation: {msg}"
+    );
+}
+
+#[test]
+fn adding_an_exemplar_invalidates_the_cached_registry() {
+    // The citation must not stay invisible until an unrelated policy write
+    // rebuilds the cache: aegis:exemplar is in the is_governance_write list,
+    // and this is the observable consequence.
+    let exemplar = "http://ex/verdict_late_link";
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().enforce_on_write = true;
+    define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
+
+    // Prime the cache with a refusal that carries no citation yet.
+    let bad =
+        |store: &Store, s: &str| vec![assert_datum(store, s, RDF_TYPE, type_ref(store, DOC_TYPE))];
+    let Err(Error::PolicyDenied(first)) =
+        store.transact(&bad(&store, "http://ex/d1"), TS, None, None)
+    else {
+        panic!("first write must be denied");
+    };
+    assert!(!first.contains(exemplar));
+
+    // Link the exemplar; the NEXT refusal must cite it.
+    let link = vec![assert_datum(
+        &store,
+        "http://ex/P1",
+        &format!("{DEFAULT_BASE_NS}exemplar"),
+        Value::Str(exemplar.into()),
+    )];
+    store.transact(&link, TS, None, None).unwrap();
+    let Err(Error::PolicyDenied(second)) =
+        store.transact(&bad(&store, "http://ex/d2"), TS, None, None)
+    else {
+        panic!("second write must be denied");
+    };
+    assert!(
+        second.contains(exemplar),
+        "the citation must appear on the write AFTER the linkage landed: {second}"
+    );
+}

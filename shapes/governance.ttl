@@ -212,6 +212,21 @@ aegis:PolicyShape a sh:NodeShape ;
         sh:class aegis:Predicate ;
         sh:maxCount 1 ;
     ] ;
+    sh:property [
+        # Policy-by-example provenance (docs/design/policy-by-example.md): the
+        # concrete record that motivated this rule — a Verdict, a DecisionRequest,
+        # a verdict-spool entry, an edit record. An IRI-as-string like
+        # aegis:targets / aegis:forPolicy, NOT sh:class-typed, deliberately: the
+        # exemplar may live outside this graph (yupana's spool), and a policy
+        # must not become unwritable because its motivating case is not a local
+        # entity. OPTIONAL: a hand-authored policy has no exemplar, and demanding
+        # one would forge provenance for every policy that predates the gesture.
+        # A refusal under an exemplar-carrying policy cites it, so the refusal
+        # arrives explained by example.
+        sh:path aegis:exemplar ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
 
     # ── SARC constraint metadata ────────────────────────────────────
     # SARC (arXiv:2605.07728) §3.1 models a constraint as

@@ -811,3 +811,72 @@ fn an_undecided_prior_request_is_not_precedent() {
         "an undecided request must not be cited as precedent"
     );
 }
+
+#[test]
+fn a_rejection_carries_the_reject_to_policy_offer() {
+    // The escalation seam is where a human already rules on instances, and a
+    // rejection is the "not this" signal (policy-by-example design, step 4).
+    // The refusal must therefore carry the offer to widen the ruling into a
+    // standing rule — naming the request record as the exemplar a draft would
+    // cite, and the gesture (draft, then backtest) to take it up. Advisory
+    // text only: nothing is created here.
+    let mut store = store_with_request(600);
+    decide(
+        &mut store,
+        "reject",
+        "stiwi",
+        &evidence_hash(POLICY, TARGET),
+        POLICY,
+    );
+    let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
+    let why = ruling.reason(POLICY, TARGET);
+    assert!(
+        why.contains(&request_iri(POLICY, TARGET)),
+        "the offer must name the exemplar-candidate record by IRI: {why}"
+    );
+    assert!(
+        why.contains("quipu policy draft --exemplar"),
+        "and the gesture that takes it up: {why}"
+    );
+    assert!(
+        why.contains("backtest") && why.contains("warn"),
+        "and the born-advisory, backtest-first contract: {why}"
+    );
+}
+
+#[test]
+fn only_a_rejection_makes_the_offer() {
+    // The paired green case. Pending and Expired are ABSENCES of a ruling —
+    // there is no "not this" signal to widen, and offering policy drafting on
+    // every unserviced escalation would train operators to ignore the offer
+    // where it means something.
+    let store = store_with_request(600);
+    for ruling in [
+        resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap(),
+        resolve(&store, POLICY, TARGET, NOW + 601).unwrap().unwrap(),
+    ] {
+        let why = ruling.reason(POLICY, TARGET);
+        assert!(
+            !why.contains("policy draft"),
+            "{ruling:?} must not carry the offer: {why}"
+        );
+    }
+}
+
+#[test]
+fn the_cited_request_iri_is_the_minted_one() {
+    // The offer names an IRI derived without a store in hand; mint_request
+    // interns one derived with it. If the two functions drifted, every offer
+    // would cite a record that does not exist — checked here by minting and
+    // resolving the derived IRI against what actually landed.
+    let store = store_with_request(600);
+    let iri = request_iri(POLICY, TARGET);
+    let q = format!("ASK {{ <{iri}> ?p ?o }}");
+    assert!(
+        matches!(
+            crate::sparql::query(&store, &q).unwrap(),
+            crate::sparql::QueryResult::Ask(true)
+        ),
+        "the offered IRI must be the minted request's: {iri}"
+    );
+}

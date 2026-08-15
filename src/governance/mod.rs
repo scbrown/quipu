@@ -12,6 +12,8 @@
 pub mod audit;
 pub mod audit_spec;
 pub mod authority;
+pub mod backtest;
+pub mod draft;
 pub mod guard;
 pub mod inheritance;
 pub mod inventory;

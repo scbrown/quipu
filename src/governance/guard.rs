@@ -44,6 +44,31 @@ struct CompiledPolicy {
     /// treats a zero window as already expired rather than inventing a bound
     /// SARC I4 requires be declared.
     reversibility_window: Option<i64>,
+    /// `aegis:exemplar` — the record that motivated this policy, when it was
+    /// drafted from one (docs/design/policy-by-example.md). Carried in the
+    /// registry so a refusal can cite its motivating case WITHOUT a per-denial
+    /// SELECT: the citation belongs in the refusal message, and the refusal
+    /// path must stay as cheap as the allow path.
+    exemplar: Option<String>,
+}
+
+impl CompiledPolicy {
+    /// The exemplar citation appended to this policy's refusals, or `""`.
+    ///
+    /// A refusal under a drafted rule arrives EXPLAINED BY EXAMPLE — the case
+    /// that birthed the rule is named, so the refused party reads why the rule
+    /// exists rather than only that it fired. Empty (never a placeholder) for
+    /// a hand-authored policy: citing an absent exemplar would be forged
+    /// provenance in the message channel.
+    fn exemplar_citation(&self) -> String {
+        match &self.exemplar {
+            Some(iri) => format!(
+                " This rule's motivating case: {iri} (aegis:exemplar) — the \
+                 refusal is similar to the example that motivated the rule."
+            ),
+            None => String::new(),
+        }
+    }
 }
 
 /// The active `boundary:"action"` policies, indexed by target-type IRI for a
@@ -61,11 +86,12 @@ impl PolicyRegistry {
     pub fn build(store: &Store) -> Result<Self> {
         let q = format!(
             "PREFIX a: <{DEFAULT_BASE_NS}> \
-             SELECT ?p ?t ?c ?e ?probe ?window WHERE {{ \
+             SELECT ?p ?t ?c ?e ?probe ?window ?exemplar WHERE {{ \
                 ?p a a:Policy ; a:targets ?t ; a:claim ?c ; a:boundary \"action\" . \
                 OPTIONAL {{ ?p a:effect ?e }} \
                 OPTIONAL {{ ?p a:evidenceProbe ?probe }} \
                 OPTIONAL {{ ?p a:reversibilityWindowSeconds ?window }} \
+                OPTIONAL {{ ?p a:exemplar ?exemplar }} \
              }}"
         );
         let mut by_type: HashMap<String, Vec<CompiledPolicy>> = HashMap::new();
@@ -84,6 +110,7 @@ impl PolicyRegistry {
                     Some(Value::Str(s)) => s.parse().ok(),
                     _ => None,
                 };
+                let exemplar = str_of(row.get("exemplar"));
                 by_type
                     .entry(target_type_iri.clone())
                     .or_default()
@@ -94,6 +121,7 @@ impl PolicyRegistry {
                         effect,
                         evidence_probe,
                         reversibility_window,
+                        exemplar,
                     });
             }
         }
@@ -269,14 +297,16 @@ fn evaluate_one(
                      (declared default-deny). This attempt has opened a fresh \
                      request; have an authorized operator record a signed \
                      aegis:Decision with outcome \"approve\" bound to its \
-                     evidenceHash, then retry.",
-                    policy.policy_iri
+                     evidenceHash, then retry.{}",
+                    policy.policy_iri,
+                    policy.exemplar_citation()
                 )));
             }
             return Err(Error::PolicyDenied(format!(
-                "'{entity_iri}' blocked by policy '{}': {}",
+                "'{entity_iri}' blocked by policy '{}': {}{}",
                 policy.policy_iri,
-                ruling.reason(&policy.policy_iri, entity_iri)
+                ruling.reason(&policy.policy_iri, entity_iri),
+                policy.exemplar_citation()
             )));
         }
         // No request yet: this attempt is what opens one. The request itself is
@@ -293,14 +323,18 @@ fn evaluate_one(
             "'{entity_iri}' needs a human decision under policy '{}'. A \
              DecisionRequest has been opened; have a registered decider record \
              a signed aegis:Decision with outcome \"approve\" bound to its \
-             evidenceHash, then retry.",
-            policy.policy_iri
+             evidenceHash, then retry.{}",
+            policy.policy_iri,
+            policy.exemplar_citation()
         )));
     }
 
     Err(Error::PolicyDenied(format!(
-        "'{entity_iri}' blocked by policy '{}' (effect '{}', target type '{}'): claim unsatisfied",
-        policy.policy_iri, policy.effect, policy.target_type_iri
+        "'{entity_iri}' blocked by policy '{}' (effect '{}', target type '{}'): claim unsatisfied.{}",
+        policy.policy_iri,
+        policy.effect,
+        policy.target_type_iri,
+        policy.exemplar_citation()
     )))
 }
 
@@ -322,7 +356,11 @@ fn run_ask(store: &Store, ask: &str) -> Result<bool> {
 }
 
 /// Reject an IRI that could break out of an inlined `<...>` and inject SPARQL.
-fn guard_iri(iri: &str) -> Result<()> {
+///
+/// Crate-visible because the backtest inlines target IRIs into the same claim
+/// contract; two copies of an injection filter would eventually differ, and
+/// the difference would be an injection.
+pub(crate) fn guard_iri(iri: &str) -> Result<()> {
     if iri
         .chars()
         .any(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '{' | '}' | '\\'))
@@ -350,13 +388,22 @@ fn iri_of(store: &Store, v: Option<&Value>) -> Result<String> {
 }
 
 /// True if any datum defines or amends a governance policy — i.e. writes an
-/// `aegis:{targets,claim,boundary,effect,evidenceProbe}` fact or asserts an
-/// `rdf:type aegis:Policy`. When true, the cached [`PolicyRegistry`] is stale.
-/// Cheap: integer term-id compares over the datums after a handful of interned
-/// lookups.
+/// `aegis:{targets,claim,boundary,effect,evidenceProbe,exemplar}` fact or
+/// asserts an `rdf:type aegis:Policy`. When true, the cached [`PolicyRegistry`]
+/// is stale. (`exemplar` is in the list because the registry carries it into
+/// refusal messages — a citation added after the cache was built must not stay
+/// invisible until an unrelated policy write.) Cheap: integer term-id compares
+/// over the datums after a handful of interned lookups.
 pub fn is_governance_write(store: &Store, datums: &[Datum]) -> Result<bool> {
     let mut pred_ids = Vec::new();
-    for p in ["targets", "claim", "boundary", "effect", "evidenceProbe"] {
+    for p in [
+        "targets",
+        "claim",
+        "boundary",
+        "effect",
+        "evidenceProbe",
+        "exemplar",
+    ] {
         if let Some(id) = store.lookup(&format!("{DEFAULT_BASE_NS}{p}"))? {
             pred_ids.push(id);
         }

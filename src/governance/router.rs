@@ -103,7 +103,25 @@ impl Ruling {
         match self {
             Ruling::Approved { by } => format!("approved by {by}"),
             Ruling::Rejected { by, outcome } => {
-                format!("'{target}' was refused by {by} ({outcome}) under policy '{policy}'")
+                // The reject-to-policy seam (docs/design/policy-by-example.md
+                // step 4). A rejection is a human's "not this" — the strongest
+                // exemplar there is — and today it binds only this one
+                // (policy, target) pair. The refusal therefore CARRIES the
+                // offer to widen it: the request record's deterministic IRI is
+                // named as the exemplar a drafted rule would cite. Advisory
+                // text only — nothing here creates anything; the gesture stays
+                // the human's, and the draft is born advisory and backtested
+                // before it exists.
+                format!(
+                    "'{target}' was refused by {by} ({outcome}) under policy \
+                     '{policy}'. This ruling binds only this (policy, target) \
+                     pair; to make it a standing rule, draft a policy citing \
+                     this decision as its exemplar — `quipu policy draft \
+                     --exemplar {request} ...` — then backtest the draft over \
+                     recorded history (`quipu policy backtest`) before creating \
+                     it. The draft is born advisory (effect \"warn\").",
+                    request = request_iri(policy, target),
+                )
             }
             Ruling::Pending { expires_at } => format!(
                 "'{target}' needs a human decision under policy '{policy}'. A \
@@ -233,10 +251,7 @@ pub fn mint_request(
     let hash = evidence_hash(policy_iri, target_iri);
     // Deterministic IRI from the evidence, so a retry that is still refused
     // updates the same request rather than accumulating one per attempt.
-    let subject = store.intern(&format!(
-        "{DEFAULT_BASE_NS}decision_request_{}",
-        &hash[7..hash.len().min(39)]
-    ))?;
+    let subject = store.intern(&request_iri(policy_iri, target_iri))?;
     let assert = |attribute: i64, value: Value| Datum {
         entity: subject,
         attribute,
@@ -322,6 +337,23 @@ pub(crate) fn decision_verifies(
         .iter()
         .filter_map(|r| str_of(r.get("k")))
         .any(|key| crate::signing::verify_hex(&key, &message, signature)))
+}
+
+/// The deterministic `DecisionRequest` IRI for `(policy, target)`.
+///
+/// Pure — derivable from the pair alone, with no store in hand — which is what
+/// lets [`Ruling::reason`] cite the request record from inside a refusal
+/// message: the rejection seam offers the record as a policy exemplar, and an
+/// offer naming an IRI the operator would have to go and look up is an offer
+/// nobody takes. One function shared with [`mint_request`], so the cited IRI
+/// and the minted one cannot drift apart.
+#[must_use]
+pub fn request_iri(policy_iri: &str, target_iri: &str) -> String {
+    let hash = evidence_hash(policy_iri, target_iri);
+    format!(
+        "{DEFAULT_BASE_NS}decision_request_{}",
+        &hash[7..hash.len().min(39)]
+    )
 }
 
 /// The evidence a decision binds to: `sha256:<hex>` over `policy|target`.
