@@ -84,7 +84,7 @@ seed:
 
 # Serve the test fixture database on localhost:3030
 serve-fixtures:
-    cargo run --bin quipu-server --features shacl,onnx -- --db test-fixtures/test-store.db
+    cargo run --bin quipu-server --features shacl,onnx,server -- --db test-fixtures/test-store.db
 
 # Build the paper PDF (docs/paper/): just paper [clean]
 paper cmd="build":
