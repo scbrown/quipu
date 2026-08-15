@@ -31,14 +31,21 @@ Extend the `aegis:Predicate` vocabulary:
 ```turtle
 aegis:pred_no_ticket_in_comment_v2 a aegis:Predicate ;
     aegis:name "no-ticket-in-comment" ;
-    # The regex DEMOTES to candidate extractor: it proposes tokens,
-    # it no longer decides truth.
-    aegis:candidateSource "\\b[a-zA-Z]+-[a-z0-9]+\\b" ;
+    # No regex. Candidates are simply the TOKENS of the introduced text —
+    # yupana already parsed the comment; tokenization needs no shape
+    # assumption. (An optional aegis:candidateSource pattern remains
+    # available purely as a narrowing optimization, never as authority.)
+    aegis:candidateSource "token" ;
     # Truth is membership: a SPARQL SELECT naming the authoritative set.
     aegis:groundingQuery "SELECT ?id WHERE { ?w a aegis:WorkItem ; aegis:identifier ?id }" ;
     aegis:matchType "must-not-ground" ;
     aegis:tier "tree-sitter+graph" .
 ```
+
+The id set itself defines what a ticket looks like: a token grounds if
+and only if the graph holds it. A hash-set membership test per token is
+O(tokens of introduced text) against a projected set, well inside the
+5 ms budget — the regex is not merely demoted, it is unnecessary.
 
 Evaluation of a candidate token then has **three outcomes, not two**:
 
@@ -69,11 +76,47 @@ time* — computed at read time from the graph, never stored (the
 liveness-by-absence discipline). A TODO citing a closed ticket is its own
 advisory outcome.
 
-## Design B — semantic-tier predicates (model judgment, honestly tiered)
+## Design B — similarity-tier predicates (vector grounding, falsifiable)
 
-A comment can reference tracked work with no id-shaped token at all.
-Deciding that is a model judgment, and the stack's own rules for model
-judgments apply:
+A comment can reference tracked work with no id at all ("fixes the
+frontier-recompute problem"). Before reaching for a generative model,
+there is a deterministic middle tier: **embedding similarity against
+the work-item corpus**.
+
+- **The corpus exists.** Bobbin already indexes beads
+  (`bobbin src/index/beads.rs`) — id, title, description, embedded.
+  The grounding matrix is a projection of that index (or an equivalent
+  embedding pass over the graph's work items): a few thousand vectors,
+  brute-force cosine in microseconds, no ANN infrastructure needed.
+- **Deterministic and falsifiable.** Given a pinned embedding model and
+  corpus snapshot, the score is reproducible. The verdict records the
+  matched item, the score, and the threshold —
+  `cosine(comment, bobbin-bnq) = 0.83 ≥ 0.75` — which is a falsifier in
+  the catalog's own style: re-embed and recompute to disprove.
+- **Still a classifier, honestly.** A threshold trades FP against FN,
+  so the predicate carries `aegis:tier "embedding"` (a distinct value:
+  reproducible-but-approximate, unlike both `tree-sitter+graph` exact
+  membership and generative `model` judgment), a **nonzero**
+  `OperatingPoint`, and placement at PAA or the escalation router —
+  never hard PAG denial. The embedding-model identity and corpus
+  snapshot watermark ride the verdict, since a score means nothing
+  outside the model and corpus that produced it (the trust-chain rule,
+  applied to embeddings).
+- **Freshness as ever.** The vector matrix projects under the same
+  freshness/cache-age machinery; a stale matrix is declared in the
+  verdict, and a missing one renders the rule unevaluated, never
+  satisfied.
+
+The predicate ladder is then three closed tiers, weakest authority to
+strongest claim: exact membership (`tree-sitter+graph`, hard-capable) →
+similarity (`embedding`, advisory/escalate, score-falsifiable) →
+generative judgment (`model`, advisory only, quarantined output).
+
+## Design C — model-tier predicates (generative judgment, last resort)
+
+Where similarity is insufficient — judgments requiring reasoning over
+the sentence, not nearness to a corpus — a generative model decides,
+and the stack's own rules for model judgments apply:
 
 1. **A new tier value, closed as ever.** The predicate carries
    `aegis:tier "model"` — a fifth value alongside
@@ -105,6 +148,8 @@ judgments apply:
 | Loud non-answers (unevaluated, unresolvable) | yupana typed-outcome discipline |
 | FP/FN honesty for inexact predicates | `aegis:OperatingPoint` |
 | Human ruling on semantic denials | escalation router (provisional A §3) |
+| Embedded work-item corpus | bobbin beads index (`src/index/beads.rs`) |
+| Score meaningless outside its model+corpus | trust-chain rule (provisional A §4), applied to embeddings |
 | Quarantine of model-written facts | camayoc `sourceKind` + label lattice |
 | Read-time open-ness of a cited ticket | bitemporal store, liveness-by-absence |
 
@@ -116,9 +161,13 @@ judgments apply:
 2. Grounding-set projection into the hot plane; three-outcome
    evaluation; `unresolvable` violation class. (yupana)
 3. `todo-needs-ticket` v2 requiring an open, existing item. (catalog)
-4. Semantic tier: vocabulary value, OperatingPoint requirement,
+4. Embedding tier: work-item vector matrix projected from bobbin's
+   beads index (or an equivalent embedding pass), `tier "embedding"`,
+   score/threshold/model/corpus-watermark in the verdict, PAA or
+   escalate placement. (bobbin + yupana + quipu vocabulary)
+5. Model tier: vocabulary value, OperatingPoint requirement,
    PAA/escalate placement, quarantined fact output. (quipu + yupana,
-   after 1–3 prove the grounding loop)
+   after 1–4 prove the grounding loop)
 
 Related: `shapes/policies/treesitter.ttl` (the v1 pair this supersedes),
 `docs/design/policy-edit-hooks.md` (the hook seam), camayoc

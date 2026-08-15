@@ -152,7 +152,7 @@ on; Provisional D now claims it.
 | Blocker evidence strength (stated/built); liveness-as-deliberate-absence | 2026-08-07 | camayoc `a696f15` | 2027-08-07 |
 | Per-class vocabulary narrowing (Metric declared-only; Observation observed-only) | 2026-08-07 | camayoc `ad0c2f8` | 2027-08-07 |
 | Coverage Empty/Partial/Full over bare counts (doc; query is quipu-side) | 2026-08-07 | camayoc `53b4417` | 2027-08-07 |
-| Entity-grounded predicates (grounding-set membership, fabricated-reference outcome) and model-tier semantic predicates (design) | 2026-08-15 | quipu `docs/design/semantic-grounded-edit-policies.md`; embodiment in provisional D § 9, aspects 26–27 | 2027-08-15 |
+| Entity-grounded predicates (tokenized grounding-set membership, no pattern; fabricated-reference outcome), embedding-similarity grounding (score/threshold/model/corpus-watermark in verdict), and model-tier semantic predicates (design) | 2026-08-15 | quipu `docs/design/semantic-grounded-edit-policies.md`; embodiments in provisional D § 9, aspects 26–29 | 2027-08-15 |
 
 **Controlling statutory deadline for cluster D: 2027-07-18** (tier
 vocabulary). The quarantine/promotion combination is disclosed as design
