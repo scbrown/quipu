@@ -541,3 +541,273 @@ fn a_zero_window_expires_immediately_rather_than_inventing_a_bound() {
         .transact(&noncompliant_doc(&store, "http://ex/d9"), TS, None, None)
         .expect("an approval after expiry still lets the write through");
 }
+
+// ── Escalation precedent (quipu-8dk) ─────────────────────────────────────────
+//
+// Design #4 (docs/design/semantic-grounded-edit-policies.md): a minted request
+// carries its nearest prior DECIDED requests, scored and method-named, so the
+// operator sees precedent with the similarity claim falsifiable on record.
+// Advisory throughout: every degraded path must still MINT, with no precedent
+// and no fabricated score.
+
+use std::sync::Arc;
+
+/// Deterministic test embedder: dimensions count "alpha"/"beta"/"gamma"
+/// occurrences, so similarity is legible from the target IRIs — same word,
+/// cosine 1.0; disjoint words, cosine 0.0; mixed, in between.
+struct CountEmbedder;
+
+impl crate::embedding::EmbeddingProvider for CountEmbedder {
+    fn embed_text(&self, text: &str) -> crate::error::Result<Vec<f32>> {
+        Ok(["alpha", "beta", "gamma"]
+            .iter()
+            .map(|w| text.matches(w).count() as f32)
+            .collect())
+    }
+    fn dimension(&self) -> usize {
+        3
+    }
+}
+
+/// An embedder that always fails — the advisory-path-must-not-block case.
+struct FailingEmbedder;
+
+impl crate::embedding::EmbeddingProvider for FailingEmbedder {
+    fn embed_text(&self, _text: &str) -> crate::error::Result<Vec<f32>> {
+        Err(crate::error::Error::Store(
+            "the model is on fire".to_string(),
+        ))
+    }
+    fn dimension(&self) -> usize {
+        3
+    }
+}
+
+/// Mint a request for `target` under [`POLICY`] and transact it.
+fn mint_for(store: &mut Store, target: &str) {
+    let datums = mint_request(store, POLICY, target, None, 600, NOW, TS).unwrap();
+    store.transact(&datums, TS, None, None).unwrap();
+}
+
+/// Every `(prior-request-iri, score, method)` precedent link in the store.
+fn precedent_links(store: &Store) -> Vec<(String, f64, String)> {
+    let q = format!(
+        "PREFIX a: <{DEFAULT_BASE_NS}> \
+         SELECT ?prior ?score ?method WHERE {{ \
+            ?r a a:DecisionRequest ; a:precedent ?l . \
+            ?l a:precedentRequest ?prior ; a:similarityScore ?score ; \
+               a:similarityMethod ?method . \
+         }}"
+    );
+    let QueryResult::Select { rows, .. } = sparql::query(store, &q).unwrap() else {
+        panic!("select")
+    };
+    rows.iter()
+        .filter_map(|row| {
+            let Some(Value::Ref(id)) = row.get("prior") else {
+                return None;
+            };
+            let Some(Value::Float(score)) = row.get("score") else {
+                return None;
+            };
+            let Some(Value::Str(method)) = row.get("method") else {
+                return None;
+            };
+            Some((store.resolve(*id).unwrap(), *score, method.clone()))
+        })
+        .collect()
+}
+
+#[test]
+fn minting_attaches_the_nearest_decided_request_with_its_score_on_record() {
+    // THE case: a near prior with a signed ruling becomes precedent; a far one
+    // does not; and the link carries score + method, so the nearness claim is
+    // an experiment a reader can re-run, not an assertion.
+    let mut store = Store::open_in_memory().unwrap();
+    mint_for(&mut store, "http://ex/alpha-1");
+    mint_for(&mut store, "http://ex/beta-1");
+    decide(
+        &mut store,
+        "reject",
+        "alice",
+        &evidence_hash(POLICY, "http://ex/alpha-1"),
+        POLICY,
+    );
+    decide(
+        &mut store,
+        "reject",
+        "bob",
+        &evidence_hash(POLICY, "http://ex/beta-1"),
+        POLICY,
+    );
+    store.set_embedding_provider(Arc::new(CountEmbedder));
+
+    mint_for(&mut store, "http://ex/alpha-2");
+
+    let links = precedent_links(&store);
+    assert_eq!(
+        links.len(),
+        1,
+        "only the near prior is precedent — beta scores 0.0, and zero \
+         similarity is no precedent: {links:?}"
+    );
+    let (prior, score, method) = &links[0];
+    let alpha_hash = evidence_hash(POLICY, "http://ex/alpha-1");
+    assert!(
+        prior.contains(&alpha_hash[7..20]),
+        "the link names the near prior's deterministic request IRI: {prior}"
+    );
+    assert!(
+        (*score - 1.0).abs() < 1e-9,
+        "identical embedding direction must score 1.0: {score}"
+    );
+    assert!(
+        method.starts_with("embedding:"),
+        "the method identity rides the score — without it the score is \
+         unfalsifiable: {method}"
+    );
+}
+
+#[test]
+fn a_request_is_not_its_own_precedent() {
+    // The re-mint case: a decided request under the SAME (policy, target)
+    // shares the new mint's evidence hash, and citing it would tell the
+    // operator "you already ruled on exactly this" about the very ruling
+    // that made the re-mint necessary.
+    let mut store = Store::open_in_memory().unwrap();
+    mint_for(&mut store, "http://ex/alpha-1");
+    decide(
+        &mut store,
+        "reject",
+        "alice",
+        &evidence_hash(POLICY, "http://ex/alpha-1"),
+        POLICY,
+    );
+    store.set_embedding_provider(Arc::new(CountEmbedder));
+    // Re-mint the same pair (same deterministic IRI, fresh expiry).
+    mint_for(&mut store, "http://ex/alpha-1");
+    assert!(
+        precedent_links(&store).is_empty(),
+        "a request must not cite its own prior incarnation as precedent"
+    );
+}
+
+#[test]
+fn an_unsigned_decision_does_not_make_a_prior_precedent() {
+    // The signed-decider rule, REUSED not restated (decision_verifies): a
+    // ruling forgeable by any writer is no ruling for resolve, and no
+    // precedent here — otherwise mallory curates what the operator sees.
+    let mut store = Store::open_in_memory().unwrap();
+    mint_for(&mut store, "http://ex/alpha-1");
+    write_decision(
+        &mut store,
+        "reject",
+        "mallory",
+        &evidence_hash(POLICY, "http://ex/alpha-1"),
+        None,
+    );
+    store.set_embedding_provider(Arc::new(CountEmbedder));
+    mint_for(&mut store, "http://ex/alpha-2");
+    assert!(
+        precedent_links(&store).is_empty(),
+        "an unsigned decision must not turn its request into precedent"
+    );
+}
+
+#[test]
+fn without_a_similarity_method_minting_is_clean_and_attaches_nothing() {
+    // The degraded state: no embedding provider means no method, and the
+    // advisory is ABSENT — not an error, and not a cheaper heuristic quietly
+    // scoring under a label it cannot honour.
+    let mut store = Store::open_in_memory().unwrap();
+    mint_for(&mut store, "http://ex/alpha-1");
+    decide(
+        &mut store,
+        "reject",
+        "alice",
+        &evidence_hash(POLICY, "http://ex/alpha-1"),
+        POLICY,
+    );
+    mint_for(&mut store, "http://ex/alpha-2");
+    assert!(
+        precedent_links(&store).is_empty(),
+        "no provider must mean no precedent, never a fabricated score"
+    );
+    // And the mint itself is whole: the new request resolves as Pending.
+    assert!(matches!(
+        resolve(&store, POLICY, "http://ex/alpha-2", NOW).unwrap(),
+        Some(Ruling::Pending { .. })
+    ));
+}
+
+#[test]
+fn a_failing_provider_cannot_block_minting() {
+    // Minting is load-bearing; precedent is advice. An advisory path that can
+    // veto the mint has the authority relation backwards, so a provider that
+    // errors degrades to no precedent — the request still lands.
+    let mut store = Store::open_in_memory().unwrap();
+    mint_for(&mut store, "http://ex/alpha-1");
+    decide(
+        &mut store,
+        "reject",
+        "alice",
+        &evidence_hash(POLICY, "http://ex/alpha-1"),
+        POLICY,
+    );
+    store.set_embedding_provider(Arc::new(FailingEmbedder));
+    let datums = mint_request(&store, POLICY, "http://ex/alpha-2", None, 600, NOW, TS)
+        .expect("a failing advisory path must not fail the mint");
+    store.transact(&datums, TS, None, None).unwrap();
+    assert!(precedent_links(&store).is_empty());
+    assert!(matches!(
+        resolve(&store, POLICY, "http://ex/alpha-2", NOW).unwrap(),
+        Some(Ruling::Pending { .. })
+    ));
+}
+
+#[test]
+fn precedent_is_capped_at_the_nearest_three() {
+    // Three shows a pattern; an uncapped list buries the nearest ruling
+    // under its own tail. The far prior both exceeds nothing and proves the
+    // cap keeps the NEAREST three, not the first three found.
+    let mut store = Store::open_in_memory().unwrap();
+    for (i, target) in [
+        "http://ex/alpha-a",
+        "http://ex/alpha-b",
+        "http://ex/alpha-c",
+        "http://ex/alpha-d",
+    ]
+    .iter()
+    .enumerate()
+    {
+        mint_for(&mut store, target);
+        decide(
+            &mut store,
+            "reject",
+            &format!("decider{i}"),
+            &evidence_hash(POLICY, target),
+            POLICY,
+        );
+    }
+    store.set_embedding_provider(Arc::new(CountEmbedder));
+    mint_for(&mut store, "http://ex/alpha-new");
+    assert_eq!(
+        precedent_links(&store).len(),
+        crate::governance::precedent::MAX_PRECEDENTS,
+        "four decided near priors must attach as exactly the capped three"
+    );
+}
+
+#[test]
+fn an_undecided_prior_request_is_not_precedent() {
+    // An open question is not precedent for anything: the prior request
+    // exists, is near, and has NO ruling — nothing attaches.
+    let mut store = Store::open_in_memory().unwrap();
+    mint_for(&mut store, "http://ex/alpha-1");
+    store.set_embedding_provider(Arc::new(CountEmbedder));
+    mint_for(&mut store, "http://ex/alpha-2");
+    assert!(
+        precedent_links(&store).is_empty(),
+        "an undecided request must not be cited as precedent"
+    );
+}

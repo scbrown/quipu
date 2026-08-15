@@ -266,6 +266,16 @@ pub fn mint_request(
             Value::Ref(store.intern(group)?),
         ));
     }
+    // Advisory precedent (semantic-grounded design, application #4): the
+    // nearest prior DECIDED requests ride the mint, scored and method-named,
+    // so the operator rules with "you rejected something similar" in view.
+    // Appended LAST and infallible by contract: minting is load-bearing and
+    // the precedent is advice, so every failure in the advisory path — no
+    // embedding provider, a failing one, a malformed prior — lands the
+    // request WITHOUT precedent rather than not landing it.
+    datums.extend(super::precedent::advisory_datums(
+        store, subject, policy_iri, target_iri, timestamp,
+    ));
     Ok(datums)
 }
 
@@ -284,7 +294,7 @@ pub fn decision_message(evidence_hash: &str, outcome: &str, by: &str) -> Vec<u8>
 /// and whose `aegis:attests` names the escalating policy. The registry is the
 /// same human-owned root of trust the verdict plane uses; quipu never registers
 /// deciders itself.
-fn decision_verifies(
+pub(crate) fn decision_verifies(
     store: &Store,
     policy_iri: &str,
     evidence_hash: &str,

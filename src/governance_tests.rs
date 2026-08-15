@@ -427,6 +427,77 @@ fn the_catalog_v2_grounded_predicate_names_its_id_set() {
     assert!(block.contains("aegis:tier \"tree-sitter+graph\""));
 }
 
+// ── Escalation precedent (quipu-8dk) ─────────────────────────────────────────
+// Design #4: a minted DecisionRequest carries its nearest decided priors as
+// reified, scored PrecedentLink nodes. The shape holds the falsifiability
+// contract: no precedent without its score, no score without its method.
+
+/// A decided prior + a fresh request carrying one precedent link, with the
+/// link's fields drawn from `fields`. The happy path the rejections perturb.
+fn precedent_fixture(link_fields: &str) -> String {
+    format!(
+        "{NS}\n\
+         aegis:prior a aegis:DecisionRequest ; aegis:forPolicy \"http://ex/P1\" ; \
+             aegis:forTarget \"http://ex/alpha-1\" ; aegis:expiresAt 1700000600 ; \
+             aegis:evidenceHash \"sha256:aa\" .\n\
+         aegis:req a aegis:DecisionRequest ; aegis:forPolicy \"http://ex/P1\" ; \
+             aegis:forTarget \"http://ex/alpha-2\" ; aegis:expiresAt 1700000600 ; \
+             aegis:evidenceHash \"sha256:bb\" ; aegis:precedent aegis:link .\n\
+         aegis:link a aegis:PrecedentLink {link_fields} .\n"
+    )
+}
+
+#[test]
+fn a_decision_request_carrying_scored_precedent_conforms() {
+    let data = precedent_fixture(
+        "; aegis:precedentRequest aegis:prior ; aegis:similarityScore 0.83 ; \
+         aegis:similarityMethod \"embedding:model.onnx\"",
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        fb.conforms,
+        "a request with a fully-sealed precedent link should conform: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn a_precedent_link_missing_any_seal_field_is_rejected() {
+    // A precedent without its score is an insinuation; a score without its
+    // method is unfalsifiable; a link pointing at nothing scores nothing.
+    // Each omission must fail on its own.
+    for missing in [
+        // no precedentRequest
+        "; aegis:similarityScore 0.83 ; aegis:similarityMethod \"embedding:m\"",
+        // no similarityScore
+        "; aegis:precedentRequest aegis:prior ; aegis:similarityMethod \"embedding:m\"",
+        // no similarityMethod
+        "; aegis:precedentRequest aegis:prior ; aegis:similarityScore 0.83",
+    ] {
+        let fb = validate_shapes(SHAPES, &precedent_fixture(missing)).unwrap();
+        assert!(
+            !fb.conforms,
+            "a precedent link missing a seal field must be rejected: {missing}"
+        );
+    }
+}
+
+#[test]
+fn precedent_must_point_at_a_precedent_link() {
+    // sh:class aegis:PrecedentLink — a request citing an untyped node as
+    // precedent is malformed, same discipline as assignsWorkflow.
+    let data = format!(
+        "{NS}\naegis:req a aegis:DecisionRequest ; aegis:forPolicy \"p\" ; \
+         aegis:forTarget \"t\" ; aegis:expiresAt 1 ; aegis:evidenceHash \"h\" ; \
+         aegis:precedent aegis:ghost .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        !fb.conforms,
+        "precedent must reference an aegis:PrecedentLink"
+    );
+}
+
 #[test]
 fn policy_selector_must_point_at_a_selector() {
     // sh:class aegis:Selector — selector pointing at a non-Selector is malformed.

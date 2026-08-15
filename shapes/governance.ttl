@@ -712,6 +712,48 @@ aegis:DecisionRequestShape a sh:NodeShape ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Advisory precedent (semantic-grounded design, application #4): the
+        # nearest prior DECIDED requests, attached at mint time so the human
+        # rules with "you rejected something similar, here is why" in view.
+        # Zero-or-more, deliberately: absence means no similarity method ran
+        # or nothing was near — never "precedent was checked and cleared",
+        # which is a claim minting is not entitled to make. The ruling itself
+        # stays the human's; this property only informs it.
+        sh:path aegis:precedent ;
+        sh:class aegis:PrecedentLink ;
+    ] .
+
+# ── PrecedentLink ──────────────────────────────────────────────────
+# One scored nearest-neighbour claim: "this prior decided request is near the
+# minted one, by THIS method, at THIS score". Reified as its own node rather
+# than flattened onto the request because a request carries several
+# precedents, and three bare scores beside three bare request refs would
+# leave nothing pairing each score with the prior it scores. All three fields
+# are required together: a precedent without its score is an insinuation, a
+# score without its method is unfalsifiable, and the design's rule is that
+# every similarity verdict carries what it takes to re-run and disprove it.
+
+aegis:PrecedentLinkShape a sh:NodeShape ;
+    sh:targetClass aegis:PrecedentLink ;
+    sh:property [
+        sh:path aegis:precedentRequest ;
+        sh:class aegis:DecisionRequest ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:similarityScore ;
+        sh:datatype xsd:decimal ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:similarityMethod ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
     ] .
 
 # ═══════════════════════════════════════════════════════════════════

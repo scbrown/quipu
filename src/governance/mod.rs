@@ -16,8 +16,10 @@ pub mod guard;
 pub mod inheritance;
 pub mod inventory;
 pub mod placement;
+pub mod precedent;
 pub mod replay;
 pub mod router;
+pub mod similarity;
 pub mod tree;
 pub mod verdict_facts;
 

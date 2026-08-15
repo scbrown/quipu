@@ -202,6 +202,30 @@ aegis:afterHours a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:comment "What happens outside declared hours: \"deny\", or \"defer_within_window\". There is deliberately no allow: an after-hours ALLOW is the default-allow-under-load SARC §5.3 names as the opposite of oversight, and it is left unrepresentable for the same reason onTimeout is." .
 
+# ── Escalation precedent (semantic-grounded design, application #4) ─
+
+aegis:precedent a owl:ObjectProperty ;
+    rdfs:label "precedent" ;
+    rdfs:domain aegis:DecisionRequest ;
+    rdfs:range aegis:PrecedentLink ;
+    rdfs:comment "A scored nearest-neighbour claim attached when this request was minted: a prior DECIDED request (one holding a signed ruling from a registered decider) similar to this one, so the operator rules with \"you rejected something similar, here is why\" in view. Advisory only — the ruling stays the human's — and absence means no similarity method ran or nothing was near, never that precedent was checked and cleared." .
+
+aegis:precedentRequest a owl:ObjectProperty ;
+    rdfs:label "precedent request" ;
+    rdfs:domain aegis:PrecedentLink ;
+    rdfs:range aegis:DecisionRequest ;
+    rdfs:comment "The prior decided DecisionRequest a precedent link points at. Kept on the reified link rather than directly on the new request because the link also carries the score and method for THIS pairing, and several precedents on one request would otherwise leave scores nobody can pair with their subjects." .
+
+aegis:similarityScore a owl:DatatypeProperty ;
+    rdfs:label "similarity score" ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "The numeric result of a similarity comparison, recorded as a fact about the COMPARISON rather than about either compared thing. Meaningless without the method that produced it, so it never appears without aegis:similarityMethod (or, on a sealed verdict, the model identity) beside it — re-run the named method to reproduce or disprove the number. No rdfs:domain: any similarity claim carries it (a PrecedentLink today, a sealed Verdict next), and a domain would materialise a wrong rdf:type on the others." .
+
+aegis:similarityMethod a owl:DatatypeProperty ;
+    rdfs:label "similarity method" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The method/model identity that produced a similarity score — e.g. \"embedding:model.onnx\", or an honestly self-naming deterministic method. This is the falsifier: a score outside its method is an assertion, a score with it is an experiment anyone can re-run. A method that cannot name itself must not put scores on record. No rdfs:domain, for the same shared-carrier reason as aegis:similarityScore." .
+
 # ═══════════════════════════════════════════════════════════════════
 # Q-SARC-VOCAB — the rest of the GOVERNANCE PLANE's vocabulary.
 #
