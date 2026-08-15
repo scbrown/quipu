@@ -438,6 +438,85 @@ fn a_chain_redefinition_shows_up_as_drift() {
 }
 
 #[test]
+fn a_wrong_cached_rank_shows_up_as_drift() {
+    // quipu-6zn: the sweep compared the chain but never the RANK, so a cache
+    // row with the right chain and a wrong rank read as healthy forever.
+    let mut store = store_with_graph("urn:g:rankdrift");
+    store
+        .set_graph_label(
+            "urn:g:rankdrift",
+            &GraphLabel {
+                trust: Some(trust("urn:t:v", "urn:chain:a", 10)),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    assert_eq!(store.graph_label_drift().unwrap(), vec![]);
+
+    let g = store.lookup("urn:g:rankdrift").unwrap().unwrap();
+    store
+        .conn
+        .execute("UPDATE graphs SET trust_rank = 99 WHERE g = ?1", params![g])
+        .unwrap();
+
+    let drift = store.graph_label_drift().unwrap();
+    assert_eq!(drift.len(), 1, "exactly the trust axis: {drift:?}");
+    assert_eq!(drift[0].axis, "trust");
+    assert_eq!(drift[0].rdf, "rank 10", "RDF is the authority");
+    assert_eq!(drift[0].cached, "rank 99");
+}
+
+#[test]
+fn a_rank_redefinition_is_refused_at_read() {
+    // The other half of quipu-6zn: `label_of` verified only that a trust fact
+    // existed and the chain was current, then served the cached rank. When the
+    // meta-graph re-ranks the trust value, the cached number is one the RDF no
+    // longer stands behind — refuse, exactly as a chain redefinition is refused.
+    let mut store = store_with_graph("urn:g:rerank");
+    store
+        .set_graph_label(
+            "urn:g:rerank",
+            &GraphLabel {
+                trust: Some(trust("urn:t:v", "urn:chain:a", 10)),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    store.label_of("urn:g:rerank").expect("healthy cache reads");
+
+    let meta_g = store.meta_graph_id().unwrap();
+    let term = store.lookup("urn:t:v").unwrap().unwrap();
+    let attr = store.intern(QUIPU_TRUST_RANK).unwrap();
+    store
+        .transact_to_graph(
+            &[Datum {
+                entity: term,
+                attribute: attr,
+                value: Value::Int(20),
+                valid_from: "2026-08-07T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-08-07T00:00:00Z",
+            None,
+            None,
+            meta_g,
+        )
+        .unwrap();
+
+    let err = store
+        .label_of("urn:g:rerank")
+        .expect_err("a re-ranked trust value must not be served from the cache");
+    let msg = err.to_string();
+    assert!(msg.contains("10"), "names the cached rank: {msg}");
+    assert!(msg.contains("20"), "names the declared rank: {msg}");
+}
+
+#[test]
 fn drift_detects_a_cache_edited_behind_the_rdf() {
     // RDF is authoritative. Corrupt only the cache and the doctor must say so —
     // otherwise the cache could drift indefinitely and read as truth.

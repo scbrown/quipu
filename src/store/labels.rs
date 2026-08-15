@@ -171,6 +171,7 @@ type DriftRow = (
     i64,
     Option<i64>,
     Option<i64>,
+    Option<i64>,
     Option<String>,
     Option<String>,
 );
@@ -465,6 +466,7 @@ impl Store {
                 let iri = self.declared_trust_iri(g)?;
                 if let Some(iri) = iri {
                     self.assert_chain_still_current(graph_iri, &iri, &chain)?;
+                    self.assert_rank_still_current(graph_iri, &iri, rank)?;
                     Some(Trust::new(iri, chain, rank))
                 } else {
                     // Cache says trusted, RDF has no trust fact. That is drift,
@@ -618,6 +620,43 @@ impl Store {
             )));
         }
         Ok(())
+    }
+
+    /// Refuse if the RANK the meta-graph declares for `trust_iri` no longer
+    /// matches the cached one. The chain check alone let a cache row with the
+    /// right chain but a wrong rank be served silently (quipu-6zn) — and the
+    /// rank is the half a floor check actually compares against.
+    fn assert_rank_still_current(
+        &self,
+        graph_iri: &str,
+        trust_iri: &str,
+        cached_rank: i64,
+    ) -> Result<()> {
+        let Some(declared) = self.declared_rank_of(trust_iri)? else {
+            return Ok(());
+        };
+        if declared != cached_rank {
+            return Err(Error::Store(format!(
+                "graph '{graph_iri}' caches trust value '{trust_iri}' at rank \
+                 {cached_rank}, but the meta-graph now ranks it {declared}. \
+                 Serving the cached rank would answer a floor check with a \
+                 number the RDF no longer stands behind, so this is refused \
+                 rather than answered. Run `quipu doctor labels` to recompute."
+            )));
+        }
+        Ok(())
+    }
+
+    /// The rank the meta-graph currently declares for `trust_iri`.
+    fn declared_rank_of(&self, trust_iri: &str) -> Result<Option<i64>> {
+        let Some(term) = self.lookup(trust_iri)? else {
+            return Ok(None);
+        };
+        let meta_g = self.meta_graph_id()?;
+        Ok(match self.current_value(term, QUIPU_TRUST_RANK, meta_g)? {
+            Some(Value::Int(i)) => Some(i),
+            _ => None,
+        })
     }
 
     /// The composed label of a whole dataset — the fold over its member graphs
@@ -811,15 +850,23 @@ impl Store {
         let meta_g = self.meta_graph_id()?;
 
         let mut stmt = self.conn.prepare(
-            "SELECT g, fresh_rank, durability_rank, trust_chain, policy FROM graphs WHERE g <> ?1",
+            "SELECT g, fresh_rank, durability_rank, trust_rank, trust_chain, policy \
+             FROM graphs WHERE g <> ?1",
         )?;
         let rows: Vec<DriftRow> = stmt
             .query_map(params![meta_g], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
             })?
             .collect::<std::result::Result<_, _>>()?;
 
-        for (g, fresh_rank, durability_rank, trust_chain, policy) in rows {
+        for (g, fresh_rank, durability_rank, trust_rank, trust_chain, policy) in rows {
             let graph_iri = self.resolve(g).unwrap_or_else(|_| format!("g={g}"));
 
             // Freshness.
@@ -868,6 +915,25 @@ impl Store {
                     axis: "trust",
                     rdf: rdf_chain.unwrap_or_else(|| "(undeclared)".into()),
                     cached: trust_chain.unwrap_or_else(|| "(undeclared)".into()),
+                });
+            }
+
+            // Trust rank — compared separately from the chain, because a cache
+            // row with the RIGHT chain and the WRONG rank is exactly the drift
+            // the sweep used to miss (quipu-6zn): `label_of` served the cached
+            // rank while checking only that a trust fact existed and the chain
+            // was current.
+            let rdf_rank = match self.declared_trust_iri(g)? {
+                Some(iri) => self.declared_rank_of(&iri)?,
+                None => None,
+            };
+            if rdf_rank != trust_rank {
+                drift.push(LabelDrift {
+                    graph_iri: graph_iri.clone(),
+                    axis: "trust",
+                    rdf: rdf_rank.map_or_else(|| "(undeclared)".into(), |r| format!("rank {r}")),
+                    cached: trust_rank
+                        .map_or_else(|| "(undeclared)".into(), |r| format!("rank {r}")),
                 });
             }
 
