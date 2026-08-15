@@ -1,8 +1,12 @@
 # Public Disclosure Timeline — Patentability Assessment
 
-**Status:** rev 2, 2026-08-14 — corrected after independent adversarial
-re-derivation of every row across all seven sibling repositories. Not legal
-advice; prepared to support provisional filings and attorney review.
+**Status:** rev 3, 2026-08-15 — rev 2 corrected after independent
+adversarial re-derivation of every row across all seven sibling
+repositories; rev 3 adds the 2026-08-15 cluster-D rows (observed-scope
+enforcement, assignment-time briefing, corroborated retrieval, hub-degree
+cap, ablation-gated admission — all first disclosed and implemented the
+same day, clocks to 2027-08-15). Not legal advice; prepared to support
+provisional filings and attorney review.
 
 ## Purpose
 
@@ -154,6 +158,12 @@ on; Provisional D now claims it.
 | Coverage Empty/Partial/Full over bare counts (doc; query is quipu-side) | 2026-08-07 | camayoc `53b4417` | 2027-08-07 |
 | Entity-grounded predicates (tokenized grounding-set membership, no pattern; fabricated-reference outcome), embedding-similarity grounding (score/threshold/model/corpus-watermark in verdict), and model-tier semantic predicates (design) | 2026-08-15 | quipu `docs/design/semantic-grounded-edit-policies.md`; embodiments in provisional D § 9, aspects 26–29 | 2027-08-15 |
 | Policy by example: exemplar-designated drafting with placement-valid scaffold, pre-creation backtest, advisory birth with evidence-gated promotion, exemplar-cited refusals (design) | 2026-08-15 | quipu `docs/design/policy-by-example.md`; embodiment in provisional D § 9, aspect 30 | 2027-08-15 |
+| Observed-scope enforcement rung: commit-provenance-derived path scope projected under policy freshness/cache machinery; staged off/advise/enforce with ambient-mode ceiling; out-of-scope advisory/denial naming rung, item, and remedies; unknown-scope once-per-session advisory (implemented) | 2026-08-15 | yupana `bf13cbb` (`src/hook/scope_arm.rs`, `src/project_scope.rs`, `src/policy.rs`); provisional D § 10.1, aspect 31 | 2027-08-15 |
+| Assignment-time governed briefing: session-start injection of observed ground + structural neighborhood, announced posture with remedies, seeded-pagerank central entities, outcome-carrying exemplars ("done" ⇒ reuse), typed absences (implemented) | 2026-08-15 | yupana `2acdb14` (`src/brief.rs`, `src/hook/session_start.rs`); provisional D § 11.1, aspect 33 | 2027-08-15 |
+| Corroboration-voted multi-source similar-work retrieval (phrase/term/provenance votes; prune-only-when-corroborated; never-blank) | 2026-08-15 | yupana `7d8bbe1` (`src/brief_sources.rs`); provisional D § 11.3, aspect 34 | 2027-08-15 |
+| Hub-degree cap on co-occurrence relatedness (degree count includes the querying item) | 2026-08-15 | yupana `8a9cf79` (`related_items`, `HUB_DEGREE_CAP`); provisional D § 11.2, aspect 32 | 2027-08-15 |
+| Problem-classed ablation-gated feature admission (full ≥ floor AND each source's removal strictly degrades; silence-is-correct class) | 2026-08-15 | yupana `8a9cf79`, `ed49faa` (`scripts/e2e/eval_f1.py`); provisional D § 11.4, aspect 37 | 2027-08-15 |
+| Query-relative semantic acceptance (band-of-top-non-self, self excluded, no-veto finding) + per-query retirement of compensatory lexical probes | 2026-08-15 | yupana `ed49faa` (`brief_sources.rs` `SEMANTIC_BAND`, `probes`); provisional D § 11.3, aspects 35–36 | 2027-08-15 |
 
 **Controlling statutory deadline for cluster D: 2027-07-18** (tier
 vocabulary). The quarantine/promotion combination is disclosed as design
