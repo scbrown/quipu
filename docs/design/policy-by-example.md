@@ -1,10 +1,18 @@
 # Policy by example: from an observed edit to a governed rule
 
-> **Implementation status (2026-08-15):** 🟥 **Design only.** Nothing below is
-> implemented. Every ingredient it composes is: the verdict spool and
-> enforcement traces (yupana), the policy vocabulary and definition-time
-> placement validation, the escalation router's decision records, and the
-> replay machinery with its advisory→enforcing promotion gates.
+> **Implementation status (2026-08-15):** 🟨 **Quipu side built (quipu-6bl)** —
+> sequencing steps 1, 3 and 4. `aegis:exemplar` is in the vocabulary
+> (`shapes/governance.ttl` + `shapes/aegis-properties.ttl`); the drafting
+> scaffold emits born-advisory (`effect "warn"`, hard-coded), placement-aimed
+> Turtle (`src/governance/draft.rs`, `quipu policy draft`) with the placement
+> check still running at ingest; the backtest replays a candidate over the
+> store's bitemporal history pre-creation, distinguishing "0 hits" from
+> "cannot evaluate" (`src/governance/backtest.rs`, `quipu policy backtest`);
+> the rejection seam offers the request IRI as exemplar
+> (`src/governance/router.rs`) and guard refusals cite their motivating case
+> (`src/governance/guard.rs`). **Step 2 (yupana exemplar extraction: spool ref
+> → Selector + tiered predicates) and step 5's end-to-end skill gesture remain
+> design only.**
 
 ## Problem
 
