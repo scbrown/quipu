@@ -88,6 +88,7 @@ struct Placement {
     boundary: Option<String>,
     class: Option<String>,
     point: Option<String>,
+    effect: Option<String>,
     reversibility_window: Option<String>,
     on_timeout: Option<String>,
     hosted_at_layer: Option<String>,
@@ -203,6 +204,28 @@ impl Placement {
                  \"{class}\" (expected hard, soft or escalation)"
             ));
         };
+
+        // Class↔effect conformance. The write gate escalates on the EFFECT
+        // (`require-approval`/`escalate`), while the window/onTimeout rules
+        // below key on the CLASS — so a policy with an escalating effect but
+        // class hard/soft would escalate at runtime with no declared window,
+        // get a zero window from the router, and become an instant permanent
+        // denial. Refuse the mismatch here, where the author can still fix it.
+        if let Some(effect) = self.effect.as_deref()
+            && matches!(effect, "require-approval" | "escalate")
+            && class != "escalation"
+        {
+            return Some(format!(
+                "policy '{iri}' declares aegis:effect \"{effect}\", which routes \
+                 to a human at runtime, but aegis:constraintClass \"{class}\". \
+                 An escalating effect needs the escalation class's declared \
+                 bounds (aegis:reversibilityWindowSeconds, aegis:onTimeout) — \
+                 without them the escalation has no time at which the absence \
+                 of a ruling becomes an answer. Declare constraintClass \
+                 \"escalation\" with those fields, or use a non-escalating \
+                 effect."
+            ));
+        }
 
         if !permitted.contains(&point) {
             return Some(format!(
@@ -352,13 +375,18 @@ fn is_policy(
 
 /// Read the SARC metadata of the touched policies in one SPARQL pass.
 fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, Placement>> {
+    // Every OPTIONAL-bound variable must ALSO be in the SELECT projection:
+    // `Project` strips non-projected variables, so a binding left out here is
+    // silently `None` at `row.get` — which is how the hostedAtLayer refusal
+    // was dead code (quipu-sio).
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
-         SELECT ?p ?boundary ?class ?point ?window ?timeout WHERE {{ \
+         SELECT ?p ?boundary ?class ?point ?effect ?window ?timeout ?layer WHERE {{ \
             ?p a a:Policy . \
             OPTIONAL {{ ?p a:boundary ?boundary }} \
             OPTIONAL {{ ?p a:constraintClass ?class }} \
             OPTIONAL {{ ?p a:verificationPoint ?point }} \
+            OPTIONAL {{ ?p a:effect ?effect }} \
             OPTIONAL {{ ?p a:reversibilityWindowSeconds ?window }} \
             OPTIONAL {{ ?p a:onTimeout ?timeout }} \
             OPTIONAL {{ ?p a:hostedAtLayer ?layer }} \
@@ -381,6 +409,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 ("boundary", "boundary"),
                 ("constraintClass", "class"),
                 ("verificationPoint", "point"),
+                ("effect", "effect"),
                 ("reversibilityWindowSeconds", "window"),
                 ("onTimeout", "timeout"),
                 ("hostedAtLayer", "layer"),
@@ -414,6 +443,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 boundary: single("boundary"),
                 class: single("constraintClass"),
                 point: single("verificationPoint"),
+                effect: single("effect"),
                 reversibility_window: single("reversibilityWindowSeconds"),
                 on_timeout: single("onTimeout"),
                 hosted_at_layer: single("hostedAtLayer"),

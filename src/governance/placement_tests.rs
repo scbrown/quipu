@@ -13,6 +13,7 @@ fn action(class: Option<&str>, point: Option<&str>) -> Placement {
         boundary: Some("action".to_string()),
         class: class.map(str::to_string),
         point: point.map(str::to_string),
+        effect: None,
         reversibility_window: None,
         on_timeout: None,
         hosted_at_layer: None,
@@ -25,6 +26,7 @@ fn escalation(point: &str, window: Option<&str>, timeout: Option<&str>) -> Place
         boundary: Some("action".to_string()),
         class: Some("escalation".to_string()),
         point: Some(point.to_string()),
+        effect: None,
         reversibility_window: window.map(str::to_string),
         on_timeout: timeout.map(str::to_string),
         hosted_at_layer: None,
@@ -490,5 +492,91 @@ fn a_bad_value_is_refused_at_the_write_path() {
     assert!(
         matches!(err, Err(Error::PolicyDenied(_))),
         "onTimeout \"allow\" must be refused on the write path, got {err:?}"
+    );
+}
+
+#[test]
+fn a_forbidden_hosting_layer_is_refused_through_the_read_path() {
+    // quipu-sio: the placement SELECT once omitted ?layer from its projection,
+    // so `read_placements` never saw hostedAtLayer and the prompt-layer refusal
+    // was dead code — reachable only by constructing a Placement directly. This
+    // goes through the real transact, so it fails if the projection regresses.
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    let err = define(
+        &mut store,
+        "http://ex/p",
+        &[
+            ("targets", "CodeModule"),
+            ("claim", "ASK { ?s ?p ?o }"),
+            ("boundary", "action"),
+            ("constraintClass", "hard"),
+            ("verificationPoint", "PAG"),
+            ("hostedAtLayer", "prompt"),
+        ],
+    );
+    let Err(Error::PolicyDenied(why)) = err else {
+        panic!("hostedAtLayer \"prompt\" must be refused through read_placements, got {err:?}");
+    };
+    assert!(
+        why.contains("hostedAtLayer") && why.contains("prompt"),
+        "the refusal names the field and value: {why}"
+    );
+}
+
+// ── Class↔effect conformance (quipu-tw9) ─────────────────────────────────────
+//
+// The gate escalates on the EFFECT while the window/onTimeout rules key on the
+// CLASS. A policy with effect "escalate" but class "hard" escalated at runtime
+// with no declared window, got a zero window, and became an instant permanent
+// denial. The mismatch is refused at definition time instead.
+
+#[test]
+fn an_escalating_effect_with_a_non_escalation_class_is_rejected() {
+    for effect in ["escalate", "require-approval"] {
+        for class in ["hard", "soft"] {
+            let point = if class == "hard" { "PAG" } else { "PAA" };
+            let mut p = action(Some(class), Some(point));
+            p.effect = Some(effect.to_string());
+            let why = p.violation("p").unwrap();
+            assert!(
+                why.contains(effect) && why.contains(class),
+                "the refusal names the mismatched pair: {why}"
+            );
+            assert!(
+                why.contains("escalation"),
+                "and the remedy — the class that carries the bounds: {why}"
+            );
+        }
+    }
+    // The conformant pairing still lands: escalating effect, escalation class.
+    let mut ok = escalation("PAG", Some("600"), Some("deny"));
+    ok.effect = Some("escalate".to_string());
+    assert!(ok.violation("p").is_none());
+    // And a non-escalating effect on a hard class is untouched.
+    let mut deny = action(Some("hard"), Some("PAG"));
+    deny.effect = Some("deny".to_string());
+    assert!(deny.violation("p").is_none());
+}
+
+#[test]
+fn an_escalating_effect_without_the_escalation_class_is_refused_at_the_write_path() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    let err = define(
+        &mut store,
+        "http://ex/p",
+        &[
+            ("targets", "CodeModule"),
+            ("claim", "ASK { ?s ?p ?o }"),
+            ("boundary", "action"),
+            ("effect", "escalate"),
+            ("constraintClass", "hard"),
+            ("verificationPoint", "PAG"),
+        ],
+    );
+    assert!(
+        matches!(err, Err(Error::PolicyDenied(_))),
+        "an escalate-effect hard-class policy must be refused at definition time, got {err:?}"
     );
 }
