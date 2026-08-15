@@ -153,6 +153,41 @@ and the stack's own rules for model judgments apply:
 | Quarantine of model-written facts | camayoc `sourceKind` + label lattice |
 | Read-time open-ness of a cited ticket | bitemporal store, liveness-by-absence |
 
+## Further applications of similarity-as-grounding
+
+The pattern — resolve text to governed entities by similarity, seal the
+score in a falsifiable verdict, never let similarity hard-deny — applies
+wherever an agent cites, claims, or should-have-cited an entity. The
+rule everywhere: similarity **grounds or advises**; exact membership
+stays the only hard tier; every verdict carries
+score/threshold/model/corpus-watermark; anything written lands
+`inferred` and quarantined.
+
+1. **Claimed-linkage verification** (grounding-integrity, strongest).
+   A commit or bead-close *claims* `aegis:implements` — check the
+   diff/commit content's similarity against the cited item's
+   description. Grounded / **cited-but-dissimilar** (a fabricated
+   linkage — the provenance edge checkable rather than trusted) /
+   no-citation. The unverified claim is exactly how a wrong provenance
+   edge poisons replay-derived rules.
+2. **Settled-decision collision.** Before a new `Decision` episode
+   lands (camayoc), similarity against `crew:declared` standing
+   decisions — "this duplicates or conflicts with a settled human
+   decision," advisory or escalate, *before* the write. Convention
+   memory made enforceable: re-litigation is noticed by the store.
+3. **Duplicate work-item detection at `bd create`** — the beads corpus
+   is already embedded (bobbin); a new issue near an open one gets an
+   advisory naming the near-duplicate.
+4. **Precedent for the escalation router** — a minted DecisionRequest
+   carries its nearest prior *decided* requests, so the human sees
+   precedent, with the similarity score on record.
+5. **Denied-edit recurrence** — the verdict spool as corpus; an edit
+   near a previously denied one surfaces the prior verdict as
+   advisory, teaching the agent from refusals it never saw.
+6. **Competency-gap detection** (camayoc) — a question resolving to no
+   competency question above threshold is reported as an ontology
+   gap ("no coverage"), never silently answered.
+
 ## Sequencing
 
 1. Vocabulary: `aegis:candidateSource`, `aegis:groundingQuery`,
