@@ -118,6 +118,47 @@ scope reaches the sibling-disclosed generic mechanisms (tier tagging per se,
 agent-nudge transport per se). The provisional's aspects were scoped during
 review to avoid resting novelty on those generic elements.
 
+## Provisional D — grounding-integrity cluster (camayoc + yupana + quipu)
+
+Added 2026-08-15. Rows derived from full git history (yupana history was
+recovered with `git fetch --unshallow`; the repo was renamed from `hank`
+2026-08-09, so pre-rename commit author dates are in-repo but the
+corroborating v0.1.0–v0.5.0 tags live on the `scbrown/hank` tombstone
+repo — CHANGELOG permalinks corroborate in the interim; pull the tag list
+from the tombstone before relying on any tight window). Camayoc history
+is 2026-08-06 onward. The generic tier-tagging row below is the same
+mechanism Provisional C's review deliberately declined to rest novelty
+on; Provisional D now claims it.
+
+| Mechanism | First disclosure | Evidence | US filing deadline |
+|---|---|---|---|
+| Closed precision-tier vocabulary (`Tier`, 4 variants, no escape hatch) | **2026-07-18** | yupana `ea0f78b` (`src/types.rs`, repo then named hank) | **2027-07-18** |
+| Edit verification with unchecked-classes disclosure | 2026-07-19 | yupana `8a5d5f5` (`src/verify/`) | 2027-07-19 |
+| Tier on every response envelope; freshness omitted-not-faked (self-correction commit) | 2026-07-20 | yupana `45969c1`, `caa2d16` | 2027-07-20 |
+| Typed non-answers: `Sizing` unmeasurable≠zero; `ChangedPaths` could-not-look≠unchanged | 2026-07-20 | yupana `3aab970`, `9d3fd2d` | 2027-07-20 |
+| Pre-edit blocking guard at the agent's tool-use seam | 2026-07-19 | yupana `53a2c41` (`src/hook/pre_edit.rs`) | 2027-07-19 |
+| Verdict freshness with conservative recomputing→stale collapse; signed verdict return to store | 2026-07-22 | yupana `3286eaa` (`src/verdict.rs`) | 2027-07-22 |
+| Rule-plane-unprojectable as reserved status failure | 2026-08-01 | yupana `e49b9cb` (`src/cli_status.rs`) | 2027-08-01 |
+| Policy projection targeted at supertype (unbind-proof) | 2026-08-02 | yupana `8228082` (`src/project.rs`) | 2027-08-02 |
+| Verdict spool retained on store rejection | 2026-08-03 | yupana `e448616` | 2027-08-03 |
+| Durable projection cache; cache age declared in verdict | 2026-08-04 | yupana `7d55aff` (`src/projection_cache.rs`) | 2027-08-04 |
+| Column-precision refusal; explained miss | 2026-08-01 | yupana `1627c06` (`src/cli_analyze.rs`) | 2027-08-01 |
+| Abstaining resolvers (work-item plate, action parser); advisory pre-bash trace | 2026-08-02 | yupana `610400e`, `4fe96e2`, `562609e` | 2027-08-02 |
+| Work-scoped governance design (scope provenance ladder; unknown-advises) | 2026-08-02 | yupana `5f5378d` (`docs/work-scoped-governance.md`) | 2027-08-02 |
+| vacuous/unevaluated policy outcomes; empty-world guard refusal; pre-existing discrimination; declared-effect blame | 2026-08-03 | yupana `a19759e` (`src/state/guard.rs`) | 2027-08-03 |
+| Closed `sourceKind` vocabulary + write refusal + installer single-omission gate proofs + plugin | 2026-08-06 | camayoc `922a733`, `d8b8298` | 2027-08-06 |
+| Ingress discipline design: deterministic-first, quarantine planes, authority-gated promotion | 2026-08-06 | camayoc `ee3da0b` (`docs/design/ingress.md`) | 2027-08-06 |
+| Falsifier-gated Verification (shape + separate probe arm) | 2026-08-07 | camayoc `1209d73` | 2027-08-07 |
+| Blocker evidence strength (stated/built); liveness-as-deliberate-absence | 2026-08-07 | camayoc `a696f15` | 2027-08-07 |
+| Per-class vocabulary narrowing (Metric declared-only; Observation observed-only) | 2026-08-07 | camayoc `ad0c2f8` | 2027-08-07 |
+| Coverage Empty/Partial/Full over bare counts (doc; query is quipu-side) | 2026-08-07 | camayoc `53b4417` | 2027-08-07 |
+
+**Controlling statutory deadline for cluster D: 2027-07-18** (tier
+vocabulary). The quarantine/promotion combination is disclosed as design
+in camayoc and as implemented substrate in quipu (label lattice rows in
+cluster A, 2026-08-06); claims resting on the combination inherit the
+camayoc design date.
+
 ## Practical deadline
 
 Both provisionals should be **filed by 2026-08-31** — the inventor begins

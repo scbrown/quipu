@@ -55,6 +55,16 @@ on filing day.
 | Upload as | Single specification PDF with figures rendered inline |
 | Statutory deadline protected | 2027-07-26 (the contract disclosure; combination claims inherit it) |
 
+## Application 4 — Provisional D
+
+| Field | Value |
+|---|---|
+| Title | Grounding-Integrity Machinery for Machine-Written Knowledge: Provenance-Refusing Ingress, Quarantined Inference with Governed Promotion, Falsifier-Gated Verification, Tier-Honest Fact Serving, and Typed Non-Answers |
+| Suggested docket number | SCB-004-PRV |
+| Specification source | `camayoc` repo, `docs/patents/provisional-grounding-cluster.md` (~9 figures) |
+| Upload as | Single specification PDF with figures rendered inline |
+| Statutory deadline protected | 2027-07-18 (closed tier vocabulary, first disclosed in yupana while named hank) |
+
 ## Filing-day sequence (per application)
 
 1. Sign in to [Patent Center](https://patentcenter.uspto.gov) (verified

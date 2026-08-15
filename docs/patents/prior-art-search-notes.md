@@ -110,6 +110,30 @@ These sit at the agent/orchestration layer, not the store layer; Provisional
 A's positioning (in-store mechanisms, writer-agnostic) is the right
 distinction and is already stated in the Background.
 
+### 8. Provisional D — grounding-integrity cluster (added 2026-08-15)
+
+- [US20250131289A1](https://patents.google.com/patent/US20250131289A1/en) —
+  knowledge-graph extraction via LLMs with stored provenance information.
+  Provenance is informational (surfaced to a user who decides trust);
+  D's provenance is a write-gate admission requirement with closed
+  vocabulary and refusal. Cite and distinguish.
+- [US12353469B1](https://patents.google.com/patent/US12353469B1/en) —
+  verification and citation for LLM outputs against ground-truth data.
+  Post-hoc output validation; D enforces at the store gate and at the
+  edit boundary. Cite and distinguish.
+- [Veritas-RPM, arXiv:2604.16081](https://arxiv.org/pdf/2604.16081) —
+  provenance tags at ingestion (device-verified / patient-reported /
+  EHR-derived / inferred) with routing that structurally keeps
+  LLM-inferred values from decisions without human confirmation.
+  Closest concept-level art for the taxonomy+routing idea; D is
+  distinguished as enforcement machinery (closed-vocab refusal,
+  per-class narrowing, lattice quarantine, authority-gated promotion,
+  gate proof). Acknowledged in D's Background.
+- Monitor-Guided Decoding (multilspy, Microsoft) — published non-patent
+  art for analysis-facts-as-generation-guardrails; D's edit-boundary
+  claims rest on the projection/cache-age/verdict-return machinery and
+  typed refusals, not on facts-as-guardrails per se.
+
 ## Take-aways for conversion
 
 1. Nothing found anticipates the five core mechanisms as claimed; the
