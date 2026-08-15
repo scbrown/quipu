@@ -21,7 +21,11 @@
 //!
 //! So the "hold" is the agent retrying, not the engine waiting. SARC's §5.3
 //! reversibility window still governs: past `expiresAt` an unserviced request is
-//! a DENIAL, not a request that quietly stays open.
+//! a DENIAL, not a request that quietly stays open. That denial closes the
+//! REQUEST, not the channel: the next refused attempt re-mints a fresh request
+//! (same deterministic IRI, new `expiresAt`) so an operator who missed the
+//! window can still rule. Only a recorded rejection is terminal — that is an
+//! answer, not an absence of one.
 //!
 //! ## Content binding, and why approval cannot be reused
 //!
@@ -29,6 +33,21 @@
 //! what was approved and the hash changes, so the approval no longer applies —
 //! this is the approve-then-sneak-in-changes defence, and it is the same
 //! mechanism a Verdict uses, not a second one invented for decisions.
+//!
+//! ## Signed, and why write access is not authority
+//!
+//! A decision is an ATTESTATION, not a fact. Decisions are ordinary writable
+//! facts, so before quipu-5s5 the agent whose write was refused could write its
+//! own `aegis:Decision "approve"` and walk through. The router now trusts a
+//! decision only when it is **signed by a registered decider**: the row must
+//! carry an `aegis:signature` over [`decision_message`], verifying under the
+//! `aegis:publicKey` of an `aegis:VerifierRegistration` whose `aegis:verifier`
+//! is the decision's `aegis:by` and whose `aegis:attests` names the policy —
+//! the same human-owned root of trust the verdict plane uses (`signing.rs`),
+//! not a second one. An unsigned or unverifiable decision is not a wrong
+//! ruling; it is no ruling at all, and resolution falls through to
+//! `Pending`/`Expired` — which are refusals, so a forgery can never widen
+//! access.
 //!
 //! ## What this is not
 //!
@@ -89,8 +108,8 @@ impl Ruling {
             Ruling::Pending { expires_at } => format!(
                 "'{target}' needs a human decision under policy '{policy}'. A \
                  DecisionRequest is open and expires at {expires_at} (unix \
-                 seconds), after which it is DENIED. To proceed, have an \
-                 authorized operator record an aegis:Decision with outcome \
+                 seconds), after which it is DENIED. To proceed, have a \
+                 registered decider record a signed aegis:Decision with outcome \
                  \"approve\" bound to this request's evidenceHash, then retry."
             ),
             Ruling::Expired => format!(
@@ -133,11 +152,15 @@ pub fn resolve(
     };
 
     // A ruling, if one is bound to THIS evidence. A decision over different
-    // evidence is a decision about something else.
+    // evidence is a decision about something else — and an unsigned or
+    // unverifiable one is no ruling at all (see the module doc): decisions are
+    // ordinary writable facts, so without the signature check the refused
+    // agent could approve its own request.
     let dq = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
-         SELECT ?outcome ?by WHERE {{ \
+         SELECT ?outcome ?by ?sig WHERE {{ \
             ?d a a:Decision ; a:evidenceHash \"{hash}\" ; a:outcome ?outcome ; a:by ?by . \
+            OPTIONAL {{ ?d a:signature ?sig }} \
          }}",
         hash = escape(&hash),
     );
@@ -151,6 +174,12 @@ pub fn resolve(
             else {
                 continue;
             };
+            let Some(sig) = str_of(row.get("sig")) else {
+                continue;
+            };
+            if !decision_verifies(store, policy_iri, &hash, &outcome, &by, &sig)? {
+                continue;
+            }
             match outcome.as_str() {
                 "approve" => approval.get_or_insert(Ruling::Approved { by }),
                 _ => return Ok(Some(Ruling::Rejected { by, outcome })),
@@ -238,6 +267,51 @@ pub fn mint_request(
         ));
     }
     Ok(datums)
+}
+
+/// The canonical byte string a decider signs. Deterministic field order so any
+/// consumer re-derives the exact same message from the decision's own fields
+/// and checks the signature — checked, not trusted, same discipline as
+/// [`crate::signing::verdict_message`].
+#[must_use]
+pub fn decision_message(evidence_hash: &str, outcome: &str, by: &str) -> Vec<u8> {
+    format!("decision-v1|{evidence_hash}|{outcome}|{by}").into_bytes()
+}
+
+/// Whether a decision row is a trustworthy attestation: its signature must
+/// verify over [`decision_message`] under the public key of an
+/// `aegis:VerifierRegistration` whose `aegis:verifier` is the decision's `by`
+/// and whose `aegis:attests` names the escalating policy. The registry is the
+/// same human-owned root of trust the verdict plane uses; quipu never registers
+/// deciders itself.
+fn decision_verifies(
+    store: &Store,
+    policy_iri: &str,
+    evidence_hash: &str,
+    outcome: &str,
+    by: &str,
+    signature: &str,
+) -> Result<bool> {
+    let kq = format!(
+        "PREFIX a: <{DEFAULT_BASE_NS}> \
+         SELECT ?k WHERE {{ \
+            ?r a a:VerifierRegistration ; a:verifier \"{by}\" ; \
+               a:attests \"{policy}\" ; a:publicKey ?k . \
+         }}",
+        by = escape(by),
+        policy = escape(policy_iri),
+    );
+    let QueryResult::Select { rows, .. } = sparql::query(store, &kq)? else {
+        return Ok(false);
+    };
+    let message = decision_message(evidence_hash, outcome, by);
+    // Any registered key for this decider may verify — a decider mid key
+    // rotation legitimately has two registrations, and requiring "the first
+    // row" would make the ruling depend on row order.
+    Ok(rows
+        .iter()
+        .filter_map(|r| str_of(r.get("k")))
+        .any(|key| crate::signing::verify_hex(&key, &message, signature)))
 }
 
 /// The evidence a decision binds to: `sha256:<hex>` over `policy|target`.

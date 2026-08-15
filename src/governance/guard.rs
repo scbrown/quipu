@@ -250,6 +250,29 @@ fn evaluate_one(
             if ruling.permits() {
                 return Ok(());
             }
+            // An expired request is a DENIAL of that request, not a permanent
+            // dead end for the (policy, target) pair: this attempt re-mints,
+            // superseding the expired request with a fresh window a human can
+            // still act in. Without this, resolve returns Expired forever and
+            // no retry ever reopens the channel (quipu-fu0). A recorded
+            // rejection is different — that is an answer, and it stands.
+            if matches!(ruling, super::router::Ruling::Expired) {
+                requests.push(super::router::PendingRequest {
+                    policy_iri: policy.policy_iri.clone(),
+                    target_iri: entity_iri.to_string(),
+                    window_secs: policy.reversibility_window.unwrap_or(0),
+                    now,
+                });
+                return Err(Error::PolicyDenied(format!(
+                    "'{entity_iri}' blocked by policy '{}': the previous \
+                     DecisionRequest expired with no ruling and was denied \
+                     (declared default-deny). This attempt has opened a fresh \
+                     request; have an authorized operator record a signed \
+                     aegis:Decision with outcome \"approve\" bound to its \
+                     evidenceHash, then retry.",
+                    policy.policy_iri
+                )));
+            }
             return Err(Error::PolicyDenied(format!(
                 "'{entity_iri}' blocked by policy '{}': {}",
                 policy.policy_iri,
@@ -268,8 +291,8 @@ fn evaluate_one(
         });
         return Err(Error::PolicyDenied(format!(
             "'{entity_iri}' needs a human decision under policy '{}'. A \
-             DecisionRequest has been opened; have an authorized operator record \
-             an aegis:Decision with outcome \"approve\" bound to its \
+             DecisionRequest has been opened; have a registered decider record \
+             a signed aegis:Decision with outcome \"approve\" bound to its \
              evidenceHash, then retry.",
             policy.policy_iri
         )));

@@ -14,7 +14,56 @@ fn store_with_request(window: i64) -> Store {
     store
 }
 
-fn decide(store: &mut Store, outcome: &str, by: &str, hash: &str) {
+fn keypair() -> ring::signature::Ed25519KeyPair {
+    let rng = ring::rand::SystemRandom::new();
+    let doc = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
+    ring::signature::Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap()
+}
+
+/// Register `by` as a decider for `policy` — the human-authored root-of-trust
+/// fact a real deployment writes when it appoints an operator.
+fn register_decider(store: &mut Store, by: &str, policy: &str, public_key_hex: &str) {
+    let iri = format!(
+        "http://ex/reg_{by}_{}",
+        policy.replace(['/', ':', '#'], "_")
+    );
+    let class = Value::Ref(
+        store
+            .intern(&format!("{DEFAULT_BASE_NS}VerifierRegistration"))
+            .unwrap(),
+    );
+    let d = |store: &Store, p: &str, v: Value| Datum {
+        entity: store.intern(&iri).unwrap(),
+        attribute: store.intern(p).unwrap(),
+        value: v,
+        valid_from: TS.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    let datums = vec![
+        d(store, RDF_TYPE, class),
+        d(
+            store,
+            &format!("{DEFAULT_BASE_NS}verifier"),
+            Value::Str(by.into()),
+        ),
+        d(
+            store,
+            &format!("{DEFAULT_BASE_NS}attests"),
+            Value::Str(policy.into()),
+        ),
+        d(
+            store,
+            &format!("{DEFAULT_BASE_NS}publicKey"),
+            Value::Str(public_key_hex.into()),
+        ),
+    ];
+    store.transact(&datums, TS, None, None).unwrap();
+}
+
+/// Write a decision fact, optionally carrying `signature`. No registration —
+/// callers set that up (or deliberately don't).
+fn write_decision(store: &mut Store, outcome: &str, by: &str, hash: &str, signature: Option<&str>) {
     let iri = format!("http://ex/decision_{outcome}_{by}");
     let class = Value::Ref(store.intern(&format!("{DEFAULT_BASE_NS}Decision")).unwrap());
     let d = |store: &Store, p: &str, v: Value| Datum {
@@ -25,7 +74,7 @@ fn decide(store: &mut Store, outcome: &str, by: &str, hash: &str) {
         valid_to: None,
         op: Op::Assert,
     };
-    let datums = vec![
+    let mut datums = vec![
         d(store, RDF_TYPE, class),
         d(
             store,
@@ -43,7 +92,23 @@ fn decide(store: &mut Store, outcome: &str, by: &str, hash: &str) {
             Value::Str(hash.into()),
         ),
     ];
+    if let Some(sig) = signature {
+        datums.push(d(
+            store,
+            &format!("{DEFAULT_BASE_NS}signature"),
+            Value::Str(sig.into()),
+        ));
+    }
     store.transact(&datums, TS, None, None).unwrap();
+}
+
+/// A properly attested ruling: register `by` as a decider for `policy`, sign
+/// the canonical decision message, and write the decision.
+fn decide(store: &mut Store, outcome: &str, by: &str, hash: &str, policy: &str) {
+    let kp = keypair();
+    register_decider(store, by, policy, &crate::signing::public_key_hex(&kp));
+    let sig = crate::signing::sign_hex(&kp, &decision_message(hash, outcome, by));
+    write_decision(store, outcome, by, hash, Some(&sig));
 }
 
 #[test]
@@ -85,6 +150,7 @@ fn an_approval_bound_to_the_evidence_permits_the_write() {
         "approve",
         "stiwi",
         &evidence_hash(POLICY, TARGET),
+        POLICY,
     );
     let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
     assert_eq!(ruling, Ruling::Approved { by: "stiwi".into() });
@@ -96,7 +162,13 @@ fn an_approval_over_different_evidence_does_not_apply() {
     // Content binding, and the approve-then-sneak-in-changes defence. A decision
     // about other evidence is a decision about something else.
     let mut store = store_with_request(600);
-    decide(&mut store, "approve", "stiwi", "sha256:something-else");
+    decide(
+        &mut store,
+        "approve",
+        "stiwi",
+        "sha256:something-else",
+        POLICY,
+    );
     let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
     assert!(!ruling.permits(), "got {ruling:?}");
 }
@@ -109,6 +181,7 @@ fn a_rejection_is_an_answer_distinct_from_pending() {
         "reject",
         "stiwi",
         &evidence_hash(POLICY, TARGET),
+        POLICY,
     );
     let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
     assert!(matches!(ruling, Ruling::Rejected { .. }));
@@ -123,8 +196,8 @@ fn a_rejection_outranks_an_approval_when_both_exist() {
     // safe reading of a disagreement about whether to permit something is "no".
     let mut store = store_with_request(600);
     let hash = evidence_hash(POLICY, TARGET);
-    decide(&mut store, "approve", "alice", &hash);
-    decide(&mut store, "reject", "bob", &hash);
+    decide(&mut store, "approve", "alice", &hash, POLICY);
+    decide(&mut store, "reject", "bob", &hash, POLICY);
     let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
     assert!(!ruling.permits(), "got {ruling:?}");
 }
@@ -188,6 +261,131 @@ fn only_an_approval_permits() {
             outcome: "changes".into()
         }
         .permits()
+    );
+}
+
+// ── Signed decisions (quipu-5s5) ─────────────────────────────────────────────
+//
+// Decisions are ordinary writable facts. Before the signature check, the agent
+// whose write was refused could write its own `aegis:Decision "approve"` and
+// walk through the gate. Every path below MUST fall through to Pending — a
+// forged decision is not a wrong ruling, it is no ruling at all.
+
+#[test]
+fn an_unsigned_decision_is_not_a_ruling() {
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    // The refused agent writes a bare approval — write access it has.
+    write_decision(&mut store, "approve", "mallory", &hash, None);
+    let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
+    assert!(
+        matches!(ruling, Ruling::Pending { .. }),
+        "an unsigned approval must not permit: {ruling:?}"
+    );
+}
+
+#[test]
+fn a_self_signed_decision_without_a_registration_is_ignored() {
+    // Mallory can sign — with mallory's own key. Signing proves key
+    // possession; the REGISTRATION is what makes it authority, and only a
+    // human writes those.
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    let kp = keypair();
+    let sig = crate::signing::sign_hex(&kp, &decision_message(&hash, "approve", "mallory"));
+    write_decision(&mut store, "approve", "mallory", &hash, Some(&sig));
+    let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
+    assert!(
+        !ruling.permits(),
+        "an unregistered signer must not permit: {ruling:?}"
+    );
+}
+
+#[test]
+fn a_decision_signed_by_a_key_other_than_the_registered_one_is_ignored() {
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    let registered = keypair();
+    register_decider(
+        &mut store,
+        "stiwi",
+        POLICY,
+        &crate::signing::public_key_hex(&registered),
+    );
+    // ...but the decision is signed with a different key.
+    let other = keypair();
+    let sig = crate::signing::sign_hex(&other, &decision_message(&hash, "approve", "stiwi"));
+    write_decision(&mut store, "approve", "stiwi", &hash, Some(&sig));
+    let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
+    assert!(
+        !ruling.permits(),
+        "a wrong-key signature must not permit: {ruling:?}"
+    );
+}
+
+#[test]
+fn a_registration_for_a_different_policy_does_not_authorize() {
+    // Authority is scoped: attesting policy A does not let a decider rule on
+    // policy B, same as a verifier registration scopes to a predicate.
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    let kp = keypair();
+    register_decider(
+        &mut store,
+        "stiwi",
+        "http://ex/some-other-policy",
+        &crate::signing::public_key_hex(&kp),
+    );
+    let sig = crate::signing::sign_hex(&kp, &decision_message(&hash, "approve", "stiwi"));
+    write_decision(&mut store, "approve", "stiwi", &hash, Some(&sig));
+    let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
+    assert!(
+        !ruling.permits(),
+        "out-of-scope authority must not permit: {ruling:?}"
+    );
+}
+
+#[test]
+fn a_signature_over_a_different_outcome_is_ignored() {
+    // The signature seals the outcome. Re-pointing a signed rejection at
+    // "approve" must break the seal — the flip-the-outcome forgery.
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    let kp = keypair();
+    register_decider(
+        &mut store,
+        "stiwi",
+        POLICY,
+        &crate::signing::public_key_hex(&kp),
+    );
+    let sig = crate::signing::sign_hex(&kp, &decision_message(&hash, "reject", "stiwi"));
+    write_decision(&mut store, "approve", "stiwi", &hash, Some(&sig));
+    let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
+    assert!(
+        !ruling.permits(),
+        "a re-pointed signature must not permit: {ruling:?}"
+    );
+}
+
+// ── Re-minting after expiry (quipu-fu0) ──────────────────────────────────────
+
+#[test]
+fn a_fresh_mint_supersedes_an_expired_request() {
+    // Expiry denies the REQUEST, not the (policy, target) pair forever. A
+    // re-mint at a later instant reopens the window: resolve takes the newest
+    // expiry, so the pair is Pending again rather than Expired for good.
+    let mut store = store_with_request(600);
+    assert_eq!(
+        resolve(&store, POLICY, TARGET, NOW + 601).unwrap().unwrap(),
+        Ruling::Expired
+    );
+    let again = mint_request(&store, POLICY, TARGET, None, 600, NOW + 601, TS).unwrap();
+    store.transact(&again, TS, None, None).unwrap();
+    assert_eq!(
+        resolve(&store, POLICY, TARGET, NOW + 601).unwrap().unwrap(),
+        Ruling::Pending {
+            expires_at: NOW + 1201
+        }
     );
 }
 
@@ -299,7 +497,7 @@ fn an_approval_lets_the_next_attempt_through() {
 
     // A human rules on it, bound to the same evidence.
     let hash = evidence_hash("http://ex/PE", "http://ex/d9");
-    decide(&mut store, "approve", "stiwi", &hash);
+    decide(&mut store, "approve", "stiwi", &hash, "http://ex/PE");
 
     // The retry succeeds — the same write, now permitted.
     store
@@ -326,4 +524,20 @@ fn a_zero_window_expires_immediately_rather_than_inventing_a_bound() {
         panic!("expected denial");
     };
     assert!(why.contains("default-deny"), "{why}");
+    // quipu-fu0: the expiry denied the REQUEST, not the pair forever — the
+    // refusal says a fresh request was opened, and one exists (same
+    // deterministic IRI, so still exactly one).
+    assert!(
+        why.contains("fresh"),
+        "the refusal must say the channel reopened: {why}"
+    );
+    assert_eq!(open_requests(&store), 1);
+
+    // And the reopened channel is live: a signed approval recorded after the
+    // expiry lets a later attempt through.
+    let hash = evidence_hash("http://ex/PE", "http://ex/d9");
+    decide(&mut store, "approve", "stiwi", &hash, "http://ex/PE");
+    store
+        .transact(&noncompliant_doc(&store, "http://ex/d9"), TS, None, None)
+        .expect("an approval after expiry still lets the write through");
 }
