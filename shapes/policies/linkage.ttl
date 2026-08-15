@@ -1,0 +1,77 @@
+# Claimed-linkage verification catalog — quipu's side of design #1
+# (docs/design/semantic-grounded-edit-policies.md, "Further applications"):
+# an aegis:implements claim is checked against the cited work item, turning
+# the provenance edge from trusted to checkable. Three outcomes — grounded /
+# cited-but-dissimilar (a fabricated linkage) / no-citation — with the
+# unevaluated state mapped to the verdict plane's "unknown".
+#
+# The verifier entry point is src/governance/linkage.rs
+# (verify_claimed_linkage); the heavy corpus (bobbin's embedded beads index)
+# is external by design — what ships here is the predicate vocabulary, the
+# calibration, and the advisory placement the embedding tier is allowed.
+#
+# Validate against the shapes before loading:
+#   cargo test governance  (see src/governance_tests.rs)
+# Load via POST /shapes / quipu knot.
+
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+# ═══════════════════════════════════════════════════════════════════
+# implements-claim-grounded — the similarity-tier grounded predicate.
+# must-ground, because the DIRECTION is "the claim must land on tracked
+# work"; tier "embedding", because the truth test is nearness under a pinned
+# model, reproducible but approximate — which is exactly why the placement
+# rules refuse this predicate a hard PAG deny (src/governance/placement.rs).
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:pred_implements_grounded a aegis:Predicate ;
+    aegis:name "implements-claim-grounded" ;
+    # Provenance of the membership half of the answer: the graph's own
+    # work-item set is what a citation must resolve INTO before similarity
+    # has anything to score. Same id set as the grounded ticket predicate —
+    # one authority, not two.
+    aegis:evidenceSource "graph:work-item-id-set" ;
+    # The candidate is the CITED item of the aegis:implements claim itself —
+    # not tokens of the text. There is exactly one candidate per claim, and
+    # whether it grounds is (1) membership of the citation in the id set,
+    # then (2) similarity of the claiming content to that item's description
+    # against the operating point's threshold.
+    aegis:candidateSource "citation" ;
+    aegis:groundingQuery "SELECT ?id WHERE { ?w a aegis:WorkItem ; aegis:identifier ?id }" ;
+    aegis:matchType "must-ground" ;
+    aegis:tier "embedding" .
+
+aegis:op_implements_grounded a aegis:OperatingPoint ;
+    # A threshold over a similarity score — a CLASSIFIER's operating point,
+    # so both tolerances are nonzero by necessity: 0.0/0.0 is the exact
+    # tiers' claim, and the placement check refuses an embedding-tier policy
+    # asserting it.
+    aegis:kind "threshold" ;
+    aegis:threshold 0.75 ;
+    aegis:calibrationBasis "cosine(claiming text, cited work-item description) under the deployment's pinned embedding model and corpus watermark" ;
+    aegis:falsePositiveTolerance 0.05 ;
+    aegis:falseNegativeTolerance 0.10 .
+
+aegis:policy_implements_claim_grounded a aegis:Policy ;
+    rdfs:label "implements-claim-grounded" ;
+    aegis:targets "Commit" ;
+    aegis:claim "every aegis:implements claim's content is similar to its cited work item's description at or above the declared threshold; a cited-but-dissimilar claim is a fabricated linkage, its own violation class" ;
+    aegis:boundary "action" ;
+    # SOFT at the PAA, effect "warn": similarity ADVISES, and only the
+    # completed claim (the commit message, the bead close) exists to compare.
+    # Escalating to a human ruling is the other seam the tier permits; a hard
+    # PAG deny is the one placement the vocabulary and the placement check
+    # both refuse it.
+    aegis:effect "warn" ;
+    aegis:predicate aegis:pred_implements_grounded ;
+    aegis:constraintClass "soft" ;
+    aegis:verificationPoint "PAA" ;
+    aegis:hostedAtLayer "orchestration" ;
+    aegis:sourceType "operational" ;
+    aegis:authority "engineering-conventions" ;
+    aegis:operatingPoint aegis:op_implements_grounded ;
+    # An embedding pass over two short texts, not a model call — but still
+    # nothing that belongs in a 5 ms pre-edit hook, which is one more reason
+    # this sits at the PAA.
+    aegis:latencyBudgetMs 50 .

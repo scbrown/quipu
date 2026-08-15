@@ -336,7 +336,7 @@ aegis:gate a owl:DatatypeProperty ;
 aegis:tier a owl:DatatypeProperty ;
     rdfs:label "tier" ;
     rdfs:range xsd:string ;
-    rdfs:comment "How precise the evidence behind a fact is: \"live\", \"lsp\", \"tree-sitter\", \"committed\" or \"attested\" — plus, on a Predicate only, the grounded ladder of \"tree-sitter+graph\" (exact membership, hard-capable), \"embedding\" (reproducible but approximate; advisory or escalate, never a hard PAG deny) and \"model\" (generative judgment, last resort). Carried by Selector, Predicate AND Verdict, so no rdfs:domain. Every fact this stack serves is tagged, and an approximation is never presented as exact." .
+    rdfs:comment "How precise the evidence behind a fact is: \"live\", \"lsp\", \"tree-sitter\", \"committed\" or \"attested\" — plus, on Predicate AND Verdict, the grounded ladder of \"tree-sitter+graph\" (exact membership, hard-capable), \"embedding\" (reproducible but approximate; advisory or escalate, never a hard PAG deny) and \"model\" (generative judgment, last resort). The tier rides the verdict into the graph: a similarity verdict records tier \"embedding\", never an exact tier's label. Carried by Selector, Predicate AND Verdict, so no rdfs:domain. Every fact this stack serves is tagged, and an approximation is never presented as exact." .
 
 # ── Verdict and the root of trust ──────────────────────────────────
 
@@ -401,6 +401,34 @@ aegis:by a owl:DatatypeProperty ;
     rdfs:label "by" ;
     rdfs:range xsd:string ;
     rdfs:comment "Who made a decision. Range and comment only — `by` is far too generic a name to materialise a type from, whatever this vocabulary happens to use it for today." .
+
+# ── Claimed-linkage verification (semantic-grounded design, #1) ────
+
+aegis:implements a owl:ObjectProperty ;
+    rdfs:label "implements" ;
+    rdfs:range aegis:WorkItem ;
+    rdfs:comment "A provenance claim that this thing (a commit, an episode, a bead close) realises the cited work item. A CLAIM, deliberately — writing the edge asserts nothing about its truth; verify_claimed_linkage (src/governance/linkage.rs) checks the claiming content's similarity against the cited item's description and types the answer grounded / cited-but-dissimilar / no-citation, which is what turns this edge from trusted to checkable. No rdfs:domain: many kinds of thing legitimately claim to implement work, and a domain would materialise a wrong type on all but one of them." .
+
+aegis:similarityThreshold a owl:DatatypeProperty ;
+    rdfs:label "similarity threshold" ;
+    rdfs:range xsd:decimal ;
+    rdfs:comment "The cut a similarity score was compared against when a verdict was sealed. Recorded ON the verdict even though the declared value lives in the policy's OperatingPoint, because the verdict must stay falsifiable after the policy is re-calibrated: \"0.83 >= 0.75\" is re-checkable forever, \"0.83 >= whatever the threshold was then\" is not. No rdfs:domain — any sealed similarity record may carry it." .
+
+aegis:embeddingModel a owl:DatatypeProperty ;
+    rdfs:label "embedding model" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The identity of the embedding model that produced a sealed similarity score — the model half of the trust-chain rule applied to embeddings: a score is reproducible only under the model that computed it, so a verdict that omitted this would be unfalsifiable the moment the deployment swapped models. No rdfs:domain, same shared-carrier reasoning as aegis:similarityScore." .
+
+aegis:corpusWatermark a owl:DatatypeProperty ;
+    rdfs:label "corpus watermark" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Which state of the comparison corpus a sealed similarity score was computed against — a transaction id (\"tx:41\"), a snapshot hash, an index generation. The corpus half of the trust-chain rule: re-embedding against a corpus that has since changed is honestly a DIFFERENT comparison, and the watermark is what lets a re-verifier notice that instead of reporting a spurious mismatch. No rdfs:domain — any sealed similarity record may carry it." .
+
+aegis:linkageOutcome a owl:DatatypeProperty ;
+    rdfs:label "linkage outcome" ;
+    rdfs:domain aegis:Verdict ;
+    rdfs:range xsd:string ;
+    rdfs:comment "What kind of grounding answer a claimed-linkage check gave: \"grounded\" (the claim is similar to its cited item at or above threshold), \"cited-but-dissimilar\" (a real item cited, content not near it — a fabricated linkage, its own violation class), or \"no-citation\" (nothing cited, or the citation resolves to nothing). A closed three-value set, deliberately WITHOUT an unevaluated value: a check that could not run records outcome \"unknown\" and no linkageOutcome at all, keeping the existing unknown semantics single rather than duplicated." .
 
 # ── Workflow, Step, Artifact, PlanStep ─────────────────────────────
 

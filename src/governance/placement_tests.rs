@@ -807,6 +807,44 @@ fn a_grounded_predicate_with_its_query_lands() {
     .expect("a grounded predicate naming its id set must land");
 }
 
+#[test]
+fn the_grounding_query_rule_applies_to_the_embedding_tier_linkage_predicate() {
+    // quipu-508: the claimed-linkage predicate is must-ground AND tier
+    // "embedding". The grounding rule keys on the MATCH TYPE, not the tier —
+    // so the similarity tier buys no exemption: without its id-set query the
+    // citation half of the check evaluates against emptiness, exactly like
+    // the exact-tier case.
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    let fields = |with_query: bool| {
+        let mut f = vec![
+            ("name", "implements-claim-grounded"),
+            ("evidenceSource", "graph:work-item-id-set"),
+            ("candidateSource", "citation"),
+            ("matchType", "must-ground"),
+            ("tier", "embedding"),
+        ];
+        if with_query {
+            f.push((
+                "groundingQuery",
+                "SELECT ?id WHERE { ?w a aegis:WorkItem ; aegis:identifier ?id }",
+            ));
+        }
+        f
+    };
+    let err = define_predicate(&mut store, "http://ex/pr", &fields(false));
+    let Err(Error::PolicyDenied(why)) = err else {
+        panic!("a query-less embedding-tier must-ground predicate must be refused, got {err:?}");
+    };
+    assert!(
+        why.contains("groundingQuery") && why.contains("must-ground"),
+        "the refusal names the missing field and the grounded direction: {why}"
+    );
+    // The green half: the shipped linkage predicate's exact shape lands.
+    define_predicate(&mut store, "http://ex/pr", &fields(true))
+        .expect("the linkage predicate with its id-set query must land");
+}
+
 /// Stage predicate + operating point + composing policy in ONE transaction,
 /// so the placement read sees the whole composition in the pending state.
 fn define_inexact_policy(

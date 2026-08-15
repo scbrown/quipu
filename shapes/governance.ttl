@@ -530,10 +530,16 @@ aegis:VerdictShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
+        # The verdict's tier mirrors the Predicate ladder, INCLUDING the
+        # grounded and inexact values: "the tier rides the verdict into the
+        # graph" is the design's rule, and a similarity verdict that could
+        # only be recorded as "committed" would be an approximation wearing
+        # an exact tier's label — the misrepresentation the closed enum
+        # exists to prevent, committed by the vocabulary itself.
         sh:path aegis:tier ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
-        sh:in ( "live" "lsp" "tree-sitter" "committed" "attested" ) ;
+        sh:in ( "live" "lsp" "tree-sitter" "tree-sitter+graph" "embedding" "model" "committed" "attested" ) ;
     ] ;
     sh:property [
         sh:path aegis:freshness ;
@@ -545,6 +551,48 @@ aegis:VerdictShape a sh:NodeShape ;
         sh:path aegis:confidence ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
+    ] ;
+
+    # ── The similarity seal (semantic-grounded design, application #1) ──
+    # A verdict produced by a similarity comparison carries the four fields
+    # that make its score falsifiable: the score, the threshold it was cut
+    # at, the model identity, and the corpus watermark — a score means
+    # nothing outside the model and corpus state that produced it. All
+    # optional here (an exact-tier verdict has no score to seal); requiring
+    # them CONDITIONALLY on tier "embedding"/"model" is a cross-field rule
+    # in the placement-check style, not core SHACL's.
+    sh:property [
+        sh:path aegis:similarityScore ;
+        sh:datatype xsd:decimal ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:similarityThreshold ;
+        sh:datatype xsd:decimal ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:embeddingModel ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:corpusWatermark ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # The claimed-linkage three-outcome set, CLOSED. Deliberately a
+        # separate property rather than new aegis:outcome values: outcome
+        # keeps its satisfied/unsatisfied/unknown contract (unknown = the
+        # check could not run — the Unevaluated linkage state maps there),
+        # while this says WHAT KIND of grounding answer the linkage check
+        # gave. "cited-but-dissimilar" is the fabricated-linkage class,
+        # never folded into either neighbour.
+        sh:path aegis:linkageOutcome ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "grounded" "cited-but-dissimilar" "no-citation" ) ;
     ] .
 
 # ═══════════════════════════════════════════════════════════════════

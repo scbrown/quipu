@@ -427,6 +427,162 @@ fn the_catalog_v2_grounded_predicate_names_its_id_set() {
     assert!(block.contains("aegis:tier \"tree-sitter+graph\""));
 }
 
+// ── Claimed-linkage verification (quipu-508) ─────────────────────────────────
+// Design #1: an aegis:implements claim becomes checkable. The catalog ships
+// the embedding-tier must-ground predicate; the Verdict shape gains the
+// similarity seal (score/threshold/model/watermark) and the closed
+// three-outcome aegis:linkageOutcome; the verifier is
+// src/governance/linkage.rs.
+
+const LINKAGE_CATALOG: &str = include_str!("../shapes/policies/linkage.ttl");
+
+#[test]
+fn linkage_policy_catalog_conforms() {
+    // Shipped data exercises the shapes, not only fixtures — same contract as
+    // the tree-sitter catalog.
+    let fb = validate_shapes(SHAPES, LINKAGE_CATALOG).unwrap();
+    assert!(
+        fb.conforms,
+        "linkage policy catalog should conform: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn the_linkage_predicate_models_the_embedding_grounded_discipline() {
+    // The exemplar has to model what it documents: grounded direction over
+    // the work-item id set, the honest inexact tier, and a calibration that
+    // does NOT claim exactness.
+    let pred = LINKAGE_CATALOG
+        .split("aegis:pred_implements_grounded a aegis:Predicate")
+        .nth(1)
+        .expect("catalog no longer defines pred_implements_grounded")
+        .split(" .\n")
+        .next()
+        .unwrap();
+    assert!(pred.contains("aegis:matchType \"must-ground\""));
+    assert!(pred.contains("aegis:tier \"embedding\""));
+    assert!(
+        pred.contains("aegis:groundingQuery"),
+        "must-ground without an id set is refused at definition time"
+    );
+    let op = LINKAGE_CATALOG
+        .split("aegis:op_implements_grounded a aegis:OperatingPoint")
+        .nth(1)
+        .expect("catalog no longer defines op_implements_grounded")
+        .split(" .\n")
+        .next()
+        .unwrap();
+    assert!(op.contains("aegis:kind \"threshold\""));
+    // The declared tolerance, read as a number: substring checks would read
+    // "0.05" as containing the "0.0" they forbid.
+    let fp: f64 = op
+        .split("aegis:falsePositiveTolerance ")
+        .nth(1)
+        .expect("the operating point must declare an FP tolerance")
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .parse()
+        .expect("the FP tolerance must be numeric");
+    assert!(
+        fp > 0.0,
+        "a classifier's operating point must declare a NONZERO FP tolerance, got {fp}"
+    );
+    let policy = LINKAGE_CATALOG
+        .split("aegis:policy_implements_claim_grounded a aegis:Policy")
+        .nth(1)
+        .expect("catalog no longer defines policy_implements_claim_grounded")
+        .split(" .\n")
+        .next()
+        .unwrap();
+    assert!(
+        policy.contains("aegis:verificationPoint \"PAA\"")
+            && !policy.contains("aegis:effect \"deny\""),
+        "the embedding tier is advisory/escalate — never a hard PAG deny"
+    );
+}
+
+#[test]
+fn the_linkage_catalog_lands_through_the_write_path_with_placement_on() {
+    // The whole composition — embedding-tier must-ground predicate, threshold
+    // operating point, soft PAA policy — must clear the definition-time
+    // placement rules on the REAL write path, or the catalog documents a
+    // policy no store would accept.
+    use crate::store::Store;
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    crate::ingest_rdf(
+        &mut store,
+        LINKAGE_CATALOG.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .expect("the shipped linkage catalog must clear the placement rules");
+}
+
+#[test]
+fn a_verdict_sealing_a_similarity_score_conforms() {
+    // The similarity seal riding a verdict: score, threshold, model identity,
+    // corpus watermark, the honest tier, and the typed linkage outcome. This
+    // is the record shape design #1 requires of every similarity verdict.
+    let data = format!(
+        "{NS}\naegis:v a aegis:Verdict ; \
+         aegis:predicateId \"implements-claim-grounded\" ; \
+         aegis:targetRef \"commit:9cbc747\" ; aegis:outcome \"unsatisfied\" ; \
+         aegis:evidenceHash \"sha256:00\" ; aegis:verifier \"quipu\" ; \
+         aegis:signature \"sig:..\" ; aegis:tier \"embedding\" ; \
+         aegis:similarityScore 0.42 ; aegis:similarityThreshold 0.75 ; \
+         aegis:embeddingModel \"all-MiniLM-L6-v2\" ; \
+         aegis:corpusWatermark \"tx:41\" ; \
+         aegis:linkageOutcome \"cited-but-dissimilar\" .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        fb.conforms,
+        "a sealed similarity verdict should conform: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn linkage_outcome_out_of_enum_is_rejected() {
+    // The three-outcome set is CLOSED, and deliberately has no "unevaluated"
+    // value: a check that could not run records outcome "unknown" and no
+    // linkageOutcome, keeping the existing unknown semantics single.
+    for bad in ["unevaluated", "similar-ish"] {
+        let data = format!(
+            "{NS}\naegis:v a aegis:Verdict ; aegis:predicateId \"p\" ; \
+             aegis:targetRef \"t\" ; aegis:outcome \"unknown\" ; \
+             aegis:evidenceHash \"h\" ; aegis:verifier \"q\" ; \
+             aegis:signature \"s\" ; aegis:linkageOutcome \"{bad}\" .\n"
+        );
+        assert!(
+            !validate_shapes(SHAPES, &data).unwrap().conforms,
+            "linkageOutcome \"{bad}\" must be outside the closed set"
+        );
+    }
+}
+
+#[test]
+fn verdict_tier_was_widened_not_unhinged() {
+    // The verdict tier now admits the grounded ladder (the tier rides the
+    // verdict into the graph) — and still rejects everything else.
+    let data = format!(
+        "{NS}\naegis:v a aegis:Verdict ; aegis:predicateId \"p\" ; \
+         aegis:targetRef \"t\" ; aegis:outcome \"satisfied\" ; \
+         aegis:evidenceHash \"h\" ; aegis:verifier \"q\" ; \
+         aegis:signature \"s\" ; aegis:tier \"vibes\" .\n"
+    );
+    assert!(
+        !validate_shapes(SHAPES, &data).unwrap().conforms,
+        "a verdict tier outside the widened enum must still be rejected"
+    );
+}
+
 // ── Escalation precedent (quipu-8dk) ─────────────────────────────────────────
 // Design #4: a minted DecisionRequest carries its nearest decided priors as
 // reified, scored PrecedentLink nodes. The shape holds the falsifiability
