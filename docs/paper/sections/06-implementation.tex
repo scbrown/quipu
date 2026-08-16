@@ -39,3 +39,22 @@ runs on every graph-scoped write by design --- GS3 is not
 abstention-eligible, and RQ1's zero-overhead property is scoped to the
 policy gate alone. Single-run latencies are illustrative; the
 benchmark's determinism note governs aggregation.
+
+\paragraph{The fast-plane consumer, measured externally.}
+The edit-boundary consumer this store projects policy into has since
+been measured end to end in its own repository; we report the numbers
+as external context --- they trace to that repository's artifacts
+(yupana \texttt{scripts/e2e/}, reproducible with \texttt{just e2e})
+rather than to the \census manifest, and are governed by that
+harness's conditions. A shared analysis server enforcing this store's
+projected policies sustained $\sim$200 guard evaluations per second
+across 32 concurrent agents on four cores with every projection served
+live (zero cache fallbacks, zero fail-opens), and the projection's
+context consumer --- a work-item briefing injected at assignment time
+--- scores 0.954 macro-F1 on a problem-classed retrieval corpus under
+an ablation gate that fails the build unless each retrieval source's
+removal strictly degrades the score. The eval note accompanying that
+harness records two findings the gate forced: a semantic-similarity
+veto was rejected after mid-band true and false positives measured
+indistinguishable on the serving surface, and lexical term probes
+retire per-query once a semantic surface answers.
