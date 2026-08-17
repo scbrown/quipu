@@ -74,6 +74,42 @@ on filing day.
 | Upload as | Single specification PDF with figures rendered inline |
 | Statutory deadline protected | 2027-07-18 (closed tier vocabulary, first disclosed in yupana while named hank) |
 
+## Step 0 — the USPTO.gov account (the only remaining gate)
+
+**Identity verification has been mandatory for every Patent Center user since
+2025-09-11.** There is no filing without it. Two routes exist; only one is fast.
+
+| Step | What | Time |
+|---|---|---|
+| 1 | Create the account at <https://account.uspto.gov/profile/create-account> | minutes |
+| 2 | Verify identity through **ID.me** | **~30 min**, or under 15 on the self-service path |
+| 3 | Log into [Patent Center](https://patentcenter.uspto.gov), self-enroll, role **Independent Inventor** | part of the same session |
+
+🔴 **The name on the USPTO.gov account must be *exactly identical* to the name on
+the government photo ID**, because ID.me builds the match from that ID. This is
+the single most likely point of failure, and it is why the inferred-name caveat
+above mattered. Use the full legal name as printed on the licence, not a
+shortened or published form. **Do not create the account as "Steve Brown."**
+
+**ID.me self-service needs:** the photo ID, a Social Security number, access to
+credit-profile header data, and a selfie for biometric match *(ID.me states the
+selfie is deleted 24 hours after account creation)*. The alternative is a live
+video chat with an agent, where the wait depends on volume.
+
+✅ **An existing verified ID.me account carries over.** ID.me verification is
+reusable across federal and state agencies, so if one already exists from an
+unrelated filing, step 2 may already be satisfied and this whole gate collapses
+to roughly half an hour rather than the "days ahead" this document originally
+assumed.
+
+**Customer number:** not needed in advance. Self-enrollment completes without
+one, and Patent Center creates a number afterwards. An existing customer number
+can instead be self-assigned during enrollment.
+
+**Slow fallback, avoid:** mailing a paper Patent Electronic System Verification
+form. Only worth considering if ID.me fails outright, and it will not fit inside
+the 2026-08-31 target.
+
 ## Filing-day sequence (per application)
 
 1. Sign in to [Patent Center](https://patentcenter.uspto.gov) (verified
