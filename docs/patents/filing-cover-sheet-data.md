@@ -28,7 +28,9 @@ on filing day.
 | Correspondence email | `scbrown3@gmail.com` |
 | Correspondence address | `[FILL AT FILING — same as mailing address is fine]` |
 | Entity status | **Small entity** (deliberate choice: a signed employment agreement may create an assignment obligation, which would defeat micro-entity certification; overpaying small-entity is always safe, undercertifying is not) |
-| Provisional filing fee | $130 at the small-entity rate (verify on filing day) |
+| Provisional filing fee | **$130 small entity** ✅ verified against the fee schedule revised 2026-08-14 (undiscounted $325, micro $65) |
+| Application size fee | **None owed.** 37 CFR 1.16(s) only bites above **100 sheets**; the four specs are 35, 37, 47 and 35 pages |
+| Total for all four | **$520** |
 | Government interest | None |
 | Joint research agreement | None `[CONFIRM]` |
 | Signature format | S-signature: `/Your Legal Name/` typed between forward slashes |
@@ -109,6 +111,15 @@ can instead be self-assigned during enrollment.
 **Slow fallback, avoid:** mailing a paper Patent Electronic System Verification
 form. Only worth considering if ID.me fails outright, and it will not fit inside
 the 2026-08-31 target.
+
+## Filing order
+
+**File B first.** All four are independent and each earns its own filing date, so
+order is normally irrelevant. It matters only if a session goes wrong partway:
+B protects **2027-01-02**, the earliest statutory deadline of the four, while A,
+C and D all sit in July 2027. Front-load the one with the least runway.
+
+Staged and verified 2026-08-17 in `~/Downloads/provisionals-2026-08-17/`.
 
 ## Filing-day sequence (per application)
 
