@@ -53,6 +53,10 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/project", // rw_handler; louvain persists quipu:memberOfCommunity when persist:true
     "/overlay/write", // &mut handler -> store.overlay_write, returns a tx_id
     "/overlay/create", // ro_handler by signature, but writes the graphs registry
+    // camayoc-s0h: registering a graph writes the graphs registry; labelling
+    // one writes the label meta-graph. Both are writes and both are gated.
+    "/graph/create",
+    "/graph/label",
     "/events/commit", // durable consumer cursor upsert (event-log P1)
     "/subscriptions", // push-subscription registry create/list/delete (event-log P2)
     "/datasets", // named-dataset registry create/remove (quipu #69) + meta-graph mirror

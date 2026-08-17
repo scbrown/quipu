@@ -457,6 +457,12 @@ async fn main() {
         .route("/proposals", post(list_proposals))
         .route("/proposal/accept", post(accept_proposal))
         .route("/proposal/reject", post(reject_proposal))
+        // camayoc-s0h: the registration and labelling primitives existed in
+        // the store with no way in from outside. Routing into a named graph
+        // without being able to LABEL it yields separate graphs every query
+        // still reads at equal trust, so these ship together.
+        .route("/graph/create", post(graph_create))
+        .route("/graph/label", post(graph_label))
         .route("/overlay/create", post(overlay_create))
         .route("/overlay/write", post(overlay_write))
         .route("/overlay/compose", post(overlay_compose))

@@ -394,6 +394,120 @@ pub fn tool_overlay_create(store: &Store, input: &JsonValue) -> Result<JsonValue
     Ok(serde_json::json!({ "g": g, "parent_branch": parent_branch }))
 }
 
+/// MCP tool: `quipu_graph_create` -- register a committed-class named graph.
+///
+/// Input: `{ "graph": "<iri>" }`. Output: `{ "g": N, "created": bool }`.
+///
+/// This exists because `Store::graph_create` had no caller outside its own
+/// tests (camayoc-s0h): the registration `set_graph_label` presumes was
+/// written and unreachable, so a consumer could write into a named graph via
+/// `/episode` — which interns the IRI without registering it — and then find
+/// the graph could not be labelled. Routing without labelling is worse than
+/// neither, because it produces separate graphs every query still reads at
+/// equal trust.
+///
+/// Idempotent. Re-creating an existing committed graph is a no-op, and
+/// `created` reports which happened rather than leaving the caller to guess
+/// from a bare success.
+pub fn tool_graph_create(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let graph = input
+        .get("graph")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'graph' parameter".into()))?;
+    let existed = store.lookup(graph)?.is_some();
+    let g = store.graph_create(graph)?;
+    Ok(serde_json::json!({ "g": g, "created": !existed }))
+}
+
+/// MCP tool: `quipu_graph_label` -- declare a named graph's lattice label.
+///
+/// Input: `{ "graph": "<iri>", "timestamp": "<utc>", "trust": {"iri","chain","rank"}?,
+///           "freshness": "<v>"?, "durability": "<v>"?, "policy": ["<token>", ...]?,
+///           "valid_to": "<utc>"?, "actor": "<iri>"? }`.
+/// Output: `{ "tx_id": N }`.
+///
+/// The other half of camayoc-s0h. The whole lattice — composition, per-row
+/// annotation, query-time floors — was built and reachable only from Rust, so
+/// a plane a consumer created could not be labelled `low-trust` even by hand.
+///
+/// An empty label is REFUSED by the store rather than silently written, and
+/// that refusal is deliberately not softened here: a label declaring nothing
+/// is almost certainly not what the caller meant, and writing it would look
+/// like the graph had been labelled.
+pub fn tool_graph_label(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    use crate::lattice::{Durability, Freshness, PolicyClass, Trust};
+    use crate::store::labels::GraphLabel;
+
+    let graph = input
+        .get("graph")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'graph' parameter".into()))?
+        .to_string();
+    let timestamp = input
+        .get("timestamp")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'timestamp' parameter".into()))?
+        .to_string();
+
+    // Each axis is parsed strictly: an unrecognised value is an ERROR, never a
+    // dropped axis. A silently ignored `trust` would leave the graph labelled
+    // on the other axes and look fully declared.
+    let freshness = match input.get("freshness").and_then(JsonValue::as_str) {
+        Some(v) => Some(Freshness::parse(v).ok_or_else(|| {
+            Error::InvalidValue(format!("unrecognised freshness value '{v}'"))
+        })?),
+        None => None,
+    };
+    let durability = match input.get("durability").and_then(JsonValue::as_str) {
+        Some(v) => Some(Durability::parse(v).ok_or_else(|| {
+            Error::InvalidValue(format!("unrecognised durability value '{v}'"))
+        })?),
+        None => None,
+    };
+    let trust = match input.get("trust") {
+        Some(t) => {
+            let iri = t.get("iri").and_then(JsonValue::as_str).ok_or_else(|| {
+                Error::InvalidValue("trust requires 'iri'".into())
+            })?;
+            let chain = t.get("chain").and_then(JsonValue::as_str).ok_or_else(|| {
+                Error::InvalidValue("trust requires 'chain' — a rank without the chain that ranks it is not comparable".into())
+            })?;
+            let rank = t.get("rank").and_then(JsonValue::as_i64).ok_or_else(|| {
+                Error::InvalidValue("trust requires an integer 'rank'".into())
+            })?;
+            Some(Trust::new(iri, chain, rank))
+        }
+        None => None,
+    };
+    let policy = match input.get("policy").and_then(JsonValue::as_array) {
+        Some(tokens) => {
+            let toks: Vec<String> = tokens
+                .iter()
+                .filter_map(|t| t.as_str().map(String::from))
+                .collect();
+            if toks.len() != tokens.len() {
+                return Err(Error::InvalidValue(
+                    "every policy token must be a string".into(),
+                ));
+            }
+            Some(PolicyClass::new(toks))
+        }
+        None => None,
+    };
+
+    let label = GraphLabel {
+        freshness,
+        durability,
+        trust,
+        policy,
+    };
+    let valid_to = input.get("valid_to").and_then(JsonValue::as_str);
+    let actor = input.get("actor").and_then(JsonValue::as_str);
+
+    let tx_id = store.set_graph_label_until(&graph, &label, &timestamp, valid_to, actor)?;
+    Ok(serde_json::json!({ "tx_id": tx_id }))
+}
+
 /// MCP tool: `quipu_overlay_write` -- write one overlay primitive.
 ///
 /// Input: `{ "overlay": "<iri>", "op": "assert"|"retract"|"tombstone",
@@ -465,4 +579,116 @@ pub fn tool_overlay_compose(store: &Store, input: &JsonValue) -> Result<JsonValu
         })
         .collect();
     Ok(serde_json::json!({ "count": triples.len(), "triples": triples }))
+}
+
+#[cfg(test)]
+mod graph_registry_tool_tests {
+    use super::*;
+    use crate::Store;
+
+    fn store() -> Store {
+        Store::open_in_memory().unwrap()
+    }
+
+    /// The pair camayoc-s0h is blocked on, exercised in the order that matters:
+    /// register, then label. Before these tools the store could do both and
+    /// nothing outside Rust could reach either.
+    #[test]
+    fn a_registered_graph_can_then_be_labelled_through_the_tools() {
+        let mut s = store();
+        let created = tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/inferred" }))
+            .expect("graph_create");
+        assert_eq!(created["created"], serde_json::json!(true));
+
+        let out = tool_graph_label(
+            &mut s,
+            &serde_json::json!({
+                "graph": "http://ex/g/inferred",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "trust": {"iri": "ex:low", "chain": "ex:chain", "rank": 1},
+            }),
+        )
+        .expect("graph_label on a registered graph");
+        assert!(out["tx_id"].as_i64().unwrap() > 0);
+    }
+
+    /// The ordering constraint itself: labelling an UNREGISTERED graph must
+    /// fail. If it silently succeeded, a consumer could believe a quarantine
+    /// plane was labelled when the label had nowhere to live.
+    #[test]
+    fn labelling_an_unregistered_graph_is_refused() {
+        let mut s = store();
+        let err = tool_graph_label(
+            &mut s,
+            &serde_json::json!({
+                "graph": "http://ex/g/never-registered",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "trust": {"iri": "ex:low", "chain": "ex:chain", "rank": 1},
+            }),
+        );
+        assert!(err.is_err(), "an unregistered graph must not be labelable");
+    }
+
+    /// Re-registration is idempotent and SAYS SO. A bare success would leave
+    /// the caller unable to tell "I created this" from "it was already there",
+    /// which is the difference between a fresh plane and one someone else set
+    /// up with different labels.
+    #[test]
+    fn re_creating_reports_that_it_already_existed() {
+        let s = store();
+        let first = tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/x" })).unwrap();
+        let second = tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/x" })).unwrap();
+        assert_eq!(first["created"], serde_json::json!(true));
+        assert_eq!(second["created"], serde_json::json!(false));
+        assert_eq!(first["g"], second["g"], "same graph, same id");
+    }
+
+    /// An unrecognised axis value is an ERROR, not a dropped axis. A silently
+    /// ignored freshness would leave the graph labelled on its other axes and
+    /// read as fully declared.
+    #[test]
+    fn an_unrecognised_axis_value_is_refused_rather_than_dropped() {
+        let mut s = store();
+        tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/y" })).unwrap();
+        let err = tool_graph_label(
+            &mut s,
+            &serde_json::json!({
+                "graph": "http://ex/g/y",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "freshness": "sort-of-recent",
+            }),
+        );
+        assert!(err.is_err(), "an unparseable freshness must not be dropped");
+    }
+
+    /// A trust rank without its chain is refused: a rank is only comparable
+    /// within the chain that declares it.
+    #[test]
+    fn trust_without_its_chain_is_refused() {
+        let mut s = store();
+        tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/z" })).unwrap();
+        let err = tool_graph_label(
+            &mut s,
+            &serde_json::json!({
+                "graph": "http://ex/g/z",
+                "timestamp": "2026-01-01T00:00:00Z",
+                "trust": {"iri": "ex:low", "rank": 1},
+            }),
+        );
+        assert!(err.is_err(), "a rank without a chain is not comparable");
+    }
+
+    /// An empty label declares nothing. The store refuses it and the tool does
+    /// not soften that — writing it would look like the graph had been
+    /// labelled when no axis was declared.
+    #[test]
+    fn an_empty_label_is_refused() {
+        let mut s = store();
+        tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/w" })).unwrap();
+        let err = tool_graph_label(
+            &mut s,
+            &serde_json::json!({ "graph": "http://ex/g/w", "timestamp": "2026-01-01T00:00:00Z" }),
+        );
+        assert!(err.is_err(), "a label declaring no axis must be refused");
+    }
 }

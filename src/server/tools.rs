@@ -238,6 +238,11 @@ rw_handler!(subscriptions, quipu::tool_subscriptions);
 // so it is rw_handler! now. compose is a genuine read (no mutating call). write
 // is a hand-written &mut handler defined below like `knot`.
 rw_handler!(overlay_create, quipu::tool_overlay_create);
+// camayoc-s0h. graph_create writes the graphs registry through a `&self`
+// method — same shape as overlay_create, and rw_handler! for the same reason.
+// graph_label takes `&mut Store`.
+rw_handler!(graph_create, quipu::tool_graph_create);
+rw_handler!(graph_label, quipu::tool_graph_label);
 ro_handler!(overlay_compose, quipu::tool_overlay_compose);
 ro_handler!(cooccurrence, quipu::tool_cooccurrence);
 // policy_check is the one read handler with its own counter: the metric uses
