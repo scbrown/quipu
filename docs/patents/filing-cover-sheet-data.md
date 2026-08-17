@@ -1,7 +1,16 @@
-# Filing-Day Cover Sheet Data — Provisionals A and B
+# Filing-Day Cover Sheet Data — Provisionals A through D
 
 **Status:** prepared 2026-08-14 for filing via USPTO Patent Center by
-2026-08-31. Personal fields are deliberately left as `[FILL AT FILING]`
+2026-08-31. ✅ **All four specifications are drafted with filing-ready PDFs as
+of 2026-08-17** — A `quipu/docs/patents/provisional-A-governance.pdf` (35pp),
+B `bobbin/docs/patents/provisional-B-retrieval.pdf` (37pp),
+C `NeuralAmplifier/docs/patents/provisional-C-delegation.pdf` (~47pp),
+D `camayoc/docs/patents/provisional-D-grounding.pdf` (~35pp). **The remaining
+gate is the verified USPTO.gov account**, which has lead time and blocks all
+four.
+
+⚠️ `bobbin`'s remote is named `github`, not `origin`, and a stale `origin/main`
+ref from 2026-08-05 is still present locally. Read `github/main` there. Personal fields are deliberately left as `[FILL AT FILING]`
 placeholders — complete them in Patent Center, not in this public file.
 Fee amounts should be re-verified against the
 [USPTO fee schedule](https://www.uspto.gov/learning-and-resources/fees-and-payment/uspto-fee-schedule)
@@ -13,7 +22,7 @@ on filing day.
 |---|---|
 | Application type | Provisional |
 | Subject matter | Utility |
-| Inventor (sole) | Legal name `[VERIFY — "Stephen C. Brown" was inferred from the GitHub handle; use the name on your government ID]` |
+| Inventor (sole) | `[FILL AT FILING — full legal name confirmed with the inventor 2026-08-17; the earlier "inferred from the GitHub handle" caveat is resolved. Deliberately not written here: this repo is public and the middle name is not.]` |
 | Inventor residence | `[FILL AT FILING — city, state, country]` |
 | Inventor mailing address | `[FILL AT FILING]` |
 | Correspondence email | `scbrown3@gmail.com` |
@@ -76,10 +85,10 @@ on filing day.
    sheet (equivalent of form PTO/SB/16) from it.
 5. Certify **small entity**; pay the fee.
 6. Save the filing receipt and the application number (63/xxx,xxx).
-7. After both filings: record both application numbers, titles, and filing
-   dates on the new employer's prior-inventions exhibit alongside the seven
-   repositories (quipu, bobbin, yupana, shantytown, camayoc, NeuralAmplifier,
-   creel).
+7. After **all four** filings: record every application number, title, and
+   filing date on the new employer's prior-inventions exhibit alongside the
+   seven repositories (quipu, bobbin, yupana, shantytown, camayoc,
+   NeuralAmplifier, creel).
 
 ## The 12-month decision (calendar these)
 
@@ -89,8 +98,10 @@ law-school-clinic stage) before:
 
 - Application A: filing date + 12 months
 - Application B: filing date + 12 months
+- Application C: filing date + 12 months
+- Application D: filing date + 12 months
 
-Both conversion decisions will fall during the new employment — the
+All four conversion decisions will fall during the new employment — the
 prior-inventions exhibit listing is what keeps them clean. Raise the
 inventorship analysis (human contribution per claimed mechanism, and the
 §102(b)(1)(A) inventor-derivation chain behind agent-authored public
