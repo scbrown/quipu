@@ -49,11 +49,11 @@ pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use tools::ontology;
 use tools::{
     accept_proposal, ask, context, cooccurrence, cord, datasets, embed_backfill, episode,
-    episodes_complete, graph_view, graphiti_search_nodes, hybrid_search, impact_analysis,
-    list_proposals, overlay_compose, overlay_create, overlay_write, policy_check, project_graph,
-    propose_schema_change, queries, reject_proposal, report, report_get, resolve_probe, retract,
-    retract_episode, search, search_facts, search_nodes, set_predicate, shapes, subscriptions,
-    unified_search, unravel, validate, verdict_verify, verifier_authorized,
+    episodes_complete, graph_create, graph_label, graph_view, graphiti_search_nodes, hybrid_search,
+    impact_analysis, list_proposals, overlay_compose, overlay_create, overlay_write, policy_check,
+    project_graph, propose_schema_change, queries, reject_proposal, report, report_get,
+    resolve_probe, retract, retract_episode, search, search_facts, search_nodes, set_predicate,
+    shapes, subscriptions, unified_search, unravel, validate, verdict_verify, verifier_authorized,
 };
 
 #[tokio::main]
