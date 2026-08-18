@@ -177,6 +177,83 @@ impl NamedQuery {
 /// The named-query catalog. Schema-agnostic queries that work on any Quipu
 /// store; extend by adding entries here.
 pub const CATALOG: &[NamedQuery] = &[
+    // ── Work-item disclosure rungs (bobbin-pt4 / quipu-1uq) ─────────────────
+    // The L1 half of a progressive-disclosure ladder. Yupana's session-start
+    // briefing pushes a small L0 census — the item, its ground paths, and a
+    // count per withheld section — and each count names one of these by name.
+    // They live HERE rather than as bespoke tools for the reason quipu#37
+    // already settled: the catalog is self-describing and parameter-validated,
+    // which is what makes a handle advertised in a census actually redeemable.
+    //
+    // All three walk the provenance chain
+    // `Bead <-aegis:implements- GitCommit -aegis:modifies-> entity`, the same
+    // one `entity_work`, `cochanged_with` and yupana's WORK_ITEM_SCOPE_QUERY
+    // use. That chain is populated by camayoc's git ingress; where it has not
+    // run, these return empty — which is UNKNOWN, not "this item touched
+    // nothing", and a caller must not render it as the latter.
+    NamedQuery {
+        name: "brief_ground",
+        description: "Files prior work on a work item touched — its observed ground, the L1 expansion of a briefing's ground census (quipu-1uq).",
+        template: "PREFIX a: <http://aegis.gastown.local/ontology/> SELECT DISTINCT ?path WHERE { ?w a:identifier '{item}' . ?c a:implements ?w ; a:modifies ?e . ?e a:filePath ?path } ORDER BY ?path LIMIT {limit}",
+        params: &[
+            ParamSpec {
+                name: "item",
+                kind: ParamKind::Text,
+                required: true,
+                default: None,
+                description: "Tracker id of the work item (e.g. 'bobbin-052').",
+            },
+            ParamSpec {
+                name: "limit",
+                kind: ParamKind::Int,
+                required: false,
+                default: Some("50"),
+                description: "Maximum paths to return.",
+            },
+        ],
+    },
+    NamedQuery {
+        name: "brief_related",
+        description: "Work items whose commits touched the same entities as the given item — likely coordination, the L1 expansion of a briefing's related-work census (quipu-1uq).",
+        template: "PREFIX a: <http://aegis.gastown.local/ontology/> SELECT ?other (COUNT(DISTINCT ?e) AS ?shared_entities) WHERE { ?w a:identifier '{item}' . ?cA a:implements ?w ; a:modifies ?e . ?cB a:modifies ?e ; a:implements ?otherW . ?otherW a:identifier ?other . FILTER(?other != '{item}') } GROUP BY ?other ORDER BY DESC(?shared_entities) LIMIT {limit}",
+        params: &[
+            ParamSpec {
+                name: "item",
+                kind: ParamKind::Text,
+                required: true,
+                default: None,
+                description: "Tracker id of the work item to find neighbours for.",
+            },
+            ParamSpec {
+                name: "limit",
+                kind: ParamKind::Int,
+                required: false,
+                default: Some("10"),
+                description: "Maximum related work items to return.",
+            },
+        ],
+    },
+    NamedQuery {
+        name: "entity_summary",
+        description: "The NARROW view of an entity — label, types and comment only, no fact list. The L0/L1 rung below entity_facts, for a census that names an entity without spending a fact budget on it (quipu-1uq).",
+        template: "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?label ?type ?comment WHERE { OPTIONAL { <{entity}> rdfs:label ?label } OPTIONAL { <{entity}> rdf:type ?type } OPTIONAL { <{entity}> rdfs:comment ?comment } } LIMIT {limit}",
+        params: &[
+            ParamSpec {
+                name: "entity",
+                kind: ParamKind::Iri,
+                required: true,
+                default: None,
+                description: "IRI of the entity to summarise.",
+            },
+            ParamSpec {
+                name: "limit",
+                kind: ParamKind::Int,
+                required: false,
+                default: Some("10"),
+                description: "Maximum rows (an entity with several types returns one row each).",
+            },
+        ],
+    },
     NamedQuery {
         name: "entity_facts",
         description: "All facts (predicate + object) asserted about an entity.",
@@ -540,5 +617,70 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         let err = tool_ask(&store, &serde_json::json!({ "name": "nope" })).unwrap_err();
         assert!(err.to_string().contains("unknown named query"));
+    }
+
+    // --- The work-item disclosure rungs ------------------------------------
+
+    /// Every rung a briefing census can name must be IN the catalog, because a
+    /// census that advertises a call is making a promise on the catalog's
+    /// behalf. A rung that is described but not registered turns a disclosure
+    /// ladder into a dead end the agent only discovers by trying it.
+    #[test]
+    fn the_disclosure_rungs_are_discoverable_by_name() {
+        let store = Store::open_in_memory().unwrap();
+        let out = tool_ask(&store, &serde_json::json!({})).unwrap();
+        let names: Vec<&str> = out["queries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|q| q["name"].as_str().unwrap())
+            .collect();
+        for rung in ["brief_ground", "brief_related", "entity_summary"] {
+            assert!(
+                names.contains(&rung),
+                "{rung} is not in the catalog: {names:?}"
+            );
+        }
+    }
+
+    /// The item id is TEXT, not an IRI — it is matched against
+    /// `aegis:identifier`, a literal. Text params are escaped for a
+    /// single-quoted SPARQL literal, so a tracker id containing a quote cannot
+    /// break out of it.
+    #[test]
+    fn a_work_item_id_is_escaped_not_interpolated() {
+        let sparql = query("brief_ground")
+            .render(&args(&[("item", "o'brien-1")]))
+            .unwrap();
+        assert!(sparql.contains("o\\'brien-1"), "{sparql}");
+        assert!(sparql.contains("a:filePath"));
+    }
+
+    /// `brief_related` must exclude the item itself, or every work item is
+    /// trivially its own top neighbour and the ranking is noise.
+    #[test]
+    fn related_work_excludes_the_item_itself() {
+        let sparql = query("brief_related")
+            .render(&args(&[("item", "aegis-1")]))
+            .unwrap();
+        assert!(
+            sparql.contains("FILTER(?other != 'aegis-1')"),
+            "the item must not be its own neighbour: {sparql}"
+        );
+    }
+
+    /// `entity_summary` is the NARROW rung: it must not pull a fact list, or it
+    /// is just `entity_facts` under another name and the ladder has one rung.
+    #[test]
+    fn entity_summary_is_narrow_by_construction() {
+        let sparql = query("entity_summary")
+            .render(&args(&[("entity", "http://example.org/x")]))
+            .unwrap();
+        assert!(sparql.contains("rdfs:label"));
+        assert!(sparql.contains("rdfs:comment"));
+        assert!(
+            !sparql.contains("?p ?o"),
+            "the narrow rung must not select arbitrary predicates: {sparql}"
+        );
     }
 }
