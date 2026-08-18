@@ -452,29 +452,33 @@ pub fn tool_graph_label(store: &mut Store, input: &JsonValue) -> Result<JsonValu
     // Each axis is parsed strictly: an unrecognised value is an ERROR, never a
     // dropped axis. A silently ignored `trust` would leave the graph labelled
     // on the other axes and look fully declared.
-    let freshness = match input.get("freshness").and_then(JsonValue::as_str) {
-        Some(v) => Some(Freshness::parse(v).ok_or_else(|| {
-            Error::InvalidValue(format!("unrecognised freshness value '{v}'"))
-        })?),
-        None => None,
-    };
-    let durability = match input.get("durability").and_then(JsonValue::as_str) {
-        Some(v) => Some(Durability::parse(v).ok_or_else(|| {
-            Error::InvalidValue(format!("unrecognised durability value '{v}'"))
-        })?),
-        None => None,
-    };
+    let freshness =
+        match input.get("freshness").and_then(JsonValue::as_str) {
+            Some(v) => Some(Freshness::parse(v).ok_or_else(|| {
+                Error::InvalidValue(format!("unrecognised freshness value '{v}'"))
+            })?),
+            None => None,
+        };
+    let durability =
+        match input.get("durability").and_then(JsonValue::as_str) {
+            Some(v) => Some(Durability::parse(v).ok_or_else(|| {
+                Error::InvalidValue(format!("unrecognised durability value '{v}'"))
+            })?),
+            None => None,
+        };
     let trust = match input.get("trust") {
         Some(t) => {
-            let iri = t.get("iri").and_then(JsonValue::as_str).ok_or_else(|| {
-                Error::InvalidValue("trust requires 'iri'".into())
-            })?;
+            let iri = t
+                .get("iri")
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| Error::InvalidValue("trust requires 'iri'".into()))?;
             let chain = t.get("chain").and_then(JsonValue::as_str).ok_or_else(|| {
                 Error::InvalidValue("trust requires 'chain' — a rank without the chain that ranks it is not comparable".into())
             })?;
-            let rank = t.get("rank").and_then(JsonValue::as_i64).ok_or_else(|| {
-                Error::InvalidValue("trust requires an integer 'rank'".into())
-            })?;
+            let rank = t
+                .get("rank")
+                .and_then(JsonValue::as_i64)
+                .ok_or_else(|| Error::InvalidValue("trust requires an integer 'rank'".into()))?;
             Some(Trust::new(iri, chain, rank))
         }
         None => None,
@@ -596,8 +600,9 @@ mod graph_registry_tool_tests {
     #[test]
     fn a_registered_graph_can_then_be_labelled_through_the_tools() {
         let mut s = store();
-        let created = tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/inferred" }))
-            .expect("graph_create");
+        let created =
+            tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/inferred" }))
+                .expect("graph_create");
         assert_eq!(created["created"], serde_json::json!(true));
 
         let out = tool_graph_label(
@@ -636,8 +641,10 @@ mod graph_registry_tool_tests {
     #[test]
     fn re_creating_reports_that_it_already_existed() {
         let s = store();
-        let first = tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/x" })).unwrap();
-        let second = tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/x" })).unwrap();
+        let first =
+            tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/x" })).unwrap();
+        let second =
+            tool_graph_create(&s, &serde_json::json!({ "graph": "http://ex/g/x" })).unwrap();
         assert_eq!(first["created"], serde_json::json!(true));
         assert_eq!(second["created"], serde_json::json!(false));
         assert_eq!(first["g"], second["g"], "same graph, same id");

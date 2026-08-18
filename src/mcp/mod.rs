@@ -22,8 +22,8 @@ use serde_json::Value as JsonValue;
 
 pub use governance::{
     tool_cooccurrence, tool_graph_create, tool_graph_label, tool_overlay_compose,
-    tool_overlay_create, tool_overlay_write,
-    tool_policy_check, tool_verdict_verify, tool_verifier_authorized,
+    tool_overlay_create, tool_overlay_write, tool_policy_check, tool_verdict_verify,
+    tool_verifier_authorized,
 };
 
 use crate::error::{Error, Result};
