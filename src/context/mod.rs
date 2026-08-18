@@ -35,6 +35,11 @@ pub struct KnowledgeEntity {
     /// Source identifier for unified search (e.g. "knowledge" vs Bobbin's "code").
     pub source: String,
     pub facts: Vec<KnowledgeFact>,
+    /// Whether this entity has more facts than `facts` carries — the per-entity
+    /// half of [`Truncation`]. `false` means the fact list is complete, which is
+    /// a claim worth being able to make.
+    #[serde(default)]
+    pub facts_capped: bool,
 }
 
 /// A single fact about an entity — analogous to Bobbin's `ContextChunk`.
@@ -72,6 +77,63 @@ pub struct KnowledgeSummary {
     pub linked_additions: usize,
     /// Whether semantic retrieval could have contributed at all (quipu #53).
     pub embeddings: EmbeddingStatus,
+    /// What the budget cut, reported rather than dropped.
+    pub truncated: Truncation,
+}
+
+/// What a budgeted context response did NOT return.
+///
+/// The pipeline caps entities and facts, and until this existed it capped them
+/// SILENTLY: a caller receiving `max_entities` results could not tell whether
+/// the graph held exactly that many or a thousand. That is the same ambiguity
+/// [`EmbeddingStatus`] was added to remove (quipu #53) — an empty `entities`
+/// list read as "nothing matched" when the real cause might be that no provider
+/// was attached, and the answer had to travel with the result rather than sit in
+/// a log the caller cannot see. Omission is the same class of fact about the
+/// answer, and it travels the same way.
+///
+/// The shape follows [`crate::graph_view`]'s existing `truncated: {shown, of}`
+/// convention rather than inventing a second one.
+///
+/// EXACT WHERE EXACT IS CHEAP, HONEST WHERE IT IS NOT. The entity total is
+/// known — the candidate set is in hand before it is cut — so `entities_of` is
+/// a real count. Per-entity fact totals are NOT known: facts come back under a
+/// SPARQL `LIMIT`, and learning the true total would cost a `COUNT` round-trip
+/// per entity. So rather than guess one, the pipeline asks for one row more than
+/// it needs and reports how many entities came back at the cap. That answers
+/// "was anything held back, and where" without ever stating a number nobody
+/// counted.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Truncation {
+    /// Entities returned after the `max_entities` cut.
+    pub entities_shown: usize,
+    /// Entities the pipeline actually GATHERED before the cut — deliberately
+    /// not called a total. Link expansion stops as soon as the budget is full
+    /// (`query`, step 2), so when `more_available` is set this is a floor: the
+    /// neighbours we never walked were never counted either. Naming it a total
+    /// would reintroduce, one layer up, exactly the overclaim this struct
+    /// exists to remove.
+    pub entities_considered: usize,
+    /// The pipeline stopped looking because the budget filled, so entities
+    /// exist that it never gathered. Distinct from `entities_considered >
+    /// entities_shown`, which says candidates were ranked and cut; this says
+    /// the search itself was cut short.
+    pub more_available: bool,
+    /// Entities whose fact list came back at `max_facts_per_entity`, meaning
+    /// more facts exist for them than are shown here. NOT a count of missing
+    /// facts, which nobody counted.
+    pub entities_with_more_facts: usize,
+}
+
+impl Truncation {
+    /// Whether anything at all was held back — the one-line question a caller
+    /// asks before deciding to expand.
+    #[must_use]
+    pub fn any(&self) -> bool {
+        self.more_available
+            || self.entities_considered > self.entities_shown
+            || self.entities_with_more_facts > 0
+    }
 }
 
 /// Whether the store can answer semantically, reported alongside every context
@@ -219,7 +281,23 @@ impl<'a> ContextPipeline<'a> {
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        // Same discipline as `query`: count the candidates before cutting them,
+        // and recompute the per-entity half after the merge — the semantic arm
+        // adds entities, so a truncation report carried over from the lexical
+        // pass would describe a different result set than the one returned.
+        let entities_considered = ctx.entities.len();
+        // `more_available` is carried forward from the lexical pass rather than
+        // recomputed: the semantic arm adds candidates, it does not un-halt a
+        // walk that already stopped short.
+        let more_available =
+            ctx.summary.truncated.more_available || entities_considered > self.config.max_entities;
         ctx.entities.truncate(self.config.max_entities);
+        ctx.summary.truncated = Truncation {
+            entities_shown: ctx.entities.len(),
+            entities_considered,
+            more_available,
+            entities_with_more_facts: ctx.entities.iter().filter(|e| e.facts_capped).count(),
+        };
 
         Ok(ctx)
     }
@@ -247,15 +325,21 @@ impl<'a> ContextPipeline<'a> {
 
         // Step 2: Expand links from direct hits.
         let mut linked_count = 0;
+        // Set when the walk stops early. The budget is a real budget — we do not
+        // gather past it — so the honest report is not "here is the total" but
+        // "we stopped looking, and here is where".
+        let mut halted = false;
         if self.config.expand_links && !entities.is_empty() {
             let seed_iris: Vec<String> = entities.iter().map(|e| e.iri.clone()).collect();
             for iri in &seed_iris {
                 if entities.len() >= self.config.max_entities {
+                    halted = true;
                     break;
                 }
                 let neighbors = self.linked_entities(iri)?;
                 for neighbor in neighbors {
                     if entities.len() >= self.config.max_entities {
+                        halted = true;
                         break;
                     }
                     if !seen_iris.contains(&neighbor.iri) {
@@ -278,9 +362,18 @@ impl<'a> ContextPipeline<'a> {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
         }
+        // Before the cut, so the report counts what we held rather than
+        // estimating what we dropped.
+        let entities_considered = entities.len();
         entities.truncate(self.config.max_entities);
 
         let total_facts: usize = entities.iter().map(|e| e.facts.len()).sum();
+        let truncated = Truncation {
+            entities_shown: entities.len(),
+            entities_considered,
+            more_available: halted,
+            entities_with_more_facts: entities.iter().filter(|e| e.facts_capped).count(),
+        };
 
         Ok(KnowledgeContext {
             query: query.to_string(),
@@ -291,6 +384,7 @@ impl<'a> ContextPipeline<'a> {
                 direct_hits: direct_count,
                 linked_additions: linked_count,
                 embeddings: EmbeddingStatus::of(self.store),
+                truncated,
             },
         })
     }
@@ -449,9 +543,15 @@ impl<'a> ContextPipeline<'a> {
             .replace('\'', "\\'")
             .replace('>', "\\>");
 
+        // ONE MORE THAN THE BUDGET, deliberately. A `LIMIT max` cannot tell a
+        // caller whether the entity had exactly `max` facts or a thousand, and
+        // the only exact answer costs a `COUNT` round-trip per entity. Asking
+        // for `max + 1` costs one row and answers the question that actually
+        // matters — is there more behind this — without ever reporting a total
+        // nobody counted. The extra row is dropped below.
         let sparql = format!(
             "SELECT ?p ?o WHERE {{ <{safe_iri}> ?p ?o }} LIMIT {}",
-            self.config.max_facts_per_entity
+            self.config.max_facts_per_entity.saturating_add(1)
         );
 
         let result = sparql::query(self.store, &sparql)?;
@@ -490,6 +590,11 @@ impl<'a> ContextPipeline<'a> {
             });
         }
 
+        // Drop the probe row. `facts_capped` is what it was for: the entity has
+        // more than the budget shows, and a caller that wants them can ask.
+        let facts_capped = facts.len() > self.config.max_facts_per_entity;
+        facts.truncate(self.config.max_facts_per_entity);
+
         Ok(KnowledgeEntity {
             iri: iri.to_string(),
             label,
@@ -498,6 +603,7 @@ impl<'a> ContextPipeline<'a> {
             score,
             source: "knowledge".to_string(),
             facts,
+            facts_capped,
         })
     }
 }

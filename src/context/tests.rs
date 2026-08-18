@@ -404,3 +404,128 @@ fn hybrid_search_without_provider_names_the_missing_config() {
         "distinguishes the ONNX runtime from a model: {msg}"
     );
 }
+
+// --- Honest truncation: a capped answer must not look like a complete one ---
+
+/// RED. Squeeze the entity budget below the candidate set and the summary must
+/// say how much it held back.
+///
+/// Before `Truncation`, a caller receiving `max_entities` results had no way to
+/// tell whether the graph held exactly that many or a thousand — the same
+/// ambiguity `EmbeddingStatus` was added to remove (quipu #53), and the same
+/// answer: the fact about the answer travels with the answer.
+#[test]
+fn a_capped_entity_set_reports_what_it_held_back() {
+    let store = setup_test_store();
+    let pipeline = ContextPipeline::new(
+        &store,
+        ContextPipelineConfig {
+            max_entities: 1,
+            expand_links: true,
+            ..Default::default()
+        },
+    );
+
+    let ctx = pipeline.query("traefik").unwrap();
+    assert_eq!(ctx.entities.len(), 1, "fixture precondition: the cap bit");
+    assert_eq!(ctx.summary.truncated.entities_shown, 1);
+    assert!(
+        ctx.summary.truncated.more_available,
+        "expansion stopped at the budget, and the report must say the search \
+         itself was cut short rather than implying it saw everything: {:?}",
+        ctx.summary.truncated
+    );
+    assert!(ctx.summary.truncated.any());
+}
+
+/// GREEN, and the control the test above needs. An uncut result set must report
+/// `entities_of == entities_shown` rather than omitting the field — a reader
+/// must never have to infer completeness from an absence, which is precisely
+/// the inference that made silent truncation invisible.
+#[test]
+fn an_uncut_result_set_says_so_rather_than_staying_silent() {
+    let store = setup_test_store();
+    let pipeline = ContextPipeline::new(
+        &store,
+        ContextPipelineConfig {
+            max_entities: 100,
+            expand_links: false,
+            max_facts_per_entity: 100,
+            ..Default::default()
+        },
+    );
+
+    let ctx = pipeline.query("traefik").unwrap();
+    assert_eq!(
+        ctx.summary.truncated.entities_shown, ctx.summary.truncated.entities_considered,
+        "nothing was cut, and the report must be able to SAY nothing was cut"
+    );
+    assert!(!ctx.summary.truncated.more_available);
+    assert_eq!(ctx.summary.truncated.entities_with_more_facts, 0);
+    assert!(
+        !ctx.summary.truncated.any(),
+        "a complete answer must not claim it withheld something"
+    );
+}
+
+/// The per-entity half. `facts_capped` answers "is there more behind this
+/// entity" without anyone paying for a COUNT round-trip, and without the
+/// pipeline ever stating a total nobody counted.
+#[test]
+fn an_entity_with_more_facts_than_the_budget_says_so() {
+    let store = setup_test_store();
+    let pipeline = ContextPipeline::new(
+        &store,
+        ContextPipelineConfig {
+            max_entities: 10,
+            max_facts_per_entity: 1,
+            expand_links: false,
+            ..Default::default()
+        },
+    );
+
+    let ctx = pipeline.query("traefik").unwrap();
+    let entity = ctx
+        .entities
+        .iter()
+        .find(|e| e.iri.contains("traefik"))
+        .expect("fixture entity");
+    assert_eq!(entity.facts.len(), 1, "the fact budget bit");
+    assert!(
+        entity.facts_capped,
+        "ex:traefik has several facts; one shown means more were withheld"
+    );
+    assert!(ctx.summary.truncated.entities_with_more_facts >= 1);
+}
+
+/// And the control for THAT: an entity whose facts all fit reports
+/// `facts_capped: false`, so the flag is a real discriminator rather than a
+/// constant. The probe row must not leak into the returned facts either.
+#[test]
+fn an_entity_whose_facts_all_fit_is_not_marked_capped() {
+    let store = setup_test_store();
+    let pipeline = ContextPipeline::new(
+        &store,
+        ContextPipelineConfig {
+            max_entities: 10,
+            max_facts_per_entity: 500,
+            expand_links: false,
+            ..Default::default()
+        },
+    );
+
+    let ctx = pipeline.query("traefik").unwrap();
+    let entity = ctx
+        .entities
+        .iter()
+        .find(|e| e.iri.contains("traefik"))
+        .expect("fixture entity");
+    assert!(
+        !entity.facts_capped,
+        "every fact fits, so nothing was withheld"
+    );
+    assert!(
+        entity.facts.len() < 500,
+        "the LIMIT max+1 probe row must never survive into the result"
+    );
+}

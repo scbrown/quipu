@@ -45,8 +45,9 @@ pub fn tool_context(store: &Store, input: &serde_json::Value) -> Result<serde_js
 ///
 /// Input: `{ "query": "search text", "embedding": [f32...], "limit": N,
 ///           "expand_links": bool, "max_facts_per_entity": N }`
-/// Output: `{ "results": [{ "entity", "text", "score", "source", "relevance", "types", "facts" }],
-///            "count": N, "summary": { ... } }`
+/// Output: `{ "results": [{ "entity", "text", "score", "source", "relevance",
+///                          "types", "facts", "facts_capped" }],
+///            "count": N, "summary": { ..., "truncated": { ... } } }`
 pub fn tool_unified_search(store: &Store, input: &serde_json::Value) -> Result<serde_json::Value> {
     let query = input
         .get("query")
@@ -128,7 +129,12 @@ pub fn tool_unified_search(store: &Store, input: &serde_json::Value) -> Result<s
                 "source": "knowledge",
                 "relevance": e.relevance,
                 "types": e.types,
-                "facts": facts
+                "facts": facts,
+                // Whether this entity has more facts than `facts` carries. A
+                // caller deciding whether to drill in should not have to infer
+                // it from `facts.len() == max_facts_per_entity`, which is also
+                // what an entity with exactly that many facts looks like.
+                "facts_capped": e.facts_capped
             })
         })
         .collect();
@@ -143,7 +149,12 @@ pub fn tool_unified_search(store: &Store, input: &serde_json::Value) -> Result<s
             "linked_additions": ctx.summary.linked_additions,
             // quipu #53: tells a caller with zero results whether semantic
             // retrieval was even possible, without reading the server log.
-            "embeddings": ctx.summary.embeddings
+            "embeddings": ctx.summary.embeddings,
+            // What the budget cut. Same reasoning as `embeddings` above and the
+            // same reasoning as `graph_view`'s `truncated`: a capped result set
+            // is indistinguishable from a complete one unless the answer says
+            // so, and the caller cannot see our logs.
+            "truncated": ctx.summary.truncated
         }
     }))
 }
