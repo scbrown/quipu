@@ -8,6 +8,15 @@ the axes but their reach: labels, verdicts, decisions, authority
 grants, and --- via the versioned registry --- the validation rules
 themselves are time-indexed, which is what makes governance replay
 (\S\ref{sec:eval-replay}) a query rather than an archaeology project.
+ActiveGraph~\cite{nakajima2026log} carries the same log-is-truth
+commitment into agent runtimes --- the working graph as a
+deterministic projection of an append-only event log, with replay and
+cheap counterfactual forks over runs that include nondeterministic
+model calls. \sys converges on the lineage and the forks (speculative
+transactions, \S\ref{sec:eval-replay}) but differs on what the history
+\emph{carries}: facts enter through gates and arrive with evidence, so
+replay and speculation answer to the same validation as the live write
+path, rather than replaying whatever the log happened to record.
 
 \paragraph{Named graphs, provenance, and information flow.}
 Carroll et al.~\cite{carroll2005named} attached provenance and trust
