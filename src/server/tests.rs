@@ -611,6 +611,18 @@ fn every_pooled_tool_survives_a_read_only_connection() {
             quipu::tool_overlay_compose,
             json!({"overlays": []}),
         ),
+        // Both refuse this input (no steps / no topic) — the point here is
+        // that refusing must not require a write.
+        (
+            "tool_path_cone",
+            quipu::tool_path_cone,
+            json!({"trajectory": entity}),
+        ),
+        (
+            "tool_path_backtest",
+            quipu::tool_path_backtest,
+            json!({"exemplar": entity}),
+        ),
     ];
 
     for (name, f, input) in cases {

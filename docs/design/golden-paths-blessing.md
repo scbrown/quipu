@@ -1,10 +1,20 @@
 # Golden-path blessing: from a verified trajectory to a governed path
 
-> **Implementation status (2026-08-20):** 🟥 **Design only.** Nothing below is
-> implemented. This is the quipu-owned mechanism half of the golden-paths
-> design; the ontology and its competency suite live in camayoc
+> **Implementation status (2026-08-20, quipu-gp2/gp3/gp4):** 🟨 **The
+> analysis pipeline is built; promotion still rides the existing gates.**
+> `src/path/` implements the cone (`quipu path cone`, `quipu_path_cone` MCP,
+> `POST /path/cone`), the trajectory backtest (`quipu path backtest`,
+> `quipu_path_backtest`, `POST /path/backtest`) under the versioned grammar
+> (`src/path/grammar.rs`, [conformance-grammar.md](./conformance-grammar.md)),
+> and the Turtle-emitting draft (`quipu path draft`). One design correction
+> found while building is recorded inline in §3: the cone is forward
+> reachability, not speculative removal. Trajectory ingestion needed no code
+> (§1 — it is the episode path with camayoc's vocabulary), and promotion
+> deliberately adds none (§5). This is the quipu-owned mechanism half of the
+> golden-paths design; the ontology and its competency suite live in camayoc
 > (`docs/design/golden-paths.md`, `competency/golden-paths.md` there), and the
-> enforcement half lives in yupana (`docs/golden-path-guard.md`).
+> enforcement half lives in yupana (`docs/golden-path-guard.md`), still
+> design-only.
 >
 > Created: 2026-08-20
 > Status: DESIGN
@@ -70,12 +80,24 @@ Decision with rationale.
 Reuse: the impact machinery already answers "what depends on X" —
 `Store::speculate` (`src/store/ops.rs`) and `speculate_remove`
 (`src/impact.rs`) evaluate a hypothetical removal without committing it. The
-cone question is the same traversal anchored at the result instead of the
-candidate: *speculatively remove step S; is the terminal Verification's
-derivation chain still intact?* If yes, S is out-of-cone. A dedicated
-`quipu path cone <trajectory>` (CLI + MCP) wraps this per-trajectory rather
-than per-fact, and its output is stored as facts on the candidate — each
-omission carrying its authority (`cone-analysis` vs a Decision IRI), so
+original sketch here was: *speculatively remove step S; is the terminal
+Verification's derivation chain still intact?*
+
+> **As built (quipu-gp2), a correction:** the speculative-removal test is
+> unsound for this question. Retraction removes only S's OWN facts, so a
+> chain that continues through edges owned by S's output artifacts survives
+> S's removal — and a load-bearing step reads as prunable, which is the one
+> direction this analysis must never fail in. What shipped is **forward
+> reachability** on the same bounded BFS as `quipu impact`
+> (`src/path/cone.rs`): S is in-cone iff something it produced flows, along
+> the derivation predicates, into a falsifier-gated verification. A step
+> with no recorded derivation edges is CANNOT-EVALUATE — never prunable by
+> silence — and a trajectory with no falsifier-gated verification is refused
+> outright.
+
+`quipu path cone <trajectory>` (CLI + MCP + `POST /path/cone`) wraps this
+per-trajectory. Its verdicts become stored facts at DRAFT time (§5): each
+omission carries its authority (`cone-analysis` vs a Decision IRI), so
 competency Q6 is answerable forever after.
 
 ### 4. Backtest — `governance/backtest.rs`, generalized

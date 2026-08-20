@@ -27,6 +27,7 @@ pub mod onnx_embedder;
 pub mod owl;
 pub mod pack;
 mod pack_turtle;
+pub mod path;
 pub mod proposal;
 pub mod provider;
 pub mod rdf;
@@ -84,6 +85,7 @@ pub use mcp::impact::tool_impact;
 pub use mcp::named_query::tool_ask;
 #[cfg(feature = "owl")]
 pub use mcp::owl::tool_load_ontology;
+pub use mcp::path::{tool_path_backtest, tool_path_cone};
 pub use mcp::proposal::{
     tool_accept_proposal, tool_list_proposals, tool_propose_schema_change, tool_reject_proposal,
 };

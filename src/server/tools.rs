@@ -311,6 +311,8 @@ rw_handler!(reject_proposal, quipu::tool_reject_proposal);
 rw_handler!(episode, quipu::tool_episode);
 rw_handler!(episodes_complete, quipu::tool_episodes_complete);
 rw_handler!(impact_analysis, quipu::tool_impact);
+ro_handler!(path_cone, quipu::tool_path_cone);
+ro_handler!(path_backtest, quipu::tool_path_backtest);
 rw_handler!(retract, quipu::tool_retract);
 rw_handler!(set_predicate, quipu::tool_set);
 rw_handler!(retract_episode, quipu::tool_retract_episode);

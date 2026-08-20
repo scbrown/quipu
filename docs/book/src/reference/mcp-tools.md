@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **37 tools** in a default build, or
-**38** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **39 tools** in a default build, or
+**40** when built with the `owl` feature (which adds `quipu_load_ontology`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -418,6 +418,37 @@ mutated.
 | `predicates` | No | Restrict walk to these predicate IRIs (empty = all) |
 | `rank_by_ppr` | No | Order the reached set by Personalized PageRank seeded at the root — each entry gains a `ppr` score (default: false) |
 | `timestamp` | No | Timestamp for the speculative retraction (used when `remove=true`) |
+
+### `quipu_path_cone`
+
+Golden paths: compute the provenance cone of a trajectory — which steps did
+its falsifier-gated verified result depend on? Per-step verdicts are
+`in-cone` (load-bearing; pruning needs a human Decision), `out-of-cone`
+(mechanically prunable), or `cannot-evaluate` (no derivation edges recorded —
+never silently prunable). Refuses trajectories with no steps or no
+falsifier-gated verification. See the
+[golden-paths design](https://github.com/scbrown/quipu/blob/main/docs/design/golden-paths-blessing.md).
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `trajectory` | Yes | IRI of the Trajectory to analyse |
+| `via` | No | Derivation predicate IRIs to walk, in addition to `verifiedBy` (always followed) |
+| `hops` | No | Depth bound for the derivation walk (default: 8) |
+| `base_ns` | No | Vocabulary namespace override (default: the store's `base_ns`) |
+
+### `quipu_path_backtest`
+
+Golden paths: backtest a pruned candidate (exemplar trajectory minus omitted
+steps) over recorded history — which past trajectories with a shared
+work-item topic would have conformed under `gp-grammar/1`, and how did their
+work items close? Distinguishes 0 matches from cannot-evaluate, and refuses a
+pattern it cannot compile.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `exemplar` | Yes | IRI of the exemplar Trajectory |
+| `omit` | No | Step IRIs the candidate omits |
+| `base_ns` | No | Vocabulary namespace override (default: the store's `base_ns`) |
 
 ### `quipu_unified_search`
 

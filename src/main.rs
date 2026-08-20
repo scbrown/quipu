@@ -21,6 +21,7 @@
 mod cli;
 mod cli_audit;
 mod cli_commands;
+mod cli_path;
 mod cli_policy;
 mod cli_propose;
 
@@ -69,6 +70,7 @@ fn main() {
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
         "policy" => cli_policy::cmd_policy(&args, db_path),
+        "path" => cli_path::cmd_path(&args, db_path, &config.base_ns),
         "propose" => cli_propose::cmd_propose(&args, db_path),
         "audit" => cli_audit::cmd_audit(&args, db_path),
         "ontology" => cmd_ontology(&args, db_path),
@@ -215,6 +217,7 @@ COMMANDS:
     quipu cord [--type <IRI>] [--limit N] [--db <path>]
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
     quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]
+    quipu path <cone|backtest|draft> <trajectory-IRI> [options] [--db <path>]
     quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85] [--predicate <IRI>] [--graph <IRI>] [--db <path>]
     quipu report [--hubs N] [--surprises N] [--questions N] [--type <IRI>] [--predicate <IRI>] [--db <path>]
     quipu reason [--rules <file.ttl>] [--db <path>]

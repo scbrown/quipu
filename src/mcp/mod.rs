@@ -10,6 +10,7 @@ pub mod impact;
 pub mod named_query;
 #[cfg(feature = "owl")]
 pub mod owl;
+pub mod path;
 pub mod proposal;
 pub mod resolution;
 pub mod search;
@@ -786,6 +787,33 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the speculative retraction (used only when remove=true)" }
                 },
                 "required": ["entity"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_path_cone",
+            "description": "Golden paths: compute the provenance cone of a trajectory — which steps did its falsifier-gated verified result depend on? Per-step verdicts are in-cone (load-bearing; pruning needs a human Decision), out-of-cone (mechanically prunable), or cannot-evaluate (no derivation edges recorded — never silently prunable). Refuses trajectories with no steps or no falsifier-gated verification.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "trajectory": { "type": "string", "description": "IRI of the Trajectory to analyse" },
+                    "via": { "type": "array", "items": { "type": "string" }, "description": "Derivation predicate IRIs to walk, in addition to verifiedBy (always followed)." },
+                    "hops": { "type": "integer", "description": "Depth bound for the derivation walk (default: 8)" },
+                    "base_ns": { "type": "string", "description": "Vocabulary namespace override; defaults to the store's configured base_ns." }
+                },
+                "required": ["trajectory"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_path_backtest",
+            "description": "Golden paths: backtest a pruned candidate (exemplar trajectory minus omitted steps) over recorded history — which past trajectories with a shared work-item topic would have conformed under gp-grammar/1, and how did their work items close? Distinguishes 0 matches from cannot-evaluate, and refuses a pattern it cannot compile.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "exemplar": { "type": "string", "description": "IRI of the exemplar Trajectory" },
+                    "omit": { "type": "array", "items": { "type": "string" }, "description": "Step IRIs the candidate omits" },
+                    "base_ns": { "type": "string", "description": "Vocabulary namespace override; defaults to the store's configured base_ns." }
+                },
+                "required": ["exemplar"]
             }
         }),
         serde_json::json!({

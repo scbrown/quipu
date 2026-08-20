@@ -1297,14 +1297,17 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_overlay_create"));
     assert!(names.contains(&"quipu_overlay_write"));
     assert!(names.contains(&"quipu_overlay_compose"));
+    // Golden paths (quipu-gp2/gp3): the cone and the backtest.
+    assert!(names.contains(&"quipu_path_cone"));
+    assert!(names.contains(&"quipu_path_backtest"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 38);
+        assert_eq!(defs.len(), 40);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 37);
+        assert_eq!(defs.len(), 39);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 
