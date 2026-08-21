@@ -70,6 +70,16 @@ pub const QUIPU_DERIVATION_QUERY: &str = "https://quipu.dev/ontology/derivationQ
 /// `quipu:derivationParams` — canonical JSON parameters for the query.
 pub const QUIPU_DERIVATION_PARAMS: &str = "https://quipu.dev/ontology/derivationParams";
 
+/// `quipu:distinctFrom` — this entity is DELIBERATELY not the entity named by
+/// the object, even though entity resolution scores them as near-duplicates.
+///
+/// Asserted by a writer to override a strict-mode resolution refusal for one
+/// specific pairing, rather than by disabling `strict_mode` for every entity.
+/// It is a durable fact, so the override survives the write that made it: a
+/// later re-ingest of the same entity reads it back and stays silent about the
+/// pairing it excuses. It excuses exactly the named pairing and nothing else.
+pub const QUIPU_DISTINCT_FROM: &str = "https://quipu.dev/ontology/distinctFrom";
+
 /// RDF reified-statement class.
 pub const RDF_STATEMENT: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement";
 /// RDF reified-statement subject predicate.

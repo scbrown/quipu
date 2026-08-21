@@ -327,12 +327,14 @@ fn episode_batch_embeds() {
                 node_type: Some("Service".into()),
                 description: Some("The foo service".into()),
                 properties: None,
+                distinct_from: Vec::new(),
             },
             Node {
                 name: "Bar".into(),
                 node_type: Some("Service".into()),
                 description: Some("The bar service".into()),
                 properties: None,
+                distinct_from: Vec::new(),
             },
         ],
         edges: vec![Edge {

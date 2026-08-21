@@ -26,6 +26,7 @@ fn node(name: &str, ty: &str) -> Node {
         node_type: Some(ty.into()),
         description: Some(format!("{name} description")),
         properties: None,
+        distinct_from: Vec::new(),
     }
 }
 

@@ -298,6 +298,8 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         // say that, and reads as a failed write.
         "outcome": result.outcome.as_str(),
         "episode": ep.name,
-        "resolution_hints": crate::mcp::resolution_hints_json(&result.resolution_hints)
+        "resolution_hints": crate::mcp::resolution_hints_json(&result.resolution_hints),
+        "resolution_contentions":
+            crate::mcp::resolution_contentions_json(&result.resolution_contentions)
     }))
 }

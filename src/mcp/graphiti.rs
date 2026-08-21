@@ -185,7 +185,8 @@ pub fn tool_episodes_complete(store: &mut Store, input: &JsonValue) -> Result<Js
         "tx_id": result.tx_id,
         "count": result.count,
         "episode": name,
-        "resolution_hints": super::resolution_hints_json(&result.resolution_hints)
+        "resolution_hints": super::resolution_hints_json(&result.resolution_hints),
+        "resolution_contentions": super::resolution_contentions_json(&result.resolution_contentions)
     }))
 }
 

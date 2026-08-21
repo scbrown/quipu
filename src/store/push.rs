@@ -228,6 +228,7 @@ mod tests {
                 node_type: Some("Thing".into()),
                 description: None,
                 properties: None,
+                distinct_from: Vec::new(),
             }],
             edges: vec![],
             graph: None,

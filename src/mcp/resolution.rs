@@ -11,7 +11,7 @@ use crate::store::Store;
 /// returns candidates that may be duplicates of the proposed entity.
 ///
 /// Input: `{ "name": "Alice Smith", "properties": { "role": "engineer" }, "top_k": 3, "threshold": 0.85 }`
-/// Output: `{ "has_matches": bool, "candidates": [...] }`
+/// Output: `{ "has_matches": bool, "candidates": [...], "vector_scope": {...} }`
 pub fn tool_resolve_entity(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let name = input
         .get("name")
@@ -55,9 +55,14 @@ pub fn tool_resolve_entity(store: &Store, input: &JsonValue) -> Result<JsonValue
         })
         .collect();
 
+    // `vector_scope` is not decoration: on a composed store the embedding half
+    // does not search attached layers, so an empty candidate list can mean "no
+    // duplicates" or "the layer your duplicate is in was never searched". The
+    // caller cannot tell those apart without being told which one it got.
     Ok(serde_json::json!({
         "has_matches": result.has_matches,
         "candidates": candidates,
-        "count": candidates.len()
+        "count": candidates.len(),
+        "vector_scope": result.vector_scope
     }))
 }

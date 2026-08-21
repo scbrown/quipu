@@ -98,6 +98,44 @@ the caller must reuse the existing IRI, or assert `quipu:distinctFrom` to
 record that the entities are intentionally separate. There is no automatic
 dedup, no silent IRI rewriting, and no background merge job.
 
+`quipu:distinctFrom` excuses exactly the pairing it names, and is stored as a
+durable fact, so it is declared once rather than on every re-ingest:
+
+```json
+{ "name": "alice_smith", "type": "Person",
+  "distinct_from": ["http://aegis.gastown.local/ontology/Alice"] }
+```
+
+That holds for contention too. When two nodes of one write claim the same
+existing entity, the response says so in `resolution_contentions` — but it does
+not pick a winner. Assigning contested entities would be a judgment made from a
+similarity score the caller can see and quipu cannot justify, and quipu leaves
+judgments to the reader.
+
+```json
+{
+  "resolution_contentions": [
+    { "iri": "http://aegis.gastown.local/ontology/Alice",
+      "claimants": [ {"node": "alice_smith", "score": 0.94},
+                     {"node": "a_smith", "score": 0.88} ] }
+  ]
+}
+```
+
+## What resolution can see
+
+On a store with attached layers the two halves have different reach. The
+canonical-name half reads the composed fact source, so it sees entities defined
+in an attached knowledge pack. The embedding half does not: `vectors` is a
+per-database table and a pack may carry a different embedding model, so unioning
+the indexes could turn a working search into a dimension-mismatch error.
+
+Every result therefore carries `vector_scope` — `{"kind": "whole_store"}` when
+there is nothing attached, `{"kind": "local_only", "attached_layers": N}` when
+the embedding half left N layers unsearched. Without it, an empty candidate list
+means either "no duplicates" or "the layer your duplicate is in was never
+searched", and the caller cannot tell which.
+
 ## Configuration
 
 ```toml

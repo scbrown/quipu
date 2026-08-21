@@ -28,7 +28,7 @@ pub use governance::{
 };
 
 use crate::error::{Error, Result};
-use crate::resolution::EntityCandidate;
+use crate::resolution::{Contention, EntityCandidate};
 use crate::sparql::{self, QueryResult, TemporalContext, rdfs};
 use crate::store::Store;
 use crate::store::labels;
@@ -51,6 +51,28 @@ pub(crate) fn resolution_hints_json(hints: &[(String, Vec<EntityCandidate>)]) ->
                 })
                 .collect();
             serde_json::json!({ "node": node, "candidates": cands })
+        })
+        .collect()
+}
+
+/// Render resolution contentions — existing entities that MORE THAN ONE node of
+/// the same episode claimed — as JSON for the `resolution_contentions` field.
+///
+/// Separate from `resolution_hints` because it answers a different question. A
+/// hint says "this node may be a duplicate of something already stored". A
+/// contention says "these nodes are about to become duplicates OF EACH OTHER",
+/// which no per-node hint can express and which the caller, not quipu, has to
+/// decide about.
+pub(crate) fn resolution_contentions_json(contentions: &[Contention]) -> Vec<JsonValue> {
+    contentions
+        .iter()
+        .map(|c| {
+            let claimants: Vec<JsonValue> = c
+                .claimants
+                .iter()
+                .map(|(node, score)| serde_json::json!({ "node": node, "score": score }))
+                .collect();
+            serde_json::json!({ "iri": c.iri, "claimants": claimants })
         })
         .collect()
 }

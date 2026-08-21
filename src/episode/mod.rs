@@ -14,7 +14,7 @@ use crate::error::Error;
 use crate::error::Result;
 use crate::namespace;
 use crate::rdf::{ingest_rdf_to_graph, parse_rdf};
-use crate::resolution::{self, EntityCandidate};
+use crate::resolution::{self, Contention, EntityCandidate};
 #[cfg(feature = "shacl")]
 use crate::shacl;
 use crate::store::Store;
@@ -59,6 +59,9 @@ pub struct IngestResult {
     /// Per-node resolution candidates (node name → candidates).
     /// Only populated when resolution is enabled and matches were found.
     pub resolution_hints: Vec<(String, Vec<EntityCandidate>)>,
+    /// Existing entities claimed by MORE THAN ONE node of this episode: the
+    /// write is about to fragment one entity. See `resolution::matching`.
+    pub resolution_contentions: Vec<Contention>,
 }
 
 /// What an `/episode` ingest did, so a caller can tell "already recorded" from
@@ -115,39 +118,20 @@ pub fn ingest_episode_with_resolution(
     resolution_opts: Option<&IngestResolutionOpts>,
 ) -> Result<IngestResult> {
     let mut resolution_hints = Vec::new();
+    let mut resolution_contentions = Vec::new();
 
-    // Run entity resolution for each node if enabled.
+    // Resolve every node in ONE pass: it scans the label set once for the whole
+    // episode rather than once per node, and it can see two nodes claiming one
+    // existing entity — which a per-node loop structurally cannot.
     if let Some(opts) = resolution_opts
         && opts.enabled
     {
-        for node in &episode.nodes {
-            let properties: Vec<(String, String)> = node
-                .description
-                .as_ref()
-                .map(|d| vec![("description".to_string(), d.clone())])
-                .unwrap_or_default();
-
-            let result = resolution::resolve_entity(
-                store,
-                &node.name,
-                &properties,
-                opts.threshold,
-                opts.top_k,
-            )?;
-
-            if result.has_matches {
-                if opts.strict_mode {
-                    let top = &result.candidates[0];
-                    return Err(crate::error::Error::InvalidValue(format!(
-                        "entity resolution: '{}' matches existing entity '{}' \
-                             (score: {:.2}, matched by: {}). Use an existing IRI or \
-                             assert quipu:distinctFrom to override.",
-                        node.name, top.iri, top.score, top.matched_on,
-                    )));
-                }
-                resolution_hints.push((node.name.clone(), result.candidates));
-            }
+        let resolved = resolution::resolve_episode_nodes(store, &episode.nodes, base_ns, opts)?;
+        if let Some(msg) = resolved.refusal {
+            return Err(crate::error::Error::InvalidValue(msg));
         }
+        resolution_hints = resolved.hints;
+        resolution_contentions = resolved.contentions;
     }
 
     let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
@@ -157,7 +141,14 @@ pub fn ingest_episode_with_resolution(
         count,
         outcome,
         resolution_hints,
+        resolution_contentions,
     })
+}
+
+/// The IRI an episode node is written as. One definition, so resolution reads
+/// back `quipu:distinctFrom` under the same IRI the Turtle generator asserts it.
+pub(crate) fn node_iri(name: &str, base_ns: &str) -> String {
+    format!("{base_ns}{}", sanitize_iri_local(name))
 }
 
 /// An episode — a unit of knowledge to ingest.
@@ -200,6 +191,10 @@ pub struct Node {
     pub description: Option<String>,
     #[serde(default)]
     pub properties: Option<serde_json::Map<String, serde_json::Value>>,
+    /// IRIs this entity is DELIBERATELY not, asserted as `quipu:distinctFrom`:
+    /// overrides a strict refusal for exactly these pairings, durably.
+    #[serde(default, alias = "distinctFrom")]
+    pub distinct_from: Vec<String>,
 }
 
 /// An edge (relationship) between two nodes.
@@ -635,6 +630,11 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
         ttl.push_str(&format!(
             " ;\n    prov:wasGeneratedBy aegis:episode_{ep_local}"
         ));
+
+        // Written as facts so the override outlives the write that made it.
+        for other in &node.distinct_from {
+            ttl.push_str(&format!(" ;\n    quipu:distinctFrom <{other}>"));
+        }
 
         // Optional properties as typed literals. A JSON ARRAY yields one triple
         // per element — the natural RDF reading, and exactly what the /knot+Turtle
