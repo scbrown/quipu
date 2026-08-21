@@ -1,11 +1,14 @@
 use super::*;
 use crate::namespace::{
     BOBBIN, BOBBIN_DEFINED_IN, BOBBIN_FILE_PATH, BOBBIN_IMPORTS, BOBBIN_LANGUAGE, BOBBIN_NAME,
+    CODE_BASE,
 };
 use crate::store::Store;
 use crate::types::{Op, Value};
 
 /// Seed a store with two repos of code entities and some unresolved imports.
+/// Entity IRIs use the LIVE lane shape: `CODE_BASE` + repo + one
+/// percent-encoded path segment (+ `name-L{line}` for symbols).
 fn seeded_store() -> Store {
     let mut store = Store::open_in_memory().unwrap();
     let ts = "2026-04-04T00:00:00Z";
@@ -14,7 +17,7 @@ fn seeded_store() -> Store {
 
     // CodeModule: repo-a/src/utils.rs
     let mod_a = store
-        .intern(&format!("{BOBBIN}code/repo-a/src/utils.rs"))
+        .intern(&format!("{CODE_BASE}repo-a/src%2Futils.rs"))
         .unwrap();
     let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
     let code_module_type = store.intern(&format!("{BOBBIN}CodeModule")).unwrap();
@@ -60,7 +63,7 @@ fn seeded_store() -> Store {
 
     // CodeSymbol: repo-a/src/utils.rs::helper_fn
     let sym_helper = store
-        .intern(&format!("{BOBBIN}code/repo-a/src/utils.rs::helper_fn"))
+        .intern(&format!("{CODE_BASE}repo-a/src%2Futils.rs/helper_fn-L10"))
         .unwrap();
     let code_symbol_type = store.intern(&format!("{BOBBIN}CodeSymbol")).unwrap();
 
@@ -101,7 +104,7 @@ fn seeded_store() -> Store {
     // --- Repo B: another Rust project that imports from repo-a ---
 
     let mod_b = store
-        .intern(&format!("{BOBBIN}code/repo-b/src/main.rs"))
+        .intern(&format!("{CODE_BASE}repo-b/src%2Fmain.rs"))
         .unwrap();
 
     store
@@ -140,7 +143,7 @@ fn seeded_store() -> Store {
 
     // CodeSymbol: repo-b/src/main.rs::run — has an unresolved import
     let sym_run = store
-        .intern(&format!("{BOBBIN}code/repo-b/src/main.rs::run"))
+        .intern(&format!("{CODE_BASE}repo-b/src%2Fmain.rs/run-L5"))
         .unwrap();
 
     store
@@ -202,7 +205,7 @@ fn resolves_single_match() {
     // Verify the import edge is now a Ref, not a Str.
     let imports_id = store.lookup(BOBBIN_IMPORTS).unwrap().unwrap();
     let sym_run_id = store
-        .lookup(&format!("{BOBBIN}code/repo-b/src/main.rs::run"))
+        .lookup(&format!("{CODE_BASE}repo-b/src%2Fmain.rs/run-L5"))
         .unwrap()
         .unwrap();
     let facts = store.entity_facts(sym_run_id).unwrap();
@@ -214,7 +217,7 @@ fn resolves_single_match() {
 
     // Verify it points to the right entity.
     let target_id = store
-        .lookup(&format!("{BOBBIN}code/repo-a/src/utils.rs::helper_fn"))
+        .lookup(&format!("{CODE_BASE}repo-a/src%2Futils.rs/helper_fn-L10"))
         .unwrap()
         .unwrap();
     assert_eq!(import_fact.value, Value::Ref(target_id));
@@ -227,10 +230,10 @@ fn dangling_when_target_not_indexed() {
 
     // Create a symbol with an import that can't be resolved.
     let mod_id = store
-        .intern(&format!("{BOBBIN}code/repo-x/src/lib.rs"))
+        .intern(&format!("{CODE_BASE}repo-x/src%2Flib.rs"))
         .unwrap();
     let sym_id = store
-        .intern(&format!("{BOBBIN}code/repo-x/src/lib.rs::foo"))
+        .intern(&format!("{CODE_BASE}repo-x/src%2Flib.rs/foo-L1"))
         .unwrap();
     let name_attr = store.intern(BOBBIN_NAME).unwrap();
     let lang_attr = store.intern(BOBBIN_LANGUAGE).unwrap();
@@ -308,23 +311,23 @@ fn ambiguous_when_multiple_matches() {
 
     // Two symbols with the same name in different repos.
     let mod_1 = store
-        .intern(&format!("{BOBBIN}code/repo-1/src/lib.rs"))
+        .intern(&format!("{CODE_BASE}repo-1/src%2Flib.rs"))
         .unwrap();
     let mod_2 = store
-        .intern(&format!("{BOBBIN}code/repo-2/src/lib.rs"))
+        .intern(&format!("{CODE_BASE}repo-2/src%2Flib.rs"))
         .unwrap();
     let sym_1 = store
-        .intern(&format!("{BOBBIN}code/repo-1/src/lib.rs::Widget"))
+        .intern(&format!("{CODE_BASE}repo-1/src%2Flib.rs/Widget-L1"))
         .unwrap();
     let sym_2 = store
-        .intern(&format!("{BOBBIN}code/repo-2/src/lib.rs::Widget"))
+        .intern(&format!("{CODE_BASE}repo-2/src%2Flib.rs/Widget-L1"))
         .unwrap();
 
     let mod_src = store
-        .intern(&format!("{BOBBIN}code/repo-src/src/main.rs"))
+        .intern(&format!("{CODE_BASE}repo-src/src%2Fmain.rs"))
         .unwrap();
     let sym_src = store
-        .intern(&format!("{BOBBIN}code/repo-src/src/main.rs::caller"))
+        .intern(&format!("{CODE_BASE}repo-src/src%2Fmain.rs/caller-L1"))
         .unwrap();
 
     store
@@ -505,7 +508,7 @@ fn go_resolver_handles_full_path() {
 
 #[test]
 fn iri_path_matching() {
-    let iri = &format!("{BOBBIN}code/repo-a/src/utils.rs::helper_fn");
+    let iri = &format!("{CODE_BASE}repo-a/src%2Futils.rs/helper_fn-L10");
     assert!(iri_contains_path(iri, "utils"));
     assert!(iri_contains_path(iri, "src/utils"));
     assert!(!iri_contains_path(iri, "nonexistent"));

@@ -23,8 +23,23 @@ pub const OWL: &str = "http://www.w3.org/2002/07/owl#";
 pub const SKOS: &str = "http://www.w3.org/2004/02/skos/core#";
 
 // ── Bobbin namespace ──────────────────────────────────────────
+//
+// `bobbin:` ≡ `aegis:` — decided 2026-08-21 (bobbin×quipu roadmap). The live
+// ingest lane (`shapes/code-entities.ttl`, `scripts/ingest-repos.py`, ~15k
+// live entities) has always bound `bobbin:` to the aegis base, and the
+// `https://bobbin.dev/ontology#` spelling this constant used to carry was
+// referenced by nothing outside `reconcile` — two spellings intern as two
+// different terms that never join, the exact failure the `quipu:` http/https
+// note below warns about. Entity IRIs live under `CODE_BASE`, vocabulary
+// under `BOBBIN`/`DEFAULT_BASE_NS`.
 
-pub const BOBBIN: &str = "https://bobbin.dev/ontology#";
+pub const BOBBIN: &str = DEFAULT_BASE_NS;
+
+/// Base namespace for code/document ENTITY IRIs (as opposed to vocabulary).
+/// Matches `scripts/ingest-repos.py`'s `BASE`: path segments are
+/// percent-encoded with `/` escaped, so a relative path is one opaque
+/// segment — `http://aegis.gastown.local/code/{repo}/{src%2Flib.rs}`.
+pub const CODE_BASE: &str = "http://aegis.gastown.local/code/";
 
 // ── Quipu namespace ───────────────────────────────────────────
 // Quipu's own ontology terms (graph-analysis qualifiers it mints itself, as
@@ -117,17 +132,18 @@ pub const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 pub const RDFS_SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
 
 // ── Bobbin property IRIs ──────────────────────────────────────
+// Under the aegis base, matching what the live lane emits.
 
 /// `bobbin:imports` — unresolved import edge (target may be literal or ref).
-pub const BOBBIN_IMPORTS: &str = "https://bobbin.dev/ontology#imports";
+pub const BOBBIN_IMPORTS: &str = "http://aegis.gastown.local/ontology/imports";
 /// `bobbin:name` — symbol / entity name.
-pub const BOBBIN_NAME: &str = "https://bobbin.dev/ontology#name";
+pub const BOBBIN_NAME: &str = "http://aegis.gastown.local/ontology/name";
 /// `bobbin:language` — programming language of a `CodeModule`.
-pub const BOBBIN_LANGUAGE: &str = "https://bobbin.dev/ontology#language";
+pub const BOBBIN_LANGUAGE: &str = "http://aegis.gastown.local/ontology/language";
 /// `bobbin:definedIn` — links a `CodeSymbol` to its parent `CodeModule`.
-pub const BOBBIN_DEFINED_IN: &str = "https://bobbin.dev/ontology#definedIn";
+pub const BOBBIN_DEFINED_IN: &str = "http://aegis.gastown.local/ontology/definedIn";
 /// `bobbin:filePath` — file path of a `CodeModule`.
-pub const BOBBIN_FILE_PATH: &str = "https://bobbin.dev/ontology#filePath";
+pub const BOBBIN_FILE_PATH: &str = "http://aegis.gastown.local/ontology/filePath";
 
 // ── XSD datatype IRIs ──────────────────────────────────────────
 
@@ -172,278 +188,17 @@ pub fn is_numeric_datatype(dt: &str) -> bool {
     )
 }
 
-// ── Bobbin IRI constructors ───────────────────────────────────
-
-/// Build a `bobbin:code/{repo}/{path}` IRI (`CodeModule`).
-pub fn code_module_iri(repo: &str, path: &str) -> String {
-    format!("{BOBBIN}code/{repo}/{path}")
-}
-
-/// Build a `bobbin:code/{repo}/{path}::{symbol}` IRI (`CodeSymbol`).
-pub fn code_symbol_iri(repo: &str, path: &str, symbol: &str) -> String {
-    format!("{BOBBIN}code/{repo}/{path}::{symbol}")
-}
-
-/// Build a `bobbin:doc/{repo}/{path}` IRI (`Document`).
-pub fn document_iri(repo: &str, path: &str) -> String {
-    format!("{BOBBIN}doc/{repo}/{path}")
-}
-
-/// Build a `bobbin:doc/{repo}/{path}#section-slug` IRI (`Section`).
-pub fn section_iri(repo: &str, path: &str, section_slug: &str) -> String {
-    format!("{BOBBIN}doc/{repo}/{path}#{section_slug}")
-}
-
-/// Build a `bobbin:bundle/{name}` IRI (`Bundle`).
-pub fn bundle_iri(name: &str) -> String {
-    format!("{BOBBIN}bundle/{name}")
-}
-
-// ── Bobbin IRI parsing ────────────────────────────────────────
-
-/// Parsed components of a Bobbin code entity IRI.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BobbinIri<'a> {
-    /// `bobbin:code/{repo}/{path}`
-    CodeModule { repo: &'a str, path: &'a str },
-    /// `bobbin:code/{repo}/{path}::{symbol}`
-    CodeSymbol {
-        repo: &'a str,
-        path: &'a str,
-        symbol: &'a str,
-    },
-    /// `bobbin:doc/{repo}/{path}`
-    Document { repo: &'a str, path: &'a str },
-    /// `bobbin:doc/{repo}/{path}#section-slug`
-    Section {
-        repo: &'a str,
-        path: &'a str,
-        section: &'a str,
-    },
-    /// `bobbin:bundle/{name}`
-    Bundle { name: &'a str },
-}
-
-/// Parse a full IRI into its Bobbin components, or `None` if it does not match.
-pub fn parse_bobbin_iri(iri: &str) -> Option<BobbinIri<'_>> {
-    let rest = iri.strip_prefix(BOBBIN)?;
-
-    if let Some(rest) = rest.strip_prefix("bundle/") {
-        if rest.is_empty() {
-            return None;
-        }
-        return Some(BobbinIri::Bundle { name: rest });
-    }
-
-    if let Some(rest) = rest.strip_prefix("code/") {
-        let (repo, path_and_maybe_symbol) = rest.split_once('/')?;
-        if repo.is_empty() {
-            return None;
-        }
-        // Check for `::symbol` suffix (split at first `::` — paths never contain `::`)
-        if let Some((path, symbol)) = path_and_maybe_symbol.split_once("::") {
-            if path.is_empty() || symbol.is_empty() {
-                return None;
-            }
-            return Some(BobbinIri::CodeSymbol { repo, path, symbol });
-        }
-        if path_and_maybe_symbol.is_empty() {
-            return None;
-        }
-        return Some(BobbinIri::CodeModule {
-            repo,
-            path: path_and_maybe_symbol,
-        });
-    }
-
-    if let Some(rest) = rest.strip_prefix("doc/") {
-        let (repo, path_and_maybe_section) = rest.split_once('/')?;
-        if repo.is_empty() {
-            return None;
-        }
-        // Check for `#section` suffix
-        if let Some((path, section)) = path_and_maybe_section.rsplit_once('#') {
-            if path.is_empty() || section.is_empty() {
-                return None;
-            }
-            return Some(BobbinIri::Section {
-                repo,
-                path,
-                section,
-            });
-        }
-        if path_and_maybe_section.is_empty() {
-            return None;
-        }
-        return Some(BobbinIri::Document {
-            repo,
-            path: path_and_maybe_section,
-        });
-    }
-
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_code_module_iri() {
-        assert_eq!(
-            code_module_iri("quipu", "src/namespace.rs"),
-            "https://bobbin.dev/ontology#code/quipu/src/namespace.rs"
-        );
-    }
-
-    #[test]
-    fn test_code_symbol_iri() {
-        assert_eq!(
-            code_symbol_iri("quipu", "src/store.rs", "Store::insert"),
-            "https://bobbin.dev/ontology#code/quipu/src/store.rs::Store::insert"
-        );
-    }
-
-    #[test]
-    fn test_document_iri() {
-        assert_eq!(
-            document_iri("quipu", "docs/architecture.md"),
-            "https://bobbin.dev/ontology#doc/quipu/docs/architecture.md"
-        );
-    }
-
-    #[test]
-    fn test_section_iri() {
-        assert_eq!(
-            section_iri("quipu", "docs/architecture.md", "overview"),
-            "https://bobbin.dev/ontology#doc/quipu/docs/architecture.md#overview"
-        );
-    }
-
-    #[test]
-    fn test_bundle_iri() {
-        assert_eq!(
-            bundle_iri("my-bundle"),
-            "https://bobbin.dev/ontology#bundle/my-bundle"
-        );
-    }
-
-    #[test]
-    fn test_parse_code_module() {
-        let iri = code_module_iri("quipu", "src/lib.rs");
-        assert_eq!(
-            parse_bobbin_iri(&iri),
-            Some(BobbinIri::CodeModule {
-                repo: "quipu",
-                path: "src/lib.rs",
-            })
-        );
-    }
-
-    #[test]
-    fn test_parse_code_symbol() {
-        let iri = code_symbol_iri("quipu", "src/store.rs", "Store::insert");
-        assert_eq!(
-            parse_bobbin_iri(&iri),
-            Some(BobbinIri::CodeSymbol {
-                repo: "quipu",
-                path: "src/store.rs",
-                symbol: "Store::insert",
-            })
-        );
-    }
-
-    #[test]
-    fn test_parse_document() {
-        let iri = document_iri("quipu", "docs/arch.md");
-        assert_eq!(
-            parse_bobbin_iri(&iri),
-            Some(BobbinIri::Document {
-                repo: "quipu",
-                path: "docs/arch.md",
-            })
-        );
-    }
-
-    #[test]
-    fn test_parse_section() {
-        let iri = section_iri("quipu", "docs/arch.md", "overview");
-        assert_eq!(
-            parse_bobbin_iri(&iri),
-            Some(BobbinIri::Section {
-                repo: "quipu",
-                path: "docs/arch.md",
-                section: "overview",
-            })
-        );
-    }
-
-    #[test]
-    fn test_parse_bundle() {
-        let iri = bundle_iri("my-bundle");
-        assert_eq!(
-            parse_bobbin_iri(&iri),
-            Some(BobbinIri::Bundle { name: "my-bundle" })
-        );
-    }
-
-    #[test]
-    fn test_parse_non_bobbin_iri() {
-        assert_eq!(parse_bobbin_iri("http://example.com/foo"), None);
-    }
-
-    #[test]
-    fn test_parse_empty_segments() {
-        // Empty repo
-        assert_eq!(parse_bobbin_iri(&format!("{BOBBIN}code//src/lib.rs")), None);
-        // Empty path
-        assert_eq!(parse_bobbin_iri(&format!("{BOBBIN}code/quipu/")), None);
-        // Empty bundle name
-        assert_eq!(parse_bobbin_iri(&format!("{BOBBIN}bundle/")), None);
-    }
-
-    #[test]
-    fn test_roundtrip_all_variants() {
-        // Verify constructors and parser are consistent
-        let cases: Vec<(String, BobbinIri<'_>)> = vec![
-            (
-                code_module_iri("r", "a/b.rs"),
-                BobbinIri::CodeModule {
-                    repo: "r",
-                    path: "a/b.rs",
-                },
-            ),
-            (
-                code_symbol_iri("r", "a/b.rs", "Foo"),
-                BobbinIri::CodeSymbol {
-                    repo: "r",
-                    path: "a/b.rs",
-                    symbol: "Foo",
-                },
-            ),
-            (
-                document_iri("r", "d.md"),
-                BobbinIri::Document {
-                    repo: "r",
-                    path: "d.md",
-                },
-            ),
-            (
-                section_iri("r", "d.md", "s"),
-                BobbinIri::Section {
-                    repo: "r",
-                    path: "d.md",
-                    section: "s",
-                },
-            ),
-            (bundle_iri("b"), BobbinIri::Bundle { name: "b" }),
-        ];
-        for (iri, expected) in &cases {
-            assert_eq!(
-                parse_bobbin_iri(iri).as_ref(),
-                Some(expected),
-                "failed for {iri}"
-            );
-        }
+    fn bobbin_vocabulary_is_the_aegis_base() {
+        // Two spellings would intern as two different terms; the live lane's
+        // binding is the one true namespace.
+        assert_eq!(BOBBIN, DEFAULT_BASE_NS);
+        assert!(BOBBIN_IMPORTS.starts_with(DEFAULT_BASE_NS));
+        assert!(CODE_BASE.starts_with("http://aegis.gastown.local/"));
+        assert_ne!(CODE_BASE, DEFAULT_BASE_NS);
     }
 }

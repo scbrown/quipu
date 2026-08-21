@@ -370,8 +370,9 @@ fn build_name_index(
             && let Value::Str(ref name) = fact.value
         {
             let iri = store.resolve(fact.entity)?;
-            // Only index entities with Bobbin code IRIs.
-            if iri.starts_with(namespace::BOBBIN) {
+            // Only index entities with Bobbin code IRIs — the live lane mints
+            // them under the aegis code base, not the vocabulary namespace.
+            if iri.starts_with(namespace::CODE_BASE) {
                 entries
                     .entry(name.to_lowercase())
                     .or_default()
@@ -424,12 +425,15 @@ fn find_matches(
 
 /// Check whether an entity IRI contains the given path fragment.
 fn iri_contains_path(iri: &str, path_hint: &str) -> bool {
-    // Strip the Bobbin prefix and check if the remaining path contains the hint.
-    let Some(rest) = iri.strip_prefix(namespace::BOBBIN) else {
+    // Strip the entity base and check if the remaining path contains the
+    // hint. Live IRIs percent-encode path segments (`/` becomes `%2F`), so
+    // decode before comparing; `::` normalization covers module hints
+    // written as Rust paths.
+    let Some(rest) = iri.strip_prefix(namespace::CODE_BASE) else {
         return false;
     };
-    // Normalize separators for comparison.
-    let normalized = rest.replace("::", "/");
+    let decoded = rest.replace("%2F", "/").replace("%2f", "/");
+    let normalized = decoded.replace("::", "/");
     let hint_normalized = path_hint.replace("::", "/");
     normalized.contains(&hint_normalized)
 }
