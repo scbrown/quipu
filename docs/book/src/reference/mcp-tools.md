@@ -42,6 +42,9 @@ Assert facts from Turtle data, with optional SHACL validation.
 | `actor` | No | Who is asserting |
 | `source` | No | Where the facts came from |
 | `shapes` | No | SHACL Turtle for validation gate |
+| `graph` | No | Registered committed-graph IRI to write into; unknown IRIs error, overlays refused; omit for ROOT |
+| `replace_snapshot` | No | Replace this producer's prior facts (diffed), scoped to the target graph |
+| `snapshot` | No | Stable producer key required by `replace_snapshot` |
 
 Returns: transaction ID, fact count, and whether validation passed.
 

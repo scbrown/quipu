@@ -143,7 +143,11 @@ curl -s localhost:3030/knot -X POST \
   -d '{"turtle": "@prefix ex: <http://example.org/> . ex:alice a ex:Person ."}'
 ```
 
-Optional fields: `shapes` (SHACL Turtle), `timestamp`, `actor`, `source`.
+Optional fields: `shapes` (SHACL Turtle), `timestamp`, `actor`, `source`,
+`replace_snapshot` + `snapshot` (diffed replacement of a producer's prior
+facts under a stable key), and `graph` (a named-graph IRI that must already
+be registered committed-class via `POST /graph/create`; unknown IRIs error,
+overlay-class targets are refused, omitted means ROOT).
 
 Response: `{"tx_id": 1, "count": 2, "conforms": true}`
 

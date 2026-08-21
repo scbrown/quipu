@@ -10,9 +10,16 @@
 > Property paths follow a fixed named
 > graph or a `FROM` merge without crossing undeclared graph boundaries;
 > `GRAPH ?g` remains deliberately refused. Implicit RDFS widening was retired
-> in favour of explicit property paths. The write side deliberately stays on
-> the overlay path + `/episode` `graph` field; a raw `/knot graph` parameter
-> would bypass the committed/overlay invariant and is not part of the contract.
+> in favour of explicit property paths. The write side runs on the overlay
+> path, `/episode`'s `graph` field, and — since 2026-08-21 (bobbin×quipu
+> roadmap) — a strict `graph` parameter on `/knot`: the target must already be
+> a **registered committed-class** graph (`graph_create`); unknown IRIs error
+> without being interned, and overlay-class targets are refused. The
+> committed/overlay invariant the earlier refusal protected survives because
+> registration, where authority checks live, remains the only way to mint a
+> writable target. Known limitation: SHACL store-context repair reads
+> ROOT-only type facts, so chunked writes into a named graph may lack repair
+> context for nodes typed only in that graph.
 > §6 is built for fixed datasets. §7's committed-read defect is fixed, reasoner
 > evaluation reads and writes one selected graph, and ROOT-loaded SHACL shapes
 > remain enforcing for every destination graph.

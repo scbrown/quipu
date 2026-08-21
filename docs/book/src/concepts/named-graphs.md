@@ -3,9 +3,10 @@
 > **Implementation status:** ✅ **Built** on the sanctioned surfaces — the `g`
 > column and `graphs` registry, overlay create/write/compose, `GRAPH` /
 > `FROM` / `FROM NAMED` evaluation, the `graph` query param, and named
-> datasets. Deliberately **not** built: a `graph` param on `POST /knot`
-> (writes go through overlays or `/episode`'s `graph` field), and property
-> paths under `GRAPH ?g` (explicitly refused, never a silent ROOT read).
+> datasets, and (since 2026-08-21) a strict `graph` param on `POST /knot`
+> that accepts only already-registered committed-class graphs. Deliberately
+> **not** built: property paths under `GRAPH ?g` (explicitly refused, never
+> a silent ROOT read).
 > See `docs/design/named-graphs.md` for the full design.
 
 Every fact in quipu's EAVT store carries a graph coordinate on top of
@@ -91,12 +92,17 @@ one uniform read:
 
 Many tenants can extend the same base independently this way, and a
 committed read never sees any of them unless the query names the overlay.
-This is the sanctioned write path for named graphs: there is deliberately no
-`graph` param on `POST /knot`, because an arbitrary write to a named
-committed branch would bypass the committed/overlay class invariant.
-`POST /episode` does accept a `graph` field for ingestion into a named
-graph. The event log emits for ROOT-graph commits only; overlay writes are
-compose-only staging and do not emit.
+Overlays are one sanctioned write path for named graphs. `POST /episode`
+accepts a `graph` field for ingestion into a named graph, and `POST /knot`
+accepts a `graph` field under a strict contract: the target must already be
+a **registered committed-class** graph (created via `graph_create`, where
+authority checks live). An unknown IRI is an error and is never interned —
+a typo'd plane name must not become a writable target as a side effect of
+being rejected — and overlay-class graphs are refused (write through
+`overlay_write`). The class invariant the earlier "no `graph` on `/knot`"
+refusal protected survives because registration remains the only way to
+mint a target. The event log emits for ROOT-graph commits only; overlay
+writes are compose-only staging and do not emit.
 
 ## Datasets
 

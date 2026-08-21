@@ -104,6 +104,122 @@ fn knot_snapshot_replacement_requires_stable_identity() {
 }
 
 #[test]
+fn knot_writes_to_a_registered_committed_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let plane = "http://example.org/graph/records";
+    store.graph_create(plane).unwrap();
+
+    tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:a a ex:Module .",
+            "graph": plane,
+            "actor": "test",
+        }),
+    )
+    .unwrap();
+
+    let module_query = "PREFIX ex: <http://example.org/> SELECT ?s WHERE { ?s a ex:Module }";
+    // Visible when the query scopes to the plane…
+    let scoped = tool_query(
+        &store,
+        &serde_json::json!({"query": module_query, "graph": plane}),
+    )
+    .unwrap();
+    assert_eq!(scoped["count"], 1);
+    // …and absent from the ROOT default graph.
+    let root = tool_query(&store, &serde_json::json!({"query": module_query})).unwrap();
+    assert_eq!(root["count"], 0);
+}
+
+#[test]
+fn knot_refuses_an_unknown_graph_without_interning_it() {
+    let mut store = Store::open_in_memory().unwrap();
+    let iri = "http://example.org/graph/never-created";
+    let err = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:a a ex:Module .",
+            "graph": iri,
+        }),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("graph_create"), "{err}");
+    // The refusal must not have interned the IRI — a typo'd plane name must
+    // not become a term as a side effect of being rejected.
+    assert!(store.lookup(iri).unwrap().is_none());
+}
+
+#[test]
+fn knot_refuses_an_overlay_class_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let overlay = "http://example.org/graph/scratch";
+    store.overlay_create(overlay, 0).unwrap();
+    let err = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:a a ex:Module .",
+            "graph": overlay,
+        }),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("overlay_write"), "{err}");
+}
+
+#[test]
+fn knot_snapshot_replacement_is_scoped_to_the_target_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let plane = "http://example.org/graph/records";
+    store.graph_create(plane).unwrap();
+    let snapshot = |turtle: &str, graph: Option<&str>| {
+        let mut input = serde_json::json!({
+            "turtle": turtle,
+            "replace_snapshot": true,
+            "snapshot": "code:demo"
+        });
+        if let Some(g) = graph {
+            input["graph"] = serde_json::json!(g);
+        }
+        input
+    };
+    let module_query = "PREFIX ex: <http://example.org/> SELECT ?s WHERE { ?s a ex:Module }";
+
+    // Same producer key writes one fact into ROOT and one into the plane.
+    tool_knot(
+        &mut store,
+        &snapshot(
+            "@prefix ex: <http://example.org/> . ex:root a ex:Module .",
+            None,
+        ),
+    )
+    .unwrap();
+    tool_knot(
+        &mut store,
+        &snapshot(
+            "@prefix ex: <http://example.org/> . ex:planed a ex:Module .",
+            Some(plane),
+        ),
+    )
+    .unwrap();
+
+    // Replacing the plane's snapshot with an empty payload clears the plane…
+    tool_knot(
+        &mut store,
+        &snapshot("@prefix ex: <http://example.org/> .", Some(plane)),
+    )
+    .unwrap();
+    let scoped = tool_query(
+        &store,
+        &serde_json::json!({"query": module_query, "graph": plane}),
+    )
+    .unwrap();
+    assert_eq!(scoped["count"], 0);
+    // …and leaves ROOT's fact under the same key untouched.
+    let root = tool_query(&store, &serde_json::json!({"query": module_query})).unwrap();
+    assert_eq!(root["count"], 1);
+}
+
+#[test]
 fn omitted_timestamp_defaults_to_now_not_epoch() {
     // hq-tb4: a write with no explicit timestamp must be stamped with the real
     // clock, not 1970 — defaulting to epoch silently corrupts the bitemporal
