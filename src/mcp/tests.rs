@@ -132,6 +132,79 @@ fn knot_writes_to_a_registered_committed_graph() {
     assert_eq!(root["count"], 0);
 }
 
+/// quipu-080 end-to-end: a chunked `/knot` write into a named committed graph,
+/// where chunk 1 types a node in that graph and chunk 2 references it under an
+/// `sh:class` constraint. Before the graph-scoped type context, chunk 2 was
+/// refused — repair read ROOT, and ROOT never saw chunk 1.
+#[test]
+#[cfg(feature = "shacl")]
+fn knot_chunked_write_into_a_named_graph_gets_repair_context_from_that_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let plane = "http://example.org/graph/plane";
+    store.graph_create(plane).unwrap();
+
+    let shapes = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <http://example.org/> .
+ex:SymbolShape a sh:NodeShape ;
+    sh:targetClass ex:Symbol ;
+    sh:property [ sh:path ex:name ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+    sh:property [ sh:path ex:definedIn ; sh:class ex:Module ; sh:minCount 1 ] .
+"#;
+
+    // Chunk 1: the module, typed IN THE PLANE.
+    let chunk1 = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:m a ex:Module .",
+            "shapes": shapes,
+            "graph": plane,
+        }),
+    )
+    .unwrap();
+    assert_eq!(chunk1["conforms"], true, "chunk 1 refused: {chunk1}");
+
+    // Chunk 2: a symbol whose sh:class needs chunk 1's type. This is the
+    // previously-refused write.
+    let chunk2 = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . \
+                       ex:s a ex:Symbol ; ex:name \"s\" ; ex:definedIn ex:m .",
+            "shapes": shapes,
+            "graph": plane,
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        chunk2["conforms"], true,
+        "chunk 2 of a plane-routed write was refused although chunk 1 typed \
+         the module in that plane: {chunk2}"
+    );
+    assert!(chunk2["tx_id"].as_i64().is_some(), "chunk 2 did not commit");
+
+    // The boundary holds end-to-end too: the same chunk 2 aimed at a DIFFERENT
+    // committed graph must still be refused — plane A's types are not plane B's
+    // repair context.
+    let other = "http://example.org/graph/other";
+    store.graph_create(other).unwrap();
+    let cross = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . \
+                       ex:s2 a ex:Symbol ; ex:name \"s2\" ; ex:definedIn ex:m .",
+            "shapes": shapes,
+            "graph": other,
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        cross["conforms"], false,
+        "a type committed in one plane repaired a write into another: {cross}"
+    );
+}
+
 #[test]
 fn knot_refuses_an_unknown_graph_without_interning_it() {
     let mut store = Store::open_in_memory().unwrap();

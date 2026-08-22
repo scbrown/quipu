@@ -22,10 +22,13 @@
 //! - Absent or empty `graph` targets ROOT, byte-identical to the old
 //!   behavior.
 //!
-//! Known limitation (documented, not fixed here): SHACL store-context repair
-//! reads ROOT-only type facts, so a chunked write into a named graph whose
-//! earlier chunks typed nodes in that graph gets no repair context. See
-//! `docs/design/named-graphs.md`.
+//! SHACL store-context repair is graph-aware (quipu-080): validation runs
+//! against the resolved destination graph, so its repair context is the union
+//! of that graph's committed type facts and ROOT's. A chunked write into a
+//! named graph whose earlier chunks typed nodes in that graph sees those types
+//! (the aegis-fp17f/aegis-sd5fj defect class stays fixed on plane-routed
+//! writes), ROOT-held ontology types keep applying everywhere, and no third
+//! graph's types leak in. See `docs/design/named-graphs.md`.
 
 use serde_json::Value as JsonValue;
 
@@ -110,9 +113,14 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     // caller that splits one graph across several posts had every chunk judged
     // as if the others did not exist. See `shacl_context` for why the store
     // supplies only types, and only for nodes the payload already references.
+    // Context is scoped to the RESOLVED DESTINATION graph unioned with ROOT
+    // (quipu-080): earlier chunks of a plane-routed write typed their nodes in
+    // that plane, not in ROOT.
     #[cfg(feature = "shacl")]
     if let Some(shapes) = &combined_shapes {
-        let feedback = crate::shacl_context::validate_with_store_context(store, shapes, turtle)?;
+        let feedback = crate::shacl_context::validate_with_store_context_in_graph(
+            store, shapes, turtle, graph,
+        )?;
         if !feedback.conforms {
             let issues: Vec<JsonValue> = feedback
                 .results

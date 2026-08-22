@@ -427,6 +427,113 @@ fn partition_soak_no_payload_is_newly_refused() {
     );
 }
 
+/// THE quipu-080 REGRESSION: a chunked write into a named committed graph whose
+/// earlier chunk typed a node IN THAT GRAPH must get repair context from it.
+///
+/// This is aegis-fp17f re-run one graph over: the module landed in the plane
+/// (as chunk 1 of a plane-routed write does), the symbol chunk references it,
+/// and ROOT-scoped context finds nothing. The control arm pins that the
+/// ROOT-only form really does refuse this fixture — without it, "conforms"
+/// is also what a validator finding the module in the wrong graph would say.
+#[test]
+fn a_named_graph_write_is_repaired_by_types_committed_in_that_graph() {
+    let mut store = Store::open_in_memory().expect("store");
+    let g = store
+        .graph_create("http://x/graph/plane")
+        .expect("registered committed graph");
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        MODULE.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-05T00:00:00Z",
+        None,
+        Some("test"),
+        g,
+    )
+    .expect("chunk 1 ingested into the plane");
+
+    // CONTROL: ROOT-scoped repair must refuse, or the plane is not where the
+    // type lives and the graph-scoped assertion below proves nothing.
+    let root_v = validate_with_store_context(&store, SHAPES, SYMBOL).expect("validated");
+    assert!(
+        !root_v.conforms,
+        "CONTROL FAILED: ROOT-scoped context repaired a type that should exist \
+         only in the plane — the fixture does not reproduce quipu-080"
+    );
+
+    // THE FIX: the same write, validated against its destination graph.
+    let v = validate_with_store_context_in_graph(&store, SHAPES, SYMBOL, g).expect("validated");
+    assert!(
+        v.conforms,
+        "chunk 2 of a plane-routed write was refused despite chunk 1 typing \
+         the module in that plane: {:?}",
+        v.results
+    );
+}
+
+/// The union half of the quipu-080 semantics: ontology lives in ROOT and
+/// applies to every destination graph (`docs/design/named-graphs.md`), so a
+/// node ROOT types must repair a plane-routed write too — graph-scoped context
+/// is graph + ROOT, not graph-only.
+#[test]
+fn root_types_still_repair_a_named_graph_write() {
+    let store = store_with_module(); // module typed in ROOT
+    let g = store
+        .graph_create("http://x/graph/plane")
+        .expect("registered committed graph");
+    let v = validate_with_store_context_in_graph(&store, SHAPES, SYMBOL, g).expect("validated");
+    assert!(
+        v.conforms,
+        "a ROOT-typed node did not repair a write into a named graph — the \
+         union with ROOT is broken: {:?}",
+        v.results
+    );
+}
+
+/// The boundary half: a THIRD graph's types must not leak into another graph's
+/// repair context. Planes are trust boundaries — a low-trust plane's `rdf:type`
+/// claims repairing a write into a different plane is exactly the masquerade
+/// camayoc's ingress discipline quarantines against.
+#[test]
+fn an_unrelated_graphs_types_do_not_leak_into_another_graphs_repair() {
+    let mut store = Store::open_in_memory().expect("store");
+    let target = store
+        .graph_create("http://x/graph/target")
+        .expect("target graph");
+    let other = store
+        .graph_create("http://x/graph/quarantine")
+        .expect("other graph");
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        MODULE.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-05T00:00:00Z",
+        None,
+        Some("test"),
+        other,
+    )
+    .expect("module ingested into the OTHER graph");
+
+    // CONTROL: scoped to the graph that holds the type, the write conforms —
+    // so the refusal below is the scoping, not a broken fixture.
+    let held =
+        validate_with_store_context_in_graph(&store, SHAPES, SYMBOL, other).expect("validated");
+    assert!(
+        held.conforms,
+        "CONTROL FAILED: even the graph holding the type did not repair"
+    );
+
+    let v =
+        validate_with_store_context_in_graph(&store, SHAPES, SYMBOL, target).expect("validated");
+    assert!(
+        !v.conforms,
+        "a type committed in an unrelated graph leaked into another graph's \
+         repair context"
+    );
+}
+
 /// The subset property is an INVARIANT OF THE CODE, not an observation about
 /// one payload shape (sattler, aegis-fp17f condition 2).
 ///

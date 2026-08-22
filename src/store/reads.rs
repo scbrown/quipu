@@ -47,12 +47,22 @@ impl Store {
     /// — the exact "a retraction in graph A does not touch graph B" invariant
     /// #36 claims.
     pub fn entity_facts(&self, entity: i64) -> Result<Vec<Fact>> {
+        self.entity_facts_in_graph(entity, crate::schema::ROOT_GRAPH)
+    }
+
+    /// Current asserted facts for an entity in ONE graph (quipu-080). `g = 0`
+    /// is ROOT — [`Store::entity_facts`] is exactly that case. A named graph's
+    /// `g` is the term id of its graph IRI. Like
+    /// [`Store::current_facts_in_graph`] this is a graph's OWN facts, not a
+    /// composed view: callers that want "this graph plus ROOT" (the SHACL
+    /// type-context repair does) read both and union.
+    pub fn entity_facts_in_graph(&self, entity: i64, g: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
              WHERE e = ?1 AND op = 1 AND valid_to IS NULL AND g = ?2 \
              ORDER BY a",
         )?;
-        Self::collect_facts(&mut stmt, params![entity, crate::schema::ROOT_GRAPH])
+        Self::collect_facts(&mut stmt, params![entity, g])
     }
 
     /// Time-travel query: return ROOT's facts as they were at a given point.

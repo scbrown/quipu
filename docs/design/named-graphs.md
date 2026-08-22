@@ -17,9 +17,12 @@
 > without being interned, and overlay-class targets are refused. The
 > committed/overlay invariant the earlier refusal protected survives because
 > registration, where authority checks live, remains the only way to mint a
-> writable target. Known limitation: SHACL store-context repair reads
-> ROOT-only type facts, so chunked writes into a named graph may lack repair
-> context for nodes typed only in that graph.
+> writable target. SHACL store-context repair is graph-scoped (quipu-080):
+> a `/knot` write is repaired by the type facts of its resolved destination
+> graph **unioned with ROOT** — earlier chunks of a plane-routed write that
+> typed nodes in that plane supply repair context, ROOT-held ontology types
+> keep applying to every destination graph, and no third graph's types leak
+> across plane boundaries.
 > §6 is built for fixed datasets. §7's committed-read defect is fixed, reasoner
 > evaluation reads and writes one selected graph, and ROOT-loaded SHACL shapes
 > remain enforcing for every destination graph.

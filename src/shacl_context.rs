@@ -121,26 +121,57 @@ pub fn scope_of(payload_turtle: &str) -> Result<PayloadScope> {
 /// never seen is not an error here, it is simply a constraint that will fail on
 /// its own merits.
 pub fn store_type_context(store: &Store, iris: &BTreeSet<String>) -> Result<String> {
+    store_type_context_in_graph(store, iris, crate::schema::ROOT_GRAPH)
+}
+
+/// [`store_type_context`], scoped to the graph a write is landing in (quipu-080).
+///
+/// The context is the UNION of the target graph's types and ROOT's. That is the
+/// semantics `docs/design/named-graphs.md` already sanctions for the shapes
+/// half: ontology lives in ROOT and applies to every destination graph, so a
+/// node ROOT types (an `aegis:` class, a shared entity) repairs a plane-routed
+/// write exactly as it repairs a ROOT write. The graph's own half is the fix
+/// for the aegis-fp17f/aegis-sd5fj defect class re-surfacing on `/knot`'s
+/// `graph` param: a chunked write into a named committed graph whose earlier
+/// chunks typed nodes IN THAT GRAPH must see those types too.
+///
+/// What is deliberately NOT unioned: any third graph. Planes are trust
+/// boundaries — camayoc's ingress discipline quarantines model-inferred facts
+/// in low-trust planes precisely so they cannot masquerade — and a quarantined
+/// graph's `rdf:type` claims repairing a write into another plane would be
+/// exactly that masquerade. Deduplicated because ROOT and the target graph may
+/// both hold the same type triple, and `g = ROOT` reduces to the old behaviour.
+pub fn store_type_context_in_graph(
+    store: &Store,
+    iris: &BTreeSet<String>,
+    g: i64,
+) -> Result<String> {
     let Some(type_attr) = store.lookup(RDF_TYPE)? else {
         // No rdf:type interned at all — an empty store. No context to add.
         return Ok(String::new());
     };
-    let mut out = String::new();
+    let mut lines = BTreeSet::new();
+    let mut graphs = vec![crate::schema::ROOT_GRAPH];
+    if g != crate::schema::ROOT_GRAPH {
+        graphs.push(g);
+    }
     for iri in iris {
         let Some(entity) = store.lookup(iri)? else {
             continue;
         };
-        for fact in store.entity_facts(entity)? {
-            if fact.attribute != type_attr {
-                continue;
-            }
-            if let Value::Ref(type_id) = fact.value {
-                let type_iri = store.resolve(type_id)?;
-                out.push_str(&format!("<{iri}> <{RDF_TYPE}> <{type_iri}> .\n"));
+        for &scope in &graphs {
+            for fact in store.entity_facts_in_graph(entity, scope)? {
+                if fact.attribute != type_attr {
+                    continue;
+                }
+                if let Value::Ref(type_id) = fact.value {
+                    let type_iri = store.resolve(type_id)?;
+                    lines.insert(format!("<{iri}> <{RDF_TYPE}> <{type_iri}> .\n"));
+                }
             }
         }
     }
-    Ok(out)
+    Ok(lines.into_iter().collect())
 }
 
 /// Validate `turtle` against `shapes`, using the store to REPAIR violations
@@ -156,6 +187,26 @@ pub fn validate_with_store_context(
     shapes_turtle: &str,
     data_turtle: &str,
 ) -> Result<crate::shacl::ValidationFeedback> {
+    validate_with_store_context_in_graph(
+        store,
+        shapes_turtle,
+        data_turtle,
+        crate::schema::ROOT_GRAPH,
+    )
+}
+
+/// [`validate_with_store_context`] for a write landing in graph `g` (quipu-080):
+/// the repair context is the target graph's type triples unioned with ROOT's —
+/// see [`store_type_context_in_graph`] for why that union and no wider. `/knot`
+/// threads its resolved destination graph here; `g = ROOT` is byte-identical to
+/// the two-argument form.
+#[cfg(feature = "shacl")]
+pub fn validate_with_store_context_in_graph(
+    store: &Store,
+    shapes_turtle: &str,
+    data_turtle: &str,
+    g: i64,
+) -> Result<crate::shacl::ValidationFeedback> {
     // Pass 1: the payload alone. This is the OLD behaviour and the ceiling on
     // what may be reported.
     let baseline = crate::shacl::validate_shapes(shapes_turtle, data_turtle)?;
@@ -165,7 +216,7 @@ pub fn validate_with_store_context(
     }
 
     let scope = scope_of(data_turtle)?;
-    let context = store_type_context(store, &scope.untyped_references)?;
+    let context = store_type_context_in_graph(store, &scope.untyped_references, g)?;
     if context.is_empty() {
         return Ok(baseline);
     }
