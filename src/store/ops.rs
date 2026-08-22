@@ -155,8 +155,23 @@ impl Store {
         self.assert_graph_is_writable(graph)?;
         // Authority first, before anything is staged: a write the chain may not
         // make should not reach the policy gate, the placement check, or the
-        // fact table. SARC I5.
-        self.enforce_graph_authority(graph)?;
+        // fact table. SARC I5. This gate runs BEFORE the savepoint opens, so
+        // its refusal is recorded directly — there is no rollback to outlive.
+        if let Err(e) = self.enforce_graph_authority(graph) {
+            let refusal = super::events::PendingRefusal {
+                gate: "authority",
+                reason: e.to_string(),
+                refused_datums: datums.len(),
+            };
+            self.record_refusal(
+                &refusal,
+                &self.graph_iri_of(graph),
+                actor,
+                source,
+                timestamp,
+            );
+            return Err(e);
+        }
         // SUSPEND read-model consultation for the duration of this write rather
         // than dropping the model. The write-time policy guard runs INSIDE the
         // savepoint and queries the pending post-state, so it must see staged
@@ -202,10 +217,22 @@ impl Store {
                 // dropped the model here to undo poisoning that could no longer
                 // happen.
                 self.set_write_in_progress(false);
+                // Take the staged refusal BEFORE flushing verdicts: the flush
+                // runs a nested transact whose own error path would otherwise
+                // consume it under the verdict-writer's actor/source.
+                let refusal = self.pending_refusal.take();
                 // AFTER the rollback, deliberately. The verdict of a denial is
                 // the one worth keeping — an accepted write leaves its own
                 // evidence in the facts it wrote, a refused one leaves nothing.
                 self.flush_pending_verdicts(timestamp, actor);
+                // Same reason, same ordering, for the refusal event
+                // (camayoc-0d3): recorded only after the rollback succeeded,
+                // on the same connection, and never able to mask `e` —
+                // `record_refusal` swallows its own failures. Refusals under
+                // speculate() are skipped inside (actor/source "speculate").
+                if let Some(r) = refusal {
+                    self.record_refusal(&r, &self.graph_iri_of(graph), actor, source, timestamp);
+                }
                 Err(e)
             }
         }
@@ -342,12 +369,18 @@ impl Store {
         // writes that define or amend a policy: a malformed constraint must be
         // refused before it can be evaluated, or the very next write is judged
         // by a rule whose class and enforcement point disagree.
-        self.validate_policy_placement(&staged_datums, graph)?;
+        // Each gate's refusal is STASHED (not written) via `stash_refusal`:
+        // this all runs inside the open savepoint, so the durable
+        // `write.refused` event is recorded by the caller's error path after
+        // the rollback (camayoc-0d3).
+        self.validate_policy_placement(&staged_datums, graph)
+            .map_err(|e| self.stash_refusal("placement", e, staged_datums.len()))?;
 
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.
-        self.enforce_write_policies(&staged_datums, graph)?;
+        self.enforce_write_policies(&staged_datums, graph)
+            .map_err(|e| self.stash_refusal("policy", e, staged_datums.len()))?;
 
         // OWL write-time constraints (aegis-bmqup): disjointWith and
         // FunctionalProperty. Same contract as the policy guard above — an Err
@@ -355,7 +388,8 @@ impl Store {
         // Placed AFTER the policy gate so authority and governance still decide
         // first, and BEFORE emit_events so a rejected write emits nothing.
         #[cfg(feature = "owl")]
-        self.enforce_owl_constraints(&staged_datums)?;
+        self.enforce_owl_constraints(&staged_datums)
+            .map_err(|e| self.stash_refusal("owl", e, staged_datums.len()))?;
 
         // Event log (event-log P1): append this tx's semantic events INSIDE the
         // savepoint, AFTER the policy guard — a denied write emits nothing, a

@@ -324,6 +324,7 @@ impl Store {
             policy_registry: None,
             pending_verdicts: Vec::new(),
             pending_requests: Vec::new(),
+            pending_refusal: None,
             principal_chain: Vec::new(),
             recording_verdicts: false,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),

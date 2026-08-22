@@ -458,10 +458,17 @@ sh:property [ sh:path aegis:size ; sh:minCount 1 ] .
             DEFAULT_BASE_NS,
         );
         assert!(result.is_err(), "reject shape must gate the write");
+        // The write's own events (semantic + shacl.violation) died with the
+        // rollback; the ONE event a rejected write leaves is the durable
+        // `write.refused` refusal record (camayoc-0d3).
+        let after: Vec<_> = store.events_after(before, 100, None, None).unwrap();
         assert_eq!(
-            store.latest_event_offset().unwrap(),
-            before,
-            "no events of any kind from a rejected write"
+            after
+                .iter()
+                .map(|e| e.event_type.as_str())
+                .collect::<Vec<_>>(),
+            vec!["write.refused"],
+            "a rejected write leaves exactly its refusal record, nothing else"
         );
         assert!(shacl_events(&store).is_empty());
     }
@@ -620,5 +627,239 @@ fn retention_is_opt_in() {
             .retention_days
             .is_none(),
         "default must be keep-forever"
+    );
+}
+
+// -- Refusal events (camayoc-0d3) -----------------------------------------
+
+use crate::types::{Op, Value};
+
+const RTS: &str = "2026-08-22T00:00:00Z";
+const RDF_TYPE_IRI: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const DOC_TYPE: &str = "http://ex/Doc";
+
+fn assert_datum(store: &Store, s: &str, p: &str, v: Value) -> Datum {
+    Datum {
+        entity: store.intern(s).unwrap(),
+        attribute: store.intern(p).unwrap(),
+        value: v,
+        valid_from: RTS.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    }
+}
+
+/// Define an action-boundary `deny` policy: entities of `DOC_TYPE` must carry
+/// an `rdfs:label` (the `guard_tests` fixture, minimally).
+fn define_require_label_policy(store: &mut Store) {
+    store.governance_config_mut().enforce_on_write = true;
+    let ns = DEFAULT_BASE_NS;
+    let claim = "ASK { $target <http://www.w3.org/2000/01/rdf-schema#label> ?l }";
+    let policy_class = Value::Ref(store.intern(&format!("{ns}Policy")).unwrap());
+    let datums = vec![
+        assert_datum(store, "http://ex/P1", RDF_TYPE_IRI, policy_class),
+        assert_datum(
+            store,
+            "http://ex/P1",
+            &format!("{ns}targets"),
+            Value::Str(DOC_TYPE.into()),
+        ),
+        assert_datum(
+            store,
+            "http://ex/P1",
+            &format!("{ns}claim"),
+            Value::Str(claim.into()),
+        ),
+        assert_datum(
+            store,
+            "http://ex/P1",
+            &format!("{ns}boundary"),
+            Value::Str("action".into()),
+        ),
+        assert_datum(
+            store,
+            "http://ex/P1",
+            &format!("{ns}effect"),
+            Value::Str("deny".into()),
+        ),
+    ];
+    store.transact(&datums, RTS, None, None).unwrap();
+}
+
+/// A Doc with no label — refused by the require-label deny policy.
+fn unlabelled_doc(store: &Store) -> Vec<Datum> {
+    let ty = Value::Ref(store.intern(DOC_TYPE).unwrap());
+    vec![assert_datum(store, "http://ex/d1", RDF_TYPE_IRI, ty)]
+}
+
+fn refusal_events(store: &Store) -> Vec<EventRow> {
+    store
+        .events_after(0, 10_000, Some(&["write.refused".to_string()]), None)
+        .unwrap()
+}
+
+/// ACCEPTANCE: a policy-refused transact leaves the graph unchanged but a
+/// `write.refused` event with gate=policy exists, flows through the existing
+/// `events_after` consumer surface, and is countable by gate.
+#[test]
+fn policy_refusal_records_refusal_event() {
+    let mut store = Store::open_in_memory().unwrap();
+    define_require_label_policy(&mut store);
+
+    let bad = unlabelled_doc(&store);
+    let err = store.transact(&bad, RTS, Some("tester"), Some("unit-test"));
+    assert!(matches!(err, Err(crate::error::Error::PolicyDenied(_))));
+
+    // The write itself left nothing behind...
+    assert!(
+        !store
+            .current_facts()
+            .unwrap()
+            .iter()
+            .any(|f| store.resolve(f.entity).unwrap() == "http://ex/d1"),
+        "a refused write must leave no facts"
+    );
+
+    // ...but the refusal survives the rollback, on the events spine.
+    let evs = refusal_events(&store);
+    assert_eq!(evs.len(), 1, "exactly one refusal event");
+    let payload: serde_json::Value = serde_json::from_str(&evs[0].payload).unwrap();
+    assert_eq!(payload["gate"], "policy");
+    assert_eq!(payload["graph"], crate::schema::ROOT_GRAPH_IRI);
+    assert_eq!(payload["actor"], "tester");
+    assert_eq!(payload["source"], "unit-test");
+    assert_eq!(payload["refused_datums"], 1);
+    assert!(
+        payload["reason"].as_str().unwrap().contains("policy"),
+        "reason must carry the gate's own terse text: {}",
+        payload["reason"]
+    );
+    // Metadata, not bodies: the gate's reason may NAME the target, but the
+    // refused datums themselves (op/valid_from/value tuples) are not stored.
+    assert!(!evs[0].payload.contains("valid_from"));
+
+    assert_eq!(
+        store.refusals_by_gate().unwrap(),
+        vec![("policy".to_string(), 1)]
+    );
+}
+
+/// ACCEPTANCE: an authority refusal (pre-savepoint gate) records too, and the
+/// count-by-gate helper aggregates across gates.
+#[test]
+fn authority_refusal_records_and_counts_by_gate() {
+    let mut store = Store::open_in_memory().unwrap();
+    define_require_label_policy(&mut store);
+    // Two policy refusals...
+    for _ in 0..2 {
+        let bad = unlabelled_doc(&store);
+        assert!(store.transact(&bad, RTS, None, None).is_err());
+    }
+    // ...then one authority refusal: a bound chain with no declared authority
+    // intersects to nothing (fail-safe), so the write is refused.
+    store.governance_config_mut().enforce_authority = true;
+    store.set_principal_chain(vec!["nobody".to_string()]);
+    let labelled = vec![assert_datum(
+        &store,
+        "http://ex/d2",
+        "http://www.w3.org/2000/01/rdf-schema#label",
+        Value::Str("fine".into()),
+    )];
+    let err = store.transact(&labelled, RTS, Some("nobody"), None);
+    assert!(matches!(err, Err(crate::error::Error::PolicyDenied(_))));
+
+    let evs = refusal_events(&store);
+    assert_eq!(evs.len(), 3);
+    let last: serde_json::Value = serde_json::from_str(&evs[2].payload).unwrap();
+    assert_eq!(last["gate"], "authority");
+
+    assert_eq!(
+        store.refusals_by_gate().unwrap(),
+        vec![("authority".to_string(), 1), ("policy".to_string(), 2)]
+    );
+}
+
+/// ACCEPTANCE: a refusal inside `speculate` is NOT a real refusal — the whole
+/// speculation rolls back by design — so it leaves NO refusal event.
+#[test]
+fn speculate_refusal_leaves_no_refusal_event() {
+    let mut store = Store::open_in_memory().unwrap();
+    define_require_label_policy(&mut store);
+
+    let bad = unlabelled_doc(&store);
+    let result = store.speculate(&bad, RTS, |_s| Ok(()));
+    assert!(
+        result.is_err(),
+        "the hypothetical write is still refused to the caller"
+    );
+
+    assert!(
+        refusal_events(&store).is_empty(),
+        "a speculative refusal must not be recorded as a real one"
+    );
+}
+
+/// ACCEPTANCE: a failure to record the refusal must not mask the original
+/// refusal error. Simulated by dropping the events table out from under the
+/// recording path.
+#[test]
+fn recording_failure_does_not_mask_the_refusal() {
+    let mut store = Store::open_in_memory().unwrap();
+    define_require_label_policy(&mut store);
+    store.conn.execute_batch("DROP TABLE events").unwrap();
+
+    let bad = unlabelled_doc(&store);
+    let err = store.transact(&bad, RTS, None, None);
+    assert!(
+        matches!(err, Err(crate::error::Error::PolicyDenied(_))),
+        "the caller must still see the gate's own refusal, got {err:?}"
+    );
+}
+
+/// ACCEPTANCE: a SHACL-refused episode write leaves the graph unchanged but a
+/// countable `write.refused` event with gate=shacl exists.
+#[test]
+#[cfg(feature = "shacl")]
+fn shacl_refused_episode_records_refusal_event() {
+    let mut store = Store::open_in_memory().unwrap();
+
+    let shapes = concat!(
+        "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
+        "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n",
+        "aegis:WebServiceShape a sh:NodeShape ;\n",
+        "    sh:targetClass aegis:WebService ;\n",
+        "    sh:property [ sh:path aegis:port ; sh:minCount 1 ] .\n"
+    );
+    let mut episode = ep("bad-svc", vec![node("broken", "WebService")], vec![]);
+    episode.shapes = Some(shapes.into());
+
+    let err = ingest_episode(&mut store, &episode, RTS, DEFAULT_BASE_NS);
+    assert!(matches!(
+        err,
+        Err(crate::error::Error::ValidationFailed { .. })
+    ));
+    assert!(
+        store.current_facts().unwrap().is_empty(),
+        "a refused episode leaves the graph unchanged"
+    );
+
+    let evs = refusal_events(&store);
+    assert_eq!(evs.len(), 1);
+    let payload: serde_json::Value = serde_json::from_str(&evs[0].payload).unwrap();
+    assert_eq!(payload["gate"], "shacl");
+    assert_eq!(payload["graph"], crate::schema::ROOT_GRAPH_IRI);
+    assert_eq!(payload["source"], "episode:bad-svc");
+    assert_eq!(payload["refused_datums"], 1);
+    let reason = payload["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("SHACL"),
+        "terse reason names the gate: {reason}"
+    );
+    // The refused node's description/body is not stored — metadata only.
+    assert!(!evs[0].payload.contains("broken description"));
+
+    assert_eq!(
+        store.refusals_by_gate().unwrap(),
+        vec![("shacl".to_string(), 1)]
     );
 }

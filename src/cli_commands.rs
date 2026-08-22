@@ -735,6 +735,50 @@ pub fn cmd_db(args: &[String], db_path: &str) {
     }
 }
 
+/// `quipu events refusals` — count refused writes by gate (camayoc-0d3).
+///
+/// The incident-rate denominator: how many writes were attempted and refused,
+/// and by which gate. Reads the `write.refused` events the write path records
+/// after each gate refusal; the raw events (with graph/actor/source/reason)
+/// are served by `GET /events?types=write.refused`.
+pub fn cmd_events(args: &[String], db_path: &str) {
+    let sub = args.get(2).map_or("", String::as_str);
+    if sub != "refusals" {
+        eprintln!("usage: quipu events refusals [--db <path>]");
+        std::process::exit(1);
+    }
+
+    let store = match quipu::Store::open(db_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    match store.refusals_by_gate() {
+        Ok(counts) => {
+            if counts.is_empty() {
+                println!("no refused writes recorded");
+                return;
+            }
+            let mut total = 0i64;
+            println!("gate        refused");
+            println!("{}", "-".repeat(20));
+            for (gate, n) in &counts {
+                println!("{gate:<11} {n}");
+                total += n;
+            }
+            println!("{}", "-".repeat(20));
+            println!("total       {total}");
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 /// `quipu graph import <db> --as <iri>` (quipu #85).
 pub fn cmd_graph(args: &[String], db_path: &str) {
     if args.get(2).map(String::as_str) != Some("import") {

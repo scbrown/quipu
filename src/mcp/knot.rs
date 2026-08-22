@@ -122,6 +122,43 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             store, shapes, turtle, graph,
         )?;
         if !feedback.conforms {
+            // A gate refusal, even though this surface reports it as
+            // `conforms: false` rather than an Err: record it on the audit
+            // spine (camayoc-0d3). Metadata only — gate, destination graph,
+            // actor/source, shape ids — never the refused Turtle body. The
+            // datum count is unknowable without parsing (which would intern
+            // terms for a write that is being refused), so it is 0 here.
+            let reason = format!(
+                "SHACL validation failed: {} violation(s): {}",
+                feedback.violations,
+                feedback
+                    .results
+                    .iter()
+                    .take(3)
+                    .map(|r| {
+                        format!(
+                            "{}: {} [{}] ({})",
+                            r.severity,
+                            r.message.as_deref().unwrap_or("no message"),
+                            r.source_shape.as_deref().unwrap_or("?"),
+                            r.focus_node
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+            let refusal = crate::store::events::PendingRefusal {
+                gate: "shacl",
+                reason,
+                refused_datums: 0,
+            };
+            store.record_refusal(
+                &refusal,
+                &store.graph_iri_of(graph),
+                actor,
+                source,
+                timestamp,
+            );
             let issues: Vec<JsonValue> = feedback
                 .results
                 .iter()

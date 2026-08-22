@@ -23,6 +23,12 @@
 //! fire exactly once per term for the store's lifetime (first sight), per the P1 spec. `rdf:type` itself never emits predicate.new — the type
 //! system's own plumbing is covered by type.new, not reported as a predicate.
 //!
+//! Beyond the P1 taxonomy, the spine also carries registry-change events
+//! (`shapes.loaded`, `ontology.loaded`, `fork.*` — see `registry.rs`) and,
+//! since camayoc-0d3, `write.refused` — the durable record of a write a gate
+//! REFUSED, written AFTER the refused write's savepoint rolled back (see the
+//! refusals section below).
+//!
 //! OVERLAY writes (g != 0) do NOT emit events in P1: overlays are transient,
 //! compose-only staging (#36); announcing their writes as graph-change events
 //! would double-fire when the content is promoted to ROOT. Recorded here so
@@ -39,6 +45,36 @@ use super::{Datum, Store};
 
 /// Versioned event schema tag carried on every event served by the API.
 pub const EVENT_SCHEMA: &str = "quipu.event/v1";
+
+/// Event type recorded when a write gate REFUSES a write (camayoc-0d3).
+///
+/// A refused write never enters the graph, so nothing durable used to record
+/// that it was attempted — the incident-rate denominator ("how many writes
+/// were attempted and refused, by which gate") had to live with the refusal
+/// path or nowhere. Payload: `{gate, graph, actor, source, reason,
+/// refused_datums}` — identifying METADATA only, never the refused datum
+/// bodies (refused payloads can be junk or sensitive).
+pub const REFUSAL_EVENT: &str = "write.refused";
+
+/// The gates that can stamp a `write.refused` event.
+pub const REFUSAL_GATES: [&str; 5] = ["shacl", "policy", "authority", "owl", "placement"];
+
+/// Refusal reasons are terse machine-usable identifiers (shape/policy id,
+/// constraint name), not documents; anything longer is truncated.
+const REFUSAL_REASON_MAX: usize = 500;
+
+/// One gate refusal, staged by the failing gate inside the write's savepoint
+/// and recorded by `transact_to_graph`'s error path AFTER the rollback.
+#[derive(Debug, Clone)]
+pub(crate) struct PendingRefusal {
+    /// Which gate refused (one of [`REFUSAL_GATES`]).
+    pub gate: &'static str,
+    /// Terse machine-usable reason (policy id / constraint name in the gate's
+    /// own error text).
+    pub reason: String,
+    /// How many datums the refused write carried (metadata, not bodies).
+    pub refused_datums: usize,
+}
 
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
@@ -286,6 +322,100 @@ impl Store {
         }
 
         Ok(())
+    }
+
+    // -- Refusals (camayoc-0d3) -------------------------------------------
+
+    /// Stash the refusal a gate just decided, so the write's error path can
+    /// record it AFTER the `quipu_transact` savepoint has rolled back — an
+    /// event inserted inside the savepoint would be rolled back with it.
+    /// Returns `err` unchanged so gate call sites can use it in `map_err`.
+    pub(crate) fn stash_refusal(
+        &mut self,
+        gate: &'static str,
+        err: crate::error::Error,
+        refused_datums: usize,
+    ) -> crate::error::Error {
+        self.pending_refusal = Some(PendingRefusal {
+            gate,
+            reason: err.to_string(),
+            refused_datums,
+        });
+        err
+    }
+
+    /// Durably record that a write was REFUSED, as a [`REFUSAL_EVENT`] on the
+    /// audit spine (camayoc-0d3).
+    ///
+    /// Contract:
+    /// - MUST be called with no open savepoint that is about to roll back
+    ///   (i.e. after `transact_to_graph`'s rollback, or on pre-write gates
+    ///   that run before any savepoint opens).
+    /// - NEVER fails: a refusal that cannot be recorded must not mask the
+    ///   original refusal error, so insert failures are swallowed.
+    /// - Refusals under [`Store::speculate`] are SKIPPED: the whole
+    ///   speculation rolls back by design, so a hypothetical write's refusal
+    ///   is not a real refusal. Speculation is detected by the
+    ///   actor/source `"speculate"` that `speculate()` threads into its inner
+    ///   transact. (Nested writes inside a speculation are additionally
+    ///   contained by the outer `speculate` savepoint, which discards any
+    ///   event they insert.)
+    /// - Stores identifying METADATA only — gate, destination graph, actor,
+    ///   source, terse reason, datum count — never the refused datum bodies.
+    pub(crate) fn record_refusal(
+        &self,
+        refusal: &PendingRefusal,
+        graph_iri: &str,
+        actor: Option<&str>,
+        source: Option<&str>,
+        timestamp: &str,
+    ) {
+        if actor == Some("speculate") || source == Some("speculate") {
+            return;
+        }
+        let reason: String = refusal.reason.chars().take(REFUSAL_REASON_MAX).collect();
+        // Watermark, like `emit_registry_event`: the refused write's own tx
+        // row was rolled back, so the event carries the last COMMITTED tx.
+        let tx = self.latest_tx_id().unwrap_or(0);
+        let payload = json!({
+            "gate": refusal.gate,
+            "graph": graph_iri,
+            "actor": actor,
+            "source": source,
+            "reason": reason,
+            "refused_datums": refusal.refused_datums,
+        });
+        let _ = self.conn.execute(
+            "INSERT INTO events (type, ts, subject, group_id, tx_id, payload) \
+             VALUES (?1, ?2, ?3, NULL, ?4, ?5)",
+            params![REFUSAL_EVENT, timestamp, graph_iri, tx, payload.to_string()],
+        );
+    }
+
+    /// The IRI of graph `g`, for refusal payloads. ROOT gets its stable IRI;
+    /// an unresolvable id degrades to `g:<id>` rather than failing the
+    /// (must-not-fail) recording path.
+    pub(crate) fn graph_iri_of(&self, graph: i64) -> String {
+        if graph == crate::schema::ROOT_GRAPH {
+            crate::schema::ROOT_GRAPH_IRI.to_string()
+        } else {
+            self.resolve(graph).unwrap_or_else(|_| format!("g:{graph}"))
+        }
+    }
+
+    /// Count [`REFUSAL_EVENT`]s by gate — the incident-rate denominator
+    /// (camayoc-0d3). Returns `(gate, count)` pairs, sorted by gate.
+    pub fn refusals_by_gate(&self) -> Result<Vec<(String, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COALESCE(json_extract(payload, '$.gate'), '?') AS gate, COUNT(*) \
+             FROM events WHERE type = ?1 GROUP BY gate ORDER BY gate",
+        )?;
+        let rows = stmt.query_map(params![REFUSAL_EVENT], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
 
     // -- Retention --------------------------------------------------------

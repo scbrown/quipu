@@ -898,6 +898,31 @@ rewind.
 `{"consumer_id", "offset"}` — durably record a consumer's cursor. Any offset
 ≥ 0 is accepted, including a **lower** one: that is the explicit replay knob.
 
+### Refusal events (`write.refused`)
+
+A refused write never enters the graph, so the event log is where the attempt
+is recorded (camayoc-0d3 — the incident-rate denominator: how many writes were
+attempted and refused, by which gate). Every write-gate refusal — SHACL on the
+episode and `/knot` paths, and the policy, authority, OWL and placement gates
+in `transact` — appends a `write.refused` event *after* the refused write's
+savepoint has rolled back, so the event survives the rollback that the refusal
+caused. A failure to record never masks the refusal error itself.
+
+Payload: `{gate, graph, actor, source, reason, refused_datums}` where `gate`
+is one of `shacl | policy | authority | owl | placement`, `graph` is the
+destination graph IRI, `reason` is the gate's own terse text (shape/policy id,
+constraint name; truncated), and `refused_datums` counts what was refused.
+
+Deliberately **not** recorded: the refused datum bodies. Refused payloads can
+be junk or sensitive — the event stores identifying metadata only.
+
+Refusals inside `speculate` (counterfactual writes) are **not** recorded: the
+whole speculation rolls back by design, so a hypothetical write's refusal is
+not a real one.
+
+Query via `GET /events?types=write.refused`, or count by gate with the CLI:
+`quipu events refusals`.
+
 ## Linked-Data Surface
 
 Standards-flavoured read endpoints for semantic-web tooling.

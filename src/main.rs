@@ -83,6 +83,7 @@ fn main() {
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_commands::cmd_pack(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
+        "events" => cli_commands::cmd_events(&args, db_path),
         "graph" => cli_commands::cmd_graph(&args, db_path),
         "fork" => cli_fork::cmd_fork(&args, db_path),
         "unpack" => cli_commands::cmd_unpack(&args, db_path),
@@ -239,6 +240,7 @@ COMMANDS:
     quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     quipu pack --verify <file.qpack.db>
     quipu db respace --into <space> --out <file> [--db <path>]
+    quipu events refusals [--db <path>]
     quipu graph import <db> --as <iri> [--db <path>]
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]

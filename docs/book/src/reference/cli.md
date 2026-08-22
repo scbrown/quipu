@@ -506,6 +506,19 @@ without id collisions. Reads the source read-only; writes a new file.
 quipu db respace --into 7 --out respace.db --db my.db
 ```
 
+### `quipu events refusals`
+
+Count refused writes by gate (`shacl | policy | authority | owl |
+placement`) — the incident-rate denominator. Reads the `write.refused` events
+the write gates record; the raw events are served by
+`GET /events?types=write.refused`. See the REST API reference for what a
+refusal event records (metadata only, never the refused bodies) and the
+speculate exclusion.
+
+```bash
+quipu events refusals --db my.db
+```
+
 ### `quipu graph import <db>`
 
 Import another quipu database's ROOT graph as a named graph in this store.

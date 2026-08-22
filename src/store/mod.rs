@@ -92,6 +92,12 @@ pub struct Store {
     /// savepoint back, and a request written in place would vanish with it —
     /// leaving a refusal with nothing for an operator to act on.
     pub(crate) pending_requests: Vec<crate::governance::router::PendingRequest>,
+    /// The gate refusal of the CURRENT write, staged by the gate that refused
+    /// inside the `quipu_transact` savepoint and recorded as a `write.refused`
+    /// event AFTER that savepoint has rolled back (camayoc-0d3) — an event
+    /// inserted before the rollback would die with it, same reason as
+    /// `pending_verdicts`. Taken (and thus cleared) on the write's error path.
+    pub(crate) pending_refusal: Option<events::PendingRefusal>,
     /// The principal-and-agent chain the current caller is acting under (SARC
     /// §9.6's `P`). Empty means unattributed, which is NOT the same as
     /// unconstrained — see `enforce_graph_authority`.
