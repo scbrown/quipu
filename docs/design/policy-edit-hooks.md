@@ -222,7 +222,13 @@ Status: ☐ open · ☑ done (this change).
   **The ordering is the whole design.** A denied write is ROLLED BACK, so a
   verdict written inside the same savepoint goes with it — and the denial's
   verdict is exactly the one worth keeping, because an accepted write leaves its
-  own evidence in the facts it wrote while a refused one leaves nothing at all.
+  own evidence in the facts it wrote while a refused one used to leave nothing
+  at all. (Since 2026-08-22 / camayoc-0d3 that is no longer literally true:
+  every gate refusal is additionally recorded as a `write.refused` event —
+  gate, destination graph, actor, terse reason, datum count; never the refused
+  bodies — using this same stash-then-record-after-rollback pattern. See
+  `src/store/events.rs`. The verdict remains the *judgment* record; the event
+  is the *incident-rate* record.)
   Verdicts are therefore STAGED on the `Store` during evaluation and flushed
   afterwards, in their own transaction, once the savepoint has resolved either
   way. `a_denied_write_still_records_its_verdict` is the case.
@@ -265,7 +271,9 @@ Status: ☐ open · ☑ done (this change).
   independent of `enforce_on_write`, which governs *evaluation* of policies
   where this governs *definition* of them. It runs inside the same savepoint as
   the write gate and returns `PolicyDenied`, so a refused definition leaves the
-  store byte-identical.
+  graph byte-identical. (Since 2026-08-22 the event log does gain one
+  `write.refused` row recording the refusal — metadata only, never the refused
+  definition itself.)
 
   Three things surfaced while building it, all worth carrying forward:
 
