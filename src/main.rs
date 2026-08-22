@@ -15,12 +15,14 @@
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
+//!   quipu fork <tx>|list|diff|drop|promote  Persistent named forks of ROOT
 //!
 //! Aliases: load=knot, query=read
 
 mod cli;
 mod cli_audit;
 mod cli_commands;
+mod cli_fork;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
@@ -82,6 +84,7 @@ fn main() {
         "pack" => cli_commands::cmd_pack(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "graph" => cli_commands::cmd_graph(&args, db_path),
+        "fork" => cli_fork::cmd_fork(&args, db_path),
         "unpack" => cli_commands::cmd_unpack(&args, db_path),
         "migrate-vectors" => cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
@@ -213,7 +216,7 @@ fn print_usage() {
 
 COMMANDS:
     quipu knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
-    quipu read \"<sparql>\" [--db <path>]
+    quipu read \"<sparql>\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]
     quipu cord [--type <IRI>] [--limit N] [--db <path>]
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
     quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]
@@ -237,6 +240,7 @@ COMMANDS:
     quipu pack --verify <file.qpack.db>
     quipu db respace --into <space> --out <file> [--db <path>]
     quipu graph import <db> --as <iri> [--db <path>]
+    quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]

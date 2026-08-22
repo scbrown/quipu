@@ -127,9 +127,10 @@ pub use resolution::{EntityCandidate, ResolutionResult, resolve_entity};
 #[cfg(feature = "shacl")]
 pub use shacl::{ValidationFeedback, Validator, validate_shapes};
 pub use sparql::{
-    QueryResult, TemporalContext, Triple, query as sparql_query,
+    GraphScope, QueryResult, TemporalContext, Triple, query as sparql_query,
     query_temporal as sparql_query_temporal,
 };
+pub use store::forks::{ForkDiff, ForkInfo, ForkPromotion};
 pub use store::{Datum, Store};
 #[cfg(feature = "reactive-reasoner")]
 pub use store::{Delta, TransactObserver};

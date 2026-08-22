@@ -190,7 +190,14 @@ impl Store {
     /// Append a registry-change event so the audit spine records that the rules
     /// moved. Carries the tx watermark, which is what makes an `as_of_tx`
     /// replay able to ask "which shapes were in force then".
-    fn emit_registry_event(&self, event_type: &str, name: &str, timestamp: &str) -> Result<()> {
+    /// `pub(crate)` since quipu-gp5: the fork registry (`store::forks`) records
+    /// `fork.created`/`fork.promoted`/`fork.dropped` through the same spine.
+    pub(crate) fn emit_registry_event(
+        &self,
+        event_type: &str,
+        name: &str,
+        timestamp: &str,
+    ) -> Result<()> {
         let tx = self.latest_tx_id()?;
         self.conn.execute(
             "INSERT INTO events (type, ts, subject, group_id, tx_id, payload) \

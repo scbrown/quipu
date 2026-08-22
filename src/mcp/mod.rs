@@ -146,12 +146,22 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
     // quipu #69: the `graph` param resolves a dataset name too, so `FROM
     // <dataset>` and `graph: "<dataset>"` mean the same thing rather than one
     // of them silently scoping to an empty graph.
-    let graph = match input.get("graph").and_then(|v| v.as_str()) {
-        None => sparql::GraphScope::default(),
-        Some(iri) if store.is_dataset(iri)? => {
+    // quipu-gp5: `fork` resolves a fork NAME through the registry — unknown or
+    // dropped forks are refused loudly, never a silent fall-through to ROOT.
+    // Mutually exclusive with `graph`: one request, one scope authority.
+    let fork = input.get("fork").and_then(|v| v.as_str());
+    let graph = match (fork, input.get("graph").and_then(|v| v.as_str())) {
+        (Some(_), Some(_)) => {
+            return Err(Error::InvalidValue(
+                "pass either 'fork' or 'graph', not both".into(),
+            ));
+        }
+        (Some(name), None) => sparql::GraphScope::Default(vec![store.fork_graph_for_read(name)?]),
+        (None, None) => sparql::GraphScope::default(),
+        (None, Some(iri)) if store.is_dataset(iri)? => {
             sparql::GraphScope::Default(store.dataset_member_ids(iri)?)
         }
-        Some(iri) => sparql::GraphScope::Default(vec![store.lookup(iri)?.unwrap_or(-1)]),
+        (None, Some(iri)) => sparql::GraphScope::Default(vec![store.lookup(iri)?.unwrap_or(-1)]),
     };
     Ok((
         query_str,

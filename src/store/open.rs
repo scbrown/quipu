@@ -158,6 +158,8 @@ impl Store {
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
         Self::migrate_retraction_tx(&conn)?;
+        // AFTER migrate_named_graphs: the fork registry references graphs(g).
+        Self::migrate_forks(&conn)?;
         attach::migrate_graph_source(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because

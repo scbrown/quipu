@@ -146,21 +146,14 @@ pub fn cmd_query(args: &[String], db_path: &str) {
         Some(q) if !q.starts_with("--") => q,
         _ => {
             eprintln!(
-                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--db <path>]"
+                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]"
             );
             std::process::exit(1);
         }
     };
 
-    let valid_at = args
-        .windows(2)
-        .find(|w| w[0] == "--valid-at")
-        .map(|w| w[1].clone());
-
-    let as_of_tx: Option<i64> = args
-        .windows(2)
-        .find(|w| w[0] == "--tx")
-        .and_then(|w| w[1].parse().ok());
+    let valid_at = flag_value(args, "--valid-at").map(String::from);
+    let as_of_tx: Option<i64> = flag_value(args, "--tx").and_then(|v| v.parse().ok());
 
     let store = match quipu::Store::open(db_path) {
         Ok(s) => s,
@@ -170,9 +163,12 @@ pub fn cmd_query(args: &[String], db_path: &str) {
         }
     };
 
+    // `--fork <name>` scopes the default graph to a named fork (quipu-gp5).
+    let graph = crate::cli_fork::fork_scope(&store, args);
     let ctx = quipu::TemporalContext {
         valid_at,
         as_of_tx,
+        graph,
         ..Default::default()
     };
 

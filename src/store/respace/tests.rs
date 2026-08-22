@@ -697,9 +697,12 @@ fn a_ref_blob_and_an_id_column_cannot_be_confused() {
     assert_eq!(kind("graphs", "parent_branch"), Some(TermIdKind::Id));
     assert_eq!(kind("terms", "id"), Some(TermIdKind::Id));
     assert_eq!(kind("vectors", "entity_id"), Some(TermIdKind::Id));
+    assert_eq!(kind("forks", "g"), Some(TermIdKind::Id));
+    assert_eq!(kind("forks", "parent_branch"), Some(TermIdKind::Id));
     // The near-misses: integers that are NOT term ids.
     assert_eq!(kind("facts", "tx"), Some(TermIdKind::None));
     assert_eq!(kind("facts", "retracted_tx"), Some(TermIdKind::None));
+    assert_eq!(kind("forks", "fork_tx"), Some(TermIdKind::None));
     assert_eq!(kind("graphs", "labels_tx"), Some(TermIdKind::None));
     assert_eq!(kind("term_spaces", "space"), Some(TermIdKind::None));
     assert_eq!(kind("events", "tx_id"), Some(TermIdKind::None));

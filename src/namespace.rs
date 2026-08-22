@@ -111,6 +111,13 @@ pub const QUIPU_DATASET: &str = "https://quipu.dev/ontology/Dataset";
 /// `quipu:includesGraph` — a dataset's membership edge.
 pub const QUIPU_INCLUDES_GRAPH: &str = "https://quipu.dev/ontology/includesGraph";
 
+// ── Persistent named forks (quipu-gp5) ─────────────────────────
+
+/// `quipu:Fork` — the class of a persistent named fork's graph.
+pub const QUIPU_FORK: &str = "https://quipu.dev/ontology/Fork";
+/// `quipu:forkTx` — the parent transaction a fork is pinned to.
+pub const QUIPU_FORK_TX: &str = "https://quipu.dev/ontology/forkTx";
+
 // ── Retrieval policy (quipu #80) ───────────────────────────────
 //
 // A pack RECOMMENDS; the consumer's `[quipu.labels]` config ENFORCES. These

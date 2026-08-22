@@ -152,6 +152,17 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("query_params", "description", TermIdKind::None),
     // -- Store::migrate_retraction_tx (quipu #83) --
     ("facts", "retracted_tx", TermIdKind::None),
+    // -- Store::migrate_forks (quipu-gp5) --
+    // `g` is the fork graph's term id; `parent_branch` matches
+    // `graphs.parent_branch` (v1 only writes ROOT `0`, the exempt sentinel).
+    // `fork_tx` is a TRANSACTION id, like `facts.tx` — an integer that looks
+    // exactly like a term id and is not.
+    ("forks", "name", TermIdKind::None),
+    ("forks", "g", TermIdKind::Id),
+    ("forks", "parent_branch", TermIdKind::Id),
+    ("forks", "fork_tx", TermIdKind::None),
+    ("forks", "created_at", TermIdKind::None),
+    ("forks", "status", TermIdKind::None),
     // -- vector::VECTORS_SQL --
     // `entity_id` IS a term id: `embedding::build_entity_text` feeds it straight
     // to `Store::entity_facts`, i.e. it is a `facts.e`. Nothing in #74's scope,

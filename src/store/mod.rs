@@ -4,6 +4,7 @@ pub mod alias;
 pub mod attach;
 pub mod datasets;
 pub mod events;
+pub mod forks;
 mod gate;
 pub mod import;
 pub mod labels;

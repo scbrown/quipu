@@ -251,6 +251,31 @@ impl Store {
     /// respace that misses one does not error, it silently repoints the
     /// registry. Resolution does a `lookup` per member, which `apply_dataset`
     /// already does for every `FROM` IRI anyway.
+    /// Fork registry (quipu-gp5) — persistent named forks of ROOT at a pinned
+    /// transaction.
+    ///
+    /// `g` is the fork graph's id (a term id — classified `Id` in
+    /// `respace_map`); `parent_branch` follows `graphs.parent_branch`'s
+    /// classification, though v1 only ever writes ROOT (`0`, the exempt
+    /// sentinel). `fork_tx` is a TRANSACTION id, like `facts.tx` — an integer
+    /// that looks exactly like a term id and is not. Rows are never deleted:
+    /// `dropped` and `promoted` are terminal statuses, because a fork that
+    /// existed is a fact about the past (the `dataset_remove` precedent).
+    pub(super) fn migrate_forks(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS forks (
+                 name          TEXT PRIMARY KEY,
+                 g             INTEGER NOT NULL REFERENCES graphs(g),
+                 parent_branch INTEGER NOT NULL,
+                 fork_tx       INTEGER NOT NULL,
+                 created_at    TEXT NOT NULL,
+                 status        TEXT NOT NULL
+                     CHECK (status IN ('open','promoted','dropped'))
+             );",
+        )?;
+        Ok(())
+    }
+
     pub(super) fn migrate_datasets(conn: &Connection) -> Result<()> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS datasets (

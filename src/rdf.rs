@@ -245,7 +245,9 @@ pub(crate) fn parse_rdf(
 ///
 /// Supported output formats: Turtle, N-Triples, N-Quads, RDF/XML, `TriG`.
 /// Serialize a set of facts to an RDF document (shared by the exporters).
-fn serialize_facts(
+/// `pub(crate)` since quipu-gp5: fork promotion serializes its asserted delta
+/// for the SHACL gate through the same path the exporters use.
+pub(crate) fn serialize_facts(
     store: &Store,
     facts: &[crate::types::Fact],
     format: RdfFormat,
