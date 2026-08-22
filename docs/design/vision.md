@@ -7,9 +7,12 @@
 > SPARQL 1.1 evaluator, RDFS + SHACL, vector search (SQLite default; LanceDB optional
 > **but inert in the shipped binaries** — embedder-only), graph projection with
 > PageRank/Louvain, the stratified-datalog reasoner, entity resolution, episode
-> retraction, and `speculate()` counterfactuals — all in `src/`. Federation is partial
-> (remote provider built and health-checked at startup; queries not yet routed
-> through it). For granular per-feature status see the design docs in `docs/design/`
+> retraction, and `speculate()` counterfactuals — all in `src/`. Federation is
+> built end-to-end since 2026-08-12 (quipu-tkh): the remote provider is
+> health-checked at startup and `POST /query` with `"federated": true` fans the
+> query out through it (*corrected 2026-08-22 — this banner previously said
+> "queries not yet routed through it," which quipu-tkh made stale*). For
+> granular per-feature status see the design docs in `docs/design/`
 > and `docs/book/src/architecture/`, each now carrying its own status block.
 >
 > Created: 2026-04-04, crew/braino session (aegis-6ct6)

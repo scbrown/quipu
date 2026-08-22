@@ -1,8 +1,12 @@
 # Design: In-Memory Read Model — query in memory, write to SQLite
 
-> **Implementation status (2026-08-07):** 🚧 **Phases 1–3 landed; 4–5
-> designed.** The read model is **on by default** and SPARQL joins run through
-> it. Every number below was measured on this branch, native x86-64,
+> **Implementation status (2026-08-07; corrected 2026-08-22):** ✅ **All
+> phases (1–5) landed.** This banner previously said "Phases 1–3 landed; 4–5
+> designed"; §8's own records were already ahead of it — Phase 4
+> (selectivity-ordered join planning + `LIMIT` pushdown, quipu-0lr) and
+> Phase 5 (per-graph models scoped to the derived layer, quipu-nip) are built
+> and measured there. The read model is **on by default** and SPARQL joins run
+> through it. Every number below was measured on this branch, native x86-64,
 > `--release`, `--no-default-features`. The model is exercised by
 > `examples/mem_read_model.rs`; the baseline it is compared against is
 > `examples/scale_bench.rs`.
