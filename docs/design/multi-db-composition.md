@@ -16,7 +16,10 @@
 >   `src/store/attach.rs`. `Store::open_with_attachments` mounts, verifies and
 >   registers; the BGP evaluator reads the composed source. **`GRAPH ?g` ranges
 >   attached graphs end-to-end today.**
-> - **§1.2 aliases / §5 cross-DB limits — NOT built** (quipu #76, #77).
+> - **§1.2 aliases — BUILT** (quipu #76; the TEMP-table deviation is noted
+>   above). **§5 cross-DB limits — NOT built** (quipu #77). *(Corrected
+>   2026-08-22: this line previously still listed §1.2 as NOT built,
+>   contradicting the paragraph above it.)*
 >
 > ⚠️ **The one thing §4's SQL sketch gets wrong, measured while building it.**
 > `SELECT … FROM shared.facts` written literally puts the attached layer's OWN
@@ -25,13 +28,16 @@
 > CONTRIBUTES — the same `g <> 0 AND g <> <its meta>` set §3 already decided the
 > registry copies. §4 and §3 disagreed, and §4 is the one that is wrong.
 >
-> ⚠️ **The honest limit of what is built: `GRAPH <attached-iri>` is REFUSED, not
-> served.** `lookup` (IRI → id) reads `main` only, because the same IRI in two
-> spaces has two ids and picking one silently would be a wrong join — that is
-> #76's whole subject. `resolve` (id → IRI) DOES cross attachments, because term
-> spaces make it unambiguous and the union is unusable without it. Naming an
-> attached graph therefore errors and names #76, rather than matching nothing:
-> an empty result there is indistinguishable from a typo.
+> ⚠️ **Correction (2026-08-22).** An earlier revision of this banner said
+> "`GRAPH <attached-iri>` is REFUSED, not served" — the honest limit of #75
+> alone, when `lookup` (IRI → id) read `main` only. #76 removed that refusal:
+> `Store::lookup_all` ranges every term space, so `GRAPH <attached-iri>` and
+> `FROM <attached-iri>` read the attached graph as the ordinary successful
+> path (test `naming_an_attached_graph_by_iri_reads_it`,
+> `src/store/attach/tests.rs`), with bindings canonicalised back toward the
+> local id. A genuinely unknown IRI keeps SPARQL's match-nothing behaviour —
+> the refusal was scoped to "no cross-space lookup exists", not to typos.
+> `resolve` (id → IRI) crosses attachments as before.
 >
 > The blob sidecar (§7) is **design-accepted / consumer-gated** — do not build
 > it until a payload consumer exists.
@@ -208,7 +214,8 @@ asserted by a test rather than trusted.
 that cannot be expressed: `GRAPH ?g { ?s ?p ?o }` produced `unknown term id:
 8796093022210` before `resolve` read the attached `terms`. `resolve` (id → IRI)
 is unambiguous — term spaces give each id exactly one owner — and belongs here.
-`lookup` (IRI → id) is **not**, and stays main-only for §1.2 / #76.
+`lookup` (IRI → id) is **not**, and stayed main-only until #76 landed
+`lookup_all` (see the 2026-08-22 banner correction).
 
 Two non-negotiable tests:
 
