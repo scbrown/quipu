@@ -40,6 +40,7 @@ quipu read "SELECT ?s WHERE { ?s a <http://ex.org/Person> }" --valid-at "2026-03
 |------|-------------|
 | `--valid-at <date>` | Time-travel: query as of this ISO-8601 timestamp |
 | `--tx <N>` | Time-travel: query as of this transaction ID |
+| `--fork <name>` | Scope the default graph to a named fork (see `quipu fork`); unknown or dropped forks are refused |
 
 Alias: `query`
 
@@ -496,6 +497,35 @@ quipu unpack domain.qpack.db --into urn:local:domain --db my.db
 | `--format turtle` | Also embed a Turtle serialization |
 | `--verify <file>` | Recompute and check the pack's content hash |
 | `--into <graph-iri>` | Unpack target graph (default: the pack's own graph IRI) |
+
+### `quipu fork`
+
+Persistent named forks (quipu-gp5): fork ROOT as of any transaction into an
+independent committed-class named graph (`urn:quipu:fork:<name>`), read it
+exactly like the main line, diff it, then drop it or promote it. Promotion
+re-enters through the SHACL + policy write gates — a refused promotion writes
+nothing and the fork stays open. Fork ergonomics are never a gate bypass.
+
+```bash
+quipu fork 42 --name experiment --db my.db     # fork ROOT as of tx 42
+quipu fork list --db my.db
+quipu read "SELECT ?s ?p ?o WHERE { ?s ?p ?o }" --fork experiment --db my.db
+quipu fork diff main experiment --db my.db     # each side: a fork name, or 'main'
+quipu fork promote experiment --db my.db       # delta re-enters via the gates
+quipu fork drop experiment --db my.db          # terminal; the name is not reusable
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `<tx> [--name <n>]` | Create: materialize ROOT-as-of-`<tx>` into a new fork (default name `fork-<tx>`) |
+| `list` | Name, fork-tx, status, created-at for every fork |
+| `diff <a> <b>` | Present-state triple diff between two forks (or `main`) |
+| `promote <name>` | Apply the fork's delta to ROOT through the write gates; SHACL refusal leaves ROOT untouched |
+| `drop <name>` | Close the fork; its facts remain as history, the name is not reusable |
+
+Reads: `--fork <name>` on `quipu read`, or the `fork` field on
+`POST /query` / `quipu_query`. Unknown and dropped forks are refused
+loudly — never a silent fall-through to ROOT.
 
 ### `quipu db respace`
 

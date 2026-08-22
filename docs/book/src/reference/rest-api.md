@@ -124,7 +124,12 @@ curl -s localhost:3030/query -X POST \
   -d '{"query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 5"}'
 ```
 
-Optional fields: `valid_at` (ISO-8601), `tx` (integer).
+Optional fields: `valid_at` (ISO-8601), `tx` (integer), `graph` (a
+named-graph IRI or dataset name that scopes the query's *default* graph
+without writing a `FROM`/`GRAPH` clause — an unknown IRI yields an empty
+default graph, never a silent ROOT fall-through), and `fork` (a fork name
+registered by `quipu fork`; unknown or dropped forks are refused loudly;
+mutually exclusive with `graph`).
 
 With `"federated": true` the whole query text fans out through the federated
 provider — the local store plus every `[[quipu.federation.remotes]]` — and the

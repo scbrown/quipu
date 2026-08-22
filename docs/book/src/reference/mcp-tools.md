@@ -20,6 +20,8 @@ Execute a SPARQL SELECT query.
 | `query` | Yes | SPARQL query string |
 | `valid_at` | No | ISO-8601 timestamp for time-travel |
 | `tx` | No | Transaction ID for time-travel |
+| `graph` | No | Named-graph IRI or dataset name scoping the default graph (unknown IRI → empty default graph, never ROOT) |
+| `fork` | No | Fork name to read (see `quipu fork`); unknown/dropped forks are refused; mutually exclusive with `graph` |
 
 ### `quipu_export`
 
