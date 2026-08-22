@@ -1,6 +1,6 @@
 # Design: Named Graphs (Quads) — the `graph × valid-time × tx-time` model
 
-> **Implementation status (2026-08-07):** ✅ **Complete on the sanctioned surfaces.**
+> **Implementation status (2026-08-07; amended 2026-08-22):** ✅ **Complete on the sanctioned surfaces.**
 > The store layer (the `g` column, the `graphs` registry, overlay
 > create/write/compose, in-place migration) shipped earlier. The SPARQL read
 > surface — `GRAPH <iri>` / `GRAPH ?g` scoping, `FROM` / `FROM NAMED` dataset
@@ -110,10 +110,15 @@ active dataset:
 ### Write
 
 Named-graph writes use the **overlay path** (`overlay_create` +
-`overlay_write` / MCP `quipu_overlay_*`) or `POST /episode`'s `graph` field.
-There is deliberately **no** `graph` param on `/knot` yet — arbitrary writes to a
-named committed branch would bypass the committed/overlay class invariant; the
-overlay path is the sanctioned route.
+`overlay_write` / MCP `quipu_overlay_*`), `POST /episode`'s `graph` field, or
+— since 2026-08-21 — a strict `graph` param on `/knot`: the target must
+already be a **registered committed-class** graph (`graph_create`); an
+unknown IRI errors without being interned, and overlay-class targets are
+refused (write through `overlay_write`). An earlier revision of this section
+deliberately refused any `/knot` graph param to protect the
+committed/overlay class invariant; the invariant survives the param because
+registration, where authority checks live, remains the only way to mint a
+writable target.
 
 ## 6. Graph-scoping the traversal reads (built for fixed datasets)
 
@@ -122,10 +127,10 @@ stays inside that graph, while `FROM <a> FROM <b>` traverses their RDF merge.
 Every scan uses the composed `facts_source`, so attached graphs obey the same
 rule. `GRAPH ?g` still fails loud for the reason in §6.2.
 
-### 6.1 What is actually hardcoded
+### 6.1 What was hardcoded (historical — since fixed)
 
-Three call sites pin `g = 0` in SQL rather than taking it from the evaluation
-context:
+When this section was written, three call sites pinned `g = 0` in SQL rather
+than taking it from the evaluation context:
 
 | Site | Line | Read |
 |---|---|---|
@@ -133,9 +138,12 @@ context:
 | `sparql/rdfs.rs` | `46` | `rdfs:subClassOf` closure |
 | `sparql/rdfs.rs` | `103` | type-pattern expansion |
 
-`TemporalContext.graph` already carries the answer at every one of these call
+`TemporalContext.graph` already carried the answer at every one of these call
 sites — `GraphScope` is threaded through `eval_pattern_seeded` and reaches both
-modules. The work is to *use* it, not to plumb it.
+modules — so the work was to *use* it, not to plumb it. That work is done: the
+§6.4 acceptance list below is the record, and the line numbers above are kept
+as the historical record only. (`rdfs.rs` has since been reduced to the
+asserted-only advisory marker of §6.3, which is ROOT-gated by design.)
 
 ### 6.2 Decision — paths and inference are single-graph, never cross-graph
 
@@ -224,7 +232,10 @@ graph-agnostic — whatever the caller serializes is what gets validated. The
 decision is therefore about the **write gate**, not the validator:
 
 - `validate_on_write` validates **the delta being written, against the shapes
-  loaded in ROOT**, regardless of which graph is being written.
+  loaded in ROOT**, regardless of which graph is being written. (Since
+  quipu-080 the *repair context* — the committed type facts handed to
+  validation alongside the delta — is graph-scoped: the resolved destination
+  graph's types unioned with ROOT's, and no third graph's; see the banner.)
 - Shapes are ontology, and by §6.3 ontology lives in ROOT. An overlay cannot
   weaken its parent's constraints by asserting laxer shapes into itself.
 - A future per-branch shape set would compose ROOT ∪ branch with the branch
@@ -255,11 +266,18 @@ decision is therefore about the **write gate**, not the validator:
 
 ## 8. Scope boundaries / follow-ups (honest)
 
-- **Write-side `graph` param on `/knot`** stays deferred: arbitrary writes to a
-  named committed branch would bypass the committed/overlay class invariant. The
-  overlay path and `/episode`'s `graph` field are the sanctioned routes.
-- The event log (P1) emits for **ROOT-graph commits only**; overlay writes are
-  transient compose-only staging and do not emit.
+- **Write-side `graph` param on `/knot`** — the deferral FLIPPED (2026-08-21,
+  bobbin×quipu roadmap): `/knot` takes a strict `graph` param under the §5
+  contract, registered committed-class targets only. The class invariant the
+  deferral protected is preserved by registration, not by the param's absence.
+- The **semantic** event taxonomy (P1: `episode.ingested`, `entity.*`,
+  `edge.*`, `type.new`, `predicate.new`) emits for **ROOT-graph commits only**;
+  named-graph writes — overlay staging and committed-class targets (`/knot`
+  `graph`, forks) alike — do not emit it. The spine is not silent about
+  everything else, though (2026-08-22): gate refusals are recorded as
+  `write.refused` events **for any destination graph** (the payload names the
+  graph IRI), and registry changes (`shapes.loaded`, `fork.*`, …) emit their
+  own events. See `src/store/events.rs`.
 - Property paths under `GRAPH ?g` remain refused (§6.2).
 
 ## 9. Related

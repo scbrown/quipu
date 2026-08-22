@@ -101,8 +101,12 @@ a typo'd plane name must not become a writable target as a side effect of
 being rejected — and overlay-class graphs are refused (write through
 `overlay_write`). The class invariant the earlier "no `graph` on `/knot`"
 refusal protected survives because registration remains the only way to
-mint a target. The event log emits for ROOT-graph commits only; overlay
-writes are compose-only staging and do not emit.
+mint a target. The semantic event taxonomy (`episode.ingested`, `entity.*`,
+`edge.*`, `type.new`, `predicate.new`) emits for ROOT-graph commits only;
+named-graph writes — overlay staging and committed-class targets alike — do
+not emit it. Gate refusals, however, are recorded as `write.refused` events
+for **any** destination graph (the payload names the graph IRI), and
+registry changes (`shapes.loaded`, `fork.*`) emit their own events.
 
 ## Datasets
 
