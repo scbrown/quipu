@@ -46,15 +46,7 @@ use entity::{
     transactions,
 };
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
-use tools::{
-    accept_proposal, ask, context, cooccurrence, cord, datasets, embed_backfill, episode,
-    episodes_complete, graph_create, graph_label, graph_view, graphiti_search_nodes, graphs_list,
-    hybrid_search, impact_analysis, list_proposals, ontology, overlay_compose, overlay_create,
-    overlay_write, path_backtest, path_cone, policy_check, project_graph, propose_schema_change,
-    queries, reject_proposal, report, report_get, resolve_probe, retract, retract_episode, search,
-    search_facts, search_nodes, set_predicate, shapes, subscriptions, unified_search, unravel,
-    validate, verdict_verify, verifier_authorized,
-};
+use tools::*;
 
 #[tokio::main]
 async fn main() {
@@ -466,7 +458,8 @@ async fn main() {
         .route("/graphs", get(graphs_list))
         .route("/graph/create", post(graph_create))
         .route("/graph/label", post(graph_label))
-        .merge(tools::graph_lifecycle_routes())
+        .route("/graph/freeze", post(graph_freeze))
+        .route("/graph/thaw", post(graph_thaw))
         .route("/overlay/create", post(overlay_create))
         .route("/overlay/write", post(overlay_write))
         .route("/overlay/compose", post(overlay_compose))

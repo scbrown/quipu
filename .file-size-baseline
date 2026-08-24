@@ -9,6 +9,6 @@ src/episode/mod.rs 661
 src/graph.rs 514
 src/mcp/named_query.rs 537
 src/rdf.rs 717
-src/server.rs 514
+src/server.rs 507
 src/store/labels.rs 762
 src/store/ops.rs 666
