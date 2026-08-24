@@ -93,6 +93,8 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 - **RDF data model** — IRIs, blank nodes, typed literals via oxrdf. Import/export Turtle, N-Triples, JSON-LD, RDF/XML.
 - **SPARQL 1.1** — SELECT, ASK, CONSTRUCT, DESCRIBE. BGP, JOIN, UNION, FILTER, OPTIONAL, VALUES, ORDER BY, GROUP BY, aggregates, HAVING, property paths, `IN`/`NOT IN`, RDFS subclass inference, and named-graph scoping (`GRAPH`, `FROM`, `FROM NAMED`).
 - **SHACL validation** — strict schema enforcement at write time. Structured feedback with severity, focus node, component, path, and message.
+- **Graph labels & kinds** — graphs carry declared labels on five axes (freshness, trust, policy, durability, `dataKind`); datasets compose them without ever widening, and every query answer reports the composed label. Opt-in floors can refuse queries that fall below a declared bar.
+- **Deep freeze** — relocate a graph's full history into a verified read-only archive pack (`quipu graph freeze`). The graph keeps its IRI and stays queryable — by name, via the `urn:quipu:dataset:frozen` dataset, or by `include_kinds: ["archive"]` on a query; `quipu graph thaw` restores it for writes. `GET /graphs` lists every registered graph with kind and lifecycle.
 
 **🤖 AI-Native Features**
 
@@ -347,6 +349,9 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | RDF data model (oxrdf) | ✅ | Turtle, N-Triples, JSON-LD, RDF/XML |
 | SQLite storage | ✅ | Single-file, embeddable |
 | Retraction with valid-time closure | ✅ | |
+| Graph labels (5-axis lattice + floors) | ✅ | freshness / trust / policy / durability / `dataKind`; composition never widens |
+| Graph kinds + `include_kinds` widening | ✅ | `GET /graphs` listing; fetch-time opt-in for composing cold graphs |
+| Deep freeze / thaw | ✅ | `quipu graph freeze\|thaw\|list` — full-history read-only archive packs, auto-attached on open |
 | **SPARQL 1.1** | | |
 | SELECT / ASK / CONSTRUCT / DESCRIBE | ✅ | |
 | BGP, JOIN, UNION, FILTER, OPTIONAL | ✅ | |
@@ -370,6 +375,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | **Governance ([SARC](docs/book/src/reference/cli.md#quipu-audit-tracejsonl) conformance)** | | |
 | `aegis:Policy` write-time gate | ✅ | Class-aware effects, evaluated before commit |
 | Constraint metadata (class, verification point, θ, τ_rev) | ✅ | `shapes/governance.ttl` |
+| Tripwire path-boundary policies (`aegis:appliesTo`) | ✅ | `shapes/policies/tripwire.ttl`; deny hard @ PAG, throttle soft @ PAA |
 | Class ↔ placement conformance | ✅ | Refused at write; a soft constraint cannot be placed at the gate |
 | Signed verdicts (ed25519) | ✅ | Evidence-hash-bound, verified against a human-authored root of trust |
 | Escalation router with a bounded window | ✅ | Default-deny past `τ_rev`; records the request, does not deliver it |

@@ -52,6 +52,7 @@ stops being read.
 | `labels.min_freshness` | unset | Graph-label floor: refuse results staler than this |
 | `labels.min_trust_rank` / `labels.min_trust_chain` | unset | Trust floors on the query path |
 | `labels.deny_policy_tokens` | `[]` | Policy-class tokens that exclude a graph from results |
+| `labels.deny_data_kinds` | `[]` | Refuse queries composing graphs of these `dataKind` tokens (a blocklist — undeclared kinds pass) |
 | `search.default_limit` | `10` | Result limit when the caller passes none |
 | `search.max_limit` | `1000` | Hard cap on requested result limits |
 | `search.max_sparql_rows` | `10000` | Cap on SPARQL result rows |

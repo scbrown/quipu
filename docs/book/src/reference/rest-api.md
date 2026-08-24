@@ -592,6 +592,21 @@ predates it — treat that as "cannot tell", never as "no graphs".
 curl -s 'localhost:3030/graphs?kind=operational'
 ```
 
+### `POST /graph/label`
+
+Declare a graph's labels — any subset of the five axes. Required: `graph`,
+`timestamp`. Optional: `freshness`, `durability`, `kind` (a `dataKind` token,
+strictly parsed), `trust` (`{"iri", "chain", "rank"}`), `policy` (array of
+obligation tokens), `valid_to` (expiring declaration), `actor`. Each axis is
+parsed strictly: an unrecognised value is an error, never a dropped axis.
+Returns `{"tx_id": N}`. Write endpoint; honors bearer auth.
+
+```bash
+curl -s localhost:3030/graph/label -X POST -H "Content-Type: application/json" \
+  -d '{"graph": "urn:app:runs/2026-08", "kind": "operational",
+       "freshness": "fresh", "timestamp": "2026-08-24T00:00:00Z"}'
+```
+
 ### `POST /graph/freeze` and `POST /graph/thaw`
 
 The deep-freeze surface — same inputs and outputs as the `quipu_graph_freeze`

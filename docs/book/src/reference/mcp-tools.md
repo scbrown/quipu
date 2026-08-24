@@ -22,6 +22,7 @@ Execute a SPARQL SELECT query.
 | `tx` | No | Transaction ID for time-travel |
 | `graph` | No | Named-graph IRI or dataset name scoping the default graph (unknown IRI → empty default graph, never ROOT) |
 | `fork` | No | Fork name to read (see `quipu fork`); unknown/dropped forks are refused; mutually exclusive with `graph` |
+| `include_kinds` | No | `dataKind` tokens (e.g. `["archive"]`) that widen the default graph set with every graph declaring one of them. Absent/empty = unchanged scope; malformed tokens are refused; mutually exclusive with `fork`; a `FROM` in the query text still overrides |
 
 ### `quipu_export`
 

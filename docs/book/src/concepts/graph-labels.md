@@ -1,8 +1,8 @@
 # Graph Labels & the Trust Lattice
 
 > **Implementation status:** 🟨 **Substantially built.** The axes
-> (`Freshness`, `Trust`, `PolicyClass`, `Durability`), the meet/join algebra
-> in `src/lattice.rs`, label storage (`set_graph_label` / `label_of`, the
+> (`Freshness`, `Trust`, `PolicyClass`, `Durability`, `DataKind`), the
+> meet/join algebra in `src/lattice.rs` / `src/lattice_kind.rs`, label storage (`set_graph_label` / `label_of`, the
 > reserved meta-graph, cache columns), dataset labels on the query path, label
 > floors, expiring declarations, and derivation methods are all implemented.
 > Statement-level labels (quipu #73) remain design-only. See
@@ -22,8 +22,10 @@ invariant holds both ways:
 
 - **Freshness, trust, and durability compose by meet** — a union of graphs is
   only as fresh, as trusted, and as durable as its weakest member.
-- **Policy obligations compose by join** — a union of graphs carries the
-  *union* of their restrictions, so one `no-export` graph taints the set.
+- **Policy obligations and kinds compose by join** — a union of graphs carries
+  the *union* of their restrictions, so one `no-export` graph taints the set,
+  and the *union* of their declared kinds, so a dataset touching an `archive`
+  graph says so.
 
 ## The axes
 
@@ -33,8 +35,9 @@ invariant holds both ways:
 | `quipu:trust` | IRIs ranked by a declared chain | meet, within one chain |
 | `quipu:policyClass` | set of obligation tokens (`pii`, `no-export`, …) | join (union) |
 | `quipu:durability` | `backed` > `reproducible` > `soleRecord` | meet |
+| `quipu:dataKind` | one token per graph (`knowledge`, `operational`, `identity`, `archive`, …) | join (union) |
 
-Three things to know about these values:
+Four things to know about these values:
 
 - **Trust is not a hardcoded enum.** Trust values are IRIs and the ordering is
   data: `smac:canonical quipu:trustRank 40 ; quipu:inChain smac:ruleTierChain`.
@@ -51,6 +54,12 @@ Three things to know about these values:
   parameters). It is a per-fact value, not a lattice axis — two methods do not
   meet into a third. `derivedBy` says how to recover a fact; `durability` says
   whether you must.
+- **Kind is categorical, not ordered.** `quipu:dataKind` declares *what sort*
+  of data a graph holds — the token space is lexically open
+  (`[a-z][a-z0-9-]*`), parsed strictly, and never ranked, so it composes by
+  union rather than by weakest member. It also drives fetch-time scope
+  widening (`include_kinds`) and the deep-freeze lifecycle — see
+  [Graph Kinds & Deep Freeze](graph-kinds.md).
 
 ## Undeclared is not a lattice value
 
@@ -77,7 +86,8 @@ if no returned row came from it; conservative cannot overstate. `/query` and
     "freshness": { "value": "stale", "coverage": "full" },
     "durability": { "value": "soleRecord", "coverage": "partial" },
     "trust": { "value": "smac:canonical", "chain": "smac:ruleTierChain", "coverage": "full" },
-    "policy": { "value": ["no-export"], "coverage": "full" }
+    "policy": { "value": ["no-export"], "coverage": "full" },
+    "kind": { "value": ["knowledge", "archive"], "coverage": "full" }
   }
 }
 ```
@@ -98,12 +108,16 @@ min_freshness = "fresh"
 min_trust_rank = 30
 min_trust_chain = "https://quipu.dev/ontology/defaultTrustChain"
 deny_policy_tokens = ["no-export"]
+deny_data_kinds = ["archive"]
 ```
 
 When a dataset's label falls below the floor, the query is **refused**, and
 the refusal names the graph that dragged the label down. Undeclared fails a
-configured floor — fail-safe at enforcement, honest at reporting. All keys are
-unset by default, and **unset means zero behaviour change**: no query is ever
+configured floor — fail-safe at enforcement, honest at reporting. The one
+deliberate exception is `deny_data_kinds`, which is a **blocklist**, not a
+minimum: an *undeclared* kind passes, because kind is categorical and failing
+every unlabelled graph the moment the key is set would be a different (and
+unasked-for) migration. All keys are unset by default, and **unset means zero behaviour change**: no query is ever
 refused by a store that has not configured a floor, and the unconfigured path
 does no label work at all.
 
@@ -121,7 +135,7 @@ a tenant could relabel itself `attested`.
 
 ## Built vs designed
 
-Built: the four axes and the fold, graph-label storage with the RDF meta-graph
+Built: the five axes and the fold, graph-label storage with the RDF meta-graph
 as source of truth and cache columns checked by `quipu doctor labels`, dataset
 labels on the query path, label floors, expiring declarations, durability and
 derivation. Design-only: statement-level labels (#73) — the same vocabulary
@@ -130,6 +144,7 @@ attached to individual statements, with downward-only override.
 ## Related
 
 - [Named Graphs](named-graphs.md) — the substrate labels attach to
+- [Graph Kinds & Deep Freeze](graph-kinds.md) — the `dataKind` axis in use
 - [Configuration](../getting-started/configuration.md) — the `labels.*` floor keys
 - [REST API](../reference/rest-api.md) — the `/query` response shape
 - Design: `docs/design/graph-labels.md`

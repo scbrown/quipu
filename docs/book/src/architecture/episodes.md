@@ -127,6 +127,27 @@ SELECT ?entity WHERE {
 The `episode_provenance()` function returns all entities and their facts
 for a given episode name.
 
+## Description Revisions
+
+A current entity carries one `rdfs:comment`. When an ordinary (additive)
+episode supplies a *different* `description` for an existing node, the
+superseded text is not silently discarded and not left to pile up on the
+entity: in the same transaction, each superseded comment is retracted from the
+entity and re-asserted on the **episode entity whose `prov:wasGeneratedBy`
+assertion shared its original transaction** (`src/episode/descriptions.rs`).
+Last write wins on the entity; the history stays lossless because every prior
+description remains readable on the episode that produced it.
+
+Two edges of that rule:
+
+- **Unattributable history refuses the whole write.** If a current comment has
+  no same-transaction `prov:wasGeneratedBy` attribution, the ingest errors
+  before the transaction opens rather than discarding provenance. One revision
+  migrates *every* attributable legacy comment it supersedes.
+- The reconciliation is per `(entity, new text)` — a node listed more than
+  once in an episode (for example under multiple types) produces one revision,
+  not duplicate retractions.
+
 ## SHACL Validation Gate
 
 Episodes can include a `shapes` field with SHACL constraints. If provided,

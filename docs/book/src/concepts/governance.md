@@ -36,10 +36,33 @@ aegis:todo-needs-ticket a aegis:Policy ;
 - `boundary` — `action` (pre-edit/pre-write) or `transition` (workflow step;
   declared but not yet enforced).
 - `effect` — `allow | warn | require-approval | deny | escalate | record`.
+- `appliesTo` (optional) — repo-relative path globs scoping **where** an
+  action-boundary policy binds. Genuinely multi-valued: a policy scoped to
+  three globs carries three values, and a consumer accumulates them rather
+  than keeping whichever arrived first. Absent means unscoped. Declared with
+  `rdfs:range` only — no `rdfs:domain`, so the same term reads identically on
+  a future `TextRule` or `Directive`.
 
 An optional `aegis:evidenceProbe` (another ASK: "does evidence exist yet?")
 lets the evaluator distinguish `unknown` from `unsatisfied` — no evidence is a
 different fact from failing evidence, and neither is collapsed into the other.
+
+### Tripwires: path-boundary policies
+
+A policy carrying `aegis:appliesTo` and **no** selector or predicate is a
+**tripwire**: touching the path *is* the crossing, so the claim needs no
+evidence beyond the action's own target. `shapes/policies/tripwire.ttl` ships
+the catalog — the governed twin of yupana's local
+`[[yupana.policy.tripwires]]`, with quipu as the canonical store and yupana
+holding only a projected cache. Placement follows SARC Table 3, not
+convenience: the `deny` wire is **hard at the PAG** (admissibility is decided
+before dispatch — the edit must never land), and the `throttle` wire is
+**soft at the PAA** with a declared `aegis:backoffFormula` (it prices a
+completed crossing and backs off the actions after it, never the crossing
+itself). There is no soft-at-the-gate wire — a soft constraint has nothing to
+price before the action lands. Re-scoping a wire is amending the policy:
+the write gate treats an `appliesTo` write as governance-defining and
+invalidates the cached policy registry.
 
 ## The write-path gate
 
