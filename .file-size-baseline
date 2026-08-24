@@ -18,6 +18,7 @@ src/mcp/named_query.rs 686
 src/metrics.rs 651
 src/pack.rs 557
 src/rdf.rs 894
+src/reasoner/evaluate.rs 514
 src/server.rs 750
 src/shacl.rs 665
 src/sparql/mod.rs 569
