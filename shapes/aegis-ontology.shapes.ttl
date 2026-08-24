@@ -1496,6 +1496,19 @@ aegis:MonitoringProbeShape a sh:NodeShape ;
 #
 # ⚠️ NEVER put a credential VALUE in this graph — the class names the secret,
 # it does not hold it. Nothing enforces that; it is a rule about what you write.
+# Concept, Component, and Credential were accepted together after inspecting
+# their live instances. Keep all three in the loaded vocabulary: omitting the
+# first two made valid /episode writes succeed with an ungoverned-type advisory.
+# Their producers share only the ordinary entity label contract, so stronger
+# constraints would reject already-valid incremental writes.
+aegis:ConceptShape a sh:NodeShape ;
+    sh:targetClass aegis:Concept ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:ComponentShape a sh:NodeShape ;
+    sh:targetClass aegis:Component ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
 aegis:CredentialShape a sh:NodeShape ;
     sh:targetClass aegis:Credential ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
