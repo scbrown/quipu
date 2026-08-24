@@ -377,7 +377,7 @@ pub fn ingest_episode_outcome(
         }
     }
 
-    let existing_hash = current_content_hash(store, &ep_iri, base_ns)?;
+    let existing_hash = descriptions::current_content_hash(store, &ep_iri, base_ns)?;
 
     // Idempotency fast path: same content already recorded → skip the write.
     // Reported as `Unchanged`, NOT as a bare `count: 0` — see `IngestOutcome`.
@@ -443,17 +443,7 @@ pub fn ingest_episode_outcome(
         let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_str), graph)?;
         (tx_id, count)
     } else {
-        let mut datums = parse_rdf(
-            store,
-            turtle.as_bytes(),
-            oxrdfio::RdfFormat::Turtle,
-            None,
-            timestamp,
-        )?;
-        descriptions::reconcile_node_descriptions(store, episode, base_ns, graph, &mut datums)?;
-        let count = datums.len();
-        let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_str), graph)?;
-        (tx_id, count)
+        descriptions::ingest_reconciled(store, episode, &turtle, timestamp, base_ns, actor, graph)?
     };
     Ok((tx_id, count, outcome))
 }
@@ -462,16 +452,6 @@ pub fn ingest_episode_outcome(
 /// content was already recorded). Distinguishable from a real tx, which is
 /// always positive.
 pub const NOOP_TX: i64 = 0;
-
-/// Read the content hash currently stamped on an episode activity, if any.
-fn current_content_hash(store: &Store, ep_iri: &str, base_ns: &str) -> Result<Option<String>> {
-    let query = format!("SELECT ?h WHERE {{ <{ep_iri}> <{base_ns}contentHash> ?h }} LIMIT 1");
-    let result = crate::sparql::query(store, &query)?;
-    Ok(result.rows().first().and_then(|row| match row.get("h") {
-        Some(crate::types::Value::Str(s)) => Some(s.clone()),
-        _ => None,
-    }))
-}
 
 /// A stable content hash of an episode's asserted data (name, body, source,
 /// group, and its nodes/edges). Node and edge ordering is normalised so that

@@ -7,6 +7,43 @@ use crate::types::{Op, Value};
 
 use super::{Episode, node_iri};
 
+pub(super) fn current_content_hash(
+    store: &Store,
+    ep_iri: &str,
+    base_ns: &str,
+) -> Result<Option<String>> {
+    let query = format!("SELECT ?h WHERE {{ <{ep_iri}> <{base_ns}contentHash> ?h }} LIMIT 1");
+    let result = crate::sparql::query(store, &query)?;
+    Ok(result.rows().first().and_then(|row| match row.get("h") {
+        Some(Value::Str(s)) => Some(s.clone()),
+        _ => None,
+    }))
+}
+
+/// Parse and commit an ordinary episode after reconciling description revisions.
+pub(super) fn ingest_reconciled(
+    store: &mut Store,
+    episode: &Episode,
+    turtle: &str,
+    timestamp: &str,
+    base_ns: &str,
+    actor: Option<&str>,
+    graph: i64,
+) -> Result<(i64, usize)> {
+    let mut datums = crate::rdf::parse_rdf(
+        store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        timestamp,
+    )?;
+    reconcile_node_descriptions(store, episode, base_ns, graph, &mut datums)?;
+    let count = datums.len();
+    let source = format!("episode:{}", episode.name);
+    let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source), graph)?;
+    Ok((tx_id, count))
+}
+
 /// Reconcile explicitly revised node descriptions into the pending episode tx.
 ///
 /// A current entity carries one `rdfs:comment`. When a later episode supplies a
