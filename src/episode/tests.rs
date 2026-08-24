@@ -369,7 +369,12 @@ fn canonical_slash_node_round_trips_without_sanitizing() {
     }}"#
     ));
 
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T00:00:00Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
     let exact_iri = format!("{TEST_BASE_NS}{commit}");
     assert!(ttl.contains(&format!("<{exact_iri}> a aegis:GitCommit")));
     assert!(ttl.contains(&format!("<{exact_iri}> aegis:committed_to aegis:quipu")));
