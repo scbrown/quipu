@@ -174,6 +174,146 @@ pub fn store_type_context_in_graph(
     Ok(lines.into_iter().collect())
 }
 
+/// SHACL paths that some property shape REQUIRES (`sh:minCount >= 1`).
+///
+/// Deliberately not per-`sh:targetClass`: the answer is only used to decide
+/// which of a payload subject's EXISTING facts are worth fetching, and fetching
+/// a fact that turns out to be irrelevant costs one row and cannot change a
+/// verdict (see [`repaired`]). Resolving path-to-class properly would mean
+/// implementing target selection a second time, beside the validator that
+/// already does it — two implementations that must agree, and only one of them
+/// exercised by the tests.
+///
+/// The set is small in practice: the shape files hold a label floor plus a
+/// handful of emitter-proven scalars.
+pub fn required_paths(shapes_turtle: &str) -> Result<BTreeSet<String>> {
+    use oxttl::TurtleParser;
+    use std::collections::BTreeMap;
+
+    const SH_PATH: &str = "http://www.w3.org/ns/shacl#path";
+    const SH_MIN_COUNT: &str = "http://www.w3.org/ns/shacl#minCount";
+
+    let parser = TurtleParser::new()
+        .with_base_iri("http://example.org/")
+        .map_err(|e| Error::InvalidValue(format!("shapes base IRI: {e}")))?;
+
+    // A property shape is usually a BLANK node (`sh:property [ ... ]`), so the
+    // path and the count arrive as two triples about the same subject and have
+    // to be joined rather than read off one.
+    let mut path_of: BTreeMap<String, String> = BTreeMap::new();
+    let mut required: BTreeSet<String> = BTreeSet::new();
+
+    for triple in parser.for_reader(shapes_turtle.as_bytes()) {
+        let triple = triple.map_err(|e| Error::InvalidValue(format!("shapes parse error: {e}")))?;
+        let subject = triple.subject.to_string();
+        match triple.predicate.as_str() {
+            SH_PATH => {
+                if let OxTerm::NamedNode(path) = &triple.object {
+                    path_of.insert(subject, path.as_str().to_string());
+                }
+            }
+            SH_MIN_COUNT => {
+                if let OxTerm::Literal(lit) = &triple.object
+                    && lit.value().parse::<i64>().is_ok_and(|n| n >= 1)
+                {
+                    required.insert(subject);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    Ok(required
+        .into_iter()
+        .filter_map(|s| path_of.get(&s).cloned())
+        .collect())
+}
+
+/// The store's values for `paths` on the payload's own SUBJECTS, as N-Triples.
+///
+/// # Why subjects, when [`store_type_context_in_graph`] is about references
+///
+/// That function fixes `sh:class` on a node the payload MENTIONS. This one
+/// fixes a different defect with the opposite shape (aegis-dixug): adding a
+/// governed type to an EXISTING, fully conformant node is refused unless the
+/// payload also restates every property that node's shape requires — because
+/// `sh:targetClass` matching sees the type in the payload, while every OTHER
+/// constraint on that shape is evaluated against the payload alone.
+///
+/// ```text
+/// # store already holds: <guard> rdfs:label "guard"
+/// POST /knot  "<guard> a aegis:OperationalRule ."
+///   -> conforms:false, MinCount(1) not satisfied, path=rdfs:label
+/// ```
+///
+/// The message names a label that is RIGHT THERE, so it sends the caller
+/// looking for a missing fact, finding one, and concluding the store is
+/// inconsistent. That is not a corner case: it is THE SHAPE OF EVERY
+/// INCREMENTAL WRITE — adding a type, an edge, one property. The narrower and
+/// more careful the write, the likelier it is refused.
+///
+/// # Why this is bounded, unlike the generalisation the module warns off
+///
+/// [`store_type_context_in_graph`] declines to pull each referenced node's full
+/// description because that turns one write into an unbounded read. This is not
+/// that: it is restricted to paths some shape REQUIRES, so it fetches the
+/// handful of scalars a floor is made of, never a node's edge set. A payload
+/// subject is also a node the write ANSWERS for, which a mere reference is not.
+///
+/// Safety is structural either way — [`repaired`] subtracts, so no context can
+/// introduce a violation into the reported result. This can only turn a refusal
+/// into a pass, never the reverse.
+pub fn store_property_context_in_graph(
+    store: &Store,
+    subjects: &BTreeSet<String>,
+    paths: &BTreeSet<String>,
+    g: i64,
+) -> Result<String> {
+    if subjects.is_empty() || paths.is_empty() {
+        return Ok(String::new());
+    }
+    // Resolve the required paths to term ids ONCE. A path the store has never
+    // interned cannot be on any fact, so it drops out here rather than being
+    // compared per fact.
+    let mut wanted = BTreeSet::new();
+    for path in paths {
+        if let Some(id) = store.lookup(path)? {
+            wanted.insert(id);
+        }
+    }
+    if wanted.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut graphs = vec![crate::schema::ROOT_GRAPH];
+    if g != crate::schema::ROOT_GRAPH {
+        graphs.push(g);
+    }
+
+    let mut lines = BTreeSet::new();
+    for iri in subjects {
+        let Some(entity) = store.lookup(iri)? else {
+            continue;
+        };
+        for &scope in &graphs {
+            for fact in store.entity_facts_in_graph(entity, scope)? {
+                if !wanted.contains(&fact.attribute) {
+                    continue;
+                }
+                let attr = store.resolve(fact.attribute)?;
+                // A value this store holds but cannot render as an RDF term
+                // (raw bytes) is skipped, never fatal: this is a repair pass
+                // beside a write that has already been judged once.
+                let Ok(term) = crate::rdf::value_to_term(store, &fact.value) else {
+                    continue;
+                };
+                lines.insert(format!("<{iri}> <{attr}> {term} .\n"));
+            }
+        }
+    }
+    Ok(lines.into_iter().collect())
+}
+
 /// Validate `turtle` against `shapes`, using the store to REPAIR violations
 /// caused by context the payload does not carry.
 ///
@@ -216,7 +356,20 @@ pub fn validate_with_store_context_in_graph(
     }
 
     let scope = scope_of(data_turtle)?;
-    let context = store_type_context_in_graph(store, &scope.untyped_references, g)?;
+    // Two repairs, deliberately additive and deliberately different in kind:
+    //   - TYPES for nodes the payload merely REFERENCES  (aegis-fp17f/sd5fj):
+    //     fixes `sh:class` on a value whose type lives in the store.
+    //   - REQUIRED PROPERTIES on the payload's own SUBJECTS (aegis-dixug):
+    //     fixes an incremental write being refused for a floor the store
+    //     already satisfies.
+    // Both are bounded, and neither can add a violation — `repaired` subtracts.
+    let mut context = store_type_context_in_graph(store, &scope.untyped_references, g)?;
+    context.push_str(&store_property_context_in_graph(
+        store,
+        &scope.subjects,
+        &required_paths(shapes_turtle)?,
+        g,
+    )?);
     if context.is_empty() {
         return Ok(baseline);
     }

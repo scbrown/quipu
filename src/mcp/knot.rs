@@ -235,7 +235,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let vocabulary_hint = crate::vocabulary::sanctioned(store)
         .ok()
         .map(|v| crate::vocabulary::ungoverned_types_in_turtle(turtle, &v))
-        .and_then(crate::vocabulary::hint_json);
+        .and_then(|u| crate::vocabulary::hint_json(&u));
 
     let mut response = serde_json::json!({
         "conforms": true,
