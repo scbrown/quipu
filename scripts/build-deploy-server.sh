@@ -25,6 +25,8 @@
 #                        exercisable without a deploy
 #   DEPLOY_ACTOR  WHO is deploying — REQUIRED to install (see below)
 #   DEPLOY_LOG    attribution log path         (default: /var/log/quipu-deploy.log)
+#   DEPLOY_LOCK   cross-session mutex path      (default: /tmp/quipu-deploy.lock)
+#   DEPLOY_LOCK_CHECK_ONLY=1  acquire/hold/release only; never build or deploy
 #
 # ── WHY DEPLOY_ACTOR IS REQUIRED, AND WHY IT REFUSES ──
 # Every agent on this fleet reaches the deploy target as the SAME root over the
@@ -88,6 +90,8 @@ die() { printf '\n\033[1;31mDEPLOY ABORTED: %s\033[0m\n' "$*" >&2; exit 1; }
 
 DEPLOY_LOG="${DEPLOY_LOG:-/var/log/quipu-deploy.log}"
 DEPLOY_ACTOR="${DEPLOY_ACTOR:-${SHANTY_AGENT:-${GT_CREW:-}}}"
+DEPLOY_LOCK="${DEPLOY_LOCK:-/tmp/quipu-deploy.lock}"
+DEPLOY_LOCK_HOLDER="${DEPLOY_LOCK}.holder"
 
 # The placeholders are REJECTED BY NAME, because each is a value the shared-root
 # deploy path hands you for free — and a free value is the one that ends up in
@@ -97,6 +101,8 @@ case "$(printf '%s' "${DEPLOY_ACTOR:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:
   ''|unknown|none|null|root|nobody|-|n/a|na|tbd|agent|crew|user)
     DEPLOY_ACTOR="" ;;
 esac
+[ -z "$DEPLOY_ACTOR" ] || [[ "$DEPLOY_ACTOR" =~ ^[A-Za-z0-9._-]+$ ]] \
+  || die "DEPLOY_ACTOR must contain only letters, digits, dot, underscore, or dash (got '$DEPLOY_ACTOR')."
 
 # Assert a built binary meets REQUIRE_FEATURES, by reading the binary's OWN
 # QUIPU_FEATURES stamp (aegis-t1u2h). A function, not inline, so FEATURE_CHECK_ONLY
@@ -174,6 +180,36 @@ deploy_log() {
   fi
 }
 
+LOCK_HELD=0
+release_deploy_lock() {
+  local rc=$?
+  if [ "$LOCK_HELD" -eq 1 ]; then
+    deploy_log "event=lock-release lock=$DEPLOY_LOCK result=$rc"
+    rm -f "$DEPLOY_LOCK_HOLDER" 2>/dev/null || true
+    flock -u 9 2>/dev/null || true
+  fi
+  return "$rc"
+}
+
+acquire_deploy_lock() {
+  local target holder
+  command -v flock >/dev/null 2>&1 || die "flock is required to serialize deploys."
+  target=$(git -C "$BUILD_DIR" rev-parse HEAD 2>/dev/null || echo unreadable)
+  exec 9>"$DEPLOY_LOCK" || die "cannot open deploy lock '$DEPLOY_LOCK'."
+  if ! flock -n 9; then
+    holder=$(cat "$DEPLOY_LOCK_HOLDER" 2>/dev/null || echo 'holder metadata unavailable')
+    die "another Quipu deploy holds $DEPLOY_LOCK: $holder
+  Wait for that deploy to finish. Do not delete the lock file: flock releases
+  automatically when its holder exits, including after a crash or killed shell."
+  fi
+  LOCK_HELD=1
+  printf 'actor=%s pid=%s from=%s target_sha=%s started=%s\n' \
+    "$DEPLOY_ACTOR" "$$" "$(hostname 2>/dev/null || echo '?')" "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    > "$DEPLOY_LOCK_HOLDER"
+  deploy_log "event=lock-acquire lock=$DEPLOY_LOCK target_sha=$target"
+  trap release_deploy_lock EXIT
+}
+
 check_shapes() {
   local token body code count
   token="${QUIPU_AUTH_TOKEN:-}"
@@ -230,10 +266,22 @@ fi
 # an identity for it would be friction with no audit value.
 [ "${NO_DEPLOY:-0}" = 1 ] || require_actor
 
+if [ "${DEPLOY_LOCK_CHECK_ONLY:-0}" = 1 ]; then
+  require_actor
+  acquire_deploy_lock
+  sleep "${DEPLOY_LOCK_HOLD_SECONDS:-0}"
+  exit 0
+fi
+
 cd "$BUILD_DIR"
 ARTIFACT="target/release/$BIN"
 command -v cargo >/dev/null 2>&1 \
   || die "cargo not found (looked on PATH and in \$HOME/.cargo). Run as the build-dir owner, or install rustup."
+
+# Hold one kernel lock across build, install, restart, and every verification
+# gate. It is process-owned, so a crash releases it without a reboot; the
+# sidecar is attribution only and is never trusted as the locking primitive.
+[ "${NO_DEPLOY:-0}" = 1 ] || acquire_deploy_lock
 
 # Prove the required features are still declared — if someone drops them from
 # Cargo.toml, a bare build would "succeed" and this script would build the
