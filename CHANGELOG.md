@@ -2,6 +2,103 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.24] - 2026-08-22
+
+### Added
+
+- *(wasm)* SQLite on wasm32 via rusqlite 0.40 — quipu-qd2 lands([6609c0a](https://github.com/scbrown/quipu/commit/6609c0ae842ddb504de21b4a343e88e34b3dbe63))
+- *(wasm)* Measure wasm-vs-native throughput — quipu-ajz lands([da88223](https://github.com/scbrown/quipu/commit/da8822372f448aa9338a385165f639032ea2506f))
+- *(wasm)* .db export/import and the pack round-trip — quipu-2l5 lands([38952e0](https://github.com/scbrown/quipu/commit/38952e0206d2cc5a4e6cef8b3c428dd9406cef40))
+- *(governance)* Entity-grounded predicate vocabulary — candidateSource, groundingQuery, grounded match types, embedding/model tiers([5eeea9e](https://github.com/scbrown/quipu/commit/5eeea9ee7444e2f30107dc14fabe970727043e7a))
+- *(governance)* Attach nearest decided DecisionRequests as scored precedent when minting([9cbc747](https://github.com/scbrown/quipu/commit/9cbc7477ef3200f1f14579295644db639b607477))
+- *(governance)* Claimed-linkage verification — typed three-outcome check of aegis:implements claims([1589f18](https://github.com/scbrown/quipu/commit/1589f185ddd90843056f46fd42591e9fa48d8ada))
+- *(governance)* Policy by example — exemplar linkage, advisory drafting scaffold, pre-creation backtest, reject-to-policy seam([0f46030](https://github.com/scbrown/quipu/commit/0f460300867c3d1bdd05045957e098179fd0ba39))
+- *(server)* Expose graph registration and labelling over HTTP([f3d93e5](https://github.com/scbrown/quipu/commit/f3d93e596fe73570d99142e6b0bf9c7026a6dbba))
+- *(context)* The pipeline says what the budget cut([9ce21ee](https://github.com/scbrown/quipu/commit/9ce21eef8763b4f95d61e9088c4a66aca0f6f1ab))
+- *(ask)* Work-item disclosure rungs in the named-query catalog([c35fa39](https://github.com/scbrown/quipu/commit/c35fa394ede66df789688fa521c4f957a75708a3))
+- *(path)* Golden-path analysis — grammar v1, provenance cone, backtest, draft (quipu-gp1..gp4)([8c150b1](https://github.com/scbrown/quipu/commit/8c150b1034d9089193f09a229393128626985bad))
+- *(knot)* Route /knot writes to registered committed graphs([22b3569](https://github.com/scbrown/quipu/commit/22b3569d5673556e3baf4afa81c580fb5ddf2284))
+- *(fork)* Persistent named forks — fork ROOT at any tx, promote through the gates([b636458](https://github.com/scbrown/quipu/commit/b63645817fdf842a81838f7e82a13e99f95567a0))
+- *(events)* Record write refusals as queryable write.refused events([71440ff](https://github.com/scbrown/quipu/commit/71440ff13b5be216b3a0a2d4b450eca1156b8d32))
+
+### CI/CD
+
+- *(wasm)* The browser harness enters the matrix — quipu-ame lands([6cf8864](https://github.com/scbrown/quipu/commit/6cf886452450a2b634afe592ea122df5c10ecd58))
+
+### Changed
+
+- Shrink seven files past the size ratchet's full-scan baseline([8da0c7a](https://github.com/scbrown/quipu/commit/8da0c7a5b097948fedd95012e624e8361d9b78c5))
+- *(namespace)* Bobbin: is the aegis base; delete dead bobbin.dev IRIs([ee0c5a6](https://github.com/scbrown/quipu/commit/ee0c5a623e2a5a2e95b530619c408cae8728dd18))
+
+### Documentation
+
+- *(design)* Verified headless wasm test harness; correct qd2/ajz triage([ccacf6e](https://github.com/scbrown/quipu/commit/ccacf6e1de79c8de328be73757863350642e0dfc))
+- *(patents)* Disclosure timeline and provisional draft for the governance cluster([f9d8594](https://github.com/scbrown/quipu/commit/f9d85942de5ae67cbc654e4f58cd89b8da1a4265))
+- *(patents)* Apply adversarial review to the governance provisional([3ce18ae](https://github.com/scbrown/quipu/commit/3ce18aebcb1b165d359342a7c648c21f335b79e1))
+- *(patents)* Rev 2 of disclosure timeline after adversarial re-derivation([a1127ab](https://github.com/scbrown/quipu/commit/a1127abe0a7dbd185047de8eb9e1006170371b88))
+- *(patents)* Filing-day cover sheet data for provisionals A and B([1806710](https://github.com/scbrown/quipu/commit/1806710c781e7e999bc8599e61bd066de5b400f8))
+- *(patents)* Add provisional C (NeuralAmplifier) rows to disclosure timeline([e548d47](https://github.com/scbrown/quipu/commit/e548d47666f071b569d974caa339cb2e8dbaca8d))
+- *(patents)* Filing-ready PDF of provisional A([8d911e1](https://github.com/scbrown/quipu/commit/8d911e1f1cec1d3a15a1c182cd620b312c2e5d2d))
+- *(patents)* Add provisional C to filing cover sheet data([3c5134b](https://github.com/scbrown/quipu/commit/3c5134b4980bc2aa250e7c22b1ac0a9b221fc261))
+- *(patents)* Rev 2 of cluster C timeline rows after adversarial re-derivation([49f5af3](https://github.com/scbrown/quipu/commit/49f5af34cbdfe6c1503764c1177299bd46797e83))
+- *(patents)* Fix blank pages 25-26 in provisional A PDF; numeral 108 in brief description([cecd53b](https://github.com/scbrown/quipu/commit/cecd53bc5309c03528faacd697e96268efc4f195))
+- *(patents)* Preliminary prior-art sweep notes for provisional A([748a867](https://github.com/scbrown/quipu/commit/748a8671773802a832e63088c3eebd267828428a))
+- *(patents)* Cluster D timeline rows, cover sheet entry, prior-art notes([b5703e6](https://github.com/scbrown/quipu/commit/b5703e690571e31ad760000c7537f3b1c9b1dbc8))
+- *(design)* Semantic, entity-grounded edit policies; timeline row; grounding pitch bead([9345228](https://github.com/scbrown/quipu/commit/9345228417cbbb58aaf275f61d5936fe7db5f130))
+- *(design)* Rev 2 — drop the regex; tokenized membership and the embedding tier([5148da0](https://github.com/scbrown/quipu/commit/5148da05bbb90203808c0c65b30bbbfde1f176ec))
+- *(design)* Further applications of similarity-as-grounding; claimed-linkage pitch([cca1ef3](https://github.com/scbrown/quipu/commit/cca1ef3826e8575891a2b27ad2ddca14897fa57a))
+- *(design)* The identify-and-inform-before-refusing ordering; escalation-precedent pitch([19242e8](https://github.com/scbrown/quipu/commit/19242e8705236b1ef14bc50831ff0f603ada3414))
+- *(design)* Policy by example — one gesture from an observed edit to a governed advisory rule([9bd745d](https://github.com/scbrown/quipu/commit/9bd745db0053754e92d9ccc8f19cb74af872c95f))
+- *(design)* Policy-by-example status — quipu-side steps 1/3/4 built([b0a2e16](https://github.com/scbrown/quipu/commit/b0a2e16789f6101639253adbebe8c7a03c6eaf20))
+- *(patents)* Disclosure timeline rev 3 — 2026-08-15 cluster-D rows([fd1d752](https://github.com/scbrown/quipu/commit/fd1d752ea91d241f4e8e7d4c1cf5d85fcddd7c2e))
+- *(paper)* External measurement of the fast-plane consumer (§6)([67a7fc6](https://github.com/scbrown/quipu/commit/67a7fc62b13489be6488483f00b136f53eb3d2d8))
+- *(patents)* All four specs are filing-ready; retire the inferred-name caveat([61257af](https://github.com/scbrown/quipu/commit/61257af18a12d311fe140ef3010af5c19aa49e9d))
+- *(patents)* The account gate is ~30 minutes, not days([8110039](https://github.com/scbrown/quipu/commit/8110039ee2bbe58fde878925aa0f35baec6f8f49))
+- *(patents)* Fee confirmed at $520 total, and file B first([9255671](https://github.com/scbrown/quipu/commit/925567181b2236febe12e54ff7a27fb7f7be9f06))
+- *(patents)* Record the filing — A is 64/135,410, filed 2026-08-17([48486cd](https://github.com/scbrown/quipu/commit/48486cd6200f0008d7627137da8029550d1ca7cf))
+- *(agents)* Work and push directly to main([3ad7e25](https://github.com/scbrown/quipu/commit/3ad7e25877864331aceb0200712558d9c307f21f))
+- *(design)* Golden-path blessing pipeline (design only)([7a85a20](https://github.com/scbrown/quipu/commit/7a85a20c8ac244746042cf280621270ac0b2d269))
+- *(paper)* Cite ActiveGraph (Nakajima, arXiv:2605.21997) in related work([f1be5c7](https://github.com/scbrown/quipu/commit/f1be5c7cff8b85da42f730c29def0e72282cad3c))
+- *(design)* Fork-at-any-event — semantics, gate routing, v1 scope([f4e6f5e](https://github.com/scbrown/quipu/commit/f4e6f5ea4c9e89673b8399b6fdfde6212ee910c4))
+- *(design)* Named-graphs — retire the stale /knot deferral, scope the event-log claim([647db1c](https://github.com/scbrown/quipu/commit/647db1c125f7a63c9a6cee66121cb4a7456b6b16))
+- *(design)* Multi-db-composition — aliases are built; GRAPH <attached-iri> is served([b8fb055](https://github.com/scbrown/quipu/commit/b8fb055f29fa46fe7956b267f7ddca9cea463582))
+- *(design)* Policy-edit-hooks — a refused write now leaves a write.refused trace([6e0bd04](https://github.com/scbrown/quipu/commit/6e0bd047168f859d6af748de7a366afa2f46cce3))
+- *(design)* Correct two banners the code outran — federation routing, read-model phases([b856018](https://github.com/scbrown/quipu/commit/b856018261397529edc14b3f872d917e21b0311c))
+- *(book)* Document the fork surfaces and the graph/fork query params([ef76567](https://github.com/scbrown/quipu/commit/ef76567b0d3513e7dd50cdd3bb70edbb1422a509))
+
+### Fixed
+
+- *(lint)* Unnecessary_sort_by in rank write-back, red on CI's newer clippy([e4e565c](https://github.com/scbrown/quipu/commit/e4e565c4dcbf9866ff82117738b01faff3f9261c))
+- *(governance)* Project ?layer in the placement SELECT; refuse escalating effects outside the escalation class([0328775](https://github.com/scbrown/quipu/commit/0328775c24747d9c647f64a285a42065d2b2c329))
+- *(governance)* Re-mint expired DecisionRequests; accept only signed decisions from registered deciders([0cc3a05](https://github.com/scbrown/quipu/commit/0cc3a05a8d40b25e56ef9ac1ba697ee32d6b211d))
+- *(labels)* Compare the cached trust rank in the drift sweep and verify it at read([6e59557](https://github.com/scbrown/quipu/commit/6e5955700b79182849deca1cbd3e4069c86b7b26))
+- *(just)* Serve-fixtures was missing the server feature quipu-server requires([529b8b0](https://github.com/scbrown/quipu/commit/529b8b0d65dfbf87ef86f625ee42a34506436a9a))
+- *(server)* Quipu-server did not compile under --features full([f5d9041](https://github.com/scbrown/quipu/commit/f5d90419bb261ac0fd08f5ca6b6c4fd6801f2956))
+- *(resolution)* Honour quipu:distinctFrom, read the composed store, resolve a write in one pass([34bf864](https://github.com/scbrown/quipu/commit/34bf86469386a4ad2f64238cf52a562775a0deb0))
+- *(shacl)* Graph-scope the store-context repair for named-graph knot writes([d0c24b7](https://github.com/scbrown/quipu/commit/d0c24b7f76982b9f7ca7fc06e862174da6ea6950))
+
+### Miscellaneous
+
+- *(beads)* File five governance-plane bugs found by doc-vs-code review([0aa1826](https://github.com/scbrown/quipu/commit/0aa1826b369ca9ec96b7e49b1c36bf5f603dd9e4))
+- *(beads)* Export issues.jsonl with the five governance-plane bug beads([4f4c560](https://github.com/scbrown/quipu/commit/4f4c5605cf96068e018654ec61a99e591844b9a2))
+- *(beads)* Export tracker state — all nine open beads closed([bb2d68e](https://github.com/scbrown/quipu/commit/bb2d68e0c6dd0c963c1f24c01f886312b0ccef0d))
+- *(beads)* File progressive-disclosure and work-item-containment work (jsonl export)([5ea6d22](https://github.com/scbrown/quipu/commit/5ea6d22cdd70369696f3681d2b383fa49de479ae))
+- *(beads)* Close the disclosure work that landed (jsonl export)([53b82c2](https://github.com/scbrown/quipu/commit/53b82c228fcdaabc882d16733541ff855ab1cdcf))
+- *(beads)* Close quipu-oql — the read pool already fixed it (jsonl export)([0c008bb](https://github.com/scbrown/quipu/commit/0c008bbc63d316effed64d1b4c8dbf43a7337dc3))
+- *(beads)* File golden-path gap beads (jsonl export)([ba3a003](https://github.com/scbrown/quipu/commit/ba3a003a38786a41fe8f1df232ff804ef9abbd2d))
+- *(beads)* Close quipu-gp1..gp4 (jsonl export)([469c7f6](https://github.com/scbrown/quipu/commit/469c7f6e77482ef55504164ceea20817c90d5f56))
+- *(beads)* File quipu-gp5 — fork-at-any-event ergonomics (jsonl export)([b5a9168](https://github.com/scbrown/quipu/commit/b5a91685bf78f0dd34a901b636e9a905203e8c96))
+- *(beads)* File quipu-er1..er4 — entity resolution defects (jsonl export)([7b4f01b](https://github.com/scbrown/quipu/commit/7b4f01b016808d23759ddd6bf07023a1778a35d0))
+- *(beads)* Close quipu-er1..er4 (jsonl export)([004e3d2](https://github.com/scbrown/quipu/commit/004e3d222ca1b03be2a9a69587bd94859f2f7139))
+- *(beads)* File quipu-080 — SHACL type-context is ROOT-only for named-graph writes (jsonl export)([bc11cc8](https://github.com/scbrown/quipu/commit/bc11cc80ede13db4643dcb7b7ff55750deccfbb1))
+- *(beads)* Close quipu-080 — SHACL repair context is now graph+ROOT scoped for named-graph knot writes (jsonl export)([fd3d6cd](https://github.com/scbrown/quipu/commit/fd3d6cd1270b6adce7d410aac9deb131bb09fbce))
+- *(beads)* Close quipu-gp5 — persistent named forks with gate-routed promotion (jsonl export)([a7082cf](https://github.com/scbrown/quipu/commit/a7082cf9c0c4208352f23347a31b73d686055395))
+- *(beads)* Close quipu-0d3 — write refusals recorded as queryable write.refused events (jsonl export)([37bfc06](https://github.com/scbrown/quipu/commit/37bfc06a33081d26177cd7176de45c7cab3647e8))
+
+### Style
+
+- Cargo fmt, and a missing final newline in three configs([c27e00f](https://github.com/scbrown/quipu/commit/c27e00f9eb8c31b52aa855556ce1edadfbf91d83))
+
 ## [0.3.23] - 2026-08-12
 
 ### Added
