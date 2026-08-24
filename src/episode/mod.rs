@@ -62,6 +62,14 @@ pub struct IngestResult {
     /// Existing entities claimed by MORE THAN ONE node of this episode: the
     /// write is about to fragment one entity. See `resolution::matching`.
     pub resolution_contentions: Vec<Contention>,
+    /// Class IRIs this episode typed that NO loaded shape targets (aegis-7n1ya).
+    /// Advisory only — the write succeeded. Empty on a fully governed episode.
+    ///
+    /// This is the one error shapes structurally cannot catch: an INVENTED
+    /// class is untargeted, so it violates nothing and returns a healthy
+    /// `count`. Measured at 405 entities across 5 such classes, every one
+    /// written behind an HTTP 200 that the author read as confirmation.
+    pub vocabulary_hints: Vec<String>,
 }
 
 /// What an `/episode` ingest did, so a caller can tell "already recorded" from
@@ -136,13 +144,43 @@ pub fn ingest_episode_with_resolution(
 
     let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
 
+    // The advisory is computed AFTER the write and can never fail it: the
+    // transaction has already committed, so an error reading the shape sets
+    // yields no hints rather than an error. See `crate::vocabulary`.
+    let vocabulary_hints = ungoverned_node_types(store, episode, base_ns);
+
     Ok(IngestResult {
         tx_id,
         count,
         outcome,
         resolution_hints,
         resolution_contentions,
+        vocabulary_hints,
     })
+}
+
+/// Class IRIs this episode's nodes are typed with that no loaded shape targets.
+///
+/// A node `type` is always emitted into the aegis domain namespace as
+/// `aegis:{sanitized}` (see `episode_to_turtle`), so the IRI this resolves to is
+/// `base_ns + sanitize_iri_local(type)` — computed the SAME way here as there,
+/// deliberately: a second spelling would report governed types as ungoverned,
+/// and an advisory that is wrong in that direction gets ignored within a week.
+fn ungoverned_node_types(store: &Store, episode: &Episode, base_ns: &str) -> Vec<String> {
+    let Ok(sanctioned) = crate::vocabulary::sanctioned(store) else {
+        return Vec::new();
+    };
+    let mut found = std::collections::BTreeSet::new();
+    for node in &episode.nodes {
+        let Some(ntype) = &node.node_type else {
+            continue;
+        };
+        let iri = format!("{base_ns}{}", sanitize_iri_local(ntype));
+        if !sanctioned.contains(&iri) {
+            found.insert(iri);
+        }
+    }
+    found.into_iter().collect()
 }
 
 /// The IRI an episode node is written as. One definition, so resolution reads

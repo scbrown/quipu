@@ -181,13 +181,18 @@ pub fn tool_episodes_complete(store: &mut Store, input: &JsonValue) -> Result<Js
     let result =
         episode::ingest_episode_with_resolution(store, &episode, timestamp, &base_ns, Some(&opts))?;
 
-    Ok(serde_json::json!({
+    let mut response = serde_json::json!({
         "tx_id": result.tx_id,
         "count": result.count,
         "episode": name,
         "resolution_hints": super::resolution_hints_json(&result.resolution_hints),
         "resolution_contentions": super::resolution_contentions_json(&result.resolution_contentions)
-    }))
+    });
+    // See the note in `tools::write` — advisory, absent when everything is governed.
+    if let Some(hint) = crate::vocabulary::hint_json(result.vocabulary_hints) {
+        response["vocabulary_hint"] = hint;
+    }
+    Ok(response)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

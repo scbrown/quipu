@@ -1,8 +1,6 @@
 //! Shape and subscription management: `quipu_validate`, `quipu_shapes`,
 //! `quipu_subscriptions`.
 
-use std::collections::BTreeSet;
-
 use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
@@ -265,28 +263,7 @@ pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 /// the accepted vocabulary: abstract parents such as Service and Host are
 /// query-only classes without their own target shape, but remain valid IRIs.
 fn vocabulary_json(store: &Store) -> Result<JsonValue> {
-    use oxttl::TurtleParser;
-
-    const TARGET_CLASS: &str = "http://www.w3.org/ns/shacl#targetClass";
-    const SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
-
-    let mut classes = BTreeSet::new();
-    for (name, turtle, _) in store.list_shapes()? {
-        let parser = TurtleParser::new()
-            .with_base_iri("http://example.org/")
-            .map_err(|e| Error::InvalidValue(format!("shape set '{name}' base IRI: {e}")))?;
-        for result in parser.for_reader(turtle.as_bytes()) {
-            let triple = result.map_err(|e| {
-                Error::InvalidValue(format!("shape set '{name}' Turtle parse error: {e}"))
-            })?;
-            let predicate = triple.predicate.as_str();
-            if (predicate == TARGET_CLASS || predicate == SUBCLASS_OF)
-                && let oxrdf::Term::NamedNode(class) = triple.object
-            {
-                classes.insert(class.as_str().to_owned());
-            }
-        }
-    }
+    let classes = crate::vocabulary::sanctioned(store)?;
     Ok(serde_json::json!({
         "classes": classes,
         "count": classes.len(),

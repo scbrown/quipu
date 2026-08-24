@@ -3180,3 +3180,192 @@ fn test_tool_export_named_graph_subset() {
         .is_err()
     );
 }
+
+// ── Vocabulary advisory (aegis-7n1ya) ────────────────────────────
+//
+// The defect these cover: SHACL fires through sh:targetClass, so a type NO
+// shape targets is untargeted and vacuously conformant. `conforms: true` is
+// truthful and says nothing about it, and every caller reads it as approval —
+// 405 entities across 5 invented classes were written exactly that way.
+
+#[test]
+fn knot_advises_when_a_type_no_shape_targets_is_written() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_shapes(
+        &store,
+        &serde_json::json!({
+            "action": "load",
+            "name": "vocab-advisory",
+            "turtle": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                       @prefix ex: <http://example.org/> .\n\
+                       ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person .",
+        }),
+    )
+    .unwrap();
+
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> .\nex:bob a ex:Invented .",
+            "timestamp": "2026-08-24T01:00:00Z",
+            "actor": "test",
+            "source": "unit-test"
+        }),
+    )
+    .unwrap();
+
+    // The write SUCCEEDED — the advisory must not be mistaken for a refusal.
+    assert_eq!(result["conforms"], true);
+    assert!(result["tx_id"].as_i64().unwrap() > 0);
+    assert_eq!(
+        result["vocabulary_hint"]["ungoverned_types"],
+        serde_json::json!(["http://example.org/Invented"])
+    );
+}
+
+#[test]
+fn knot_is_silent_when_every_type_is_governed() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_shapes(
+        &store,
+        &serde_json::json!({
+            "action": "load",
+            "name": "vocab-advisory",
+            "turtle": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                       @prefix ex: <http://example.org/> .\n\
+                       ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person .",
+        }),
+    )
+    .unwrap();
+
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> .\nex:carol a ex:Person .",
+            "timestamp": "2026-08-24T01:00:00Z",
+            "actor": "test",
+            "source": "unit-test"
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(result["conforms"], true);
+    // ABSENT, not empty: the field's existence is the signal.
+    assert!(
+        result.get("vocabulary_hint").is_none(),
+        "a fully governed write must carry no advisory, got {result}"
+    );
+}
+
+/// The aegis-6noan shape: a dual-typed node where one type is governed and the
+/// other is not. This is the case a producer's own `conforms != false` guard
+/// cannot see, because the governed half really did validate.
+#[test]
+fn knot_advises_on_the_undeclared_half_of_a_dual_typed_node() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_shapes(
+        &store,
+        &serde_json::json!({
+            "action": "load",
+            "name": "vocab-advisory",
+            "turtle": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                       @prefix ex: <http://example.org/> .\n\
+                       ex:SymbolShape a sh:NodeShape ; sh:targetClass ex:CodeSymbol .",
+        }),
+    )
+    .unwrap();
+
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> .\nex:c1 a ex:Chunk, ex:CodeSymbol .",
+            "timestamp": "2026-08-24T01:00:00Z",
+            "actor": "test",
+            "source": "unit-test"
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(result["conforms"], true);
+    assert_eq!(
+        result["vocabulary_hint"]["ungoverned_types"],
+        serde_json::json!(["http://example.org/Chunk"])
+    );
+}
+
+/// `/episode` is the path the 405 off-vocabulary entities actually came in
+/// through — a hand-authored `type` string that reads as plausible. The node
+/// type is emitted as `aegis:{sanitized}`, so the advisory has to resolve it
+/// the same way or it reports governed types as ungoverned.
+#[test]
+fn episode_advises_when_a_node_type_no_shape_targets_is_written() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_shapes(
+        &store,
+        &serde_json::json!({
+            "action": "load",
+            "name": "vocab-advisory",
+            "turtle": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                       @prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+                       aegis:BeadShape a sh:NodeShape ; sh:targetClass aegis:Bead .",
+        }),
+    )
+    .unwrap();
+
+    let result = tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "vocab-advisory-episode",
+            "episode_body": "one governed node and one invented one",
+            "source": "unit-test",
+            "group_id": "test",
+            "timestamp": "2026-08-24T01:00:00Z",
+            "nodes": [
+                {"name": "aegis-1234", "type": "Bead"},
+                {"name": "some-service", "type": "MonitoringComponent"}
+            ]
+        }),
+    )
+    .unwrap();
+
+    // The write succeeded; only the UNGOVERNED type is named.
+    assert!(result["count"].as_u64().unwrap() > 0);
+    assert_eq!(
+        result["vocabulary_hint"]["ungoverned_types"],
+        serde_json::json!(["http://aegis.gastown.local/ontology/MonitoringComponent"])
+    );
+}
+
+#[test]
+fn episode_is_silent_when_every_node_type_is_governed() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_shapes(
+        &store,
+        &serde_json::json!({
+            "action": "load",
+            "name": "vocab-advisory",
+            "turtle": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                       @prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+                       aegis:BeadShape a sh:NodeShape ; sh:targetClass aegis:Bead .",
+        }),
+    )
+    .unwrap();
+
+    let result = tool_episode(
+        &mut store,
+        &serde_json::json!({
+            "name": "governed-episode",
+            "episode_body": "all governed",
+            "source": "unit-test",
+            "group_id": "test",
+            "timestamp": "2026-08-24T01:00:00Z",
+            "nodes": [{"name": "aegis-5678", "type": "Bead"}]
+        }),
+    )
+    .unwrap();
+
+    assert!(
+        result.get("vocabulary_hint").is_none(),
+        "a fully governed episode must carry no advisory, got {result}"
+    );
+}

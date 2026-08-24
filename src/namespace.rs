@@ -39,6 +39,32 @@ pub const BOBBIN: &str = DEFAULT_BASE_NS;
 /// Matches `scripts/ingest-repos.py`'s `BASE`: path segments are
 /// percent-encoded with `/` escaped, so a relative path is one opaque
 /// segment — `http://aegis.gastown.local/code/{repo}/{src%2Flib.rs}`.
+///
+/// ⚠️ **SUPERSEDED IN PRACTICE — this scheme has ZERO live instances, and
+/// saying so here is the whole point of this paragraph** (aegis-6noan,
+/// measured 2026-08-23 across ROOT and both named graphs):
+///
+/// | population | count |
+/// |---|---|
+/// | any subject under `CODE_BASE` | **0** |
+/// | `CodeSymbol` under `{DEFAULT_BASE_NS}code/…::{name}` | **10,425** |
+///
+/// The live producer of every code entity is **hank** (`hank-src/src/export.rs`),
+/// which mints `{DEFAULT_BASE_NS}code/{repo}/{path}::{scope}::{name}` — under the
+/// ONTOLOGY base, `::`-separated, with a hierarchical scope chain and no line
+/// number. Neither difference is cosmetic: the scope chain exists because
+/// without it 42 same-kind symbols silently merged and unioned their call edges
+/// (aegis-1q14).
+///
+/// This constant stays because `reconcile` still parses against it — but a
+/// declared-and-unproduced scheme is not a neutral leftover, it is an active
+/// trap. bobbin read this constant and `ingest-repos.py`, implemented them
+/// faithfully, and would have forked the code graph into two disjoint
+/// populations of the same referents had the push shipped. It was caught by
+/// hand, twice, because nothing about a declaration says whether anything
+/// produces it. If you are about to build against `CODE_BASE`, measure the
+/// graph first — and if you are the one who retires it, retire
+/// `ingest-repos.py`'s `BASE` in the same change.
 pub const CODE_BASE: &str = "http://aegis.gastown.local/code/";
 
 // ── Quipu namespace ───────────────────────────────────────────

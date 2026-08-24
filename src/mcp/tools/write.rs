@@ -289,7 +289,7 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let result =
         episode::ingest_episode_with_resolution(store, &ep, timestamp, &base_ns, Some(&opts))?;
 
-    Ok(serde_json::json!({
+    let mut response = serde_json::json!({
         "tx_id": result.tx_id,
         "count": result.count,
         // BRANCH ON THIS, NOT ON `count`. `unchanged` means the
@@ -301,5 +301,12 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         "resolution_hints": crate::mcp::resolution_hints_json(&result.resolution_hints),
         "resolution_contentions":
             crate::mcp::resolution_contentions_json(&result.resolution_contentions)
-    }))
+    });
+    // Present ONLY when the episode typed something no shape governs, so the
+    // field's mere existence is the signal (aegis-7n1ya). Always-present
+    // fields get skimmed; this one has to be noticed the once it appears.
+    if let Some(hint) = crate::vocabulary::hint_json(result.vocabulary_hints) {
+        response["vocabulary_hint"] = hint;
+    }
+    Ok(response)
 }
