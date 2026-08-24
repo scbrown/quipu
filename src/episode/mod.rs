@@ -148,7 +148,7 @@ pub fn ingest_episode_with_resolution(
 /// The IRI an episode node is written as. One definition, so resolution reads
 /// back `quipu:distinctFrom` under the same IRI the Turtle generator asserts it.
 pub(crate) fn node_iri(name: &str, base_ns: &str) -> String {
-    format!("{base_ns}{}", sanitize_iri_local(name))
+    format!("{base_ns}{}", node_local_name(name))
 }
 
 /// An episode — a unit of knowledge to ingest.
@@ -270,6 +270,7 @@ pub fn ingest_episode_outcome(
         if let Some(ntype) = &node.node_type {
             validate_node_type(&node.name, ntype)?;
         }
+        validate_node_name(&node.name)?;
     }
 
     // Every edge relation must be representable without being rewritten. Before
@@ -279,6 +280,8 @@ pub fn ingest_episode_outcome(
     // episode before any write, same as the untyped-node gate above, so a bad
     // edge fails loudly and specifically instead of landing as a dead triple.
     for edge in &episode.edges {
+        validate_node_name(&edge.source)?;
+        validate_node_name(&edge.target)?;
         resolve_edge_predicate(&edge.relation)?;
     }
 
@@ -651,8 +654,8 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
 
     // Nodes.
     for node in &episode.nodes {
-        let local = sanitize_iri_local(&node.name);
-        ttl.push_str(&format!("aegis:{local}"));
+        let local = node_local_name(&node.name);
+        ttl.push_str(&node_term(&local, base_ns));
 
         if let Some(ntype) = &node.node_type {
             let type_local = sanitize_iri_local(ntype);
@@ -723,14 +726,18 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
 
     // Edges.
     for edge in &episode.edges {
-        let src = sanitize_iri_local(&edge.source);
-        let tgt = sanitize_iri_local(&edge.target);
+        let src = node_local_name(&edge.source);
+        let tgt = node_local_name(&edge.target);
         // Validated in ingest_episode_with_resolution before we get here; the
         // fallback keeps this function infallible and can only be reached by a
         // caller that generates Turtle without that gate.
         let rel = resolve_edge_predicate(&edge.relation)
             .unwrap_or_else(|_| format!("aegis:{}", sanitize_iri_local(&edge.relation)));
-        ttl.push_str(&format!("aegis:{src} {rel} aegis:{tgt} .\n"));
+        ttl.push_str(&format!(
+            "{} {rel} {} .\n",
+            node_term(&src, base_ns),
+            node_term(&tgt, base_ns)
+        ));
 
         // Optional confidence qualifier (hq-cug6). The bare triple above is always
         // asserted (back-compat); when a confidence is supplied we additionally
@@ -742,9 +749,9 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
         {
             let stmt_hash = format!("{:016x}", fnv1a_64(format!("{src}|{rel}|{tgt}").as_bytes()));
             ttl.push_str(&format!("aegis:stmt_{stmt_hash} a rdf:Statement ;\n"));
-            ttl.push_str(&format!("    rdf:subject aegis:{src} ;\n"));
+            ttl.push_str(&format!("    rdf:subject {} ;\n", node_term(&src, base_ns)));
             ttl.push_str(&format!("    rdf:predicate {rel} ;\n"));
-            ttl.push_str(&format!("    rdf:object aegis:{tgt} ;\n"));
+            ttl.push_str(&format!("    rdf:object {} ;\n", node_term(&tgt, base_ns)));
             ttl.push_str(&format!("    quipu:confidence {literal} .\n"));
         }
     }
@@ -919,6 +926,52 @@ pub(crate) fn sanitize_iri_local(name: &str) -> String {
             }
         })
         .collect()
+}
+
+/// Preserve a validated relative path node name; retain legacy sanitization for
+/// ordinary human labels. Validation happens before Turtle generation.
+fn node_local_name(name: &str) -> String {
+    if name.contains('/') {
+        name.to_string()
+    } else {
+        sanitize_iri_local(name)
+    }
+}
+
+fn node_term(local: &str, base_ns: &str) -> String {
+    if local.contains('/') {
+        format!("<{base_ns}{local}>")
+    } else {
+        format!("aegis:{local}")
+    }
+}
+
+/// Slash-bearing names are deliberate canonical paths, not labels to sanitize.
+/// Keep the accepted grammar narrow so permitting `/` cannot introduce schemes,
+/// traversal, query/fragment syntax, whitespace, or Turtle escapes.
+fn validate_node_name(name: &str) -> Result<()> {
+    if !name.contains('/') {
+        return Ok(());
+    }
+    let valid = !name.starts_with('/')
+        && !name.ends_with('/')
+        && name.split('/').all(|segment| {
+            !segment.is_empty()
+                && segment != "."
+                && segment != ".."
+                && segment
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err(crate::error::Error::InvalidValue(format!(
+            "node name '{name}' is not a safe relative IRI path — slash paths must use \
+             non-empty segments containing only ASCII letters, digits, '-', '_' or '.', \
+             and may not contain '.' or '..' segments"
+        )))
+    }
 }
 
 /// Escape special characters for Turtle string literals.
