@@ -109,15 +109,59 @@ SHAPES = Path(__file__).resolve().parent / "aegis-ontology.shapes.ttl"
 # "INERT BY CONSTRUCTION" note.
 LABEL_EXEMPT = {"aegis:LabelRequiredShape"}
 
+AEGIS_NS = "http://aegis.gastown.local/ontology/"
+
+# I1 escape hatch, and the ONLY one (aegis-vt03v).
+#
+# I1's own rule is not "never require anything" -- it is "prove the emitter
+# emits it FIRST". Until now there was nowhere to RECORD that proof, so a
+# requirement that had been proven looked identical to one somebody added on a
+# hunch, and the gate stayed red with no way to distinguish them.
+#
+# An entry here is a claim that live coverage was MEASURED AT 100%. Carry the
+# number and the date, and re-measure before trusting an old one -- coverage is
+# a property of the emitter, and emitters change.
+#
+#   POST /query on the quipu server:
+#     SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE {
+#       ?s a/rdfs:subClassOf* aegis:<Class> ; aegis:<predicate> ?v }
+#   compared against the same query without the predicate clause.
+#
+# Do NOT add an entry to make a red run green. The 133-violation incident in I1
+# above is what that produces: shapes requiring predicates nothing emitted, and
+# ingestion for 11 classes one validate_on_write flag away from dying.
+REQUIRED_PREDICATE_PROVEN = {
+    # (shape, predicate): "<measured coverage> <date> <who>"
+    ("aegis:TextRuleShape", "aegis:regex"):
+        "7/7 TextRule instances (via rdfs:subClassOf*) 2026-08-24 grant",
+    ("aegis:TextRuleShape", "aegis:enforcementTier"):
+        "7/7 TextRule instances (via rdfs:subClassOf*) 2026-08-24 grant",
+}
+
 
 def parse(path):
-    """Yield (shape_name, targetclass|None, [(path, [constraints])]) per shape."""
+    """Yield (shape_name, targetclass|None, [(path, [constraints])]) per shape.
+
+    PREFIX-AWARE, resolved through the file's OWN @prefix bindings (aegis-vt03v).
+    This used to match a literal `^aegis:` and was therefore blind to any file
+    that binds the aegis namespace under a different prefix — exactly the trap
+    targetclasses() below documents having already been caught by. MEASURED
+    2026-08-24: code-entities.ttl binds `bobbin:` to the aegis namespace and
+    declares 7 NodeShapes; the literal-prefix parse saw ZERO of them. So the
+    code plane could not be examined even when this function was pointed
+    straight at its file.
+    """
     text = path.read_text()
+    prefixes = dict(re.findall(r"@prefix\s+([A-Za-z][\w-]*):\s+<([^>]+)>", text))
+    ns_prefixes = {p for p, ns in prefixes.items() if ns == AEGIS_NS}
     shapes, cur = [], None
     for line in text.splitlines():
-        m = re.match(r"^(aegis:\w+Shape)\s+a\s+sh:(NodeShape|PropertyShape)", line)
+        m = re.match(r"^([A-Za-z][\w-]*):(\w+Shape)\s+a\s+sh:(NodeShape|PropertyShape)", line)
+        if m and m.group(1) not in ns_prefixes:
+            m = None            # a shape in some OTHER namespace is not ours to judge
         if m:
-            cur = {"name": m.group(1), "kind": m.group(2), "target": None, "props": []}
+            cur = {"name": f"{m.group(1)}:{m.group(2)}", "kind": m.group(3),
+                   "target": None, "props": []}
             shapes.append(cur)
             continue
         if cur is None:
@@ -131,9 +175,6 @@ def parse(path):
         if "sh:minCount 1" in line and cur["props"]:
             cur["props"][-1]["minCount"] = True
     return shapes
-
-
-AEGIS_NS = "http://aegis.gastown.local/ontology/"
 
 
 def targetclasses(ttl_text):
@@ -154,6 +195,72 @@ def targetclasses(ttl_text):
                 out.add(full[len(AEGIS_NS):])
         elif pfx in ns_prefixes:
             out.add(local)
+    return out
+
+
+def parse_text_for_selftest(text):
+    """parse() over a literal string — selftest only, so the namespace-scoping
+    half of the prefix rule can be asserted without a fixture file on disk."""
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".ttl", delete=False) as fh:
+        fh.write(text)
+        tmp = Path(fh.name)
+    try:
+        return parse(tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def other_shape_files():
+    """Every shapes/*.ttl except the one I1/I2/I3 actually read."""
+    return sorted(p for p in SHAPES.parent.glob("*.ttl") if p != SHAPES)
+
+
+def label_floor_report(paths):
+    """I9 (aegis-vt03v). What I1/I2 WOULD say about the shape files they do not
+    read — reported, never fatal.
+
+    NOT a widened I1/I2, deliberately. I1 ("only rdfs:label may be required") is
+    an aegis-ontology.shapes.ttl POLICY and was never meant to be global:
+    governance.ttl's Verdict genuinely requires a signature and an evidenceHash
+    because those are machine-emitted records, not human-facing entities. Made
+    fatal across every file this would fail on ~50 deliberate constraints, and a
+    check that is wrong 50 times gets switched off, taking the 2 real findings
+    with it.
+
+    So this reports two things per file and rules on neither:
+      * targetClass shapes with NO rdfs:label floor  (what I2 would flag)
+      * required predicates other than rdfs:label    (what I1 would flag)
+    """
+    out = []
+    for path in paths:
+        shapes = parse(path)
+        targeted = [s for s in shapes if s["target"]]
+        if not shapes:
+            continue
+        no_label = [
+            s["name"] for s in targeted
+            if s["name"] not in LABEL_EXEMPT
+            and not any(p["path"] == "rdfs:label" and p["minCount"] for p in s["props"])
+        ]
+        required = [
+            f"{s['name']}:{p['path']}" for s in shapes for p in s["props"]
+            if p["minCount"] and p["path"] != "rdfs:label"
+        ]
+        if no_label:
+            out.append(
+                f"I9 {path.name}: {len(no_label)} targetClass shape(s) with no "
+                f"rdfs:label floor — {', '.join(sorted(no_label))}. I2 does not "
+                f"read this file, so a reader of 'I2 ... ok' is not being told "
+                f"about these."
+            )
+        if required:
+            out.append(
+                f"I9 {path.name}: {len(required)} required predicate(s) other than "
+                f"rdfs:label — {', '.join(sorted(required))}. Many are deliberate "
+                f"(machine-emitted records); I1's policy is scoped to "
+                f"{SHAPES.name} and is NOT asserted over this file."
+            )
     return out
 
 
@@ -269,11 +376,18 @@ def main():
     shapes = parse(SHAPES)
     targeted = [s for s in shapes if s["target"]]
     failures = []
+    proven = []
 
-    # I1 — only rdfs:label may be required.
+    # I1 — only rdfs:label may be required, unless coverage was PROVEN.
     for s in shapes:
         for p in s["props"]:
             if p["minCount"] and p["path"] != "rdfs:label":
+                if (s["name"], p["path"]) in REQUIRED_PREDICATE_PROVEN:
+                    proven.append(
+                        f"I1 {s['name']} requires {p['path']} — allowed, coverage "
+                        f"proven: {REQUIRED_PREDICATE_PROVEN[(s['name'], p['path'])]}"
+                    )
+                    continue
                 failures.append(
                     f"I1 {s['name']} requires {p['path']} (sh:minCount 1). Nothing but "
                     f"rdfs:label may be required unless /episode provably emits it — "
@@ -300,11 +414,22 @@ def main():
                 f"own machinery."
             )
 
-    print(f"parsed {len(shapes)} shapes ({len(targeted)} with sh:targetClass)")
+    scope = SHAPES.name
+    print(f"parsed {len(shapes)} shapes ({len(targeted)} with sh:targetClass) "
+          f"in {scope}")
+    for line in proven:
+        print(f"  (proven) {line}")
     if not failures:
-        print("I1 only rdfs:label is required .............. ok")
-        print("I2 every targetClass requires rdfs:label .... ok")
-        print("I3 all targetClass are aegis:-scoped ........ ok")
+        # NAME THE FILE. These three read ONE file while I7/I8 glob shapes/*.ttl,
+        # and saying "every targetClass" of a single-file check is a POSITIVE
+        # CLAIM OF COVERAGE THAT STOPS ANYONE LOOKING (aegis-vt03v). It is not
+        # academic: bobbin:SectionShape lives in code-entities.ttl, requires
+        # bobbin:heading and bobbin:headingDepth and requires no label -- I1 and
+        # I2 would each have caught one half -- and 1751 Section nodes sat with
+        # no rdfs:label while this printed "ok" for months.
+        print(f"I1 only rdfs:label is required .............. ok [{scope}]")
+        print(f"I2 every targetClass requires rdfs:label .... ok [{scope}]")
+        print(f"I3 all targetClass are aegis:-scoped ........ ok [{scope}]")
 
     # I4 — the live gate.
     if "--data" in sys.argv:
@@ -402,6 +527,20 @@ def main():
     else:
         print("I7 live<->declared .......................... SKIPPED (no --live)")
         print("I8 abstract-parent assertion ................ SKIPPED (no --live)")
+
+    # I9 — the honest edge of I1/I2's scope. Always runs: it needs no server and
+    # no flag, and the whole point is that a reader of "ok" learns what was NOT
+    # examined. Non-fatal by design (see label_floor_report).
+    others = other_shape_files()
+    i9 = label_floor_report(others)
+    examined = [p.name for p in others if parse(p)]
+    if i9:
+        reports.extend(i9)
+        print(f"I9 other shape files ........................ {len(i9)} report(s) "
+              f"over {len(examined)} file(s) — see REPORTS")
+    else:
+        print(f"I9 other shape files ........................ ok "
+              f"({len(examined)} file(s) examined)")
 
     if reports:
         print("\n" + "=" * 66)
@@ -538,6 +677,65 @@ def selftest():
         fails.append("I8-severity: the I8 branch appends to reports; a direct "
                      "assertion must be FATAL, not scrolled past")
 
+    # ---- aegis-vt03v: scope honesty. Each case is the bug, not a paraphrase.
+
+    # parse() must be PREFIX-AWARE. code-entities.ttl binds the aegis namespace
+    # to `bobbin:`; the literal-prefix parse saw 0 of its 7 NodeShapes, so the
+    # code plane was unexaminable even when pointed straight at its file.
+    ce = SHAPES.parent / "code-entities.ttl"
+    if ce.exists():
+        ce_shapes = parse(ce)
+        if len(ce_shapes) < 7:
+            fails.append(
+                f"vt03v-prefix: parse() saw {len(ce_shapes)} shapes in "
+                f"code-entities.ttl, expected >= 7 — it is prefix-blind again"
+            )
+        if not any(s["name"] == "bobbin:SectionShape" for s in ce_shapes):
+            fails.append("vt03v-prefix: bobbin:SectionShape not seen by parse()")
+        # ...and a shape in a genuinely FOREIGN namespace must stay out of scope.
+        foreign = parse_text_for_selftest(
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n"
+            "@prefix other: <http://example.invalid/ns#> .\n"
+            "other:ThingShape a sh:NodeShape ;\n    sh:targetClass other:Thing .\n"
+        )
+        if foreign:
+            fails.append("vt03v-prefix: a non-aegis-namespace shape was parsed as ours")
+
+    # The I1/I2/I3 lines must NAME THE FILE. "every targetClass ... ok" from a
+    # single-file check is a positive claim of coverage that stops anyone
+    # looking -- the whole defect.
+    main_src = inspect.getsource(main)
+    for inv in ("I1 only rdfs:label", "I2 every targetClass", "I3 all targetClass"):
+        seg = main_src.split(inv)[-1].split("\n")[0]
+        if "{scope}" not in seg:
+            fails.append(
+                f"vt03v-scope: the '{inv}' output line no longer names the file it "
+                f"reads; an unscoped 'ok' reads as global coverage"
+            )
+
+    # I9 must stay NON-FATAL. Made fatal it fails on ~50 deliberate constraints,
+    # and a check that is wrong 50 times gets switched off with the real ones.
+    i9_seg = main_src.split("i9 = label_floor_report")[-1].split("if reports:")[0]
+    if "failures.append" in i9_seg or "sys.exit" in i9_seg:
+        fails.append("vt03v-i9: I9 was promoted to fatal; it reports by design")
+    if "reports.extend" not in i9_seg:
+        fails.append("vt03v-i9: I9 no longer feeds REPORTS — it would be invisible")
+
+    # I9 must actually SEE the other files. A silent zero here is the same class
+    # of lie as the unscoped 'ok'.
+    others = other_shape_files()
+    if others and not any(parse(p) for p in others):
+        fails.append("vt03v-i9: I9 parsed 0 shapes across every other file")
+
+    # Every proven-coverage entry must CARRY its measurement. An empty note
+    # turns the escape hatch into the exemption list I1's history forbids.
+    for key, note in REQUIRED_PREDICATE_PROVEN.items():
+        if not note or not any(ch.isdigit() for ch in note):
+            fails.append(
+                f"vt03v-proven: {key} has no measurement recorded — an entry here "
+                f"is a claim that coverage was MEASURED, so it must carry a number"
+            )
+
     if fails:
         print("SELFTEST FAILED:", file=sys.stderr)
         for f in fails:
@@ -546,7 +744,10 @@ def selftest():
     print("SELFTEST PASSED: I5/I6 fail on unshaped documented kinds, pass on "
           "agreement, report shapes-only kinds, scope to the vocabulary "
           "section; I7 isolates live-but-undeclared kinds; I8 derives the "
-          "abstract set, isolates asserted parents, and is retired by shaping.")
+          "abstract set, isolates asserted parents, and is retired by shaping; "
+          "parse() resolves the aegis namespace through any prefix and rejects "
+          "foreign ones, I1/I2/I3 name the file they read, I9 stays non-fatal "
+          "and visible, and every proven-coverage entry carries its measurement.")
     return 0
 
 
