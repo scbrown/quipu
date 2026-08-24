@@ -511,6 +511,89 @@ aegis:TraitValueShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── DesiredCrewShape / DesiredCrewSlot ──────────────────────────
+#
+# Declarative input to the admin-owned crew-reconcile skill. This is the
+# DESIRED plane; CrewMember + reports_to remain the observed/live plane. st
+# supplies atomic mechanisms only after an administrator compares the two.
+#
+# A plan owns total target and scope; slots own composition. Slots reuse
+# CrewRole so survival and precedence remain existing role-catalogue DATA.
+# Completeness, cross-node arithmetic, one-active-plan-per-scope, and cycle
+# checks belong to reconciliation. I1 permits no required non-label property
+# before an emitter is proven, and core SHACL cannot express the latter checks
+# without SPARQL constraints. The skill therefore REFUSES an incomplete active
+# plan; SHACL constrains every value that is present.
+
+aegis:DesiredCrewShapeShape a sh:NodeShape ;
+    sh:targetClass aegis:DesiredCrewShape ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [
+        sh:path aegis:crewPlanStatus ;
+        sh:in ( "draft" "active" "retired" ) ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:scopeKind ;
+        sh:in ( "fleet" "rig" "group" "lane" ) ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Omit only for fleet scope. Rig/group/lane plans point at the graph
+        # entity being planned; the reconciler enforces that conditional.
+        sh:path aegis:scopeEntity ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:targetSize ; sh:datatype xsd:integer ;
+        sh:minInclusive 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:hasCrewSlot ; sh:class aegis:DesiredCrewSlot ;
+    ] .
+
+aegis:DesiredCrewSlotShape a sh:NodeShape ;
+    sh:targetClass aegis:DesiredCrewSlot ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [
+        # Multi-valued: slots can require composable roles. Harness, survival
+        # and precedence are resolved from those role facts, not redefined.
+        sh:path aegis:requiresRole ; sh:class aegis:CrewRole ;
+    ] ;
+    sh:property [
+        sh:path aegis:desiredCount ; sh:datatype xsd:integer ;
+        sh:minInclusive 0 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # A root says minimumCount=1 and elastic=false; it cannot satisfy a
+        # smaller target by disappearing. targetSize includes this floor.
+        sh:path aegis:minimumCount ; sh:datatype xsd:integer ;
+        sh:minInclusive 0 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:elastic ; sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Current policy is lead=claude, worker=codex; keeping it as data lets
+        # the policy change without changing st or the reconciliation skill.
+        sh:path aegis:desiredHarness ;
+        sh:in ( "claude" "codex" ) ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Desired hierarchy between slots. Root slots omit it.
+        sh:path aegis:reportsToSlot ; sh:class aegis:DesiredCrewSlot ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Destination for duties when this slot sheds capacity. Omit where
+        # consolidation requires fresh administrator judgment.
+        sh:path aegis:consolidatesInto ; sh:class aegis:DesiredCrewSlot ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:domain ; sh:datatype xsd:string ; sh:maxCount 1 ;
+    ] .
+
 # ── Polecat ──────────────���───────────────────────────────────────
 #
 # A worker agent dispatched to execute a formula.
