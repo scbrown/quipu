@@ -1,7 +1,8 @@
 # SHACL shapes for Bobbin code entity types.
 #
-# Defines validation constraints for CodeModule, CodeSymbol, Document,
-# Section, and Bundle — the core entity model for knowledge-aware bundles.
+# Defines validation constraints for Chunk, CodeModule, CodeSymbol, Document,
+# Section, Bundle and Commit — the core entity model for knowledge-aware
+# bundles and for bobbin's chunk snapshot lane.
 #
 # Load via POST /shapes:
 #   curl -s localhost:3030/shapes -X POST \
@@ -17,6 +18,86 @@
 #
 # A source file in a repository. Every code module must declare its
 # file path, repository, and programming language.
+
+# ── Chunk (aegis-6noan, ian 2026-08-23) ────────────────────────
+#
+# A retrieval SPAN — bobbin's unit of indexing. NOT a synonym for CodeSymbol,
+# and the two must not be collapsed: a Chunk is a span (identity, order,
+# adjacency), a CodeSymbol is a named definition. bobbin dual-types the same
+# node `bobbin:Chunk, bobbin:CodeSymbol` (or `, bobbin:Section`) where a chunk
+# happens to be one, which is ONE entity with two types — the established
+# convention here — never a duplicate node.
+#
+# WHY THIS SHAPE EXISTS AT ALL, which is the part worth keeping:
+# bobbin `1e34ec4` publishes chunk snapshots to a REMOTE /knot and guards on
+# `conforms != false`. But SHACL fires via sh:targetClass, so an UNDECLARED
+# class is untargeted and VACUOUSLY CONFORMANT — measured on aegis-hpav5, where
+# an invented class and a real off-vocab class both returned conforms=true while
+# a sanctioned class missing rdfs:label violated. Without this shape the chunk
+# push would have returned a clean conforms:true while minting the largest
+# ungoverned class in the graph's history: aegis-7n1ya (405 nodes / 5 undeclared
+# classes) recurring at roughly 10x, delivered by a SANCTIONED integration
+# rather than a careless write. Declaring the class is what makes the write
+# checkable — and what makes it visible to /shapes vocabulary.
+#
+# LABEL FLOOR ONLY — every other property is minCount 0, and that is measured,
+# not lazy. Two reasons:
+#   1. aegis-dixug: /knot's shacl_context supplies only TYPES for nodes the
+#      payload references, so every REQUIRED property is re-checked against the
+#      payload alone. Any later incremental touch of a chunk (adding one type,
+#      one edge) would be refused for a property the store already holds. On a
+#      class that will be the graph's largest, a minCount 1 here would make the
+#      whole population un-amendable until dixug lands.
+#   2. This repo's own rule two shapes up: never require a predicate the emitter
+#      does not emit, and advise before enforce.
+# rdfs:label IS required, matching all five sibling shapes below, and the
+# emitter always writes it (generate_chunk_turtle falls back to
+# "<path>:<line>"). Tighten the rest AFTER dixug, against a measured census.
+bobbin:ChunkShape a sh:NodeShape ;
+    sh:targetClass bobbin:Chunk ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    # Membership: the CodeModule/Document this span belongs to.
+    sh:property [
+        sh:path bobbin:inDocument ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 0 ;
+        sh:maxCount 1 ;
+    ] ;
+    # Order within its file, 0-based. Governs the DATATYPE so a string "3"
+    # cannot silently sort beside an integer 3.
+    sh:property [
+        sh:path bobbin:chunkOrder ;
+        sh:datatype xsd:integer ;
+        sh:minCount 0 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path bobbin:filePath ;
+        sh:datatype xsd:string ;
+        sh:minCount 0 ;
+        sh:maxCount 1 ;
+    ] ;
+    # Adjacency. Single successor by construction.
+    sh:property [
+        sh:path bobbin:nextChunk ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 0 ;
+        sh:maxCount 1 ;
+    ] ;
+    # WEAK mention literals (bobbin W2.P5) — a NAME, not a resolved reference,
+    # resolved to Ref edges later by knowledge::mentions. Deliberately
+    # unbounded and deliberately a literal: typing it sh:IRI here would force
+    # the emitter to guess a referent it has not resolved yet.
+    sh:property [
+        sh:path bobbin:mentions ;
+        sh:datatype xsd:string ;
+        sh:minCount 0 ;
+    ] .
 
 bobbin:CodeModuleShape a sh:NodeShape ;
     sh:targetClass bobbin:CodeModule ;

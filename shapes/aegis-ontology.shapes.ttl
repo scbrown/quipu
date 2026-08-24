@@ -1023,6 +1023,88 @@ aegis:DockerImageShape a sh:NodeShape ;
 #
 # A work item tracked in beads.
 
+# ── BeadScope (aegis-6adcf / aegis-368cu.5, ian 2026-08-23) ────────────────
+#
+# Tier 2 of the bead-scope contract. Tier 1 landed as /propose proposal_id 6 —
+# and an ACCEPTED PROPOSAL IS LOST ON REDEPLOY unless it is also in this file,
+# which is why this is a shape and not a note on the bead.
+#
+# THREE THINGS A REVIEWER SHOULD NOT TIDY UP.
+#
+# 1. Every property is minCount 0. That is not laxness, it is rule 1 of
+#    368cu.5 — "unknown scope ADVISES, never blocks" — made structural.
+#    160+ open beads carry no scope, so a required property makes all of them
+#    violations overnight and pressures the guard into reading ABSENCE as
+#    DENIAL. That is the aegis-unbuw failure: a guard refused an operator for
+#    having ALREADY done what it demanded, unrecoverable short of a host restart.
+#
+# 2. grantsAction excludes "read", deliberately. Rule 2: scope governs
+#    MUTATION, not observation. Investigation legitimately reads far outside a
+#    bead's scope — clearing aegis-0jv06 needed 24 agents' transcripts. If read
+#    were grantable somebody would eventually deny it, and advisories on reads
+#    train everyone to ignore advisories. Unrepresentable beats
+#    documented-as-discouraged.
+#
+# 3. touches* are IRIs, not strings. They point at referents that already
+#    exist (repo_shantytown, repo_quipu, repo_bobbin, repo_hank, repo_goldblum).
+#    A string would mint a second referent vocabulary beside the entity graph —
+#    the aegis-hpav5 / aegis-7n1ya fragmentation this graph keeps paying for.
+#
+# The closed action set is the SAME vocabulary the trace emits (368cu.1's
+# resolver returns verbs). Records and rules share one vocabulary, so a policy
+# is a saved query over records plus an effect; changing one side silently
+# invalidates the other.
+#
+# Describing reality, not proposing it — worked example asserted and read back
+# conforms:true at tx 34475:
+#     aegis-9mehy  touchesRepo repo_shantytown ;
+#                  grantsAction "edit","commit","push","deploy" ;
+#                  scopeProvenance "declared"
+#
+# A SECOND shape on aegis:Bead is intentional and valid SHACL: BeadShape below
+# governs bead identity, this one governs scope. Kept separate so the scope
+# contract can be read, revised or retired without touching bead identity.
+aegis:BeadScopeShape a sh:NodeShape ;
+    sh:targetClass aegis:Bead ;
+    # I2 (verify_shape_invariants.py): a targetClass shape that requires
+    # nothing asserts nothing. This block is that floor and NOTHING MORE —
+    # it does not weaken rule 1 above, because a label is independent of
+    # scope: a bead with no scope at all still satisfies it, which is the
+    # whole point. Already true of the data (BeadShape below requires the
+    # same, 547 live Beads), so it refuses nothing that exists. Do not read
+    # it as licence to add a second sh:minCount 1 here.
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:touchesRepo ;
+        sh:minCount 0 ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path aegis:touchesHost ;
+        sh:minCount 0 ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path aegis:touchesService ;
+        sh:minCount 0 ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path aegis:grantsAction ;
+        sh:minCount 0 ;
+        sh:datatype xsd:string ;
+        sh:in ( "edit" "commit" "push" "deploy" "restart" "delete" ) ;
+    ] ;
+    sh:property [
+        sh:path aegis:scopeProvenance ;
+        sh:minCount 0 ;
+        sh:maxCount 1 ;
+        sh:in ( "declared" "derived" "observed" ) ;
+    ] .
+
 aegis:BeadShape a sh:NodeShape ;
     sh:targetClass aegis:Bead ;
     sh:property [
@@ -1311,6 +1393,30 @@ aegis:MonitoringProbeShape a sh:NodeShape ;
     sh:targetClass aegis:MonitoringProbe ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
 
+# ── Credential (aegis-5eovj, ian 2026-08-23) ───────────────────
+#
+# ACCEPTED into the vocabulary after inspecting all 9 instances, per this
+# repo's rule that a generic class must be justified by its nodes and not by
+# its name: TELEGRAM_BOT_TOKEN_secret, prometheus-basic-auth-credential,
+# homelab-mcp-ssh-key, dolt-backup-pull-key, terraform-ansible-controller-key,
+# infisical-vault-access, crew-host-infisical-identity,
+# homelab-mcp-ntfy-publisher, telegram_bot_8152168925.
+#
+# A secret or access identity is a real kind here — it has a reader path we
+# already depend on (rotation runbooks, the pushgateway credential, the quipu
+# bearer). SSHKey covers 3 of the 9 and is the SPECIAL case, so the hierarchy
+# runs that way round rather than widening SSHKey to mean "any secret".
+#
+# Label floor only, deliberately: these nodes are authored by hand across
+# several lanes and no emitter guarantees any other property. A shape must
+# refuse nothing that already exists.
+#
+# ⚠️ NEVER put a credential VALUE in this graph — the class names the secret,
+# it does not hold it. Nothing enforces that; it is a rule about what you write.
+aegis:CredentialShape a sh:NodeShape ;
+    sh:targetClass aegis:Credential ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
 aegis:SSHKeyShape a sh:NodeShape ;
     sh:targetClass aegis:SSHKey ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
@@ -1411,6 +1517,7 @@ aegis:DatabaseService rdfs:subClassOf aegis:Service .
 aegis:SearchService rdfs:subClassOf aegis:Service .
 aegis:ClaudeCodeHook rdfs:subClassOf aegis:Script .
 aegis:AlertRule rdfs:subClassOf aegis:Directive .
+aegis:SSHKey rdfs:subClassOf aegis:Credential .
 
 # ⚠️ READ THE PARENTHESIS IN THE HEADER ABOVE — IT IS THE WHOLE MECHANISM.
 #
