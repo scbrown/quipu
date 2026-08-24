@@ -404,11 +404,18 @@ pub fn ingest_episode_outcome(
 
     let source_str = format!("episode:{}", episode.name);
 
-    // Named graph (aegis-g1al / #36): intern the graph IRI to its term id and
-    // write there. Absent = ROOT (g=0). The graph is itself an entity (its term
-    // id), which is where #37 provenance (owner/tenant) attaches.
+    // Named graph (aegis-g1al / #36): register the graph and write there.
+    // Absent = ROOT (g=0). The graph is itself an entity (its term id), which
+    // is where #37 provenance (owner/tenant) attaches.
+    //
+    // `graph_create`, not a bare `intern` (camayoc-s0h): interning without
+    // registering produced graphs with no `graphs` row, which could then never
+    // be labelled — quarantine-shaped writes with the appearance of a plane
+    // and none of the substance. Idempotent, permissive like this field always
+    // was (no writer breaks), and every episode-created graph becomes
+    // labelable and freezable.
     let graph = match &episode.graph {
-        Some(iri) if !iri.trim().is_empty() => store.intern(iri)?,
+        Some(iri) if !iri.trim().is_empty() => store.graph_create(iri)?,
         _ => 0,
     };
 

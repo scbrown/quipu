@@ -3514,3 +3514,33 @@ fn graph_list_filters_by_kind_and_probes_lifecycle() {
     // Unknown lifecycle filter is refused.
     assert!(tool_graph_list(&store, &serde_json::json!({ "lifecycle": "thawed" })).is_err());
 }
+
+#[test]
+fn episode_graph_field_registers_the_graph_so_it_can_be_labelled() {
+    // camayoc-s0h: /episode's graph field used to intern without registering,
+    // leaving graphs that set_graph_label refused forever after.
+    let mut store = Store::open_in_memory().unwrap();
+    let input = serde_json::json!({
+        "name": "ep-registers",
+        "graph": "urn:test:graph:episodic",
+        "nodes": [{"name": "N1", "type": "Thing"}],
+        "timestamp": "2026-01-01T00:00:00Z"
+    });
+    tool_episode(&mut store, &input).unwrap();
+
+    // The graph is registered committed-class…
+    let g = store.lookup("urn:test:graph:episodic").unwrap().unwrap();
+    assert_eq!(store.graph_class(g).unwrap().as_deref(), Some("committed"));
+    // …and therefore labelable.
+    store
+        .set_graph_label(
+            "urn:test:graph:episodic",
+            &crate::store::labels::GraphLabel {
+                kind: Some(crate::lattice_kind::DataKind::parse("operational").unwrap()),
+                ..Default::default()
+            },
+            "2026-01-01T00:00:01Z",
+            None,
+        )
+        .expect("an episode-created graph must be labelable");
+}
