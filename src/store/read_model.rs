@@ -462,11 +462,12 @@ impl Store {
         // independent of how many `Store` handles exist and who did the write.
         let latest = self.latest_tx_id()?;
         let since = match self.read_model.borrow().get(&graph) {
-            None => None,                                   // nothing resident
-            Some(m) if m.built_at_tx() == latest => return Ok(std::cell::Ref::map(
-                self.read_model.borrow(),
-                |m| m.get(&graph).expect("checked resident and current"),
-            )),
+            None => None, // nothing resident
+            Some(m) if m.built_at_tx() == latest => {
+                return Ok(std::cell::Ref::map(self.read_model.borrow(), |m| {
+                    m.get(&graph).expect("checked resident and current")
+                }));
+            }
             Some(m) => Some(m.built_at_tx()),
         };
         match since {
