@@ -619,3 +619,99 @@ aegis:unlabelled a aegis:Directive ;
         "a real violation on the episode path was laundered by store context"
     );
 }
+
+// ── Incremental type-add (aegis-dixug) ───────────────────────────
+//
+// The opposite shape to the fp17f defect above: not a node the payload
+// REFERENCES, but the payload's OWN SUBJECT, already in the store and already
+// conformant, refused for a floor the store satisfies. `sh:targetClass` sees
+// the type in the payload; every other constraint is judged on the payload
+// alone.
+
+const RULE_SHAPES: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+aegis:OperationalRuleShape a sh:NodeShape ;
+    sh:targetClass aegis:OperationalRule ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ] .
+"#;
+
+/// The node as the store already holds it: labelled, conformant, untyped as a
+/// rule. This is the state the bead measured on `traefik-dynamic-orphan-guard`.
+fn store_with_labelled_node() -> Store {
+    let mut store = Store::open_in_memory().expect("store");
+    crate::rdf::ingest_rdf(
+        &mut store,
+        br#"<http://x/guard> <http://www.w3.org/2000/01/rdf-schema#label> "guard" ."#.as_slice(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-08-24T00:00:00Z",
+        None,
+        Some("test"),
+    )
+    .expect("node ingested");
+    store
+}
+
+#[test]
+fn adding_a_type_to_an_existing_node_is_not_refused_for_a_label_it_already_has() {
+    let store = store_with_labelled_node();
+    let payload = r#"
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+<http://x/guard> a aegis:OperationalRule .
+"#;
+
+    // CONTROL: the payload alone really is refused, so a pass below is the
+    // repair working and not the shape failing to constrain anything.
+    let bare = crate::shacl::validate_shapes(RULE_SHAPES, payload).expect("bare validate");
+    assert!(
+        !bare.conforms,
+        "control failed: the payload alone must be refused, or this test proves nothing"
+    );
+
+    let v = validate_with_store_context(&store, RULE_SHAPES, payload).expect("validate");
+    assert!(
+        v.conforms,
+        "an incremental type-add was refused for a label the store already holds: {:?}",
+        v.results
+    );
+}
+
+/// The floor still bites when the store CANNOT satisfy it. Without this, the
+/// fix above is indistinguishable from having disabled the constraint.
+#[test]
+fn adding_a_type_is_still_refused_when_the_node_has_no_label_anywhere() {
+    let store = store_with_labelled_node();
+    let payload = r#"
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+<http://x/never-seen> a aegis:OperationalRule .
+"#;
+    let v = validate_with_store_context(&store, RULE_SHAPES, payload).expect("validate");
+    assert!(
+        !v.conforms,
+        "a node with no label in the payload OR the store must still be refused"
+    );
+}
+
+#[test]
+fn required_paths_finds_the_floor_and_ignores_optional_properties() {
+    let shapes = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:S a sh:NodeShape ;
+    sh:targetClass aegis:Thing ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ] ;
+    sh:property [ sh:path aegis:optional ; sh:minCount 0 ] ;
+    sh:property [ sh:path aegis:alsoRequired ; sh:minCount 2 ] .
+"#;
+    let got = required_paths(shapes).expect("paths");
+    assert!(got.contains("http://www.w3.org/2000/01/rdf-schema#label"));
+    assert!(got.contains("http://aegis.gastown.local/ontology/alsoRequired"));
+    assert!(
+        !got.contains("http://aegis.gastown.local/ontology/optional"),
+        "minCount 0 is not a floor and must not trigger a store read"
+    );
+}

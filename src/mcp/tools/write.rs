@@ -305,7 +305,7 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     // Present ONLY when the episode typed something no shape governs, so the
     // field's mere existence is the signal (aegis-7n1ya). Always-present
     // fields get skimmed; this one has to be noticed the once it appears.
-    if let Some(hint) = crate::vocabulary::hint_json(result.vocabulary_hints) {
+    if let Some(hint) = crate::vocabulary::hint_json(&result.vocabulary_hints) {
         response["vocabulary_hint"] = hint;
     }
     Ok(response)

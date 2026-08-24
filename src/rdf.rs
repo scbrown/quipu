@@ -96,7 +96,7 @@ fn literal_to_value(lit: &Literal) -> Result<Value> {
 }
 
 /// Convert a `Value` back to an oxrdf `Term` for serialization.
-fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
+pub(crate) fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
     match value {
         Value::Ref(id) => {
             let iri = store.resolve(*id)?;

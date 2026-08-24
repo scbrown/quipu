@@ -106,7 +106,7 @@ pub fn ungoverned_types_in_turtle(turtle: &str, sanctioned: &BTreeSet<String>) -
 /// `None` rather than an empty list ON PURPOSE, so the field is ABSENT on a
 /// clean write. A field that is always present teaches readers to skip it, and
 /// this one has exactly one job: to be noticed the one time it appears.
-pub fn hint_json(ungoverned: Vec<String>) -> Option<serde_json::Value> {
+pub fn hint_json(ungoverned: &[String]) -> Option<serde_json::Value> {
     if ungoverned.is_empty() {
         return None;
     }
@@ -144,7 +144,7 @@ mod tests {
         let v = vocab(&["http://ex.org/Known"]);
         let ttl = r#"<http://ex.org/a> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://ex.org/Known> ."#;
         assert!(ungoverned_types_in_turtle(ttl, &v).is_empty());
-        assert!(hint_json(Vec::new()).is_none());
+        assert!(hint_json(&[]).is_none());
     }
 
     /// The aegis-6noan case: a dual-typed node where ONE of the two types is
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn hint_names_the_types_and_says_the_write_succeeded() {
-        let hint = hint_json(vec!["http://ex.org/Invented".to_string()]).expect("hint");
+        let hint = hint_json(&["http://ex.org/Invented".to_string()]).expect("hint");
         assert_eq!(hint["ungoverned_types"][0], "http://ex.org/Invented");
         assert!(hint["meaning"].as_str().unwrap().contains("SUCCEEDED"));
     }
