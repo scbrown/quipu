@@ -13,11 +13,13 @@ use serde::Deserialize;
 use crate::error::Error;
 use crate::error::Result;
 use crate::namespace;
-use crate::rdf::{ingest_rdf_to_graph, parse_rdf};
+use crate::rdf::parse_rdf;
 use crate::resolution::{self, Contention, EntityCandidate};
 #[cfg(feature = "shacl")]
 use crate::shacl;
 use crate::store::Store;
+
+mod descriptions;
 
 /// Options controlling entity resolution during episode ingest.
 #[derive(Debug, Clone)]
@@ -441,16 +443,17 @@ pub fn ingest_episode_outcome(
         let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_str), graph)?;
         (tx_id, count)
     } else {
-        ingest_rdf_to_graph(
+        let mut datums = parse_rdf(
             store,
             turtle.as_bytes(),
             oxrdfio::RdfFormat::Turtle,
             None,
             timestamp,
-            actor,
-            Some(&source_str),
-            graph,
-        )?
+        )?;
+        descriptions::reconcile_node_descriptions(store, episode, base_ns, graph, &mut datums)?;
+        let count = datums.len();
+        let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_str), graph)?;
+        (tx_id, count)
     };
     Ok((tx_id, count, outcome))
 }

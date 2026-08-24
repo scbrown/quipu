@@ -833,6 +833,97 @@ fn ordinary_episode_updates_remain_additive_for_generated_entities() {
 }
 
 #[test]
+fn a_reworded_node_description_supersedes_without_losing_provenance() {
+    let mut store = Store::open_in_memory().unwrap();
+    let first = parse_episode(
+        r#"{
+          "name":"first-observation",
+          "nodes":[{"name":"shared-service","type":"Service","description":"old wording"}]
+        }"#,
+    );
+    ingest_episode(&mut store, &first, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    let revision = parse_episode(
+        r#"{
+          "name":"correcting-observation",
+          "nodes":[{"name":"shared-service","type":"Service","description":"current wording"}]
+        }"#,
+    );
+    ingest_episode(&mut store, &revision, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    let entity = format!("{TEST_BASE_NS}shared-service");
+    assert_eq!(
+        active_values(&store, &entity, &format!("{}comment", namespace::RDFS)),
+        vec!["current wording"],
+        "the reader path has exactly the latest description"
+    );
+    let first_episode = format!("{TEST_BASE_NS}episode_first-observation");
+    assert_eq!(
+        active_values(
+            &store,
+            &first_episode,
+            &format!("{}comment", namespace::RDFS)
+        ),
+        vec!["old wording"],
+        "the superseded text remains on the episode that originally wrote it"
+    );
+
+    let repeated = parse_episode(
+        r#"{
+          "name":"third-observation",
+          "nodes":[{"name":"shared-service","type":"Service","description":"current wording"}]
+        }"#,
+    );
+    ingest_episode(&mut store, &repeated, "2026-01-03T00:00:00Z", TEST_BASE_NS).unwrap();
+    assert_eq!(
+        active_values(&store, &entity, &format!("{}comment", namespace::RDFS)),
+        vec!["current wording"],
+        "byte-identical descriptions do not accrete"
+    );
+}
+
+#[test]
+fn a_revision_refuses_an_unattributable_current_comment() {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = format!(
+        "@prefix rdfs: <{}> . <{TEST_BASE_NS}manual> rdfs:comment \"manual wording\" .",
+        namespace::RDFS
+    );
+    crate::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        Some("manual"),
+    )
+    .unwrap();
+
+    let revision = parse_episode(
+        r#"{
+          "name":"revision",
+          "nodes":[{"name":"manual","type":"Service","description":"new wording"}]
+        }"#,
+    );
+    let err =
+        ingest_episode(&mut store, &revision, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("no same-transaction prov:wasGeneratedBy")
+    );
+    assert_eq!(
+        active_values(
+            &store,
+            &format!("{TEST_BASE_NS}manual"),
+            &format!("{}comment", namespace::RDFS)
+        ),
+        vec!["manual wording"],
+        "a refused revision leaves the original untouched"
+    );
+}
+
+#[test]
 fn content_hash_is_order_independent_for_nodes() {
     let a =
         parse_episode(r#"{ "name": "h", "nodes": [{"name": "x"}, {"name": "y"}], "edges": [] }"#);

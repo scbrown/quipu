@@ -241,12 +241,17 @@ impl Store {
 
     /// Return the full history of an entity: all facts (asserts + retracts) ordered by tx.
     pub fn entity_history(&self, entity: i64) -> Result<Vec<Fact>> {
+        self.entity_history_in_graph(entity, crate::schema::ROOT_GRAPH)
+    }
+
+    /// Return the full history of an entity inside one graph, ordered by tx.
+    pub fn entity_history_in_graph(&self, entity: i64, graph: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
              WHERE e = ?1 AND g = ?2 \
              ORDER BY tx, a",
         )?;
-        Self::collect_facts(&mut stmt, params![entity, crate::schema::ROOT_GRAPH])
+        Self::collect_facts(&mut stmt, params![entity, graph])
     }
 
     /// List all transactions ordered by id.
