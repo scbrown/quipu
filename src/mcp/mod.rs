@@ -520,11 +520,11 @@ pub fn tool_definitions() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_shapes",
-            "description": "Manage persistent SHACL shapes (load, list, remove). Loaded shapes auto-validate on writes.",
+            "description": "Manage persistent SHACL shapes (load, list, get, remove) and inspect the loaded class vocabulary. Loaded shapes auto-validate on writes.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "action": { "type": "string", "enum": ["load", "list", "remove"], "description": "Action to perform (default: list)" },
+                    "action": { "type": "string", "enum": ["load", "list", "get", "remove", "vocabulary"], "description": "Action to perform (default: list)" },
                     "name": { "type": "string", "description": "Shape graph name (required for load/remove)" },
                     "turtle": { "type": "string", "description": "SHACL shapes in Turtle format (required for load)" },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }

@@ -1,6 +1,8 @@
 //! Shape and subscription management: `quipu_validate`, `quipu_shapes`,
 //! `quipu_subscriptions`.
 
+use std::collections::BTreeSet;
+
 use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
@@ -245,15 +247,51 @@ pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             }
         }
         "list" => list_shapes_json(store),
+        "vocabulary" => vocabulary_json(store),
         // An unrecognized action USED TO FALL THROUGH TO `list`, so a typo
         // ("laod") returned HTTP 200 and a plausible shape list — success by
         // every signal a caller can see, having done nothing. Same silent-no-op
         // class as `bd label` exiting 0 (aegis-oe10). A missing action still
         // defaults to "list" above, which keeps a bare `{}` probe working.
         other => Err(Error::InvalidValue(format!(
-            "unknown shapes action '{other}' (expected: load, list, get, remove)"
+            "unknown shapes action '{other}' (expected: load, list, get, remove, vocabulary)"
         ))),
     }
+}
+
+/// Return the class IRIs sanctioned by the shapes currently loaded in the
+/// server.  `list` only names shape sets; it cannot answer whether a proposed
+/// rdf:type is governed.  Target classes plus declared superclass objects form
+/// the accepted vocabulary: abstract parents such as Service and Host are
+/// query-only classes without their own target shape, but remain valid IRIs.
+fn vocabulary_json(store: &Store) -> Result<JsonValue> {
+    use oxttl::TurtleParser;
+
+    const TARGET_CLASS: &str = "http://www.w3.org/ns/shacl#targetClass";
+    const SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+
+    let mut classes = BTreeSet::new();
+    for (name, turtle, _) in store.list_shapes()? {
+        let parser = TurtleParser::new()
+            .with_base_iri("http://example.org/")
+            .map_err(|e| Error::InvalidValue(format!("shape set '{name}' base IRI: {e}")))?;
+        for result in parser.for_reader(turtle.as_bytes()) {
+            let triple = result.map_err(|e| {
+                Error::InvalidValue(format!("shape set '{name}' Turtle parse error: {e}"))
+            })?;
+            let predicate = triple.predicate.as_str();
+            if predicate == TARGET_CLASS || predicate == SUBCLASS_OF {
+                if let oxrdf::Term::NamedNode(class) = triple.object {
+                    classes.insert(class.as_str().to_owned());
+                }
+            }
+        }
+    }
+    Ok(serde_json::json!({
+        "classes": classes,
+        "count": classes.len(),
+        "basis": ["sh:targetClass", "rdfs:subClassOf object"]
+    }))
 }
 
 fn list_shapes_json(store: &Store) -> Result<JsonValue> {

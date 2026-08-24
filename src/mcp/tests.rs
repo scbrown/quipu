@@ -1398,6 +1398,38 @@ fn test_tool_shapes_get_and_unknown_action() {
 }
 
 #[test]
+fn test_tool_shapes_vocabulary_unions_targets_and_abstract_parents() {
+    let store = Store::open_in_memory().unwrap();
+    let shapes = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix bobbin: <http://bobbin.dev/ontology/> .
+aegis:WebShape a sh:NodeShape ; sh:targetClass aegis:WebApplication .
+bobbin:CodeShape a sh:NodeShape ; sh:targetClass bobbin:CodeSymbol .
+aegis:WebApplication rdfs:subClassOf aegis:Service .
+"#;
+    tool_shapes(
+        &store,
+        &serde_json::json!({
+            "action": "load", "name": "mixed-prefixes", "turtle": shapes
+        }),
+    )
+    .unwrap();
+
+    let got = tool_shapes(&store, &serde_json::json!({"action": "vocabulary"})).unwrap();
+    assert_eq!(got["count"], 3);
+    assert_eq!(
+        got["classes"],
+        serde_json::json!([
+            "http://aegis.gastown.local/ontology/Service",
+            "http://aegis.gastown.local/ontology/WebApplication",
+            "http://bobbin.dev/ontology/CodeSymbol"
+        ])
+    );
+}
+
+#[test]
 #[cfg(feature = "shacl")]
 fn test_tool_shapes_load_and_enforce() {
     let mut store = Store::open_in_memory().unwrap();
