@@ -196,7 +196,7 @@ impl Store {
                 // Bring the resident model up to date: apply the change set when
                 // the write vouched for it, drop when it could not (quipu-m9h).
                 self.set_write_in_progress(false);
-                self.maintain_read_model(graph, effective.as_deref());
+                self.maintain_read_model(graph, effective.as_deref(), tx_id);
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
                 crate::metrics::metrics().observe_write(datums.len() as u64);

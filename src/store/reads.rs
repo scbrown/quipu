@@ -9,7 +9,7 @@ use rusqlite::params;
 use crate::error::Result;
 use crate::types::{Fact, Op, Value};
 
-use super::{AsOf, Store};
+use super::{AsOf, Datum, Store};
 
 impl Store {
     // -- Read path --
@@ -37,6 +37,73 @@ impl Store {
              ORDER BY e, a",
         )?;
         Self::collect_facts(&mut stmt, params![g])
+    }
+
+    /// Every change to one graph's current facts SINCE a transaction id, in
+    /// transaction order, as datums ready for `ReadModel::apply_all`.
+    ///
+    /// The catch-up path for a resident model that has gone stale (aegis-98gai).
+    /// A full rebuild is correct but costs a scan of every current fact —
+    /// measured 608 ms in release at 340k triples — and a pooled reader goes
+    /// stale on every write it did not perform, so rebuilding would put that
+    /// cost on a store already measured over its request-second ceiling.
+    ///
+    /// Two event kinds, and BOTH are needed. An assert is a row whose own `tx`
+    /// is newer. A retraction does not delete the row: it sets `valid_to` and
+    /// stamps `retracted_tx`, so the closing event is on a row that may be far
+    /// older than `since` and would be invisible to a `tx > since` filter alone.
+    ///
+    /// Ordered by the transaction that CAUSED each event, not by row, because
+    /// the two interleave: a triple asserted at tx 5 and closed at tx 9 must end
+    /// absent, while one closed at 6 and re-asserted at 8 must end present.
+    /// Grouping asserts before retractions gets one of those two wrong.
+    pub fn facts_changed_since_in_graph(&self, g: i64, since: i64) -> Result<Vec<Datum>> {
+        let mut events: Vec<(i64, Datum)> = Vec::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT e, a, v, tx, valid_from FROM facts \
+                 WHERE g = ?1 AND op = 1 AND tx > ?2 AND valid_to IS NULL",
+            )?;
+            let mut rows = stmt.query(params![g, since])?;
+            while let Some(row) = rows.next()? {
+                let tx: i64 = row.get(3)?;
+                events.push((
+                    tx,
+                    Datum {
+                        entity: row.get(0)?,
+                        attribute: row.get(1)?,
+                        value: Value::from_bytes(&row.get::<_, Vec<u8>>(2)?)?,
+                        valid_from: row.get(4)?,
+                        valid_to: None,
+                        op: Op::Assert,
+                    },
+                ));
+            }
+        }
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT e, a, v, retracted_tx, valid_from FROM facts \
+                 WHERE g = ?1 AND op = 1 AND retracted_tx IS NOT NULL \
+                 AND retracted_tx > ?2",
+            )?;
+            let mut rows = stmt.query(params![g, since])?;
+            while let Some(row) = rows.next()? {
+                let rtx: i64 = row.get(3)?;
+                events.push((
+                    rtx,
+                    Datum {
+                        entity: row.get(0)?,
+                        attribute: row.get(1)?,
+                        value: Value::from_bytes(&row.get::<_, Vec<u8>>(2)?)?,
+                        valid_from: row.get(4)?,
+                        valid_to: None,
+                        op: Op::Retract,
+                    },
+                ));
+            }
+        }
+        events.sort_by_key(|(tx, _)| *tx);
+        Ok(events.into_iter().map(|(_, d)| d).collect())
     }
 
     /// Return current facts for only the requested attributes in one graph.

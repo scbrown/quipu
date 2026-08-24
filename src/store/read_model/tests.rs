@@ -931,3 +931,326 @@ fn per_graph_models_are_maintained_independently() {
     assert!(s.read_model_is_resident_for(g), "g's model survived");
     assert_eq!(s.read_model_for(g).unwrap().len(), 1);
 }
+
+/// aegis-98gai. A SECOND `Store` handle on the same database — which is exactly
+/// what the REST server's read pool is — must not answer from a model built
+/// before a write it never saw.
+///
+/// This is the shape the server actually runs: `server.rs` opens
+/// `read_pool_size` independent `Store::open_read_only` connections, and every
+/// `ro_handler!` tool takes one of them. A write goes through the writer's
+/// handle, so `maintain_read_model` runs on the WRITER's model and nothing ever
+/// touches the pooled ones — `invalidate_read_model` has a single call site and
+/// it is `set_read_model_enabled(false)`.
+///
+/// Because only multi-pattern BGPs consult a model, the live symptom was
+/// specific and silent: a freshly written node answered `<iri> a ?t` and
+/// `<iri> rdfs:label ?l` with one row each and their CONJUNCTION with zero.
+/// Measured on the deployed 0.3.24: 4 of 264 `FailureMode` nodes join-invisible,
+/// all written in the preceding ~40 minutes; 0 of 264 after the process cycled.
+///
+/// Both directions: the reader must see the new fact, AND it must still be
+/// holding a model (a fix that simply disabled the model would pass a
+/// one-directional version of this and give up the join speedup silently).
+#[test]
+fn a_second_handle_does_not_serve_a_stale_model_after_another_handles_write() {
+    let dir = std::env::temp_dir().join(format!(
+        "quipu-98gai-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("store.db");
+    let db = path.to_str().unwrap();
+
+    let mut writer = Store::open(db).unwrap();
+    let first = datum(
+        &writer,
+        "http://example.org/before",
+        "http://example.org/p",
+        "http://example.org/o",
+        Op::Assert,
+    );
+    writer
+        .transact(&[first], "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+
+    // A separate handle, as the pool holds. Build its model by reading.
+    let reader = Store::open_read_only(db).unwrap();
+    assert_eq!(
+        reader.read_model().unwrap().len(),
+        1,
+        "the reader should see the write that preceded it"
+    );
+    assert!(
+        reader.read_model_is_resident(),
+        "the reader must have a resident model, or this test proves nothing"
+    );
+
+    // A write the reader's handle knows nothing about.
+    let second = datum(
+        &writer,
+        "http://example.org/after",
+        "http://example.org/p",
+        "http://example.org/o",
+        Op::Assert,
+    );
+    writer
+        .transact(&[second], "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+
+    assert_eq!(
+        reader.read_model().unwrap().len(),
+        2,
+        "the reader served a model built before a write it never saw — this is \
+         the join-invisible-node defect (aegis-98gai)"
+    );
+    assert!(
+        reader.read_model_is_resident(),
+        "freshness must be kept by REBUILDING, not by abandoning the model"
+    );
+
+    drop(reader);
+    drop(writer);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The counterpart: a write THIS handle performed must not force a rebuild, or
+/// the stamp has undone quipu-m9h's incremental maintenance.
+#[test]
+fn a_writers_own_write_still_maintains_rather_than_rebuilds_its_model() {
+    let mut s = store();
+    let d1 = datum(
+        &s,
+        "http://example.org/a",
+        "http://example.org/p",
+        "http://example.org/o",
+        Op::Assert,
+    );
+    s.transact(&[d1], "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    assert_eq!(s.read_model().unwrap().len(), 1);
+
+    let d2 = datum(
+        &s,
+        "http://example.org/b",
+        "http://example.org/p",
+        "http://example.org/o",
+        Op::Assert,
+    );
+    s.transact(&[d2], "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+
+    let latest = s.latest_tx_id().unwrap();
+    assert_eq!(
+        s.read_model().unwrap().built_at_tx(),
+        latest,
+        "the writer's own maintained model must be stamped current, or every \
+         read after a write pays a full rebuild"
+    );
+    assert_eq!(s.read_model().unwrap().len(), 2);
+}
+
+/// aegis-98gai cost check, not a correctness test: how long does a rebuild take
+/// at production scale? Run explicitly:
+///   cargo test --lib read_model_rebuild_cost -- --ignored --nocapture
+///
+/// The freshness check makes a pooled reader rebuild after a write it did not
+/// perform. That is correct; whether it is AFFORDABLE on a store already
+/// measured at 1.187 request-seconds per wall-second (aegis-x5nr6) is a
+/// separate question, and shipping a correctness fix onto a saturated,
+/// auto-deploying service without the number is how a fix becomes an incident.
+#[test]
+#[ignore]
+fn read_model_rebuild_cost_at_production_scale() {
+    // The live store reported 336,323 facts / 20,255 entities on 2026-08-24.
+    const ENTITIES: usize = 20_000;
+    const PER_ENTITY: usize = 17; // ~340k facts
+    let mut s = store();
+    let p: Vec<i64> = (0..PER_ENTITY)
+        .map(|i| s.intern(&format!("http://example.org/p{i}")).unwrap())
+        .collect();
+    let o = s.intern("http://example.org/o").unwrap();
+
+    let mut datums = Vec::with_capacity(ENTITIES * PER_ENTITY);
+    for e in 0..ENTITIES {
+        let ent = s.intern(&format!("http://example.org/e{e}")).unwrap();
+        for a in &p {
+            datums.push(Datum {
+                entity: ent,
+                attribute: *a,
+                value: Value::Ref(o),
+                valid_from: "2026-01-01T00:00:00Z".to_string(),
+                valid_to: None,
+                op: Op::Assert,
+            });
+        }
+    }
+    let total = datums.len();
+    for chunk in datums.chunks(20_000) {
+        s.transact(chunk, "2026-01-01T00:00:00Z", Some("bench"), None)
+            .unwrap();
+    }
+
+    let t0 = std::time::Instant::now();
+    let model = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
+    let build = t0.elapsed();
+
+    let t1 = std::time::Instant::now();
+    let latest = s.latest_tx_id().unwrap();
+    let stamp = t1.elapsed();
+
+    // The number that decides whether the fix is deployable: what a POOLED
+    // READER pays to catch up after one ordinary write it did not perform.
+    let one_more = vec![Datum {
+        entity: s.intern("http://example.org/late").unwrap(),
+        attribute: p[0],
+        value: Value::Ref(o),
+        valid_from: "2026-01-02T00:00:00Z".to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    }];
+    s.transact(&one_more, "2026-01-02T00:00:00Z", Some("bench"), None)
+        .unwrap();
+
+    let t2 = std::time::Instant::now();
+    let delta = s.facts_changed_since_in_graph(crate::schema::ROOT_GRAPH, latest).unwrap();
+    let catch_up = t2.elapsed();
+
+    println!(
+        "REBUILD COST: {} triples in model (wrote {total}), build={:?}, \
+         latest_tx_id()={:?} (tx {latest})",
+        model.len(),
+        build,
+        stamp
+    );
+    println!(
+        "CATCH-UP COST after ONE write: {} change(s) read in {:?} \
+         (vs {:?} for a full rebuild)",
+        delta.len(),
+        catch_up,
+        build
+    );
+}
+
+/// The load-bearing one for aegis-98gai's catch-up path: a model brought
+/// forward by `facts_changed_since_in_graph` must hold EXACTLY what a rebuild
+/// holds, across the write shapes that are not simple appends.
+///
+/// A retraction does not delete its row — it stamps `valid_to`/`retracted_tx` —
+/// so the closing event sits on a row whose own `tx` may predate the model.
+/// A delta that filtered on `tx` alone would apply the asserts and silently
+/// keep every retracted triple, which is the WORSE failure: the model would
+/// answer confidently with facts the store has withdrawn.
+///
+/// Retract-then-reassert is included deliberately: it is the case that fails if
+/// the delta groups asserts and retractions instead of ordering both by the
+/// transaction that caused them.
+#[test]
+fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
+    let dir = std::env::temp_dir().join(format!(
+        "quipu-98gai-delta-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("store.db");
+    let db = path.to_str().unwrap();
+    let mut writer = Store::open(db).unwrap();
+
+    let d = |s: &Store, e: &str, o: &str, op: Op| datum(s, e, "http://example.org/p", o, op);
+
+    // Seed, and let a SEPARATE handle build a model over it.
+    writer
+        .transact(
+            &[
+                d(&writer, "http://example.org/a", "http://example.org/1", Op::Assert),
+                d(&writer, "http://example.org/b", "http://example.org/1", Op::Assert),
+                d(&writer, "http://example.org/c", "http://example.org/1", Op::Assert),
+            ],
+            "2026-01-01T00:00:00Z",
+            Some("test"),
+            None,
+        )
+        .unwrap();
+    let reader = Store::open_read_only(db).unwrap();
+    assert_eq!(reader.read_model().unwrap().len(), 3);
+
+    // Now every awkward shape, through the writer, unseen by the reader.
+    // 1. a plain append
+    writer
+        .transact(
+            &[d(&writer, "http://example.org/d", "http://example.org/1", Op::Assert)],
+            "2026-01-01T00:00:01Z",
+            Some("test"),
+            None,
+        )
+        .unwrap();
+    // 2. retract a triple the reader's model was BUILT with (its row is older
+    //    than the model; only `retracted_tx` marks it)
+    writer
+        .transact(
+            &[d(&writer, "http://example.org/a", "http://example.org/1", Op::Retract)],
+            "2026-01-01T00:00:02Z",
+            Some("test"),
+            None,
+        )
+        .unwrap();
+    // 3. retract, then RE-ASSERT the same triple: order decides the answer
+    writer
+        .transact(
+            &[d(&writer, "http://example.org/b", "http://example.org/1", Op::Retract)],
+            "2026-01-01T00:00:03Z",
+            Some("test"),
+            None,
+        )
+        .unwrap();
+    writer
+        .transact(
+            &[d(&writer, "http://example.org/b", "http://example.org/1", Op::Assert)],
+            "2026-01-01T00:00:04Z",
+            Some("test"),
+            None,
+        )
+        .unwrap();
+    // 4. assert then retract within the reader's stale window: must end ABSENT
+    writer
+        .transact(
+            &[d(&writer, "http://example.org/e", "http://example.org/1", Op::Assert)],
+            "2026-01-01T00:00:05Z",
+            Some("test"),
+            None,
+        )
+        .unwrap();
+    writer
+        .transact(
+            &[d(&writer, "http://example.org/e", "http://example.org/1", Op::Retract)],
+            "2026-01-01T00:00:06Z",
+            Some("test"),
+            None,
+        )
+        .unwrap();
+
+    let caught_up = reader.read_model().unwrap().triples_sorted();
+    let rebuilt = ReadModel::build(&reader, crate::schema::ROOT_GRAPH)
+        .unwrap()
+        .triples_sorted();
+    assert_eq!(
+        caught_up, rebuilt,
+        "the caught-up model diverged from a rebuild — a drifting index answers \
+         confidently with facts the store retracted"
+    );
+    // And it is the RIGHT content, not merely two equal wrong answers: c and d
+    // remain, b was retracted and re-asserted, a and e are gone.
+    assert_eq!(caught_up.len(), 3, "expected b, c, d");
+
+    drop(reader);
+    drop(writer);
+    let _ = std::fs::remove_dir_all(&dir);
+}

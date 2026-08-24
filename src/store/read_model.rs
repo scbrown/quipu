@@ -58,6 +58,10 @@ pub struct ReadModel {
     osp: HashMap<Vec<u8>, Vec<(i64, i64)>>,
     /// Distinct triples held, maintained incrementally so `len` is not a scan.
     triples: usize,
+    /// The store's `latest_tx_id()` when this model was built or last
+    /// maintained. A model whose stamp no longer matches the database is STALE
+    /// and must be rebuilt before it answers anything (aegis-98gai).
+    built_at_tx: i64,
 }
 
 impl ReadModel {
@@ -66,14 +70,33 @@ impl ReadModel {
     /// # Errors
     /// [`crate::Error::Sqlite`] if the fact scan fails.
     pub fn build(store: &Store, graph: i64) -> Result<Self> {
+        // STAMP BEFORE SCANNING, never after. Between the two there is no lock
+        // held over the database, so a write that lands mid-scan would other-
+        // wise be stamped as included when the scan may have missed it. Taking
+        // the stamp first can only make the model look staler than it is, which
+        // costs a rebuild; the other order silently serves a gap.
+        let built_at_tx = store.latest_tx_id()?;
         let mut model = Self {
             graph,
+            built_at_tx,
             ..Default::default()
         };
         for fact in store.current_facts_in_graph(graph)? {
             model.insert(fact.entity, fact.attribute, &fact.value);
         }
         Ok(model)
+    }
+
+    /// The `latest_tx_id()` this model is current as of.
+    #[must_use]
+    pub fn built_at_tx(&self) -> i64 {
+        self.built_at_tx
+    }
+
+    /// Re-stamp after an incremental maintain, so a write the model DID absorb
+    /// does not force the next reader to rebuild it.
+    pub(crate) fn set_built_at_tx(&mut self, tx_id: i64) {
+        self.built_at_tx = tx_id;
     }
 
     /// The graph this model covers.
@@ -412,9 +435,59 @@ impl Store {
     /// # Errors
     /// [`crate::Error::Sqlite`] if the fact scan fails.
     pub fn read_model_for(&self, graph: i64) -> Result<std::cell::Ref<'_, ReadModel>> {
-        if !self.read_model.borrow().contains_key(&graph) {
-            let built = ReadModel::build(self, graph)?;
-            self.read_model.borrow_mut().insert(graph, built);
+        // FRESHNESS IS CHECKED AGAINST THE DATABASE, not assumed from having
+        // seen the writes (aegis-98gai). `maintain_read_model` keeps THIS
+        // `Store`'s model current, which is sound for an embedder that writes
+        // and reads through one handle — and the REST server is not that. Its
+        // read pool is N SEPARATE `Store`s opened read-only on the same file
+        // (`server.rs`, `Store::open_read_only` in a loop); a write goes through
+        // the writer's handle, so the pooled models never hear about it and
+        // nothing ever drops them. `invalidate_read_model` has exactly one call
+        // site and it is `set_read_model_enabled(false)`.
+        //
+        // Only multi-pattern BGPs consult a model (`sparql/triple.rs`:
+        // `patterns.len() >= 2`), so the symptom was silent and specific: a
+        // freshly written node answered `<iri> a ?t` and `<iri> rdfs:label ?l`
+        // with one row each and their CONJUNCTION with zero. Measured
+        // 2026-08-24 on the deployed 0.3.24: exactly 4 of 264 `FailureMode`
+        // nodes were join-invisible, all four written in the preceding ~40
+        // minutes, deterministic over 8 repetitions — and 0 of 264 once the
+        // process had cycled. A restart was the only thing clearing it.
+        //
+        // `latest_tx_id()` is a cheap indexed MAX on a rowid-keyed table and its
+        // own doc comment already offers it for exactly this: "callers can use
+        // it as a change-generation stamp for caches of derived read-side data:
+        // rebuild when it moves, reuse when it hasn't." Checking the database
+        // rather than trusting in-process bookkeeping makes correctness
+        // independent of how many `Store` handles exist and who did the write.
+        let latest = self.latest_tx_id()?;
+        let since = match self.read_model.borrow().get(&graph) {
+            None => None,                                   // nothing resident
+            Some(m) if m.built_at_tx() == latest => return Ok(std::cell::Ref::map(
+                self.read_model.borrow(),
+                |m| m.get(&graph).expect("checked resident and current"),
+            )),
+            Some(m) => Some(m.built_at_tx()),
+        };
+        match since {
+            // CATCH UP, DO NOT REBUILD. A rebuild is correct and costs a scan of
+            // every current fact — 608 ms in release at 340k triples, measured —
+            // and a pooled reader goes stale on EVERY write it did not perform.
+            // Paying that per write on a store already over its request-second
+            // ceiling (aegis-x5nr6) would trade a silent wrong answer for a
+            // loud slow one. The delta is bounded by what actually changed.
+            Some(built_at) => {
+                let changes = self.facts_changed_since_in_graph(graph, built_at)?;
+                let mut models = self.read_model.borrow_mut();
+                if let Some(model) = models.get_mut(&graph) {
+                    model.apply_all(&changes);
+                    model.set_built_at_tx(latest);
+                }
+            }
+            None => {
+                let built = ReadModel::build(self, graph)?;
+                self.read_model.borrow_mut().insert(graph, built);
+            }
         }
         Ok(std::cell::Ref::map(self.read_model.borrow(), |m| {
             m.get(&graph).expect("just built")
@@ -449,7 +522,7 @@ impl Store {
     ///   instead of a full rebuild.
     /// - It could not vouch (OWL inference, functional supersede): drop, and
     ///   let the next read rebuild. Correct by construction.
-    pub(crate) fn maintain_read_model(&self, graph: i64, effective: Option<&[Datum]>) {
+    pub(crate) fn maintain_read_model(&self, graph: i64, effective: Option<&[Datum]>, tx_id: i64) {
         let mut models = self.read_model.borrow_mut();
         // Only the WRITTEN graph's model is touched (quipu-nip): a model over
         // ROOT is genuinely unaffected by a write to graph 7, because
@@ -458,7 +531,12 @@ impl Store {
             return;
         };
         match effective {
-            Some(datums) => model.apply_all(datums),
+            Some(datums) => {
+                model.apply_all(datums);
+                // Re-stamp, or the freshness check in `read_model_for` would
+                // rebuild on the very next read and undo quipu-m9h.
+                model.set_built_at_tx(tx_id);
+            }
             None => {
                 models.remove(&graph);
             }
