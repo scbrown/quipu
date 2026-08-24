@@ -7,7 +7,7 @@ use quipu::{EmbeddingProvider, Store};
 use serde_json::json;
 
 use super::SharedStore;
-use super::base::{STATS_CACHE, StatsCache, stats};
+use super::base::{STATS_CACHE, StatsCache, metrics_handler, stats};
 use super::tools::search;
 
 /// An embedding provider whose embed is deliberately SLOW, so that whether the
@@ -383,6 +383,35 @@ fn pooled_read_sees_the_writers_committed_facts() {
         "a pooled reader did not see the writer's committed fact — WAL visibility \
          is the whole premise of the pool: {after}"
     );
+}
+
+/// Prometheus cancellations do not cancel `spawn_blocking` work. If metrics
+/// queues on the writer, every timed-out scrape leaves a task behind and the
+/// service eventually reaches `TasksMax`. Holding the writer here is the exact
+/// discriminator: the handler can finish only if it uses the read pool.
+#[tokio::test(flavor = "current_thread")]
+async fn metrics_does_not_queue_behind_the_writer() {
+    let (_dir, handle) = pooled_handle(1);
+    let shared = Arc::new(handle);
+    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let holder = shared.clone();
+    let thread = std::thread::spawn(move || {
+        let _writer = holder.lock();
+        locked_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    locked_rx.recv().unwrap();
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        metrics_handler(State(shared.clone())),
+    )
+    .await
+    .expect("metrics queued behind the writer instead of using the read pool")
+    .expect("metrics failed on a read-only pooled connection");
+    release_tx.send(()).unwrap();
+    thread.join().unwrap();
 }
 
 /// Run `f` on a thread and FAIL — rather than hang — if it does not finish.

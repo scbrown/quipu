@@ -61,7 +61,11 @@ pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
     let (entities, facts, predicates) = blocking(move || {
-        let store = store.lock();
+        // Metrics is read-only and must not join the writer queue. Prometheus
+        // abandons timed-out responses, but spawn_blocking keeps their queued
+        // work alive; one scrape per interval otherwise consumes task slots
+        // until TasksMax starves unrelated store endpoints (aegis-vimo5).
+        let store = store.read();
         Ok(store.graph_counts()?)
     })
     .await?;
