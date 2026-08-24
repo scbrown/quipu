@@ -6,6 +6,19 @@ AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledg
 
 ## Conventions
 
+### Query Quipu before repository-wide discovery
+
+Use configured Quipu MCP tools first for semantic context, SPARQL, stored
+queries, and guarded writes. Use the native `quipu` CLI second when operating on
+a local database. Raw HTTP is the fallback, with request shapes and
+authentication in `docs/book/src/reference/rest-api.md`; do not invent an
+endpoint from an MCP tool name.
+
+For scoped knowledge, preserve Quipu's dataset semantics: ROOT is the default;
+named graphs and datasets are selected explicitly with `FROM` / `FROM NAMED` or
+the query `graph` field. Do not replace an explicit application or tenant
+dataset with an accidental all-graph query.
+
 - **Always use `just` instead of raw commands.** The justfile is configured with quiet output by default to save context — you only see errors and warnings.
 - **Prefer subcommands over separate recipes.** Group related operations under a single recipe with a subcommand argument (e.g., `just docs build`, `just docs lint`) rather than creating separate top-level recipes (e.g., `just docs-build`, `just docs-lint`).
 - **Keep source files small.** `scripts/check-file-size.sh` warns at 400 lines

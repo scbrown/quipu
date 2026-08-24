@@ -35,22 +35,22 @@ $ quipu knot infrastructure.ttl --shapes aegis-schema.ttl --db ops.db
 Ingested 847 triples in transaction 1 (SHACL: 0 violations)
 
 $ quipu read "SELECT ?svc ?host WHERE {
-    ?svc a <http://aegis.local/WebApplication> ;
-         <http://aegis.local/runsOn> ?host .
+    ?svc a <http://example.org/WebApplication> ;
+         <http://example.org/runsOn> ?host .
   }" --db ops.db
 
 | svc       | host   |
 |-----------|--------|
-| traefik   | kota   |
-| forgejo   | koror  |
-| grafana   | kota   |
+| gateway   | host-a |
+| git       | host-b |
+| metrics   | host-a |
 3 results
 
 $ quipu episode - --db ops.db <<'JSON'
-{"name": "koror-rebuild", "source": "aegis/ellie",
- "nodes": [{"name": "koror", "type": "ProxmoxNode",
+{"name": "host-b-rebuild", "source": "ops/agent",
+ "nodes": [{"name": "host-b", "type": "ComputeNode",
             "properties": {"status": "recovered"}}],
- "edges": [{"source": "koror", "target": "kota", "relation": "rebuilt_on"}]}
+ "edges": [{"source": "host-b", "target": "host-a", "relation": "rebuilt_on"}]}
 JSON
 Ingested 6 triples in transaction 2
 ```
@@ -116,7 +116,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 - **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.
 - **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 39 MCP tools for agent integration (40 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
-- **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. CI runs fmt, clippy, tests, and markdown lint on every push.
+- **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. Version discovery is `git_only = true`: the baseline comes from this repository's tags, never the unrelated `quipu` crate on crates.io. CI runs fmt, clippy, tests, and markdown lint on every push. The current published release is v0.3.24; `/version` also reports the deployed git SHA so post-release deployments remain identifiable.
 
 ## 🚀 Quick Start
 
@@ -209,10 +209,10 @@ Semantic Web APIs for interoperability:
 
 ```bash
 # Impact analysis — what depends on this entity?
-quipu impact http://aegis.local/traefik --db ops.db
+quipu impact http://example.org/gateway --db ops.db
 
 # Counterfactual — what breaks if we remove it?
-quipu impact http://aegis.local/traefik --remove --db ops.db
+quipu impact http://example.org/gateway --remove --db ops.db
 
 # Run Datalog rules over the fact log
 quipu reason --rules rules.ttl --db ops.db
@@ -274,7 +274,7 @@ with its own code search to give agents both code and knowledge in one response.
 ```json
 {
   "tool": "quipu_context",
-  "input": { "query": "traefik reverse proxy", "max_entities": 10 }
+  "input": { "query": "gateway reverse proxy", "max_entities": 10 }
 }
 // Returns ranked entities with facts, types, and relevance scores
 ```
@@ -288,9 +288,9 @@ provenance tracking.
   "input": {
     "name": "deploy-v3",
     "source": "aegis/ellie",
-    "nodes": [{"name": "traefik", "type": "WebApplication",
+    "nodes": [{"name": "gateway", "type": "WebApplication",
                "properties": {"version": "3.0"}}],
-    "edges": [{"source": "traefik", "target": "kota", "relation": "runs_on"}]
+    "edges": [{"source": "gateway", "target": "host-a", "relation": "runs_on"}]
   }
 }
 ```
@@ -298,6 +298,22 @@ provenance tracking.
 Embeddings are shared: Bobbin's ONNX pipeline (`all-MiniLM-L6-v2`) provides
 384-dimensional vectors to both its code search and Quipu's knowledge search,
 enabling hybrid queries that span both domains.
+
+### Agent access
+
+When Quipu MCP tools are configured, agents should use them first so structured
+inputs, validation feedback, and provenance stay in the tool contract. Use the
+native `quipu` CLI second for local databases and offline work. Raw HTTP is the
+portability fallback; endpoint shapes and authentication are in the
+[REST API reference](docs/book/src/reference/rest-api.md).
+
+Named graphs are first-class query scopes, and named datasets are reusable sets
+of graphs. ROOT remains the default until a caller explicitly selects a graph or
+dataset with SPARQL `FROM` / `FROM NAMED`, the query `graph` field, or
+the query tool's graph field. This permits an application to ground a request in
+one declared plane without silently widening into every graph. See
+[Named Graphs](docs/book/src/concepts/named-graphs.md) for the registration,
+write, and trust-label rules.
 
 ## 📖 Documentation
 
