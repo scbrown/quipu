@@ -216,6 +216,61 @@ jobs:
       - run: scripts/test-check-file-size.sh
       - run: scripts/check-file-size.sh
 
+  shapes:
+    name: Shape invariants
+    runs-on: ubuntu-latest
+    # A SEPARATE JOB, so its verdict is its own (aegis-qq7uw). The defect being
+    # fixed is that `shapes/verify_shape_invariants.py` was wired into NOTHING —
+    # no workflow referenced it, nothing else invoked it, and it ran only when a
+    # human remembered to type it. It was RED for 17 DAYS and nobody knew:
+    # a5eb73b added sh:minCount 1 on aegis:regex and aegis:enforcementTier to
+    # TextRuleShape, which I1 rejects, so the script exited 1 from 2026-08-07
+    # until 2026-08-24. The finding turned out to be a false positive in
+    # substance — but nobody adjudicated it for 17 days BECAUSE NOBODY SAW IT.
+    # A gate that is red and unrun makes no claim at all.
+    #
+    # NOT PATH-FILTERED, deliberately. `paths: shapes/**` is the obvious
+    # refinement and it reintroduces the exact failure mode: a way for the gate
+    # to legitimately not run, which is indistinguishable from the gate being
+    # broken. The static half takes about a second and needs no network, so
+    # there is nothing to buy by skipping it.
+    #
+    # STATIC HALF ONLY. I1/I2/I3/I9 and --selftest need no server. I4/I7/I8 want
+    # --data/--live against a running store; they stay out until there is a
+    # fixture worth trusting, and the script SAYS so per-invariant ("SKIPPED (no
+    # --live)") rather than quietly counting them as passed.
+    #
+    # I9 REPORTS, IT DOES NOT GATE — and that is the script's own design, not a
+    # concession made here. I1's "only rdfs:label may be required" is an
+    # aegis-ontology.shapes.ttl policy; governance.ttl's Verdict genuinely
+    # requires a signature and an evidenceHash. I9 currently prints 3 reports
+    # over 3 files (48 required-predicate + 14 missing-label findings). Gating on
+    # those would fail every PR on day one and the job would be switched off
+    # within a day, taking the real findings with it.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # REFUSE A VACUOUS PASS. If the script is renamed, moved or deleted, a
+      # `python3 <missing>` would fail loudly — but a future edit that wrapped
+      # this in a conditional, or a glob that stopped matching, would not. Assert
+      # the thing exists before claiming its verdict, because "the job was green"
+      # must never be reachable without the check having run.
+      - name: The gate must exist before it can pass
+        run: |
+          test -f shapes/verify_shape_invariants.py \
+            || { echo "::error::shapes/verify_shape_invariants.py is missing — refusing a green that checked nothing"; exit 1; }
+      # The script's own both-direction proof: I5/I6 fail on unshaped documented
+      # kinds and pass on agreement, I7 isolates live-but-undeclared kinds, I8
+      # derives the abstract set and is retired by shaping, and I9 stays
+      # non-fatal and visible. Run FIRST: if the checker's own logic is broken,
+      # its verdict on the real shapes is worth nothing.
+      - name: Self-test the invariant checker
+        run: python3 shapes/verify_shape_invariants.py --selftest
+      - name: Verify shape invariants (static)
+        run: python3 shapes/verify_shape_invariants.py
+
   lint-markdown:
     name: Markdown lint
     runs-on: ubuntu-latest
