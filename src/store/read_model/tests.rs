@@ -1056,7 +1056,7 @@ fn a_writers_own_write_still_maintains_rather_than_rebuilds_its_model() {
 
 /// aegis-98gai cost check, not a correctness test: how long does a rebuild take
 /// at production scale? Run explicitly:
-///   cargo test --lib read_model_rebuild_cost -- --ignored --nocapture
+/// `cargo test --lib read_model_rebuild_cost -- --ignored --nocapture`
 ///
 /// The freshness check makes a pooled reader rebuild after a write it did not
 /// perform. That is correct; whether it is AFFORDABLE on a store already
@@ -1117,7 +1117,9 @@ fn read_model_rebuild_cost_at_production_scale() {
         .unwrap();
 
     let t2 = std::time::Instant::now();
-    let delta = s.facts_changed_since_in_graph(crate::schema::ROOT_GRAPH, latest).unwrap();
+    let delta = s
+        .facts_changed_since_in_graph(crate::schema::ROOT_GRAPH, latest)
+        .unwrap();
     let catch_up = t2.elapsed();
 
     println!(
@@ -1170,9 +1172,24 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
     writer
         .transact(
             &[
-                d(&writer, "http://example.org/a", "http://example.org/1", Op::Assert),
-                d(&writer, "http://example.org/b", "http://example.org/1", Op::Assert),
-                d(&writer, "http://example.org/c", "http://example.org/1", Op::Assert),
+                d(
+                    &writer,
+                    "http://example.org/a",
+                    "http://example.org/1",
+                    Op::Assert,
+                ),
+                d(
+                    &writer,
+                    "http://example.org/b",
+                    "http://example.org/1",
+                    Op::Assert,
+                ),
+                d(
+                    &writer,
+                    "http://example.org/c",
+                    "http://example.org/1",
+                    Op::Assert,
+                ),
             ],
             "2026-01-01T00:00:00Z",
             Some("test"),
@@ -1186,7 +1203,12 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
     // 1. a plain append
     writer
         .transact(
-            &[d(&writer, "http://example.org/d", "http://example.org/1", Op::Assert)],
+            &[d(
+                &writer,
+                "http://example.org/d",
+                "http://example.org/1",
+                Op::Assert,
+            )],
             "2026-01-01T00:00:01Z",
             Some("test"),
             None,
@@ -1196,7 +1218,12 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
     //    than the model; only `retracted_tx` marks it)
     writer
         .transact(
-            &[d(&writer, "http://example.org/a", "http://example.org/1", Op::Retract)],
+            &[d(
+                &writer,
+                "http://example.org/a",
+                "http://example.org/1",
+                Op::Retract,
+            )],
             "2026-01-01T00:00:02Z",
             Some("test"),
             None,
@@ -1205,7 +1232,12 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
     // 3. retract, then RE-ASSERT the same triple: order decides the answer
     writer
         .transact(
-            &[d(&writer, "http://example.org/b", "http://example.org/1", Op::Retract)],
+            &[d(
+                &writer,
+                "http://example.org/b",
+                "http://example.org/1",
+                Op::Retract,
+            )],
             "2026-01-01T00:00:03Z",
             Some("test"),
             None,
@@ -1213,7 +1245,12 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
         .unwrap();
     writer
         .transact(
-            &[d(&writer, "http://example.org/b", "http://example.org/1", Op::Assert)],
+            &[d(
+                &writer,
+                "http://example.org/b",
+                "http://example.org/1",
+                Op::Assert,
+            )],
             "2026-01-01T00:00:04Z",
             Some("test"),
             None,
@@ -1222,7 +1259,12 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
     // 4. assert then retract within the reader's stale window: must end ABSENT
     writer
         .transact(
-            &[d(&writer, "http://example.org/e", "http://example.org/1", Op::Assert)],
+            &[d(
+                &writer,
+                "http://example.org/e",
+                "http://example.org/1",
+                Op::Assert,
+            )],
             "2026-01-01T00:00:05Z",
             Some("test"),
             None,
@@ -1230,7 +1272,12 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
         .unwrap();
     writer
         .transact(
-            &[d(&writer, "http://example.org/e", "http://example.org/1", Op::Retract)],
+            &[d(
+                &writer,
+                "http://example.org/e",
+                "http://example.org/1",
+                Op::Retract,
+            )],
             "2026-01-01T00:00:06Z",
             Some("test"),
             None,
