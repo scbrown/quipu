@@ -1564,14 +1564,16 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_path_backtest"));
     // Graph registry listing (graph kinds + deep freeze).
     assert!(names.contains(&"quipu_graph_list"));
+    assert!(names.contains(&"quipu_graph_freeze"));
+    assert!(names.contains(&"quipu_graph_thaw"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 41);
+        assert_eq!(defs.len(), 43);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 40);
+        assert_eq!(defs.len(), 42);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 

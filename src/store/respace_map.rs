@@ -117,6 +117,16 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     // Kind and lifecycle are TEXT tokens (`archive`, `frozen`), never ids.
     ("graphs", "data_kind", TermIdKind::None),
     ("graphs", "lifecycle", TermIdKind::None),
+    // The frozen-pack registry: IRIs, paths and hashes as TEXT; `space` is a
+    // term-SPACE number, not a term id, so nothing here carries term identity.
+    ("frozen_packs", "id", TermIdKind::None),
+    ("frozen_packs", "graph_iri", TermIdKind::None),
+    ("frozen_packs", "alias", TermIdKind::None),
+    ("frozen_packs", "path", TermIdKind::None),
+    ("frozen_packs", "space", TermIdKind::None),
+    ("frozen_packs", "content_hash", TermIdKind::None),
+    ("frozen_packs", "frozen_at", TermIdKind::None),
+    ("frozen_packs", "thawed_at", TermIdKind::None),
     // -- attach::migrate_graph_source (quipu #75) --
     // TEXT holding an attachment ALIAS, not a term id. Added by #75 — and this
     // entry exists because respace REFUSED to run until it did, one hour after

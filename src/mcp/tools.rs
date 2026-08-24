@@ -12,7 +12,7 @@ mod shapes;
 mod write;
 
 pub use datasets::tool_datasets;
-pub use graphs::tool_graph_list;
+pub use graphs::{tool_graph_freeze, tool_graph_list, tool_graph_thaw};
 pub use queries::tool_queries;
 pub use read::{tool_cord, tool_unravel};
 pub use search::{tool_hybrid_search, tool_search};

@@ -258,6 +258,10 @@ pub(crate) async fn graphs_list(
 
 rw_handler!(graph_create, quipu::tool_graph_create);
 rw_handler!(graph_label, quipu::tool_graph_label);
+// Deep freeze: both mutate the registry, the fact table and the attachment
+// set, so rw_handler! and WRITE_ENDPOINTS entries.
+rw_handler!(graph_freeze, quipu::tool_graph_freeze);
+rw_handler!(graph_thaw, quipu::tool_graph_thaw);
 ro_handler!(overlay_compose, quipu::tool_overlay_compose);
 ro_handler!(cooccurrence, quipu::tool_cooccurrence);
 // policy_check is the one read handler with its own counter: the metric uses

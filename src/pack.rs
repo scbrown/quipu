@@ -236,7 +236,7 @@ pub fn content_hash(canonical: &str) -> String {
 }
 
 /// The `pack_manifest` DDL. One row, by construction.
-const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest (
+pub(crate) const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest (
      id           INTEGER PRIMARY KEY CHECK (id = 1),
      pack_format  TEXT NOT NULL,
      name         TEXT NOT NULL,

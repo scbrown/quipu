@@ -126,6 +126,33 @@ pub(super) fn defs() -> Vec<JsonValue> {
             }
         }),
         serde_json::json!({
+            "name": "quipu_graph_freeze",
+            "description": "Deep-freeze a named graph: export its FULL history (retracted rows and transactions included) into a read-only archive pack, verify the copy by content hash, delete the local rows, and re-attach the pack so the graph stays addressable at the same IRI. Compose frozen graphs back in with FROM <iri>, the urn:quipu:dataset:frozen dataset, or include_kinds:[\"archive\"]. Refuses ROOT, the meta-graph, overlays, attached graphs, and double-freezes.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "graph": { "type": "string", "description": "IRI of the committed graph to freeze" },
+                    "out_dir": { "type": "string", "description": "Directory for the archive pack (default: beside the store file)" },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" },
+                    "actor": { "type": "string", "description": "Who is freezing" }
+                },
+                "required": ["graph", "timestamp"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_graph_thaw",
+            "description": "Thaw a frozen graph: verify its archive pack, detach it, restore the full history into the local store under the same IRI, and reopen the graph for writes. The pack file is kept on disk; the freeze registry row is closed, never deleted.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "graph": { "type": "string", "description": "IRI of the frozen graph" },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp" },
+                    "actor": { "type": "string", "description": "Who is thawing" }
+                },
+                "required": ["graph", "timestamp"]
+            }
+        }),
+        serde_json::json!({
             "name": "quipu_datasets",
             "description": "Manage named datasets — a reusable NAME for an arbitrary set of graphs, so it can be labelled, governed and handed to another agent. `FROM <dataset-iri>` then means FROM over its members. Datasets overlap freely and are never implicitly active.",
             "inputSchema": {

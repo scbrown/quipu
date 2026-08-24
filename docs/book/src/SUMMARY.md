@@ -14,6 +14,7 @@
 - [The Temporal Model](concepts/temporal-model.md)
 - [Named Graphs, Overlays & Datasets](concepts/named-graphs.md)
 - [Graph Labels & the Trust Lattice](concepts/graph-labels.md)
+- [Graph Kinds & Deep Freeze](concepts/graph-kinds.md)
 - [Governance: Policies, Verdicts & the Write Gate](concepts/governance.md)
 - [Knowledge Packs](concepts/knowledge-packs.md)
 - [SHACL Validation](concepts/shacl-validation.md)

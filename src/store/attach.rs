@@ -135,7 +135,7 @@ pub(crate) fn attach_all(conn: &Connection, attachments: &[Attachment]) -> Resul
 ///
 /// Absence reads as space 0, exactly as it does for the local store: a
 /// database with no registry predates it and its ids are `1..n`.
-fn attached_term_space(conn: &Connection, alias: &str) -> Result<i64> {
+pub(crate) fn attached_term_space(conn: &Connection, alias: &str) -> Result<i64> {
     let has_table: bool = conn
         .prepare(&format!(
             "SELECT 1 FROM {alias}.sqlite_master WHERE type='table' AND name='term_spaces'"

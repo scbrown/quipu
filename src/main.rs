@@ -23,6 +23,7 @@ mod cli;
 mod cli_audit;
 mod cli_commands;
 mod cli_fork;
+mod cli_graph;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
@@ -84,7 +85,7 @@ fn main() {
         "pack" => cli_commands::cmd_pack(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
-        "graph" => cli_commands::cmd_graph(&args, db_path),
+        "graph" => cli_graph::cmd_graph(&args, db_path),
         "fork" => cli_fork::cmd_fork(&args, db_path),
         "unpack" => cli_commands::cmd_unpack(&args, db_path),
         "migrate-vectors" => cmd_migrate_vectors(&args, &config),

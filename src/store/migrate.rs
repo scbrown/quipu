@@ -120,6 +120,33 @@ impl Store {
         Ok(())
     }
 
+    /// The frozen-pack registry (graph kinds + deep freeze).
+    ///
+    /// One row per freeze: where the graph's rows went (`path`,
+    /// `content_hash`), the alias and term space it re-attaches under, and
+    /// when it was thawed (`NULL` = still frozen). Rows are never deleted —
+    /// a thaw sets `thawed_at`, the fork-status precedent: a freeze that
+    /// happened is a fact about the past.
+    ///
+    /// `graph_iri` is TEXT (the respace rule: no term ids in new columns
+    /// without term identity); every column is classified `None` in
+    /// `respace_map`.
+    pub(super) fn migrate_frozen_packs(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS frozen_packs (
+                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                 graph_iri    TEXT NOT NULL,
+                 alias        TEXT NOT NULL,
+                 path         TEXT NOT NULL,
+                 space        INTEGER NOT NULL,
+                 content_hash TEXT NOT NULL,
+                 frozen_at    TEXT NOT NULL,
+                 thawed_at    TEXT
+             );",
+        )?;
+        Ok(())
+    }
+
     /// Record which transaction RETRACTED a fact (quipu #83).
     ///
     /// `as_of_tx = N` is meant to answer "what did the store know as of

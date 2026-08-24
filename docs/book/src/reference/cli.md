@@ -498,6 +498,24 @@ quipu unpack domain.qpack.db --into urn:local:domain --db my.db
 | `--verify <file>` | Recompute and check the pack's content hash |
 | `--into <graph-iri>` | Unpack target graph (default: the pack's own graph IRI) |
 
+### `quipu graph`
+
+The graph-registry commands: offline import, and the deep-freeze lifecycle
+(see [Graph Kinds & Deep Freeze](../concepts/graph-kinds.md)).
+
+```bash
+quipu graph import other.db --as urn:app:imported --db my.db
+quipu graph freeze urn:app:runs/2026-07 --out /var/quipu/archive --db my.db
+quipu graph thaw urn:app:runs/2026-07 --db my.db
+quipu graph list --kind operational --db my.db
+quipu graph list --frozen --db my.db
+```
+
+`freeze` exports the graph's full history to a `.qpack.db` archive, verifies
+it by content hash, deletes the local rows and re-attaches the pack
+read-only; the graph stays queryable at the same IRI and refuses writes
+until `thaw`. `list` prints `iri  class  kind  lifecycle  source` per graph.
+
 ### `quipu fork`
 
 Persistent named forks (quipu-gp5): fork ROOT as of any transaction into an

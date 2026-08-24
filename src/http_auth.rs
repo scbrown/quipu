@@ -57,6 +57,8 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // one writes the label meta-graph. Both are writes and both are gated.
     "/graph/create",
     "/graph/label",
+    "/graph/freeze",  // deep freeze: relocates rows, mutates registry + attachments
+    "/graph/thaw",    // restores rows, mutates registry + attachments
     "/events/commit", // durable consumer cursor upsert (event-log P1)
     "/subscriptions", // push-subscription registry create/list/delete (event-log P2)
     "/datasets",      // named-dataset registry create/remove (quipu #69) + meta-graph mirror

@@ -592,6 +592,18 @@ predates it — treat that as "cannot tell", never as "no graphs".
 curl -s 'localhost:3030/graphs?kind=operational'
 ```
 
+### `POST /graph/freeze` and `POST /graph/thaw`
+
+The deep-freeze surface — same inputs and outputs as the `quipu_graph_freeze`
+/ `quipu_graph_thaw` MCP tools. Freeze relocates a graph's full history into
+a read-only archive pack (kept addressable and composable at query time);
+thaw restores it. Both are write endpoints and honor bearer auth.
+
+```bash
+curl -s localhost:3030/graph/freeze -X POST -H "Content-Type: application/json" \
+  -d '{"graph": "urn:app:shuttle/runs/2026-07", "timestamp": "2026-08-24T00:00:00Z"}'
+```
+
 ### `POST /graph`
 
 Render-ready node-link projection — the single payload the web UI draws from.

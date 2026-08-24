@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **40 tools** in a default build, or
-**41** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **42 tools** in a default build, or
+**43** when built with the `owl` feature (which adds `quipu_load_ontology`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -529,6 +529,36 @@ consumer must treat as "cannot tell" — never as "no graphs".
 |-----------|----------|-------------|
 | `kind` | No | Only graphs declaring this `dataKind` token (e.g. `operational`, `archive`) |
 | `lifecycle` | No | Only graphs in this storage lifecycle state (`frozen`) |
+
+### `quipu_graph_freeze`
+
+Deep-freeze a named graph: export its **full history** (retracted rows and
+transactions included) into a read-only archive pack, verify the copy by
+content hash, delete the local rows, and re-attach the pack — the graph stays
+addressable at the same IRI. Compose frozen graphs back in with `FROM <iri>`,
+`FROM <urn:quipu:dataset:frozen>`, or `include_kinds: ["archive"]`. Known
+cost: `as_of_tx` time travel is refused while any archive is attached
+(pre-existing rule for attachments); valid-time queries survive.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `graph` | Yes | IRI of the committed graph to freeze |
+| `out_dir` | No | Directory for the archive pack (default: beside the store file) |
+| `timestamp` | Yes | ISO-8601 timestamp |
+| `actor` | No | Who is freezing |
+
+### `quipu_graph_thaw`
+
+Thaw a frozen graph: verify its archive pack, detach it, restore the full
+history into the local store under the same IRI, and reopen the graph for
+writes. The pack file is kept on disk; the freeze registry row is closed,
+never deleted.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `graph` | Yes | IRI of the frozen graph |
+| `timestamp` | Yes | ISO-8601 timestamp |
+| `actor` | No | Who is thawing |
 
 ### `quipu_datasets`
 

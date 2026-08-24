@@ -95,9 +95,10 @@ pub use mcp::proposal::{
 pub use mcp::resolution::tool_resolve_entity;
 pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
-    resolve_validation_shapes, tool_cord, tool_datasets, tool_episode, tool_graph_list,
-    tool_hybrid_search, tool_queries, tool_retract, tool_retract_episode, tool_search, tool_set,
-    tool_shapes, tool_subscriptions, tool_unravel, tool_validate,
+    resolve_validation_shapes, tool_cord, tool_datasets, tool_episode, tool_graph_freeze,
+    tool_graph_list, tool_graph_thaw, tool_hybrid_search, tool_queries, tool_retract,
+    tool_retract_episode, tool_search, tool_set, tool_shapes, tool_subscriptions, tool_unravel,
+    tool_validate,
 };
 pub use mcp::{
     inference_header, query_inference, query_result, tool_cooccurrence, tool_definitions,

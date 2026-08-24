@@ -140,6 +140,17 @@ impl Store {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(INIT_SQL)?;
         conn.execute_batch(VECTORS_SQL)?;
+        // Frozen packs re-attach on every open (deep freeze): read the
+        // registry BEFORE attach_all so the caller's attachments and the
+        // frozen ones verify as one composition. The table is read via a
+        // sqlite_master guard because migrations have not run yet — a store
+        // that never froze anything has no table and skips this entirely.
+        // A missing pack file is a HARD refusal naming the path: an archive
+        // graph silently absent is the silent-zero-rows failure this stack
+        // refuses everywhere.
+        let mut attachments = attachments.to_vec();
+        attachments.extend(super::freeze::frozen_attachments(&conn)?);
+        let attachments = attachments.as_slice();
         // ATTACH here, after INIT_SQL and before the migrations, per
         // multi-db-composition.md §2. Safe because every migration below uses
         // unqualified table names, which SQLite binds to `main` — measured, not
@@ -160,6 +171,7 @@ impl Store {
         Self::migrate_retraction_tx(&conn)?;
         // AFTER migrate_named_graphs: the fork registry references graphs(g).
         Self::migrate_forks(&conn)?;
+        Self::migrate_frozen_packs(&conn)?;
         attach::migrate_graph_source(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because
@@ -279,18 +291,34 @@ impl Store {
     /// # Errors
     /// [`Error::Store`] naming the graph and the attachment that owns it.
     pub fn assert_graph_is_writable(&self, graph: i64) -> Result<()> {
-        if graph == crate::schema::ROOT_GRAPH || self.attachments.is_empty() {
+        if graph == crate::schema::ROOT_GRAPH {
             return Ok(());
         }
-        let source: Option<String> = self
+        // Frozen first (deep freeze): a frozen graph's rows have been
+        // relocated into a read-only pack, and a local write tagged with its
+        // id would sit BESIDE the archive — read as if the archive supplied
+        // it, exactly the failure the attached-source check below stops.
+        // Checked unconditionally (not gated on attachments) so the refusal
+        // holds even mid-freeze or with the pack temporarily absent.
+        let row: Option<(Option<String>, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT source FROM main.graphs WHERE g = ?1",
+                "SELECT lifecycle, source FROM main.graphs WHERE g = ?1",
                 params![graph],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
-            .optional()?
-            .flatten();
+            .optional()?;
+        let Some((lifecycle, source)) = row else {
+            return Ok(());
+        };
+        if lifecycle.as_deref() == Some("frozen") {
+            let iri = self.resolve(graph).unwrap_or_else(|_| format!("g={graph}"));
+            return Err(Error::Store(format!(
+                "refusing to write to graph '{iri}': it is FROZEN — its rows \
+                 live in a read-only archive pack. Thaw it first: \
+                 `quipu graph thaw {iri}`."
+            )));
+        }
         if let Some(alias) = source {
             return Err(Error::Store(format!(
                 "refusing to write to graph {graph}: it belongs to the attached \

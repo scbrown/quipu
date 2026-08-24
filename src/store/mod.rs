@@ -5,6 +5,8 @@ pub mod attach;
 pub mod datasets;
 pub mod events;
 pub mod forks;
+pub mod freeze;
+mod freeze_io;
 mod gate;
 pub mod import;
 pub mod labels;

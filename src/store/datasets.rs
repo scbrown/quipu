@@ -228,17 +228,23 @@ impl Store {
     /// member (not harmless, and invisible).
     pub fn dataset_member_ids(&self, name: &str) -> Result<Vec<i64>> {
         let mut ids = Vec::new();
+        // `lookup_all`, not `lookup` (deep freeze): a frozen member's IRI
+        // resolves to TWO registered ids — the local, now-empty graph row and
+        // the archive pack's row in its own term space. Resolving only the
+        // local id would read the empty graph and silently return zero rows,
+        // which is the exact failure `apply_dataset` already uses
+        // `lookup_all` to prevent for a bare `FROM <iri>`. For an ordinary
+        // single-space member this is one id, exactly as before.
         for m in self.dataset_members(name)? {
-            let Some(g) = self.lookup(&m.graph_iri)? else {
-                continue;
-            };
-            let registered = self
-                .conn
-                .query_row("SELECT 1 FROM graphs WHERE g = ?1", params![g], |_| Ok(()))
-                .optional()?
-                .is_some();
-            if registered {
-                ids.push(g);
+            for g in self.lookup_all(&m.graph_iri)? {
+                let registered = self
+                    .conn
+                    .query_row("SELECT 1 FROM graphs WHERE g = ?1", params![g], |_| Ok(()))
+                    .optional()?
+                    .is_some();
+                if registered {
+                    ids.push(g);
+                }
             }
         }
         Ok(ids)
