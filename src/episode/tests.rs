@@ -883,6 +883,47 @@ fn a_reworded_node_description_supersedes_without_losing_provenance() {
 }
 
 #[test]
+fn a_dual_typed_revision_reconciles_its_description_once() {
+    let mut store = Store::open_in_memory().unwrap();
+    let first = parse_episode(
+        r#"{
+          "name":"first-dual-type-observation",
+          "nodes":[{"name":"shared-rule","type":"Directive","description":"old wording"}]
+        }"#,
+    );
+    ingest_episode(&mut store, &first, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    let revision = parse_episode(
+        r#"{
+          "name":"dual-type-revision",
+          "nodes":[
+            {"name":"shared-rule","type":"Directive","description":"current wording"},
+            {"name":"shared-rule","type":"FailureMode","description":"current wording"}
+          ]
+        }"#,
+    );
+    ingest_episode(&mut store, &revision, "2026-01-02T00:00:00Z", TEST_BASE_NS)
+        .expect("duplicate node entries for multiple types must reconcile only once");
+
+    assert_eq!(
+        active_values(
+            &store,
+            &format!("{TEST_BASE_NS}shared-rule"),
+            &format!("{}comment", namespace::RDFS)
+        ),
+        vec!["current wording"]
+    );
+    assert_eq!(
+        active_values(
+            &store,
+            &format!("{TEST_BASE_NS}episode_first-dual-type-observation"),
+            &format!("{}comment", namespace::RDFS)
+        ),
+        vec!["old wording"]
+    );
+}
+
+#[test]
 fn a_revision_refuses_an_unattributable_current_comment() {
     let mut store = Store::open_in_memory().unwrap();
     let turtle = format!(

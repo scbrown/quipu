@@ -4,6 +4,7 @@ use crate::error::{Error, Result};
 use crate::namespace;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
+use std::collections::HashSet;
 
 use super::{Episode, node_iri};
 
@@ -61,6 +62,7 @@ pub(super) fn reconcile_node_descriptions(
     let comment_iri = format!("{}comment", namespace::RDFS);
     let comment = store.intern(&comment_iri)?;
     let generated_by = store.intern(&format!("{}wasGeneratedBy", namespace::PROV))?;
+    let mut reconciled = HashSet::new();
 
     for node in &episode.nodes {
         let Some(new_text) = node.description.as_deref() else {
@@ -69,6 +71,9 @@ pub(super) fn reconcile_node_descriptions(
         let Some(entity) = store.lookup(&node_iri(&node.name, base_ns))? else {
             continue;
         };
+        if !reconciled.insert((entity, new_text)) {
+            continue;
+        }
         let history = store.entity_history_in_graph(entity, graph)?;
         let superseded: Vec<_> = history
             .iter()
