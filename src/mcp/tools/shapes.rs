@@ -280,10 +280,10 @@ fn vocabulary_json(store: &Store) -> Result<JsonValue> {
                 Error::InvalidValue(format!("shape set '{name}' Turtle parse error: {e}"))
             })?;
             let predicate = triple.predicate.as_str();
-            if predicate == TARGET_CLASS || predicate == SUBCLASS_OF {
-                if let oxrdf::Term::NamedNode(class) = triple.object {
-                    classes.insert(class.as_str().to_owned());
-                }
+            if (predicate == TARGET_CLASS || predicate == SUBCLASS_OF)
+                && let oxrdf::Term::NamedNode(class) = triple.object
+            {
+                classes.insert(class.as_str().to_owned());
             }
         }
     }
