@@ -100,6 +100,37 @@ pub fn ungoverned_types_in_turtle(turtle: &str, sanctioned: &BTreeSet<String>) -
     found.into_iter().collect()
 }
 
+/// Class IRIs an episode's node `type` strings resolve to that no loaded shape
+/// targets.
+///
+/// A node `type` is always emitted into the aegis domain namespace as
+/// `aegis:{sanitized}` (see `episode::episode_to_turtle`), so this resolves it
+/// the SAME way — `base_ns + sanitize_iri_local(type)`. A second spelling would
+/// report governed types as ungoverned, and an advisory that is wrong in that
+/// direction is ignored within a week.
+///
+/// Lives here rather than in `episode` because it is vocabulary logic, and
+/// because it is computed from the RESPONSE side: it runs after the write has
+/// committed and can never fail it. An error reading the shape sets yields no
+/// hints.
+pub fn ungoverned_episode_types<'a>(
+    store: &Store,
+    node_types: impl Iterator<Item = &'a str>,
+    base_ns: &str,
+) -> Vec<String> {
+    let Ok(sanctioned) = sanctioned(store) else {
+        return Vec::new();
+    };
+    let mut found = BTreeSet::new();
+    for ntype in node_types {
+        let iri = format!("{base_ns}{}", crate::episode::sanitize_iri_local(ntype));
+        if !sanctioned.contains(&iri) {
+            found.insert(iri);
+        }
+    }
+    found.into_iter().collect()
+}
+
 /// Build the advisory payload for a response, or `None` when everything the
 /// write typed is governed.
 ///

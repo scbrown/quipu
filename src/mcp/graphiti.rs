@@ -189,7 +189,11 @@ pub fn tool_episodes_complete(store: &mut Store, input: &JsonValue) -> Result<Js
         "resolution_contentions": super::resolution_contentions_json(&result.resolution_contentions)
     });
     // See the note in `tools::write` — advisory, absent when everything is governed.
-    if let Some(hint) = crate::vocabulary::hint_json(&result.vocabulary_hints) {
+    if let Some(hint) = crate::vocabulary::hint_json(&crate::vocabulary::ungoverned_episode_types(
+        store,
+        episode.nodes.iter().filter_map(|n| n.node_type.as_deref()),
+        &base_ns,
+    )) {
         response["vocabulary_hint"] = hint;
     }
     Ok(response)
