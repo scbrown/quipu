@@ -8,8 +8,8 @@ src/cli_commands.rs 828
 src/context/mod.rs 616
 src/episode/mod.rs 934
 src/governance/audit/passes.rs 521
-src/graph.rs 712
 src/governance/placement.rs 716
+src/graph.rs 712
 src/http_auth.rs 524
 src/lattice.rs 582
 src/mcp/governance.rs 701
