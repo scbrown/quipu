@@ -492,6 +492,18 @@ pub(crate) fn register_attached_graphs(
         // see `contributed_graphs_sql`. Registry and readable rows are one set
         // expressed once, so they cannot drift into disagreeing.
         let contributed = contributed_graphs_sql(meta);
+        // `data_kind` travels like the other label columns, but is guarded per
+        // attachment: a pack built before the kind axis has no such column and
+        // the SELECT would otherwise hard-fail the whole attach. `lifecycle`
+        // deliberately does NOT travel — it is the ATTACHED store's storage
+        // state, and the local `source` column already marks these rows
+        // non-writable here.
+        let has_kind: bool = conn
+            .prepare(&format!(
+                "SELECT 1 FROM pragma_table_info('graphs', '{alias}') WHERE name = 'data_kind'"
+            ))?
+            .exists([])?;
+        let kind_expr = if has_kind { "data_kind" } else { "NULL" };
         // `INSERT OR REPLACE` keyed on g: re-opening a store with the same
         // attachment must converge rather than accumulate or fail. The source
         // column is re-asserted each time, so a graph that moved between
@@ -500,9 +512,9 @@ pub(crate) fn register_attached_graphs(
             &format!(
                 "INSERT OR REPLACE INTO main.graphs \
                      (g, class, parent_branch, created_at, source, \
-                      fresh_rank, trust_rank, trust_chain, policy) \
+                      fresh_rank, trust_rank, trust_chain, policy, data_kind) \
                  SELECT g, class, parent_branch, created_at, ?1, \
-                        fresh_rank, trust_rank, trust_chain, policy \
+                        fresh_rank, trust_rank, trust_chain, policy, {kind_expr} \
                  FROM {alias}.graphs WHERE {contributed}"
             ),
             params![alias],

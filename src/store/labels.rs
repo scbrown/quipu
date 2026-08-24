@@ -33,15 +33,16 @@ use rusqlite::params;
 
 use crate::error::{Error, Result};
 use crate::lattice::{Composed, Coverage, Durability, Freshness, PolicyClass, Trust};
+use crate::lattice_kind::{DataKind, KindSet};
 use crate::namespace::{
-    META_GRAPH_IRI, QUIPU_DURABILITY, QUIPU_FRESHNESS, QUIPU_IN_CHAIN, QUIPU_POLICY_CLASS,
-    QUIPU_TRUST, QUIPU_TRUST_RANK,
+    META_GRAPH_IRI, QUIPU_DATA_KIND, QUIPU_DURABILITY, QUIPU_FRESHNESS, QUIPU_IN_CHAIN,
+    QUIPU_POLICY_CLASS, QUIPU_TRUST, QUIPU_TRUST_RANK,
 };
 use crate::types::{Op, Value};
 
 use super::{Datum, Store};
 
-/// A graph's declared label across the three axes. Every axis is optional —
+/// A graph's declared label across the five axes. Every axis is optional —
 /// declaring freshness alone is normal and must not imply anything about trust.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GraphLabel {
@@ -53,6 +54,9 @@ pub struct GraphLabel {
     pub trust: Option<Trust>,
     /// Obligation tokens carried by the graph.
     pub policy: Option<PolicyClass>,
+    /// What sort of data the graph holds (categorical — see
+    /// [`crate::lattice_kind`]).
+    pub kind: Option<DataKind>,
 }
 
 impl GraphLabel {
@@ -63,6 +67,7 @@ impl GraphLabel {
             && self.durability.is_none()
             && self.trust.is_none()
             && self.policy.is_none()
+            && self.kind.is_none()
     }
 
     /// Per-axis coverage for a single graph: `Full` where declared, `None`
@@ -88,6 +93,8 @@ pub struct ReadLabel {
     pub trust: Composed<Trust>,
     /// Composed policy for this graph.
     pub policy: Composed<PolicyClass>,
+    /// Composed kind for this graph.
+    pub kind: Composed<DataKind>,
     /// The transaction that last wrote this graph's labels.
     pub labels_tx: Option<i64>,
 }
@@ -107,6 +114,9 @@ pub struct DatasetLabels {
     pub trust: Composed<Trust>,
     /// Composed policy — the JOIN (union) of declared members' obligations.
     pub policy: Composed<PolicyClass>,
+    /// Composed kind — the JOIN (union) of declared members' kinds, so a
+    /// dataset touching an archive graph reports `archive` among its kinds.
+    pub kind: Composed<KindSet>,
 }
 
 impl DatasetLabels {
@@ -118,6 +128,7 @@ impl DatasetLabels {
             && self.durability.value.is_none()
             && self.trust.value.is_none()
             && self.policy.value.is_none()
+            && self.kind.value.is_none()
     }
 }
 
@@ -126,7 +137,7 @@ impl DatasetLabels {
 pub struct LabelDrift {
     /// The graph's IRI.
     pub graph_iri: String,
-    /// The axis that disagrees (`freshness`, `trust`, `policy`).
+    /// The axis that disagrees (`freshness`, `durability`, `trust`, `policy`, `kind`).
     pub axis: &'static str,
     /// What the meta-graph facts say — the authority.
     pub rdf: String,
@@ -164,6 +175,7 @@ type CacheRow = (
     Option<String>,
     Option<i64>,
     Option<String>,
+    Option<String>,
 );
 
 /// One `graphs` row during a drift sweep.
@@ -172,6 +184,7 @@ type DriftRow = (
     Option<i64>,
     Option<i64>,
     Option<i64>,
+    Option<String>,
     Option<String>,
     Option<String>,
 );
@@ -309,6 +322,16 @@ impl Store {
                 });
             }
         }
+        if let Some(k) = &label.kind {
+            datums.push(Datum {
+                entity: subject,
+                attribute: self.intern(QUIPU_DATA_KIND)?,
+                value: Value::Str(k.as_str().to_string()),
+                valid_from: timestamp.to_string(),
+                valid_to: valid_to.map(str::to_string),
+                op: Op::Assert,
+            });
+        }
 
         let policy_encoded = match &label.policy {
             Some(p) => Some(encode_policy(p)?),
@@ -323,7 +346,7 @@ impl Store {
                 self.transact_to_graph(&datums, timestamp, actor, Some("graph-label"), meta_g)?;
             let updated = self.conn.execute(
                 "UPDATE graphs SET fresh_rank = ?2, durability_rank = ?3, trust_rank = ?4, trust_chain = ?5, \
-                 policy = ?6, labels_tx = ?7, labels_valid_to = ?8 WHERE g = ?1",
+                 policy = ?6, labels_tx = ?7, labels_valid_to = ?8, data_kind = ?9 WHERE g = ?1",
                 params![
                     subject,
                     label.freshness.map(|f| f as i64),
@@ -333,6 +356,7 @@ impl Store {
                     policy_encoded,
                     tx,
                     valid_to,
+                    label.kind.as_ref().map(|k| k.as_str().to_string()),
                 ],
             )?;
             // An UPDATE matching no row is not an error in SQL, and that is
@@ -395,7 +419,7 @@ impl Store {
         let row: Option<CacheRow> = self
             .conn
             .query_row(
-                "SELECT fresh_rank, durability_rank, trust_rank, trust_chain, policy, labels_tx, labels_valid_to \
+                "SELECT fresh_rank, durability_rank, trust_rank, trust_chain, policy, labels_tx, labels_valid_to, data_kind \
                      FROM graphs WHERE g = ?1",
                 params![g],
                 |r| {
@@ -407,6 +431,7 @@ impl Store {
                         r.get(4)?,
                         r.get(5)?,
                         r.get(6)?,
+                        r.get(7)?,
                     ))
                 },
             )
@@ -420,6 +445,7 @@ impl Store {
             policy,
             labels_tx,
             labels_valid_to,
+            data_kind,
         )) = row
         else {
             return Ok(Self::undeclared_label());
@@ -490,6 +516,18 @@ impl Store {
 
         let policy = policy.as_deref().map(decode_policy);
 
+        // A cached kind that fails the lexical rule is drift (the cache is
+        // written from a parsed value), so refuse rather than serve it.
+        let kind = match data_kind.as_deref() {
+            Some(s) => Some(DataKind::parse(s).map_err(|_| {
+                Error::Store(format!(
+                    "graph '{graph_iri}' has cached data_kind '{s}', which is not \
+                     a kind token; recompute with `quipu doctor labels`"
+                ))
+            })?),
+            None => None,
+        };
+
         Ok(ReadLabel {
             freshness: Composed {
                 coverage: GraphLabel::coverage_of(freshness.as_ref()),
@@ -506,6 +544,10 @@ impl Store {
             policy: Composed {
                 coverage: GraphLabel::coverage_of(policy.as_ref()),
                 value: policy,
+            },
+            kind: Composed {
+                coverage: GraphLabel::coverage_of(kind.as_ref()),
+                value: kind,
             },
             labels_tx,
         })
@@ -529,6 +571,10 @@ impl Store {
                 value: None,
                 coverage: Coverage::None,
             },
+            kind: Composed {
+                value: None,
+                coverage: Coverage::None,
+            },
             labels_tx: None,
         }
     }
@@ -544,7 +590,12 @@ impl Store {
     /// Plain SQL, deliberately not SPARQL: `label_of` runs on the query path,
     /// where a nested evaluation is the re-entrancy hazard the cache exists to
     /// avoid in the first place.
-    fn current_value(&self, e: i64, predicate: &str, graph: i64) -> Result<Option<Value>> {
+    pub(super) fn current_value(
+        &self,
+        e: i64,
+        predicate: &str,
+        graph: i64,
+    ) -> Result<Option<Value>> {
         let Some(attr) = self.lookup(predicate)? else {
             return Ok(None);
         };
@@ -580,7 +631,7 @@ impl Store {
     }
 
     /// Resolve a `Value::Ref` to its IRI; anything else is not a reference.
-    fn ref_iri(&self, v: Option<&Value>) -> Result<Option<String>> {
+    pub(super) fn ref_iri(&self, v: Option<&Value>) -> Result<Option<String>> {
         match v {
             Some(Value::Ref(id)) => Ok(Some(self.resolve(*id)?)),
             _ => Ok(None),
@@ -686,6 +737,7 @@ impl Store {
         let mut durability = Vec::with_capacity(graphs.len());
         let mut trust = Vec::with_capacity(graphs.len());
         let mut policy = Vec::with_capacity(graphs.len());
+        let mut kind = Vec::with_capacity(graphs.len());
 
         for &g in graphs {
             let l = self.label_of_id(g)?;
@@ -693,6 +745,7 @@ impl Store {
             durability.push(l.durability.value);
             trust.push(l.trust.value);
             policy.push(l.policy.value);
+            kind.push(l.kind.value.as_ref().map(KindSet::singleton));
         }
 
         Ok(DatasetLabels {
@@ -700,6 +753,7 @@ impl Store {
             durability: crate::lattice::fold_meet(durability)?,
             trust: crate::lattice::fold_meet(trust)?,
             policy: crate::lattice::fold_join(policy)?,
+            kind: crate::lattice::fold_join(kind)?,
         })
     }
 
@@ -821,6 +875,25 @@ impl Store {
                      dataset."
                 )));
             }
+
+            // A kind deny-list is a BLOCKLIST, not a minimum: an undeclared
+            // kind passes. Failing every unlabelled graph the moment the key
+            // is set would break every existing store; the freshness/trust
+            // floors above are minimums, where undeclared correctly fails.
+            if !floor.deny_data_kinds.is_empty()
+                && let Some(k) = &l.kind.value
+                && let Some(denied) = floor
+                    .deny_data_kinds
+                    .iter()
+                    .find(|d| d.as_str() == k.as_str())
+            {
+                return Err(Error::PolicyDenied(format!(
+                    "query refused: graph '{iri}' is dataKind '{denied}', denied by \
+                     [quipu.labels] deny_data_kinds. Labels are not access control — \
+                     name the graph explicitly via FROM, a dataset, or include_kinds \
+                     to opt in."
+                )));
+            }
         }
 
         Ok(())
@@ -850,7 +923,7 @@ impl Store {
         let meta_g = self.meta_graph_id()?;
 
         let mut stmt = self.conn.prepare(
-            "SELECT g, fresh_rank, durability_rank, trust_rank, trust_chain, policy \
+            "SELECT g, fresh_rank, durability_rank, trust_rank, trust_chain, policy, data_kind \
              FROM graphs WHERE g <> ?1",
         )?;
         let rows: Vec<DriftRow> = stmt
@@ -862,11 +935,12 @@ impl Store {
                     r.get(3)?,
                     r.get(4)?,
                     r.get(5)?,
+                    r.get(6)?,
                 ))
             })?
             .collect::<std::result::Result<_, _>>()?;
 
-        for (g, fresh_rank, durability_rank, trust_rank, trust_chain, policy) in rows {
+        for (g, fresh_rank, durability_rank, trust_rank, trust_chain, policy, data_kind) in rows {
             let graph_iri = self.resolve(g).unwrap_or_else(|_| format!("g={g}"));
 
             // Freshness.
@@ -937,6 +1011,18 @@ impl Store {
                 });
             }
 
+            // Kind — a plain string compare; the axis is categorical and both
+            // sides store the declared token verbatim.
+            let rdf_kind = self.declared_str(g, QUIPU_DATA_KIND, meta_g)?;
+            if rdf_kind != data_kind {
+                drift.push(LabelDrift {
+                    graph_iri: graph_iri.clone(),
+                    axis: "kind",
+                    rdf: rdf_kind.unwrap_or_else(|| "(undeclared)".into()),
+                    cached: data_kind.unwrap_or_else(|| "(undeclared)".into()),
+                });
+            }
+
             // Policy — compare as SETS, since the cache is a canonical join and
             // a string compare would report a false drift on reordering.
             let rdf_tokens = self.declared_all(g, QUIPU_POLICY_CLASS, meta_g)?;
@@ -960,7 +1046,12 @@ impl Store {
     }
 
     /// The single current string value of `(e, predicate)` in `graph`.
-    fn declared_str(&self, e: i64, predicate: &str, graph: i64) -> Result<Option<String>> {
+    pub(super) fn declared_str(
+        &self,
+        e: i64,
+        predicate: &str,
+        graph: i64,
+    ) -> Result<Option<String>> {
         Ok(match self.current_value(e, predicate, graph)? {
             Some(Value::Str(s)) => Some(s),
             _ => None,
@@ -992,161 +1083,3 @@ impl Store {
 #[cfg(test)]
 #[path = "labels_tests.rs"]
 mod tests;
-
-/// A producer's RECOMMENDED floor for consumers of a layer (quipu #80).
-///
-/// **Advisory. Never enforced.** See [`Store::recommended_floor`].
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct RecommendedFloor {
-    /// Minimum freshness the producer considers safe.
-    pub min_freshness: Option<Freshness>,
-    /// Minimum trust value (an IRI) the producer considers safe.
-    pub min_trust: Option<String>,
-}
-
-impl RecommendedFloor {
-    /// Whether the producer recommended anything at all.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.min_freshness.is_none() && self.min_trust.is_none()
-    }
-
-    /// A one-line rendering for the attach banner, phrased as a recommendation
-    /// so it cannot be misread as something the store applied.
-    #[must_use]
-    pub fn line(&self, graph_iri: &str) -> String {
-        let mut parts = Vec::new();
-        if let Some(f) = self.min_freshness {
-            parts.push(format!("freshness >= {f}"));
-        }
-        if let Some(t) = &self.min_trust {
-            parts.push(format!("trust >= {t}"));
-        }
-        format!(
-            "{graph_iri} RECOMMENDS {} — advisory only; enforcement is the \
-             consumer's [quipu.labels] config",
-            parts.join(", ")
-        )
-    }
-}
-
-impl Store {
-    /// Declare a producer's recommended floor for a graph (quipu #80).
-    ///
-    /// Written as ordinary meta-graph facts, so it is queryable, bitemporal and
-    /// governed exactly as a label is — and, like a label, requires authority
-    /// over the meta-graph.
-    ///
-    /// # Errors
-    /// As [`Store::set_graph_label`]; also when nothing is recommended.
-    pub fn set_recommended_floor(
-        &mut self,
-        graph_iri: &str,
-        floor: &RecommendedFloor,
-        timestamp: &str,
-        actor: Option<&str>,
-    ) -> Result<i64> {
-        if floor.is_empty() {
-            return Err(Error::InvalidValue(format!(
-                "recommended floor for '{graph_iri}' declares nothing"
-            )));
-        }
-        let meta_g = self.meta_graph_id()?;
-        let subject = self.intern(graph_iri)?;
-        let mut datums = Vec::new();
-        if let Some(f) = floor.min_freshness {
-            datums.push(Datum {
-                entity: subject,
-                attribute: self.intern(crate::namespace::QUIPU_RECOMMENDS_FRESHNESS)?,
-                value: Value::Str(f.as_str().to_string()),
-                valid_from: timestamp.to_string(),
-                valid_to: None,
-                op: Op::Assert,
-            });
-        }
-        if let Some(t) = &floor.min_trust {
-            let t_term = self.intern(t)?;
-            datums.push(Datum {
-                entity: subject,
-                attribute: self.intern(crate::namespace::QUIPU_RECOMMENDS_TRUST)?,
-                value: Value::Ref(t_term),
-                valid_from: timestamp.to_string(),
-                valid_to: None,
-                op: Op::Assert,
-            });
-        }
-        self.transact_to_graph(&datums, timestamp, actor, Some("recommended-floor"), meta_g)
-    }
-
-    /// Read a graph's recommended floor.
-    ///
-    /// ⚠️ **This is READ and SURFACED, never applied.** A pack that could
-    /// tighten enforcement could `DoS` its consumer; one that could loosen it
-    /// could bypass the consumer's own floor. So nothing in the query path
-    /// consults this — [`Store::check_label_floor`] reads
-    /// `[quipu.labels]` and nothing else, and a test asserts enforcement is
-    /// byte-identical with and without a recommendation present.
-    pub fn recommended_floor(&self, graph_iri: &str) -> Result<RecommendedFloor> {
-        let Some(g) = self.lookup(graph_iri)? else {
-            return Ok(RecommendedFloor::default());
-        };
-        let meta_g = self.meta_graph_id()?;
-        let min_freshness = self
-            .declared_str(g, crate::namespace::QUIPU_RECOMMENDS_FRESHNESS, meta_g)?
-            .and_then(|s| Freshness::parse(&s));
-        let min_trust = self.ref_iri(
-            self.current_value(g, crate::namespace::QUIPU_RECOMMENDS_TRUST, meta_g)?
-                .as_ref(),
-        )?;
-        Ok(RecommendedFloor {
-            min_freshness,
-            min_trust,
-        })
-    }
-
-    /// Declare the dataset a graph expects to be activated with (quipu #80).
-    ///
-    /// # Errors
-    /// As [`Store::set_graph_label`].
-    pub fn set_default_dataset(
-        &mut self,
-        graph_iri: &str,
-        dataset_iri: &str,
-        timestamp: &str,
-        actor: Option<&str>,
-    ) -> Result<i64> {
-        let meta_g = self.meta_graph_id()?;
-        let subject = self.intern(graph_iri)?;
-        let attribute = self.intern(crate::namespace::QUIPU_DEFAULT_DATASET)?;
-        let value = Value::Ref(self.intern(dataset_iri)?);
-        self.transact_to_graph(
-            &[Datum {
-                entity: subject,
-                attribute,
-                value,
-                valid_from: timestamp.to_string(),
-                valid_to: None,
-                op: Op::Assert,
-            }],
-            timestamp,
-            actor,
-            Some("default-dataset"),
-            meta_g,
-        )
-    }
-
-    /// The dataset IRI a graph expects to be activated with, if declared.
-    ///
-    /// Advisory like the floor: naming it does not activate it. The ROOT-alone
-    /// default survives, and a dataset is never implicitly active (#69).
-    pub fn default_dataset(&self, graph_iri: &str) -> Result<Option<String>> {
-        let Some(g) = self.lookup(graph_iri)? else {
-            return Ok(None);
-        };
-        let meta_g = self.meta_graph_id()?;
-        self.ref_iri(
-            self.current_value(g, crate::namespace::QUIPU_DEFAULT_DATASET, meta_g)?
-                .as_ref(),
-        )
-    }
-}

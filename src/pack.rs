@@ -216,6 +216,11 @@ pub fn canonical_content(
     if let Some(p) = &l.policy.value {
         out.push_str(&format!("policy={}\n", p.tokens().join(" ")));
     }
+    // Additive: a graph with no declared kind emits nothing here, so every
+    // pre-kind pack hashes identically.
+    if let Some(k) = &l.kind.value {
+        out.push_str(&format!("kind={k}\n"));
+    }
     Ok(out)
 }
 
@@ -445,6 +450,9 @@ fn pack_into(
             freshness: l.freshness.value,
             trust: l.trust.value.clone(),
             policy: l.policy.value.clone(),
+            // Kind travels: it describes the CONTENT, not this store's custody
+            // of it (durability, by contrast, is the consumer's judgment).
+            kind: l.kind.value.clone(),
         };
         if !label.is_empty() {
             out.set_graph_label(graph_iri, &label, timestamp, None)?;

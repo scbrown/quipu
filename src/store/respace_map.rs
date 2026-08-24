@@ -114,6 +114,9 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("graphs", "policy", TermIdKind::None),
     ("graphs", "labels_tx", TermIdKind::None),
     ("graphs", "labels_valid_to", TermIdKind::None),
+    // Kind and lifecycle are TEXT tokens (`archive`, `frozen`), never ids.
+    ("graphs", "data_kind", TermIdKind::None),
+    ("graphs", "lifecycle", TermIdKind::None),
     // -- attach::migrate_graph_source (quipu #75) --
     // TEXT holding an attachment ALIAS, not a term id. Added by #75 — and this
     // entry exists because respace REFUSED to run until it did, one hour after

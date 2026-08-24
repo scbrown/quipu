@@ -102,6 +102,18 @@ pub const QUIPU_DURABILITY: &str = "https://quipu.dev/ontology/durability";
 pub const QUIPU_TRUST_RANK: &str = "https://quipu.dev/ontology/trustRank";
 /// `quipu:inChain` — the chain that ranks a trust value.
 pub const QUIPU_IN_CHAIN: &str = "https://quipu.dev/ontology/inChain";
+/// `quipu:dataKind` — what sort of data a graph holds (categorical; see
+/// [`crate::lattice_kind`]). Conventioned values: `knowledge`, `operational`,
+/// `identity`, `archive`.
+pub const QUIPU_DATA_KIND: &str = "https://quipu.dev/ontology/dataKind";
+/// `quipu:lifecycleState` — a graph's storage lifecycle (`frozen` after a
+/// deep-freeze; absent otherwise). Written by freeze/thaw, never by hand.
+pub const QUIPU_LIFECYCLE_STATE: &str = "https://quipu.dev/ontology/lifecycleState";
+/// `quipu:frozenInto` — the content hash of the pack a frozen graph's rows
+/// were relocated into.
+pub const QUIPU_FROZEN_INTO: &str = "https://quipu.dev/ontology/frozenInto";
+/// `quipu:frozenAt` — when the freeze happened.
+pub const QUIPU_FROZEN_AT: &str = "https://quipu.dev/ontology/frozenAt";
 /// `quipu:derivedBy` — a statement's derivation method resource.
 pub const QUIPU_DERIVED_BY: &str = "https://quipu.dev/ontology/derivedBy";
 /// `quipu:derivationSystem` — the system capable of executing a method.

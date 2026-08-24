@@ -55,6 +55,11 @@ pub struct LabelsConfig {
     /// Refuse queries whose composed policy carries any of these obligation
     /// tokens (e.g. `no-export`). Empty = no policy floor.
     pub deny_policy_tokens: Vec<String>,
+
+    /// Refuse queries over graphs declaring any of these data kinds (e.g.
+    /// `archive`, to keep frozen graphs out of implicit reads). A BLOCKLIST,
+    /// not a minimum: an undeclared kind passes. Empty = no kind floor.
+    pub deny_data_kinds: Vec<String>,
 }
 
 impl LabelsConfig {
@@ -65,6 +70,7 @@ impl LabelsConfig {
         self.min_freshness.is_none()
             && self.min_trust_rank.is_none()
             && self.deny_policy_tokens.is_empty()
+            && self.deny_data_kinds.is_empty()
     }
 }
 

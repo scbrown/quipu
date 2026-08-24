@@ -91,6 +91,10 @@ impl Store {
             ("policy", "TEXT"),
             ("labels_tx", "INTEGER"),
             ("labels_valid_to", "TEXT"),
+            // The dataKind axis and the freeze lifecycle. TEXT tokens, not
+            // interned ids, for the same respace reason as `trust_chain`.
+            ("data_kind", "TEXT"),
+            ("lifecycle", "TEXT"),
         ] {
             let present: bool = conn
                 .prepare("SELECT 1 FROM pragma_table_info('graphs') WHERE name = ?1")?

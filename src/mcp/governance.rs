@@ -499,11 +499,17 @@ pub fn tool_graph_label(store: &mut Store, input: &JsonValue) -> Result<JsonValu
         None => None,
     };
 
+    let kind = match input.get("kind").and_then(JsonValue::as_str) {
+        Some(v) => Some(crate::lattice_kind::DataKind::parse(v)?),
+        None => None,
+    };
+
     let label = GraphLabel {
         freshness,
         durability,
         trust,
         policy,
+        kind,
     };
     let valid_to = input.get("valid_to").and_then(JsonValue::as_str);
     let actor = input.get("actor").and_then(JsonValue::as_str);

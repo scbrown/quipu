@@ -11,7 +11,7 @@ src/governance/audit/passes.rs 521
 src/governance/placement.rs 716
 src/graph.rs 712
 src/http_auth.rs 524
-src/lattice.rs 582
+src/lattice.rs 525
 src/mcp/governance.rs 701
 src/mcp/mod.rs 1020
 src/mcp/named_query.rs 686
@@ -25,6 +25,6 @@ src/sparql/mod.rs 569
 src/sparql/triple.rs 517
 src/store/attach.rs 515
 src/store/events.rs 555
-src/store/labels.rs 1152
+src/store/labels.rs 994
 src/store/ops.rs 1151
 src/store/respace.rs 519

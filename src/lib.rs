@@ -16,6 +16,8 @@ pub mod graph_view;
 pub mod http_auth;
 pub mod impact;
 pub mod lattice;
+pub mod lattice_fold;
+pub mod lattice_kind;
 pub mod mcp;
 pub mod metrics;
 #[cfg(feature = "lancedb")]

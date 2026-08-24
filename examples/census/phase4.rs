@@ -37,6 +37,7 @@ fn label_fresh_with_rank(ctx: &mut Ctx, iri: &str, rank: i64, chain: &str) -> i6
             rank,
         }),
         policy: None,
+        kind: None,
     };
     ctx.store
         .set_graph_label(iri, &label, &ts, Some("census:composition"))

@@ -317,6 +317,7 @@ fn phase1_founding(ctx: &mut Ctx, out_dir: &str) -> CensusIris {
                 rank: rank as i64,
             }),
             policy: None,
+            kind: None,
         };
         let tx = ctx
             .store

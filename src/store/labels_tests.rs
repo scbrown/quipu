@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::lattice::DEFAULT_TRUST_CHAIN;
+use crate::store::labels_advisory::RecommendedFloor;
 
 const TS: &str = "2026-08-06T00:00:00Z";
 
@@ -134,6 +135,7 @@ fn set_graph_label_writes_facts_and_cache_with_zero_drift() {
         freshness: Some(Freshness::Recomputing),
         trust: Some(trust("urn:t:observed", DEFAULT_TRUST_CHAIN, 20)),
         policy: Some(PolicyClass::new(["pii", "no-export"])),
+        kind: None,
     };
     let tx = store
         .set_graph_label("urn:g:full", &label, TS, None)
@@ -212,6 +214,7 @@ fn a_whitespace_policy_token_is_refused_before_anything_is_written() {
         freshness: Some(Freshness::Fresh),
         trust: None,
         policy: Some(PolicyClass::new(["two words"])),
+        kind: None,
     };
     let err = store
         .set_graph_label("urn:g:tok", &bad, TS, None)
@@ -1291,4 +1294,133 @@ fn the_recommendation_banner_is_surfaced_for_every_graph_that_declares_one() {
     assert_eq!(declaring.len(), 1, "only the declaring graph is surfaced");
     assert!(declaring[0].contains("urn:g:a"));
     assert!(declaring[0].contains("advisory only"));
+}
+
+// ---------------------------------------------------------------------------
+// The dataKind axis (graph kinds + deep freeze)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn kind_label_round_trips_through_facts_and_cache_with_zero_drift() {
+    use crate::lattice_kind::DataKind;
+    let mut store = store_with_graph("urn:g:kind");
+    let label = GraphLabel {
+        kind: Some(DataKind::parse("operational").unwrap()),
+        ..Default::default()
+    };
+    store
+        .set_graph_label("urn:g:kind", &label, TS, None)
+        .expect("kind-only label writes");
+
+    let read = store.label_of("urn:g:kind").unwrap();
+    assert_eq!(read.kind.value.unwrap().as_str(), "operational");
+    // Kind alone declares nothing about the other axes.
+    assert!(read.freshness.value.is_none());
+    assert!(store.graph_label_drift().unwrap().is_empty());
+}
+
+#[test]
+fn dataset_kind_composes_by_union() {
+    use crate::lattice_kind::DataKind;
+    let mut store = store_with_graph("urn:g:hot");
+    let hot = store.lookup("urn:g:hot").unwrap().unwrap();
+    let cold = store.graph_create("urn:g:cold").unwrap();
+    store
+        .set_graph_label(
+            "urn:g:hot",
+            &GraphLabel {
+                kind: Some(DataKind::parse("operational").unwrap()),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    store
+        .set_graph_label(
+            "urn:g:cold",
+            &GraphLabel {
+                kind: Some(DataKind::parse("archive").unwrap()),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+
+    let ds = store.dataset_labels(&[hot, cold]).unwrap();
+    let kinds = ds.kind.value.expect("both declared");
+    assert_eq!(kinds.kinds(), vec!["archive", "operational"]);
+    assert!(ds.kind.coverage.is_full());
+}
+
+#[test]
+fn deny_data_kinds_is_a_blocklist_so_undeclared_passes() {
+    use crate::lattice_kind::DataKind;
+    let mut store = store_with_graph("urn:g:frozenish");
+    let g = store.lookup("urn:g:frozenish").unwrap().unwrap();
+    let plain = store.graph_create("urn:g:plain").unwrap();
+    store.labels_config_mut().deny_data_kinds = vec!["archive".into()];
+
+    // Undeclared kind passes a deny-list (unlike a minimum floor).
+    store
+        .check_label_floor(&[plain])
+        .expect("undeclared passes");
+
+    store
+        .set_graph_label(
+            "urn:g:frozenish",
+            &GraphLabel {
+                kind: Some(DataKind::parse("archive").unwrap()),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    let err = store.check_label_floor(&[g]).unwrap_err();
+    assert!(err.to_string().contains("archive"), "names the kind: {err}");
+    // A non-denied kind passes.
+    store
+        .set_graph_label(
+            "urn:g:plain",
+            &GraphLabel {
+                kind: Some(DataKind::parse("knowledge").unwrap()),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    store.check_label_floor(&[plain]).expect("knowledge passes");
+}
+
+#[test]
+fn kind_cache_drift_is_reported_on_the_kind_axis() {
+    use crate::lattice_kind::DataKind;
+    let mut store = store_with_graph("urn:g:drifty");
+    store
+        .set_graph_label(
+            "urn:g:drifty",
+            &GraphLabel {
+                kind: Some(DataKind::parse("operational").unwrap()),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    // Corrupt the cache behind the RDF's back.
+    store
+        .conn
+        .execute(
+            "UPDATE graphs SET data_kind = 'archive' WHERE data_kind = 'operational'",
+            [],
+        )
+        .unwrap();
+    let drift = store.graph_label_drift().unwrap();
+    assert_eq!(drift.len(), 1);
+    assert_eq!(drift[0].axis, "kind");
+    assert_eq!(drift[0].rdf, "operational");
+    assert_eq!(drift[0].cached, "archive");
 }

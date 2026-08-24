@@ -8,6 +8,7 @@ pub mod forks;
 mod gate;
 pub mod import;
 pub mod labels;
+pub mod labels_advisory;
 mod migrate;
 mod open;
 pub mod ops;
