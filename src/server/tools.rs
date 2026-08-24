@@ -11,6 +11,12 @@ use serde_json::{Value as JsonValue, json};
 use super::SharedStore;
 use super::base::{AppError, blocking};
 
+pub(crate) fn graph_lifecycle_routes() -> axum::Router<SharedStore> {
+    axum::Router::new()
+        .route("/graph/freeze", axum::routing::post(graph_freeze))
+        .route("/graph/thaw", axum::routing::post(graph_thaw))
+}
+
 macro_rules! ro_handler {
     ($name:ident, $tool:path) => {
         pub(crate) async fn $name(

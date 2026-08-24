@@ -37,6 +37,29 @@ pub(crate) use super::freeze_io::frozen_attachments;
 /// every frozen graph without naming each window.
 pub const FROZEN_DATASET_IRI: &str = "urn:quipu:dataset:frozen";
 
+#[cfg(not(target_arch = "wasm32"))]
+fn ensure_deep_freeze_supported() -> Result<()> {
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn ensure_deep_freeze_supported() -> Result<()> {
+    Err(Error::InvalidValue(
+        "deep freeze is unavailable in wasm32: it requires native filesystem and SQLite attach"
+            .into(),
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn respace_archive(src: &Path, dst: &Path, space: i64) -> Result<super::respace::RespaceReport> {
+    super::respace::respace_file(src, dst, space)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn respace_archive(_src: &Path, _dst: &Path, _space: i64) -> Result<super::respace::RespaceReport> {
+    unreachable!("ensure_deep_freeze_supported refuses wasm32 before archive construction")
+}
+
 /// What a freeze did, for the caller and the CLI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FreezeReport {
@@ -72,6 +95,7 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<FreezeReport> {
+        ensure_deep_freeze_supported()?;
         let g = self
             .lookup(graph_iri)?
             .ok_or_else(|| Error::InvalidValue(format!("freeze: unknown graph '{graph_iri}'")))?;
@@ -145,8 +169,7 @@ impl Store {
             timestamp,
         )?;
         let space = self.next_free_space()?;
-        let respaced =
-            super::respace::respace_file(Path::new(&build_path), Path::new(&final_path), space);
+        let respaced = respace_archive(Path::new(&build_path), Path::new(&final_path), space);
         for suffix in ["", "-wal", "-shm"] {
             let p = format!("{build_path}{suffix}");
             if Path::new(&p).exists() {
@@ -225,6 +248,7 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<usize> {
+        ensure_deep_freeze_supported()?;
         let row: Option<(i64, String, String, String)> = self
             .conn
             .query_row(
