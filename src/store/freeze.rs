@@ -476,6 +476,91 @@ impl Store {
         Ok(())
     }
 
+    /// Bring this connection's frozen-pack attachments in line with the
+    /// `frozen_packs` registry. Returns whether anything changed.
+    ///
+    /// The registry is the writer's committed truth; a POOLED READER opened
+    /// before a freeze (or before the store ever froze anything) has no way
+    /// to hear about it — its `facts_source` is plain `"facts"` and a query
+    /// over the frozen graph silently reads zero rows, the exact failure
+    /// this feature refuses everywhere else. `StoreHandle::read()` calls
+    /// this after acquiring a reader, so every pooled read composes the same
+    /// archives the writer does. Cost when nothing changed: one indexed
+    /// SELECT on `frozen_packs`.
+    ///
+    /// Reader-safe by construction: `ATTACH ... mode=ro` is permitted under
+    /// `PRAGMA query_only` (measured), and registration rows are NOT written
+    /// here — the writer's freeze committed them. The one write a remount
+    /// needs is the TEMP alias table, so `query_only` is toggled off around
+    /// exactly that rebuild; the file handle stays `SQLITE_OPEN_READ_ONLY`,
+    /// so real writes remain impossible at the layer that counts.
+    pub fn sync_frozen_attachments(&mut self) -> Result<bool> {
+        let has_table: bool = self
+            .conn
+            .prepare("SELECT 1 FROM main.sqlite_master WHERE type='table' AND name='frozen_packs'")?
+            .exists([])?;
+        if !has_table {
+            return Ok(false);
+        }
+        let desired: Vec<(String, String)> = self
+            .conn
+            .prepare("SELECT alias, path FROM frozen_packs WHERE thawed_at IS NULL ORDER BY id")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<std::result::Result<_, _>>()?;
+        let mounted: Vec<String> = self
+            .attachments
+            .iter()
+            .filter(|a| a.alias.starts_with("fz_"))
+            .map(|a| a.alias.clone())
+            .collect();
+        let want: Vec<&str> = desired.iter().map(|(a, _)| a.as_str()).collect();
+        if mounted.iter().map(String::as_str).collect::<Vec<_>>() == want {
+            return Ok(false);
+        }
+
+        for alias in &mounted {
+            if !want.contains(&alias.as_str()) {
+                self.conn
+                    .execute_batch(&format!("DETACH DATABASE {alias}"))?;
+                self.attachments.retain(|a| &a.alias != alias);
+            }
+        }
+        for (alias, path) in &desired {
+            if self.attachments.iter().any(|a| &a.alias == alias) {
+                continue;
+            }
+            if !Path::new(path).exists() {
+                return Err(Error::Store(format!(
+                    "frozen pack {path:?} (alias {alias}) is missing; refusing \
+                     to read with the archive silently absent"
+                )));
+            }
+            let att = Attachment::read_only(alias, path);
+            attach::attach_all(&self.conn, std::slice::from_ref(&att))?;
+            self.attachments.push(att);
+        }
+
+        let all = self.attachments.clone();
+        self.pack_manifests = attach::attached_pack_manifests(&self.conn, &all)?;
+        self.facts_source = attach::build_facts_source(&self.conn, &all)?;
+        self.resolve_sql = attach::build_resolve_sql(&all);
+        // The alias TEMP table is the one write a remount needs; a pooled
+        // reader runs with query_only=ON, so toggle it off around exactly
+        // this — and RESTORE the prior value, because when the pool is empty
+        // `read()` falls back to the WRITER, whose query_only must stay off.
+        // The reader's file handle is still read-only either way.
+        let was_query_only: bool = self.conn.query_row("PRAGMA query_only", [], |r| r.get(0))?;
+        if was_query_only {
+            self.conn.execute_batch("PRAGMA query_only=OFF")?;
+        }
+        let alias_result = super::alias::build_term_alias(&self.conn, &all);
+        if was_query_only {
+            self.conn.execute_batch("PRAGMA query_only=ON")?;
+        }
+        alias_result?;
+        Ok(true)
+    }
+
     /// Mount one attachment on the LIVE connection and rebuild the composed
     /// SQL — the in-process half of what `open_with_attachments` does at
     /// startup, so a freeze needs no server restart.

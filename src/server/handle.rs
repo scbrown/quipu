@@ -110,22 +110,36 @@ impl StoreHandle {
     /// but failing a request is still a bug, and the borrow checker cannot
     /// catch it here the way `&Store` vs `&mut Store` does in the tool layer.
     pub(crate) fn read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        if self.readers.conns.is_empty() {
-            return self.writer.lock();
+        let mut guard = if self.readers.conns.is_empty() {
+            self.writer.lock()
+        } else if let Some(g) = self.readers.conns.iter().find_map(FairMutex::try_lock) {
+            // Work-conserving fast path.
+            g
+        } else {
+            // All busy: queue FIFO on one connection. Relaxed is right — this
+            // is a load-spreading hint, not a synchronisation edge.
+            let i = self
+                .readers
+                .next
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                % self.readers.conns.len();
+            self.readers.conns[i].lock()
+        };
+        // Deep freeze: a pooled reader opened before a freeze has no pack
+        // attached, and its `facts_source` is plain "facts" — a query over
+        // the frozen graph would silently read zero rows. Sync against the
+        // frozen-pack registry on every acquisition (one indexed SELECT when
+        // nothing changed). A failed sync is reported on stderr and the read
+        // proceeds against main only — the archive graphs then read as
+        // absent from THIS request, which the frozen registry rows at least
+        // make diagnosable, and refusing every read for one bad pack file
+        // would take the whole store down with it.
+        if let Err(e) = guard.sync_frozen_attachments() {
+            eprintln!(
+                "{} read-pool frozen-pack sync failed: {e}",
+                quipu::time::now_iso()
+            );
         }
-        // Work-conserving fast path.
-        for c in &self.readers.conns {
-            if let Some(g) = c.try_lock() {
-                return g;
-            }
-        }
-        // All busy: queue FIFO on one connection. Relaxed is right — this is a
-        // load-spreading hint, not a synchronisation edge.
-        let i = self
-            .readers
-            .next
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            % self.readers.conns.len();
-        self.readers.conns[i].lock()
+        guard
     }
 }
