@@ -310,14 +310,35 @@ pub(crate) struct World {
 }
 
 impl World {
+    /// Load only predicates and constants referenced by selected rules.
+    ///
+    /// Reactive evaluation calls this after its dependency analysis has
+    /// already isolated the affected rules. Keeping that scope through the
+    /// SQL read avoids loading the entire fact table and then throwing nearly
+    /// all of it away in `attr_to_pred`.
     #[cfg(feature = "reactive-reasoner")]
-    pub(crate) fn load(store: &Store, ruleset: &RuleSet) -> Result<Self> {
-        Self::load_graph(store, ruleset, crate::schema::ROOT_GRAPH)
+    pub(crate) fn load_rule_indices(
+        store: &Store,
+        ruleset: &RuleSet,
+        rule_indices: &[usize],
+    ) -> Result<Self> {
+        Self::load_graph_rule_indices(store, ruleset, crate::schema::ROOT_GRAPH, rule_indices)
     }
 
     fn load_graph(store: &Store, ruleset: &RuleSet, graph: i64) -> Result<Self> {
+        let indices: Vec<usize> = (0..ruleset.rules.len()).collect();
+        Self::load_graph_rule_indices(store, ruleset, graph, &indices)
+    }
+
+    fn load_graph_rule_indices(
+        store: &Store,
+        ruleset: &RuleSet,
+        graph: i64,
+        rule_indices: &[usize],
+    ) -> Result<Self> {
         let mut preds: BTreeSet<String> = BTreeSet::new();
-        for rule in &ruleset.rules {
+        for &rule_idx in rule_indices {
+            let rule = &ruleset.rules[rule_idx];
             preds.insert(rule.head.predicate.clone());
             for body in &rule.body {
                 preds.insert(body.atom().predicate.clone());
@@ -340,8 +361,11 @@ impl World {
             tuples.insert(pred.clone(), BTreeSet::new());
         }
 
-        // Load all current facts once; partition by predicate.
-        let facts = store.current_facts_in_graph(graph)?;
+        // Load only facts for predicates referenced by these rules. The old
+        // path loaded the full current table once per affected stratum and
+        // discarded every attribute absent from `attr_to_pred` afterwards.
+        let attribute_ids: Vec<i64> = attr_to_pred.keys().copied().collect();
+        let facts = store.current_facts_for_attributes_in_graph(&attribute_ids, graph)?;
         for fact in facts {
             if let Some(pred) = attr_to_pred.get(&fact.attribute)
                 && let Value::Ref(target) = fact.value
@@ -364,7 +388,8 @@ impl World {
         // `project_rule_body` had no term id to compare against and silently
         // ignored the constant, matching every tuple of the predicate.
         let mut const_ids: BTreeMap<String, i64> = BTreeMap::new();
-        for rule in &ruleset.rules {
+        for &rule_idx in rule_indices {
+            let rule = &ruleset.rules[rule_idx];
             let head_terms = rule.head.args.iter();
             let body_terms = rule.body.iter().flat_map(|b| b.atom().args.iter());
             for term in head_terms.chain(body_terms) {

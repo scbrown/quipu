@@ -76,6 +76,68 @@ fn round_trip_write_read() {
 }
 
 #[test]
+fn current_facts_for_attributes_reads_only_requested_predicates() {
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://example.org/entity").unwrap();
+    let wanted = store.intern("http://example.org/wanted").unwrap();
+    let unrelated = store.intern("http://example.org/unrelated").unwrap();
+    let target = store.intern("http://example.org/target").unwrap();
+    store
+        .transact(
+            &[
+                Datum {
+                    entity: e,
+                    attribute: wanted,
+                    value: Value::Ref(target),
+                    valid_from: "2026-08-23".into(),
+                    valid_to: None,
+                    op: Op::Assert,
+                },
+                Datum {
+                    entity: e,
+                    attribute: unrelated,
+                    value: Value::Ref(target),
+                    valid_from: "2026-08-23".into(),
+                    valid_to: None,
+                    op: Op::Assert,
+                },
+            ],
+            "2026-08-23",
+            None,
+            Some("attribute-filter-test"),
+        )
+        .unwrap();
+
+    let facts = store
+        .current_facts_for_attributes_in_graph(&[wanted], crate::schema::ROOT_GRAPH)
+        .unwrap();
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].attribute, wanted);
+    let plan: Vec<String> = store
+        .conn
+        .prepare(
+            "EXPLAIN QUERY PLAN SELECT e, a, v, tx, valid_from, valid_to, op \
+             FROM facts INDEXED BY idx_aevt \
+             WHERE op = 1 AND valid_to IS NULL AND a IN (?) AND g = ? ORDER BY e, a",
+        )
+        .unwrap()
+        .query_map(params![wanted, crate::schema::ROOT_GRAPH], |row| row.get(3))
+        .unwrap()
+        .collect::<std::result::Result<_, _>>()
+        .unwrap();
+    assert!(
+        plan.iter().any(|step| step.contains("idx_aevt")),
+        "attribute-filtered read must use idx_aevt, got {plan:?}"
+    );
+    assert!(
+        store
+            .current_facts_for_attributes_in_graph(&[], crate::schema::ROOT_GRAPH)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn temporal_query() {
     let mut store = test_store();
 
