@@ -47,7 +47,12 @@ fn episode_to_turtle_generates_valid_rdf() {
     }"#,
     );
 
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T12:34:56Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
 
     // Should contain prefixes.
     assert!(ttl.contains("@prefix aegis:"));
@@ -59,6 +64,7 @@ fn episode_to_turtle_generates_valid_rdf() {
     assert!(ttl.contains("rdfs:comment \"Test body\""));
     // Should carry the idempotency key (hq-fhc).
     assert!(ttl.contains("aegis:contentHash"));
+    assert!(ttl.contains("prov:generatedAtTime \"2026-08-24T12:34:56Z\"^^xsd:dateTime"));
 
     // Should contain node.
     assert!(ttl.contains("aegis:alpha a aegis:ServiceType"));
@@ -238,7 +244,7 @@ fn ingest_episode_writes_to_store() {
         ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
 
     assert!(tx_id > 0);
-    // Episode (4: type + label + comment + wasAssociatedWith + groupId = 5)
+    // Episode: type + label + comment + actor + group + time + content hash = 7.
     // + koror (4: type + label + comment + wasGeneratedBy = 4)
     // + ct-205 (4: type + label + comment + wasGeneratedBy = 4)
     // + 1 edge = 14 total
@@ -312,7 +318,12 @@ fn array_valued_node_property_yields_one_triple_per_element() {
     }"#,
     );
 
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T00:00:00Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
     // both array elements present as their own object term (multi-value preserved)
     assert!(
         ttl.contains("aegis:traitWorkIntake \"self-directed\""),
@@ -363,8 +374,8 @@ fn minimal_episode_with_body_only() {
     let (tx_id, count) =
         ingest_episode(&mut store, &ep, "2026-04-04T14:00:00Z", TEST_BASE_NS).unwrap();
     assert!(tx_id > 0);
-    // Just the episode entity: type + label + comment + contentHash = 4
-    assert_eq!(count, 4);
+    // Just the episode entity: type + label + comment + time + content hash = 5.
+    assert_eq!(count, 5);
 }
 
 #[test]
@@ -785,7 +796,12 @@ fn edge_without_confidence_is_a_bare_triple() {
     let ep = parse_episode(
         r#"{ "name": "ep", "edges": [{"source": "a", "target": "b", "relation": "knows"}] }"#,
     );
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T00:00:00Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
     assert!(ttl.contains("aegis:a aegis:knows aegis:b ."));
     assert!(
         !ttl.contains("rdf:Statement"),
@@ -856,7 +872,12 @@ fn edge_confidence_numeric_emits_decimal() {
     let ep = parse_episode(
         r#"{ "name": "n", "edges": [{"source": "a", "target": "b", "relation": "rel", "confidence": 0.75}] }"#,
     );
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T00:00:00Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
     assert!(ttl.contains("a rdf:Statement"));
     assert!(
         ttl.contains("quipu:confidence \"0.75\"^^xsd:decimal"),
@@ -997,7 +1018,12 @@ fn prefixed_edge_relation_is_emitted_verbatim_not_forced_into_aegis() {
     }"#,
     );
 
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T00:00:00Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
 
     assert!(
         ttl.contains("aegis:child rdfs:subClassOf aegis:parent"),
@@ -1047,7 +1073,12 @@ fn every_known_prefix_resolves_and_is_declared() {
              "edges":[{edges}]}}"#
     ));
 
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T00:00:00Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
 
     for (prefix, _ns) in KNOWN_PREFIXES {
         // Resolves rather than being refused or mangled into aegis:.
@@ -1084,7 +1115,12 @@ fn full_iri_edge_relation_is_emitted_verbatim() {
         ]
     }"#,
     );
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T00:00:00Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
     assert!(
         ttl.contains("aegis:a <http://example.org/ns#custom> aegis:b"),
         "full-IRI relation must be emitted verbatim:\n{ttl}"
@@ -1198,7 +1234,12 @@ fn one_entry_per_type_still_yields_one_entity_with_both_types() {
     ingest_episode(&mut store, &ep, "2026-08-04T00:00:00Z", TEST_BASE_NS)
         .expect("one-entry-per-type is the documented working form and must be accepted");
 
-    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let ttl = episode_to_turtle(
+        &ep,
+        "2026-08-24T00:00:00Z",
+        TEST_BASE_NS,
+        &episode_content_hash(&ep),
+    );
     assert!(
         ttl.contains("aegis:governor-burndown a aegis:Feature"),
         "first type missing:\n{ttl}"

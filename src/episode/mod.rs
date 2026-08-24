@@ -282,7 +282,7 @@ pub fn ingest_episode_outcome(
         resolve_edge_predicate(&edge.relation)?;
     }
 
-    let turtle = episode_to_turtle(episode, base_ns, &new_hash);
+    let turtle = episode_to_turtle(episode, timestamp, base_ns, &new_hash);
 
     // SHACL validation gates, run before any write — and before the idempotency
     // short-circuit, so a no-op re-ingest is still validated (e.g. if
@@ -609,7 +609,12 @@ pub fn episode_provenance(
 
 // ── Turtle generation ──────────────────────────────────────────
 
-fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> String {
+fn episode_to_turtle(
+    episode: &Episode,
+    timestamp: &str,
+    base_ns: &str,
+    content_hash: &str,
+) -> String {
     let mut ttl = String::new();
 
     // Prefixes.
@@ -645,6 +650,13 @@ fn episode_to_turtle(episode: &Episode, base_ns: &str, content_hash: &str) -> St
     if let Some(gid) = &episode.group_id {
         ttl.push_str(&format!(" ;\n    aegis:groupId \"{}\"", escape_turtle(gid)));
     }
+    // The activity's transaction time is server-supplied by the HTTP/MCP write
+    // boundary. Keep it on the provenance entity as a typed literal so readers
+    // can answer when the knowledge was learned, rather than only who supplied it.
+    ttl.push_str(&format!(
+        " ;\n    prov:generatedAtTime \"{}\"^^xsd:dateTime",
+        escape_turtle(timestamp)
+    ));
     // Idempotency key for re-ingest detection (hq-fhc).
     ttl.push_str(&format!(" ;\n    aegis:contentHash \"{content_hash}\""));
     ttl.push_str(" .\n\n");
