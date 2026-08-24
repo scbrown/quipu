@@ -1562,14 +1562,16 @@ fn test_tool_definitions() {
     // Golden paths (quipu-gp2/gp3): the cone and the backtest.
     assert!(names.contains(&"quipu_path_cone"));
     assert!(names.contains(&"quipu_path_backtest"));
+    // Graph registry listing (graph kinds + deep freeze).
+    assert!(names.contains(&"quipu_graph_list"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 40);
+        assert_eq!(defs.len(), 41);
         assert!(names.contains(&"quipu_load_ontology"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 39);
+        assert_eq!(defs.len(), 40);
         assert!(!names.contains(&"quipu_load_ontology"));
     }
 
@@ -3409,4 +3411,106 @@ fn episode_is_silent_when_every_node_type_is_governed() {
         result.get("vocabulary_hint").is_none(),
         "a fully governed episode must carry no advisory, got {result}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Graph kinds: include_kinds widening + the registry listing
+// ---------------------------------------------------------------------------
+
+/// A store with one fact in ROOT and one in a kind-labelled named graph.
+fn kind_store() -> Store {
+    use crate::store::Datum;
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let cold = store.graph_create("urn:test:graph:cold").unwrap();
+    let label = crate::store::labels::GraphLabel {
+        kind: Some(crate::lattice_kind::DataKind::parse("archive").unwrap()),
+        ..Default::default()
+    };
+    store
+        .set_graph_label("urn:test:graph:cold", &label, "2026-01-01T00:00:00Z", None)
+        .unwrap();
+    let e = store.intern("urn:test:e").unwrap();
+    let a = store.intern("urn:test:p").unwrap();
+    for (val, g) in [("hot", 0), ("cold", cold)] {
+        store
+            .transact_to_graph(
+                &[Datum {
+                    entity: e,
+                    attribute: a,
+                    value: Value::Str(val.into()),
+                    valid_from: "2026-01-01T00:00:00Z".into(),
+                    valid_to: None,
+                    op: Op::Assert,
+                }],
+                "2026-01-01T00:00:00Z",
+                None,
+                None,
+                g,
+            )
+            .unwrap();
+    }
+    store
+}
+
+#[test]
+fn include_kinds_widens_the_default_scope_and_silence_does_not() {
+    let store = kind_store();
+    let q = "SELECT ?v WHERE { <urn:test:e> <urn:test:p> ?v }";
+
+    // Silence never widens: default scope reads ROOT only.
+    let out = tool_query(&store, &serde_json::json!({ "query": q })).unwrap();
+    assert_eq!(out["count"], 1, "default scope must stay ROOT-only: {out}");
+
+    // Explicit opt-in composes the archive graph.
+    let out = tool_query(
+        &store,
+        &serde_json::json!({ "query": q, "include_kinds": ["archive"] }),
+    )
+    .unwrap();
+    assert_eq!(out["count"], 2, "include_kinds must widen: {out}");
+    // The composed label honestly reports the archive kind.
+    assert!(
+        out["labels"]["kind"]["value"]
+            .as_array()
+            .is_some_and(|k| k.iter().any(|v| v == "archive")),
+        "composed label must report the archive kind: {out}"
+    );
+
+    // An empty list is silence, not "all kinds".
+    let out = tool_query(
+        &store,
+        &serde_json::json!({ "query": q, "include_kinds": [] }),
+    )
+    .unwrap();
+    assert_eq!(out["count"], 1);
+
+    // A malformed kind token is refused, never a filter matching nothing.
+    let err = tool_query(
+        &store,
+        &serde_json::json!({ "query": q, "include_kinds": ["Archive"] }),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("kind token"), "{err}");
+}
+
+#[test]
+fn graph_list_filters_by_kind_and_probes_lifecycle() {
+    let store = kind_store();
+    let out = tool_graph_list(&store, &serde_json::json!({})).unwrap();
+    // ROOT + the cold graph; the meta-graph is excluded.
+    assert_eq!(out["count"], 2, "{out}");
+
+    let out = tool_graph_list(&store, &serde_json::json!({ "kind": "archive" })).unwrap();
+    assert_eq!(out["count"], 1);
+    assert_eq!(out["graphs"][0]["iri"], "urn:test:graph:cold");
+    assert_eq!(out["graphs"][0]["labels"]["kind"], "archive");
+    assert!(out["graphs"][0]["lifecycle"].is_null());
+
+    // Nothing frozen yet.
+    let out = tool_graph_list(&store, &serde_json::json!({ "lifecycle": "frozen" })).unwrap();
+    assert_eq!(out["count"], 0);
+
+    // Unknown lifecycle filter is refused.
+    assert!(tool_graph_list(&store, &serde_json::json!({ "lifecycle": "thawed" })).is_err());
 }

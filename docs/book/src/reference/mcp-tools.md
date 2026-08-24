@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **39 tools** in a default build, or
-**40** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **40 tools** in a default build, or
+**41** when built with the `owl` feature (which adds `quipu_load_ontology`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -516,6 +516,19 @@ prior version rather than overwriting it).
 | `dataset` | No | Dataset IRI this query is scoped to |
 | `params` | No | Ordered param specs `{name, type, required, default, description}` |
 | `timestamp` | No | ISO-8601 timestamp |
+
+### `quipu_graph_list`
+
+List registered named graphs with class, source, storage lifecycle, and labels
+(freshness / durability / trust / policy / kind). The read half of the
+graph-kinds surface, and the consumer **capability probe**: a store that does
+not serve this tool (or `GET /graphs`) predates the kind axis, which a
+consumer must treat as "cannot tell" — never as "no graphs".
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `kind` | No | Only graphs declaring this `dataKind` token (e.g. `operational`, `archive`) |
+| `lifecycle` | No | Only graphs in this storage lifecycle state (`frozen`) |
 
 ### `quipu_datasets`
 

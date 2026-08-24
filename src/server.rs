@@ -49,12 +49,12 @@ pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use tools::ontology;
 use tools::{
     accept_proposal, ask, context, cooccurrence, cord, datasets, embed_backfill, episode,
-    episodes_complete, graph_create, graph_label, graph_view, graphiti_search_nodes, hybrid_search,
-    impact_analysis, list_proposals, overlay_compose, overlay_create, overlay_write, path_backtest,
-    path_cone, policy_check, project_graph, propose_schema_change, queries, reject_proposal,
-    report, report_get, resolve_probe, retract, retract_episode, search, search_facts,
-    search_nodes, set_predicate, shapes, subscriptions, unified_search, unravel, validate,
-    verdict_verify, verifier_authorized,
+    episodes_complete, graph_create, graph_label, graph_view, graphiti_search_nodes, graphs_list,
+    hybrid_search, impact_analysis, list_proposals, overlay_compose, overlay_create, overlay_write,
+    path_backtest, path_cone, policy_check, project_graph, propose_schema_change, queries,
+    reject_proposal, report, report_get, resolve_probe, retract, retract_episode, search,
+    search_facts, search_nodes, set_predicate, shapes, subscriptions, unified_search, unravel,
+    validate, verdict_verify, verifier_authorized,
 };
 
 #[tokio::main]
@@ -464,6 +464,7 @@ async fn main() {
         // the store with no way in from outside. Routing into a named graph
         // without being able to LABEL it yields separate graphs every query
         // still reads at equal trust, so these ship together.
+        .route("/graphs", get(graphs_list))
         .route("/graph/create", post(graph_create))
         .route("/graph/label", post(graph_label))
         .route("/overlay/create", post(overlay_create))

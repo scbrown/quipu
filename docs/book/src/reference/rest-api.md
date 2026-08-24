@@ -131,6 +131,14 @@ default graph, never a silent ROOT fall-through), and `fork` (a fork name
 registered by `quipu fork`; unknown or dropped forks are refused loudly;
 mutually exclusive with `graph`).
 
+`include_kinds` (array of `dataKind` tokens, e.g. `["archive"]`) widens the
+default graph set with every registered graph declaring one of those kinds —
+the explicit opt-in for composing cold/frozen graphs into a hot read. Silence
+never widens: absent or empty means the scope is unchanged, a `FROM` clause in
+the query text still overrides the request-level scope, and `fork` +
+`include_kinds` is refused (one scope authority). The response's composed
+`labels.kind` then honestly reports every kind that contributed.
+
 With `"federated": true` the whole query text fans out through the federated
 provider — the local store plus every `[[quipu.federation.remotes]]` — and the
 response adds a per-member `providers` list and a `complete` flag, with every
@@ -570,6 +578,18 @@ curl -s localhost:3030/report
 curl -s localhost:3030/report -X POST \
   -H "Content-Type: application/json" \
   -d '{"hubs": 5, "surprises": 5, "questions": 6}'
+```
+
+### `GET /graphs`
+
+List registered named graphs with class, source, storage lifecycle, and label
+cache (freshness / durability / trust / policy / kind). Query params: `kind`
+(a `dataKind` token) and `lifecycle` (`frozen`). Also the consumer
+**capability probe** for the graph-kinds surface: a 404 means the store
+predates it — treat that as "cannot tell", never as "no graphs".
+
+```bash
+curl -s 'localhost:3030/graphs?kind=operational'
 ```
 
 ### `POST /graph`

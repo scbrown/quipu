@@ -75,6 +75,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    "/graphs",        // registry listing + kind capability probe (pooled read)
     "/path/cone",     // golden-path provenance cone (ro_handler, quipu-gp2)
     "/path/backtest", // golden-path candidate backtest (ro_handler, quipu-gp3)
     "/",

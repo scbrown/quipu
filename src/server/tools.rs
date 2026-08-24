@@ -241,6 +241,21 @@ rw_handler!(overlay_create, quipu::tool_overlay_create);
 // camayoc-s0h. graph_create writes the graphs registry through a `&self`
 // method — same shape as overlay_create, and rw_handler! for the same reason.
 // graph_label takes `&mut Store`.
+/// `GET /graphs` — the registry listing (graph kinds + deep freeze). A GET
+/// with query params rather than a POST body: it is also the consumer
+/// capability probe, and "does this endpoint exist" must be answerable with
+/// plain curl. Pooled read, same discipline as `ro_handler!`.
+pub(crate) async fn graphs_list(
+    State(s): State<SharedStore>,
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let input = json!({
+        "kind": q.get("kind"),
+        "lifecycle": q.get("lifecycle"),
+    });
+    blocking(move || Ok(axum::Json(quipu::tool_graph_list(&s.read(), &input)?))).await
+}
+
 rw_handler!(graph_create, quipu::tool_graph_create);
 rw_handler!(graph_label, quipu::tool_graph_label);
 ro_handler!(overlay_compose, quipu::tool_overlay_compose);

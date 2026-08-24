@@ -18,6 +18,7 @@ pub mod queries;
 pub mod read_model;
 mod reads;
 mod registry;
+pub mod registry_list;
 pub mod respace;
 mod respace_map;
 mod serialize;
