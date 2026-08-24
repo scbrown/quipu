@@ -39,6 +39,35 @@ impl Store {
         Self::collect_facts(&mut stmt, params![g])
     }
 
+    /// Return current facts for only the requested attributes in one graph.
+    ///
+    /// This is the read primitive the reactive reasoner needs: an affected
+    /// rule references a small predicate set, so loading every current fact
+    /// merely to discard unrelated attributes turns each write into a
+    /// table-wide scan. An empty attribute set returns an empty result without
+    /// issuing invalid `IN ()` SQL.
+    pub fn current_facts_for_attributes_in_graph(
+        &self,
+        attributes: &[i64],
+        g: i64,
+    ) -> Result<Vec<Fact>> {
+        if attributes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = std::iter::repeat_n("?", attributes.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts INDEXED BY idx_aevt \
+             WHERE op = 1 AND valid_to IS NULL AND a IN ({placeholders}) AND g = ? \
+             ORDER BY e, a"
+        );
+        let mut values = attributes.to_vec();
+        values.push(g);
+        let mut stmt = self.conn.prepare(&sql)?;
+        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+    }
+
     /// Return ROOT's facts for a specific entity (current state).
     ///
     /// **ROOT-scoped** (quipu #56). This is the selection `retract_triples`

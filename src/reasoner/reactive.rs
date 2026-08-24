@@ -200,14 +200,15 @@ fn evaluate_affected(
         // Reload the world before each stratum so that derived facts
         // from earlier strata (committed to the store) are visible to
         // rules in later strata.
-        let world = evaluate::World::load(store, ruleset)
+        let rule_indices: Vec<usize> = strata.levels[*stratum_idx]
+            .iter()
+            .copied()
+            .filter(|idx| affected.contains(idx))
+            .collect();
+        let world = evaluate::World::load_rule_indices(store, ruleset, &rule_indices)
             .map_err(|e| crate::Error::Store(e.to_string()))?;
 
-        let rule_indices = &strata.levels[*stratum_idx];
-        for &rule_idx in rule_indices {
-            if !affected.contains(&rule_idx) {
-                continue;
-            }
+        for &rule_idx in &rule_indices {
             let rule = &ruleset.rules[rule_idx];
 
             // Compute what the rule derives from the current world.
