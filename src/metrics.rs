@@ -19,7 +19,7 @@
 //!     buckets exist precisely so a wedge is visible per-endpoint (a
 //!     service-level probe stayed green through a real 20s /query wedge).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -130,6 +130,27 @@ struct Hist {
 /// by removing the cap.
 const MAX_CLIENTS: usize = 32;
 
+fn client_key<V>(
+    map: &BTreeMap<(String, String), V>,
+    client: &str,
+    endpoint: &str,
+) -> (String, String) {
+    let key = (client.to_string(), endpoint.to_string());
+    let known_clients: BTreeSet<&str> = map
+        .keys()
+        .map(|(known_client, _)| known_client.as_str())
+        .filter(|known_client| *known_client != "other")
+        .collect();
+    if map.contains_key(&key)
+        || known_clients.contains(client)
+        || known_clients.len() < MAX_CLIENTS - 1
+    {
+        key
+    } else {
+        ("other".to_string(), endpoint.to_string())
+    }
+}
+
 #[derive(Default)]
 pub struct Metrics {
     /// (endpoint template, status) -> request count.
@@ -205,17 +226,13 @@ impl Metrics {
     /// constant for why the cap is not optional.
     pub fn observe_client(&self, client: &str, endpoint: &str, seconds: f64) {
         let mut map = self.clients.lock().unwrap();
-        let key = (client.to_string(), endpoint.to_string());
         // `MAX_CLIENTS - 1`, not `MAX_CLIENTS`: the `other` bucket needs a slot
         // of its own, or the cap is silently one higher than the constant says.
-        // My own test caught this at 33 series against a stated cap of 32 — a
-        // one-series overshoot is harmless, but a cap that does not mean its own
-        // number is the kind of thing that gets copied somewhere it matters.
-        let key = if map.contains_key(&key) || map.len() < MAX_CLIENTS - 1 {
-            key
-        } else {
-            ("other".to_string(), endpoint.to_string())
-        };
+        // The reserved value makes the maximum 31 named callers plus `other`.
+        // Endpoint series do not consume this identity budget: route templates
+        // are bounded independently, and counting pairs caused real callers to
+        // fold after a few multi-endpoint clients (aegis-vxl81).
+        let key = client_key(&map, client, endpoint);
         let e = map.entry(key).or_insert((0, 0.0));
         e.0 += 1;
         e.1 += seconds;
@@ -228,12 +245,7 @@ impl Metrics {
     /// label comes from a caller-controlled header.
     pub fn observe_store_time(&self, client: &str, endpoint: &str, wait: f64, held: f64) {
         let mut map = self.store_time.lock().unwrap();
-        let key = (client.to_string(), endpoint.to_string());
-        let key = if map.contains_key(&key) || map.len() < MAX_CLIENTS - 1 {
-            key
-        } else {
-            ("other".to_string(), endpoint.to_string())
-        };
+        let key = client_key(&map, client, endpoint);
         let e = map.entry(key).or_insert((0.0, 0.0));
         e.0 += wait;
         e.1 += held;
@@ -497,14 +509,17 @@ mod tests {
             m.observe_client(&format!("caller{i}"), "/query", 0.1);
         }
         let text = m.render(0, 0, 0);
-        let series = text
+        let clients: BTreeSet<&str> = text
             .lines()
             .filter(|l| l.starts_with("quipu_http_client_requests_total"))
-            .count();
-        // The cap is the point: an uncapped map would render 128 series here.
+            .filter_map(|line| line.split("client=\"").nth(1)?.split('"').next())
+            .collect();
+        // The cap applies to caller identities. A client can legitimately have
+        // one series per bounded route template.
         assert!(
-            series <= MAX_CLIENTS,
-            "client series {series} exceeded the cap {MAX_CLIENTS}"
+            clients.len() <= MAX_CLIENTS,
+            "client labels {} exceeded the cap {MAX_CLIENTS}",
+            clients.len()
         );
         // Overflow is FOLDED, never dropped — the totals must still add up, or
         // the attribution silently understates load, which is worse than no
@@ -516,6 +531,30 @@ mod tests {
             .filter_map(|l| l.rsplit(' ').next()?.parse::<u64>().ok())
             .sum();
         assert_eq!(total as usize, MAX_CLIENTS * 4);
+    }
+
+    #[test]
+    fn client_cap_counts_clients_not_client_endpoint_pairs() {
+        let m = Metrics::default();
+        // One established caller can use many bounded route templates without
+        // consuming the identity budget. The old map.len() check counted these
+        // pairs and folded the next legitimate caller into `other`.
+        for i in 0..MAX_CLIENTS {
+            let endpoint = format!("/route/{i}");
+            m.observe_client("existing", &endpoint, 0.1);
+            m.observe_store_time("existing", &endpoint, 0.0, 0.1);
+        }
+        m.observe_client("new-caller", "/query", 0.1);
+        m.observe_store_time("new-caller", "/query", 0.0, 0.1);
+
+        let text = m.render(0, 0, 0);
+        assert!(text.contains(
+            "quipu_http_client_requests_total{client=\"new-caller\",endpoint=\"/query\"} 1"
+        ));
+        assert!(text.contains(
+            "quipu_store_held_seconds_total{client=\"new-caller\",endpoint=\"/query\"} 0.1"
+        ));
+        assert!(!text.contains("client=\"other\",endpoint=\"/query\""));
     }
 
     #[test]
