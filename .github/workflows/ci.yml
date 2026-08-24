@@ -213,6 +213,12 @@ jobs:
       # which is right locally but checks nothing under `--all-files` (nothing
       # is staged in CI) — that is exactly the hole quipu-5le describes, where
       # the guard was green for its whole life without ever reading a file.
+      # The scanner the gate counts with, before the gate that trusts it. Its
+      # lifetime case fails in the PASSING direction if it is ever broken —
+      # `&'a str` read as an unterminated char literal swallows the rest of the
+      # file and reports a low count — so an untested scanner is a gate that
+      # quietly stops gating (aegis-gf3j7).
+      - run: scripts/test-rust-sloc.py
       - run: scripts/test-check-file-size.sh
       - run: scripts/check-file-size.sh
 

@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 #
-# Source file size ratchet.
+# Source file size ratchet — counted in CODE lines.
+#
+# ## Why CODE lines and not raw lines (aegis-gf3j7)
+#
+# This counted raw lines until 2026-08-24, and that metric disagreed with the
+# gate's own intent. MEASURED on the ten files it refused that morning: 1,598 of
+# 6,822 lines were comments. `src/config.rs` is 227 lines of code and 207 of
+# comment, refused by a 500-line gate for being well documented; `attach.rs` is
+# 44% comment. The cheapest way to pass a raw-line gate is to delete the
+# rationale, which is the opposite of what a complexity gate is for.
+#
+# Five of those ten were genuinely large in code alone and remain real debt, so
+# this is a change to the METRIC, not a loosening of the limit: the 500 ceiling,
+# the grandfathering, and the refuse-to-loosen property are all unchanged.
+#
+# Counting is done by scripts/rust_sloc.py — a SCANNER, not a regex. Regex
+# stripping is unsound on Rust (nested block comments, raw strings containing
+# comment markers, and lifetimes that look like unterminated char literals), and
+# each of those has a test in scripts/test-rust-sloc.py.
 #
 # ## Why this is a ratchet and not a limit
 #
@@ -33,6 +51,22 @@ set -euo pipefail
 WARN_LIMIT=400
 ERROR_LIMIT=500
 BASELINE="$(git rev-parse --show-toplevel)/.file-size-baseline"
+SLOC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/rust_sloc.py"
+
+# One python invocation for the whole tree rather than one per file: the scan
+# runs on every commit and every CI job, and ~200 interpreter starts is the
+# difference between a gate people keep and a gate people disable.
+declare -A CODE_LINES
+prefetch_sloc() {
+    local f n
+    while read -r n f; do
+        [ -n "${f:-}" ] && CODE_LINES["$f"]=$n
+    done < <(git ls-files '*.rs' | xargs -r "$SLOC" --batch)
+}
+code_lines_of() {
+    if [ -n "${CODE_LINES[$1]:-}" ]; then echo "${CODE_LINES[$1]}"; else "$SLOC" "$1"; fi
+}
+prefetch_sloc
 
 mode="all"
 case "${1:-}" in
@@ -66,7 +100,7 @@ if [ "$mode" = "update" ]; then
     for file in $(git ls-files '*.rs'); do
         is_exempt "$file" && continue
         [ -f "$file" ] || continue
-        lines=$(wc -l < "$file")
+        lines=$(code_lines_of "$file")
         [ "$lines" -gt "$ERROR_LIMIT" ] || continue
         recorded=$(baseline_for "$file")
         # Never loosen: keep the smaller of recorded and actual.
@@ -76,7 +110,8 @@ if [ "$mode" = "update" ]; then
         echo "$file $lines" >> "$tmp"
     done
     {
-        echo "# Files over the ${ERROR_LIMIT}-line limit, grandfathered at these sizes."
+        echo "# Files over the ${ERROR_LIMIT}-CODE-line limit, grandfathered at these sizes."
+        echo "# CODE lines = non-blank, non-comment, counted by scripts/rust_sloc.py (aegis-gf3j7)."
         echo "# They may shrink; growing fails the build. Regenerate with:"
         echo "#   scripts/check-file-size.sh --update-baseline"
         echo "# Shrinking this file is the point. See quipu-bu3."
@@ -95,15 +130,15 @@ shrunk=0
 for file in $(list_files); do
     is_exempt "$file" && continue
     [ -f "$file" ] || continue
-    lines=$(wc -l < "$file")
+    lines=$(code_lines_of "$file")
     recorded=$(baseline_for "$file")
 
     if [ "$lines" -gt "$ERROR_LIMIT" ]; then
         if [ -z "$recorded" ]; then
-            echo "ERROR: $file has $lines lines (limit: $ERROR_LIMIT)"
+            echo "ERROR: $file has $lines CODE lines (limit: $ERROR_LIMIT)"
             errors=$((errors + 1))
         elif [ "$lines" -gt "$recorded" ]; then
-            echo "ERROR: $file grew to $lines lines (baseline: $recorded)"
+            echo "ERROR: $file grew to $lines CODE lines (baseline: $recorded)"
             errors=$((errors + 1))
         elif [ "$lines" -lt "$recorded" ]; then
             shrunk=$((shrunk + 1))
@@ -116,7 +151,7 @@ for file in $(list_files); do
         # A full scan naming all ~17 files every run is noise that trains people
         # to skip the output, which is how the ERROR lines get missed too.
         if [ "$mode" = "staged" ]; then
-            echo "WARNING: $file has $lines lines (warn: $WARN_LIMIT)"
+            echo "WARNING: $file has $lines CODE lines (warn: $WARN_LIMIT)"
         fi
         warnings=$((warnings + 1))
     fi
@@ -124,7 +159,7 @@ done
 
 if [ "$errors" -gt 0 ]; then
     echo
-    echo "$errors file(s) exceed $ERROR_LIMIT lines or grew past their baseline."
+    echo "$errors file(s) exceed $ERROR_LIMIT CODE lines or grew past their baseline."
     echo "Split the file, or if a grandfathered file legitimately shrank elsewhere,"
     echo "run: scripts/check-file-size.sh --update-baseline"
     exit 1

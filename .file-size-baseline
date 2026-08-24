@@ -1,30 +1,14 @@
-# Files over the 500-line limit, grandfathered at these sizes.
+# Files over the 500-CODE-line limit, grandfathered at these sizes.
+# CODE lines = non-blank, non-comment, counted by scripts/rust_sloc.py (aegis-gf3j7).
 # They may shrink; growing fails the build. Regenerate with:
 #   scripts/check-file-size.sh --update-baseline
 # Shrinking this file is the point. See quipu-bu3.
-examples/census/phases.rs 564
-src/cli.rs 640
-src/cli_commands.rs 828
-src/context/mod.rs 616
-src/episode/mod.rs 934
-src/governance/audit/passes.rs 521
-src/governance/placement.rs 716
-src/graph.rs 712
-src/http_auth.rs 524
-src/lattice.rs 525
-src/mcp/governance.rs 701
-src/mcp/mod.rs 1020
-src/mcp/named_query.rs 686
-src/metrics.rs 651
-src/pack.rs 557
-src/rdf.rs 894
-src/reasoner/evaluate.rs 514
-src/server.rs 750
-src/shacl.rs 665
-src/sparql/mod.rs 569
-src/sparql/triple.rs 517
-src/store/attach.rs 515
-src/store/events.rs 555
-src/store/labels.rs 994
-src/store/ops.rs 1151
-src/store/respace.rs 519
+src/cli_commands.rs 710
+src/cli.rs 521
+src/episode/mod.rs 661
+src/graph.rs 514
+src/mcp/named_query.rs 537
+src/rdf.rs 717
+src/server.rs 514
+src/store/labels.rs 762
+src/store/ops.rs 666

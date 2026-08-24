@@ -19,13 +19,23 @@ failed=0
 
 # Build a scratch repo containing $2 lines in src/big.rs.
 setup() {
-    local dir="$1" lines="$2"
+    local dir="$1" lines="$2" kind="${3:-code}"
     mkdir -p "$dir/src"
     git -C "$dir" init -q
     git -C "$dir" config user.email t@example.com
     git -C "$dir" config user.name t
-    python3 -c "import sys; open(sys.argv[1],'w').write('// x\n'*int(sys.argv[2]))" \
-        "$dir/src/big.rs" "$lines"
+    # CODE lines, not comments. The old fixture wrote '// x' — fine for a raw-line
+    # gate and meaningless for a code-line one (aegis-gf3j7): a "600-line" file of
+    # comments is 0 code lines, so three of the tests below silently stopped
+    # testing anything the moment the metric changed. $3 optional: "comment".
+    python3 -c "
+import sys
+kind = sys.argv[3] if len(sys.argv) > 3 else 'code'
+line = '// x' if kind == 'comment' else 'pub fn f%d() {}'
+n = int(sys.argv[2])
+body = '\\n'.join((line % i) if '%d' in line else line for i in range(n))
+open(sys.argv[1], 'w').write(body + '\\n')
+" "$dir/src/big.rs" "$lines" "${3:-code}"
     git -C "$dir" add -A
     git -C "$dir" commit -qm init
 }
@@ -65,18 +75,18 @@ check "new violation fails" 1 "$(run "$tmp/new")"
 check "grandfathered violation passes" 0 "$(run "$tmp/new")"
 
 # Growing past the baseline fails, even by one line.
-printf '// grow\n' >> "$tmp/new/src/big.rs"
+printf 'pub fn grow() {}\n' >> "$tmp/new/src/big.rs"   # CODE, not a comment
 check "growth past baseline fails" 1 "$(run "$tmp/new")"
 
 # Shrinking is always allowed.
-python3 -c "open('$tmp/new/src/big.rs','w').write('// x\n'*550)"
+python3 -c "open('$tmp/new/src/big.rs','w').write(''.join('pub fn s%d() {}\n' % i for i in range(550)))"
 check "shrinking passes" 0 "$(run "$tmp/new")"
 
 # --update-baseline must never loosen: re-running after growth keeps the
 # tighter number, so a grown file cannot be laundered into the baseline.
 setup "$tmp/tight" 600
 ( cd "$tmp/tight" && "$SCRIPT" --update-baseline >/dev/null 2>&1 )
-python3 -c "open('$tmp/tight/src/big.rs','w').write('// x\n'*800)"
+python3 -c "open('$tmp/tight/src/big.rs','w').write(''.join('pub fn t%d() {}\n' % i for i in range(800)))"
 ( cd "$tmp/tight" && "$SCRIPT" --update-baseline >/dev/null 2>&1 )
 recorded=$(awk '/big.rs/ {print $2}' "$tmp/tight/.file-size-baseline")
 if [ "$recorded" = "600" ]; then
@@ -94,8 +104,30 @@ git -C "$tmp/tests" add -A && git -C "$tmp/tests" commit -qm t
 check "tests.rs is exempt" 0 "$(run "$tmp/tests")"
 
 echo
+
+# ── aegis-gf3j7: the metric is CODE lines. ian's required controls. ──
+#
+# The metric change is the kind that can silently make a gate vacuous: baselines
+# recorded in RAW lines are all larger than any CODE count, so until they were
+# regenerated nothing could fail. Each direction is pinned here so it stays true.
+
+# Comment-only growth must NOT fail — that is the entire point of the change.
+setup "$tmp/cmt" 450
+printf '// a comment\n// another\n// and a third\n' >> "$tmp/cmt/src/big.rs"
+check "comment-only growth passes" 0 "$(run "$tmp/cmt")"
+
+# Huge in RAW lines, small in CODE lines, must pass. This is src/config.rs from
+# the ruling: 227 code, 207 comment, refused by the old metric for being well
+# documented.
+setup "$tmp/documented" 700 comment
+printf 'pub fn only_code() {}\n' >> "$tmp/documented/src/big.rs"
+check "700 comment lines + 1 code line passes" 0 "$(run "$tmp/documented")"
+
+# ...and one code line past the limit must still fail.
+setup "$tmp/codebig" 501
+check "501 code lines fails" 1 "$(run "$tmp/codebig")"
+
 if [ "$failed" -gt 0 ]; then
     echo "$failed test(s) failed, $passed passed"
     exit 1
 fi
-echo "all $passed test(s) passed"
