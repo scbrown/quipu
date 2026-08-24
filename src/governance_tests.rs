@@ -193,6 +193,70 @@ fn treesitter_policy_catalog_conforms() {
     );
 }
 
+// ── Tripwire policy catalog (shapes/policies/tripwire.ttl) ────────────────────
+
+const TRIPWIRE_CATALOG: &str = include_str!("../shapes/policies/tripwire.ttl");
+
+#[test]
+fn tripwire_policy_catalog_conforms() {
+    // The shipped tripwire catalog — path-boundary policies with no selector or
+    // predicate — must validate against the governance shapes. This is also the
+    // proof that PolicyShape genuinely permits a policy whose whole condition
+    // is `aegis:appliesTo`: a shape drift that started requiring a selector
+    // would fail here at `cargo test`, not at the first projection.
+    let fb = validate_shapes(SHAPES, TRIPWIRE_CATALOG).unwrap();
+    assert!(
+        fb.conforms,
+        "tripwire policy catalog should conform: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn the_tripwire_catalog_places_deny_at_the_gate_and_throttle_after_it() {
+    // SARC Table 3, asserted on the shipped file: a deny wire is hard @ PAG
+    // (the edit must never land) and a throttle wire is soft @ PAA (it prices
+    // the crossing and acts on the successor). A wire drifting off these
+    // placements would project as the false-`prevented` claim the enforcement
+    // gradient exists to stop.
+    for (policy, class, point) in [
+        ("policy_tripwire_auth_boundary", "hard", "PAG"),
+        ("policy_tripwire_generated_throttle", "soft", "PAA"),
+    ] {
+        let block = TRIPWIRE_CATALOG
+            .split("aegis:policy_")
+            .find(|b| b.starts_with(&policy["policy_".len()..]))
+            .unwrap_or_else(|| panic!("catalog should carry {policy}"));
+        assert!(
+            block.contains(&format!("aegis:constraintClass \"{class}\"")),
+            "{policy} should declare class {class}"
+        );
+        assert!(
+            block.contains(&format!("aegis:verificationPoint \"{point}\"")),
+            "{policy} should declare point {point}"
+        );
+        assert!(
+            block.contains("aegis:appliesTo"),
+            "{policy} is a tripwire; the path scope IS its condition"
+        );
+    }
+}
+
+#[test]
+fn a_policy_scoped_by_multiple_applies_to_globs_conforms() {
+    // `aegis:appliesTo` is deliberately multi-valued — a wire spanning three
+    // globs is three values, and yupana's projection accumulates the rows. A
+    // maxCount creeping onto the shape would silently narrow every multi-glob
+    // policy to whichever row arrived first, which is the exact decoder defect
+    // (hardcoded empty scope) this vocabulary exists to close.
+    let data = sarc_policy(
+        "; aegis:appliesTo \"src/auth/**\" ; aegis:appliesTo \"src/session/**\" ; \
+         aegis:appliesTo \"crates/token/**\"",
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(fb.conforms, "{:#?}", fb.results);
+}
+
 // ── SARC constraint metadata (SARC arXiv:2605.07728 §3.1, §4.2) ──────────────
 
 /// Every SARC field the shape types, on one policy, so the happy path is a

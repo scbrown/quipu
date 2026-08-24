@@ -189,6 +189,18 @@ aegis:PolicyShape a sh:NodeShape ;
         sh:in ( "allow" "warn" "require-approval" "deny" "escalate" "record" "throttle" ) ;
     ] ;
     sh:property [
+        # WHERE this policy binds, as repo-relative path globs — the boundary a
+        # tripwire spans, and the scope any action-boundary policy may narrow
+        # itself to. Deliberately multi-valued (no maxCount): a wire spanning
+        # three globs is three values, and yupana's projection accumulates the
+        # rows rather than collapsing to whichever arrived first. Absent means
+        # unscoped — the policy applies wherever its selector's language does.
+        # A policy carrying appliesTo and NO selector/predicate is a TRIPWIRE:
+        # touching the path IS the crossing (see shapes/policies/tripwire.ttl).
+        sh:path aegis:appliesTo ;
+        sh:datatype xsd:string ;
+    ] ;
+    sh:property [
         # The workflow to instantiate when the effect requires one
         # (require-approval / escalate) — points at an aegis:Workflow. This is the
         # seam a consumer (a Hank edit-guard, or a Shantytown event subscriber)

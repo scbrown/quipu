@@ -388,8 +388,8 @@ fn iri_of(store: &Store, v: Option<&Value>) -> Result<String> {
 }
 
 /// True if any datum defines or amends a governance policy — i.e. writes an
-/// `aegis:{targets,claim,boundary,effect,evidenceProbe,exemplar}` fact or
-/// asserts an `rdf:type aegis:Policy`. When true, the cached [`PolicyRegistry`]
+/// `aegis:{targets,claim,boundary,effect,evidenceProbe,exemplar,appliesTo}`
+/// fact or asserts an `rdf:type aegis:Policy`. When true, the cached [`PolicyRegistry`]
 /// is stale. (`exemplar` is in the list because the registry carries it into
 /// refusal messages — a citation added after the cache was built must not stay
 /// invisible until an unrelated policy write.) Cheap: integer term-id compares
@@ -403,6 +403,9 @@ pub fn is_governance_write(store: &Store, datums: &[Datum]) -> Result<bool> {
         "effect",
         "evidenceProbe",
         "exemplar",
+        // A tripwire's whole condition is its path scope, so re-scoping one is
+        // amending the policy — the cache must not keep serving the old span.
+        "appliesTo",
     ] {
         if let Some(id) = store.lookup(&format!("{DEFAULT_BASE_NS}{p}"))? {
             pred_ids.push(id);

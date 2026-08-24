@@ -286,6 +286,11 @@ aegis:predicate a owl:ObjectProperty ;
     rdfs:range aegis:Predicate ;
     rdfs:comment "What must be true at the selected sites — the WHAT half. SARC's `pred` field, and the only part of a constraint whose language is deliberately unconstrained: the audit checker is predicate-language-agnostic by design." .
 
+aegis:appliesTo a owl:DatatypeProperty ;
+    rdfs:label "applies to" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A repo-relative path glob scoping WHERE an action-boundary policy binds — the half of the seam yupana's projection had asked for since Phase 4 and quipu never declared. Genuinely multi-valued: a policy scoped to three globs carries three values, and the consumer accumulates them. Absent means unscoped. On a policy with no selector and no predicate this is the whole condition — a TRIPWIRE, where touching the path is the crossing. No rdfs:domain on purpose: the term reads the same on a Policy today and on a TextRule or Directive tomorrow, and a materialised wrong type outlives a missing one." .
+
 aegis:exemplar a owl:DatatypeProperty ;
     rdfs:label "exemplar" ;
     rdfs:domain aegis:Policy ;

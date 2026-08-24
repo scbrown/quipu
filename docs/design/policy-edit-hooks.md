@@ -133,6 +133,24 @@ straight into a `Rule` — the seam is a decode, not a redesign. An
 `aegis:VerifierRegistration` for the `hank` verifier authorizes it to attest
 these predicates when its edit-time verdicts promote back (H-PROMOTE-VERDICT).
 
+### The tripwire catalog (`shapes/policies/tripwire.ttl`)
+
+A **tripwire** is a path-boundary policy with *no selector and no predicate*:
+`aegis:appliesTo` globs bound to an `aegis:effect`, where touching the path is
+the crossing. It is the governed form of yupana's local
+`[[yupana.policy.tripwires]]` (yupana `docs/book/src/reference/policy-guard.md`,
+"Tripwires") — same concept, quipu canonical, yupana caching a projection.
+`aegis:appliesTo` is deliberately multi-valued and, until this catalog landed,
+was the half of the seam yupana's `POLICY_QUERY` had asked for that quipu never
+declared.
+
+Placement follows SARC Table 3: a `deny` wire is `hard` @ `PAG` (the edit must
+never land), a `throttle` wire is `soft` @ `PAA` with a declared
+`aegis:backoffFormula` (it prices the crossing and backs off the successor).
+Yupana enforces the PAG wires at `hook pre-edit` first; PAA-side projection is
+its sequencing step 2. Validated in
+`src/governance_tests.rs::tripwire_policy_catalog_conforms`.
+
 ## Phase B — hank projection (backlogged, Phase-4-blocked)
 
 Hank holds a **hot, compiled projection** of quipu's `boundary:"action"`

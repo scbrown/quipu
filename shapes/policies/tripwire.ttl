@@ -1,0 +1,93 @@
+# Tripwire policy catalog — path-boundary policies with no selector/predicate.
+#
+# A TRIPWIRE is the governance plane's Binding/Gate primitive at its simplest:
+# a boundary of path globs (`aegis:appliesTo`) bound to an effect. It carries
+# NO selector and NO predicate — touching the path IS the crossing, so the
+# claim needs no evidence beyond the action's own target. This is the governed
+# form of yupana's local `[[yupana.policy.tripwires]]` (yupana
+# docs/book/src/reference/policy-guard.md, "Tripwires"): the same concept, with
+# quipu as the canonical store and yupana holding only a projected cache.
+#
+# Placement follows SARC Table 3, not convenience:
+#   - a DENY tripwire is hard @ PAG — admissibility is decided before dispatch;
+#   - a THROTTLE tripwire is soft @ PAA — the response prices completed-action
+#     data and backs off the actions AFTER the crossing, never this one.
+# There is no soft-at-the-gate wire, because the placement gate is right to
+# refuse one: a soft constraint has nothing to price before the action lands.
+#
+# Like treesitter.ttl's v2 exemplar, the PAA throttle wire below is the
+# catalog's exemplar of the vocabulary before every consumer seam exists:
+# yupana projects and enforces PAG tripwires at `hook pre-edit` first; the
+# PAA-side projection is its sequencing step 2. Shipped here so the shapes are
+# exercised by real data, not only by fixtures.
+#
+# Validated against shapes/governance.ttl by `cargo test governance`.
+
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+# ═══════════════════════════════════════════════════════════════════
+# tripwire-auth-boundary — an edit landing inside the auth tree is denied
+# before dispatch. Path-only: no selector, no predicate, the target is the
+# evidence. effect "deny", hard @ PAG.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:op_tripwire_auth_boundary a aegis:OperatingPoint ;
+    aegis:kind "exact_predicate" ;
+    # A glob match over the edit's own repo-relative path: no classifier, no
+    # score. The residual error is a mis-derived relative path, which is the
+    # consumer's bug to fix, not an FP rate this wire can trade against.
+    aegis:falsePositiveTolerance 0.0 ;
+    aegis:falseNegativeTolerance 0.0 .
+
+aegis:policy_tripwire_auth_boundary a aegis:Policy ;
+    rdfs:label "tripwire-auth-boundary" ;
+    aegis:targets "CodeModule" ;
+    aegis:claim "no agent edit targets a path matching src/auth/**" ;
+    aegis:boundary "action" ;
+    aegis:effect "deny" ;
+    aegis:appliesTo "src/auth/**" ;
+    # HARD, at the PAG: the whole point of a deny wire is that the edit never
+    # lands. Judged after the fact it would be a report about a crossing that
+    # already happened, which is a different (soft) wire.
+    aegis:constraintClass "hard" ;
+    aegis:verificationPoint "PAG" ;
+    # Orchestration, honestly: yupana's pre-edit hook is the host, and an agent
+    # that writes the file by another route is not governed by this.
+    aegis:hostedAtLayer "orchestration" ;
+    aegis:sourceType "operational" ;
+    aegis:authority "engineering-conventions" ;
+    aegis:operatingPoint aegis:op_tripwire_auth_boundary ;
+    aegis:latencyBudgetMs 5 .
+
+# ═══════════════════════════════════════════════════════════════════
+# tripwire-generated-throttle — edits inside the generated tree are admissible
+# at a cost: each crossing records an expiring backoff the subsequent edits
+# surface. Path-only. effect "throttle", soft @ PAA, with the declared
+# backoff formula the consumer compiles (aegis:backoffFormula).
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:op_tripwire_generated_throttle a aegis:OperatingPoint ;
+    aegis:kind "exact_predicate" ;
+    aegis:falsePositiveTolerance 0.0 ;
+    aegis:falseNegativeTolerance 0.0 .
+
+aegis:policy_tripwire_generated_throttle a aegis:Policy ;
+    rdfs:label "tripwire-generated-throttle" ;
+    aegis:targets "CodeModule" ;
+    aegis:claim "edits inside src/generated/** are priced: each crossing backs off subsequent edits" ;
+    aegis:boundary "action" ;
+    aegis:effect "throttle" ;
+    aegis:appliesTo "src/generated/**" ;
+    # SOFT, at the PAA. A throttle cannot prevent the action it just watched —
+    # it prices the crossing and acts on the successor, which is exactly the
+    # placement Table 3 assigns the soft class. Declaring it at the PAG would
+    # be the false-`prevented` claim the enforcement gradient exists to stop.
+    aegis:constraintClass "soft" ;
+    aegis:verificationPoint "PAA" ;
+    aegis:hostedAtLayer "orchestration" ;
+    aegis:sourceType "operational" ;
+    aegis:authority "engineering-conventions" ;
+    aegis:operatingPoint aegis:op_tripwire_generated_throttle ;
+    aegis:backoffFormula "exp(min(overage / 1.0, 8.0))" ;
+    aegis:latencyBudgetMs 5 .
