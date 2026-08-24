@@ -355,6 +355,55 @@ fn sanitize_iri_local_handles_special_chars() {
 }
 
 #[test]
+fn canonical_slash_node_round_trips_without_sanitizing() {
+    let mut store = Store::open_in_memory().unwrap();
+    let commit = "commit/quipu/64c49f7480af0f4dd4c51c25c6d1973d37e03f83";
+    let ep = parse_episode(&format!(
+        r#"{{
+        "name": "canonical-commit",
+        "nodes": [
+            {{"name": "{commit}", "type": "GitCommit"}},
+            {{"name": "quipu", "type": "GitRepo"}}
+        ],
+        "edges": [{{"source": "{commit}", "target": "quipu", "relation": "committed_to"}}]
+    }}"#
+    ));
+
+    let ttl = episode_to_turtle(&ep, TEST_BASE_NS, &episode_content_hash(&ep));
+    let exact_iri = format!("{TEST_BASE_NS}{commit}");
+    assert!(ttl.contains(&format!("<{exact_iri}> a aegis:GitCommit")));
+    assert!(ttl.contains(&format!("<{exact_iri}> aegis:committed_to aegis:quipu")));
+    assert!(!ttl.contains("aegis:commit_quipu_64c49f"));
+
+    ingest_episode(&mut store, &ep, "2026-08-24T12:00:00Z", TEST_BASE_NS).unwrap();
+    assert_eq!(
+        active_values(&store, &exact_iri, &format!("{}label", namespace::RDFS)),
+        vec![commit.to_string()]
+    );
+}
+
+#[test]
+fn slash_node_names_reject_iri_injection_and_traversal() {
+    assert!(validate_node_name("commit/quipu/64c49f").is_ok());
+    for name in [
+        "/commit/quipu/64c49f",
+        "commit/quipu/64c49f/",
+        "commit//64c49f",
+        "commit/../64c49f",
+        "commit/./64c49f",
+        "http://example.invalid/commit",
+        "commit/quipu?ref=main",
+        "commit/quipu#fragment",
+        "commit/quipu name",
+    ] {
+        assert!(
+            validate_node_name(name).is_err(),
+            "unsafe slash name was accepted: {name}"
+        );
+    }
+}
+
+#[test]
 fn escape_turtle_handles_quotes() {
     assert_eq!(escape_turtle(r#"say "hello""#), r#"say \"hello\""#);
     assert_eq!(escape_turtle("line1\nline2"), "line1\\nline2");
