@@ -924,6 +924,64 @@ fn a_revision_refuses_an_unattributable_current_comment() {
 }
 
 #[test]
+fn one_revision_migrates_every_attributable_legacy_comment() {
+    let mut store = Store::open_in_memory().unwrap();
+    for (episode, wording, timestamp) in [
+        ("legacy-one", "old one", "2026-01-01T00:00:00Z"),
+        ("legacy-two", "old two", "2026-01-02T00:00:00Z"),
+    ] {
+        let turtle = format!(
+            "@prefix rdfs: <{rdfs}> . @prefix prov: <{prov}> . \
+             <{base}legacy> rdfs:comment \"{wording}\" ; \
+             prov:wasGeneratedBy <{base}episode_{episode}> .",
+            rdfs = namespace::RDFS,
+            prov = namespace::PROV,
+            base = TEST_BASE_NS,
+        );
+        crate::rdf::ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            timestamp,
+            None,
+            Some(episode),
+        )
+        .unwrap();
+    }
+
+    let revision = parse_episode(
+        r#"{
+          "name":"migration",
+          "nodes":[{"name":"legacy","type":"Service","description":"current"}]
+        }"#,
+    );
+    ingest_episode(&mut store, &revision, "2026-01-03T00:00:00Z", TEST_BASE_NS).unwrap();
+
+    let comment = format!("{}comment", namespace::RDFS);
+    assert_eq!(
+        active_values(&store, &format!("{TEST_BASE_NS}legacy"), &comment),
+        vec!["current"]
+    );
+    assert_eq!(
+        active_values(
+            &store,
+            &format!("{TEST_BASE_NS}episode_legacy-one"),
+            &comment
+        ),
+        vec!["old one"]
+    );
+    assert_eq!(
+        active_values(
+            &store,
+            &format!("{TEST_BASE_NS}episode_legacy-two"),
+            &comment
+        ),
+        vec!["old two"]
+    );
+}
+
+#[test]
 fn content_hash_is_order_independent_for_nodes() {
     let a =
         parse_episode(r#"{ "name": "h", "nodes": [{"name": "x"}, {"name": "y"}], "edges": [] }"#);
