@@ -49,7 +49,6 @@ benchmark/census/out/
 # DEMM-Bench run outputs (cases, scorer results, summaries)
 benchmark/demm/out/
 state.json
-CLAUDE.md
 CLAUDE.local.md
 
 # host-local beads store redirect (path differs per machine; do not track)

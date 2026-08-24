@@ -28,6 +28,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      # release-plz refuses a repository where a tracked path is also ignored,
+      # even when checkout itself is clean. Catch the repository invariant at
+      # the boundary instead of waiting through release-plz setup to discover it.
+      - name: Reject tracked files matched by .gitignore
+        run: |
+          set -euo pipefail
+          tracked_ignored="$(git ls-files -ci --exclude-standard)"
+          if [ -n "$tracked_ignored" ]; then
+            echo "Tracked files are also ignored:" >&2
+            printf '%s\n' "$tracked_ignored" >&2
+            exit 1
+          fi
+
       - uses: dtolnay/rust-toolchain@stable
 
       # DO NOT split this into ordered `command: release` / `command: release-pr`
