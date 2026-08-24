@@ -419,7 +419,7 @@ fn tool_episode_mints_under_configured_base_ns() {
         "episode_body": "widget lives here",
         "source": "test",
         "group_id": "test",
-        "timestamp": "2026-04-04T12:00:00Z",
+        "timestamp": "1900-01-01T00:00:00Z",
         "nodes": [{"name": "widget", "type": "Thing"}],
         "edges": []
     });
@@ -465,6 +465,47 @@ fn test_tool_episode() {
     assert_eq!(result["episode"], "deploy-event");
     assert!(result["tx_id"].as_i64().unwrap() > 0);
     assert!(result["count"].as_i64().unwrap() >= 10);
+
+    let episode_iri = format!("{}episode_deploy-event", crate::namespace::DEFAULT_BASE_NS);
+    assert!(ask(
+        &store,
+        &format!("<{episode_iri}> <http://www.w3.org/ns/prov#generatedAtTime> ?time")
+    ));
+    assert!(!ask(
+        &store,
+        &format!(
+            "<{episode_iri}> <http://www.w3.org/ns/prov#generatedAtTime> \
+             \"1900-01-01T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+        )
+    ));
+}
+
+#[test]
+fn graphiti_episode_time_is_server_stamped() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_episodes_complete(
+        &mut store,
+        &serde_json::json!({
+            "name": "graphiti-time",
+            "episode_body": "time boundary proof",
+            "source_description": "test-client",
+            "timestamp": "1900-01-01T00:00:00Z"
+        }),
+    )
+    .unwrap();
+
+    let episode_iri = format!("{}episode_graphiti-time", crate::namespace::DEFAULT_BASE_NS);
+    assert!(ask(
+        &store,
+        &format!("<{episode_iri}> <http://www.w3.org/ns/prov#generatedAtTime> ?time")
+    ));
+    assert!(!ask(
+        &store,
+        &format!(
+            "<{episode_iri}> <http://www.w3.org/ns/prov#generatedAtTime> \
+             \"1900-01-01T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+        )
+    ));
 }
 
 // -- Episode-scoped logical retraction (aegis-hxb) --

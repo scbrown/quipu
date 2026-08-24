@@ -274,11 +274,9 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let ep: Episode = serde_json::from_value(input.clone())
         .map_err(|e| Error::InvalidValue(format!("invalid episode JSON: {e}")))?;
 
-    let now = crate::time::now_iso();
-    let timestamp = input
-        .get("timestamp")
-        .and_then(|v| v.as_str())
-        .unwrap_or(&now);
+    // Provenance time is a server attestation, not caller-authored episode
+    // content. Ignore any legacy `timestamp` field at this trust boundary.
+    let timestamp = crate::time::now_iso();
 
     // Apply the configured entity-resolution policy so dedup fires on ingest
     // (hq-uye). Opts are cloned out of the store before the &mut borrow.
@@ -287,7 +285,7 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     // (aegis-4h3x). Read before the &mut borrow, same as opts.
     let base_ns = store.base_ns().to_string();
     let result =
-        episode::ingest_episode_with_resolution(store, &ep, timestamp, &base_ns, Some(&opts))?;
+        episode::ingest_episode_with_resolution(store, &ep, &timestamp, &base_ns, Some(&opts))?;
 
     let mut response = serde_json::json!({
         "tx_id": result.tx_id,
