@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.27] - 2026-08-25
+
+### Fixed
+
+- *(ci)* Restore file-size and changelog gates([652c4d8](https://github.com/scbrown/quipu/commit/652c4d887a33cd570d6d9a2c8fdcb158afb648d9))
+
 ## [0.3.26] - 2026-08-25
 
 ### Added
