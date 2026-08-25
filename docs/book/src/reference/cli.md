@@ -455,6 +455,101 @@ quipu propose reject 4 --note "breaks existing data" --db my.db
 | `accept <id> [--note <text>]` | Apply and record the decision |
 | `reject <id> --note <reason>` | Reject with a reason |
 
+### `quipu policy`
+
+Policy by example: draft a placement-aimed advisory policy from an exemplar,
+then replay it over recorded history *before* anything is created. The ordering
+is the point — draft, backtest, read the hit list, and only then `quipu knot`
+the file, at which point the definition-time placement check still runs and can
+still refuse.
+
+```bash
+quipu policy draft --exemplar http://example.org/verdict/17 --name no-bare-secrets \
+  --label "never commit a bare secret again" \
+  --targets http://example.org/CodeEdit \
+  --claim 'ASK { FILTER NOT EXISTS { $target ex:containsSecret true } }' \
+  --out draft.ttl
+quipu policy backtest draft.ttl --last-txs 500 --db my.db
+quipu knot draft.ttl --db my.db
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-iri> --claim <ask>` | Emit advisory Turtle for one policy. Never writes to the store |
+| `backtest <candidate.ttl>` | Replay the candidate over the store's transaction log |
+
+`draft` flags:
+
+| Flag | Description |
+|------|-------------|
+| `--exemplar <iri>` | The Verdict / `DecisionRequest` / edit record that motivated the rule (required) |
+| `--name <slug>` | Local name for the policy IRI; sanitised to `[A-Za-z0-9_-]` (required) |
+| `--label <sentence>` | The intent sentence, kept verbatim as `rdfs:label` (required) |
+| `--targets <type-iri>` | Target entity type, `aegis:targets` (required) |
+| `--claim <ask>` | The compliant condition: a SPARQL ASK over `$target` (required) |
+| `--class soft\|hard` | `aegis:constraintClass` (default: `soft`) |
+| `--point <point>` | `aegis:verificationPoint` (default: derived from the class — soft→PAA, hard→PAG) |
+| `--layer <layer>` | `aegis:hostedAtLayer` (default: `tool`) |
+| `--authority <who>` | `aegis:authority` on the parent Directive |
+| `--out <file.ttl>` | Write the Turtle to a file instead of stdout |
+
+A drafted policy is **born advisory** — `aegis:effect "warn"` is a constant, not
+a flag. Promotion to enforcement goes through the existing advisory→enforcing
+gates over recorded traffic.
+
+`backtest` flags:
+
+| Flag | Description |
+|------|-------------|
+| `--last-txs <N>` | Window the replay to the last N transactions (default: the whole log) |
+| `--from-tx <A> --to-tx <B>` | Explicit transaction window; both must be given together |
+
+Output is one line per hit (`tx <id> (<timestamp>): would have fired on
+<target>`) followed by a summary. The summary distinguishes "0 hits" from
+"cannot evaluate", and the command **exits 1 when nothing could be measured**
+so a script that knots on success cannot read an unevaluable candidate as
+clean.
+
+### `quipu path`
+
+Golden-path analysis over recorded trajectories: the provenance cone, the
+backtest, and a grammar draft. All three are reads; `draft` prints Turtle for a
+human to review and load. See the
+[golden paths design](https://github.com/scbrown/quipu/blob/main/docs/design/golden-paths-blessing.md).
+
+```bash
+quipu path cone http://example.org/traj/42 --via http://example.org/derivedFrom --hops 6 --db my.db
+quipu path backtest http://example.org/traj/42 --omit http://example.org/step/3 --json --db my.db
+quipu path draft http://example.org/traj/42 --name fast-review --label "the short path" \
+  --via http://example.org/derivedFrom \
+  --omit http://example.org/step/3 --by http://example.org/decision/9 --db my.db
+```
+
+The trajectory IRI is the first positional argument to every subcommand.
+
+| Subcommand | Description |
+|------------|-------------|
+| `cone <trajectory-IRI>` | Which steps did the falsifier-gated verified result depend on? |
+| `backtest <trajectory-IRI>` | Replay a pruned candidate over past trajectories sharing a work-item topic |
+| `draft <trajectory-IRI>` | Emit `gp-grammar/1` Turtle for the blessed path |
+
+| Flag | Subcommands | Description |
+|------|-------------|-------------|
+| `--via <predicate-IRI>` | `cone`, `draft` | Derivation predicate to walk, in addition to `verifiedBy` (always followed). Repeatable |
+| `--hops <N>` | `cone` | Depth bound for the derivation walk (default: 8) |
+| `--omit <step-IRI>` | `backtest`, `draft` | Step the candidate omits. Repeatable |
+| `--by <decision-IRI>` | `draft` | The human Decision authorising the paired `--omit`. Repeatable |
+| `--dead-end <step-IRI>` | `draft` | Mark a step a dead end in the drafted grammar. Repeatable |
+| `--name <local-name>` | `draft` | Local name for the drafted grammar (required) |
+| `--label <text>` | `draft` | Human label for the drafted grammar (required) |
+| `--json` | `cone`, `backtest` | Emit the report as JSON instead of the text table |
+
+`cone` verdicts are `IN-CONE` (load-bearing; pruning needs a human Decision),
+`OUT-OF-CONE` (mechanically prunable) or `CANNOT-EVALUATE` (no derivation edges
+recorded — never silently prunable). `draft` refuses when the count of `--omit`
+flags does not match the count of `--by` flags: a human cut without its Decision
+is a silent edit of history.
+
 ### `quipu ontology`
 
 Manage stored OWL ontologies (versioned: re-loading a name closes the prior

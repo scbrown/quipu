@@ -717,6 +717,46 @@ Graphiti-compatible flat episode ingestion. Body: `name`, optional
 Impact analysis: walk downstream from an entity, optionally counterfactual.
 Body: `entity`, optional `remove`, `hops`, `predicates`, `timestamp`.
 
+### `POST /path/cone`
+
+Golden paths: the provenance cone of a trajectory — which steps did its
+falsifier-gated verified result depend on? Read-only. Body: `trajectory` (the
+Trajectory IRI, required), optional `via` (array of derivation predicate IRIs
+walked in addition to `verifiedBy`, which is always followed), `hops` (walk
+depth, default 8), `base_ns` (vocabulary namespace override; defaults to the
+store's configured `base_ns`).
+
+```bash
+curl -s localhost:3030/path/cone -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"trajectory": "http://example.org/traj/42", "hops": 6}'
+```
+
+Returns the cone report: the trajectory, the hop bound, the verifications it
+was checked against, and one entry per step carrying `iri`, `order`, `verdict`
+(`InCone` / `OutOfCone` / `CannotEvaluate`) and the human-readable `reason`.
+Refuses a trajectory with no steps or no falsifier-gated verification.
+
+### `POST /path/backtest`
+
+Golden paths: replay a pruned candidate (the exemplar trajectory minus omitted
+steps) over recorded history — which past trajectories sharing a work-item
+topic would have conformed under `gp-grammar/1`, and how did their work items
+close? Read-only. Body: `exemplar` (the exemplar Trajectory IRI, required),
+optional `omit` (array of step IRIs the candidate omits), `base_ns`.
+
+```bash
+curl -s localhost:3030/path/backtest -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"exemplar": "http://example.org/traj/42",
+       "omit": ["http://example.org/step/3"]}'
+```
+
+Returns the backtest report: the exemplar, the grammar, the matched topics, one
+row per replayed trajectory, and the conformer/deviator completion counts with
+an explicit `cannot_evaluate` tally — 0 matches and "nothing measurable" are
+never reported as the same thing.
+
 ### `POST /propose`
 
 Submit a schema-evolution proposal. Body: `kind`, `target`, `diff`, `proposer`,
