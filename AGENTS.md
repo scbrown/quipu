@@ -145,6 +145,48 @@ reported with its exact command and error rather than worked around.
 - NEVER say "ready to push when you are" — YOU must push
 - If push fails, resolve and retry until it succeeds
 
+## Beads: this repo is JSONL-only, no Dolt
+
+**Do not run `bd init` here, and do not create a Dolt database.**
+
+`.beads/metadata.json` declares a Dolt backend, but there is no Dolt database:
+not in a fresh clone, and — checked with `git ls-remote origin` — no
+`refs/dolt/*` on the remote either. There is no store to hydrate from and
+nothing to reconcile against. `bd` 1.2.2 refuses to operate without one ("no
+beads database found"), including with `no-db: true` set in
+`.beads/config.yaml`, so `bd` commands cannot read or write this tracker.
+
+So `.beads/issues.jsonl` **is** this repo's tracker, not an export of one —
+which is what the history has been doing all along, in commits titled
+`chore(beads): … (jsonl export)`. `bd init` would mint a second identity
+alongside the `project_id` already in `.beads/metadata.json` rather than
+adopting it.
+
+Use the script:
+
+```bash
+scripts/beads-jsonl.py list [--status open]
+scripts/beads-jsonl.py create "Title" [--description ...] [--priority 3]
+scripts/beads-jsonl.py close <id> --reason "..."
+scripts/beads-jsonl.py note  <id> --text   "..."
+```
+
+It refuses any write that loses information — a record disappearing, a closed
+issue reopening, notes or comments shrinking — because the file has no schema
+enforcement and one bad write is a silent data loss committed as a normal diff.
+`note` appends and never replaces. It writes in this file's own measured
+convention (`json.dumps` defaults), so a one-record edit is a one-line diff
+rather than a whole-file reformat; hand-editing with different settings
+reformats all 78 records and buries the real change.
+
+**On the managed block below.** It describes a Dolt-backed architecture and
+calls hand-editing the JSONL an anti-pattern. That warning is correct *when a
+Dolt store exists*, because then the JSONL is derived and the next export
+reverts the edit. Here there is no store to derive from and nothing to revert
+it. Where that block and this section disagree, this section governs. The
+sibling repos scbrown/bobbin and scbrown/camayoc reached the same place and
+carry the same script.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:46cd31e7 -->
 ## Beads Issue Tracker
 
