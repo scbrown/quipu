@@ -141,9 +141,14 @@ the query text still overrides the request-level scope, and `fork` +
 
 With `"federated": true` the whole query text fans out through the federated
 provider — the local store plus every `[[quipu.federation.remotes]]` — and the
-response adds a per-member `providers` list and a `complete` flag, with every
-row `_provider`-tagged. The temporal/graph fields are refused on a federated
-query (they only shape the local evaluator's context). See
+response adds a per-member `providers` list (each carrying the remote's
+operator-declared `label`) and a `complete` flag, with every row
+`_provider`-tagged and, for declared remotes, `_trust`/`_freshness`-stamped.
+The composed dataset `labels` fold the remotes in as members, and configured
+`[quipu.labels]` floors refuse a federated query exactly as a local one — an
+undeclared remote fails a configured freshness/trust floor (quipu-fd1). The
+temporal/graph fields are refused on a federated query (they only shape the
+local evaluator's context). See
 [Federation](../architecture/federation.md).
 
 ### `POST /knot`

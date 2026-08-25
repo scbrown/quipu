@@ -21,6 +21,42 @@ pub(crate) async fn ui() -> Html<&'static str> {
     Html(UI_HTML)
 }
 
+/// quipu #47: report the configured federation remotes at startup, and prove
+/// they are REACHED rather than merely parsed. The declared label rides each
+/// line (quipu-fd1): "undeclared" for a remote the operator has not labelled,
+/// so a floor-configured deployment can see at startup which remotes a
+/// federated query will be refused over.
+pub(crate) fn report_federation(store: &quipu::Store, federation: &quipu::FederationConfig) {
+    match quipu::provider::federated_from_config(store, "local", federation) {
+        Ok(fed) => {
+            for status in fed.health_all() {
+                let label = status
+                    .label
+                    .as_ref()
+                    .map_or_else(|| "undeclared".to_string(), ToString::to_string);
+                match (status.healthy, status.message.as_deref()) {
+                    (true, _) => {
+                        eprintln!("federation: '{}' reachable (label: {label})", status.name);
+                    }
+                    (false, Some(why)) => eprintln!(
+                        "federation: '{}' NOT reachable (label: {label}) — {why}",
+                        status.name
+                    ),
+                    (false, None) => {
+                        eprintln!(
+                            "federation: '{}' NOT reachable (label: {label})",
+                            status.name
+                        );
+                    }
+                }
+            }
+        }
+        // A malformed label declaration (quipu-fd1): every federated query
+        // will refuse with this same error, so say it once at startup too.
+        Err(e) => eprintln!("federation: INVALID remote declaration — {e}"),
+    }
+}
+
 pub(crate) async fn components_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript")],
@@ -293,7 +329,14 @@ pub(crate) async fn query(
                 let text = input.get("query").and_then(|v| v.as_str()).ok_or_else(|| {
                     quipu::Error::InvalidValue("missing 'query' parameter".into())
                 })?;
-                let fed = quipu::provider::federated_from_config(store, "local", &federation);
+                // quipu-fd1: configured [quipu.labels] floors gate the
+                // federated path exactly as the local one — the local members
+                // via the same dataset fold `tool_query` applies, each remote
+                // via the trust/freshness the LOCAL operator declared for it.
+                // Before this, `federated: true` was the way around a
+                // configured min_trust floor. A no-op when no floor is set.
+                quipu::provider::check_federated_floor(store, text, &federation)?;
+                let fed = quipu::provider::federated_from_config(store, "local", &federation)?;
                 let fq = fed.query_all(text);
                 let quipu::QueryResult::Select {
                     variables,
@@ -325,15 +368,24 @@ pub(crate) async fn query(
                     .map(|o| {
                         json!({
                             "name": o.name, "ok": o.ok, "rows": o.rows, "error": o.error,
+                            // The operator-declared label; null = undeclared,
+                            // never fabricated (quipu-fd1).
+                            "label": o.label.as_ref().map(quipu::DeclaredLabel::to_json),
                         })
                     })
                     .collect();
+                // The composed label of the whole federated dataset — remote
+                // declarations folded in as members, so composition never
+                // widens. A fold refusal (cross-chain trust) is reported in
+                // the field, not raised, matching the local path.
+                let labels = quipu::provider::federated_dataset_labels(store, text, &federation);
                 let mut body = json!({
                     "variables": variables,
                     "rows": json_rows,
                     "count": json_rows.len(),
                     "providers": providers,
                     "complete": fq.complete,
+                    "labels": quipu::labels_json(&labels),
                 });
                 if truncated {
                     body["truncated"] = json!(true);

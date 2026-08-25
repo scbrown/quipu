@@ -273,7 +273,15 @@ pub fn query_inference(store: &Store, input: &JsonValue) -> Result<Vec<rdfs::Wit
 /// honest outcome; refusing to answer the query is a different and unasked-for
 /// one.
 fn add_labels(out: &mut JsonValue, labels: &Result<Option<labels::DatasetLabels>>) {
-    let value = match labels {
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert("labels".to_string(), labels_json(labels));
+    }
+}
+
+/// The JSON shape of a composed dataset label — shared by `add_labels` and the
+/// federated `/query` path (quipu-fd1), so the two surfaces cannot drift.
+pub fn labels_json(labels: &Result<Option<labels::DatasetLabels>>) -> JsonValue {
+    match labels {
         Ok(None) => JsonValue::Null,
         Ok(Some(l)) => serde_json::json!({
             "freshness": {
@@ -300,9 +308,6 @@ fn add_labels(out: &mut JsonValue, labels: &Result<Option<labels::DatasetLabels>
             },
         }),
         Err(e) => serde_json::json!({ "error": e.to_string() }),
-    };
-    if let Some(obj) = out.as_object_mut() {
-        obj.insert("labels".to_string(), value);
     }
 }
 

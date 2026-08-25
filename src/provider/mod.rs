@@ -4,9 +4,13 @@
 //! enabling Quipu to federate queries across its local `SQLite` store and external
 //! sources like Graphiti (`FalkorDB`).
 
+mod label;
 #[cfg(feature = "remote")]
 mod remote;
 
+pub use label::{
+    DeclaredLabel, check_federated_floor, check_member_floor, federated_dataset_labels,
+};
 #[cfg(feature = "remote")]
 pub use remote::{RemoteProvider, federated_from_config};
 
@@ -23,6 +27,10 @@ pub struct ProviderStatus {
     pub healthy: bool,
     pub fact_count: Option<u64>,
     pub message: Option<String>,
+    /// The label this member's rows carry — **declared by the local operator**,
+    /// never read from the member itself (quipu-fd1, multi-db-composition.md
+    /// §5). `None` = undeclared; a value is never fabricated from silence.
+    pub label: Option<DeclaredLabel>,
 }
 
 /// A virtual graph provider that can answer SPARQL queries and list entities.
@@ -38,6 +46,14 @@ pub trait GraphProvider {
 
     /// Health check.
     fn health(&self) -> ProviderStatus;
+
+    /// The label this member's rows carry, declared by the **local** operator
+    /// (quipu-fd1). Default: undeclared. The local store deliberately returns
+    /// `None` — its labels are per-graph and enforced by the dataset fold, not
+    /// summarised into one provider-level value that could overstate.
+    fn declared_label(&self) -> Option<&DeclaredLabel> {
+        None
+    }
 }
 
 /// Local provider backed by Quipu's `SQLite` store.
@@ -79,6 +95,7 @@ impl GraphProvider for LocalProvider<'_> {
             healthy: true,
             fact_count,
             message: None,
+            label: None,
         }
     }
 }
@@ -100,6 +117,9 @@ pub struct ProviderOutcome {
     pub rows: usize,
     /// Why the member did not contribute, when it did not.
     pub error: Option<String>,
+    /// The label this member's rows carry, declared by the local operator —
+    /// `None` = undeclared (quipu-fd1).
+    pub label: Option<DeclaredLabel>,
 }
 
 /// A federated query's merged rows plus the per-provider account of who
@@ -138,13 +158,30 @@ impl<'a> FederatedProvider<'a> {
     /// Rows are tagged with a `_provider` field identifying the source. The tag
     /// is decided per row, not once globally: a row that already carries
     /// `_provider` (a remote that itself federates) keeps its own tag.
+    ///
+    /// When any member carries a declared label (quipu-fd1), its rows are also
+    /// stamped `_trust` (the trust IRI; rank and chain ride the per-member
+    /// outcome) and `_freshness`. Rows from an undeclared member simply lack
+    /// the binding — undeclared is absent, never fabricated.
     pub fn query_all(&self, sparql: &str) -> FederatedQuery {
+        // The stamp columns a row can carry beside its data. Excluded from the
+        // variable-list agreement check the same way `_provider` is.
+        const META_VARS: [&str; 3] = ["_provider", "_trust", "_freshness"];
+        let stamp_axis = |probe: fn(&DeclaredLabel) -> bool| {
+            self.providers
+                .iter()
+                .any(|p| p.declared_label().is_some_and(probe))
+        };
+        let stamp_trust = stamp_axis(|l| l.trust.is_some());
+        let stamp_fresh = stamp_axis(|l| l.freshness.is_some());
+
         let mut merged_rows = Vec::new();
         let mut variables: Option<Vec<String>> = None;
         let mut outcomes = Vec::new();
 
         for provider in &self.providers {
             let name = provider.name().to_string();
+            let label = provider.declared_label().cloned();
             match provider.query(sparql) {
                 Ok(QueryResult::Select {
                     variables: their_vars,
@@ -156,15 +193,24 @@ impl<'a> FederatedProvider<'a> {
                     // a silent merge under mislabelled columns.
                     let canon = variables.get_or_insert_with(|| {
                         let mut v = their_vars.clone();
-                        if !v.iter().any(|x| x == "_provider") {
-                            v.push("_provider".to_string());
+                        let mut want = vec!["_provider"];
+                        if stamp_trust {
+                            want.push("_trust");
+                        }
+                        if stamp_fresh {
+                            want.push("_freshness");
+                        }
+                        for meta in want {
+                            if !v.iter().any(|x| x == meta) {
+                                v.push(meta.to_string());
+                            }
                         }
                         v
                     });
                     let mut expected = canon.clone();
-                    expected.retain(|v| v != "_provider");
+                    expected.retain(|v| !META_VARS.contains(&v.as_str()));
                     let mut theirs = their_vars.clone();
-                    theirs.retain(|v| v != "_provider");
+                    theirs.retain(|v| !META_VARS.contains(&v.as_str()));
                     if theirs != expected {
                         outcomes.push(ProviderOutcome {
                             name,
@@ -173,6 +219,7 @@ impl<'a> FederatedProvider<'a> {
                             error: Some(format!(
                                 "variable list {theirs:?} does not match the federated list {expected:?}"
                             )),
+                            label,
                         });
                         continue;
                     }
@@ -182,6 +229,20 @@ impl<'a> FederatedProvider<'a> {
                         row.entry("_provider".to_string()).or_insert_with(|| {
                             crate::types::Value::Str(provider.name().to_string())
                         });
+                        // Stamp the DECLARED label per row (quipu-fd1). Same
+                        // per-row rule as `_provider`: a pre-existing stamp (a
+                        // remote that itself federates) survives.
+                        if let Some(l) = &label {
+                            if let Some(t) = &l.trust {
+                                row.entry("_trust".to_string())
+                                    .or_insert_with(|| crate::types::Value::Str(t.iri.clone()));
+                            }
+                            if let Some(f) = l.freshness {
+                                row.entry("_freshness".to_string()).or_insert_with(|| {
+                                    crate::types::Value::Str(f.as_str().to_string())
+                                });
+                            }
+                        }
                         merged_rows.push(row);
                     }
                     outcomes.push(ProviderOutcome {
@@ -189,6 +250,7 @@ impl<'a> FederatedProvider<'a> {
                         ok: true,
                         rows: count,
                         error: None,
+                        label,
                     });
                 }
                 Ok(_) => {
@@ -201,6 +263,7 @@ impl<'a> FederatedProvider<'a> {
                         error: Some(
                             "non-SELECT result cannot be merged into a federated row set".into(),
                         ),
+                        label,
                     });
                 }
                 Err(e) => {
@@ -209,6 +272,7 @@ impl<'a> FederatedProvider<'a> {
                         ok: false,
                         rows: 0,
                         error: Some(e.to_string()),
+                        label,
                     });
                 }
             }
@@ -352,6 +416,7 @@ mod tests {
                 healthy: false,
                 fact_count: None,
                 message: None,
+                label: None,
             }
         }
     }
@@ -402,6 +467,7 @@ mod tests {
                 healthy: true,
                 fact_count: None,
                 message: None,
+                label: None,
             }
         }
     }

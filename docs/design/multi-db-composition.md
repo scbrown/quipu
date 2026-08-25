@@ -242,6 +242,22 @@ labels: `ProviderStatus` gains the label fields, and a remote must carry a
 **declared** trust label rather than an inferred one — the SARC trust
 boundary, surfaced at the federation edge.
 
+> **The label seam is BUILT (quipu-fd1, 2026-08-25).** `ProviderStatus` and
+> `ProviderOutcome` carry a `label` field (`src/provider/mod.rs`); the label is
+> **declared by the local operator** — `trust`/`trust_chain`/`trust_rank`/
+> `freshness` on `[[quipu.federation.remotes]]` (`src/config/federation.rs`),
+> never read from the remote (`src/provider/label.rs`, module docs state the
+> rule and the undeclared semantics). Federated rows are stamped
+> `_trust`/`_freshness` beside `_provider` (`FederatedProvider::query_all`),
+> remote labels fold into the composed dataset label as members
+> (`federated_dataset_labels`), and configured `[quipu.labels]` floors refuse
+> a federated result exactly as a local one — local members and each remote,
+> with the refusal naming the member (`check_federated_floor`, wired at
+> `src/server/base.rs`'s federated `/query` branch; tests in
+> `src/provider/label_tests.rs`). An undeclared remote composes like an
+> unlabelled local graph: undeclared, never fabricated, and failing a
+> configured freshness/trust floor.
+
 ## 6. Not possible — permanently, and this document says so
 
 - **Cross-DB writes: out.** Not deferred — out. Every write is `main`-only.

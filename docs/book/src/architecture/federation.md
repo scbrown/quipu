@@ -1,12 +1,15 @@
 # Federation
 
-> **Implementation status (2026-08-12):** ✅ **Built.** In `src/provider/`
+> **Implementation status (2026-08-25):** ✅ **Built.** In `src/provider/`
 > (with tests): the `GraphProvider` trait, `ProviderStatus`, `LocalProvider`,
 > `FederatedProvider` with outcome-reporting `query_all`, and — behind the
 > `remote` feature — `RemoteProvider` plus `federated_from_config()`
 > (re-exported from `lib.rs`). `quipu-server` health-checks every configured
 > remote at startup, and `POST /query` with `"federated": true` fans the query
-> out through the federated provider per request (quipu-tkh). See
+> out through the federated provider per request (quipu-tkh). Since quipu-fd1,
+> remotes carry an operator-**declared** trust/freshness label
+> (`src/provider/label.rs`) and configured `[quipu.labels]` floors refuse a
+> federated result exactly as a local one. See
 > `docs/design/federation-remote-provider.md`.
 
 Quipu defines federated queries across multiple graph providers through
@@ -80,15 +83,52 @@ Behind the `remote` feature (a default of the shipped binaries): another
 
 ```toml
 [[quipu.federation.remotes]]
-name       = "prod"
-url        = "http://quipu.example:3030"
-auth_token = "…"     # optional; sent as `Authorization: Bearer …`
-timeout_ms = 5000    # optional; default 5000
+name        = "prod"
+url         = "http://quipu.example:3030"
+auth_token  = "…"     # optional; sent as `Authorization: Bearer …`
+timeout_ms  = 5000    # optional; default 5000
+
+# The label this remote's rows carry, DECLARED by you, the local operator
+# (quipu-fd1). Never read from the remote itself — a remote asserting its own
+# trustworthiness would defeat the trust boundary. All optional; trust needs
+# all three fields (a rank means nothing outside its chain) and a partial
+# declaration is refused at startup and on every federated query.
+trust       = "urn:trust:partner"
+trust_chain = "https://quipu.dev/ontology/defaultTrustChain"
+trust_rank  = 30
+freshness   = "fresh"  # fresh | recomputing | stale
 ```
 
 `quipu-server` builds the federated provider from these at startup and
-health-checks every remote (reported on stderr), so a dead peer or a wrong
-token is visible without waiting for a federated query to be issued.
+health-checks every remote (reported on stderr, with each remote's declared
+label — or `undeclared`), so a dead peer, a wrong token, or a missing label
+is visible without waiting for a federated query to be issued.
+
+## Trust labels at the federation edge
+
+A remote's rows enter your composed result set, so they must enter your label
+lattice — and the label is **declared by the local operator**, never inferred
+and never read from the remote (the SARC trust boundary, surfaced at the
+federation edge — see `docs/design/multi-db-composition.md` §5).
+
+- **Rows are stamped.** Beside `_provider`, rows from a declared remote carry
+  `_trust` (the trust IRI; rank and chain ride the per-member `providers`
+  entry) and `_freshness`. Rows from an undeclared member simply lack the
+  binding — undeclared is absent, never fabricated.
+- **`ProviderStatus` carries the label.** Health reports (startup stderr, and
+  the `label` field on each `providers` entry) show what each member's rows
+  are declared as; `null`/`undeclared` means exactly that.
+- **The composed label folds remotes in as members.** The federated response's
+  `labels` key is the local dataset fold with each remote's declared label
+  met in — trust and freshness by meet, so composition never widens; the axes
+  a remote cannot declare (durability, policy, kind) degrade coverage to
+  `partial`.
+- **Configured floors apply.** With `[quipu.labels]` floors set, a federated
+  query is refused when a local member fails the floor (same check as the
+  local path) or when a remote's declared label is below it — and the refusal
+  names the remote. **An undeclared remote fails a configured freshness or
+  trust floor**, exactly as an unlabelled local graph does: fail-safe at
+  enforcement, honest at reporting. With no floor configured, nothing changes.
 
 ## Federated queries over REST
 
@@ -104,19 +144,29 @@ plus the per-member account:
 
 ```json
 {
-  "variables": ["s", "p", "o", "_provider"],
+  "variables": ["s", "p", "o", "_provider", "_trust", "_freshness"],
   "rows": [
     { "s": "ex:traefik", "p": "ex:port", "o": "443", "_provider": "local" },
-    { "s": "ex:nginx", "p": "ex:port", "o": "80", "_provider": "prod" }
+    { "s": "ex:nginx", "p": "ex:port", "o": "80", "_provider": "prod",
+      "_trust": "urn:trust:partner", "_freshness": "fresh" }
   ],
   "count": 2,
   "providers": [
-    { "name": "local", "ok": true, "rows": 1, "error": null },
-    { "name": "prod", "ok": true, "rows": 1, "error": null }
+    { "name": "local", "ok": true, "rows": 1, "error": null, "label": null },
+    { "name": "prod", "ok": true, "rows": 1, "error": null,
+      "label": { "trust": { "iri": "urn:trust:partner",
+                            "chain": "https://quipu.dev/ontology/defaultTrustChain",
+                            "rank": 30 },
+                 "freshness": "fresh" } }
   ],
-  "complete": true
+  "complete": true,
+  "labels": null
 }
 ```
+
+`_trust`/`_freshness` columns appear only when at least one member declares
+that axis; `labels` is the composed dataset label (local members' fold with
+every remote met in), `null` when nothing local or remote declared anything.
 
 Whole-query federation only: every member gets the same query text and the
 results are unioned, not joined across members. The temporal/graph parameters

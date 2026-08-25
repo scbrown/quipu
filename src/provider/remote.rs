@@ -42,6 +42,10 @@ pub struct RemoteProvider {
     url: String,
     timeout: std::time::Duration,
     auth_token: Option<String>,
+    /// The label this remote's rows carry — DECLARED by the local operator
+    /// (quipu-fd1), never read from the remote itself: a remote asserting its
+    /// own trustworthiness would defeat the boundary.
+    label: super::DeclaredLabel,
 }
 
 #[cfg(feature = "remote")]
@@ -53,7 +57,16 @@ impl RemoteProvider {
             url: url.into().trim_end_matches('/').to_string(),
             timeout: std::time::Duration::from_secs(30),
             auth_token: None,
+            label: super::DeclaredLabel::default(),
         }
+    }
+
+    /// Declare the label this remote's rows carry (the local operator's
+    /// declaration from `[[quipu.federation.remotes]]`).
+    #[must_use]
+    pub fn with_label(mut self, label: super::DeclaredLabel) -> Self {
+        self.label = label;
+        self
     }
 
     /// Override the per-request timeout.
@@ -215,6 +228,9 @@ impl GraphProvider for RemoteProvider {
     /// the failure federation exists to avoid. The reason lands in `message`
     /// rather than being discarded.
     fn health(&self) -> ProviderStatus {
+        // The declared label rides every status, healthy or not: it is the
+        // operator's configuration, not a liveness observation.
+        let label = self.declared_label().cloned();
         match self
             .authed(ureq::get(&format!("{}/stats", self.url)))
             .timeout(self.timeout)
@@ -233,12 +249,14 @@ impl GraphProvider for RemoteProvider {
                         .or_else(|| body.get("fact_count"))
                         .and_then(serde_json::Value::as_u64),
                     message: None,
+                    label,
                 },
                 Err(e) => ProviderStatus {
                     name: self.name.clone(),
                     healthy: false,
                     fact_count: None,
                     message: Some(format!("malformed /stats response: {e}")),
+                    label,
                 },
             },
             Err(e) => ProviderStatus {
@@ -246,7 +264,16 @@ impl GraphProvider for RemoteProvider {
                 healthy: false,
                 fact_count: None,
                 message: Some(format!("unreachable: {e}")),
+                label,
             },
+        }
+    }
+
+    fn declared_label(&self) -> Option<&super::DeclaredLabel> {
+        if self.label.is_empty() {
+            None
+        } else {
+            Some(&self.label)
         }
     }
 }
@@ -260,27 +287,34 @@ impl GraphProvider for RemoteProvider {
 ///
 /// The local store is added first so it leads the merged results, matching the
 /// order `query_all` reports.
+///
+/// # Errors
+/// A malformed label declaration on a remote (a partial trust triple, an
+/// unparseable freshness — quipu-fd1). Refused rather than silently dropped:
+/// a typo'd declaration that vanished would leave the operator believing a
+/// label flows when none does.
 #[cfg(feature = "remote")]
-#[must_use]
 pub fn federated_from_config<'a>(
     store: &'a Store,
     local_label: &str,
     federation: &crate::config::FederationConfig,
-) -> FederatedProvider<'a> {
+) -> Result<FederatedProvider<'a>> {
     let mut fed = FederatedProvider::new();
     fed.add(Box::new(LocalProvider::new(store, local_label)));
     for remote in &federation.remotes {
         // 5s default (design §3): long enough for a real query, short enough
         // that one dead peer does not dominate a federated call.
-        let mut p = RemoteProvider::new(&remote.name, &remote.url).with_timeout(
-            std::time::Duration::from_millis(remote.timeout_ms.unwrap_or(5000)),
-        );
+        let mut p = RemoteProvider::new(&remote.name, &remote.url)
+            .with_timeout(std::time::Duration::from_millis(
+                remote.timeout_ms.unwrap_or(5000),
+            ))
+            .with_label(remote.declared_label()?);
         if let Some(token) = &remote.auth_token {
             p = p.with_auth_token(token);
         }
         fed.add(Box::new(p));
     }
-    fed
+    Ok(fed)
 }
 
 #[cfg(all(test, feature = "remote"))]
@@ -397,13 +431,44 @@ mod remote_tests {
                 crate::config::RemoteEndpoint::new("b", "http://two:3030/"),
             ],
         };
-        let fed = federated_from_config(&store, "local", &cfg);
+        let fed = federated_from_config(&store, "local", &cfg).unwrap();
         let names: Vec<String> = fed.health_all().into_iter().map(|s| s.name).collect();
         assert_eq!(
             names,
             vec!["local", "a", "b"],
             "local leads, then each configured remote — the dead config is retired"
         );
+    }
+
+    #[test]
+    fn a_declared_label_reaches_the_status_and_a_partial_declaration_is_refused() {
+        // quipu-fd1: the CONFIG declaration is wired through to the provider —
+        // the status carries it even for an unreachable remote (it is the
+        // operator's declaration, not a liveness observation) — and a partial
+        // trust triple is refused at build time, never silently dropped.
+        let store = Store::open_in_memory().unwrap();
+        let mut cfg = crate::config::FederationConfig {
+            remotes: vec![crate::config::RemoteEndpoint {
+                trust: Some("urn:trust:partner".into()),
+                trust_chain: Some("urn:chain:c".into()),
+                trust_rank: Some(30),
+                ..crate::config::RemoteEndpoint::new("p", DEAD)
+            }],
+        };
+        let fed = federated_from_config(&store, "local", &cfg).unwrap();
+        let statuses = fed.health_all();
+        assert!(statuses[0].label.is_none(), "local: labels are per-graph");
+        let declared = statuses[1].label.as_ref().expect("declared label rides");
+        assert_eq!(
+            declared.trust.as_ref().map(|t| (t.iri.as_str(), t.rank)),
+            Some(("urn:trust:partner", 30))
+        );
+
+        cfg.remotes[0].trust_chain = None;
+        let Err(err) = federated_from_config(&store, "local", &cfg) else {
+            panic!("a partial trust declaration must be refused")
+        };
+        assert!(err.to_string().contains("trust_chain"), "{err}");
     }
 
     #[test]
@@ -443,13 +508,12 @@ mod remote_tests {
         let store = Store::open_in_memory().unwrap();
         let cfg = crate::config::FederationConfig {
             remotes: vec![crate::config::RemoteEndpoint {
-                name: "authed".into(),
-                url,
                 auth_token: Some("sekrit".into()),
                 timeout_ms: Some(2000),
+                ..crate::config::RemoteEndpoint::new("authed", url)
             }],
         };
-        let fed = federated_from_config(&store, "local", &cfg);
+        let fed = federated_from_config(&store, "local", &cfg).unwrap();
         let fq = fed.query_all("SELECT ?s WHERE { ?s ?p ?o }");
         assert!(fq.complete, "{:?}", fq.providers);
         let req = server.join().unwrap();

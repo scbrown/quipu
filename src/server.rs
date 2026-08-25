@@ -125,16 +125,7 @@ async fn main() {
     // configured — and whether each one answers — is what makes the difference
     // visible without waiting for a federated query to be issued.
     if !config.federation.remotes.is_empty() {
-        let fed = quipu::provider::federated_from_config(&store, "local", &config.federation);
-        for status in fed.health_all() {
-            match (status.healthy, status.message.as_deref()) {
-                (true, _) => eprintln!("federation: '{}' reachable", status.name),
-                (false, Some(why)) => {
-                    eprintln!("federation: '{}' NOT reachable — {why}", status.name);
-                }
-                (false, None) => eprintln!("federation: '{}' NOT reachable", status.name),
-            }
-        }
+        base::report_federation(&store, &config.federation);
     }
 
     // Apply the SHACL validation policy so episode writes can be gated against
