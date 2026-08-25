@@ -23,6 +23,7 @@ mod registry;
 pub mod registry_list;
 pub mod respace;
 mod respace_map;
+mod retraction;
 mod serialize;
 mod settings;
 pub mod terms;

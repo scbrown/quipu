@@ -26,6 +26,7 @@ All notable changes to this project will be documented in this file.
 
 ### Miscellaneous
 
+- *(beads)* Adopt the documented JSONL-only convention (jsonl export)([1650abf](https://github.com/scbrown/quipu/commit/1650abfdbae3a957be1f95ce6670933d63c0fa85))
 - *(beads)* File six gap beads from the 2026-08-25 design-vs-impl survey (jsonl export)([2fb2c61](https://github.com/scbrown/quipu/commit/2fb2c61cb4fc8b5e31914e7c250e92bdb76ffcbf))
 
 ## [0.3.25] - 2026-08-24

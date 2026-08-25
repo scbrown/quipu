@@ -8,6 +8,8 @@ use crate::types::{Fact, Op, Value};
 
 use super::{Datum, Store};
 
+pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome};
+
 /// Result of staging a transaction's rows into the open `quipu_transact`
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
 struct Staged {
@@ -30,85 +32,6 @@ struct Staged {
     /// Datums actually retracted, for reactive observer notification.
     #[cfg(feature = "reactive-reasoner")]
     retracts: Vec<Datum>,
-}
-
-/// What episode-scoped retraction does when removing an episode's facts would
-/// strip a node's IDENTITY (`rdfs:label` / `rdf:type`) while leaving it
-/// referenced by facts from other episodes — a GHOST NODE (aegis-arup).
-///
-/// A ghost is present (answers predicate queries, holds edges, inflates counts)
-/// and absent (unnameable, untypeable) at the same time: it is invisible to the
-/// label scan and `rdf:type` query that the read path and every agent-facing
-/// skill use for discovery. Before this policy existed, retraction was purely
-/// tx-source-scoped and identity triples were ordinary facts, so
-/// `{"retracted": N}` looked identical for a clean cleanup and a mutilation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum OrphanPolicy {
-    /// DEFAULT. Keep the episode's `rdfs:label` / `rdf:type` facts alive for any
-    /// entity that still has surviving references after the retraction. A node
-    /// that survives keeps its name and type; a node with nothing left is
-    /// removed whole, identity included. Reported in
-    /// [`RetractEpisodeOutcome::preserved_identity`].
-    #[default]
-    Preserve,
-    /// Refuse the whole retraction (no writes) if it would orphan any identity.
-    /// For callers that want retract-then-repost to be an explicit decision.
-    Refuse,
-    /// Legacy strict episode-scope: retract identity triples too, creating the
-    /// ghosts. Still reported in [`RetractEpisodeOutcome::orphans`] so the
-    /// caller can repost — the API can no longer stay silent about it.
-    Allow,
-}
-
-impl OrphanPolicy {
-    /// Parse a policy name (`preserve` | `refuse` | `allow`). Case-insensitive.
-    pub fn parse(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "preserve" => Some(Self::Preserve),
-            "refuse" => Some(Self::Refuse),
-            "allow" => Some(Self::Allow),
-            _ => None,
-        }
-    }
-
-    /// The policy's canonical name, as accepted by [`OrphanPolicy::parse`].
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Preserve => "preserve",
-            Self::Refuse => "refuse",
-            Self::Allow => "allow",
-        }
-    }
-}
-
-/// An entity whose identity the retraction would strip while leaving it
-/// referenced elsewhere in the graph (aegis-arup).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IdentityOrphan {
-    /// The entity term id.
-    pub entity: i64,
-    /// The episode declared this entity's only `rdfs:label`.
-    pub lost_label: bool,
-    /// The episode declared this entity's only `rdf:type`.
-    pub lost_type: bool,
-}
-
-/// Result of an episode-scoped retraction.
-#[derive(Debug, Clone)]
-pub struct RetractEpisodeOutcome {
-    /// The retraction transaction, or [`crate::episode::NOOP_TX`] when nothing
-    /// was written.
-    pub tx_id: i64,
-    /// Facts actually closed by this retraction.
-    pub retracted: Vec<Fact>,
-    /// Identity facts deliberately left ACTIVE under
-    /// [`OrphanPolicy::Preserve`], so their entities stay findable.
-    pub preserved_identity: Vec<Fact>,
-    /// Entities whose identity was at risk. Under `Preserve` these were saved
-    /// (see `preserved_identity`); under `Allow` they are now real ghosts.
-    pub orphans: Vec<IdentityOrphan>,
-    /// The policy that was applied.
-    pub policy: OrphanPolicy,
 }
 
 impl Store {
