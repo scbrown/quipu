@@ -329,6 +329,63 @@ from the harness's actual tool registry, so it can drift from reality the way a
 prose list does; the difference is that a drifted declaration is a wrong answer
 to a question something asks rather than a paragraph nobody re-reads.
 
+### `quipu audit namespace`
+
+List the base-namespace predicates **episode ingest minted** that no loaded shape
+mentions — namespace drift, in the same shape as `quipu audit inventory`.
+
+```bash
+quipu audit namespace --db my.db
+quipu audit namespace --graph urn:example:tenant --json --db my.db
+```
+
+Exits `0` whatever it finds, and refuses nothing. Every key in an episode node's
+`properties` map becomes a predicate in the base namespace via
+`sanitize_iri_local`, with no shape governing which keys are admissible, so
+agents writing free-form properties mint predicates indefinitely and nothing
+reported the drift. A *gate* here would reject writes every deployment is already
+making — the ontology in the store today was grown by exactly this path — so it
+would be switched off within a day and the drift would go back to being
+invisible. A report an operator reads beats a gate nobody leaves on.
+
+Per ungoverned predicate: the IRI, how many current facts use it, how many
+distinct episode-written subjects carry it, and the window it has been in use.
+
+```text
+namespace: 2 ungoverned predicate(s), 1 governed, minted by episode ingest over
+2 episode-written subject(s) in urn:quipu:graph:root against 1 loaded shape(s)
+
+UNGOVERNED http://aegis.gastown.local/ontology/rackUnit: 1 fact(s) on 1 subject(s),
+in use 2026-01-01T00:00:00Z .. 2026-01-01T00:00:00Z
+```
+
+**What counts as minted here.** A predicate is reported when its subject carries
+`prov:wasGeneratedBy` pointing at a `{base}episode_…` activity, the predicate is
+in the configured base namespace, and the object is a **literal**. That last
+condition is what separates the `properties` map from the edge path: edge
+relations resolve to node references and already pass through
+`resolve_edge_predicate`, which is a fence. The two predicates episode ingest
+emits structurally — `aegis:groupId` and `aegis:contentHash` — are excluded by
+name, because the writer's own vocabulary reported as agent drift would put a
+permanent floor under every report.
+
+**What "no shape mentions it" means.** A predicate is treated as governed if its
+IRI appears *anywhere* in any loaded shape's graph — as an `sh:path`, a target,
+or any other position. That is the widest reading of "mentions", chosen
+deliberately: this is a report an operator acts on, and a false alarm costs more
+here than a missed one.
+
+**What the seen window honestly is.** `first_seen` / `last_seen` are the earliest
+and latest `valid_from` among the facts using the predicate. The store keeps no
+separate mint timestamp, so this answers "since when has this predicate been in
+use", not "when was this IRI first interned" — and a fact re-asserted with an
+older valid time genuinely moves `first_seen` backwards.
+
+Scans the ROOT graph by default; `--graph <iri>` scans one named graph instead. A
+graph IRI that names no graph is an error, not an empty result — "no drift in the
+graph you named" and "there is no such graph" are different answers and only one
+should let an operator stop looking.
+
 ### `quipu audit replay <trace.jsonl>`
 
 Re-check a recorded window against the **current** Σ and report what promoting

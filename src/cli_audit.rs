@@ -13,16 +13,17 @@
 use quipu::governance::audit::{self, Report, Severity};
 use quipu::governance::inheritance;
 use quipu::governance::inventory;
+use quipu::governance::namespace;
 use quipu::governance::replay;
 use quipu::governance::tree;
 
 /// Run a checker: `audit <trace.jsonl>` against a trace, `audit inventory`
 /// against the dispatch graph, `audit replay <trace.jsonl>` for promotion
-/// readiness.
-pub fn cmd_audit(args: &[String], db_path: &str) {
+/// readiness, `audit namespace` for base-namespace drift.
+pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
     let Some(subject) = args.get(2).filter(|a| !a.starts_with("--")) else {
         eprintln!(
-            "usage: quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>|\
+            "usage: quipu audit <trace.jsonl>|inventory|namespace|replay <trace.jsonl>|\
              tree <trace.jsonl>|inheritance <trace.jsonl> [--json] [--db <path>]"
         );
         std::process::exit(1);
@@ -35,6 +36,10 @@ pub fn cmd_audit(args: &[String], db_path: &str) {
     }
     if subject == "tree" {
         cmd_tree(args);
+        return;
+    }
+    if subject == "namespace" {
+        cmd_namespace(args, &store, base_ns);
         return;
     }
 
@@ -217,6 +222,76 @@ fn cmd_replay(args: &[String], store: &quipu::Store) {
     println!();
     for rule in &report.rules {
         println!("{}", rule.line());
+    }
+}
+
+/// `quipu audit namespace` — base-namespace predicates episode ingest minted
+/// that no loaded shape mentions (`statement-identity.md` §8).
+///
+/// **Exits 0 whatever it finds, by design.** The design names the cheapest
+/// useful version as a report and not a block, and this is that: drift is a
+/// thing an operator reads and decides about, not a thing that fails a build.
+/// Gating on it would reject writes every deployment is already making, the
+/// gate would be switched off, and the drift would go back to being invisible.
+fn cmd_namespace(args: &[String], store: &quipu::Store, base_ns: &str) {
+    let graph = args
+        .windows(2)
+        .find(|w| w[0] == "--graph")
+        .map(|w| w[1].as_str());
+    let report = namespace::check(store, base_ns, graph).unwrap_or_else(|e| {
+        eprintln!("error checking namespace: {e}");
+        std::process::exit(1);
+    });
+
+    if args.iter().any(|a| a == "--json") {
+        let predicates: Vec<serde_json::Value> = report
+            .ungoverned
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "iri": p.iri,
+                    "local": p.local,
+                    "facts": p.facts,
+                    "subjects": p.subjects,
+                    "first_seen": p.first_seen,
+                    "last_seen": p.last_seen,
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "summary": report.summary(),
+                "graph": report.graph,
+                "minted": report.minted(),
+                "governed": report.governed,
+                "shapes_loaded": report.shapes_loaded,
+                "shape_terms": report.shape_terms,
+                "subjects_scanned": report.subjects_scanned,
+                "ungoverned": predicates,
+            })
+        );
+        return;
+    }
+
+    println!("{}", report.summary());
+    if report.ungoverned.is_empty() {
+        return;
+    }
+    println!();
+    for p in &report.ungoverned {
+        // first/last seen are valid-time bounds on the facts, not mint times —
+        // see the module doc. Labelled "in use" so the line does not claim more
+        // than the store can say.
+        println!(
+            "UNGOVERNED {iri}: {facts} fact(s) on {subjects} subject(s), \
+             in use {first} .. {last}",
+            iri = p.iri,
+            facts = p.facts,
+            subjects = p.subjects,
+            first = p.first_seen,
+            last = p.last_seen,
+        );
     }
 }
 

@@ -163,6 +163,7 @@ quipu repl --db my.db
 # Governance: check an agent's enforcement trace against the policy set
 quipu audit trace.jsonl --db my.db          # T ⊨ Σ — exits 1 on a violation
 quipu audit inventory --db my.db            # which tool classes are ungoverned
+quipu audit namespace --db my.db            # which minted predicates no shape mentions
 quipu audit replay trace.jsonl --db my.db   # advise → enforce readiness, per rule
 ```
 
@@ -382,6 +383,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Authority intersection over named graphs | ✅ | Off by default; a delegate can only narrow |
 | `T ⊨ Σ` audit checker | ✅ | `quipu audit`; four passes, deterministic, never an LLM call |
 | Dispatch-graph inventory (I7) | ✅ | `quipu audit inventory`; ungoverned classes are data, not prose |
+| Namespace-drift report | ✅ | `quipu audit namespace`; report-only, never refuses a write |
 | Replay / promotion readiness | ✅ | `quipu audit replay`; counts blocks, cannot label false positives |
 | Attribution tree, constraint inheritance | ✅ | `quipu audit tree` / `inheritance` — reconstructed from principal chains |
 | Trust predicate over imported state | 🔜 | The boundary is declared and reported; nothing evaluates the content |

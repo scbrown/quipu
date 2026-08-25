@@ -2,8 +2,10 @@
 
 > **Implementation status (2026-08-04):** ⬜ **Analysis and proposal, not built.**
 > The mechanism this document generalizes already exists in one hardcoded form:
-> `src/episode/mod.rs:560` reifies an edge to carry `quipu:confidence`. Nothing
-> else here is implemented.
+> `src/episode/mod.rs:560` reifies an edge to carry `quipu:confidence`.
+> **Exception (2026-08-25):** §8's namespace-governance report is now built as
+> `quipu audit namespace` — see that section's own banner. Nothing else here is
+> implemented, and in particular no statement-identity machinery exists.
 
 This note answers a design question raised against Quipu: *should Quipu adopt
 property-graph features — key/value attributes on entities, and the traversal
@@ -299,6 +301,13 @@ protocol, and an unmeasurable claim.
 
 ## 8. Adjacent risk — namespace governance
 
+> **Implementation status (2026-08-25):** ✅ **Built** — `quipu audit namespace`
+> (`src/governance/namespace.rs`, `src/cli_audit.rs::cmd_namespace`, documented
+> at `docs/book/src/reference/cli.md`). This section only; the rest of this
+> document is still analysis, per the banner at the top. §9 item 4 calls the
+> report independent of Proposals A and B, which is why it could land without
+> them, and it did: nothing here creates statement identity.
+
 Worth settling alongside this work, because Proposal A widens the same path.
 Today every key in an episode node's `properties` map becomes a predicate in the
 base namespace via `sanitize_iri_local`, with no shape governing which keys are
@@ -311,6 +320,25 @@ version is a report, not a block: list predicates minted by episode ingest that
 no shape mentions — the same shape as `quipu audit inventory`, which already
 answers "which tool classes are ungoverned."
 
+**What shipped, and what it can honestly say.** `quipu audit namespace` reports
+each base-namespace predicate carried by an episode-written subject (one whose
+`prov:wasGeneratedBy` names a `{base}episode_…` activity) with a **literal**
+object — the literal condition is what isolates the `properties` map from the
+edge path, which already passes through `resolve_edge_predicate`. Per predicate
+it gives the IRI, the fact count, the distinct-subject count, and the window it
+has been in use. It exits `0` always and refuses nothing, per the paragraph
+above.
+
+Two honesty notes, because the fields this section named are not all things the
+store can supply as written. **First/last seen** are the earliest and latest
+`valid_from` among the facts using the predicate: the fact log keeps no separate
+mint timestamp, so the report answers "since when has this predicate been in
+use", not "when was this IRI first interned", and it says so on the line it
+prints. **"No shape mentions it"** is implemented as the widest reading — the
+IRI appears nowhere in any loaded shape's graph, in any position — which biases
+toward under-reporting rather than crying wolf about a predicate some shape
+constrains through a path expression.
+
 ## 9. Suggested ordering
 
 1. **Proposal A** (statement identity + edge properties) — unblocks governance
@@ -320,7 +348,9 @@ answers "which tool classes are ungoverned."
 3. **Trace ingestion into the store**, so `governance/tree.rs` becomes a query
    rather than a reconstruction. Much the largest change, depends on (1) for
    per-dispatch identity, and wants its own design note before any code.
-4. **Namespace governance report** (§8) — independent of the others, and cheap.
+4. ~~**Namespace governance report** (§8) — independent of the others, and
+   cheap.~~ **Done (2026-08-25):** `quipu audit namespace`. Its independence is
+   what let it land first; (1)–(3) are unchanged by it.
 
 A property-graph query surface (§7) is deliberately absent from this list. It is
 gated on (1) and (2) landing, and on the demand still existing afterwards.

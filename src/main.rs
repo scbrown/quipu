@@ -14,6 +14,7 @@
 //!   quipu stats [--db <path>]            Show store statistics
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
+//!   quipu audit namespace                                   Report base-namespace drift
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
 //!   quipu db attach --list                List the databases mounted alongside this store
 //!   quipu pack <graph-iri> --out <file> [--space N]  Export a graph as an attachable pack
@@ -87,7 +88,7 @@ fn main() {
         "policy" => cli_policy::cmd_policy(&args, db_path),
         "path" => cli_path::cmd_path(&args, db_path, &config.base_ns),
         "propose" => cli_propose::cmd_propose(&args, db_path),
-        "audit" => cli_audit::cmd_audit(&args, db_path),
+        "audit" => cli_audit::cmd_audit(&args, db_path, &config.base_ns),
         "ontology" => cmd_ontology(&args, db_path),
         "validate" => cli_commands::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
@@ -283,6 +284,7 @@ COMMANDS:
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
+    quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
 OPTIONS:

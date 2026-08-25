@@ -18,6 +18,7 @@ pub mod guard;
 pub mod inheritance;
 pub mod inventory;
 pub mod linkage;
+pub mod namespace;
 pub mod placement;
 pub mod precedent;
 pub mod replay;
