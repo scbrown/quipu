@@ -2,6 +2,68 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.25] - 2026-08-24
+
+### Added
+
+- *(shapes)* Expose loaded class vocabulary([5c29abe](https://github.com/scbrown/quipu/commit/5c29abe1c9458b525ba5920535edc0a36d52a7dc))
+- *(shapes)* Declare Chunk, Credential and BeadScope([12dec00](https://github.com/scbrown/quipu/commit/12dec007251e5117398dcf81bf1ef35a911b10ee))
+- *(vocabulary)* Advise when a write types a node no shape governs([3524a82](https://github.com/scbrown/quipu/commit/3524a825020389d6908e1e6cb74e403dbaff2105))
+- *(ontology)* Describe desired crew composition([5e05ebf](https://github.com/scbrown/quipu/commit/5e05ebf6dc8c02ec8b37e4e3ad8349c01e5f69a0))
+- *(governance)* Tripwire policies — declare aegis:appliesTo, ship the path-boundary catalog([0ae7e88](https://github.com/scbrown/quipu/commit/0ae7e88e480d9fd1d5603a9f574fedb874e37267))
+- DataKind label axis — categorical graph-kind dimension on the label lattice([f9e0ce7](https://github.com/scbrown/quipu/commit/f9e0ce7e0b790ae2da14c7e412d42226eaa3ef81))
+- GET /graphs listing + include_kinds query widening([20e6676](https://github.com/scbrown/quipu/commit/20e66769cdb69aaebad4b0383871f0928cee65e0))
+- Deep freeze — relocate a graph's full history into a composable read-only archive([df12db9](https://github.com/scbrown/quipu/commit/df12db93a416f267233e9b24319bd0a1c626650a))
+
+### CI/CD
+
+- *(shapes)* Run verify_shape_invariants — the gate was wired into nothing([d4206b7](https://github.com/scbrown/quipu/commit/d4206b7a245eccf88113014c983c69c3377392e4))
+
+### Changed
+
+- *(vocabulary)* Move the episode advisory out of episode/mod.rs([7596a1a](https://github.com/scbrown/quipu/commit/7596a1ab83ed51ac7dca327ebab1a31ef5071a10))
+- *(read-model)* Split the applicability guard out to unbreak check-file-size([08be8a4](https://github.com/scbrown/quipu/commit/08be8a4c35f35a90c694567bcde66d54e5854923))
+- *(read-model)* Split the index out, rather than raise the size baseline([afb8707](https://github.com/scbrown/quipu/commit/afb870792dfcfadcf9cb197cd5e131e4840e59da))
+- *(episode)* Isolate description reconciliation([01e342e](https://github.com/scbrown/quipu/commit/01e342e3947b4f2f6aadfca3b6266ea0da1b3ce1))
+
+### Documentation
+
+- Document graph scopes and agent access order([c3c1a9d](https://github.com/scbrown/quipu/commit/c3c1a9d8df80f0954d0982290496bfc0c60a5beb))
+- Catch the book and README up with the dataKind axis, tripwires, and episode description revisions([4c446aa](https://github.com/scbrown/quipu/commit/4c446aa38097c077a04456d2460a8ba48f39c2e4))
+
+### Fixed
+
+- *(ci)* Restore green ratchets and clippy([a2b1f42](https://github.com/scbrown/quipu/commit/a2b1f42acd50cb20fd57701ac8d1b9131cb61c22))
+- *(ci)* Satisfy remote-feature clippy([9ef4f18](https://github.com/scbrown/quipu/commit/9ef4f1822603eb16ce31614f4b423e234b84476b))
+- *(ci)* Baseline integrated reasoner growth([94faeeb](https://github.com/scbrown/quipu/commit/94faeeb91418c2db5e427abe2cb2fa3dd98ac306))
+- *(shapes)* Stop I1/I2/I3 claiming coverage they never had([d3d9d8b](https://github.com/scbrown/quipu/commit/d3d9d8b33684afd6b708afe84df4166417be9761))
+- *(shacl)* Repair an incremental write with the floor the store already holds([37f5c3b](https://github.com/scbrown/quipu/commit/37f5c3bb5efb0b97379edb34645aaa605073498f))
+- *(read-model)* Check freshness against the database, not in-process bookkeeping([382ac15](https://github.com/scbrown/quipu/commit/382ac1555b63ab0056f5cd255d6e2dbd0812f11d))
+- *(ci)* Rustfmt + doc backticks in read_model tests([8cd37f0](https://github.com/scbrown/quipu/commit/8cd37f0e1454433834f78572509d23578d6cb63b))
+- *(ci)* Rustfmt read_model.rs too — the Format gate covers both files([8506e32](https://github.com/scbrown/quipu/commit/8506e32308e2ca3ed553b870cb0d90bdce0550d8))
+- *(release)* Reject tracked files hidden by ignore rules([9f925cd](https://github.com/scbrown/quipu/commit/9f925cdfa7796e55e012358c2f8adeec35ba4eaf))
+- Preserve canonical slash node paths in episodes([adb1b27](https://github.com/scbrown/quipu/commit/adb1b273f6287cfa4c99b0061dabbd817d8a209e))
+- /episode graph field registers the graph instead of bare-interning (camayoc-s0h)([9401926](https://github.com/scbrown/quipu/commit/9401926b71d7364261ec714108f70eb1c9815176))
+- *(deploy)* Serialize Quipu installs with attributed lock([8f042c3](https://github.com/scbrown/quipu/commit/8f042c36bbaa144753cee3d0b05f9b8cbde4c469))
+- *(ci)* Count CODE lines in the file-size ratchet, and split the MCP manifest([3aa1327](https://github.com/scbrown/quipu/commit/3aa1327d986a432dddeb82393c877f0635e4ad62))
+- *(ci)* Missing trailing newline in the file-size selftest([7d3aa2d](https://github.com/scbrown/quipu/commit/7d3aa2d41c93099bbc0a65070c56d705781999f9))
+- Keep metrics off the writer queue([8264870](https://github.com/scbrown/quipu/commit/82648700e692139a4d669066d9077211b6fd9907))
+- *(metrics)* Cap caller identities, not endpoint pairs([15cb77f](https://github.com/scbrown/quipu/commit/15cb77f1b50c336bfea828c9be8b1d0c17fc6b26))
+- *(shapes)* Govern Concept and Component([e8c5e0c](https://github.com/scbrown/quipu/commit/e8c5e0c16876849220a176d7f99b666f478cf428))
+- *(ci)* Restore wasm and file-size gates([fffa9ae](https://github.com/scbrown/quipu/commit/fffa9ae4a94ca074ab75cd2a580026fd5cb49032))
+- *(ci)* Keep classified graph routes visible([8fb9f83](https://github.com/scbrown/quipu/commit/8fb9f839befaeb48f57fac8be1c6f0549ede3c7f))
+- *(episode)* Preserve superseded descriptions([4cd620a](https://github.com/scbrown/quipu/commit/4cd620a7e5feaee071061c1e90a290df66a91684))
+- Pooled readers compose frozen packs — sync against the registry on acquisition([eecdea9](https://github.com/scbrown/quipu/commit/eecdea984114d80ac6bf112f4dc6fc3145913319))
+- *(episode)* Dedupe multi-type description revisions([b633a7f](https://github.com/scbrown/quipu/commit/b633a7f5888756ac00f11b9fb6d76cb0dc18d810))
+
+### Miscellaneous
+
+- *(beads)* Close quipu-uq2/-k7w/-cbh — graph kinds + deep freeze shipped (jsonl export)([1a0f911](https://github.com/scbrown/quipu/commit/1a0f911036a865e4d01ab571c70756924c1c41ef))
+
+### Testing
+
+- *(episode)* Cover legacy comment migration([94ab1cb](https://github.com/scbrown/quipu/commit/94ab1cb75b8be9c19b0137b7b84571f57a6e52ba))
+
 ## [0.3.24] - 2026-08-22
 
 ### Added
