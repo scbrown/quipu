@@ -376,6 +376,13 @@ impl Store {
         self.validate_policy_placement(&staged_datums, graph)
             .map_err(|e| self.stash_refusal("placement", e, staged_datums.len()))?;
 
+        // Transition-signature gate (quipu-8cc): a staged
+        // `aegis:TransitionEvent` must carry a signature that verifies under
+        // its performing agent's registered key, or the write rolls back.
+        // Same contract and refusal plumbing as the placement check above.
+        self.verify_transition_signatures(&staged_datums, graph)
+            .map_err(|e| self.stash_refusal("transition", e, staged_datums.len()))?;
+
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.

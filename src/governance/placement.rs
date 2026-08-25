@@ -503,7 +503,11 @@ pub fn validate_write(store: &Store, datums: &[Datum], graph: i64) -> Result<()>
 /// the attributes written: amending an unrelated field of a malformed
 /// definition should still surface the malformation, and adding the rdf:type
 /// to an existing node is itself a definition.
-fn touched_of_type(
+///
+/// Crate-visible: the transition-signature gate (`super::transition`) scans
+/// the same pending post-state for `aegis:TransitionEvent`s, and two copies of
+/// "what did this write touch" would eventually disagree.
+pub(crate) fn touched_of_type(
     store: &Store,
     datums: &[Datum],
     graph: i64,

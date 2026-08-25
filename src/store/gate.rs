@@ -384,6 +384,19 @@ impl Store {
         crate::governance::validate_placement(self, datums, graph)
     }
 
+    /// Verify agent transition signatures for any `aegis:TransitionEvent`
+    /// this write defines or amends (`src/governance/transition.rs`,
+    /// quipu-8cc). Gated by `[quipu.governance] verify_transitions`, default
+    /// off. Independent of `enforce_on_write` for the same reason the
+    /// placement check is: authenticity of a recorded transition is a
+    /// different question from policy evaluation over it.
+    pub(crate) fn verify_transition_signatures(&self, datums: &[Datum], graph: i64) -> Result<()> {
+        if !self.governance_config.verify_transitions || self.recording_verdicts {
+            return Ok(());
+        }
+        crate::governance::verify_transitions(self, datums, graph)
+    }
+
     /// Invalidate the cached policy registry if this transaction defined or
     /// amended a governance policy. Cheap no-op unless enforcement is enabled.
     pub(crate) fn invalidate_policy_registry_if_governance(

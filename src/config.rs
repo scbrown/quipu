@@ -196,6 +196,21 @@ pub struct GovernanceConfig {
     /// job, and nothing will say so.
     pub validate_placement: bool,
 
+    /// Verify agent transition signatures at the write gate
+    /// (`src/governance/transition.rs`, quipu-8cc). When set, a write that
+    /// defines or amends an `aegis:TransitionEvent` is refused unless the
+    /// event carries an `aegis:signature` that verifies — over shuttle's
+    /// canonical `shuttle-transition-v1` message, re-derived from the staged
+    /// facts — under a public key registered for the performing agent as an
+    /// `aegis:VerifierRegistration`. Unsigned, unregistered-signer, and
+    /// tampered transitions are refused at write time rather than only
+    /// detected later by consumer-side re-verification (`shuttle verify`).
+    ///
+    /// Default false — opt in, mirroring [`Self::validate_placement`]: events
+    /// already in the graph are not re-validated, so flipping this on cannot
+    /// retroactively break a store, only refuse the next unverifiable write.
+    pub verify_transitions: bool,
+
     /// Enforce authority intersection over named graphs on the write path
     /// (`src/governance/authority.rs`, SARC I5). When a caller has set a
     /// principal chain, a write to a graph the chain's INTERSECTED authority

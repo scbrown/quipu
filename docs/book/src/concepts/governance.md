@@ -155,6 +155,25 @@ facts carry each verifier's name, hex `aegis:publicKey`, and the predicates it
 Verification is currently latest-only; the bitemporal key registry (rotation
 with as-of re-verification) is designed but not built.
 
+## Transition signatures at the write gate
+
+Shuttle signs every workflow transition with the performing agent's ed25519
+key over the canonical message
+`shuttle-transition-v1|{run}|{step}|{from}|{to}|{at}|{agent}` and exports the
+signature as an ordinary `aegis:signature` fact on the
+`aegis:TransitionEvent` — re-derivable from the exported facts alone, so
+consumers can re-check it (`shuttle verify`). Under
+`[quipu.governance] verify_transitions` (default off), quipu re-checks it
+**at the write gate** (`src/governance/transition.rs`): a write landing a
+`TransitionEvent` that is unsigned, signed by an agent with no
+`aegis:VerifierRegistration`, or whose signature does not verify over the
+staged fields under any of the agent's registered keys is refused before it
+commits — forged and tampered transitions become unwritable rather than
+merely detectable. The registry read spans every graph (shuttle's convention
+keeps registrations in a never-frozen `dataKind=identity` named graph);
+protecting the registry itself from unauthorized writes is `enforce_authority`'s
+job, exactly as for signed decisions.
+
 ## Authority over graphs
 
 `aegis:Principal` facts hold `aegis:authorityOver` graph IRIs (or `*`). A call

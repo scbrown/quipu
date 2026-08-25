@@ -23,8 +23,10 @@ pub mod precedent;
 pub mod replay;
 pub mod router;
 pub mod similarity;
+pub mod transition;
 pub mod tree;
 pub mod verdict_facts;
 
 pub use guard::{PolicyRegistry, is_governance_write};
 pub use placement::validate_write as validate_placement;
+pub use transition::verify_write as verify_transitions;
