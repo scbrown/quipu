@@ -110,6 +110,9 @@ struct Placement {
     reversibility_window: Option<String>,
     on_timeout: Option<String>,
     hosted_at_layer: Option<String>,
+    /// The `aegis:backoffFormula` a `throttle` effect compiles. Presence is
+    /// what the rule tests; the expression itself is the consumer's to parse.
+    backoff_formula: Option<String>,
     /// The tier(s) of the predicate this policy composes, read through
     /// `aegis:predicate`. A Vec, not an Option: a policy mid-re-composition can
     /// see two predicates (or one re-tiered predicate) in the pending state,
@@ -201,6 +204,26 @@ impl Placement {
                  layer — a constraint expressed as an instruction the model may \
                  reinterpret or route around is not enforcement, and hosting one \
                  there is what SARC I6 forbids."
+            ));
+        }
+
+        // A `throttle` effect is a RESPONSE — the consumer compiles its
+        // declared backoff and applies it to subsequent actions. Without an
+        // `aegis:backoffFormula` there is nothing to compile: yupana's PAA
+        // records the crossing and applies NO throttle (loudly), so the wire
+        // reads as armed while pricing nothing — the same
+        // present-but-incapable shape as a hard constraint at the PAA. Checked
+        // BEFORE the boundary exemption, like the value checks above, because
+        // an uncompilable response is wrong wherever the policy binds.
+        if self.effect.as_deref() == Some("throttle") && self.backoff_formula.is_none() {
+            return Some(format!(
+                "policy '{iri}' declares aegis:effect \"throttle\" but no \
+                 aegis:backoffFormula. A throttle without a declared backoff is \
+                 a response nobody can compile: the consumer records the \
+                 crossing and applies NO throttle, so the wire looks armed and \
+                 prices nothing. Declare aegis:backoffFormula (the expression \
+                 the consumer compiles, e.g. \"exp(min(overage / 1.0, 8.0))\"), \
+                 or use a different effect."
             ));
         }
 
@@ -539,7 +562,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
          SELECT ?p ?boundary ?class ?point ?effect ?window ?timeout ?layer \
-                ?ptier ?op ?fp WHERE {{ \
+                ?backoff ?ptier ?op ?fp WHERE {{ \
             ?p a a:Policy . \
             OPTIONAL {{ ?p a:boundary ?boundary }} \
             OPTIONAL {{ ?p a:constraintClass ?class }} \
@@ -548,6 +571,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
             OPTIONAL {{ ?p a:reversibilityWindowSeconds ?window }} \
             OPTIONAL {{ ?p a:onTimeout ?timeout }} \
             OPTIONAL {{ ?p a:hostedAtLayer ?layer }} \
+            OPTIONAL {{ ?p a:backoffFormula ?backoff }} \
             OPTIONAL {{ ?p a:predicate ?pred . ?pred a:tier ?ptier }} \
             OPTIONAL {{ ?p a:operatingPoint ?op }} \
             OPTIONAL {{ ?p a:operatingPoint ?opfp . \
@@ -582,6 +606,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 ("reversibilityWindowSeconds", "window"),
                 ("onTimeout", "timeout"),
                 ("hostedAtLayer", "layer"),
+                ("backoffFormula", "backoff"),
             ] {
                 if let Some(v) = lexical(row.get(binding)) {
                     let seen = entry.entry(field).or_default();
@@ -630,6 +655,7 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
                 reversibility_window: single("reversibilityWindowSeconds"),
                 on_timeout: single("onTimeout"),
                 hosted_at_layer: single("hostedAtLayer"),
+                backoff_formula: single("backoffFormula"),
                 predicate_tiers: composed.get("predicateTier").cloned().unwrap_or_default(),
                 has_operating_point: composed.contains_key("operatingPoint"),
                 fp_tolerances: composed

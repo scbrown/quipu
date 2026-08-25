@@ -59,7 +59,11 @@ convenience: the `deny` wire is **hard at the PAG** (admissibility is decided
 before dispatch — the edit must never land), and the `throttle` wire is
 **soft at the PAA** with a declared `aegis:backoffFormula` (it prices a
 completed crossing and backs off the actions after it, never the crossing
-itself). There is no soft-at-the-gate wire — a soft constraint has nothing to
+itself). That formula is not optional decoration: under `validate_placement`
+the write gate refuses any policy declaring `effect "throttle"` without an
+`aegis:backoffFormula` — a throttle with no backoff is a response nobody can
+compile, so the consumer records the crossing and applies no throttle, an
+armed-looking wire that prices nothing. There is no soft-at-the-gate wire — a soft constraint has nothing to
 price before the action lands. Re-scoping a wire is amending the policy:
 the write gate treats an `appliesTo` write as governance-defining and
 invalidates the cached policy registry.

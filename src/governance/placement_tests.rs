@@ -933,6 +933,131 @@ fn an_inexact_policy_claiming_exactness_is_refused_at_the_write_path() {
     );
 }
 
+// ── Throttle effect requires a declared backoff (quipu-aox) ──────────────────
+//
+// A `throttle` with no `aegis:backoffFormula` is a response nobody can
+// compile: yupana's PAA records the crossing and applies NO throttle (loudly),
+// so the wire looks armed and prices nothing. SHACL core cannot state the
+// conditional; the rule lives here beside the class/point table.
+
+fn throttle_wire(backoff: Option<&str>) -> Placement {
+    Placement {
+        boundary: Some("action".to_string()),
+        class: Some("soft".to_string()),
+        point: Some("PAA".to_string()),
+        effect: Some("throttle".to_string()),
+        backoff_formula: backoff.map(str::to_string),
+        ..Placement::default()
+    }
+}
+
+#[test]
+fn a_throttle_effect_without_a_backoff_formula_is_rejected() {
+    let why = throttle_wire(None).violation("aegis:p").unwrap();
+    assert!(why.contains("aegis:p"), "names the policy: {why}");
+    assert!(
+        why.contains("backoffFormula"),
+        "names the missing field: {why}"
+    );
+    assert!(
+        why.contains("prices nothing"),
+        "names the failure mode — armed-looking, priceless wire: {why}"
+    );
+    assert!(why.contains("Declare"), "names the remedy: {why}");
+}
+
+#[test]
+fn a_throttle_effect_with_its_backoff_conforms() {
+    // The green half — the shipped tripwire wire's exact shape
+    // (aegis:policy_tripwire_generated_throttle).
+    assert!(
+        throttle_wire(Some("exp(min(overage / 1.0, 8.0))"))
+            .violation("p")
+            .is_none()
+    );
+}
+
+#[test]
+fn a_non_throttle_effect_needs_no_backoff() {
+    // The rule keys on the EFFECT: nothing else acquires a backoff demand.
+    for effect in ["deny", "warn", "record", "allow"] {
+        let mut p = action(Some("hard"), Some("PAG"));
+        p.effect = Some(effect.to_string());
+        assert!(
+            p.violation("p").is_none(),
+            "effect \"{effect}\" must not demand a backoffFormula"
+        );
+    }
+}
+
+#[test]
+fn the_throttle_rule_applies_outside_the_action_boundary_too() {
+    // Like onTimeout/hostedAtLayer, checked BEFORE the boundary exemption: an
+    // uncompilable response is wrong wherever the policy binds.
+    let p = Placement {
+        boundary: Some("transition".to_string()),
+        effect: Some("throttle".to_string()),
+        ..Placement::default()
+    };
+    assert!(
+        p.violation("p").is_some(),
+        "a transition-boundary throttle still needs its backoff"
+    );
+}
+
+/// The SARC fields of a throttle wire, with or without its backoff.
+fn throttle_fields(with_backoff: bool) -> Vec<(&'static str, &'static str)> {
+    let mut f = vec![
+        ("targets", "CodeModule"),
+        ("claim", "ASK { ?s ?p ?o }"),
+        ("boundary", "action"),
+        ("effect", "throttle"),
+        ("constraintClass", "soft"),
+        ("verificationPoint", "PAA"),
+    ];
+    if with_backoff {
+        f.push(("backoffFormula", "exp(min(overage / 1.0, 8.0))"));
+    }
+    f
+}
+
+#[test]
+fn a_backoffless_throttle_is_refused_at_the_write_path() {
+    // Liveness: this fails if read_placements stops projecting ?backoff, the
+    // way the ?layer projection once regressed (quipu-sio).
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    let err = define(&mut store, "http://ex/p", &throttle_fields(false));
+    let Err(Error::PolicyDenied(why)) = err else {
+        panic!("a throttle with no backoffFormula must be refused at write, got {err:?}");
+    };
+    assert!(
+        why.contains("backoffFormula") && why.contains("http://ex/p"),
+        "the refusal names the field and the policy: {why}"
+    );
+}
+
+#[test]
+fn a_throttle_declaring_its_backoff_lands_with_the_flag_on() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().validate_placement = true;
+    define(&mut store, "http://ex/p", &throttle_fields(true))
+        .expect("a throttle wire declaring its backoff must land");
+}
+
+#[test]
+fn the_backoffless_throttle_control_lands_with_the_flag_off() {
+    // Same datums, flag off => accepted: the rejection above is attributable
+    // to this check and nothing else.
+    let mut store = Store::open_in_memory().unwrap();
+    assert!(
+        !store.governance_config_mut().validate_placement,
+        "the flag must default to off"
+    );
+    define(&mut store, "http://ex/p", &throttle_fields(false))
+        .expect("with validation off the same definition lands");
+}
+
 #[test]
 fn a_calibrated_inexact_policy_lands_at_the_paa() {
     // The GREEN case for the whole composition: soft, advisory, at the PAA,
