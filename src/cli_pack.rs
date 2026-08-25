@@ -113,8 +113,8 @@ pub fn cmd_unpack(args: &[String], db_path: &str) {
     };
     match quipu::pack::unpack(pack, db_path, flag_value(args, "--into"), &chrono_now()) {
         Ok(r) => println!(
-            "unpacked {pack} into {}\n  facts: {}\n  shapes: {}\n  queries: {}",
-            r.graph, r.facts, r.shapes, r.queries
+            "unpacked {pack} into {}\n  facts: {}\n  shapes: {}\n  queries: {}\n  vectors: {}",
+            r.graph, r.facts, r.shapes, r.queries, r.vectors
         ),
         Err(e) => {
             eprintln!("unpack error: {e}");

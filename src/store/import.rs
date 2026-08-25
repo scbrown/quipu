@@ -15,6 +15,8 @@ pub struct ImportReport {
     pub transactions: usize,
     pub facts: usize,
     pub graph: i64,
+    /// Entity embeddings carried across, re-keyed by IRI (quipu-0v4).
+    pub vectors: usize,
 }
 
 /// Import every fact from `src` into the local named graph `graph_iri` in `dst`.
@@ -125,13 +127,70 @@ pub fn import_graph(dst: &Path, src: &Path, graph_iri: &str) -> Result<ImportRep
             )));
         }
     }
+    // Entity embeddings, re-keyed through the same dictionary as the facts
+    // (quipu-0v4). Without this an import silently drops every embedding the
+    // source carried — the `pack --with-vectors` flag produced a pack whose
+    // vectors nothing on the read side ever restored, which is the same
+    // accepted-and-inert defect that flag's own comment warns about.
+    //
+    // A row whose entity did not travel is skipped rather than interned: a
+    // vector pointing at an IRI this import did not bring is dangling.
+    let vectors = copy_vectors(&source, &tx, |foreign| ids.get(&foreign).copied())?;
+
     tx.commit()?;
     Ok(ImportReport {
         terms: source_terms.len(),
         transactions: tx_ids.len(),
         facts,
         graph,
+        vectors,
     })
+}
+
+/// Copy `source`'s `vectors` rows into `dest`, mapping each `entity_id`
+/// through `map_entity`. Rows the map does not resolve are skipped.
+///
+/// Shared by the offline import above and the thaw path
+/// (`super::freeze_io`), which map entities by different routes but write
+/// identical rows. `INSERT OR IGNORE` makes a re-run idempotent against the
+/// `(entity_id, valid_from)` primary key — thaw restores into a store that
+/// usually still holds the same embeddings.
+///
+/// # Errors
+/// Propagates `SQLite` failures. A source with no `vectors` table (a foreign
+/// or hand-built file) contributes nothing rather than failing.
+pub(crate) fn copy_vectors(
+    source: &Connection,
+    dest: &Connection,
+    mut map_entity: impl FnMut(i64) -> Option<i64>,
+) -> Result<usize> {
+    let has_table: bool = source
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='vectors'")?
+        .exists([])?;
+    if !has_table {
+        return Ok(0);
+    }
+    let mut stmt =
+        source.prepare("SELECT entity_id, text, embedding, valid_from, valid_to FROM vectors")?;
+    type VectorRow = (i64, String, Vec<u8>, String, Option<String>);
+    let rows: Vec<VectorRow> = stmt
+        .query_map([], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })?
+        .collect::<std::result::Result<_, _>>()?;
+    let mut copied = 0;
+    for (entity_id, text, embedding, valid_from, valid_to) in rows {
+        let Some(local) = map_entity(entity_id) else {
+            continue;
+        };
+        dest.execute(
+            "INSERT OR IGNORE INTO vectors (entity_id, text, embedding, valid_from, valid_to) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![local, text, embedding, valid_from, valid_to],
+        )?;
+        copied += 1;
+    }
+    Ok(copied)
 }
 
 fn mapped(map: &HashMap<i64, i64>, id: i64) -> Result<i64> {

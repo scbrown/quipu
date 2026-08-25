@@ -94,6 +94,9 @@ pub struct UnpackReport {
     pub shapes: usize,
     /// Versioned stored queries installed.
     pub queries: usize,
+    /// Entity embeddings restored from the pack, re-keyed by IRI (quipu-0v4).
+    /// A pack built without `--with-vectors` carries none and reports 0.
+    pub vectors: usize,
 }
 
 /// Materialize a pack into `destination`, installing registries by their
@@ -133,6 +136,7 @@ pub fn unpack(
         facts: imported.facts,
         shapes: shapes.len(),
         queries: queries.len(),
+        vectors: imported.vectors,
     })
 }
 

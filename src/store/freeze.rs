@@ -16,7 +16,13 @@
 //! and quipu already refuses `as_of_tx` on stores with attachments
 //! (`sparql/mod.rs`), so that boundary is pre-existing and honestly refused,
 //! not newly silent. Valid-time travel survives: rows carry their windows
-//! verbatim. Local embeddings are dropped in v1 (quipu-0v4).
+//! verbatim. Entity embeddings are NOT lost either way (quipu-0v4): freeze
+//! deletes `main.facts` rows and never touches `main.vectors`, so the freezing
+//! store's own semantic search is unchanged, and since pack format 2 the
+//! archive carries the graph's embeddings so a thaw or an import into another
+//! store restores them. What is still NOT composed is an *attached* pack's
+//! `vectors` table — vector search reads `main` only, deliberately, so one
+//! question has one index behind it.
 
 use rusqlite::{OptionalExtension, params};
 use std::path::Path;
@@ -75,6 +81,12 @@ pub struct FreezeReport {
     pub facts: usize,
     /// Transactions carried.
     pub transactions: usize,
+    /// Entity embeddings carried into the pack (quipu-0v4). The local store
+    /// keeps its own copy either way — a freeze deletes facts, never vectors.
+    pub vectors: usize,
+    /// Why no embeddings were carried, when the reason was not "there were
+    /// none": a non-enumerable vector backend. Printed, never swallowed.
+    pub vectors_omitted: Option<String>,
 }
 
 impl Store {
@@ -160,7 +172,7 @@ impl Store {
                 )));
             }
         }
-        let (facts, transactions) = super::freeze_io::export_graph_history(
+        let (facts, transactions, carry) = super::freeze_io::export_graph_history(
             self,
             graph_iri,
             g,
@@ -234,6 +246,8 @@ impl Store {
             content_hash,
             facts,
             transactions,
+            vectors: carry.carried,
+            vectors_omitted: carry.omitted,
         })
     }
 
@@ -242,12 +256,17 @@ impl Store {
     ///
     /// The pack file is KEPT on disk (deleting it is a human act), and the
     /// `frozen_packs` row is closed with `thawed_at`, never deleted.
+    ///
+    /// Returns `(facts_restored, vectors_restored)`. The vector restore is
+    /// idempotent — a freeze never removed the local rows — and is refused
+    /// rather than silently skipped when this store's vector backend cannot
+    /// serve them; see `freeze_io::import_graph_history`.
     pub fn thaw_graph(
         &mut self,
         graph_iri: &str,
         timestamp: &str,
         actor: Option<&str>,
-    ) -> Result<usize> {
+    ) -> Result<(usize, usize)> {
         ensure_deep_freeze_supported()?;
         let row: Option<(i64, String, String, String)> = self
             .conn
@@ -274,8 +293,8 @@ impl Store {
         self.unmount_attachment(&alias)?;
 
         self.conn.execute_batch("SAVEPOINT quipu_thaw")?;
-        let result = (|| -> Result<usize> {
-            let facts = super::freeze_io::import_graph_history(self, &path, graph_iri)?;
+        let result = (|| -> Result<(usize, usize)> {
+            let (facts, vectors) = super::freeze_io::import_graph_history(self, &path, graph_iri)?;
             self.conn.execute(
                 "UPDATE main.graphs SET lifecycle = NULL, data_kind = ?2 WHERE g = ?1",
                 params![g, KIND_OPERATIONAL],
@@ -307,12 +326,12 @@ impl Store {
                 params![row_id, timestamp],
             )?;
             self.frozen_dataset_update(graph_iri, false, timestamp, actor)?;
-            Ok(facts)
+            Ok((facts, vectors))
         })();
         match result {
-            Ok(facts) => {
+            Ok(counts) => {
                 self.conn.execute_batch("RELEASE quipu_thaw")?;
-                Ok(facts)
+                Ok(counts)
             }
             Err(e) => {
                 let _ = self

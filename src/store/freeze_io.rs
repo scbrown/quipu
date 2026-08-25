@@ -138,6 +138,9 @@ pub(crate) fn history_canonical(conn: &Connection, g: i64) -> Result<String> {
 /// this exists. Terms and `Ref` payloads are re-interned by IRI through the
 /// destination's own dictionary — correct by construction, the `pack_into`
 /// discipline.
+///
+/// Entity embeddings travel too (quipu-0v4); see [`export_vectors`] for what
+/// is carried and what the archive says when it cannot carry them.
 pub(crate) fn export_graph_history(
     store: &Store,
     graph_iri: &str,
@@ -145,7 +148,7 @@ pub(crate) fn export_graph_history(
     build_path: &str,
     content_hash: &str,
     timestamp: &str,
-) -> Result<(usize, usize)> {
+) -> Result<(usize, usize, VectorCarry)> {
     let out = Store::open(build_path)?;
     let out_g = out.graph_create(graph_iri)?;
 
@@ -223,6 +226,8 @@ pub(crate) fn export_graph_history(
         )?;
     }
 
+    let carry = export_vectors(store, &out, out_g)?;
+
     // The pack's own registry row carries the ARCHIVE label: kind=archive and
     // durability=backed describe what the pack IS, while freshness and policy
     // travel from the source graph. Trust is deliberately dropped — a trust
@@ -261,11 +266,86 @@ pub(crate) fn export_graph_history(
                 "facts": fact_count,
                 "transactions": txs.len(),
                 "history": true,
+                "vectors": carry.carried,
+                // Present ONLY when embeddings could not be carried, and it
+                // says why. A consumer reading `vectors: 0` beside a null
+                // here knows the graph had none; beside a reason it knows the
+                // archive is not vector-complete and must not conclude the
+                // entities were never embedded.
+                "vectors_omitted": carry.omitted,
             })
             .to_string(),
         ],
     )?;
-    Ok((fact_count, txs.len()))
+    Ok((fact_count, txs.len(), carry))
+}
+
+/// What a freeze did about entity embeddings.
+#[derive(Debug, Clone, Default)]
+pub struct VectorCarry {
+    /// Embedding rows written into the archive pack.
+    pub carried: usize,
+    /// Why none were carried, when that was not simply "there were none".
+    pub omitted: Option<String>,
+}
+
+/// Copy embeddings for the archived graph's subjects into the pack, re-keyed
+/// by IRI — the same join `pack --with-vectors` uses, since `vectors.entity_id`
+/// is a local term id that does not travel.
+///
+/// Two deliberate differences from `pack --with-vectors`:
+///
+/// - **Closed embeddings travel too.** A freeze is the FULL-history export;
+///   restricting to `valid_to IS NULL` would relocate the history of the facts
+///   and only the present of the embeddings.
+/// - **Scope is the graph's own subjects**, not every IRI the pack happens to
+///   intern. Predicate and `Ref`-target terms travel so the facts can be read;
+///   carrying their embeddings would put entities the archive is not *about*
+///   into it.
+///
+/// A store whose vector backend is delegated or `LanceDB` cannot be
+/// enumerated, so nothing can be re-keyed. That does not refuse the freeze —
+/// relocating history is not a vector operation and blocking it would be a
+/// non-sequitur — but it is recorded in [`VectorCarry::omitted`], stamped into
+/// the manifest and printed by the CLI, so no archive ever *silently* claims
+/// to be complete when it is not.
+fn export_vectors(store: &Store, out: &Store, out_g: i64) -> Result<VectorCarry> {
+    if !store.has_sqlite_vector_backend() {
+        return Ok(VectorCarry {
+            carried: 0,
+            omitted: Some(
+                "the store's vector backend is delegated or LanceDB, which cannot be \
+                 enumerated, so embeddings could not be re-keyed by IRI into the archive. \
+                 Re-embed from the pack's text, or migrate to the built-in SQLite backend \
+                 before freezing."
+                    .into(),
+            ),
+        });
+    }
+    let mut stmt = out
+        .conn
+        .prepare("SELECT DISTINCT e FROM facts WHERE g = ?1")?;
+    let subjects: std::collections::HashMap<String, i64> = stmt
+        .query_map(params![out_g], |r| r.get::<_, i64>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(|id| Ok((out.resolve(id)?, id)))
+        .collect::<Result<_>>()?;
+    let source_ids: std::collections::HashMap<i64, i64> = subjects
+        .iter()
+        .filter_map(|(iri, local)| match store.lookup(iri) {
+            Ok(Some(src_id)) => Some(Ok((src_id, *local))),
+            Ok(None) => None,
+            Err(e) => Some(Err(e)),
+        })
+        .collect::<Result<_>>()?;
+    let carried = super::import::copy_vectors(&store.conn, &out.conn, |src_id| {
+        source_ids.get(&src_id).copied()
+    })?;
+    Ok(VectorCarry {
+        carried,
+        omitted: None,
+    })
 }
 
 /// Verify a frozen pack: recompute the canonical history from the PACK's own
@@ -304,11 +384,23 @@ pub(crate) fn verify_history_pack(path: &str, graph_iri: &str, expected_hash: &s
 /// store, under the same IRI — the thaw copy. Graph-FILTERED, unlike
 /// `import::import_graph`: the pack also holds its own meta-graph label
 /// facts, which must not be imported as data.
+///
+/// Returns `(facts, vectors)` — embeddings the archive carried are restored
+/// alongside the history (quipu-0v4). The restore is idempotent: the thawing
+/// store normally still holds the same rows, because a freeze deletes facts
+/// and never touched `vectors`.
+///
+/// # Errors
+/// Refuses when the pack carries embeddings but this store's vector backend is
+/// delegated or `LanceDB`: writing rows into `main.vectors` there would put
+/// them where nothing reads them, which is worse than saying so. Run
+/// `quipu migrate-vectors` back to the built-in backend, or thaw into a store
+/// that uses it.
 pub(crate) fn import_graph_history(
     store: &Store,
     pack_path: &str,
     graph_iri: &str,
-) -> Result<usize> {
+) -> Result<(usize, usize)> {
     let src = Connection::open_with_flags(
         pack_path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
@@ -401,5 +493,50 @@ pub(crate) fn import_graph_history(
         )?;
         facts += 1;
     }
-    Ok(facts)
+
+    let vectors = restore_vectors(store, &src)?;
+    Ok((facts, vectors))
+}
+
+/// Restore an archive's embeddings into `main.vectors`, re-keyed by IRI.
+///
+/// Skips a row whose entity IRI is not interned locally — after the history
+/// import above that should not happen for the graph's own subjects, and a
+/// vector pointing at an IRI this store does not know is dangling either way.
+fn restore_vectors(store: &Store, src: &Connection) -> Result<usize> {
+    let pending: i64 = src
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='vectors'")?
+        .exists([])?
+        .then(|| src.query_row("SELECT COUNT(*) FROM vectors", [], |r| r.get(0)))
+        .transpose()?
+        .unwrap_or(0);
+    if pending == 0 {
+        return Ok(0);
+    }
+    if !store.has_sqlite_vector_backend() {
+        return Err(Error::Store(format!(
+            "thaw refuses: the archive carries {pending} entity embedding(s) but this \
+             store's vector backend is delegated or LanceDB. Restoring them into \
+             `main.vectors` would write them where nothing reads them, and dropping \
+             them would lose the archive's semantic index silently. Run \
+             `quipu migrate-vectors` back to the built-in SQLite backend, or thaw into \
+             a store that uses it."
+        )));
+    }
+    let mut resolve = src.prepare("SELECT iri FROM terms WHERE id = ?1")?;
+    let mut lookup_err = None;
+    let copied = super::import::copy_vectors(src, &store.conn, |src_id| {
+        let iri: String = resolve.query_row(params![src_id], |r| r.get(0)).ok()?;
+        match store.lookup(&iri) {
+            Ok(local) => local,
+            Err(e) => {
+                lookup_err = Some(e);
+                None
+            }
+        }
+    })?;
+    match lookup_err {
+        Some(e) => Err(e),
+        None => Ok(copied),
+    }
 }

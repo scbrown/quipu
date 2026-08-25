@@ -90,6 +90,8 @@ pub fn tool_graph_freeze(store: &mut Store, input: &JsonValue) -> Result<JsonVal
         "content_hash": r.content_hash,
         "facts": r.facts,
         "transactions": r.transactions,
+        "vectors": r.vectors,
+        "vectors_omitted": r.vectors_omitted,
     }))
 }
 
@@ -105,6 +107,10 @@ pub fn tool_graph_thaw(store: &mut Store, input: &JsonValue) -> Result<JsonValue
         .and_then(JsonValue::as_str)
         .ok_or_else(|| Error::InvalidValue("missing 'timestamp' parameter".into()))?;
     let actor = input.get("actor").and_then(JsonValue::as_str);
-    let facts = store.thaw_graph(graph, timestamp, actor)?;
-    Ok(serde_json::json!({ "graph": graph, "facts_restored": facts }))
+    let (facts, vectors) = store.thaw_graph(graph, timestamp, actor)?;
+    Ok(serde_json::json!({
+        "graph": graph,
+        "facts_restored": facts,
+        "vectors_restored": vectors,
+    }))
 }

@@ -55,3 +55,30 @@ Known cost: `as_of_tx` time travel is refused while archives are attached
 `quipu graph thaw <iri>` restores the history byte-for-byte and reopens the
 graph for writes — the pack file stays on disk, and the freeze registry row
 is closed, never deleted.
+
+### Freezing and semantic search
+
+**Freezing costs the freezing store nothing here.** Freeze deletes the graph's
+fact rows; it never touches the `vectors` table, so the embeddings of a frozen
+graph's entities stay in place and semantic search answers as it did before.
+
+**The archive carries them too.** A freeze pack holds embeddings for the
+graph's own subjects, re-keyed by IRI, and both `quipu graph thaw` and
+`quipu graph import` restore them — so a window handed to another store, or
+thawed into a store rebuilt from packs, arrives with its semantic index rather
+than needing a re-embed. Freeze and thaw report the count; the restore is
+idempotent.
+
+Two limits worth knowing:
+
+- **A delegated or LanceDB vector backend cannot be enumerated**, so nothing
+  can be re-keyed out of it. The freeze still succeeds — relocating history is
+  not a vector operation — but it warns on stderr and stamps
+  `vectors_omitted` into the pack manifest, so an incomplete archive never
+  reads as "this graph had no embeddings". A `thaw` in the other direction
+  *refuses*: restoring rows into a store whose live backend is not the built-in
+  one would put them where nothing reads them. Run `quipu migrate-vectors`
+  first.
+- **An attached archive's embeddings are not searched from the pack.** Vector
+  search reads the local store only, deliberately — one index per question.
+  Nothing is lost by it, because the local rows were never removed.

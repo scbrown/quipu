@@ -17,9 +17,15 @@
 > return identical rows post-freeze, reopen auto-attaches, a missing pack
 > refuses the open, a frozen graph refuses writes naming thaw, and
 > freeze→thaw round-trips the canonical history byte-for-byte.
+> **Vector travel — BUILT (quipu-0v4, 2026-08-25; pack format 2).** The
+> archive carries the frozen graph's own subjects' embeddings, re-keyed by IRI
+> (`export_vectors` in `src/store/freeze_io.rs`, the same join
+> `pack --with-vectors` uses), and `thaw` and `quipu graph import` restore them
+> (`restore_vectors`, `store::import::copy_vectors`). See §"What is genuinely
+> lost" below for the premise this correction overturned, and for the one thing
+> still deliberately not composed.
 > Deliberately NOT built (beads filed): write-gate signature verification
-> (quipu-8cc), vector travel for frozen graphs (quipu-0v4), a
-> `[quipu] attachments` config surface.
+> (quipu-8cc), a `[quipu] attachments` config surface.
 
 **Status:** ticket and workflow engines (shuttle first) map high-volume
 operational data into quipu. Left in ROOT or in ever-growing named graphs it
@@ -86,10 +92,47 @@ producer's own declaration that the graph is `operational`.
 **What is genuinely lost, stated plainly:** `as_of_tx` time travel across
 the composition — pre-existing and honestly refused (`sparql/mod.rs`
 refuses `as_of_tx` with attachments), not newly silent. Valid-time queries
-survive: rows carry their windows verbatim. Local embeddings are dropped in
-v1 (quipu-0v4). Trust labels do not travel into the pack: a rank is anchored
-to a chain in the origin store's meta-graph and does not survive relocation;
-the consumer's floors decide.
+survive: rows carry their windows verbatim. Trust labels do not travel into
+the pack: a rank is anchored to a chain in the origin store's meta-graph and
+does not survive relocation; the consumer's floors decide.
+
+**Entity embeddings, and the loss this design claimed and did not have.** This
+section previously read "local embeddings are dropped in v1". Measuring it
+before fixing it showed the claim was false in the direction that matters:
+freeze deletes `main.facts` rows for the graph and **never touches
+`main.vectors`**, so the freezing store's own semantic search is exactly what
+it was — pinned now by
+`freeze_keeps_local_vectors_and_carries_them_into_the_archive`. The real loss
+was the ARCHIVE's: a pack carried no embeddings, so a graph handed to another
+store, or thawed into a store rebuilt from packs, arrived with no semantic
+index and no way to derive one short of re-embedding.
+
+Pack format 2 closes that. The archive carries embeddings for the graph's own
+**subjects** — the entities its facts are about — re-keyed by IRI, because
+`vectors.entity_id` is a term id that does not travel. Predicate and
+`Ref`-target terms travel so the facts can be read; their embeddings do not,
+since the archive is not *about* those entities. Closed embeddings travel too
+(unlike `pack --with-vectors`, which carries current rows only): a full-history
+export that relocated the history of the facts and only the present of the
+embeddings would be lopsided.
+
+Three honest edges:
+
+- **The content hash does not cover embeddings.** It certifies that the history
+  relocation was lossless; an embedding is derived data, re-derivable from the
+  text it was computed from, and folding a model's output into the archive's
+  identity would make the hash depend on which embedder was configured.
+- **A non-enumerable vector backend does not refuse the freeze** — relocating
+  history is not a vector operation. It records why nothing travelled in the
+  manifest's `vectors_omitted`, in the `FreezeReport`, and on stderr, so an
+  incomplete archive never reads as "this graph had no embeddings".
+- **An attached pack's `vectors` table is NOT composed into vector search**, and
+  this is deliberate rather than pending. Vector search reads `main` only; a
+  second index behind one question is how two different answers to it appear.
+  The local store keeps its rows across a freeze, so nothing degrades in the
+  meantime, and a store that genuinely needs the archive's embeddings gets them
+  by `thaw` or `quipu graph import`, which put them in `main` where the one
+  index lives.
 
 **Windows.** Freeze operates on whole graphs, so producers write operational
 data into time-windowed graphs (`{base}graph/shuttle/runs/2026-08`, monthly)

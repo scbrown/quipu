@@ -98,3 +98,52 @@ fn unclassified_source_column_refuses_before_destination_write() {
     );
     assert_eq!(fs::read(&local).unwrap(), before);
 }
+
+#[test]
+fn import_carries_embeddings_re_keyed_by_iri() {
+    // The recipient half of quipu-0v4: an archive (or any `--with-vectors`
+    // pack) handed to another store must arrive WITH its semantic index. This
+    // path silently dropped every `vectors` row before, which made
+    // `pack --with-vectors` produce a file nothing could restore from.
+    use crate::vector::KnowledgeVectorStore;
+    let (local, foreign) = paths("vectors");
+    // A destination that already interns an unrelated IRI, so the id spaces
+    // differ and the join has to be by IRI rather than by raw id.
+    let dst = Store::open(local.to_str().unwrap()).unwrap();
+    dst.intern("urn:local-decoy").unwrap();
+    drop(dst);
+
+    let mut src = Store::open(foreign.to_str().unwrap()).unwrap();
+    let e = src.intern("urn:subject").unwrap();
+    let p = src.intern("urn:p").unwrap();
+    src.transact(
+        &[Datum {
+            entity: e,
+            attribute: p,
+            value: Value::Str("hello".into()),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: crate::Op::Assert,
+        }],
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let emb = vec![0.0f32, 1.0, 0.0, 0.0];
+    src.embed_entity(e, "the subject", &emb, "2026-01-01T00:00:00Z")
+        .unwrap();
+    drop(src);
+
+    let report = import_graph(&local, &foreign, "urn:imported").unwrap();
+    assert_eq!(report.vectors, 1, "the embedding must travel");
+
+    let store = Store::open(local.to_str().unwrap()).unwrap();
+    let matches = store.vector_search(&emb, 5, None).unwrap();
+    assert_eq!(matches.len(), 1, "and be searchable here: {matches:?}");
+    assert_eq!(
+        store.resolve(matches[0].entity_id).unwrap(),
+        "urn:subject",
+        "re-keyed onto THIS store's id for that IRI"
+    );
+}
