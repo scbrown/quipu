@@ -7,7 +7,6 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - *(ci)* Restore file-size and changelog gates([652c4d8](https://github.com/scbrown/quipu/commit/652c4d887a33cd570d6d9a2c8fdcb158afb648d9))
-- *(ci)* Update ethnum for current stable Rust([fbe0f54](https://github.com/scbrown/quipu/commit/fbe0f54107508c1aa155dd20fa49e525382b03fc))
 
 ## [0.3.26] - 2026-08-25
 
