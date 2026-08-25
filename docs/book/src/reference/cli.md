@@ -484,6 +484,7 @@ vectors), verify one, or import one into a local graph.
 ```bash
 quipu pack urn:example:graph --out domain.qpack.db --name "domain" --version 1.0.0
 quipu pack urn:example:graph --out domain.qpack.db --shapes s.ttl --queries q.json --with-vectors
+quipu pack urn:example:graph --out domain.qpack.db --space 7
 quipu pack --verify domain.qpack.db
 quipu unpack domain.qpack.db --into urn:local:domain --db my.db
 ```
@@ -492,6 +493,7 @@ quipu unpack domain.qpack.db --into urn:local:domain --db my.db
 |------|-------------|
 | `--out <file>` | Output pack path (required for pack) |
 | `--name` / `--version` | Manifest metadata |
+| `--space <N>` | Ship the pack in term space N so it attaches to a consumer without id collisions (same machinery as `quipu db respace`; the content hash is unchanged — a space moves ids, not content). Not applicable to `--format turtle` |
 | `--shapes <S>` / `--queries <Q>` | Ship shape sets / stored queries (repeatable) |
 | `--with-vectors` | Include embeddings (refused unless the SQLite vector backend is active) |
 | `--format turtle` | Also embed a Turtle serialization |

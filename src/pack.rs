@@ -18,12 +18,17 @@
 //! hash the SAME, or the hash would describe the producer rather than the
 //! content.
 //!
-//! ## Scope note (quipu #74)
+//! ## Term spaces (quipu #74)
 //!
-//! `--space <term-space>` is deliberately **not implemented here**: term-space
-//! allocation is #74, which is gated. Nothing in this module's acceptance needs
-//! it — re-interning is what makes a standalone pack correct — so the manifest
-//! records `term_space: 0` and the flag lands with #74.
+//! `--space <n>` ships the pack in term space `n`, so it can be attached to a
+//! consumer without their ids colliding. The pack is always **built** in
+//! space 0 — `Store::open` interns the meta-graph before any caller gets a
+//! say, so a fresh build store necessarily allocates from space 0 — and then
+//! moved by the same machinery `quipu db respace` uses
+//! ([`crate::store::respace::respace_file`]), which already rewrites `Ref`
+//! BLOBs, updates `pack_manifest.term_space`, and asserts its own
+//! post-conditions. The content hash is unaffected: it is computed over
+//! IRIs, and a respace moves ids, not content.
 
 use std::collections::BTreeSet;
 #[cfg(not(target_arch = "wasm32"))]
@@ -42,7 +47,8 @@ pub struct Manifest {
     pub name: String,
     /// Producer-chosen version.
     pub version: String,
-    /// Term space the pack allocates from. Always `0` until quipu #74.
+    /// Term space the pack's ids live in (quipu #74): `0` unless the pack was
+    /// shipped with `--space`.
     pub term_space: i64,
     /// `sha256:<hex>` over the canonical content (see [`content_hash`]).
     pub content_hash: String,
@@ -70,6 +76,11 @@ pub struct PackOptions {
     pub queries: Vec<String>,
     /// Include embeddings, re-keyed by IRI.
     pub with_vectors: bool,
+    /// Ship the pack in this term space (quipu #74). `None` and `Some(0)`
+    /// leave it in space 0. File packs only: the move is a respace of the
+    /// built file, so [`pack_to_bytes`] (no file) and [`pack_turtle`] (no
+    /// term ids at all) refuse a non-zero space rather than ignoring it.
+    pub space: Option<i64>,
 }
 
 /// What [`unpack`] materialized and installed.
@@ -261,7 +272,8 @@ pub(crate) fn local_name(iri: &str) -> String {
 ///
 /// # Errors
 /// Unknown graph, a named shape or query that does not exist, `--with-vectors`
-/// against a non-SQLite backend, or any store/IO error.
+/// against a non-SQLite backend, a `space` outside
+/// `[0, `[`crate::store::respace::MAX_SPACE`]`]`, or any store/IO error.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn pack(
     store: &Store,
@@ -281,22 +293,40 @@ pub fn pack(
         }
     }
 
-    {
+    let built = (|| -> Result<()> {
         let mut out = Store::open(&build_path)?;
         pack_into(store, graph_iri, opts, timestamp, &mut out)?;
-        // VACUUM INTO produces a single clean file with no WAL siblings.
-        out.conn
-            .execute("VACUUM INTO ?1", rusqlite::params![out_path])?;
-        drop(out);
-    }
-    // Remove the build artifact and ITS wal/shm siblings, so only the shipped
-    // file remains.
+        match opts.space.unwrap_or(0) {
+            0 => {
+                // VACUUM INTO produces a single clean file with no WAL siblings.
+                out.conn
+                    .execute("VACUUM INTO ?1", rusqlite::params![out_path])?;
+            }
+            space => {
+                // The build store is space 0 by construction; ship it in the
+                // requested space through the respace machinery, which owns
+                // Ref-BLOB rewriting, the `pack_manifest.term_space` row, and
+                // its own post-conditions. `respace_file` closes cleanly, so
+                // the shipped file has no `-wal`/`-shm` siblings either.
+                drop(out);
+                crate::store::respace::respace_file(
+                    Path::new(&build_path),
+                    Path::new(out_path),
+                    space,
+                )?;
+            }
+        }
+        Ok(())
+    })();
+    // Remove the build artifact and ITS wal/shm siblings — on success so only
+    // the shipped file remains, on failure so a refused pack leaves nothing.
     for suffix in ["", "-wal", "-shm"] {
         let p = format!("{build_path}{suffix}");
         if Path::new(&p).exists() {
             let _ = std::fs::remove_file(&p);
         }
     }
+    built?;
 
     read_manifest(out_path)
 }
@@ -307,13 +337,26 @@ pub fn pack(
 /// disk. The bytes attach to a native store like any pack file.
 ///
 /// # Errors
-/// Same as [`pack`], minus the file IO.
+/// Same as [`pack`], minus the file IO; additionally refuses a non-zero
+/// `space`, which only the file path can honour.
 pub fn pack_to_bytes(
     store: &Store,
     graph_iri: &str,
     opts: &PackOptions,
     timestamp: &str,
 ) -> Result<(Manifest, Vec<u8>)> {
+    // Refused rather than ignored: shipping bytes in space 0 when a space was
+    // asked for is the same "accepted and inert flag" defect `--with-vectors`
+    // shipped with once already.
+    if opts.space.unwrap_or(0) != 0 {
+        return Err(Error::InvalidValue(
+            "pack --space requires a file destination: the space move is a \
+             respace of the built file, and an in-memory pack has no file to \
+             respace. Pack to a path, or respace the written bytes with \
+             `quipu db respace`."
+                .into(),
+        ));
+    }
     let mut out = Store::open_in_memory()?;
     let manifest = pack_into(store, graph_iri, opts, timestamp, &mut out)?;
     let bytes = out.serialize_db()?;
@@ -462,6 +505,8 @@ fn pack_into(
             pack_format: "1".into(),
             name: opts.name.clone().unwrap_or_else(|| local_name(graph_iri)),
             version: opts.version.clone().unwrap_or_else(|| "0.1.0".into()),
+            // The BUILD store's space. A `--space` ship rewrites this row on
+            // the shipped file through the respace machinery (see `pack`).
             term_space: 0,
             content_hash: hash.clone(),
             created_at: timestamp.to_string(),

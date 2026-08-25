@@ -15,6 +15,8 @@
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
+//!   quipu pack <graph-iri> --out <file> [--space N]  Export a graph as an attachable pack
+//!   quipu unpack <file> [--into <graph-iri>]  Materialize a pack into a local graph
 //!   quipu fork <tx>|list|diff|drop|promote  Persistent named forks of ROOT
 //!
 //! Aliases: load=knot, query=read
@@ -24,6 +26,7 @@ mod cli_audit;
 mod cli_commands;
 mod cli_fork;
 mod cli_graph;
+mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
@@ -82,12 +85,12 @@ fn main() {
         "export" => cli_commands::cmd_export(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
-        "pack" => cli_commands::cmd_pack(&args, db_path),
+        "pack" => cli_pack::cmd_pack(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
         "graph" => cli_graph::cmd_graph(&args, db_path),
         "fork" => cli_fork::cmd_fork(&args, db_path),
-        "unpack" => cli_commands::cmd_unpack(&args, db_path),
+        "unpack" => cli_pack::cmd_unpack(&args, db_path),
         "migrate-vectors" => cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
         _ => {
@@ -238,7 +241,7 @@ COMMANDS:
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     quipu stats [--db <path>]
     quipu doctor labels [--db <path>]
-    quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
+    quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     quipu pack --verify <file.qpack.db>
     quipu db respace --into <space> --out <file> [--db <path>]
     quipu events refusals [--db <path>]

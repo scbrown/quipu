@@ -28,7 +28,9 @@ use crate::store::Store;
 /// what a content hash is supposed to rule out.
 ///
 /// # Errors
-/// Unknown graph, a named shape or query that does not exist, or any IO error.
+/// Unknown graph, a named shape or query that does not exist, a non-zero
+/// `space` (a bundle has no term ids, so there is no space to allocate from),
+/// or any IO error.
 pub fn pack_turtle(
     store: &Store,
     graph_iri: &str,
@@ -40,6 +42,15 @@ pub fn pack_turtle(
         return Err(Error::InvalidValue(format!(
             "pack: unknown graph: {graph_iri}"
         )));
+    }
+    // Refused rather than ignored — an accepted-and-inert flag is the defect
+    // class `--with-vectors` shipped with once already.
+    if opts.space.unwrap_or(0) != 0 {
+        return Err(Error::InvalidValue(
+            "pack --space does not apply to --format turtle: a bundle carries \
+             IRIs, not term ids, so there is no term space to allocate from."
+                .into(),
+        ));
     }
     let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
     let hash = content_hash(&canonical);

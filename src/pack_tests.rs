@@ -105,10 +105,7 @@ fn a_pack_round_trips_and_verifies_and_leaves_no_wal_siblings() {
     let manifest = pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
 
     assert_eq!(manifest.source_graph, "urn:g:pack");
-    assert_eq!(
-        manifest.term_space, 0,
-        "quipu #74 is gated; space 0 for now"
-    );
+    assert_eq!(manifest.term_space, 0, "no --space means space 0");
     assert!(manifest.content_hash.starts_with("sha256:"));
 
     // Acceptance 5: ONE file.
@@ -570,6 +567,158 @@ fn without_the_flag_no_vectors_travel() {
     let _ = std::fs::remove_file(&out);
 }
 
+// --- --space: ship the pack in a designated term space (quipu #74) ---
+
+#[test]
+fn a_space_pack_owns_the_space_and_still_verifies() {
+    let store = producer(5);
+    let out = tmp("space7");
+    let opts = PackOptions {
+        space: Some(7),
+        ..Default::default()
+    };
+    let m = pack(&store, "urn:g:pack", &out, &opts, TS).unwrap();
+    assert_eq!(m.term_space, 7, "the manifest records the shipped space");
+
+    // Still ONE file: acceptance 5 holds on the respace path too.
+    for suffix in [
+        "-wal",
+        "-shm",
+        ".building",
+        ".building-wal",
+        ".building-shm",
+    ] {
+        assert!(
+            !std::path::Path::new(&format!("{out}{suffix}")).exists(),
+            "a --space pack must still be a single artifact; found {out}{suffix}"
+        );
+    }
+
+    // The packed store's ids genuinely live in space 7 — the property that
+    // makes it attachable to a space-0 consumer without collisions.
+    let opened = Store::open(&out).unwrap();
+    assert_eq!(opened.local_term_space().unwrap(), 7);
+    let lo = 7 * crate::schema::SPACE_SIZE;
+    let hi = lo + crate::schema::SPACE_SIZE;
+    let strays: i64 = opened
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM terms WHERE id <> ?3 AND (id < ?1 OR id >= ?2)",
+            rusqlite::params![lo, hi, crate::schema::ROOT_GRAPH],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(strays, 0, "every term id is inside space 7");
+
+    // The content is intact, the object-position Ref included — the BLOB the
+    // respace machinery rewrites because SQL cannot.
+    let g = opened.lookup("urn:g:pack").unwrap().unwrap();
+    let facts = opened.current_facts_in_graph(g).unwrap();
+    assert_eq!(facts.len(), 2, "both facts survived the space move");
+    let refs: Vec<String> = facts
+        .iter()
+        .filter_map(|f| match &f.value {
+            Value::Ref(id) => opened.resolve(*id).ok(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        refs,
+        vec!["http://example.org/o".to_string()],
+        "the Ref BLOB moved with the space"
+    );
+
+    // The hash is content identity, not custody: verify still passes, and a
+    // space-0 pack of the same store carries the SAME hash.
+    assert!(verify(&out).unwrap().2, "--verify holds after the move");
+    let out0 = tmp("space7-control");
+    let m0 = pack(&store, "urn:g:pack", &out0, &PackOptions::default(), TS).unwrap();
+    assert_eq!(
+        m.content_hash, m0.content_hash,
+        "a space moves ids, not content"
+    );
+
+    for path in [out, out0] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[test]
+fn a_space_pack_attaches_directly_without_a_separate_respace() {
+    // The point of --space: the producer ships an artifact the consumer
+    // attaches AS-IS, instead of running `quipu db respace` on it first.
+    // (Colliding spaces are still refused at attach time —
+    // `attach/tests.rs::two_space_zero_databases_are_refused_naming_respace`.)
+    let store = producer(0);
+    let pack7 = tmp("space-attach");
+    let opts = PackOptions {
+        space: Some(7),
+        ..Default::default()
+    };
+    pack(&store, "urn:g:pack", &pack7, &opts, TS).unwrap();
+
+    let local = tmp("space-attach-consumer");
+    let opened = Store::open_with_attachments(
+        &local,
+        &[crate::store::attach::Attachment::read_only("pack", &pack7)],
+    )
+    .unwrap();
+    assert_eq!(opened.pack_manifests()[0].1.term_space, 7);
+    assert_eq!(
+        opened.verify_attached_pack_hashes().unwrap(),
+        vec![("pack".into(), true)]
+    );
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(
+        &opened,
+        "SELECT ?o WHERE { GRAPH <urn:g:pack> { <http://example.org/s> <http://example.org/p> ?o } }",
+    )
+    .unwrap() else {
+        panic!("expected SELECT")
+    };
+    assert_eq!(rows.len(), 1, "the directly-shipped pack is queryable");
+    for path in [pack7, local] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[test]
+fn an_out_of_range_space_is_refused_and_ships_nothing() {
+    let store = producer(0);
+    let out = tmp("space-range");
+    let opts = PackOptions {
+        space: Some(crate::store::respace::MAX_SPACE + 1),
+        ..Default::default()
+    };
+    let err = pack(&store, "urn:g:pack", &out, &opts, TS).expect_err("out of range");
+    assert!(err.to_string().contains("out of range"), "{err}");
+    assert!(
+        !std::path::Path::new(&out).exists(),
+        "a refused pack must ship nothing"
+    );
+    assert!(
+        !std::path::Path::new(&format!("{out}.building")).exists(),
+        "…and must not leave the build file behind either"
+    );
+}
+
+#[test]
+fn pack_to_bytes_refuses_a_nonzero_space_naming_the_restriction() {
+    // Refused, not ignored: quietly shipping space-0 bytes when a space was
+    // asked for is the accepted-and-inert-flag defect --with-vectors had.
+    let store = producer(0);
+    let opts = PackOptions {
+        space: Some(7),
+        ..Default::default()
+    };
+    let err = pack_to_bytes(&store, "urn:g:pack", &opts, TS).expect_err("no file to respace");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("file destination"),
+        "names the restriction: {msg}"
+    );
+    assert!(msg.contains("respace"), "says the remedy: {msg}");
+}
+
 // --- --format turtle: the interop bundle ---
 
 fn tmpdir(name: &str) -> String {
@@ -656,6 +805,26 @@ fn both_formats_agree_on_the_content_hash() {
     );
 
     let _ = std::fs::remove_file(&db);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_turtle_bundle_refuses_a_nonzero_space_naming_the_restriction() {
+    // A bundle carries IRIs, not term ids — there is nothing a space could
+    // apply to, so the flag is refused rather than accepted-and-inert.
+    let store = producer(0);
+    let dir = tmpdir("space");
+    let opts = PackOptions {
+        space: Some(7),
+        ..Default::default()
+    };
+    let err =
+        pack_turtle(&store, "urn:g:pack", &dir, &opts, TS).expect_err("no term ids in a bundle");
+    assert!(err.to_string().contains("term space"), "{err}");
+    assert!(
+        !std::path::Path::new(&dir).join("graph.ttl").exists(),
+        "a refused export must not leave a partial bundle"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -3,9 +3,9 @@
 > **Implementation status (2026-08-12):** ✅ **Built.** `src/pack.rs` —
 > `Manifest`, `pack`, `pack_turtle`, `unpack`, `verify`, `content_hash` — with
 > the `quipu pack` / `quipu pack --verify` / `quipu unpack` CLI, and the
-> stored-query registry packs draw from (`src/store/queries.rs`). Still open:
-> `--space <term-space>` on pack export (deferred; packs record term space 0),
-> and the design's retrieval-policy block (`quipu:defaultDataset` /
+> stored-query registry packs draw from (`src/store/queries.rs`).
+> `--space <term-space>` on pack export is built too (2026-08-25). Still open:
+> the design's retrieval-policy block (`quipu:defaultDataset` /
 > `quipu:recommendsFloor`) — a pack today carries the graph's labels but not
 > the fuller policy vocabulary. See `docs/design/knowledge-packs.md`.
 
@@ -93,9 +93,12 @@ identity. There are no signatures; verification is integrity, not provenance.
 ## Built vs designed
 
 Built: `quipu pack`, `quipu unpack`, `quipu pack --verify`, the Turtle interop
-bundle, vector export on the SQLite backend, and the stored-query registry.
-Designed but not yet built: `--space <term-space>` on export (packs currently
-record term space 0), the retrieval-policy block (default-dataset and
+bundle, vector export on the SQLite backend, the stored-query registry, and
+`--space <term-space>` on export — the pack is built in space 0 and shipped
+through the same respace machinery as `quipu db respace`, so a consumer can
+attach it as-is without an id collision (`.qpack.db` packs only; a Turtle
+bundle carries IRIs, not term ids, so `--space` does not apply there).
+Designed but not yet built: the retrieval-policy block (default-dataset and
 recommended-floor facts a consumer could SPARQL), and delta/diff packs —
 v1 packs are whole-layer, read-only artifacts.
 

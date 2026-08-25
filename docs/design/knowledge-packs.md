@@ -7,9 +7,10 @@
 > `quipu pack --verify` / `quipu unpack` CLI. The stored-query registry (§2)
 > is also built (`src/store/queries.rs`, quipu #79). The substrate it layers
 > on landed too: term spaces + attach (#74/#75), graph labels (#65), named
-> datasets (#69), the versioned shape registry (#71). Still open:
-> `--space <term-space>` on pack export (deferred to a follow-up; see
-> `src/pack.rs` module docs).
+> datasets (#69), the versioned shape registry (#71). `--space <term-space>`
+> on pack export is built as well (2026-08-25): the pack is built in space 0
+> and shipped through the `respace` machinery, so it attaches to a consumer
+> as-is.
 
 **Status:** The layering designs make knowledge *attachable*; nothing yet makes
 it *distributable*. A knowledge layer should be a single artifact you can pack,

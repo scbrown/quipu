@@ -4,7 +4,7 @@
 #   scripts/check-file-size.sh --update-baseline
 # Shrinking this file is the point. See quipu-bu3.
 src/cli.rs 521
-src/cli_commands.rs 682
+src/cli_commands.rs 590
 src/episode/mod.rs 645
 src/graph.rs 514
 src/mcp/named_query.rs 537
