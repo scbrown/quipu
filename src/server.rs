@@ -93,12 +93,15 @@ async fn main() {
             std::process::exit(1);
         });
 
+    // quipu-lv7: `vector.backend` selects the store's vector backend in-binary.
+    // It refuses when this build cannot construct the configured one rather
+    // than falling back to the SQLite table a migrated deployment has left.
+    base::apply_vector_backend(&mut store, &config);
+
     // quipu-at2: announce what the `[[quipu.attachments]]` declarations became.
     // A composed layer that nobody can see is how "it returned no rows" becomes
     // a mystery; a missing file already refused the open above.
-    for line in quipu::config::describe_attachments(&store) {
-        eprintln!("attached: {line}");
-    }
+    base::report_attachments(&store);
 
     // Mint IRIs under the CONFIGURED base namespace, not the hardcoded aegis
     // default (aegis-4h3x) — without this, `[quipu] base_ns = "..."` was inert

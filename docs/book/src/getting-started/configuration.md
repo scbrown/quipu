@@ -78,7 +78,7 @@ stops being read.
 | `embedding.auto_embed` | `false` | Auto-embed entities on write (needs model/tokenizer paths) |
 | `embedding.model_path` / `tokenizer_path` | unset | ONNX model + tokenizer for embeddings |
 | `embedding.dimension` / `max_sequence_length` / `embed_batch_size` | `384` / `256` / `32` | Embedding runtime parameters |
-| `vector.backend` | `sqlite` | `sqlite` or `lancedb` (embedder-only; see below) |
+| `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 | `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |
 
@@ -129,19 +129,40 @@ quipu db attach --list --db my.db
 
 `quipu-server` prints the same list to stderr at startup.
 
+## Choosing a vector backend
+
+`[quipu.vector] backend` selects the store's vector backend at open, for both
+binaries: search, entity resolution, auto-embedding and the MCP/REST search
+tools all go through the selected one.
+
+```toml
+[quipu.vector]
+backend = "lancedb"
+lancedb_path = ".bobbin/quipu/quipu-vectors"
+```
+
+**`lancedb` requires a binary built with the `lancedb` feature, and the release
+binaries are not.** The feature drags in protoc and the whole datafusion tree,
+which most deployments do not need. A binary that lacks it **refuses**
+`backend = "lancedb"` at startup and names the rebuild — it does not fall back
+to the SQLite table, because a deployment that has run `quipu migrate-vectors`
+would then have every search answered out of the store it migrated away from.
+
+Move existing embeddings across with
+`quipu migrate-vectors --from sqlite --to lancedb`. See
+[LanceDB Vector Backend](../architecture/lancedb.md).
+
 ## Not wired into the `quipu` CLI / `quipu-server`
 
-These keys parse but the shipped binaries do **not** act on them — they exist for
-embedders that drive quipu as a library, or are planned. The binaries print a
-`warning:` if you set them, rather than accepting them silently:
+Nothing, currently — every documented key above is read by the shipped
+binaries. The mechanism is kept rather than deleted: `unwired_warnings()` still
+exists, and any future key that parses but is not acted on must be listed there
+so setting it prints a `warning:` instead of being silently inert.
 
-| Field | Status |
-|-------|--------|
-| `vector.backend = "lancedb"` | **Embedder-only.** The CLI/server never install a non-SQLite backend; queries always use the SQLite vectors table. A host embedding quipu can install one via `Store::set_local_vector_backend`. |
-
-(`federation.remotes` used to sit here; it is fully wired now — health-checked
-at startup and queried per-request via `federated: true` on `POST /query`. See
-[Federation](../architecture/federation.md).)
+(Two keys used to sit here. `federation.remotes` was wired in quipu #47 —
+health-checked at startup and queried per-request via `federated: true` on
+`POST /query`, see [Federation](../architecture/federation.md). `vector.backend`
+was wired in quipu-lv7, described just above.)
 
 ## Priority Order
 

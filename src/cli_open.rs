@@ -16,7 +16,7 @@ use std::sync::OnceLock;
 use quipu::{QuipuConfig, Store};
 
 /// The process's config, loaded on first open.
-fn config() -> &'static QuipuConfig {
+pub fn config() -> &'static QuipuConfig {
     static CONFIG: OnceLock<QuipuConfig> = OnceLock::new();
     CONFIG.get_or_init(|| QuipuConfig::load(std::path::Path::new(".")))
 }
@@ -30,8 +30,17 @@ fn config() -> &'static QuipuConfig {
 /// schema cannot be composed — is a startup error, not a query that returns
 /// fewer rows.
 pub fn open_store(db_path: &str) -> Store {
-    quipu::open_with_configured_attachments(db_path, config()).unwrap_or_else(|e| {
-        eprintln!("error opening store: {e}");
+    let mut store =
+        quipu::open_with_configured_attachments(db_path, config()).unwrap_or_else(|e| {
+            eprintln!("error opening store: {e}");
+            std::process::exit(1);
+        });
+    // quipu-lv7: `vector.backend` selects the backend for THIS store, so it is
+    // installed per open rather than once per process. `main` has already
+    // entered a Tokio runtime when the configured backend needs one.
+    if let Err(e) = quipu::config::install_vector_backend(&mut store, config()) {
+        eprintln!("error: {e}");
         std::process::exit(1);
-    })
+    }
+    store
 }

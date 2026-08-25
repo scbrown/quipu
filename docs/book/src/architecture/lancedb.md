@@ -1,17 +1,35 @@
 # LanceDB Vector Backend
 
-> **Implementation status (2026-07-23, kelly):** 🟡 **Code-complete but inert in the
-> shipped binaries.** The backend is fully built and trait-conformant:
-> `LanceVectorStore` behind `#[cfg(feature="lancedb")]` (`src/vector_lance.rs`)
-> implementing all 5 `KnowledgeVectorStore` methods with `only_if()` predicate
-> pushdown; the `VectorSearchDelegate` wrapper; and the `quipu migrate-vectors` command
-> (`src/migration.rs`). **Gap:** neither `quipu` nor `quipu-server` ever activates it —
-> `Store::vector_store()` only selects LanceDB via `local_vector_backend`, and
-> `set_local_vector_backend` has **zero callers in-repo** (embedder-only). The
-> `vector.backend = "lancedb"` config knob is set-but-not-read (`unwired_warnings()`
-> warns so). So the doc's "enable LanceDB → add the feature flag" compiles the backend
-> but does NOT route any standalone-binary query to it; SQLite remains the only backend
-> a running quipu queries. It is an embedder-installed path (e.g. Bobbin).
+> **Implementation status (2026-08-25):** 🟩 **Selectable from config.** The
+> backend is fully built and trait-conformant — `LanceVectorStore` behind
+> `#[cfg(feature="lancedb")]` (`src/vector_lance.rs`), all
+> `KnowledgeVectorStore` methods including `only_if()` predicate pushdown, the
+> `VectorSearchDelegate` wrapper, and `quipu migrate-vectors`
+> (`src/migration.rs`) — and since quipu-lv7 the binaries **read
+> `vector.backend`** and install it at open
+> (`src/config/vector_backend.rs`; `src/cli_open.rs` for every `quipu`
+> subcommand, `src/server/base.rs` for `quipu-server`). `Store::vector_store()`
+> already preferred a local backend over the built-in table, so selecting it is
+> all search, resolution, auto-embed and the MCP/REST search tools needed.
+>
+> **Two things to know before turning it on:**
+>
+> - **The shipped release binaries are NOT built with the feature.** `lancedb`
+>   is deliberately outside the `full` bundle — protoc plus the whole datafusion
+>   tree is a real cost for a backend most deployments do not use. A binary
+>   built without it **refuses** `backend = "lancedb"` at startup, naming the
+>   rebuild, rather than falling back to the SQLite table: a deployment that has
+>   run `quipu migrate-vectors` would otherwise have every search answered out
+>   of the store it migrated away from. Build with
+>   `cargo build --features full,lancedb` to ship it.
+> - **It needs a Tokio runtime.** `quipu-server` is `#[tokio::main]`; the CLI
+>   enters one for the whole dispatch when the configured backend requires it.
+>
+> *(This banner previously read "code-complete but inert in the shipped
+> binaries" — accurate when it was written, and the shape that rots into a false
+> affordance if left: `set_local_vector_backend` had zero non-test callers and
+> `vector.backend` was set-but-not-read, so `migrate-vectors` moved embeddings
+> into a store nothing then selected.)*
 
 Quipu supports two vector storage backends: the default SQLite backend and
 an optional LanceDB backend for production workloads. Both implement the
@@ -45,6 +63,35 @@ an optional LanceDB backend for production workloads. Both implement the
 | Feature flag | Always available | `lancedb` feature |
 
 ## Enabling LanceDB
+
+Two steps, and both are required — the feature compiles the backend, the config
+key selects it.
+
+**1. Build with the feature.**
+
+```bash
+cargo build --features full,lancedb
+```
+
+**2. Select it in `.bobbin/config.toml`.**
+
+```toml
+[quipu.vector]
+backend = "lancedb"
+lancedb_path = ".bobbin/quipu/quipu-vectors"
+```
+
+Moving existing embeddings across first is one command:
+
+```bash
+quipu migrate-vectors --from sqlite --to lancedb --dry-run   # see the count
+quipu migrate-vectors --from sqlite --to lancedb
+```
+
+Selecting the backend on a directory that has never been written creates the
+empty table, so a fresh deployment does not have to migrate first.
+
+### As a library dependency
 
 Add the `lancedb` feature flag:
 

@@ -408,17 +408,17 @@ pub fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
                 );
                 if result.migrated > 0 || result.skipped == 0 {
                     println!("  LanceDB path: {lance_path}");
-                    // do NOT tell the user to "set vector.backend to use
-                    // it" — the quipu CLI and quipu-server DO NOT read that key, so
-                    // setting it changes nothing and the binary keeps querying the
-                    // SQLite vectors table. The migrated store is usable only by an
-                    // embedder that installs it via Store::set_local_vector_backend.
-                    // Printing the old instruction was the product itself directing
-                    // the user to a no-op.
+                    // This instruction was DELETED for a year and a half of
+                    // commits, because printing it would have been the product
+                    // directing the user to a no-op: vector.backend was not
+                    // read by either binary. quipu-lv7 wired it, so the next
+                    // step is real again — and a binary built without the
+                    // feature now REFUSES the key rather than ignoring it, so
+                    // following this cannot silently do nothing.
                     println!(
-                        "  NOTE: the quipu CLI/server do not yet read vector.backend, so this\n  \
-                         migrated store is NOT queried by `quipu`/`quipu-server`. It is usable\n  \
-                         only by an embedder that installs it via Store::set_local_vector_backend."
+                        "  next: set `[quipu.vector] backend = \"lancedb\"` to query it.\n  \
+                         The binary must be built with `--features lancedb`; one that is not\n  \
+                         refuses the key rather than falling back to the SQLite table."
                     );
                 }
             }

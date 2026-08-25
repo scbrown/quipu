@@ -12,10 +12,12 @@ use serde::Deserialize;
 
 mod attachments;
 mod federation;
+mod vector_backend;
 pub use attachments::{
     AttachmentConfig, describe_attachments, open_with_configured_attachments, resolve_attachments,
 };
 pub use federation::{FederationConfig, RemoteEndpoint};
+pub use vector_backend::install_vector_backend;
 
 use crate::namespace;
 
@@ -509,16 +511,13 @@ impl QuipuConfig {
     /// one of these is actually wired, remove its branch here AND its entry in
     /// `config_knobs_are_wired_or_listed_unwired`.
     pub fn unwired_warnings(&self) -> Vec<String> {
-        let mut w = Vec::new();
-        if self.vector.backend == VectorBackend::Lancedb {
-            w.push(
-                "vector.backend = \"lancedb\" is set but the quipu CLI/server do not read it; \
-                 queries still use the SQLite vectors table. LanceDB is an embedder-only backend \
-                 (Store::set_local_vector_backend)."
-                    .to_string(),
-            );
-        }
-        w
+        // Empty, and deliberately kept rather than deleted. `vector.backend`
+        // was the last entry and quipu-lv7 wired it — the binaries now install
+        // the configured backend at open, and refuse when they were built
+        // without it. The mechanism stays because the NEXT settable-but-inert
+        // knob should have somewhere to be loud, and because deleting it would
+        // take the guard test's subject with it.
+        Vec::new()
     }
 }
 

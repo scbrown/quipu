@@ -128,11 +128,15 @@ reactive-reasoner = []
 # can actually USE. Named here rather than spelled out in the workflows so CI
 # and the release build cannot drift apart.
 #
-# Deliberately EXCLUDES `lancedb`: the CLI and server cannot select that backend
-# from config (it is reachable only by an embedder via
-# `Store::set_local_vector_backend`), so shipping it would add a protoc build
-# dependency and the whole datafusion tree for a capability the binaries do not
-# expose. `--all-features` is therefore NOT what a release is built with.
+# Deliberately EXCLUDES `lancedb`. Since quipu-lv7 the binaries DO read
+# `vector.backend` and install the backend at open, so this is no longer "a
+# capability the binaries do not expose" — it is a cost decision: lancedb adds a
+# protoc build dependency and the whole datafusion tree, for a backend most
+# deployments do not use. The honest consequence is handled in code rather than
+# hidden: a release binary asked for `backend = "lancedb"` REFUSES at startup,
+# naming the rebuild, instead of silently serving from the SQLite table. Build
+# with `--features full,lancedb` to ship it. `--all-features` is therefore NOT
+# what a release is built with.
 full = ["shacl", "owl", "onnx", "reactive-reasoner", "server"]
 
 [lints.rust]

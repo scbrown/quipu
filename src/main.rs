@@ -64,6 +64,13 @@ fn main() {
     let db_path_buf = config.store_path.to_string_lossy().to_string();
     let db_path: &str = &db_path_buf;
 
+    // quipu-lv7: a configured LanceDB backend is opened and queried through
+    // async calls, so every command that touches a store needs a runtime in
+    // context. Entered here, once, and held for the whole dispatch — the
+    // per-command opens in `cli_open` install the backend inside it. A
+    // sqlite-backed store (the default) enters nothing.
+    let _vector_rt = vector_runtime(&config);
+
     let cmd = args[1].as_str();
     match cmd {
         "knot" | "load" => cli::cmd_knot(&args, db_path),
@@ -192,6 +199,33 @@ fn cmd_ontology(args: &[String], db_path: &str) {
 #[cfg(feature = "owl")]
 fn chrono_now() -> String {
     quipu::time::now_iso()
+}
+
+/// A Tokio runtime for the configured vector backend, or `None` when the
+/// default `SQLite` backend needs no async at all.
+///
+/// The returned guard must outlive every store open — see the call site.
+#[cfg(feature = "lancedb")]
+fn vector_runtime(config: &quipu::QuipuConfig) -> Option<tokio::runtime::EnterGuard<'static>> {
+    if config.vector.backend != quipu::VectorBackend::Lancedb {
+        return None;
+    }
+    let rt = tokio::runtime::Runtime::new().unwrap_or_else(|e| {
+        eprintln!("error creating Tokio runtime for the configured vector backend: {e}");
+        std::process::exit(1);
+    });
+    // Leaked deliberately: the guard borrows the runtime, and the runtime must
+    // outlive every store open in this dispatch — which is the whole process.
+    // A one-per-process leak released at exit beats a self-referential struct.
+    Some(Box::leak(Box::new(rt)).enter())
+}
+
+/// Without the `lancedb` feature there is no async backend to host — and a
+/// configured one is refused by `install_vector_backend`, not silently
+/// downgraded.
+#[cfg(not(feature = "lancedb"))]
+fn vector_runtime(_config: &quipu::QuipuConfig) -> Option<()> {
+    None
 }
 
 fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {

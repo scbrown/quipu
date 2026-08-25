@@ -42,8 +42,17 @@ jobs:
           # never compiled. See docs/design/wasm-support.md §4.3.
           - name: remote
             flags: "--no-default-features --features remote"
+          # quipu-lv7 made `vector.backend = "lancedb"` selectable from config,
+          # so this backend and its install path are shipped code — but they are
+          # NOT in `full` (protoc + the datafusion tree is a real cost), so
+          # nothing else in this matrix compiles them. Without this entry the
+          # feature ships dark.
+          - name: lancedb
+            flags: "--features shacl,lancedb"
     steps:
       - uses: actions/checkout@v4
+      - if: matrix.name == 'lancedb'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -77,8 +86,15 @@ jobs:
           # compiles out entirely.
           - name: remote
             flags: "--no-default-features --features remote"
+          # Runs the LanceDB backend's own tests AND the config-selection test
+          # that proves a write through the store lands there and not in the
+          # SQLite table (quipu-lv7). Clippy compiles them; only this runs them.
+          - name: lancedb
+            flags: "--features shacl,lancedb"
     steps:
       - uses: actions/checkout@v4
+      - if: matrix.name == 'lancedb'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:

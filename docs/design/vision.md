@@ -4,8 +4,10 @@
 > realized.** This is the aspirational vision, not a single deliverable — read the
 > "DRAFT — not implementation" line below as "this doc is an exploration," NOT "quipu
 > isn't built." Its resolved architecture is shipped: SQLite EAVT fact log, a custom
-> SPARQL 1.1 evaluator, RDFS + SHACL, vector search (SQLite default; LanceDB optional
-> **but inert in the shipped binaries** — embedder-only), graph projection with
+> SPARQL 1.1 evaluator, RDFS + SHACL, vector search (SQLite default; LanceDB
+> **selectable via `[quipu.vector] backend` since quipu-lv7**, on a build
+> carrying the `lancedb` feature — release binaries omit the feature for its
+> build cost and REFUSE the key rather than falling back), graph projection with
 > PageRank/Louvain, the stratified-datalog reasoner, entity resolution, episode
 > retraction, and `speculate()` counterfactuals — all in `src/`. Federation is
 > built end-to-end since 2026-08-12 (quipu-tkh): the remote provider is

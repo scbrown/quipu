@@ -167,15 +167,26 @@ fn unwired_knobs_warn_loudly_when_set() {
     // The set-but-inert knobs must produce a warning, so they are never
     // silent. Wiring one means updating this — federation did exactly that
     // in quipu #47, and the assertion below flipped rather than vanished.
+    //
+    // As of quipu-lv7 the list is EMPTY: every documented knob is read. The
+    // test stays because the mechanism does — the next inert knob needs
+    // somewhere to be loud, and these flipped assertions are the record of
+    // which ones stopped being inert and when.
     let mut cfg = QuipuConfig::default();
     assert!(cfg.unwired_warnings().is_empty(), "defaults must not warn");
 
+    // quipu-lv7 WIRED vector.backend, so this flipped from "must warn" to
+    // "must NOT warn" — the same flip federation made below, and kept for the
+    // same reason: a warning that outlives its subject teaches readers to
+    // ignore the channel. The binaries now install the configured backend at
+    // open, and one built without the feature REFUSES the key
+    // (`install_vector_backend`), which is louder than a warning, not quieter.
     cfg.vector.backend = VectorBackend::Lancedb;
     assert!(
-        cfg.unwired_warnings()
+        !cfg.unwired_warnings()
             .iter()
             .any(|w| w.contains("vector.backend")),
-        "vector.backend = lancedb must warn — the quipu binaries do not honour it"
+        "vector.backend is implemented (quipu-lv7) — it must NOT warn as unwired"
     );
 
     // quipu #47 WIRED federation, so this flipped from "must warn" to "must

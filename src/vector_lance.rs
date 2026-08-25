@@ -61,6 +61,31 @@ impl LanceVectorStore {
         })
     }
 
+    /// Open at `uri`, creating the empty `vectors` table when the database
+    /// does not have one yet.
+    ///
+    /// [`Self::open`] leaves `table` as `None` for a database that has never
+    /// been written, and the `&self` trait write path cannot create a table —
+    /// so a backend selected by config on a fresh directory would refuse the
+    /// first auto-embed with "table not initialized". Selecting a backend must
+    /// yield a usable one; the table is created here instead (quipu-lv7).
+    ///
+    /// # Errors
+    /// Whatever [`Self::open`] surfaces, plus a `LanceDB` create failure.
+    pub async fn open_or_create(uri: &str) -> Result<Self> {
+        let mut store = Self::open(uri).await?;
+        if store.table.is_none() {
+            let table = store
+                .conn
+                .create_empty_table(TABLE_NAME, Self::schema())
+                .execute()
+                .await
+                .map_err(|e| Error::Store(format!("LanceDB create empty table: {e}")))?;
+            store.table = Some(table);
+        }
+        Ok(store)
+    }
+
     /// Open an in-memory store (useful for tests).
     pub async fn open_in_memory() -> Result<Self> {
         let conn = lancedb::connect("memory://quipu-vectors")

@@ -1,7 +1,7 @@
-//! Migration from SQLite vectors to LanceDB.
+//! Migration from `SQLite` vectors to `LanceDB`.
 //!
-//! Reads all rows from the SQLite `vectors` table, converts them to Arrow
-//! `RecordBatch`es, and bulk-inserts into a LanceDB table. Supports dry-run
+//! Reads all rows from the `SQLite` `vectors` table, converts them to Arrow
+//! `RecordBatch`es, and bulk-inserts into a `LanceDB` table. Supports dry-run
 //! mode for previewing migration counts without writing.
 
 use std::sync::Arc;
@@ -10,7 +10,6 @@ use arrow_array::{
     ArrayRef, FixedSizeListArray, Float32Array, Int64Array, RecordBatch, StringArray,
 };
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
-use lancedb::query::ExecutableQuery;
 use rusqlite::params;
 
 use crate::error::{Error, Result};
@@ -23,7 +22,7 @@ const EMBEDDING_DIM: i32 = 384;
 /// Default batch size for bulk inserts.
 const DEFAULT_BATCH_SIZE: usize = 1000;
 
-/// LanceDB table name (must match `LanceVectorStore::TABLE_NAME`).
+/// `LanceDB` table name (must match `LanceVectorStore::TABLE_NAME`).
 const TABLE_NAME: &str = "vectors";
 
 /// Result of a migration run.
@@ -35,12 +34,12 @@ pub struct MigrateResult {
     pub skipped: usize,
 }
 
-/// Migrate all vectors from the SQLite store to a LanceDB database.
+/// Migrate all vectors from the `SQLite` store to a `LanceDB` database.
 ///
 /// # Arguments
-/// * `store` - The SQLite-backed store to read vectors from.
-/// * `lance_path` - URI/path for the LanceDB database directory.
-/// * `dry_run` - If true, report counts without writing to LanceDB.
+/// * `store` - The `SQLite`-backed store to read vectors from.
+/// * `lance_path` - URI/path for the `LanceDB` database directory.
+/// * `dry_run` - If true, report counts without writing to `LanceDB`.
 /// * `batch_size` - Number of rows per insert batch (0 = default 1000).
 pub fn migrate_sqlite_to_lancedb(
     store: &Store,
@@ -126,7 +125,7 @@ pub fn migrate_sqlite_to_lancedb(
     Ok(MigrateResult { migrated, skipped })
 }
 
-/// Create an empty LanceDB table with the vectors schema.
+/// Create an empty `LanceDB` table with the vectors schema.
 fn create_empty_table(lance_path: &str) -> Result<()> {
     let handle = tokio::runtime::Handle::try_current()
         .map_err(|_| Error::Store("No Tokio runtime available".into()))?;
@@ -154,7 +153,7 @@ fn create_empty_table(lance_path: &str) -> Result<()> {
     })
 }
 
-/// A single row read from the SQLite vectors table.
+/// A single row read from the `SQLite` vectors table.
 struct VectorRow {
     entity_id: i64,
     text: String,
@@ -163,7 +162,7 @@ struct VectorRow {
     valid_to: Option<String>,
 }
 
-/// Read all vectors from the SQLite store.
+/// Read all vectors from the `SQLite` store.
 ///
 /// Returns `(valid_rows, skipped_count)`. Rows with dimension != `EMBEDDING_DIM`
 /// are skipped.
@@ -244,7 +243,7 @@ fn build_batch(rows: &[VectorRow]) -> Result<RecordBatch> {
     .map_err(|e| Error::Store(format!("Arrow RecordBatch: {e}")))
 }
 
-/// Arrow schema for the LanceDB vectors table (matches `LanceVectorStore::schema()`).
+/// Arrow schema for the `LanceDB` vectors table (matches `LanceVectorStore::schema()`).
 fn lance_schema() -> SchemaRef {
     Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Int64, false),

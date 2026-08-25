@@ -26,6 +26,33 @@ pub(crate) async fn ui() -> Html<&'static str> {
 /// line (quipu-fd1): "undeclared" for a remote the operator has not labelled,
 /// so a floor-configured deployment can see at startup which remotes a
 /// federated query will be refused over.
+/// Announce what the `[[quipu.attachments]]` declarations became (quipu-at2).
+/// A composed layer nobody can see is how "it returned no rows" becomes a
+/// mystery; a missing file already refused the open before this runs.
+pub(crate) fn report_attachments(store: &quipu::Store) {
+    for line in quipu::config::describe_attachments(store) {
+        eprintln!("attached: {line}");
+    }
+}
+
+/// Install the configured vector backend, or exit naming the refusal
+/// (quipu-lv7).
+///
+/// Exits rather than continuing: a deployment that has run
+/// `quipu migrate-vectors` and asked for `lancedb` would otherwise serve every
+/// search out of the `SQLite` table it migrated away from, which looks like a
+/// working server returning wrong answers.
+pub(crate) fn apply_vector_backend(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
+    match quipu::config::install_vector_backend(store, config) {
+        Ok(Some(path)) => eprintln!("vector backend: lancedb at {path}"),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 pub(crate) fn report_federation(store: &quipu::Store, federation: &quipu::FederationConfig) {
     match quipu::provider::federated_from_config(store, "local", federation) {
         Ok(fed) => {
