@@ -25,7 +25,7 @@ command -v git-cliff >/dev/null 2>&1 || { echo "ERROR: git-cliff not installed" 
 
 pass=0; fail=0
 
-# Build a scratch repo: one released commit (v1.0.0), then two releasable commits.
+# Build a scratch crate: one released commit (v1.0.0), then two releasable commits.
 # Echoes "<tmpdir> <hashA> <hashB> <hashC>".
 make_repo() {
   local d; d="$(mktemp -d)"
@@ -34,13 +34,16 @@ make_repo() {
     git init -q .
     git config user.email t@example.com
     git config user.name t
-    mkdir -p scripts
+    mkdir -p scripts src docs
     cp "$REPO_ROOT/cliff.toml" .
     cp "$REPO_ROOT/scripts/verify-changelog.sh" scripts/
-    echo a > f.txt; git add -A; git commit -qm "feat: the released thing"
+    cp "$REPO_ROOT/scripts/fix-changelog.sh" scripts/
+    cp "$REPO_ROOT/scripts/filter-packaged-commits.py" scripts/
+    printf '[package]\nname="probe"\nversion="1.0.0"\nedition="2021"\nexclude=["docs/"]\n' > Cargo.toml
+    echo a > src/lib.rs; git add -A; git commit -qm "feat: the released thing"
     git tag v1.0.0
-    echo b > f.txt; git commit -qam "feat: the second thing"
-    echo c > f.txt; git commit -qam "fix: the third thing"
+    echo b > src/lib.rs; git commit -qam "feat: the second thing"
+    echo c > src/lib.rs; git commit -qam "fix: the third thing"
   ) >/dev/null 2>&1
   local a b c
   a="$(git -C "$d" rev-parse --short=7 HEAD~2)"
@@ -112,7 +115,7 @@ check "unresolvable placeholder hash is ignored" 0 "none missing, none extra" "$
 read -r d a b c <<<"$(make_repo)"
 (
   cd "$d"
-  echo x > src.txt
+  echo x >> src/lib.rs
   printf '# Changelog\n\nnote\n' > CHANGELOG.md
   git add -A && git commit -qm "fix: real work that also edits the changelog"
 ) >/dev/null 2>&1
@@ -127,12 +130,63 @@ read -r d a b c <<<"$(make_repo)"
 (
   cd "$d"
   printf '# Changelog\n\nnote\n' > CHANGELOG.md
-  printf '[package]\nversion = "1.1.0"\n' > Cargo.toml
+  sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml
   git add -A && git commit -qm "chore: release v1.1.0"
 ) >/dev/null 2>&1
 { echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
   entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
 check "pure release-mechanics commit stays exempt" 0 "none missing, none extra" "$d"
+
+# 8. An excluded-path-only commit does not change the packaged crate. It must not
+#    be required by the guard when release-plz correctly omits it.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  echo note > docs/ci.md
+  git add -A && git commit -qm "docs(ci): excluded documentation"
+) >/dev/null 2>&1
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
+check "excluded-only commit is not required" 0 "none missing, none extra" "$d"
+
+# 9. The inverse is equally important: documenting that excluded-only commit is
+#    over-documentation and must fail, preserving the guard's two-way contract.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  echo note > docs/ci.md
+  git add -A && git commit -qm "docs(ci): excluded documentation"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; entry "$e"; } > "$d/CHANGELOG.md"
+check "documented excluded-only commit fails as extra" 1 "do not belong to this release" "$d"
+
+# 10. The generator shares the same boundary: it removes an excluded commit from
+#     a generated section while retaining both packaged commits.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  echo note > docs/ci.md
+  git add -A && git commit -qm "docs(ci): excluded documentation"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; entry "$e"; echo; echo "## [1.0.0] - 2025-12-01"; echo;
+  entry "$a"; } > "$d/CHANGELOG.md"
+fix_out="$(cd "$d" && ./scripts/fix-changelog.sh 2>&1)"; fix_rc=$?
+if [[ "$fix_rc" -eq 0 ]] \
+   && grep -qF "[$b]" "$d/CHANGELOG.md" \
+   && grep -qF "[$c]" "$d/CHANGELOG.md" \
+   && ! grep -qF "[$e]" "$d/CHANGELOG.md"; then
+  echo "  PASS  fixer removes excluded-only commit (exit $fix_rc)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  fixer did not preserve packaged hashes while dropping $e:" >&2
+  sed 's/^/          /' <<<"$fix_out" >&2
+  fail=$((fail + 1))
+fi
+rm -rf "$d"
 
 echo
 echo "  ${pass} passed, ${fail} failed"

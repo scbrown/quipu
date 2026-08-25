@@ -63,7 +63,8 @@ trap cleanup EXIT
 
 GEN_FILE="$SCRATCH/cliff.md"
 NEW_FILE="$SCRATCH/CHANGELOG.new"
-export GEN_FILE
+PACKAGED_HASHES="$SCRATCH/packaged-hashes"
+export GEN_FILE PACKAGED_HASHES
 
 # Newest version section = from the first `## [x.y.z]` heading to the next one.
 newest_ver="$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md \
@@ -92,6 +93,12 @@ echo "changelog-fix: version ${newest_ver}, range ${range}"
 
 git-cliff --config "$CLIFF_CONFIG" "$range" > "$GEN_FILE" 2>/dev/null || true
 [[ -s "$GEN_FILE" ]] || { echo "ERROR: git-cliff produced nothing for ${range}" >&2; exit 2; }
+cliff_hashes="$(grep -oE '\[[0-9a-f]{7}\]' "$GEN_FILE" | tr -d '[]' | sort -u || true)"
+if [[ -n "$cliff_hashes" ]]; then
+  printf '%s\n' "$cliff_hashes" | scripts/filter-packaged-commits.py > "$PACKAGED_HASHES"
+else
+  : > "$PACKAGED_HASHES"
+fi
 
 # Splice: everything before the newest section + regenerated body + everything from
 # the following section onward.
@@ -108,6 +115,7 @@ import io, os, re, subprocess, sys
 
 ver, section_date = sys.argv[1], sys.argv[2]
 MECHANICS = {"CHANGELOG.md", "Cargo.toml", "Cargo.lock"}
+PACKAGED = set(io.open(os.environ["PACKAGED_HASHES"], encoding="utf-8").read().split())
 
 def is_mechanics(sha):
     out = subprocess.run(["git", "show", "--name-only", "--format=", sha],
@@ -123,9 +131,11 @@ body = re.sub(r"^## \[[^\]]*\].*", "## [%s] - %s" % (ver, section_date),
 kept, dropped = [], 0
 for line in body.splitlines():
     m = re.match(r"^- .*\(\[([0-9a-f]{7})\]", line)
-    if m and is_mechanics(m.group(1)):
-        dropped += 1
-        continue
+    if m:
+        sha = m.group(1)
+        if sha not in PACKAGED or is_mechanics(sha):
+            dropped += 1
+            continue
     kept.append(line)
 
 # Drop headings left with no entries beneath them.

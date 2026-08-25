@@ -71,15 +71,20 @@ else
   range="${prev_tag}..${rel_head}"
 fi
 
-# Expected commits = git-cliff over the range with the repo's config (the source of
-# truth). Extract the 7-char hashes it renders; drop the release commit itself.
-# `|| true`: an EMPTY result is a meaningful answer here, not an error — it is what
-# "this release contains nothing" looks like, which is precisely the case worth
-# catching. Without it, grep's exit 1 under `pipefail` aborted the whole script at
-# this assignment, so the empty-delta release exited 1 printing NOTHING — an outcome
-# indistinguishable from a crash, and one no reader could act on.
-expected="$(git-cliff --config "$CLIFF_CONFIG" "$range" 2>/dev/null \
+# Expected commits = git-cliff over the range, narrowed to commits that change the
+# packaged crate. release-plz uses `git_only = true`, so `cargo package` is the
+# shared definition of release content: docs/CI-only commits do not ship and do not
+# belong in the crate changelog. The helper is also used by fix-changelog.sh so the
+# generator and verifier cannot silently diverge.
+# An empty cliff result is meaningful (nothing releasable), but a package-list
+# failure is not. Keep those outcomes distinct so the guard fails closed.
+cliff_hashes="$(git-cliff --config "$CLIFF_CONFIG" "$range" 2>/dev/null \
   | grep -oE '\[[0-9a-f]{7}\]' | tr -d '[]' | sort -u || true)"
+expected=""
+if [[ -n "$cliff_hashes" ]]; then
+  expected="$(printf '%s\n' "$cliff_hashes" | scripts/filter-packaged-commits.py)" \
+    || { echo "ERROR: could not determine packaged release content" >&2; exit 2; }
+fi
 # Actual = hashes present in the newest CHANGELOG section.
 actual="$(printf '%s\n' "$newest_section" | grep -oE '\[[0-9a-f]{7}\]' | tr -d '[]' | sort -u || true)"
 
