@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.26] - 2026-08-25
+
+### Added
+
+- *(pack)* Ship a pack in a designated term space with --space([d5ddb05](https://github.com/scbrown/quipu/commit/d5ddb0545fd8583aa01b9b58b5453ae1dbb86db9))
+- *(governance)* Placement gate requires a backoffFormula on throttle effects([fedc261](https://github.com/scbrown/quipu/commit/fedc261e86e7f24a93bdbf17b7cc899fd7d5938f))
+- *(governance)* Verify agent transition signatures at the write gate([beaca8a](https://github.com/scbrown/quipu/commit/beaca8a547bf5b79bfbde9a10bc1a13a5d4bac8e))
+- *(federation)* Declared trust labels at the federation edge([f4623b0](https://github.com/scbrown/quipu/commit/f4623b051baf345fc68e07b765b777f8ff5342af))
+- *(freeze)* Archive packs carry entity embeddings([71a0295](https://github.com/scbrown/quipu/commit/71a0295e0c004c272536127222f8367bf639aac7))
+- *(config)* [[quipu.attachments]] mounts declared layers at open([3c0034a](https://github.com/scbrown/quipu/commit/3c0034a5bf9f8186559ecb09e612e5c5619292dc))
+- *(vector)* Vector.backend selects the LanceDB backend in-binary([b70305e](https://github.com/scbrown/quipu/commit/b70305e7bd4cffdc7a83baf9365ba14cd7943027))
+- *(audit)* Quipu audit namespace reports base-namespace drift([83f92f6](https://github.com/scbrown/quipu/commit/83f92f68fe9ff1b6ce1d2f4661bdb3c1f26b243f))
+
+### Documentation
+
+- Document quipu policy / quipu path CLI and the two /path/* routes([7fd8704](https://github.com/scbrown/quipu/commit/7fd870416c5d7dd548cdb0a063be7118416303e8))
+- *(design)* Correct two stale implementation banners([5086291](https://github.com/scbrown/quipu/commit/50862914c15151abcbeddd949b986e07726d1a02))
+
+### Fixed
+
+- *(test)* Isolate cached_validator_retains_its_shapes from the global validator cache([8f40206](https://github.com/scbrown/quipu/commit/8f402060fefa749ff9d12dbe285da6b192b1d301))
+
+### Miscellaneous
+
+- *(beads)* File six gap beads from the 2026-08-25 design-vs-impl survey (jsonl export)([2fb2c61](https://github.com/scbrown/quipu/commit/2fb2c61cb4fc8b5e31914e7c250e92bdb76ffcbf))
+
 ## [0.3.25] - 2026-08-24
 
 ### Added
