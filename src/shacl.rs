@@ -218,9 +218,16 @@ fn shapes_key(shapes_turtle: &str) -> u64 {
 /// On a hash collision between two *different* shape sets the cached validator
 /// would be wrong, so the stored shapes are compared before reuse.
 pub fn cached_validator(shapes_turtle: &str) -> Result<Arc<Validator>> {
+    cached_validator_in(validator_cache(), shapes_turtle)
+}
+
+/// The lookup behind `cached_validator`, with the cache as a parameter so
+/// tests can exercise the caching contract against a private cache instead of
+/// the process-global one (which parallel tests evict from at will).
+fn cached_validator_in(cache: &ValidatorCache, shapes_turtle: &str) -> Result<Arc<Validator>> {
     let key = shapes_key(shapes_turtle);
     {
-        let cache = validator_cache()
+        let cache = cache
             .lock()
             .map_err(|e| Error::InvalidValue(format!("validator cache poisoned: {e}")))?;
         if let Some(v) = cache.get(&key)
@@ -234,7 +241,7 @@ pub fn cached_validator(shapes_turtle: &str) -> Result<Arc<Validator>> {
     // lock across it would serialise every concurrent write behind one parse.
     let validator = Arc::new(Validator::from_turtle(shapes_turtle)?);
 
-    let mut cache = validator_cache()
+    let mut cache = cache
         .lock()
         .map_err(|e| Error::InvalidValue(format!("validator cache poisoned: {e}")))?;
     if cache.len() >= VALIDATOR_CACHE_CAP {
@@ -450,11 +457,16 @@ ex:bob a ex:Person .
 
     /// The cached validator must retain the exact shapes it was built from, so
     /// a hash collision cannot silently serve a different shape set.
+    ///
+    /// Runs against its own cache, not the process-global one: parallel tests
+    /// share the global (capacity-bounded) cache and can evict the entry
+    /// between the two calls, which made the `ptr_eq` assertion flaky (#84).
     #[test]
     fn cached_validator_retains_its_shapes() {
-        let v = cached_validator(PERSON_SHAPE).unwrap();
+        let cache: ValidatorCache = Mutex::new(HashMap::new());
+        let v = cached_validator_in(&cache, PERSON_SHAPE).unwrap();
         assert_eq!(v.shapes_turtle(), PERSON_SHAPE);
-        let v2 = cached_validator(PERSON_SHAPE).unwrap();
+        let v2 = cached_validator_in(&cache, PERSON_SHAPE).unwrap();
         assert!(Arc::ptr_eq(&v, &v2), "second call should hit the cache");
     }
 
