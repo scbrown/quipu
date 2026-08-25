@@ -56,8 +56,9 @@ pub mod vocabulary;
 pub mod w3c;
 
 pub use config::{
-    EmbeddingConfig, FederationConfig, GovernanceConfig, QuipuConfig, RemoteEndpoint,
-    ResolutionConfig, SearchConfig, ServerConfig, ShaclConfig, VectorBackend, VectorConfig,
+    AttachmentConfig, EmbeddingConfig, FederationConfig, GovernanceConfig, QuipuConfig,
+    RemoteEndpoint, ResolutionConfig, SearchConfig, ServerConfig, ShaclConfig, VectorBackend,
+    VectorConfig, open_with_configured_attachments,
 };
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,

@@ -56,13 +56,7 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
             .collect()
     };
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
     // `--space N` ships the pack in term space N (quipu #74), so it attaches
     // to a consumer without id collisions.
     let space = flag_value(args, "--space").map(|s| {

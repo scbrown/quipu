@@ -103,13 +103,7 @@ fn cmd_backtest(args: &[String], db_path: &str) {
             std::process::exit(1);
         }
     };
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
     let int_flag = |name: &str| flag_value(args, name).and_then(|v| v.parse::<i64>().ok());
     let window = match (int_flag("--from-tx"), int_flag("--to-tx")) {
         (Some(from_tx), Some(to_tx)) => Window { from_tx, to_tx },

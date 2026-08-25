@@ -1202,3 +1202,134 @@ fn naming_an_attached_graph_by_iri_reads_it() {
     let from_q = format!("SELECT ?s FROM <{layer_iri}> WHERE {{ ?s ?p ?o }}");
     assert!(!rows_of(&with, &from_q).is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// The `[[quipu.attachments]]` config surface (quipu-at2)
+// ---------------------------------------------------------------------------
+
+/// A config carrying exactly these attachment declarations.
+fn config_with(declared: Vec<crate::config::AttachmentConfig>) -> crate::config::QuipuConfig {
+    crate::config::QuipuConfig {
+        attachments: declared,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_configured_attachment_is_mounted_and_queryable_through_graph() {
+    // The end-to-end the mechanism never had: a declaration in config, an open
+    // that honours it, and the attached graph readable by name. Before this the
+    // only production attach was deep freeze's own, so "here is a pack, query
+    // it alongside your store" had no path that did not go through the library.
+    let scratch = Scratch::new("cfgmount");
+    let (layer, layer_graph) = respaced_layer(&scratch, "shared", "shared", 1);
+    let local = scratch.path("local.db");
+
+    let config = config_with(vec![crate::config::AttachmentConfig::new(
+        "shared",
+        layer.clone(),
+    )]);
+    let store =
+        crate::config::open_with_configured_attachments(&local.to_string_lossy(), &config).unwrap();
+
+    assert_eq!(store.attachments().len(), 1);
+    let q = format!("SELECT ?o WHERE {{ GRAPH <{layer_graph}> {{ ?s ?p ?o }} }}");
+    let result = query_temporal(&store, &q, &TemporalContext::default()).unwrap();
+    assert_eq!(
+        result.rows().len(),
+        1,
+        "the configured layer's graph must answer: {:?}",
+        result.rows()
+    );
+
+    // And the registry says where the graph came from, so a reader can tell a
+    // composed graph from a local one.
+    let contributed: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM graphs WHERE source = ?1",
+            rusqlite::params!["shared"],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        contributed > 0,
+        "the attached layer's graphs must be registered as contributed by it"
+    );
+}
+
+#[test]
+fn a_missing_configured_attachment_refuses_the_open_rather_than_degrading() {
+    let scratch = Scratch::new("cfgmissing");
+    let local = scratch.path("local.db");
+    let absent = scratch.path("not-here.db");
+
+    let config = config_with(vec![crate::config::AttachmentConfig::new(
+        "shared",
+        absent.clone(),
+    )]);
+    let err = expect_refused(crate::config::open_with_configured_attachments(
+        &local.to_string_lossy(),
+        &config,
+    ));
+    assert!(err.contains("quipu.attachments"), "names the knob: {err}");
+    assert!(err.contains("shared"), "names the alias: {err}");
+    assert!(err.contains("zero rows"), "says what it is avoiding: {err}");
+}
+
+#[test]
+fn a_configured_attachment_that_cannot_be_composed_refuses_the_open() {
+    // Schema verification is not bypassed by arriving through config: a
+    // space-0 layer collides with the local store's space and is refused with
+    // the same message a library caller would get.
+    let scratch = Scratch::new("cfgschema");
+    let layer = scratch.path("space0.db");
+    seed_layer(&layer, "collide");
+    let local = scratch.path("local.db");
+
+    let config = config_with(vec![crate::config::AttachmentConfig::new(
+        "shared",
+        layer.clone(),
+    )]);
+    let err = expect_refused(crate::config::open_with_configured_attachments(
+        &local.to_string_lossy(),
+        &config,
+    ));
+    assert!(
+        err.contains("space") || err.contains("respace"),
+        "the composition check must still run: {err}"
+    );
+}
+
+#[test]
+fn describe_attachments_reports_what_is_actually_mounted() {
+    let scratch = Scratch::new("cfglist");
+    let local = scratch.path("local.db");
+
+    // Nothing declared, nothing mounted.
+    let bare = crate::config::open_with_configured_attachments(
+        &local.to_string_lossy(),
+        &config_with(Vec::new()),
+    )
+    .unwrap();
+    assert!(crate::config::describe_attachments(&bare).is_empty());
+    drop(bare);
+
+    let (layer, _) = respaced_layer(&scratch, "shared", "shared", 1);
+    let store = crate::config::open_with_configured_attachments(
+        &local.to_string_lossy(),
+        &config_with(vec![crate::config::AttachmentConfig::new(
+            "shared",
+            layer.clone(),
+        )]),
+    )
+    .unwrap();
+    let lines = crate::config::describe_attachments(&store);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].starts_with("shared\t"), "alias first: {lines:?}");
+    assert!(
+        lines[0].contains(&layer.to_string_lossy().to_string()),
+        "the path is what an operator checks: {lines:?}"
+    );
+    assert!(lines[0].ends_with("ro"), "mounts are read-only: {lines:?}");
+}

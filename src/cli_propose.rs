@@ -5,13 +5,7 @@ use crate::cli::chrono_now;
 pub fn cmd_propose(args: &[String], db_path: &str) {
     let action = args.get(2).map_or("list", std::string::String::as_str);
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     match action {
         "submit" => cmd_propose_submit(args, &store),

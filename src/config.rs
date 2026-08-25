@@ -10,7 +10,11 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 
+mod attachments;
 mod federation;
+pub use attachments::{
+    AttachmentConfig, describe_attachments, open_with_configured_attachments, resolve_attachments,
+};
 pub use federation::{FederationConfig, RemoteEndpoint};
 
 use crate::namespace;
@@ -355,6 +359,12 @@ pub struct QuipuConfig {
 
     /// Event-log retention (quipu-9z9). Default: keep forever.
     pub events: EventsConfig,
+
+    /// Read-only databases to mount alongside the store (quipu-at2), declared
+    /// as `[[quipu.attachments]]` with `alias` and `path`. Empty by default,
+    /// which is the pre-existing behaviour exactly: no attachment, no change
+    /// to any query's result.
+    pub attachments: Vec<AttachmentConfig>,
 }
 
 impl Default for QuipuConfig {
@@ -373,6 +383,7 @@ impl Default for QuipuConfig {
             owl: OwlConfig::default(),
             governance: GovernanceConfig::default(),
             events: EventsConfig::default(),
+            attachments: Vec::new(),
         }
     }
 }

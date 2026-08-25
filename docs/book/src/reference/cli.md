@@ -642,6 +642,20 @@ Reads: `--fork <name>` on `quipu read`, or the `fork` field on
 `POST /query` / `quipu_query`. Unknown and dropped forks are refused
 loudly — never a silent fall-through to ROOT.
 
+### `quipu db attach --list`
+
+List the databases mounted alongside this store — the `[[quipu.attachments]]`
+layers (see [Configuration](../getting-started/configuration.md#attachments))
+and deep freeze's archives, which no config declares.
+
+```bash
+quipu db attach --list --db my.db
+```
+
+Output is `alias`, `path`, and mount mode (always `ro`), tab-separated. A
+declared layer that could not be mounted refuses the open instead of appearing
+here, so everything listed is genuinely composed.
+
 ### `quipu db respace`
 
 Move a store into a fresh term space so it can be attached to another store

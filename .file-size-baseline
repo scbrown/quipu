@@ -3,12 +3,11 @@
 # They may shrink; growing fails the build. Regenerate with:
 #   scripts/check-file-size.sh --update-baseline
 # Shrinking this file is the point. See quipu-bu3.
-src/cli.rs 521
-src/cli_commands.rs 590
+src/cli_commands.rs 558
 src/episode/mod.rs 645
 src/graph.rs 514
 src/mcp/named_query.rs 537
 src/rdf.rs 717
-src/server.rs 507
+src/server.rs 502
 src/store/labels.rs 762
 src/store/ops.rs 666

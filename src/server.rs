@@ -87,10 +87,18 @@ async fn main() {
         eprintln!("warning: {warning}");
     }
 
-    let mut store = quipu::Store::open(&db_path).unwrap_or_else(|e| {
-        eprintln!("error opening store {db_path}: {e}");
-        std::process::exit(1);
-    });
+    let mut store =
+        quipu::open_with_configured_attachments(&db_path, &config).unwrap_or_else(|e| {
+            eprintln!("error opening store {db_path}: {e}");
+            std::process::exit(1);
+        });
+
+    // quipu-at2: announce what the `[[quipu.attachments]]` declarations became.
+    // A composed layer that nobody can see is how "it returned no rows" becomes
+    // a mystery; a missing file already refused the open above.
+    for line in quipu::config::describe_attachments(&store) {
+        eprintln!("attached: {line}");
+    }
 
     // Mint IRIs under the CONFIGURED base namespace, not the hardcoded aegis
     // default (aegis-4h3x) — without this, `[quipu] base_ns = "..."` was inert

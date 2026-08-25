@@ -54,13 +54,7 @@ pub fn cmd_episode(args: &[String], db_path: &str, config_base_ns: &str) {
         }
     };
 
-    let mut store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let mut store = crate::cli_open::open_store(db_path);
 
     let now = resolve_timestamp(args);
     match quipu::ingest_episode(&mut store, &episode, &now, base_ns) {
@@ -90,13 +84,7 @@ pub fn cmd_retract(args: &[String], db_path: &str) {
 
     let predicate_iri = flag_value(args, "--predicate");
 
-    let mut store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let mut store = crate::cli_open::open_store(db_path);
 
     let mut input = serde_json::json!({
         "entity": entity_iri,
@@ -128,13 +116,7 @@ pub fn cmd_retract(args: &[String], db_path: &str) {
 pub fn cmd_shapes(args: &[String], db_path: &str) {
     let action = args.get(2).map_or("list", std::string::String::as_str);
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     match action {
         "load" => {
@@ -284,13 +266,7 @@ pub fn cmd_validate(args: &[String]) {
 }
 
 pub fn cmd_repl(db_path: &str) {
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     println!("quipu SPARQL repl (db: {db_path})");
     println!("type a SPARQL query, or :quit to exit\n");
@@ -344,13 +320,7 @@ pub fn cmd_export(args: &[String], db_path: &str) {
         .find(|w| w[0] == "--graph")
         .map(|w| w[1].as_str());
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     let exported = match graph {
         Some(iri) => {
@@ -370,13 +340,7 @@ pub fn cmd_export(args: &[String], db_path: &str) {
 }
 
 pub fn cmd_stats(db_path: &str) {
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     match quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }") {
         Ok(result) => {
@@ -427,13 +391,7 @@ pub fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
     }
 
     let db_path = config.store_path.to_string_lossy();
-    let store = match quipu::Store::open(&db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(&db_path);
 
     let lance_path = config.vector.lancedb_path.to_string_lossy().to_string();
     match quipu::migrate_sqlite_to_lancedb(&store, &lance_path, dry_run, 1000) {
@@ -525,13 +483,7 @@ pub fn cmd_doctor(args: &[String], db_path: &str) {
         std::process::exit(1);
     }
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     // quipu #80: surface producers' RECOMMENDED floors here. They are advisory
     // — the store never applies them — so they are reported beside the drift
@@ -592,10 +544,42 @@ pub fn cmd_doctor(args: &[String], db_path: &str) {
 /// Deliberately requires an explicit `--out`: respace is the one operation here
 /// that produces a store whose ids differ from every other copy, and defaulting
 /// the destination is how one gets written over something.
+/// `quipu db attach --list` — what is actually mounted alongside this store.
+///
+/// The visibility surface `[[quipu.attachments]]` needs to be operable: a
+/// declared layer that failed to mount refuses the open, so anything listed
+/// here IS composed — and the list also shows deep freeze's archives, which no
+/// config declares. `--list` is required rather than defaulted so the
+/// subcommand stays open for a future verb without changing what a bare
+/// `quipu db attach` means today.
+fn cmd_db_attach(args: &[String], db_path: &str) {
+    if !args.iter().any(|a| a == "--list") {
+        eprintln!("usage: quipu db attach --list [--db <path>]");
+        std::process::exit(1);
+    }
+    let store = crate::cli_open::open_store(db_path);
+    let mounted = quipu::config::describe_attachments(&store);
+    if mounted.is_empty() {
+        println!("no attachments mounted");
+        return;
+    }
+    println!("alias\tpath\tmode");
+    for line in mounted {
+        println!("{line}");
+    }
+}
+
 pub fn cmd_db(args: &[String], db_path: &str) {
     let sub = args.get(2).map_or("", String::as_str);
+    if sub == "attach" {
+        cmd_db_attach(args, db_path);
+        return;
+    }
     if sub != "respace" {
-        eprintln!("usage: quipu db respace --into <space> --out <file> [--db <path>]");
+        eprintln!(
+            "usage: quipu db respace --into <space> --out <file> [--db <path>]\n       \
+             quipu db attach --list [--db <path>]"
+        );
         std::process::exit(1);
     }
 
@@ -654,13 +638,7 @@ pub fn cmd_events(args: &[String], db_path: &str) {
         std::process::exit(1);
     }
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     match store.refusals_by_gate() {
         Ok(counts) => {

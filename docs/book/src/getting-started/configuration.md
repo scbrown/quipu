@@ -30,6 +30,14 @@ bind = "127.0.0.1:3030"
 # disk). A consumer registering AFTER a prune replays from the retained
 # prefix, not from genesis.
 # retention_days = 90
+
+# Read-only databases mounted alongside the store. Each block is one layer:
+# a knowledge pack, a shared reference database, a frozen archive someone
+# handed you. Their named graphs become readable by `GRAPH <iri>` / `FROM <iri>`
+# without changing what any existing query returns.
+# [[quipu.attachments]]
+# alias = "reference"
+# path = "/srv/quipu/reference.qpack.db"
 ```
 
 ## Config Fields
@@ -72,6 +80,54 @@ stops being read.
 | `embedding.dimension` / `max_sequence_length` / `embed_batch_size` | `384` / `256` / `32` | Embedding runtime parameters |
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb` (embedder-only; see below) |
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
+| `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |
+
+## Attachments
+
+`[[quipu.attachments]]` mounts other SQLite databases alongside your store, so
+their named graphs are readable in the same query as your own. Both binaries
+honour it at open — every `quipu` subcommand and `quipu-server` alike.
+
+```toml
+[[quipu.attachments]]
+alias = "reference"
+path = "/srv/quipu/reference.qpack.db"
+
+[[quipu.attachments]]
+alias = "tenant_a"
+path = "packs/tenant-a.db"
+```
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `alias` | Yes | SQLite schema name the file mounts under, and the `source` its contributed graphs carry in the graph registry. Must match `^[a-z][a-z0-9_]*$` |
+| `path` | Yes | Path to the database file; relative paths resolve against the working directory |
+
+What to expect:
+
+- **Nothing silently changes.** The default dataset stays your own ROOT alone,
+  so an attachment is visible only to a query that names one of its graphs —
+  `GRAPH <iri>`, `FROM <iri>`, or a dataset that includes it.
+- **Mounts are read-only, always.** There is no `read_only = false`:
+  cross-database writes are permanently out of scope, so the key would be an
+  affordance for something the store refuses anyway.
+- **A bad declaration refuses the open** — it never degrades into fewer rows. A
+  missing file, an invalid or duplicate alias, a file with no `g` column (it
+  predates named graphs), or one whose term space collides with yours all fail
+  at startup, naming the alias and the remedy. A term-space collision is fixed
+  with `quipu db respace`.
+- **The packs you already build are attachable.** `quipu pack --space N` ships a
+  pack in its own term space, which is exactly what a collision-free mount
+  needs.
+
+See what is actually mounted — including deep freeze's archives, which no
+config declares:
+
+```bash
+quipu db attach --list --db my.db
+```
+
+`quipu-server` prints the same list to stderr at startup.
 
 ## Not wired into the `quipu` CLI / `quipu-server`
 

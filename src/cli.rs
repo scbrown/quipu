@@ -65,13 +65,7 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
 
     let shapes_path = flag_value(args, "--shapes");
 
-    let mut store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let mut store = crate::cli_open::open_store(db_path);
 
     let data = match std::fs::read_to_string(file_path) {
         Ok(d) => d,
@@ -155,13 +149,7 @@ pub fn cmd_query(args: &[String], db_path: &str) {
     let valid_at = flag_value(args, "--valid-at").map(String::from);
     let as_of_tx: Option<i64> = flag_value(args, "--tx").and_then(|v| v.parse().ok());
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     // `--fork <name>` scopes the default graph to a named fork (quipu-gp5).
     let graph = crate::cli_fork::fork_scope(&store, args);
@@ -187,13 +175,7 @@ pub fn cmd_cord(args: &[String], db_path: &str) {
         .and_then(|w| w[1].parse().ok())
         .unwrap_or(100);
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     let input = serde_json::json!({
         "type": type_filter,
@@ -244,13 +226,7 @@ pub fn cmd_unravel(args: &[String], db_path: &str) {
         std::process::exit(1);
     }
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     let input = serde_json::json!({
         "tx": tx,
@@ -341,13 +317,7 @@ pub fn cmd_project(args: &[String], db_path: &str) {
         input["seeds"] = serde_json::Value::Array(seeds);
     }
 
-    let mut store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let mut store = crate::cli_open::open_store(db_path);
 
     match quipu::tool_project(&mut store, &input) {
         Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
@@ -382,13 +352,7 @@ pub fn cmd_report(args: &[String], db_path: &str) {
         input["questions"] = serde_json::json!(q);
     }
 
-    let store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let store = crate::cli_open::open_store(db_path);
 
     match quipu::tool_report(&store, &input) {
         Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
@@ -425,13 +389,7 @@ pub fn cmd_impact(args: &[String], db_path: &str) {
         .map(|w| w[1].clone())
         .collect();
 
-    let mut store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let mut store = crate::cli_open::open_store(db_path);
 
     let opts = quipu::ImpactOptions { hops, predicates };
 
@@ -545,13 +503,7 @@ pub fn cmd_reason(args: &[String], db_path: &str) {
         return;
     }
 
-    let mut store = match quipu::Store::open(db_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        }
-    };
+    let mut store = crate::cli_open::open_store(db_path);
 
     let now = chrono_now();
     let report = match quipu::reasoner::evaluate(&mut store, &ruleset, &now) {

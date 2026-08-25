@@ -335,3 +335,37 @@ fn load_nonexistent_dir() {
     let cfg = QuipuConfig::load(Path::new("/nonexistent/dir"));
     assert_eq!(cfg.store_path, PathBuf::from(".bobbin/quipu/quipu.db"));
 }
+
+#[test]
+fn parse_attachments_table() {
+    // quipu-at2: the declaration shape, and that an absent table stays empty
+    // rather than defaulting to something mounted.
+    let toml_str = r#"
+[quipu]
+store_path = "/data/quipu.db"
+
+[[quipu.attachments]]
+alias = "reference"
+path = "/data/reference.qpack.db"
+
+[[quipu.attachments]]
+alias = "tenant_a"
+path = "packs/tenant-a.db"
+"#;
+    let file: ConfigFile = toml::from_str(toml_str).unwrap();
+    let cfg = file.quipu;
+    assert_eq!(cfg.attachments.len(), 2);
+    assert_eq!(cfg.attachments[0].alias, "reference");
+    assert_eq!(
+        cfg.attachments[0].path,
+        PathBuf::from("/data/reference.qpack.db")
+    );
+    assert_eq!(cfg.attachments[1].alias, "tenant_a");
+    assert_eq!(cfg.attachments[1].path, PathBuf::from("packs/tenant-a.db"));
+
+    let empty: ConfigFile = toml::from_str("[quipu]\n").unwrap();
+    assert!(
+        empty.quipu.attachments.is_empty(),
+        "silence must mount nothing — the pre-existing behaviour exactly"
+    );
+}

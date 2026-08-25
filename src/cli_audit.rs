@@ -27,10 +27,7 @@ pub fn cmd_audit(args: &[String], db_path: &str) {
         );
         std::process::exit(1);
     };
-    let store = quipu::Store::open(db_path).unwrap_or_else(|e| {
-        eprintln!("error opening store: {e}");
-        std::process::exit(1);
-    });
+    let store = crate::cli_open::open_store(db_path);
 
     if subject == "replay" {
         cmd_replay(args, &store);

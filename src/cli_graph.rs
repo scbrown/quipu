@@ -128,8 +128,5 @@ fn cmd_list(args: &[String], db_path: &str) {
 }
 
 fn open_store(db_path: &str) -> quipu::Store {
-    quipu::Store::open(db_path).unwrap_or_else(|e| {
-        eprintln!("error opening store: {e}");
-        std::process::exit(1);
-    })
+    crate::cli_open::open_store(db_path)
 }

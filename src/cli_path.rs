@@ -7,10 +7,7 @@ use quipu::path::{ConeOptions, ConeVerdict, DraftOptions, PathVocab, backtest, c
 use quipu::store::Store;
 
 fn open(db_path: &str) -> Store {
-    Store::open(db_path).unwrap_or_else(|e| {
-        eprintln!("error opening store: {e}");
-        std::process::exit(1);
-    })
+    crate::cli_open::open_store(db_path)
 }
 
 fn die(usage: &str) -> ! {

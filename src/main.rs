@@ -15,6 +15,7 @@
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
+//!   quipu db attach --list                List the databases mounted alongside this store
 //!   quipu pack <graph-iri> --out <file> [--space N]  Export a graph as an attachable pack
 //!   quipu unpack <file> [--into <graph-iri>]  Materialize a pack into a local graph
 //!   quipu fork <tx>|list|diff|drop|promote  Persistent named forks of ROOT
@@ -26,6 +27,7 @@ mod cli_audit;
 mod cli_commands;
 mod cli_fork;
 mod cli_graph;
+mod cli_open;
 mod cli_pack;
 mod cli_path;
 mod cli_policy;
@@ -105,10 +107,7 @@ fn cmd_ontology(args: &[String], db_path: &str) {
     #[cfg(feature = "owl")]
     {
         let sub = args.get(2).map_or("list", String::as_str);
-        let mut store = quipu::Store::open(db_path).unwrap_or_else(|e| {
-            eprintln!("error opening store: {e}");
-            std::process::exit(1);
-        });
+        let mut store = cli_open::open_store(db_path);
         match sub {
             "load" => {
                 let name = args.get(3).unwrap_or_else(|| {
@@ -244,6 +243,7 @@ COMMANDS:
     quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     quipu pack --verify <file.qpack.db>
     quipu db respace --into <space> --out <file> [--db <path>]
+    quipu db attach --list [--db <path>]
     quipu events refusals [--db <path>]
     quipu graph import <db> --as <iri> [--db <path>]
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]

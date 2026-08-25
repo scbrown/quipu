@@ -17,10 +17,7 @@ const USAGE: &str = "usage: quipu fork <tx> [--name <n>] [--timestamp <ISO-8601>
 read a fork with:  quipu read \"<sparql>\" --fork <name>";
 
 fn open(db_path: &str) -> Store {
-    Store::open(db_path).unwrap_or_else(|e| {
-        eprintln!("error opening store: {e}");
-        std::process::exit(1);
-    })
+    crate::cli_open::open_store(db_path)
 }
 
 fn die() -> ! {

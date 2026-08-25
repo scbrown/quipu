@@ -351,6 +351,20 @@ Additive throughout, in the `migrate_named_graphs` style:
    consumer** — the `unwired_warnings` build guard requires it, and this repo
    has already deleted one inert key as a false affordance.
 
+   **BUILT (quipu-at2, 2026-08-25), and the delay proved the point.** The
+   mechanism shipped with #75 and the config did not, so for months the only
+   production caller of `Store::open_with_attachments` was deep freeze's
+   auto-attach: composition worked, and no operator could ask for it. The
+   config now lands with two consumers, not one — `src/config/attachments.rs`
+   resolves the declarations and `open_with_configured_attachments` mounts
+   them, called by BOTH binaries (`src/cli_open.rs` routes every `quipu`
+   subcommand through one open; `quipu-server` opens once and announces what
+   mounted). `quipu db attach --list` is the visibility surface, and it reads
+   what is MOUNTED rather than what was declared, so it also shows the frozen
+   archives no config names. A declared file that is missing refuses the open
+   with the same reasoning the frozen-pack registry uses: a layer silently
+   absent turns every query over it into a confident zero rows.
+
 Defaults that keep every deployment byte-identical: no attachments →
 `facts_source()` returns `"facts"`, zero cost; no configured space → space 0;
 attaching adds graphs without changing any existing query's results.
