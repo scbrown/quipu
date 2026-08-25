@@ -1,9 +1,56 @@
 # Semantic, entity-grounded edit policies
 
-> **Implementation status (2026-08-15):** 🟥 **Design only.** Nothing below is
-> implemented. The regex-tier catalog this evolves
+> **Implementation status (2026-08-25):** 🟨 **Partial — quipu's half of
+> sequencing steps 1, 3 and the vocabulary of 4–5 is BUILT; the evaluation
+> half (yupana) is not.** The regex-tier catalog this evolves
 > (`shapes/policies/treesitter.ttl`, projected and enforced by yupana's
-> pre-edit hook) is live; this document specifies its successor tiers.
+> pre-edit hook) is live, and so is the vocabulary that lets a grounded or
+> inexact-tier policy be *stated and refused* — but nothing yet *evaluates* a
+> grounded predicate, so no edit is decided by membership today.
+>
+> **BUILT (quipu):**
+>
+> - **§Sequencing step 1 — the grounded vocabulary and its definition-time
+>   rules.** `aegis:candidateSource` and `aegis:groundingQuery` are declared
+>   properties (`shapes/aegis-properties.ttl`); `"must-ground"` and
+>   `"must-not-ground"` are admitted `aegis:matchType` values alongside the
+>   lexical trio (`shapes/governance.ttl`, the `sh:in` on `aegis:matchType`).
+>   The cross-field rule SHACL core cannot express — a grounded match type
+>   without an `aegis:groundingQuery` is refused at definition time — lives in
+>   `src/governance/placement.rs`, with the shape-level admission tested in
+>   `src/governance_tests.rs` (`a_grounded_predicate_conforms`,
+>   `an_inexact_tier_predicate_conforms`, `predicate_tier_out_of_enum_is_rejected`)
+>   and the cross-field refusals in `src/governance/placement_tests.rs`.
+> - **§Sequencing step 3 — grounded catalog entries.**
+>   `aegis:pred_no_ticket_in_comment_v2` ships the token/id-set/`must-not-ground`
+>   form from Design A verbatim (`shapes/policies/treesitter.ttl`), and
+>   `aegis:pred_implements_grounded` ships the embedding-tier, `citation`-candidate
+>   form from Design B with its `aegis:OperatingPoint`
+>   (`shapes/policies/linkage.ttl`). Both are validated as *shipped data*, not
+>   fixtures, by `linkage_policy_catalog_conforms` and its tree-sitter twin.
+> - **The honesty rules for the inexact tiers (Design B/C vocabulary).**
+>   `"embedding"` and `"model"` are admitted `aegis:tier` values, and a policy
+>   composing either is refused at definition time when it hard-denies at the
+>   PAG, declares no `aegis:OperatingPoint`, declares no
+>   `aegis:falsePositiveTolerance`, or claims a tolerance of `0.0`
+>   (`src/governance/placement.rs`). A classifier cannot assert exactness here.
+>
+> **NOT built — the true remainder:**
+>
+> - **§Sequencing step 2, entirely (yupana).** The grounding-set projection
+>   into the hot plane, the three-outcome evaluation, and the `unresolvable`
+>   violation class. This is the load-bearing gap: `aegis:groundingQuery`'s own
+>   contract says a missing or failed projection must render the rule
+>   UNEVALUATED and loud rather than "empty set, nothing grounds, allow" — and
+>   the component that would honour that rule does not exist yet. Until it
+>   does, a grounded predicate is a well-formed statement nothing acts on.
+> - **§Sequencing step 4's evaluation half.** The work-item vector matrix
+>   projected from bobbin's beads index, and score/threshold/model/corpus-
+>   watermark carried in the verdict. Only quipu's vocabulary and calibration
+>   refusals landed.
+> - **§Sequencing step 5's evaluation half (Design C).** Same split: the
+>   `"model"` tier value and its placement rules exist; the generative
+>   judgment, its quarantined fact output, and the routing behind it do not.
 
 ## Problem
 

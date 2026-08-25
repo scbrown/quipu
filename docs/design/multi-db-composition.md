@@ -1,7 +1,7 @@
 # Design: Multi-DB Composition — term spaces, ATTACH, and the blob sidecar
 
-> **Implementation status (2026-08-12):** 🟩 **§1–§4 are built and composed
-> reads work; §5 cross-DB limits are not (quipu #77).** §1.2 aliases landed
+> **Implementation status (2026-08-25):** 🟩 **§1–§4 are built and composed
+> reads work; §5's label seam is built; §6's limits are enforced.** §1.2 aliases landed
 > as `src/store/alias.rs` (quipu #76) with one documented deviation: the
 > alias table is TEMP and rebuilt at open rather than the design's persisted
 > `CREATE TABLE term_alias` — it is derived data, and persisting it would
@@ -17,9 +17,27 @@
 >   registers; the BGP evaluator reads the composed source. **`GRAPH ?g` ranges
 >   attached graphs end-to-end today.**
 > - **§1.2 aliases — BUILT** (quipu #76; the TEMP-table deviation is noted
->   above). **§5 cross-DB limits — NOT built** (quipu #77). *(Corrected
->   2026-08-22: this line previously still listed §1.2 as NOT built,
->   contradicting the paragraph above it.)*
+>   above). *(Corrected 2026-08-22: this line previously still listed §1.2 as
+>   NOT built, contradicting the paragraph above it.)*
+> - **§5 the `GraphProvider` seam — BUILT.** The seam itself is a placement
+>   decision that shipped with §2 (ATTACH lives below `GraphProvider`, in the
+>   store); its label half landed as quipu-fd1 — see §5's own banner for the
+>   citations.
+> - **§6 the permanent limits — ENFORCED, not merely asserted.** The
+>   transaction-time refusal is live: `query_temporal` fails an `as_of_tx`
+>   query against a store with attachments mounted, in a message that names
+>   this document's §6 (`src/sparql/mod.rs`), and
+>   `as_of_tx_is_refused_when_attachments_are_mounted_but_main_only_is_unchanged`
+>   (`src/store/attach/tests.rs`) holds it to refusing *only* that case. The
+>   write and transaction limits need no quipu-side code: the default mount is
+>   `file:…?mode=ro` (`Attachment::read_only`, `src/store/attach.rs`) and
+>   SQLite itself refuses the write with `attempt to write a readonly
+>   database`, so no write path exists to police.
+>
+> *(Corrected 2026-08-25 — quipu-db5. This banner previously read "§5 cross-DB
+> limits are not built (quipu #77)", which was wrong three ways: §5 is the
+> `GraphProvider` seam, not the limits; the limits are §6; and quipu #77 closed
+> completed on 2026-08-07, five days before the banner's own date.)*
 >
 > ⚠️ **The one thing §4's SQL sketch gets wrong, measured while building it.**
 > `SELECT … FROM shared.facts` written literally puts the attached layer's OWN
