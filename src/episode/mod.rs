@@ -8,6 +8,7 @@
 //! into RDF Turtle and writes it through the existing `ingest_rdf` pipeline.
 
 use serde::Deserialize;
+use std::collections::HashSet;
 
 #[cfg(feature = "shacl")]
 use crate::error::Error;
@@ -242,6 +243,24 @@ pub fn ingest_episode_outcome(
     timestamp: &str,
     base_ns: &str,
 ) -> Result<(i64, usize, IngestOutcome)> {
+    // One payload may mention a node name exactly once. Repeating it used to
+    // look like the documented way to dual-type an entity, but each entry also
+    // emitted its description as rdfs:comment. Two descriptions under one name
+    // therefore committed two active comments behind HTTP 200 (aegis-ibft0).
+    // Refuse before hashing, resolution, Turtle generation, or a transaction:
+    // the author is still present and can express one unambiguous node entry.
+    let mut node_names = HashSet::with_capacity(episode.nodes.len());
+    for node in &episode.nodes {
+        if !node_names.insert(node.name.as_str()) {
+            return Err(crate::error::Error::InvalidValue(format!(
+                "duplicate node name '{}' in one episode — each name may appear only once. \
+                 Repeated entries can append multiple rdfs:comment values; consolidate the \
+                 node into one entry before POSTing (aegis-ibft0).",
+                node.name
+            )));
+        }
+    }
+
     // Idempotency key (hq-fhc). The episode activity IRI is derived purely from
     // the episode name, so re-ingesting the same name targets the same node. We
     // stamp the activity with a content hash: identical re-ingests are no-ops,

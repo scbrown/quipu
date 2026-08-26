@@ -2,13 +2,42 @@
 
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::{extract::State, response::IntoResponse};
 use quipu::{EmbeddingProvider, Store};
 use serde_json::json;
 
 use super::SharedStore;
 use super::base::{STATS_CACHE, StatsCache, metrics_handler, stats};
-use super::tools::search;
+use super::tools::{episode, search};
+
+/// aegis-ibft0 acceptance: prove the HTTP handler's NEGATIVE outcome. A clean
+/// payload passing would also pass on the buggy append-two-comments behavior.
+#[tokio::test]
+async fn post_episode_refuses_one_node_name_twice_and_writes_nothing() {
+    let store = Store::open_in_memory().unwrap();
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    let input = json!({
+        "name": "duplicate-description-payload",
+        "nodes": [
+            {"name": "one-rule", "type": "Directive", "description": "first"},
+            {"name": "one-rule", "type": "FailureMode", "description": "second"}
+        ]
+    });
+
+    let err = episode(State(shared.clone()), axum::Json(input))
+        .await
+        .expect_err("POST /episode must refuse a repeated node name");
+    let response = err.into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+    assert!(
+        shared
+            .lock()
+            .lookup("http://aegis.gastown.local/ontology/one-rule")
+            .unwrap()
+            .is_none(),
+        "the refused HTTP request must commit no partial node"
+    );
+}
 
 /// An embedding provider whose embed is deliberately SLOW, so that whether the
 /// store lock is held across it is observable in wall-clock time.

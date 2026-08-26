@@ -883,43 +883,30 @@ fn a_reworded_node_description_supersedes_without_losing_provenance() {
 }
 
 #[test]
-fn a_dual_typed_revision_reconciles_its_description_once() {
+fn repeated_name_with_different_descriptions_is_refused_before_any_write() {
     let mut store = Store::open_in_memory().unwrap();
-    let first = parse_episode(
+    let episode = parse_episode(
         r#"{
-          "name":"first-dual-type-observation",
-          "nodes":[{"name":"shared-rule","type":"Directive","description":"old wording"}]
-        }"#,
-    );
-    ingest_episode(&mut store, &first, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
-
-    let revision = parse_episode(
-        r#"{
-          "name":"dual-type-revision",
+          "name":"duplicate-description-payload",
           "nodes":[
-            {"name":"shared-rule","type":"Directive","description":"current wording"},
-            {"name":"shared-rule","type":"FailureMode","description":"current wording"}
+            {"name":"shared-rule","type":"Directive","description":"prescriptive wording"},
+            {"name":"shared-rule","type":"FailureMode","description":"descriptive wording"}
           ]
         }"#,
     );
-    ingest_episode(&mut store, &revision, "2026-01-02T00:00:00Z", TEST_BASE_NS)
-        .expect("duplicate node entries for multiple types must reconcile only once");
-
-    assert_eq!(
-        active_values(
-            &store,
-            &format!("{TEST_BASE_NS}shared-rule"),
-            &format!("{}comment", namespace::RDFS)
-        ),
-        vec!["current wording"]
-    );
-    assert_eq!(
-        active_values(
-            &store,
-            &format!("{TEST_BASE_NS}episode_first-dual-type-observation"),
-            &format!("{}comment", namespace::RDFS)
-        ),
-        vec!["old wording"]
+    let err = ingest_episode(&mut store, &episode, "2026-01-02T00:00:00Z", TEST_BASE_NS);
+    let msg = err
+        .expect_err("one repeated name must be refused, not merged")
+        .to_string();
+    assert!(msg.contains("duplicate node name 'shared-rule'"), "{msg}");
+    assert!(msg.contains("only once"), "{msg}");
+    assert!(msg.contains("rdfs:comment"), "{msg}");
+    assert!(
+        store
+            .lookup(&format!("{TEST_BASE_NS}shared-rule"))
+            .unwrap()
+            .is_none(),
+        "a refused episode must not write even its first valid node entry"
     );
 }
 
@@ -1460,42 +1447,24 @@ fn comma_separated_type_is_refused_not_minted_as_a_junk_class() {
 }
 
 #[test]
-fn one_entry_per_type_still_yields_one_entity_with_both_types() {
-    // The CONVERSE, and it is the half that makes the guard a policy rather than a
-    // filter: the documented working form must keep working, or the refusal above
-    // just breaks multi-typing instead of fixing it.
+fn repeated_name_is_refused_even_when_descriptions_are_identical() {
+    // The refusal is structural, not a prose comparison. Letting identical
+    // descriptions through would preserve the affordance that produced the bug
+    // and make a later wording edit silently change the payload's validity.
     let mut store = crate::store::Store::open_in_memory().unwrap();
     let ep = parse_episode(
         r#"{
-        "name": "multi-type-ok",
+        "name": "multi-type-refused",
         "nodes": [
-            {"name": "governor-burndown", "type": "Feature"},
-            {"name": "governor-burndown", "type": "Concept"}
+            {"name": "governor-burndown", "type": "Feature", "description": "same"},
+            {"name": "governor-burndown", "type": "Concept", "description": "same"}
         ],
         "edges": []
     }"#,
     );
-    ingest_episode(&mut store, &ep, "2026-08-04T00:00:00Z", TEST_BASE_NS)
-        .expect("one-entry-per-type is the documented working form and must be accepted");
-
-    let ttl = episode_to_turtle(
-        &ep,
-        "2026-08-24T00:00:00Z",
-        TEST_BASE_NS,
-        &episode_content_hash(&ep),
-    );
-    assert!(
-        ttl.contains("aegis:governor-burndown a aegis:Feature"),
-        "first type missing:\n{ttl}"
-    );
-    assert!(
-        ttl.contains("aegis:governor-burndown a aegis:Concept"),
-        "second type missing:\n{ttl}"
-    );
-    assert!(
-        !ttl.contains("Feature__Concept"),
-        "no junk class may appear:\n{ttl}"
-    );
+    let err = ingest_episode(&mut store, &ep, "2026-08-04T00:00:00Z", TEST_BASE_NS)
+        .expect_err("a repeated name must be refused even with identical descriptions");
+    assert!(err.to_string().contains("duplicate node name"), "{err}");
 }
 
 #[test]
