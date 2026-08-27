@@ -1,8 +1,8 @@
 # CI/CD and Releases
 
 > **Implementation status (2026-07-23, kelly):** ✅ **Implemented.** `.github/workflows/ci.yml`
-> has the 6 documented jobs (`fmt`, `clippy` matrix, `test` feature-matrix, `build`,
-> `check` = pre-commit, `lint-markdown`); `release.yml` uses `release-plz-action@v0.5`;
+> has correctness, invariant, and housekeeping jobs; `release.yml` uses
+> `release-plz-action@v0.5` behind the exact-SHA correctness aggregate;
 > `docs.yml` builds the mdBook and deploys to Pages. `release-plz.toml`, `cliff.toml`,
 > `.pre-commit-config.yaml`, and `justfile` all present. (A `changelog-check.yml`
 > guard now exists too — additive.) Verified by reading the workflows.
@@ -22,14 +22,19 @@ Every push to `main` and every pull request triggers the CI workflow
 | **test** | Test suite across feature matrix |
 | **build** | Full compilation check |
 | **check** | Pre-commit hooks on all files |
+| **source-size** | Non-release-gating source-size policy ratchet |
+| **shapes** | Static ontology-shape invariants |
+| **release-correctness** | Aggregate release gate over tests, clippy, builds, pre-commit, wasm, and shapes |
 | **lint-markdown** | markdownlint-cli2 on documentation |
 
 All jobs use cargo caching for fast iteration.
 
 ## Release Automation
 
-Pushes to `main` trigger the release workflow
-(`.github/workflows/release.yml`), which uses
+Pushes to `main` trigger the release workflow (`.github/workflows/release.yml`).
+Before release-plz runs, it waits for CI's `Release correctness` check on the
+exact pushed SHA. Formatting, Markdown lint, and the source-size policy remain
+visible CI checks but do not block release. The workflow then uses
 [release-plz](https://release-plz.ieni.dev/) to:
 
 1. Analyze conventional commits since the last release

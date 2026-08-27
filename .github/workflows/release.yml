@@ -17,8 +17,28 @@ permissions:
   contents: write
 
 jobs:
+  ci-correctness:
+    name: Wait for CI correctness
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      checks: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Self-test the cross-workflow gate
+        run: |
+          python3 scripts/test_wait_release_correctness.py
+          python3 scripts/test_release_ci_gate.py
+      - name: Require CI correctness for this exact commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/wait_release_correctness.py "$GITHUB_SHA"
+
   release-plz:
     name: Release-plz
+    needs: ci-correctness
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
     outputs:
