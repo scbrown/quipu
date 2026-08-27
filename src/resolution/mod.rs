@@ -287,6 +287,17 @@ impl LabelIndex {
                 continue;
             }
 
+            // Canonical commit node names identify immutable objects. Two
+            // different hashes are distinct even when their shared
+            // `commit/<repo>/` prefix gives them a high Jaro-Winkler score.
+            // Keep exact matching above for idempotent reuse, and keep this
+            // deliberately narrower than a generic kind-prefix exemption.
+            if is_slash_qualified_commit_id(&name_lower)
+                && is_slash_qualified_commit_id(&label_lower)
+            {
+                continue;
+            }
+
             // Jaro-Winkler similarity.
             let jw = strsim::jaro_winkler(&name_lower, &label_lower);
             if jw >= threshold {
@@ -299,6 +310,23 @@ impl LabelIndex {
         }
         Ok(candidates)
     }
+}
+
+/// Whether `name` is a canonical `commit/<repo>/<hex-sha>` node name.
+///
+/// Git SHA-1 and SHA-256 object ids are 40 and 64 hex digits respectively;
+/// seven digits is the conventional minimum useful abbreviated commit id.
+fn is_slash_qualified_commit_id(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix("commit/") else {
+        return false;
+    };
+    let Some((repo, sha)) = rest.rsplit_once('/') else {
+        return false;
+    };
+    !repo.is_empty()
+        && !repo.split('/').any(str::is_empty)
+        && (7..=64).contains(&sha.len())
+        && sha.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 /// The IRIs `iri` is already recorded as `quipu:distinctFrom` in the graph.

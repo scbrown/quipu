@@ -162,6 +162,101 @@ rdfs:label "Alice Smith" .
 }
 
 #[test]
+fn resolve_does_not_fuzzy_match_distinct_slash_qualified_commits() {
+    let mut store = Store::open_in_memory().unwrap();
+
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:old_commit rdfs:label "commit/caboodle/be07c95" .
+"#;
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let result = resolve_entity(
+        &store,
+        "commit/caboodle/e5f459a45abcfe30682773ca5e167f85cd000a72",
+        &[],
+        0.85,
+        3,
+    )
+    .unwrap();
+
+    assert!(
+        !result.has_matches,
+        "distinct commit hashes must not become fuzzy identity candidates: {:?}",
+        result.candidates
+    );
+}
+
+#[test]
+fn resolve_still_exact_matches_slash_qualified_commits() {
+    let mut store = Store::open_in_memory().unwrap();
+    let commit = "commit/caboodle/e5f459a45abcfe30682773ca5e167f85cd000a72";
+
+    let turtle = format!(
+        r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:existing_commit rdfs:label "{commit}" .
+"#
+    );
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let result = resolve_entity(&store, commit, &[], 0.85, 3).unwrap();
+
+    assert!(result.has_matches);
+    assert_eq!(result.candidates[0].score, 1.0);
+    assert_eq!(result.candidates[0].matched_on, "canonical_name:exact");
+}
+
+#[test]
+fn commit_prefix_without_canonical_slashes_still_gets_fuzzy_matching() {
+    let mut store = Store::open_in_memory().unwrap();
+
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:prefixed rdfs:label "commit-aegis-alpha" .
+"#;
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let result = resolve_entity(&store, "commit-aegis-alph", &[], 0.85, 3).unwrap();
+
+    assert!(result.has_matches);
+    assert!(result.candidates[0].matched_on.contains("jaro_winkler"));
+}
+
+#[test]
 fn resolve_no_match_for_dissimilar_name() {
     let mut store = Store::open_in_memory().unwrap();
 
