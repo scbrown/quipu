@@ -185,8 +185,9 @@ ro_handler!(
     quipu::mcp::graphiti::tool_search_nodes
 );
 // aegis-e163: /shapes WRITES (tool_shapes -> store.load_shapes / remove_shapes),
-// so it is rw_handler!, not the ro_handler! it was mis-registered as.
-rw_handler!(shapes, quipu::tool_shapes);
+// so it is a write handler, not the ro_handler! it was mis-registered as.
+// quipu-923: it is now hand-written in `server/reason.rs` — same tool, plus a
+// live reload of the reactive ruleset after a successful write.
 
 // quipu #69: named datasets. create/remove WRITE (the datasets tables plus the
 // meta-graph mirror), so rw_handler! and a WRITE_ENDPOINTS entry — not the

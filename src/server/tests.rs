@@ -371,6 +371,8 @@ fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreHandle) {
             conns,
             next: std::sync::atomic::AtomicUsize::new(0),
         },
+        #[cfg(feature = "reactive-reasoner")]
+        reasoner: None,
     };
     (dir, handle)
 }

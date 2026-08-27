@@ -577,3 +577,20 @@ impl IntoResponse for AppError {
         (status, axum::Json(body)).into_response()
     }
 }
+
+pub(crate) fn print_usage() {
+    println!(
+        "quipu-server {} -- REST API for the Quipu knowledge graph
+
+USAGE:
+    quipu-server [--db <path>] [--bind <addr>] [--embed-backfill]
+
+OPTIONS:
+    --db <path>       Store file (default: from .bobbin/config.toml)
+    --bind <addr>     Listen address (default: from .bobbin/config.toml)
+    --embed-backfill  Backfill embeddings for all entities on startup
+    -V, --version     Print version and exit
+    -h, --help        Print this help and exit",
+        env!("CARGO_PKG_VERSION")
+    );
+}

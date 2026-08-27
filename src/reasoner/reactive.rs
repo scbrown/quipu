@@ -26,18 +26,43 @@ use crate::store::{Datum, Delta, Store, TransactObserver};
 /// Register with [`Store::add_observer`] after loading the ruleset. The
 /// observer skips transactions whose `source` starts with `"reasoner:"`
 /// to avoid re-triggering on its own output.
+///
+/// The ruleset is swappable at runtime via [`ReactiveReasoner::reload`], so a
+/// long-running server can pick up rules loaded through `POST /shapes` without
+/// a restart (gap G6 of `docs/design/semantic-reasoning-gaps.md` — the startup
+/// snapshot that "bit this workstream five times").
 pub struct ReactiveReasoner {
+    /// The ruleset and its derived indexes, swapped atomically on reload so
+    /// `after_commit` never sees a ruleset paired with another ruleset's
+    /// indexes.
+    index: RwLock<RuleIndex>,
+    /// Tracks total reactive evaluation stats across the session.
+    stats: RwLock<ReactiveStats>,
+}
+
+/// A ruleset with the pre-built lookup structures `after_commit` needs.
+struct RuleIndex {
     /// The loaded ruleset.
     ruleset: RuleSet,
     /// Maps predicate IRI → indices into `ruleset.rules` whose body
-    /// references that predicate. Built once at construction time.
+    /// references that predicate.
     pred_to_rules: HashMap<String, Vec<usize>>,
     /// Maps rule index → indices of rules that transitively depend on it
     /// (rules whose body references a predicate that appears in this
     /// rule's head). Pre-computed so `after_commit` is a cheap lookup.
     rule_dependents: HashMap<usize, Vec<usize>>,
-    /// Tracks total reactive evaluation stats across the session.
-    stats: RwLock<ReactiveStats>,
+}
+
+impl RuleIndex {
+    fn new(ruleset: RuleSet) -> Self {
+        let pred_to_rules = build_pred_index(&ruleset);
+        let rule_dependents = build_rule_dependents(&ruleset);
+        Self {
+            ruleset,
+            pred_to_rules,
+            rule_dependents,
+        }
+    }
 }
 
 /// Cumulative statistics for reactive evaluations.
@@ -56,22 +81,42 @@ impl ReactiveReasoner {
     ///
     /// Constructs the predicate-to-rule index and the rule dependency
     /// graph used to compute the transitive closure of affected rules.
+    /// An empty ruleset is a valid starting state: the observer is a no-op
+    /// until [`ReactiveReasoner::reload`] hands it rules.
     pub fn new(ruleset: RuleSet) -> Self {
-        let pred_to_rules = build_pred_index(&ruleset);
-        let rule_dependents = build_rule_dependents(&ruleset);
         Self {
-            ruleset,
-            pred_to_rules,
-            rule_dependents,
+            index: RwLock::new(RuleIndex::new(ruleset)),
             stats: RwLock::new(ReactiveStats::default()),
         }
+    }
+
+    /// Replace the ruleset (and its derived indexes) atomically.
+    ///
+    /// This is what makes rules loaded through `POST /shapes` take effect
+    /// without a server restart: the server keeps an `Arc` to the registered
+    /// observer and calls this after a successful shapes write. Later
+    /// `after_commit` calls see the new ruleset; the swap never mixes one
+    /// ruleset with another's indexes.
+    pub fn reload(&self, ruleset: RuleSet) {
+        *self.index.write().expect("rule index lock poisoned") = RuleIndex::new(ruleset);
+    }
+
+    /// Number of rules currently loaded.
+    pub fn rule_count(&self) -> usize {
+        self.index
+            .read()
+            .expect("rule index lock poisoned")
+            .ruleset
+            .len()
     }
 
     /// Return the current reactive evaluation statistics.
     pub fn stats(&self) -> ReactiveStats {
         self.stats.read().expect("stats lock poisoned").clone()
     }
+}
 
+impl RuleIndex {
     /// Determine which rule indices are affected by a set of changed
     /// predicate IRIs, including transitive dependents.
     fn affected_rules(&self, changed_preds: &BTreeSet<String>) -> BTreeSet<usize> {
@@ -133,14 +178,17 @@ impl TransactObserver for ReactiveReasoner {
             }
         }
 
-        let affected = self.affected_rules(&changed_preds);
+        // Hold the read lock across the whole evaluation so a concurrent
+        // reload cannot swap the ruleset out from under the affected-set.
+        let index = self.index.read().expect("rule index lock poisoned");
+        let affected = index.affected_rules(&changed_preds);
         if affected.is_empty() {
             return Ok(());
         }
 
         // Re-derive affected rules and commit per-rule with proper
         // `reasoner:<rule-id>` provenance, matching the full-evaluate path.
-        let report = evaluate_affected(store, &self.ruleset, &affected)?;
+        let report = evaluate_affected(store, &index.ruleset, &affected)?;
 
         // Update stats.
         if let Ok(mut stats) = self.stats.write() {
@@ -397,11 +445,12 @@ ex:r3 a rule:Rule ; rule:id "R3" ;
         );
         let rs = make_ruleset(&ttl);
         let reasoner = ReactiveReasoner::new(rs);
+        let index = reasoner.index.read().unwrap();
 
         // Changing p should affect R1, R2, R3 (transitive chain)
         let mut changed = BTreeSet::new();
         changed.insert(format!("{PFX}p"));
-        let affected = reasoner.affected_rules(&changed);
+        let affected = index.affected_rules(&changed);
         assert!(affected.contains(&0)); // R1
         assert!(affected.contains(&1)); // R2
         assert!(affected.contains(&2)); // R3
@@ -409,9 +458,47 @@ ex:r3 a rule:Rule ; rule:id "R3" ;
         // Changing q should affect only R2 and R3 (not R1)
         let mut changed_q = BTreeSet::new();
         changed_q.insert(format!("{PFX}q"));
-        let affected_q = reasoner.affected_rules(&changed_q);
+        let affected_q = index.affected_rules(&changed_q);
         assert!(!affected_q.contains(&0)); // R1 unaffected
         assert!(affected_q.contains(&1)); // R2
         assert!(affected_q.contains(&2)); // R3
+    }
+
+    /// `reload` must swap the ruleset AND its indexes atomically (quipu-923,
+    /// gap G6): a reasoner registered with no rules starts deriving once a
+    /// ruleset is loaded, with no re-registration and no restart.
+    #[test]
+    fn reload_swaps_ruleset_and_indexes() {
+        let reasoner = ReactiveReasoner::new(RuleSet::empty(PFX));
+        assert_eq!(reasoner.rule_count(), 0);
+
+        let mut changed = BTreeSet::new();
+        changed.insert(format!("{PFX}p"));
+        assert!(
+            reasoner
+                .index
+                .read()
+                .unwrap()
+                .affected_rules(&changed)
+                .is_empty(),
+            "an empty reasoner has nothing to affect"
+        );
+
+        let ttl = format!(
+            r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r1 a rule:Rule ; rule:id "R1" ;
+    rule:head "h(?x, ?y)" ; rule:body "p(?x, ?y)" .
+"#
+        );
+        reasoner.reload(make_ruleset(&ttl));
+        assert_eq!(reasoner.rule_count(), 1);
+        let affected = reasoner.index.read().unwrap().affected_rules(&changed);
+        assert!(
+            affected.contains(&0),
+            "after reload the new rule must be reachable from its body predicate"
+        );
     }
 }

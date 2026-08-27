@@ -34,6 +34,12 @@ pub(crate) struct StoreHandle {
     /// query path (quipu-tkh). Empty means `federated: true` fans out to the
     /// local store alone.
     pub(crate) federation: quipu::config::FederationConfig,
+    /// The registered reactive reasoner, kept concrete (not as the
+    /// `dyn TransactObserver` the store holds) so `POST /shapes` can hot-swap
+    /// its ruleset — quipu-923, gap G6: without this handle, rules loaded at
+    /// runtime needed a server restart to take effect.
+    #[cfg(feature = "reactive-reasoner")]
+    pub(crate) reasoner: Option<Arc<quipu::ReactiveReasoner>>,
 }
 
 /// A fixed set of read-only connections, each owned exclusively while in use.
@@ -92,6 +98,8 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             federation: quipu::config::FederationConfig::default(),
+            #[cfg(feature = "reactive-reasoner")]
+            reasoner: None,
         }
     }
 

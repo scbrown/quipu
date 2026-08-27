@@ -508,6 +508,35 @@ curl -s localhost:3030/shapes -X POST \
   -d '{"action": "remove", "name": "person"}'
 ```
 
+Rule Turtle (`a rule:Rule` subjects) may be stored alongside SHACL shapes. A
+successful load or remove also **hot-reloads the reactive reasoner's ruleset**
+— rules take effect on the next write, no restart (before 2026-08-27 the
+ruleset was a startup snapshot).
+
+### `POST /reason`
+
+Run a Datalog ruleset to fixpoint and persist its derivations
+(`source = reasoner:<rule-id>`). A write endpoint — derivations assert and
+retract through the fact log — so it is bearer-gated like `/episode`.
+
+Body fields, all optional: `rules` (inline rule Turtle; absent, the stored
+combined shapes are used), `prefix` (default IRI prefix for unqualified
+predicate names), `graph` (a named-graph IRI — premises and derivations both
+scope to it; absent means ROOT), `timestamp` (valid-from for derived facts).
+
+```bash
+# Evaluate the rules already loaded via /shapes, against ROOT
+curl -s localhost:3030/reason -X POST \
+  -H "Content-Type: application/json" -d '{}'
+
+# Evaluate an inline ruleset against a named graph
+curl -s localhost:3030/reason -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"rules": "@prefix rule: ...", "graph": "http://example.org/graphs/staging"}'
+# {"rules":2,"strata_run":1,"asserted":14,"retracted":0,
+#  "per_rule":[{"rule":"R1","asserted":14},{"rule":"R2","asserted":0}]}
+```
+
 ### `POST /search`
 
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,

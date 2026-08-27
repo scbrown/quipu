@@ -30,6 +30,8 @@ mod base;
 mod entity;
 #[path = "server/handle.rs"]
 mod handle;
+#[path = "server/reason.rs"]
+mod reason;
 #[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
@@ -37,8 +39,8 @@ mod tests;
 mod tools;
 
 use base::{
-    components_js, datalinks_js, export, graph_canvas_js, health, knot, metrics_handler, query,
-    stats, three_js, ui, version,
+    components_js, datalinks_js, export, graph_canvas_js, health, knot, metrics_handler,
+    print_usage, query, stats, three_js, ui, version,
 };
 use entity::{
     entity_conneg, entity_history, entity_html, entity_json, entity_turtle_suffix, events_commit,
@@ -46,6 +48,7 @@ use entity::{
     transactions,
 };
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
+use reason::{reason, shapes};
 use tools::*;
 
 #[tokio::main]
@@ -176,38 +179,47 @@ async fn main() {
     //
     // SCOPE, stated because the bead's original framing over-promised: this makes
     // DATALOG derivation incremental. `ReactiveReasoner::new` takes a `RuleSet` and
-    // there is no OWL path in it, so OWL materialization remains one-shot at
-    // ontology load. Entailments that must stay live are therefore better
+    // there is no OWL path in it, so OWL materialization is re-run on ontology
+    // load only. Entailments that must stay live are therefore better
     // expressed as rules — an `owl:inverseOf` is exactly a one-atom projection,
     // `hosts(?y, ?x) :- runs_on(?x, ?y)`.
     //
-    // The ruleset is a snapshot taken at startup: rules loaded through /shapes
-    // afterwards need a restart to take effect. Called out rather than hidden,
-    // because "loaded but not observed" is the same silent-inertness this
-    // workstream keeps finding.
+    // Registered UNCONDITIONALLY (quipu-923, gap G6), rules or none: the
+    // startup ruleset used to be a snapshot, so rules loaded through /shapes
+    // needed a restart. Now /shapes hot-swaps the ruleset through the Arc kept
+    // on StoreHandle, and an empty reasoner is a per-write no-op.
     #[cfg(feature = "reactive-reasoner")]
-    {
-        match store.get_combined_shapes() {
+    let reactive_reasoner = {
+        let empty = || quipu::reasoner::RuleSet::empty(quipu::namespace::DEFAULT_BASE_NS);
+        // A malformed ruleset must not take the server down, but it must not
+        // pass unremarked either: the failure mode being avoided is a reasoner
+        // that silently does nothing.
+        let ruleset = match store.get_combined_shapes() {
             Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, None) {
-                Ok(ruleset) if !ruleset.is_empty() => {
-                    let n = ruleset.len();
-                    store.add_observer(std::sync::Arc::new(quipu::ReactiveReasoner::new(ruleset)));
-                    eprintln!(
-                        "reactive reasoner registered — {n} Datalog rule(s) re-derive on every write"
-                    );
-                }
-                Ok(_) => {}
-                // A malformed ruleset must not take the server down, but it must
-                // not pass unremarked either: the failure mode being avoided is a
-                // reasoner that silently does nothing.
+                Ok(rs) => rs,
                 Err(e) => {
-                    eprintln!("reactive reasoner NOT registered — rules failed to parse: {e}");
+                    eprintln!("reactive reasoner starts EMPTY — rules failed to parse: {e}");
+                    empty()
                 }
             },
-            Ok(None) => {}
-            Err(e) => eprintln!("reactive reasoner NOT registered — could not read shapes: {e}"),
+            Ok(None) => empty(),
+            Err(e) => {
+                eprintln!("reactive reasoner starts EMPTY — could not read shapes: {e}");
+                empty()
+            }
+        };
+        let n = ruleset.len();
+        let reasoner = Arc::new(quipu::ReactiveReasoner::new(ruleset));
+        store.add_observer(reasoner.clone());
+        if n > 0 {
+            eprintln!(
+                "reactive reasoner registered — {n} Datalog rule(s) re-derive on every write"
+            );
+        } else {
+            eprintln!("reactive reasoner registered (0 rules) — /shapes loads take effect live");
         }
-    }
+        Some(reasoner)
+    };
 
     // Apply the governance enforcement policy: when enabled, `boundary:"action"`
     // policies gate every write (the loom's write-time gate, see
@@ -342,6 +354,8 @@ async fn main() {
         writer: FairMutex::new(store),
         readers: read_pool,
         federation: config.federation.clone(),
+        #[cfg(feature = "reactive-reasoner")]
+        reasoner: reactive_reasoner,
     });
     let push_store_outer = state.clone();
 
@@ -445,6 +459,7 @@ async fn main() {
         .route("/set", post(set_predicate))
         .route("/episode/retract", post(retract_episode))
         .route("/shapes", post(shapes))
+        .route("/reason", post(reason))
         .route("/ontology", post(ontology))
         .route("/subscriptions", post(subscriptions))
         .route("/datasets", post(datasets))
@@ -726,21 +741,4 @@ async fn main() {
     quipu::metrics::init_start_time();
 
     axum::serve(listener, app).await.unwrap();
-}
-
-fn print_usage() {
-    println!(
-        "quipu-server {} -- REST API for the Quipu knowledge graph
-
-USAGE:
-    quipu-server [--db <path>] [--bind <addr>] [--embed-backfill]
-
-OPTIONS:
-    --db <path>       Store file (default: from .bobbin/config.toml)
-    --bind <addr>     Listen address (default: from .bobbin/config.toml)
-    --embed-backfill  Backfill embeddings for all entities on startup
-    -V, --version     Print version and exit
-    -h, --help        Print this help and exit",
-        env!("CARGO_PKG_VERSION")
-    );
 }

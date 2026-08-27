@@ -460,3 +460,65 @@ ex:eq a rule:Rule ;
         "exactly one derivation expected"
     );
 }
+
+/// A reasoner registered EMPTY must start deriving after `reload` (quipu-923,
+/// gap G6) — the end-to-end shape of the /shapes live-reload path: the server
+/// registers the observer once at startup and swaps rulesets in place.
+#[test]
+fn reload_makes_a_registered_empty_reasoner_derive() {
+    use super::parse::RuleSet;
+
+    let observer = Arc::new(ReactiveReasoner::new(RuleSet::empty(PFX)));
+    let mut store = Store::open_in_memory().unwrap();
+    store.add_observer(observer.clone());
+
+    let s = store.intern("ex:a").unwrap();
+    let p = store.intern(&format!("{PFX}p")).unwrap();
+    let o = store.intern("ex:b").unwrap();
+    let write = |store: &mut Store, entity: i64| {
+        store
+            .transact(
+                &[Datum {
+                    entity,
+                    attribute: p,
+                    value: Value::Ref(o),
+                    valid_from: TS.to_string(),
+                    valid_to: None,
+                    op: Op::Assert,
+                }],
+                TS,
+                Some("test"),
+                Some("base"),
+            )
+            .unwrap();
+    };
+
+    // CONTROL: with no rules loaded, a write derives nothing.
+    write(&mut store, s);
+    assert_eq!(
+        count_facts_for_pred(&store, &format!("{PFX}h")),
+        0,
+        "no rules loaded — nothing may derive"
+    );
+
+    // Live reload: the same registered observer picks up the rule.
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r1 a rule:Rule ; rule:id "R1" ;
+    rule:head "h(?x, ?y)" ; rule:body "p(?x, ?y)" .
+"#
+    );
+    observer.reload(parse_rules(&ttl, Some(PFX)).unwrap());
+
+    // The NEXT write derives — no re-registration, no restart.
+    let s2 = store.intern("ex:a2").unwrap();
+    write(&mut store, s2);
+    assert_eq!(
+        count_derived(&store, &format!("{PFX}h"), "reasoner:R1"),
+        2,
+        "after reload the rule must re-derive over base facts (both writes)"
+    );
+}

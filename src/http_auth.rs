@@ -69,6 +69,10 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // unconditionally even though the handler is cfg(feature = "owl"), because
     // the enforcer scans server.rs as TEXT and sees the route either way.
     "/ontology",
+    // quipu-923: /reason runs a Datalog ruleset and PERSISTS its derivations
+    // (assert + retract through the fact log) — a write however read-shaped
+    // "run the reasoner" sounds.
+    "/reason",
 ];
 
 /// The set of read endpoints: every registered route that does NOT mutate state.

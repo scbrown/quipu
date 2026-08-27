@@ -11,6 +11,11 @@
 > feature (`--reactive` errors loudly without it). Capability (2) reachability
 > pre-existed (SPARQL paths + RDFS). Residual, minor: reactive is non-default by
 > design, and there is no REST `/reason` route (CLI + MCP + library only).
+> UPDATE (2026-08-27, quipu-923): `POST /reason` now exists, the reactive
+> ruleset hot-reloads on `/shapes` writes, and retraction propagates through
+> mutually supporting rules (`World::load` reads base facts, not the evaluated
+> rules' own prior derivations) — see
+> [reasoning-engine-fixes.md](./reasoning-engine-fixes.md).
 >
 > Created: 2026-04-06
 > Status: IMPLEMENTED (2026-07-23; the DRAFT note is superseded — see the status block above)
