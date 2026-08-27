@@ -26,17 +26,21 @@
 # Expressed as a rule instead, the reactive reasoner re-derives it on every
 # write, so it holds continuously rather than at one instant (aegis-jgxas).
 #
-# ⚠ ONE DIRECTION, DELIBERATELY. The symmetric encoding — adding
-# `type(?x, Commit) :- type(?x, GitCommit)` — is the obvious reading of
-# "equivalent class" and it is a TRAP. The two rules become each other's
-# support: `World::load` reads `current_facts()`, which does not distinguish
-# base facts from derived ones, and truth maintenance is re-derive-and-diff
-# with no support sets (full TMS is deferred — see the reactive module docs).
-# A retracted base type is then never un-derived. Measured as a STABLE,
-# non-converging fixpoint, not a transient one; pinned by
+# ONE DIRECTION, still deliberately — but the trap it guarded against is
+# FIXED (quipu-923). The symmetric encoding — adding
+# `type(?x, Commit) :- type(?x, GitCommit)` — used to make the two rules each
+# other's support: `World::load` read `current_facts()` without distinguishing
+# base facts from derived ones, so a retracted base type was never un-derived
+# — a STABLE non-converging fixpoint, pinned by
 # `probe_mutual_class_equivalence_under_retraction` in evaluate_tests.rs.
+# Since quipu-923, `World::load` excludes the evaluated rules' own prior
+# derivations from their premises, retraction propagates, and that probe
+# became the regression guard
+# `mutual_class_equivalence_converges_under_retraction`.
 #
-# Subsumption converges and stays retractable. Equivalence does not.
+# One direction remains the right encoding HERE because the merge is a
+# subsumption (Commit is the legacy vocabulary, GitCommit the canonical one),
+# not a live equivalence — full TMS with support sets is still deferred.
 #
 # What this means for the numbers, so nobody reads the result as a half-fix:
 # every `Commit` also becomes a `GitCommit`, so `GitCommit` is the COMPLETE

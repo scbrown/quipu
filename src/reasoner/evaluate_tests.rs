@@ -467,19 +467,25 @@ ex:eq a rule:Rule ;
 }
 
 #[test]
-fn probe_mutual_class_equivalence_under_retraction() {
-    // NOT a regression guard — a probe that PINS the behaviour of the shape
-    // aegis-jgxas proposes, so the trap is documented rather than discovered.
+fn mutual_class_equivalence_converges_under_retraction() {
+    // REGRESSION GUARD, formerly `probe_mutual_class_equivalence_under_retraction`
+    // — a probe that PINNED the failure this now guards against (aegis-jgxas,
+    // fixed under quipu-923).
     //
     // Class equivalence is symmetric, so the obvious encoding is two rules:
     //   type(?x, GitCommit) :- type(?x, Commit)
     //   type(?x, Commit)    :- type(?x, GitCommit)
-    // These are mutually recursive. `World::load` reads `current_facts()`,
-    // which does not distinguish base facts from derived ones, and truth
-    // maintenance here is re-derive-and-diff with no support sets (see the
-    // reactive module docs: full TMS is deferred). So each rule's output is
-    // the other's input and the pair can hold itself up after the base fact
-    // that started it is gone.
+    // These are mutually recursive. `World::load` used to read
+    // `current_facts()`, which did not distinguish base facts from derived
+    // ones, so each rule's stored output was the other's input and the pair
+    // held itself up forever after the base fact that started it was gone —
+    // a stable non-converging fixpoint of (1, 2) derivations.
+    //
+    // The fix: `World::load` reads BASE facts only
+    // (`current_base_facts_for_attributes_in_graph`); prior derivations are
+    // diff targets in `write_rule_delta`, never premises. In-stratum chaining
+    // still works — the first evaluation below still derives through both
+    // rules — but retraction now propagates.
     let ttl = format!(
         r#"
 @prefix rule: <{RULE_NS}> .
@@ -530,8 +536,8 @@ ex:rev a rule:Rule ;
         )
         .unwrap();
 
-    // Re-evaluate repeatedly: does the pair converge to "support gone,
-    // derivation gone", or hold itself up forever?
+    // Re-evaluate repeatedly: the pair must converge to "support gone,
+    // derivation gone" — and stay there.
     let mut trace = Vec::new();
     for _ in 0..4 {
         evaluate(&mut store, &rs, TS).expect("re-evaluate after retraction");
@@ -541,14 +547,17 @@ ex:rev a rule:Rule ;
         ));
     }
 
+    // ex:seed's GitCommit is base, so REV keeps deriving seed→Commit (1).
+    // Everything that rested on the retracted fact is gone from the first
+    // re-evaluation on: FWD derives nothing, and REV's c1→Commit is retracted.
     assert_eq!(
         trace,
-        vec![(1, 2); 4],
-        "expected a stable non-converging fixpoint, got {trace:?}"
+        vec![(0, 1); 4],
+        "retraction must propagate through mutually supporting rules, got {trace:?}"
     );
 
-    // What that fixpoint MEANS: ex:c1's only base type was retracted, yet it
-    // still carries both classes, and re-running the reasoner never clears it.
+    // What convergence MEANS: ex:c1's only base type was retracted, and no
+    // derived type survives it.
     let git_commit = store.lookup(GIT_COMMIT).unwrap().unwrap();
     let still: Vec<i64> = store
         .current_facts()
@@ -562,18 +571,7 @@ ex:rev a rule:Rule ;
         .collect();
     assert_eq!(
         still.iter().filter(|e| **e == c1).count(),
-        2,
-        "PINNED, NOT ENDORSED (aegis-jgxas). Loading BOTH directions of a class \
-         equivalence makes the two rules each other's support, so a retracted \
-         type can never be un-derived — ex:c1 keeps both classes forever. \
-         Truth maintenance here is re-derive-and-diff with no support sets \
-         (see the reactive module docs; full TMS is deferred), and \
-         `World::load` reads `current_facts()`, which does not separate base \
-         facts from derived ones. \
-         GUIDANCE: load ONE direction, toward the canonical class \
-         (`GitCommit :- Commit`). Subsumption converges and stays retractable; \
-         symmetric equivalence does not. If this test starts failing because \
-         support-set tracking landed, that is good news — revisit the \
-         guidance, do not weaken the assertion."
+        0,
+        "ex:c1 lost its only base support, so it must carry neither class"
     );
 }

@@ -135,6 +135,56 @@ impl Store {
         Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
+    /// Like [`Store::current_facts_for_attributes_in_graph`], but excluding
+    /// facts whose transaction source is in `excluded_sources`.
+    ///
+    /// This is the premise read `World::load` needs (quipu-923, gap G5 of
+    /// `docs/design/semantic-reasoning-gaps.md`): a rule's own prior
+    /// derivations (`reasoner:<rule-id>`) are diff targets, never premises.
+    /// When they fed back in, mutually supporting rules held each other up
+    /// after their base support was retracted — the stable non-converging
+    /// fixpoint `probe_mutual_class_equivalence_under_retraction` pinned.
+    /// The exclusion is per-source rather than a blanket `reasoner:%` so a
+    /// rule may still read a *different* rule's stored output — the reactive
+    /// path chains stratified rules through the store across observer wakes.
+    pub fn current_facts_for_attributes_in_graph_excluding_sources(
+        &self,
+        attributes: &[i64],
+        g: i64,
+        excluded_sources: &[String],
+    ) -> Result<Vec<Fact>> {
+        if attributes.is_empty() {
+            return Ok(Vec::new());
+        }
+        if excluded_sources.is_empty() {
+            // `NOT IN ()` is invalid SQL; nothing to exclude is the plain read.
+            return self.current_facts_for_attributes_in_graph(attributes, g);
+        }
+        let attr_placeholders = std::iter::repeat_n("?", attributes.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let src_placeholders = std::iter::repeat_n("?", excluded_sources.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
+             FROM facts f JOIN transactions t ON f.tx = t.id \
+             WHERE f.op = 1 AND f.valid_to IS NULL AND f.a IN ({attr_placeholders}) AND f.g = ? \
+               AND (t.source IS NULL OR t.source NOT IN ({src_placeholders})) \
+             ORDER BY f.e, f.a"
+        );
+        let mut values: Vec<rusqlite::types::Value> = attributes
+            .iter()
+            .map(|a| rusqlite::types::Value::Integer(*a))
+            .collect();
+        values.push(rusqlite::types::Value::Integer(g));
+        for s in excluded_sources {
+            values.push(rusqlite::types::Value::Text(s.clone()));
+        }
+        let mut stmt = self.conn.prepare(&sql)?;
+        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+    }
+
     /// Return ROOT's facts for a specific entity (current state).
     ///
     /// **ROOT-scoped** (quipu #56). This is the selection `retract_triples`

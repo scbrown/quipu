@@ -364,8 +364,26 @@ impl World {
         // Load only facts for predicates referenced by these rules. The old
         // path loaded the full current table once per affected stratum and
         // discarded every attribute absent from `attr_to_pred` afterwards.
+        //
+        // The evaluated rules' OWN prior derivations are excluded (quipu-923):
+        // they are diff targets in `write_rule_delta`, never premises. Feeding
+        // them back in let mutually supporting rules hold each other up after
+        // their base support was retracted — the stable non-converging
+        // fixpoint `probe_mutual_class_equivalence_under_retraction` used to
+        // pin. Chaining is unaffected in both regimes: within one evaluation,
+        // a lower stratum's output reaches later strata through
+        // `world.tuples` in memory; across reactive wakes, a rule NOT being
+        // re-derived here keeps its stored output readable as a premise.
+        let excluded_sources: Vec<String> = rule_indices
+            .iter()
+            .map(|&i| format!("reasoner:{}", ruleset.rules[i].id))
+            .collect();
         let attribute_ids: Vec<i64> = attr_to_pred.keys().copied().collect();
-        let facts = store.current_facts_for_attributes_in_graph(&attribute_ids, graph)?;
+        let facts = store.current_facts_for_attributes_in_graph_excluding_sources(
+            &attribute_ids,
+            graph,
+            &excluded_sources,
+        )?;
         for fact in facts {
             if let Some(pred) = attr_to_pred.get(&fact.attribute)
                 && let Value::Ref(target) = fact.value
