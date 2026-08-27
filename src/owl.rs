@@ -10,6 +10,9 @@
 #[path = "owl_parse.rs"]
 mod owl_parse;
 
+#[path = "owl_materialize.rs"]
+mod owl_materialize;
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::Read;
 
@@ -17,10 +20,7 @@ use crate::error::{Error, Result};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
-use owl_parse::{
-    collect_predicate_facts, collect_type_facts, extract_axioms, parse_turtle_triples,
-    transitive_closure,
-};
+use owl_parse::{extract_axioms, parse_turtle_triples};
 
 // ── OWL / RDF vocabulary IRIs ────────────────────────────────────────
 
@@ -128,14 +128,6 @@ pub enum ViolationKind {
     },
 }
 
-/// Identity key for a (subject, value) fact under one predicate, used to skip
-/// restatements that already exist.
-fn fact_key(entity: i64, value: &Value) -> Vec<u8> {
-    let mut key = entity.to_be_bytes().to_vec();
-    key.extend(value.to_bytes());
-    key
-}
-
 // ── Ontology loading ─────────────────────────────────────────────────
 
 impl Ontology {
@@ -171,273 +163,6 @@ impl Ontology {
             "ranges": self.axioms.ranges.len(),
             "total_triples": self.triples.len(),
         })
-    }
-
-    /// Materialize OWL 2 RL entailments into the store.
-    ///
-    /// Writes derived facts with `source = "owl:materialize"` so they can be
-    /// identified and re-materialized when the ontology changes.
-    pub fn materialize(&self, store: &mut Store, timestamp: &str) -> Result<MaterializeReport> {
-        let mut report = MaterializeReport::default();
-        let mut datums: Vec<Datum> = Vec::new();
-
-        // 1. Subclass transitive closure: if x : A and A ⊑ B, then x : B
-        let class_closure = transitive_closure(&self.axioms.subclass_of);
-        let rdf_type_id = store.intern(RDF_TYPE)?;
-
-        // Collect all current type facts.
-        let type_facts = collect_type_facts(store, rdf_type_id)?;
-
-        for (entity_id, class_id) in &type_facts {
-            let class_iri = store.resolve(*class_id)?;
-            if let Some(supers) = class_closure.get(&class_iri) {
-                for super_class in supers {
-                    let super_id = store.intern(super_class)?;
-                    datums.push(Datum {
-                        entity: *entity_id,
-                        attribute: rdf_type_id,
-                        value: Value::Ref(super_id),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.subclass_inferences += 1;
-                }
-            }
-        }
-
-        // 1b. Subproperty transitive closure: if x p y and p ⊑ q, then x q y.
-        //
-        // This was PARSED and then dropped on the floor (aegis-qfncf): `Axioms`
-        // carried `sub_property_of`, `axiom_summary()` counted it, `/ontology`
-        // reported it back — and nothing ever read it. So loading a subPropertyOf
-        // axiom returned success with `subproperty_of: 1` and materialized ZERO,
-        // and `rdfs.rs` gives it no query-time help either (that expands classes
-        // only). The axiom class was inert end to end while reporting as accepted.
-        //
-        // Measured before the fix: `aegis:calls rdfs:subPropertyOf aegis:touches`
-        // loaded cleanly and left `?s touches ?o` at 435 with 74116 `calls` facts
-        // sitting right there.
-        let property_closure = transitive_closure(&self.axioms.subproperty_of);
-        for (sub_property, supers) in &property_closure {
-            // `lookup`, not `intern`: a subproperty naming a predicate that no
-            // fact uses has nothing to restate, and interning it would mint a
-            // dangling id as a side effect of reasoning about it.
-            let Some(sub_id) = store.lookup(sub_property)? else {
-                continue;
-            };
-            let facts = collect_predicate_facts(store, sub_id)?;
-            for (entity_id, value) in &facts {
-                for super_property in supers {
-                    let super_id = store.intern(super_property)?;
-                    datums.push(Datum {
-                        entity: *entity_id,
-                        attribute: super_id,
-                        value: value.clone(),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.sub_property_inferences += 1;
-                }
-            }
-        }
-
-        // 2. Equivalent classes: bidirectional subclass.
-        for (a, b) in &self.axioms.equivalent_classes {
-            let a_id = store.intern(a)?;
-            let b_id = store.intern(b)?;
-            // Instances of A are also instances of B and vice versa.
-            for (entity_id, class_id) in &type_facts {
-                if *class_id == a_id {
-                    datums.push(Datum {
-                        entity: *entity_id,
-                        attribute: rdf_type_id,
-                        value: Value::Ref(b_id),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.equivalent_class_inferences += 1;
-                } else if *class_id == b_id {
-                    datums.push(Datum {
-                        entity: *entity_id,
-                        attribute: rdf_type_id,
-                        value: Value::Ref(a_id),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.equivalent_class_inferences += 1;
-                }
-            }
-        }
-
-        // 3. Inverse properties: if (a P b) and P inverseOf Q, assert (b Q a).
-        for (p, q) in &self.axioms.inverse_of {
-            let p_id = store.intern(p)?;
-            let q_id = store.intern(q)?;
-            let facts = collect_predicate_facts(store, p_id)?;
-            for (s, o) in &facts {
-                if let Value::Ref(o_id) = o {
-                    datums.push(Datum {
-                        entity: *o_id,
-                        attribute: q_id,
-                        value: Value::Ref(*s),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.inverse_inferences += 1;
-                }
-            }
-        }
-
-        // 4. Symmetric properties: if (a P b), assert (b P a).
-        for prop in &self.axioms.symmetric_properties {
-            let prop_id = store.intern(prop)?;
-            let facts = collect_predicate_facts(store, prop_id)?;
-            for (s, o) in &facts {
-                if let Value::Ref(o_id) = o {
-                    datums.push(Datum {
-                        entity: *o_id,
-                        attribute: prop_id,
-                        value: Value::Ref(*s),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.symmetric_inferences += 1;
-                }
-            }
-        }
-
-        // 4b. Transitive properties: if (a P b) and (b P c), assert (a P c) —
-        // the full closure to fixpoint, not one join pass, so a→b→c→d yields
-        // a→d.
-        //
-        // This axiom class had the same defect 1b documents for subPropertyOf:
-        // `Axioms` carried `transitive_properties`, `axiom_summary()` counted
-        // it, `/ontology` reported it back — and nothing ever read it, so a
-        // loaded owl:TransitiveProperty returned success and materialized ZERO.
-        //
-        // Closure pairs already asserted are skipped, so re-running
-        // materialization derives nothing new and the report stays honest.
-        for prop in &self.axioms.transitive_properties {
-            // `lookup`, not `intern`, for the same reason as 1b.
-            let Some(prop_id) = store.lookup(prop)? else {
-                continue;
-            };
-            let facts = collect_predicate_facts(store, prop_id)?;
-            let mut adjacency: HashMap<i64, Vec<i64>> = HashMap::new();
-            let mut existing: HashSet<(i64, i64)> = HashSet::new();
-            for (s, v) in &facts {
-                if let Value::Ref(o_id) = v {
-                    adjacency.entry(*s).or_default().push(*o_id);
-                    existing.insert((*s, *o_id));
-                }
-            }
-            for &start in adjacency.keys() {
-                let mut reached: HashSet<i64> = HashSet::new();
-                let mut stack: Vec<i64> = adjacency[&start].clone();
-                while let Some(node) = stack.pop() {
-                    if !reached.insert(node) {
-                        continue;
-                    }
-                    if let Some(nexts) = adjacency.get(&node) {
-                        stack.extend(nexts.iter().copied());
-                    }
-                }
-                for target in reached {
-                    if target == start || existing.contains(&(start, target)) {
-                        continue;
-                    }
-                    datums.push(Datum {
-                        entity: start,
-                        attribute: prop_id,
-                        value: Value::Ref(target),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.transitive_inferences += 1;
-                }
-            }
-        }
-
-        // 4c. Equivalent properties: facts under either property restate under
-        // the other (bidirectional subproperty semantics). Same recovered
-        // dead-end shape as 1b and 4b — parsed, counted, never materialized.
-        for (p, q) in &self.axioms.equivalent_properties {
-            for (from, to) in [(p, q), (q, p)] {
-                let Some(from_id) = store.lookup(from)? else {
-                    continue;
-                };
-                let to_id = store.intern(to)?;
-                let already: HashSet<Vec<u8>> = collect_predicate_facts(store, to_id)?
-                    .iter()
-                    .map(|(s, v)| fact_key(*s, v))
-                    .collect();
-                for (s, v) in &collect_predicate_facts(store, from_id)? {
-                    if already.contains(&fact_key(*s, v)) {
-                        continue;
-                    }
-                    datums.push(Datum {
-                        entity: *s,
-                        attribute: to_id,
-                        value: v.clone(),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.equivalent_property_inferences += 1;
-                }
-            }
-        }
-
-        // 5. Domain/range inference: if (s P o) and P domain D, assert s : D.
-        for (prop, class) in &self.axioms.domains {
-            let prop_id = store.intern(prop)?;
-            let class_id = store.intern(class)?;
-            let facts = collect_predicate_facts(store, prop_id)?;
-            for (s, _) in &facts {
-                datums.push(Datum {
-                    entity: *s,
-                    attribute: rdf_type_id,
-                    value: Value::Ref(class_id),
-                    valid_from: timestamp.to_string(),
-                    valid_to: None,
-                    op: Op::Assert,
-                });
-                report.domain_range_inferences += 1;
-            }
-        }
-        for (prop, class) in &self.axioms.ranges {
-            let prop_id = store.intern(prop)?;
-            let class_id = store.intern(class)?;
-            let facts = collect_predicate_facts(store, prop_id)?;
-            for (_, o) in &facts {
-                if let Value::Ref(o_id) = o {
-                    datums.push(Datum {
-                        entity: *o_id,
-                        attribute: rdf_type_id,
-                        value: Value::Ref(class_id),
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: Op::Assert,
-                    });
-                    report.domain_range_inferences += 1;
-                }
-            }
-        }
-
-        report.total = datums.len();
-
-        if !datums.is_empty() {
-            store.transact(&datums, timestamp, Some("owl"), Some("owl:materialize"))?;
-        }
-
-        Ok(report)
     }
 
     /// Validate a set of proposed facts against OWL constraints.

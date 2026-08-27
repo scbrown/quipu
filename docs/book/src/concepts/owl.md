@@ -57,6 +57,14 @@ Materialized facts are written with `source = "owl:materialize"` so they can
 be identified in the transaction log. When an ontology changes, derived facts
 can be re-materialized.
 
+Materialization runs to **fixpoint across axiom families**: a type introduced
+by `rdfs:range` feeds the subclass closure of the next pass, and passes repeat
+until one derives nothing new. (Before 2026-08-27 it was one-shot — each
+family ran once over base facts, so composed entailments were silently
+missing and the recorded workaround was re-encoding OWL axioms as Datalog
+rules.) Each pass derives only facts not already present, so re-running
+materialization at fixpoint is a no-op and the report counts stay honest.
+
 ```turtle
 ex:fido a ex:Dog .
 ex:Dog rdfs:subClassOf ex:Mammal .

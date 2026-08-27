@@ -458,6 +458,68 @@ ex:bob ex:authored ex:paper2 .
     );
 }
 
+/// Materialization must reach FIXPOINT across axiom families (quipu-923, gap G3).
+///
+/// The one-shot version collected type facts once, so a type introduced by
+/// `rdfs:range` in the same run never fed the subclass closure — the recorded
+/// staleness that forced re-encoding OWL axioms as Datalog rules
+/// (shapes/aegis-class-subsumption.rules.ttl). One `materialize()` call must
+/// compose: range infers `bob a Person`, the next pass lifts it to `Agent`.
+#[test]
+fn materialize_reaches_fixpoint_across_axiom_families() {
+    const FIXPOINT_ONTOLOGY: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:Agent a owl:Class .
+ex:Person a owl:Class ;
+    rdfs:subClassOf ex:Agent .
+ex:knows a owl:ObjectProperty ;
+    rdfs:range ex:Person .
+"#;
+    let ont = Ontology::from_turtle(FIXPOINT_ONTOLOGY).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+
+    // bob carries NO asserted type: his Person-ness exists only via range
+    // inference, so his Agent-ness requires the second pass.
+    let data = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:knows ex:bob .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        data.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let report = ont.materialize(&mut store, "2026-01-01T00:00:00Z").unwrap();
+    assert!(report.domain_range_inferences > 0, "range must fire");
+    assert!(
+        report.subclass_inferences > 0,
+        "subclass closure must see the range-inferred type in the same call"
+    );
+
+    let result = crate::sparql::query(
+        &store,
+        "ASK { <http://example.org/bob> a <http://example.org/Agent> }",
+    )
+    .unwrap();
+    assert!(
+        matches!(result, crate::sparql::QueryResult::Ask(true)),
+        "bob must be an Agent: range → Person, then Person ⊑ Agent, in one materialize"
+    );
+
+    // Fixpoint reached: a re-run derives nothing at all.
+    let rerun = ont.materialize(&mut store, "2026-01-02T00:00:00Z").unwrap();
+    assert_eq!(rerun.total, 0, "a re-run at fixpoint must be a no-op");
+}
+
 /// The write path must REJECT an owl:disjointWith violation (aegis-bmqup).
 ///
 /// `Ontology::validate()` implemented this and had no caller in the server, while
