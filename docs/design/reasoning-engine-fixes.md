@@ -1,8 +1,19 @@
 # Reasoning Engine Fixes — Plan
 
 > Created: 2026-08-27
-> Status: PLANNED — no implementation yet; each phase below is intended to
-> become a bead before work starts
+> Status: ✅ IMPLEMENTED (2026-08-27, bead quipu-923) — all six phases landed
+> the same day, each as its own gated commit on main. Verified by mechanism:
+> phase 1 `src/owl_materialize.rs` §4b/4c + `owl_tests.rs` regression pair;
+> phase 2 the fixpoint loop in `materialize()` + `ReactiveOwl`
+> (`src/owl_reactive.rs`, opt-in `owl.reactive_materialize`); phase 3
+> `current_facts_for_attributes_in_graph_excluding_sources` +
+> `mutual_class_equivalence_converges_under_retraction` (the flipped probe);
+> phase 4 `ReactiveReasoner::reload` + `POST /reason` (`src/server/reason.rs`);
+> phase 5 the general join pipeline in `src/reasoner/compile.rs` (N-atom,
+> multi-variable, stratified negation); phase 6 `src/explain.rs` + CLI
+> `quipu explain` + `POST /explain` + MCP `quipu_explain`.
+> One deviation from the plan as written: fact placement stays today's
+> source-attributed convention pending [entailment-regime.md](./entailment-regime.md).
 > Related: [semantic-reasoning-gaps.md](./semantic-reasoning-gaps.md) (G1–G6,
 > G8), [reasoner.md](./reasoner.md) (open questions Q1–Q6, Phase 5),
 > [entailment-regime.md](./entailment-regime.md) (fact placement)

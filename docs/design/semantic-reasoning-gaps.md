@@ -1,7 +1,14 @@
 # Semantic Reasoning Support — Gap Inventory
 
 > Created: 2026-08-27
-> Status: DESIGN — inventory only; no implementation in this document
+> Status: INVENTORY — updated 2026-08-27: gaps G1–G6 and G8 are CLOSED by
+> [reasoning-engine-fixes.md](./reasoning-engine-fixes.md) (bead quipu-923);
+> G7 (the unified entailment regime) remains open, tracked by quipu-0b6.
+> Consumer-side: U6's camayoc chains now have chain-aware stored queries
+> (camayoc_supersession_chain_current, camayoc_transitive_blockers,
+> camayoc_section_ancestry — the flagship demonstration); U5's "unbuilt
+> quipu path cone" premise was stale — the command is implemented
+> (src/path/cone.rs; CLI, REST /path/cone, MCP).
 > Related: [reasoner.md](./reasoner.md), [named-graphs.md](./named-graphs.md),
 > [vision.md](./vision.md) (Decision 4),
 > [reasoning-engine-fixes.md](./reasoning-engine-fixes.md),

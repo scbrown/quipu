@@ -1,7 +1,19 @@
 # Flagship Reasoning Use Cases — Plan
 
 > Created: 2026-08-27
-> Status: PLANNED — no implementation yet; ordering and scope recorded
+> Status: PARTIALLY IMPLEMENTED (2026-08-27) — the live demonstration
+> LANDED: camayoc gained its first property-path stored queries
+> (camayoc_section_parent_and_children, camayoc_section_ancestry,
+> camayoc_sections_at_depth, camayoc_supersession_chain_current,
+> camayoc_transitive_blockers) with execution tests; coverage moved
+> 40→43 stored. CORRECTION to Flagship 2's premise: `quipu path cone`
+> was already implemented when this doc was written (src/path/cone.rs;
+> CLI, REST /path/cone, MCP quipu_path_cone) — camayoc's "design-only"
+> note was stale and is now corrected in its coverage tables; what
+> remains of Flagship 2 is camayoc-side adoption only. Flagship 1's
+> store prerequisite (live subclass closure) landed with the engine
+> fixes; its consumer slices wait on [entailment-regime.md](./entailment-regime.md)
+> placement and a deployed quipu carrying these changes.
 > Related: [semantic-reasoning-gaps.md](./semantic-reasoning-gaps.md) (U1–U6),
 > [entailment-regime.md](./entailment-regime.md),
 > [reasoning-engine-fixes.md](./reasoning-engine-fixes.md)

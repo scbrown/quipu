@@ -2,7 +2,11 @@
 
 > Created: 2026-08-27
 > Status: DESIGN — placement decision recorded (quarantined materialization,
-> Stiwi, 2026-08-27); mechanics below are the plan, not the implementation
+> Stiwi, 2026-08-27); mechanics below are the plan, not the implementation.
+> Prerequisites landed 2026-08-27 with the engine fixes (quipu-923): live
+> fixpoint materialization, source-aware truth maintenance (promotion's
+> retraction half depends on it), and `explain` (the promotion audit's
+> evidence). Implementation tracked by quipu-0b6.
 > Related: [semantic-reasoning-gaps.md](./semantic-reasoning-gaps.md) (G7),
 > [reasoning-engine-fixes.md](./reasoning-engine-fixes.md),
 > [named-graphs.md](./named-graphs.md), [graph-labels.md](./graph-labels.md),

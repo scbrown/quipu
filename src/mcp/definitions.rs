@@ -37,6 +37,21 @@ pub fn tool_definitions() -> Vec<JsonValue> {
             }
         }
     }));
+    #[cfg(feature = "owl")]
+    defs.push(serde_json::json!({
+        "name": "quipu_explain",
+        "description": "Walk a fact's derivation chain: a base fact answers with its transaction and source; a reasoner:<rule-id> fact answers with the rule and the premises it currently re-matches; an owl:materialize fact answers with every axiom family that currently re-derives it, premises recursed to base facts. Read-only.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "s": { "type": "string", "description": "Subject IRI" },
+                "p": { "type": "string", "description": "Predicate IRI" },
+                "o": { "type": "string", "description": "Object IRI, or a string literal" },
+                "depth": { "type": "integer", "description": "Recursion depth for the derivation walk (default: 5)" }
+            },
+            "required": ["s", "p", "o"]
+        }
+    }));
 
     defs
 }

@@ -1568,13 +1568,15 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_graph_thaw"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 43);
+        assert_eq!(defs.len(), 44);
         assert!(names.contains(&"quipu_load_ontology"));
+        assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
         assert_eq!(defs.len(), 42);
         assert!(!names.contains(&"quipu_load_ontology"));
+        assert!(!names.contains(&"quipu_explain"));
     }
 
     // The only scoping parameters vector search has must be DISCOVERABLE from the
@@ -1605,7 +1607,7 @@ fn readme_mcp_tool_counts_match_the_manifest() {
     // they cannot disagree again. Runs on the default (no-owl) build, where the
     // primary count is 25 and the parenthetical is "(N with owl)" = 26.
     let base = tool_definitions().len();
-    let with_owl = base + 1; // quipu_load_ontology is the only owl-gated tool.
+    let with_owl = base + 2; // quipu_load_ontology + quipu_explain are the owl-gated tools.
     let readme =
         std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"))
             .unwrap();

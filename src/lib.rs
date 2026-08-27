@@ -92,6 +92,8 @@ pub use graph::{
 };
 pub use graph_view::tool_graph_view;
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
+#[cfg(feature = "owl")]
+pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::impact::tool_impact;
 pub use mcp::named_query::tool_ask;

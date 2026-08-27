@@ -4,6 +4,8 @@
 //! Model Context Protocol tool calling convention. Bobbin's MCP server
 //! delegates knowledge graph operations to these handlers.
 
+#[cfg(feature = "owl")]
+pub mod explain;
 pub mod governance;
 pub mod graphiti;
 pub mod impact;
