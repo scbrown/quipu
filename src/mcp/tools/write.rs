@@ -284,10 +284,17 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     // Mint IRIs under the CONFIGURED namespace, not the hardcoded aegis default
     // (aegis-4h3x). Read before the &mut borrow, same as opts.
     let base_ns = store.base_ns().to_string();
+    // Closed-vocabulary gate (aegis-hpav5). Run before resolution/ingest so an
+    // unknown type cannot mint an entity, provenance, or content hash.
+    crate::vocabulary::enforce_episode_types(
+        store,
+        ep.nodes.iter().filter_map(|n| n.node_type.as_deref()),
+        &base_ns,
+    )?;
     let result =
         episode::ingest_episode_with_resolution(store, &ep, &timestamp, &base_ns, Some(&opts))?;
 
-    let mut response = serde_json::json!({
+    Ok(serde_json::json!({
         "tx_id": result.tx_id,
         "count": result.count,
         // BRANCH ON THIS, NOT ON `count`. `unchanged` means the
@@ -299,16 +306,5 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         "resolution_hints": crate::mcp::resolution_hints_json(&result.resolution_hints),
         "resolution_contentions":
             crate::mcp::resolution_contentions_json(&result.resolution_contentions)
-    });
-    // Present ONLY when the episode typed something no shape governs, so the
-    // field's mere existence is the signal (aegis-7n1ya). Always-present
-    // fields get skimmed; this one has to be noticed the once it appears.
-    if let Some(hint) = crate::vocabulary::hint_json(&crate::vocabulary::ungoverned_episode_types(
-        store,
-        ep.nodes.iter().filter_map(|n| n.node_type.as_deref()),
-        &base_ns,
-    )) {
-        response["vocabulary_hint"] = hint;
-    }
-    Ok(response)
+    }))
 }

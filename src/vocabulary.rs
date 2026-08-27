@@ -14,20 +14,10 @@
 //! governed snapshot through `/knot` hits it exactly the same way, at machine
 //! scale, while its own `conforms != false` guard reports success (aegis-6noan).
 //!
-//! So this is deliberately an ADVISORY, not a gate. It reports what a write
-//! ADDED to the vocabulary without declaring it; it never refuses. Two reasons,
-//! both learned here the expensive way:
-//!
-//!   1. A gate on an undeclared type would refuse the 232 entities already
-//!      carrying one, on every subsequent touch, for a defect they did not
-//!      cause. Advise before enforce.
-//!   2. The reported failure mode is never "the write was rejected". It is "the
-//!      author read a 200 as confirmation that the type was fine." A hint in the
-//!      response is aimed at exactly that reader, at exactly that moment.
-//!
-//! Retiring the advisory in favour of a gate is a real option later — but only
-//! once the tail is empty, and never by deleting this: the hint is what makes
-//! the tail measurable in the first place.
+//! This began as a post-commit advisory while the graph still carried a legacy
+//! ungoverned tail. That tail reached zero on 2026-08-27 (aegis-5eovj), so the
+//! same detector is now a pre-transaction gate. An empty shape store remains a
+//! valid bootstrap state; once any vocabulary is loaded, unknown types refuse.
 
 use std::collections::BTreeSet;
 
@@ -129,6 +119,48 @@ pub fn ungoverned_episode_types<'a>(
         }
     }
     found.into_iter().collect()
+}
+
+/// Refuse unknown type IRIs before a Turtle write reaches a transaction.
+///
+/// No loaded shapes means there is no vocabulary authority yet (bootstrap and
+/// standalone-library use), so the gate is deliberately inactive in that state.
+pub fn enforce_turtle(store: &Store, turtle: &str) -> Result<()> {
+    let vocabulary = sanctioned(store)?;
+    if vocabulary.is_empty() {
+        return Ok(());
+    }
+    refuse(&ungoverned_types_in_turtle(turtle, &vocabulary))
+}
+
+/// Refuse unknown episode node types before entity resolution can mint them.
+pub fn enforce_episode_types<'a>(
+    store: &Store,
+    node_types: impl Iterator<Item = &'a str>,
+    base_ns: &str,
+) -> Result<()> {
+    let vocabulary = sanctioned(store)?;
+    if vocabulary.is_empty() {
+        return Ok(());
+    }
+    let mut unknown = BTreeSet::new();
+    for node_type in node_types {
+        let iri = format!("{base_ns}{}", crate::episode::sanitize_iri_local(node_type));
+        if !vocabulary.contains(&iri) {
+            unknown.insert(iri);
+        }
+    }
+    refuse(&unknown.into_iter().collect::<Vec<_>>())
+}
+
+fn refuse(unknown: &[String]) -> Result<()> {
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    Err(Error::InvalidValue(format!(
+        "unknown rdf:type IRIs: {}. No loaded shape sanctions these classes; choose a class from POST /shapes {{\"action\":\"vocabulary\"}} or propose and load a shape before retrying. No facts were written",
+        unknown.join(", ")
+    )))
 }
 
 /// Build the advisory payload for a response, or `None` when everything the

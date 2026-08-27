@@ -96,6 +96,11 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     }
     let graph = resolve_committed_graph(store, input.get("graph").and_then(JsonValue::as_str))?;
 
+    // Closed-vocabulary gate (aegis-hpav5). SHACL is open-world: an rdf:type
+    // targeted by no shape is vacuously conformant. Refuse it explicitly before
+    // parsing can intern terms or any transaction can begin.
+    crate::vocabulary::enforce_turtle(store, turtle)?;
+
     // SHACL validation: combine per-request shapes with stored shapes.
     let request_shapes = input.get("shapes").and_then(|v| v.as_str());
     let stored_shapes = store.get_combined_shapes()?;
@@ -219,33 +224,11 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         )?
     };
 
-    // VOCABULARY ADVISORY (aegis-7n1ya). `conforms: true` above means only that
-    // no shape was VIOLATED — and a shape fires through sh:targetClass, so a type
-    // no shape targets is untargeted and vacuously conformant. This response
-    // therefore cannot otherwise distinguish "validated and fine" from "not
-    // validated at all", and every caller reads it as the former. bobbin's chunk
-    // snapshot is the case that proved it matters at machine scale (aegis-6noan):
-    // a producer guarding on `conforms != false` would have minted the graph's
-    // largest ungoverned class behind a clean success.
-    //
-    // Never blocks, never fails the write: the transaction is already committed
-    // at this point, so any error here is swallowed by design and the field is
-    // simply absent. An advisory that can break a successful write is worse than
-    // no advisory.
-    let vocabulary_hint = crate::vocabulary::sanctioned(store)
-        .ok()
-        .map(|v| crate::vocabulary::ungoverned_types_in_turtle(turtle, &v))
-        .and_then(|u| crate::vocabulary::hint_json(&u));
-
-    let mut response = serde_json::json!({
+    Ok(serde_json::json!({
         "conforms": true,
         "tx_id": tx_id,
         "count": count,
         "snapshot": snapshot,
         "replaced": replace_snapshot
-    });
-    if let Some(hint) = vocabulary_hint {
-        response["vocabulary_hint"] = hint;
-    }
-    Ok(response)
+    }))
 }

@@ -3226,7 +3226,7 @@ fn test_tool_export_named_graph_subset() {
     );
 }
 
-// ── Vocabulary advisory (aegis-7n1ya) ────────────────────────────
+// ── Vocabulary gate (aegis-hpav5, promoted from aegis-7n1ya) ────
 //
 // The defect these cover: SHACL fires through sh:targetClass, so a type NO
 // shape targets is untargeted and vacuously conformant. `conforms: true` is
@@ -3234,7 +3234,7 @@ fn test_tool_export_named_graph_subset() {
 // 405 entities across 5 invented classes were written exactly that way.
 
 #[test]
-fn knot_advises_when_a_type_no_shape_targets_is_written() {
+fn knot_refuses_when_a_type_no_shape_targets_and_writes_nothing() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
         &store,
@@ -3248,7 +3248,7 @@ fn knot_advises_when_a_type_no_shape_targets_is_written() {
     )
     .unwrap();
 
-    let result = tool_knot(
+    let error = tool_knot(
         &mut store,
         &serde_json::json!({
             "turtle": "@prefix ex: <http://example.org/> .\nex:bob a ex:Invented .",
@@ -3257,15 +3257,16 @@ fn knot_advises_when_a_type_no_shape_targets_is_written() {
             "source": "unit-test"
         }),
     )
-    .unwrap();
+    .unwrap_err();
 
-    // The write SUCCEEDED — the advisory must not be mistaken for a refusal.
-    assert_eq!(result["conforms"], true);
-    assert!(result["tx_id"].as_i64().unwrap() > 0);
-    assert_eq!(
-        result["vocabulary_hint"]["ungoverned_types"],
-        serde_json::json!(["http://example.org/Invented"])
-    );
+    assert!(error.to_string().contains("http://example.org/Invented"));
+    assert!(error.to_string().contains("No facts were written"));
+    let absent = tool_query(
+        &store,
+        &serde_json::json!({"query": "ASK { <http://example.org/bob> a <http://example.org/Invented> }"}),
+    )
+    .unwrap();
+    assert_eq!(absent["result"], false);
 }
 
 #[test]
@@ -3302,11 +3303,10 @@ fn knot_is_silent_when_every_type_is_governed() {
     );
 }
 
-/// The aegis-6noan shape: a dual-typed node where one type is governed and the
-/// other is not. This is the case a producer's own `conforms != false` guard
-/// cannot see, because the governed half really did validate.
+/// One governed type must not hide an unknown sibling type; the whole write is
+/// refused atomically.
 #[test]
-fn knot_advises_on_the_undeclared_half_of_a_dual_typed_node() {
+fn knot_refuses_the_undeclared_half_of_a_dual_typed_node_atomically() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
         &store,
@@ -3320,7 +3320,7 @@ fn knot_advises_on_the_undeclared_half_of_a_dual_typed_node() {
     )
     .unwrap();
 
-    let result = tool_knot(
+    let error = tool_knot(
         &mut store,
         &serde_json::json!({
             "turtle": "@prefix ex: <http://example.org/> .\nex:c1 a ex:Chunk, ex:CodeSymbol .",
@@ -3329,13 +3329,15 @@ fn knot_advises_on_the_undeclared_half_of_a_dual_typed_node() {
             "source": "unit-test"
         }),
     )
-    .unwrap();
+    .unwrap_err();
 
-    assert_eq!(result["conforms"], true);
-    assert_eq!(
-        result["vocabulary_hint"]["ungoverned_types"],
-        serde_json::json!(["http://example.org/Chunk"])
-    );
+    assert!(error.to_string().contains("http://example.org/Chunk"));
+    let absent = tool_query(
+        &store,
+        &serde_json::json!({"query": "ASK { <http://example.org/c1> ?p ?o }"}),
+    )
+    .unwrap();
+    assert_eq!(absent["result"], false);
 }
 
 /// `/episode` is the path the 405 off-vocabulary entities actually came in
@@ -3343,7 +3345,7 @@ fn knot_advises_on_the_undeclared_half_of_a_dual_typed_node() {
 /// type is emitted as `aegis:{sanitized}`, so the advisory has to resolve it
 /// the same way or it reports governed types as ungoverned.
 #[test]
-fn episode_advises_when_a_node_type_no_shape_targets_is_written() {
+fn episode_refuses_when_a_node_type_no_shape_targets_and_writes_nothing() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
         &store,
@@ -3357,7 +3359,7 @@ fn episode_advises_when_a_node_type_no_shape_targets_is_written() {
     )
     .unwrap();
 
-    let result = tool_episode(
+    let error = tool_episode(
         &mut store,
         &serde_json::json!({
             "name": "vocab-advisory-episode",
@@ -3371,14 +3373,16 @@ fn episode_advises_when_a_node_type_no_shape_targets_is_written() {
             ]
         }),
     )
-    .unwrap();
+    .unwrap_err();
 
-    // The write succeeded; only the UNGOVERNED type is named.
-    assert!(result["count"].as_u64().unwrap() > 0);
-    assert_eq!(
-        result["vocabulary_hint"]["ungoverned_types"],
-        serde_json::json!(["http://aegis.gastown.local/ontology/MonitoringComponent"])
-    );
+    assert!(error.to_string().contains("MonitoringComponent"));
+    assert!(error.to_string().contains("No facts were written"));
+    let absent = tool_query(
+        &store,
+        &serde_json::json!({"query": "ASK { <http://aegis.gastown.local/ontology/aegis-1234> ?p ?o }"}),
+    )
+    .unwrap();
+    assert_eq!(absent["result"], false);
 }
 
 #[test]
@@ -3413,6 +3417,41 @@ fn episode_is_silent_when_every_node_type_is_governed() {
         result.get("vocabulary_hint").is_none(),
         "a fully governed episode must carry no advisory, got {result}"
     );
+}
+
+#[test]
+fn vocabulary_gate_accepts_prefix_neutral_targets_and_declared_parents() {
+    let mut store = Store::open_in_memory().unwrap();
+    tool_shapes(
+        &store,
+        &serde_json::json!({
+            "action": "load",
+            "name": "mixed-vocabulary",
+            "turtle": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                       @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+                       @prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+                       @prefix bobbin: <http://bobbin.dev/ontology/> .\n\
+                       bobbin:CodeShape a sh:NodeShape ; sh:targetClass bobbin:CodeSymbol .\n\
+                       aegis:WebShape a sh:NodeShape ; sh:targetClass aegis:WebApplication .\n\
+                       aegis:WebApplication rdfs:subClassOf aegis:Service .",
+        }),
+    )
+    .unwrap();
+
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+                       @prefix bobbin: <http://bobbin.dev/ontology/> .\n\
+                       <http://example.org/code> a bobbin:CodeSymbol .\n\
+                       <http://example.org/service> a aegis:Service .",
+            "actor": "test"
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(result["conforms"], true);
+    assert_eq!(result["count"], 2);
 }
 
 // ---------------------------------------------------------------------------
