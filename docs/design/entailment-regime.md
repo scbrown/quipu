@@ -95,6 +95,20 @@ that must be visible to SHACL/policy evaluation.
 
 ### 3. Promotion
 
+> **Implementation note (2026-08-27), found while scoping — the reason this
+> section is not yet built.** Promotion-as-move interacts with
+> re-derive-and-diff: a fact moved out of the companion into the premise
+> graph becomes a PREMISE, and on the next evaluation the engine re-derives
+> it — the companion's per-source diff no longer contains it, so it would be
+> re-asserted there, recreating the two-copies-at-two-trust-levels hazard
+> the move decision exists to avoid. The OWL materializer's seen-set already
+> absorbs this (premises include the promoted fact); the Datalog
+> `write_rule_delta` does not — it must learn to skip tuples already current
+> in the premise graph. And the retraction half (premise retracted →
+> promoted fact retracted) needs the promoted fact to keep a derivation
+> marker, or a sweep that re-checks promoted facts against `explain`-style
+> re-matching. Design these two together before building either.
+
 - Authority-gated graph move, following camayoc's implemented pattern
   (`scripts/promote_plane.py`, `config/plane-authority.json`, fail-closed) and
   quipu's existing governance surface (`src/governance/authority.rs`,
