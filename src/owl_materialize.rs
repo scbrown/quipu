@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::Result;
 use crate::store::{Datum, Store};
-use crate::types::{Op, Value};
+use crate::types::{Fact, Op, Value};
 
 use super::owl_parse::{collect_predicate_facts, collect_type_facts, transitive_closure};
 use super::{MaterializeReport, Ontology, RDF_TYPE};
@@ -31,16 +31,16 @@ struct Pass<'a> {
 }
 
 impl<'a> Pass<'a> {
-    fn from_store(store: &Store, timestamp: &'a str) -> Result<Self> {
+    fn from_facts(facts: &[Fact], timestamp: &'a str) -> Self {
         let mut seen = HashSet::new();
-        for f in &store.current_facts()? {
+        for f in facts {
             seen.insert((f.entity, f.attribute, f.value.to_bytes()));
         }
-        Ok(Self {
+        Self {
             seen,
             datums: Vec::new(),
             timestamp,
-        })
+        }
     }
 
     fn push(&mut self, entity: i64, attribute: i64, value: Value, counter: &mut usize) {
@@ -66,15 +66,28 @@ impl Ontology {
     /// until one derives nothing new, so axiom families compose: a type
     /// introduced by `rdfs:range` feeds the subclass closure of the next pass.
     pub fn materialize(&self, store: &mut Store, timestamp: &str) -> Result<MaterializeReport> {
+        // Placement (quipu-0b6): premises are ROOT plus its companion inferred
+        // graph; every entailment is written to the companion. The freshness
+        // note records the premise head the closure reflects.
+        let companion =
+            store.ensure_companion_inferred_graph(crate::schema::ROOT_GRAPH, timestamp)?;
+        let premise_head = store.transaction_head()?;
         let mut report = MaterializeReport::default();
         loop {
-            let datums = self.derive_pass(store, timestamp, &mut report)?;
+            let datums = self.derive_pass(store, companion, timestamp, &mut report)?;
             if datums.is_empty() {
                 break;
             }
             report.total += datums.len();
-            store.transact(&datums, timestamp, Some("owl"), Some("owl:materialize"))?;
+            store.transact_to_graph(
+                &datums,
+                timestamp,
+                Some("owl"),
+                Some("owl:materialize"),
+                companion,
+            )?;
         }
+        store.note_inferred_freshness(companion, premise_head, timestamp)?;
         Ok(report)
     }
 
@@ -83,12 +96,14 @@ impl Ontology {
     fn derive_pass(
         &self,
         store: &Store,
+        companion: i64,
         timestamp: &str,
         report: &mut MaterializeReport,
     ) -> Result<Vec<Datum>> {
-        let mut pass = Pass::from_store(store, timestamp)?;
+        let premises = store.current_facts_in_graphs(&[crate::schema::ROOT_GRAPH, companion])?;
+        let mut pass = Pass::from_facts(&premises, timestamp);
         let rdf_type_id = store.intern(RDF_TYPE)?;
-        let type_facts = collect_type_facts(store, rdf_type_id)?;
+        let type_facts = collect_type_facts(&premises, rdf_type_id);
 
         // 1. Subclass transitive closure: if x : A and A ⊑ B, then x : B.
         let class_closure = transitive_closure(&self.axioms.subclass_of);
@@ -121,7 +136,7 @@ impl Ontology {
             let Some(sub_id) = store.lookup(sub_property)? else {
                 continue;
             };
-            for (entity_id, value) in &collect_predicate_facts(store, sub_id)? {
+            for (entity_id, value) in &collect_predicate_facts(&premises, sub_id) {
                 for super_property in supers {
                     let super_id = store.intern(super_property)?;
                     pass.push(
@@ -159,7 +174,7 @@ impl Ontology {
         for (p, q) in &self.axioms.inverse_of {
             let p_id = store.intern(p)?;
             let q_id = store.intern(q)?;
-            for (s, o) in &collect_predicate_facts(store, p_id)? {
+            for (s, o) in &collect_predicate_facts(&premises, p_id) {
                 if let Value::Ref(o_id) = o {
                     pass.push(*o_id, q_id, Value::Ref(*s), &mut report.inverse_inferences);
                 }
@@ -169,7 +184,7 @@ impl Ontology {
         // 4. Symmetric properties: if (a P b), assert (b P a).
         for prop in &self.axioms.symmetric_properties {
             let prop_id = store.intern(prop)?;
-            for (s, o) in &collect_predicate_facts(store, prop_id)? {
+            for (s, o) in &collect_predicate_facts(&premises, prop_id) {
                 if let Value::Ref(o_id) = o {
                     pass.push(
                         *o_id,
@@ -190,7 +205,7 @@ impl Ontology {
                 continue;
             };
             let mut adjacency: HashMap<i64, Vec<i64>> = HashMap::new();
-            for (s, v) in &collect_predicate_facts(store, prop_id)? {
+            for (s, v) in &collect_predicate_facts(&premises, prop_id) {
                 if let Value::Ref(o_id) = v {
                     adjacency.entry(*s).or_default().push(*o_id);
                 }
@@ -228,7 +243,7 @@ impl Ontology {
                     continue;
                 };
                 let to_id = store.intern(to)?;
-                for (s, v) in &collect_predicate_facts(store, from_id)? {
+                for (s, v) in &collect_predicate_facts(&premises, from_id) {
                     pass.push(
                         *s,
                         to_id,
@@ -244,7 +259,7 @@ impl Ontology {
         for (prop, class) in &self.axioms.domains {
             let prop_id = store.intern(prop)?;
             let class_id = store.intern(class)?;
-            for (s, _) in &collect_predicate_facts(store, prop_id)? {
+            for (s, _) in &collect_predicate_facts(&premises, prop_id) {
                 pass.push(
                     *s,
                     rdf_type_id,
@@ -256,7 +271,7 @@ impl Ontology {
         for (prop, class) in &self.axioms.ranges {
             let prop_id = store.intern(prop)?;
             let class_id = store.intern(class)?;
-            for (_, o) in &collect_predicate_facts(store, prop_id)? {
+            for (_, o) in &collect_predicate_facts(&premises, prop_id) {
                 if let Value::Ref(o_id) = o {
                     pass.push(
                         *o_id,

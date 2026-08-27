@@ -3,10 +3,26 @@
 Raw facts tell you what *is*. The reasoner tells you what *follows*.
 
 Quipu's reasoner is a stratified Datalog engine that reads the EAVT fact log,
-applies rules, and writes derived facts back into the store. The derived facts
-look and behave like any other fact — you query them with SPARQL, validate
-them with SHACL, and time-travel through them — but their `source` tag traces
-back to the rule that produced them.
+applies rules, and writes derived facts into the store. Derived facts are
+**quarantined by placement** (quipu-0b6, 2026-08-27): they live in the premise
+graph's *companion inferred graph* — `<graph>#inferred`, with ROOT's at
+`urn:quipu:graph:root#inferred` — never beside the facts they were derived
+from. A plain query sees asserted facts only; a query that wants the closure
+composes it explicitly:
+
+```sparql
+ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred>
+    { <traefik> <runsOn> <koror> }
+```
+
+Within the companion, derived facts behave like any other fact — SPARQL,
+SHACL, time travel all work — their `source` tag traces to the rule that
+produced them, and the graph itself carries `aegis:sourceKind "inferred"` and
+a `quipu:derivedAsOfTx` freshness note (the premise-side transaction head the
+closure last reflected). The `#inferred` suffix is **reserved**: external
+writes to a companion are refused, so entailments cannot be forged by hand.
+Pre-regime stores move their legacy-placed derivations across with
+`quipu db migrate-inferred`.
 
 ## Why Derive Facts?
 

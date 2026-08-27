@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{Error, Result};
-use crate::store::Store;
 use crate::types::Value;
 
 use super::{
@@ -123,31 +122,36 @@ pub(crate) fn transitive_closure(pairs: &[(String, String)]) -> HashMap<String, 
     result
 }
 
-/// Collect all (entity, `class_id`) pairs from rdf:type facts.
-pub(super) fn collect_type_facts(store: &Store, rdf_type_id: i64) -> Result<Vec<(i64, i64)>> {
-    let facts = store.current_facts()?;
+/// Collect all (entity, `class_id`) pairs from rdf:type facts in a
+/// pre-collected premise set (since quipu-0b6, the premise graph plus its
+/// companion inferred graph — collected once per pass rather than re-scanned
+/// per axiom family).
+pub(super) fn collect_type_facts(
+    facts: &[crate::types::Fact],
+    rdf_type_id: i64,
+) -> Vec<(i64, i64)> {
     let mut type_facts = Vec::new();
-    for f in &facts {
+    for f in facts {
         if f.attribute == rdf_type_id
             && let Value::Ref(class_id) = &f.value
         {
             type_facts.push((f.entity, *class_id));
         }
     }
-    Ok(type_facts)
+    type_facts
 }
 
-/// Collect all (subject, object) pairs for a given predicate.
+/// Collect all (subject, object) pairs for a given predicate from a
+/// pre-collected premise set.
 pub(super) fn collect_predicate_facts(
-    store: &Store,
+    facts: &[crate::types::Fact],
     predicate_id: i64,
-) -> Result<Vec<(i64, Value)>> {
-    let facts = store.current_facts()?;
+) -> Vec<(i64, Value)> {
     let mut pred_facts = Vec::new();
-    for f in &facts {
+    for f in facts {
         if f.attribute == predicate_id {
             pred_facts.push((f.entity, f.value.clone()));
         }
     }
-    Ok(pred_facts)
+    pred_facts
 }

@@ -3,6 +3,14 @@
 Complete reference for the Quipu reasoner: rule syntax, CLI, Rust API, error
 catalogue, and current limitations.
 
+> **Placement (quipu-0b6, 2026-08-27).** Derivations are written to the
+> premise graph's companion inferred graph (`<graph>#inferred`; ROOT's is
+> `urn:quipu:graph:root#inferred`), never beside their premises. Premises are
+> read from the graph *plus* its companion, so closure feeds further
+> derivation. Compose reads with `FROM <urn:quipu:graph:root> FROM
+> <urn:quipu:graph:root#inferred>`; migrate a pre-regime store with
+> `quipu db migrate-inferred`.
+
 ## Rule Syntax
 
 Rules are written in standard Turtle files using the `rule:` vocabulary. The

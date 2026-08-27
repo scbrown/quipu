@@ -53,9 +53,11 @@ On load, Quipu:
 
 ## Materialization
 
-Materialized facts are written with `source = "owl:materialize"` so they can
-be identified in the transaction log. When an ontology changes, derived facts
-can be re-materialized.
+Materialized facts are written with `source = "owl:materialize"` into ROOT's
+**companion inferred graph** (`urn:quipu:graph:root#inferred`, quipu-0b6) —
+quarantined by placement, composed back in with
+`FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred>`. When an
+ontology changes, derived facts can be re-materialized.
 
 Materialization runs to **fixpoint across axiom families**: a type introduced
 by `rdfs:range` feeds the subclass closure of the next pass, and passes repeat
@@ -79,7 +81,10 @@ ex:Dog rdfs:subClassOf ex:Mammal .
 ex:Mammal rdfs:subClassOf ex:Animal .
 ```
 
-After materialization, `ASK { ex:fido a ex:Animal }` returns true.
+After materialization,
+`ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred>
+{ ex:fido a ex:Animal }` returns true — a plain `ASK` does not, because the
+entailment lives in the companion, not beside its premises.
 
 ## Write-Time Validation
 

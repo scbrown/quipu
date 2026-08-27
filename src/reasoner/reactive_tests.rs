@@ -437,8 +437,14 @@ ex:eq a rule:Rule ;
     let p1 = store.lookup("ex:p1").unwrap().unwrap();
     let c1 = store.lookup("ex:c1").unwrap().unwrap();
 
+    // quipu-0b6: reactive derivations land in ROOT's companion inferred
+    // graph; the union with ROOT is what a composed read sees.
+    let companion = store
+        .lookup(crate::store::inferred::ROOT_INFERRED_GRAPH_IRI)
+        .unwrap()
+        .expect("companion exists after a reactive derivation");
     let as_git_commit: Vec<i64> = store
-        .current_facts()
+        .current_facts_in_graphs(&[crate::schema::ROOT_GRAPH, companion])
         .unwrap()
         .into_iter()
         .filter(|f| f.attribute == rdf_type_id && f.value == Value::Ref(git_commit_id))

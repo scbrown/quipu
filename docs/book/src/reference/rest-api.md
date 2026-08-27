@@ -519,6 +519,12 @@ Run a Datalog ruleset to fixpoint and persist its derivations
 (`source = reasoner:<rule-id>`). A write endpoint — derivations assert and
 retract through the fact log — so it is bearer-gated like `/episode`.
 
+Derivations land in the target graph's **companion inferred graph**
+(`<graph>#inferred`; ROOT's is `urn:quipu:graph:root#inferred`, quipu-0b6).
+Read them composed: `FROM <urn:quipu:graph:root> FROM
+<urn:quipu:graph:root#inferred>` in a `/query` body. The suffix is reserved —
+external writes to a companion graph are refused.
+
 Body fields, all optional: `rules` (inline rule Turtle; absent, the stored
 combined shapes are used), `prefix` (default IRI prefix for unqualified
 predicate names), `graph` (a named-graph IRI — premises and derivations both

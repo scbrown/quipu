@@ -11,8 +11,9 @@
 //! since been retracted therefore shows as absent support, which is itself
 //! diagnostic.
 //!
-//! ROOT-scoped: like `entity_facts`, the walk reads ROOT's own facts. Depth
-//! is capped so mutually referring derivations terminate.
+//! The walk reads ROOT plus its companion inferred graph
+//! (`urn:quipu:graph:root#inferred`, quipu-0b6) — where derived facts live —
+//! and depth is capped so mutually referring derivations terminate.
 
 use rusqlite::params;
 use serde_json::{Value as Json, json};
@@ -54,14 +55,21 @@ pub fn explain(
     explain_fact(store, &ctx, e, a, &value, max_depth)
 }
 
-/// The rulesets and axioms the walk resolves derivers against, loaded once.
+/// The rulesets and axioms the walk resolves derivers against, loaded once —
+/// plus the graphs the walk reads: ROOT and, when it exists, ROOT's companion
+/// inferred graph (quipu-0b6), where every derived fact now lives.
 struct Context {
     ruleset: Option<RuleSet>,
     axioms: Option<Axioms>,
+    graphs: Vec<i64>,
 }
 
 impl Context {
     fn load(store: &Store) -> Self {
+        let mut graphs = vec![crate::schema::ROOT_GRAPH];
+        if let Ok(Some(companion)) = store.lookup(crate::store::inferred::ROOT_INFERRED_GRAPH_IRI) {
+            graphs.push(companion);
+        }
         let ruleset = store
             .get_combined_shapes()
             .ok()
@@ -73,7 +81,11 @@ impl Context {
             .flatten()
             .and_then(|ttl| Ontology::from_turtle(&ttl).ok())
             .map(|o| o.axioms);
-        Self { ruleset, axioms }
+        Self {
+            ruleset,
+            axioms,
+            graphs,
+        }
     }
 }
 
@@ -90,7 +102,7 @@ fn explain_fact(
         "p": store.resolve(a)?,
         "o": display_value(store, value)?,
     });
-    let Some((tx, source, valid_from)) = fact_row(store, e, a, value)? else {
+    let Some((tx, source, valid_from)) = fact_row(store, &ctx.graphs, e, a, value)? else {
         return Ok(json!({ "fact": display, "found": false }));
     };
     let mut node = json!({
@@ -153,7 +165,7 @@ fn explain_rule(
         }));
     };
 
-    let premises = match rule_support(store, rule, e, *v_ref)? {
+    let premises = match rule_support(store, &ctx.graphs, rule, e, *v_ref)? {
         Some(support) => {
             let mut out = Vec::new();
             for (pe, pred, pv) in support {
@@ -190,6 +202,7 @@ fn explain_rule(
 /// Returns `(entity, predicate-IRI, value-ref)` per positive body atom.
 fn rule_support(
     store: &Store,
+    graphs: &[i64],
     rule: &Rule,
     e: i64,
     v: i64,
@@ -218,14 +231,14 @@ fn rule_support(
     }
 
     match body.as_slice() {
-        [atom] => Ok(match_atom(store, atom, &bindings)?
+        [atom] => Ok(match_atom(store, graphs, atom, &bindings)?
             .map(|(pe, pv, _)| vec![(pe, atom.predicate.clone(), pv)])),
         [left, right] => {
-            let Some(left_facts) = atom_candidates(store, left, &bindings)? else {
+            let Some(left_facts) = atom_candidates(store, graphs, left, &bindings)? else {
                 return Ok(None);
             };
             for (le, lv, l_bind) in left_facts {
-                if let Some((re, rv, _)) = match_atom(store, right, &l_bind)? {
+                if let Some((re, rv, _)) = match_atom(store, graphs, right, &l_bind)? {
                     return Ok(Some(vec![
                         (le, left.predicate.clone(), lv),
                         (re, right.predicate.clone(), rv),
@@ -245,21 +258,25 @@ type Candidate = (i64, i64, Vec<(String, i64)>);
 /// bindings extended by the match.
 fn match_atom(
     store: &Store,
+    graphs: &[i64],
     atom: &crate::reasoner::Atom,
     bindings: &[(String, i64)],
 ) -> Result<Option<Candidate>> {
-    Ok(atom_candidates(store, atom, bindings)?.and_then(|mut all| {
-        if all.is_empty() {
-            None
-        } else {
-            Some(all.remove(0))
-        }
-    }))
+    Ok(
+        atom_candidates(store, graphs, atom, bindings)?.and_then(|mut all| {
+            if all.is_empty() {
+                None
+            } else {
+                Some(all.remove(0))
+            }
+        }),
+    )
 }
 
 /// All facts of `atom`'s predicate consistent with `bindings`.
 fn atom_candidates(
     store: &Store,
+    graphs: &[i64],
     atom: &crate::reasoner::Atom,
     bindings: &[(String, i64)],
 ) -> Result<Option<Vec<Candidate>>> {
@@ -267,7 +284,7 @@ fn atom_candidates(
         return Ok(None);
     };
     let mut out = Vec::new();
-    for (fe, fv) in ref_pairs_for(store, pred_id)? {
+    for (fe, fv) in ref_pairs_for(store, graphs, pred_id)? {
         let mut extended = bindings.to_vec();
         let mut ok = true;
         for (term, val) in atom.args.iter().zip([fe, fv]) {
@@ -347,7 +364,7 @@ fn explain_owl(
     if p_iri == RDF_TYPE {
         // Subclass closure: (e a C) with C ⊑ o.
         let closure = transitive_closure(&axioms.subclass_of);
-        for class_id in refs_for(store, e, a)? {
+        for class_id in refs_for(store, &ctx.graphs, e, a)? {
             let class_iri = store.resolve(class_id)?;
             if class_iri != o_iri && closure.get(&class_iri).is_some_and(|s| s.contains(&o_iri)) {
                 families.push(premise(
@@ -367,7 +384,7 @@ fn explain_owl(
                 continue;
             };
             if let Some(other_id) = store.lookup(other)?
-                && exists_ref(store, e, a, other_id)?
+                && exists_ref(store, &ctx.graphs, e, a, other_id)?
             {
                 families.push(premise(
                     "equivalentClass",
@@ -380,7 +397,7 @@ fn explain_owl(
         for (prop, class) in &axioms.domains {
             if class == &o_iri
                 && let Some(prop_id) = store.lookup(prop)?
-                && let Some(obj) = refs_for(store, e, prop_id)?.first()
+                && let Some(obj) = refs_for(store, &ctx.graphs, e, prop_id)?.first()
             {
                 families.push(premise(
                     "domain",
@@ -392,7 +409,7 @@ fn explain_owl(
         for (prop, class) in &axioms.ranges {
             if class == &o_iri
                 && let Some(prop_id) = store.lookup(prop)?
-                && let Some(subj) = subjects_for(store, prop_id, e)?.first()
+                && let Some(subj) = subjects_for(store, &ctx.graphs, prop_id, e)?.first()
             {
                 families.push(premise(
                     "range",
@@ -407,7 +424,7 @@ fn explain_owl(
         for (sub, supers) in &closure {
             if supers.contains(&p_iri)
                 && let Some(sub_id) = store.lookup(sub)?
-                && exists_ref(store, e, sub_id, *v_ref)?
+                && exists_ref(store, &ctx.graphs, e, sub_id, *v_ref)?
             {
                 families.push(premise(
                     "subPropertyOf",
@@ -425,7 +442,7 @@ fn explain_owl(
                 continue;
             };
             if let Some(other_id) = store.lookup(other)?
-                && exists_ref(store, e, other_id, *v_ref)?
+                && exists_ref(store, &ctx.graphs, e, other_id, *v_ref)?
             {
                 families.push(premise(
                     "equivalentProperty",
@@ -438,7 +455,7 @@ fn explain_owl(
         for (q, p) in &axioms.inverse_of {
             if p == &p_iri
                 && let Some(q_id) = store.lookup(q)?
-                && exists_ref(store, *v_ref, q_id, e)?
+                && exists_ref(store, &ctx.graphs, *v_ref, q_id, e)?
             {
                 families.push(premise(
                     "inverseOf",
@@ -448,7 +465,9 @@ fn explain_owl(
             }
         }
         // Symmetric: (o p e).
-        if axioms.symmetric_properties.contains(&p_iri) && exists_ref(store, *v_ref, a, e)? {
+        if axioms.symmetric_properties.contains(&p_iri)
+            && exists_ref(store, &ctx.graphs, *v_ref, a, e)?
+        {
             families.push(premise(
                 "symmetric",
                 format!("{p_iri} a owl:SymmetricProperty"),
@@ -457,8 +476,8 @@ fn explain_owl(
         }
         // Transitive: one chain (e p m), (m p o).
         if axioms.transitive_properties.contains(&p_iri) {
-            for m in refs_for(store, e, a)? {
-                if m != *v_ref && exists_ref(store, m, a, *v_ref)? {
+            for m in refs_for(store, &ctx.graphs, e, a)? {
+                if m != *v_ref && exists_ref(store, &ctx.graphs, m, a, *v_ref)? {
                     families.push(premise(
                         "transitive",
                         format!("{p_iri} a owl:TransitiveProperty"),
@@ -485,17 +504,19 @@ fn explain_owl(
 
 fn fact_row(
     store: &Store,
+    graphs: &[i64],
     e: i64,
     a: i64,
     value: &Value,
 ) -> Result<Option<(i64, Option<String>, String)>> {
-    let mut stmt = store.conn.prepare(
+    let mut stmt = store.conn.prepare(&format!(
         "SELECT f.tx, t.source, f.valid_from FROM facts f \
          JOIN transactions t ON f.tx = t.id \
          WHERE f.e = ?1 AND f.a = ?2 AND f.v = ?3 \
-           AND f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
+           AND f.op = 1 AND f.valid_to IS NULL AND f.g IN ({}) \
          ORDER BY f.tx DESC LIMIT 1",
-    )?;
+        graph_list(graphs)
+    ))?;
     let mut rows = stmt.query(params![e, a, value.to_bytes()])?;
     match rows.next()? {
         Some(row) => Ok(Some((row.get(0)?, row.get(1)?, row.get(2)?))),
@@ -503,22 +524,34 @@ fn fact_row(
     }
 }
 
+/// Inline `IN (…)` list for the walk's graph set. Graph ids are internal
+/// integers, never user input, so formatting them inline is safe.
+fn graph_list(graphs: &[i64]) -> String {
+    graphs
+        .iter()
+        .map(i64::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// Current reference objects of `(e, a, ?o)`.
-fn refs_for(store: &Store, e: i64, a: i64) -> Result<Vec<i64>> {
-    let mut stmt = store.conn.prepare(
+fn refs_for(store: &Store, graphs: &[i64], e: i64, a: i64) -> Result<Vec<i64>> {
+    let mut stmt = store.conn.prepare(&format!(
         "SELECT v FROM facts WHERE e = ?1 AND a = ?2 \
-         AND op = 1 AND valid_to IS NULL AND g = 0",
-    )?;
+         AND op = 1 AND valid_to IS NULL AND g IN ({})",
+        graph_list(graphs)
+    ))?;
     collect_refs(stmt.query(params![e, a])?)
 }
 
 /// Current subjects of `(?s, a, o)`.
-fn subjects_for(store: &Store, a: i64, o: i64) -> Result<Vec<i64>> {
+fn subjects_for(store: &Store, graphs: &[i64], a: i64, o: i64) -> Result<Vec<i64>> {
     let o_bytes = Value::Ref(o).to_bytes();
-    let mut stmt = store.conn.prepare(
+    let mut stmt = store.conn.prepare(&format!(
         "SELECT e FROM facts WHERE a = ?1 AND v = ?2 \
-         AND op = 1 AND valid_to IS NULL AND g = 0",
-    )?;
+         AND op = 1 AND valid_to IS NULL AND g IN ({})",
+        graph_list(graphs)
+    ))?;
     let mut rows = stmt.query(params![a, o_bytes])?;
     let mut out = Vec::new();
     while let Some(row) = rows.next()? {
@@ -527,16 +560,17 @@ fn subjects_for(store: &Store, a: i64, o: i64) -> Result<Vec<i64>> {
     Ok(out)
 }
 
-fn exists_ref(store: &Store, e: i64, a: i64, o: i64) -> Result<bool> {
-    Ok(fact_row(store, e, a, &Value::Ref(o))?.is_some())
+fn exists_ref(store: &Store, graphs: &[i64], e: i64, a: i64, o: i64) -> Result<bool> {
+    Ok(fact_row(store, graphs, e, a, &Value::Ref(o))?.is_some())
 }
 
 /// Current `(entity, ref-object)` pairs for a predicate.
-fn ref_pairs_for(store: &Store, a: i64) -> Result<Vec<(i64, i64)>> {
-    let mut stmt = store.conn.prepare(
+fn ref_pairs_for(store: &Store, graphs: &[i64], a: i64) -> Result<Vec<(i64, i64)>> {
+    let mut stmt = store.conn.prepare(&format!(
         "SELECT e, v FROM facts WHERE a = ?1 \
-         AND op = 1 AND valid_to IS NULL AND g = 0",
-    )?;
+         AND op = 1 AND valid_to IS NULL AND g IN ({})",
+        graph_list(graphs)
+    ))?;
     let mut rows = stmt.query(params![a])?;
     let mut out = Vec::new();
     while let Some(row) = rows.next()? {

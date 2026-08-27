@@ -150,9 +150,13 @@ impl RuleIndex {
 
 impl TransactObserver for ReactiveReasoner {
     fn after_commit(&self, store: &mut Store, delta: &Delta) -> crate::error::Result<()> {
-        // Skip our own output to avoid infinite recursion.
+        // Skip our own output — and the inferred plane's bookkeeping writes
+        // (freshness notes, tags): reacting to those could loop if a rule
+        // ever ranged over the note predicate.
         if let Some(src) = &delta.source
-            && src.starts_with("reasoner:")
+            && (src.starts_with("reasoner:")
+                || src == crate::store::inferred::PLANE_SOURCE
+                || src == crate::store::inferred::MIGRATE_SOURCE)
         {
             return Ok(());
         }
@@ -244,6 +248,14 @@ fn evaluate_affected(
     let mut total_retracted = 0_usize;
     let timestamp = "reactive";
 
+    // Placement (quipu-0b6): reactive derivation reads premises from ROOT
+    // plus its companion inferred graph and writes derivations to the
+    // companion, matching the full-evaluate path.
+    let companion = store
+        .ensure_companion_inferred_graph(crate::schema::ROOT_GRAPH, timestamp)
+        .map_err(|e| crate::Error::Store(e.to_string()))?;
+    let premise_head = store.transaction_head()?;
+
     for stratum_idx in &affected_strata {
         // Reload the world before each stratum so that derived facts
         // from earlier strata (committed to the store) are visible to
@@ -253,8 +265,13 @@ fn evaluate_affected(
             .copied()
             .filter(|idx| affected.contains(idx))
             .collect();
-        let world = evaluate::World::load_rule_indices(store, ruleset, &rule_indices)
-            .map_err(|e| crate::Error::Store(e.to_string()))?;
+        let world = evaluate::World::load_graphs_rule_indices(
+            store,
+            ruleset,
+            &[crate::schema::ROOT_GRAPH, companion],
+            &rule_indices,
+        )
+        .map_err(|e| crate::Error::Store(e.to_string()))?;
 
         for &rule_idx in &rule_indices {
             let rule = &ruleset.rules[rule_idx];
@@ -265,8 +282,9 @@ fn evaluate_affected(
             // Ensure the head predicate attribute id exists.
             let attr_id = store.intern(&rule.head.predicate)?;
             let source = format!("reasoner:{}", rule.id);
-            let old_tuples = evaluate::load_existing_derivations(store, attr_id, &source)
-                .map_err(|e| crate::Error::Store(e.to_string()))?;
+            let old_tuples =
+                evaluate::load_existing_derivations_in_graph(store, attr_id, &source, companion)
+                    .map_err(|e| crate::Error::Store(e.to_string()))?;
 
             // Build the diff datums for this rule.
             let mut datums = Vec::new();
@@ -297,11 +315,21 @@ fn evaluate_affected(
 
             let asserted = datums.iter().filter(|d| d.op == Op::Assert).count();
             let retracted = datums.iter().filter(|d| d.op == Op::Retract).count();
-            store.transact(&datums, timestamp, Some("reasoner"), Some(&source))?;
+            store.transact_to_graph(
+                &datums,
+                timestamp,
+                Some("reasoner"),
+                Some(&source),
+                companion,
+            )?;
             total_asserted += asserted;
             total_retracted += retracted;
         }
     }
+
+    store
+        .note_inferred_freshness(companion, premise_head, timestamp)
+        .map_err(|e| crate::Error::Store(e.to_string()))?;
 
     Ok(ReactiveReport {
         asserted: total_asserted,

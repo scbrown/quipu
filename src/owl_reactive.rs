@@ -63,9 +63,16 @@ fn vocab_of(axioms: &Axioms) -> (HashSet<&str>, HashSet<&str>) {
 
 impl TransactObserver for ReactiveOwl {
     fn after_commit(&self, store: &mut Store, delta: &Delta) -> crate::error::Result<()> {
-        // Skip our own output; everything else, Datalog derivations included,
-        // may feed an axiom.
-        if delta.source.as_deref() == Some("owl:materialize") {
+        // Skip our own output and the inferred plane's bookkeeping writes;
+        // everything else, Datalog derivations included, may feed an axiom.
+        if matches!(
+            delta.source.as_deref(),
+            Some(
+                "owl:materialize"
+                    | crate::store::inferred::PLANE_SOURCE
+                    | crate::store::inferred::MIGRATE_SOURCE
+            )
+        ) {
             return Ok(());
         }
         if delta.asserts.is_empty() && delta.retracts.is_empty() {
@@ -157,7 +164,7 @@ ex:dependsOn a owl:ObjectProperty, owl:TransitiveProperty .
 
         let result = crate::sparql::query(
             &store,
-            "ASK { <http://example.org/a> <http://example.org/dependsOn> <http://example.org/c> }",
+            "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/a> <http://example.org/dependsOn> <http://example.org/c> }",
         )
         .unwrap();
         assert!(

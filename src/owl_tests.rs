@@ -80,7 +80,7 @@ fn loaded_range_applies_to_facts_written_after_ontology_load() {
 
     let result = crate::sparql::query(
         &store,
-        "ASK { <http://example.org/alice> a <http://example.org/Person> . \
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/alice> a <http://example.org/Person> . \
                <http://example.org/bob> a <http://example.org/Person> }",
     )
     .unwrap();
@@ -117,7 +117,7 @@ ex:fido a ex:Dog .
     // Query: fido should be an Animal (via Dog → Mammal → Animal).
     let result = crate::sparql::query(
         &store,
-        "ASK { <http://example.org/fido> a <http://example.org/Animal> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/fido> a <http://example.org/Animal> }",
     )
     .unwrap();
     assert!(
@@ -234,7 +234,7 @@ ex:alice ex:authors ex:paper1 .
     // paper1 authoredBy alice should now exist.
     let result = crate::sparql::query(
         &store,
-        "ASK { <http://example.org/paper1> <http://example.org/authoredBy> <http://example.org/alice> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/paper1> <http://example.org/authoredBy> <http://example.org/alice> }",
     )
     .unwrap();
     assert!(
@@ -320,7 +320,7 @@ ex:fnA ex:calls ex:fnB .
     // One hop: calls -> references.
     let direct = crate::sparql::query(
         &store,
-        "ASK { <http://example.org/fnA> <http://example.org/references> <http://example.org/fnB> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/fnA> <http://example.org/references> <http://example.org/fnB> }",
     )
     .unwrap();
     assert!(
@@ -333,7 +333,7 @@ ex:fnA ex:calls ex:fnB .
     // predicate beneath it, however deep.
     let transitive = crate::sparql::query(
         &store,
-        "ASK { <http://example.org/fnA> <http://example.org/touches> <http://example.org/fnB> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/fnA> <http://example.org/touches> <http://example.org/fnB> }",
     )
     .unwrap();
     assert!(
@@ -386,7 +386,7 @@ ex:c ex:dependsOn ex:d .
 
     let full = crate::sparql::query(
         &store,
-        "ASK { <http://example.org/a> <http://example.org/dependsOn> <http://example.org/d> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/a> <http://example.org/dependsOn> <http://example.org/d> }",
     )
     .unwrap();
     assert!(
@@ -440,8 +440,8 @@ ex:bob ex:authored ex:paper2 .
     );
 
     for ask in [
-        "ASK { <http://example.org/alice> <http://example.org/authored> <http://example.org/paper1> }",
-        "ASK { <http://example.org/bob> <http://example.org/wrote> <http://example.org/paper2> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/alice> <http://example.org/authored> <http://example.org/paper1> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/bob> <http://example.org/wrote> <http://example.org/paper2> }",
     ] {
         let result = crate::sparql::query(&store, ask).unwrap();
         assert!(
@@ -507,7 +507,7 @@ ex:alice ex:knows ex:bob .
 
     let result = crate::sparql::query(
         &store,
-        "ASK { <http://example.org/bob> a <http://example.org/Agent> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/bob> a <http://example.org/Agent> }",
     )
     .unwrap();
     assert!(
@@ -574,7 +574,7 @@ ex:Robot a owl:Class ;
     // FAILED CLOSED: the offending type must not be in the store.
     let stuck = crate::sparql::query(
         &store,
-        "ASK { <http://example.org/r2d2> a <http://example.org/Person> }",
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/r2d2> a <http://example.org/Person> }",
     )
     .unwrap();
     assert!(

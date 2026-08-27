@@ -547,7 +547,13 @@ fn apply_dataset(
         let mut ids = Vec::new();
         for nn in nodes {
             let iri = nn.as_str();
-            if store.is_dataset(iri)? {
+            // ROOT has no interned term, so its well-known IRI resolves here
+            // (quipu-0b6): `FROM <urn:quipu:graph:root> FROM
+            // <urn:quipu:graph:root#inferred>` is how a query composes the
+            // default graph with its companion inferred graph.
+            if iri == crate::schema::ROOT_GRAPH_IRI {
+                ids.push(crate::schema::ROOT_GRAPH);
+            } else if store.is_dataset(iri)? {
                 ids.extend(store.dataset_member_ids(iri)?);
             } else {
                 ids.extend(store.lookup_all(iri)?);

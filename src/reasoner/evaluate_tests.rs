@@ -55,6 +55,16 @@ fn count_derived(store: &Store, predicate: &str, source: &str) -> usize {
     usize::try_from(count).expect("non-negative count")
 }
 
+/// Facts in a graph's companion inferred graph — where derivations live
+/// since quipu-0b6. Empty when no companion exists yet.
+fn companion_facts(store: &Store, graph: i64) -> Vec<crate::types::Fact> {
+    let iri = store.companion_inferred_iri(graph).unwrap();
+    match store.lookup(&iri).unwrap() {
+        Some(g) => store.current_facts_in_graph(g).unwrap(),
+        None => Vec::new(),
+    }
+}
+
 #[test]
 fn empty_ruleset_is_a_noop() {
     let mut store = Store::open_in_memory().unwrap();
@@ -126,8 +136,10 @@ ex:r1 a rule:Rule ;
     let report = evaluate_in_graph(&mut store, &rs, TS, graph).unwrap();
     assert_eq!(report.asserted, 1);
     let head = store.lookup(&format!("{PFX}h")).unwrap().unwrap();
-    let branch_facts = store.current_facts_in_graph(graph).unwrap();
-    assert!(branch_facts.iter().any(|fact| {
+    // quipu-0b6: derivations live in the BRANCH's companion inferred graph —
+    // scoped to the branch, apart from its premises.
+    let branch_derived = companion_facts(&store, graph);
+    assert!(branch_derived.iter().any(|fact| {
         fact.entity == branch_a && fact.attribute == head && fact.value == Value::Ref(branch_b)
     }));
     assert!(
@@ -137,6 +149,12 @@ ex:r1 a rule:Rule ;
             .iter()
             .any(|fact| fact.attribute == head),
         "branch derivations must not be written into ROOT"
+    );
+    assert!(
+        !companion_facts(&store, crate::schema::ROOT_GRAPH)
+            .iter()
+            .any(|fact| fact.attribute == head && fact.value == Value::Ref(branch_b)),
+        "branch derivations must not leak into ROOT's companion either"
     );
 }
 
@@ -510,10 +528,15 @@ ex:rev a rule:Rule ;
     assert_triple(&mut store, "ex:c1", RDF_TYPE, COMMIT);
 
     evaluate(&mut store, &rs, TS).expect("mutual equivalence must evaluate");
+    // TWO derivations, not one, since quipu-0b6: c1 gains GitCommit, and
+    // in-stratum chaining (REV derives seed→Commit, FWD lifts it back) also
+    // restates seed's GitCommit into the COMPANION graph — a genuine row
+    // there, where same-graph idempotency used to swallow it. The companion
+    // holds the full closure, base-duplicating entailments included.
     assert_eq!(
         count_derived(&store, RDF_TYPE, "reasoner:FWD"),
-        1,
-        "ex:c1 should gain GitCommit"
+        2,
+        "c1 gains GitCommit; seed's GitCommit restates into the companion"
     );
 
     // Now retract the BASE fact that was ex:c1's only support.
@@ -547,21 +570,24 @@ ex:rev a rule:Rule ;
         ));
     }
 
-    // ex:seed's GitCommit is base, so REV keeps deriving seed→Commit (1).
-    // Everything that rested on the retracted fact is gone from the first
-    // re-evaluation on: FWD derives nothing, and REV's c1→Commit is retracted.
+    // ex:seed's GitCommit is base, so REV keeps deriving seed→Commit — and
+    // FWD keeps lifting that back to seed→GitCommit via in-stratum chaining,
+    // a companion row that RIGHTLY persists: its support bottoms out in the
+    // live base fact, not the retracted one. Everything that rested on the
+    // retracted fact is gone from the first re-evaluation on: both of c1's
+    // derived types are retracted and stay retracted.
     assert_eq!(
         trace,
-        vec![(0, 1); 4],
+        vec![(1, 1); 4],
         "retraction must propagate through mutually supporting rules, got {trace:?}"
     );
 
     // What convergence MEANS: ex:c1's only base type was retracted, and no
     // derived type survives it.
     let git_commit = store.lookup(GIT_COMMIT).unwrap().unwrap();
-    let still: Vec<i64> = store
-        .current_facts()
-        .unwrap()
+    let mut all_facts = store.current_facts().unwrap();
+    all_facts.extend(companion_facts(&store, crate::schema::ROOT_GRAPH));
+    let still: Vec<i64> = all_facts
         .into_iter()
         .filter(|f| {
             f.attribute == rdf_type
@@ -602,9 +628,7 @@ ex:r a rule:Rule ; rule:id "PATH3" ;
     let a = store.lookup("ex:a").unwrap().unwrap();
     let d = store.lookup("ex:d").unwrap().unwrap();
     let path3 = store.lookup(&format!("{PFX}path3")).unwrap().unwrap();
-    let derived: Vec<(i64, Value)> = store
-        .current_facts()
-        .unwrap()
+    let derived: Vec<(i64, Value)> = companion_facts(&store, crate::schema::ROOT_GRAPH)
         .into_iter()
         .filter(|f| f.attribute == path3)
         .map(|f| (f.entity, f.value))
@@ -666,9 +690,7 @@ ex:r a rule:Rule ; rule:id "SELF" ;
     assert_eq!(report.asserted, 1, "only p(a, a) is reflexive");
     let a = store.lookup("ex:a").unwrap().unwrap();
     let selfloop = store.lookup(&format!("{PFX}selfloop")).unwrap().unwrap();
-    let derived: Vec<(i64, Value)> = store
-        .current_facts()
-        .unwrap()
+    let derived: Vec<(i64, Value)> = companion_facts(&store, crate::schema::ROOT_GRAPH)
         .into_iter()
         .filter(|f| f.attribute == selfloop)
         .map(|f| (f.entity, f.value))
@@ -702,9 +724,7 @@ ex:r a rule:Rule ; rule:id "NAF" ;
     let c = store.lookup("ex:c").unwrap().unwrap();
     let d = store.lookup("ex:d").unwrap().unwrap();
     let unblessed = store.lookup(&format!("{PFX}unblessed")).unwrap().unwrap();
-    let derived: Vec<(i64, Value)> = store
-        .current_facts()
-        .unwrap()
+    let derived: Vec<(i64, Value)> = companion_facts(&store, crate::schema::ROOT_GRAPH)
         .into_iter()
         .filter(|f| f.attribute == unblessed)
         .map(|f| (f.entity, f.value))
@@ -750,9 +770,7 @@ ex:r2 a rule:Rule ; rule:id "GAPS" ;
     let c = store.lookup("ex:c").unwrap().unwrap();
     let d = store.lookup("ex:d").unwrap().unwrap();
     let gap = store.lookup(&format!("{PFX}gap")).unwrap().unwrap();
-    let derived: Vec<(i64, Value)> = store
-        .current_facts()
-        .unwrap()
+    let derived: Vec<(i64, Value)> = companion_facts(&store, crate::schema::ROOT_GRAPH)
         .into_iter()
         .filter(|f| f.attribute == gap)
         .map(|f| (f.entity, f.value))

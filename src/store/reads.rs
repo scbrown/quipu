@@ -39,6 +39,18 @@ impl Store {
         Self::collect_facts(&mut stmt, params![g])
     }
 
+    /// Current asserted facts across a SET of graphs, unioned. The read the
+    /// entailment regime needs (quipu-0b6): an engine's premises are a graph
+    /// plus its companion inferred graph, so derived facts can feed further
+    /// derivation while living apart from their premises.
+    pub fn current_facts_in_graphs(&self, graphs: &[i64]) -> Result<Vec<Fact>> {
+        let mut out = Vec::new();
+        for &g in graphs {
+            out.extend(self.current_facts_in_graph(g)?);
+        }
+        Ok(out)
+    }
+
     /// Every change to one graph's current facts SINCE a transaction id, in
     /// transaction order, as datums ready for `ReadModel::apply_all`.
     ///
@@ -147,29 +159,35 @@ impl Store {
     /// The exclusion is per-source rather than a blanket `reasoner:%` so a
     /// rule may still read a *different* rule's stored output — the reactive
     /// path chains stratified rules through the store across observer wakes.
-    pub fn current_facts_for_attributes_in_graph_excluding_sources(
+    pub fn current_facts_for_attributes_in_graphs_excluding_sources(
         &self,
         attributes: &[i64],
-        g: i64,
+        graphs: &[i64],
         excluded_sources: &[String],
     ) -> Result<Vec<Fact>> {
-        if attributes.is_empty() {
+        if attributes.is_empty() || graphs.is_empty() {
             return Ok(Vec::new());
-        }
-        if excluded_sources.is_empty() {
-            // `NOT IN ()` is invalid SQL; nothing to exclude is the plain read.
-            return self.current_facts_for_attributes_in_graph(attributes, g);
         }
         let attr_placeholders = std::iter::repeat_n("?", attributes.len())
             .collect::<Vec<_>>()
             .join(", ");
-        let src_placeholders = std::iter::repeat_n("?", excluded_sources.len())
+        let graph_placeholders = std::iter::repeat_n("?", graphs.len())
             .collect::<Vec<_>>()
             .join(", ");
+        // `NOT IN ()` is invalid SQL; an always-false filter stands in when
+        // nothing is excluded.
+        let src_placeholders = if excluded_sources.is_empty() {
+            "SELECT NULL WHERE 0".to_string()
+        } else {
+            std::iter::repeat_n("?", excluded_sources.len())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
         let sql = format!(
             "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
              FROM facts f JOIN transactions t ON f.tx = t.id \
-             WHERE f.op = 1 AND f.valid_to IS NULL AND f.a IN ({attr_placeholders}) AND f.g = ? \
+             WHERE f.op = 1 AND f.valid_to IS NULL AND f.a IN ({attr_placeholders}) \
+               AND f.g IN ({graph_placeholders}) \
                AND (t.source IS NULL OR t.source NOT IN ({src_placeholders})) \
              ORDER BY f.e, f.a"
         );
@@ -177,7 +195,9 @@ impl Store {
             .iter()
             .map(|a| rusqlite::types::Value::Integer(*a))
             .collect();
-        values.push(rusqlite::types::Value::Integer(g));
+        for g in graphs {
+            values.push(rusqlite::types::Value::Integer(*g));
+        }
         for s in excluded_sources {
             values.push(rusqlite::types::Value::Text(s.clone()));
         }

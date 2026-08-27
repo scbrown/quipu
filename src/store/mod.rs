@@ -9,6 +9,7 @@ pub mod freeze;
 mod freeze_io;
 mod gate;
 pub mod import;
+pub mod inferred;
 pub mod labels;
 pub mod labels_advisory;
 mod migrate;

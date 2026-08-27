@@ -45,10 +45,13 @@ pub fn evaluate(store: &mut Store, ruleset: &RuleSet, timestamp: &str) -> Result
     evaluate_in_graph(store, ruleset, timestamp, crate::schema::ROOT_GRAPH)
 }
 
-/// Run the ruleset against one graph and write every derivation back to it.
+/// Run the ruleset against one graph, writing every derivation into the
+/// graph's companion inferred graph (quipu-0b6).
 ///
-/// Premises and prior `reasoner:<rule-id>` output are both graph-scoped, so an
-/// overlay cannot derive facts into its parent or retract a sibling's output.
+/// Premises are the graph plus its companion (closure feeds further
+/// derivation); derivations and prior `reasoner:<rule-id>` output live in the
+/// companion only. Scoping is preserved: an overlay's companion is its own,
+/// so it cannot derive facts into its parent or retract a sibling's output.
 pub fn evaluate_in_graph(
     store: &mut Store,
     ruleset: &RuleSet,
@@ -64,10 +67,18 @@ pub fn evaluate_in_graph(
         return Ok(EvalReport::default());
     }
 
+    // Placement (quipu-0b6): premises are read from the graph PLUS its
+    // companion inferred graph (so closure can feed further derivation), and
+    // every derivation is written to the companion — never beside its
+    // premises. The freshness note records the premise-side head the closure
+    // reflects, captured before our own writes move it.
+    let companion = store.ensure_companion_inferred_graph(graph, timestamp)?;
+    let premise_head = store.transaction_head()?;
+
     // Build the shared term-id cache. Constants appearing in rule heads
     // need to be interned (so we can write them as `Value::Ref`). Predicate
     // IRIs are interned too so they become attribute ids.
-    let mut world = World::load_graph(store, ruleset, graph)?;
+    let mut world = World::load_graphs(store, ruleset, &[graph, companion])?;
 
     // Per-rule accumulator: fully derived (entity, value) sets for each
     // rule, collected across strata so we can diff + write them at the end.
@@ -83,16 +94,17 @@ pub fn evaluate_in_graph(
         run_stratum(ruleset, rule_indices, &mut world, &mut derived_by_rule)?;
     }
 
-    // Write the delta back through the store, per rule.
+    // Write the delta back through the store, per rule, into the companion.
     for (rule_idx, new_tuples) in &derived_by_rule {
         let rule = &ruleset.rules[*rule_idx];
         let (asserted, retracted) =
-            write_rule_delta(store, rule, new_tuples, timestamp, graph, &mut world)?;
+            write_rule_delta(store, rule, new_tuples, timestamp, companion, &mut world)?;
         report.asserted += asserted;
         report.retracted += retracted;
         report.per_rule.push((rule.id.clone(), asserted));
     }
 
+    store.note_inferred_freshness(companion, premise_head, timestamp)?;
     Ok(report)
 }
 
@@ -341,23 +353,24 @@ impl World {
     /// SQL read avoids loading the entire fact table and then throwing nearly
     /// all of it away in `attr_to_pred`.
     #[cfg(feature = "reactive-reasoner")]
-    pub(crate) fn load_rule_indices(
+    pub(crate) fn load_graphs_rule_indices(
         store: &Store,
         ruleset: &RuleSet,
+        graphs: &[i64],
         rule_indices: &[usize],
     ) -> Result<Self> {
-        Self::load_graph_rule_indices(store, ruleset, crate::schema::ROOT_GRAPH, rule_indices)
+        Self::load_rule_indices_impl(store, ruleset, graphs, rule_indices)
     }
 
-    fn load_graph(store: &Store, ruleset: &RuleSet, graph: i64) -> Result<Self> {
+    fn load_graphs(store: &Store, ruleset: &RuleSet, graphs: &[i64]) -> Result<Self> {
         let indices: Vec<usize> = (0..ruleset.rules.len()).collect();
-        Self::load_graph_rule_indices(store, ruleset, graph, &indices)
+        Self::load_rule_indices_impl(store, ruleset, graphs, &indices)
     }
 
-    fn load_graph_rule_indices(
+    fn load_rule_indices_impl(
         store: &Store,
         ruleset: &RuleSet,
-        graph: i64,
+        graphs: &[i64],
         rule_indices: &[usize],
     ) -> Result<Self> {
         let mut preds: BTreeSet<String> = BTreeSet::new();
@@ -403,9 +416,9 @@ impl World {
             .map(|&i| format!("reasoner:{}", ruleset.rules[i].id))
             .collect();
         let attribute_ids: Vec<i64> = attr_to_pred.keys().copied().collect();
-        let facts = store.current_facts_for_attributes_in_graph_excluding_sources(
+        let facts = store.current_facts_for_attributes_in_graphs_excluding_sources(
             &attribute_ids,
-            graph,
+            graphs,
             &excluded_sources,
         )?;
         for fact in facts {
@@ -514,19 +527,11 @@ fn write_rule_delta(
 }
 
 /// Load the currently-asserted tuples derived by `source` (typically
-/// `reasoner:<rule-id>`). Only reference-valued facts on the rule's head
-/// attribute are considered — other shapes cannot be produced by Phase 2
-/// and must not exist under this source.
-#[cfg(feature = "reactive-reasoner")]
-pub(crate) fn load_existing_derivations(
-    store: &Store,
-    attr_id: i64,
-    source: &str,
-) -> Result<BTreeSet<(i64, i64)>> {
-    load_existing_derivations_in_graph(store, attr_id, source, crate::schema::ROOT_GRAPH)
-}
-
-fn load_existing_derivations_in_graph(
+/// `reasoner:<rule-id>`) in one graph — since quipu-0b6, always a companion
+/// inferred graph. Only reference-valued facts on the rule's head attribute
+/// are considered — other shapes cannot be produced by Phase 2 and must not
+/// exist under this source.
+pub(crate) fn load_existing_derivations_in_graph(
     store: &Store,
     attr_id: i64,
     source: &str,

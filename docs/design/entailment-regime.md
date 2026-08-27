@@ -1,12 +1,17 @@
 # A Unified Entailment Regime — Plan
 
 > Created: 2026-08-27
-> Status: DESIGN — placement decision recorded (quarantined materialization,
-> Stiwi, 2026-08-27); mechanics below are the plan, not the implementation.
-> Prerequisites landed 2026-08-27 with the engine fixes (quipu-923): live
-> fixpoint materialization, source-aware truth maintenance (promotion's
-> retraction half depends on it), and `explain` (the promotion audit's
-> evidence). Implementation tracked by quipu-0b6.
+> Status: ⚙ CORE IMPLEMENTED (2026-08-27, bead quipu-0b6) — placement per
+> Stiwi's recorded decisions: derivations land in reserved-suffix companion
+> graphs (`src/store/inferred.rs`; write guard in `transact_to_graph`),
+> premises read graph ∪ companion, both engines rerouted, the companion is
+> self-describing (graph-level `sourceKind` tag + `derivedAsOfTx` freshness
+> note), `FROM <urn:quipu:graph:root>` composes ROOT into a union read, and
+> `quipu db migrate-inferred` moves legacy-placed derivations.
+> REMAINING under quipu-0b6: the promotion mechanism (§3 — authority-gated
+> move + the standing auto-promote policy, which waits on camayoc's
+> competency question) and lattice labeling of companions (§1, meet-of-
+> premises durability). Prerequisites landed earlier with quipu-923.
 > Related: [semantic-reasoning-gaps.md](./semantic-reasoning-gaps.md) (G7),
 > [reasoning-engine-fixes.md](./reasoning-engine-fixes.md),
 > [named-graphs.md](./named-graphs.md), [graph-labels.md](./graph-labels.md),
@@ -147,11 +152,33 @@ else.
 - **Always distinguishable**: `sourceKind` on every derived fact, `explain`
   for its pedigree, the freshness note for its currency.
 
-## Open questions for implementation
+## Decisions (Stiwi, 2026-08-27 — recorded in the decision artifact)
 
-1. Companion-graph naming: one reserved suffix vs. registry-managed mapping
-   (lean registry-managed, consistent with datasets being explicit).
-2. Does promotion copy or move? (Lean move — two copies of one fact at
-   different trust levels is the masquerade hazard reintroduced.)
-3. Where standing promotion policies live in the governance vocabulary —
-   needs a competency question before any term is minted (house rule 2).
+The open questions are settled; implementation is green-lit ("build it
+next"):
+
+1. **Companion-graph naming: reserved IRI suffix.** `<premise>#inferred`
+   (a premise IRI already carrying a fragment gets `-inferred` appended
+   instead; ROOT's companion is the well-known
+   `http://quipu.local/graph/root#inferred`). Chosen for intuitive access —
+   the IRI is derivable anywhere without a registry lookup. The collision
+   risk that made the registry the original lean is neutralized by making
+   the suffix **reserved**: the store refuses external writes to any graph
+   IRI carrying it — only the engines populate a companion.
+2. **Promotion moves.** The fact leaves the inferred graph as it enters the
+   target; the bitemporal log keeps the record.
+3. **Standing auto-promotion, narrowly.** A governance policy (data, not
+   code) may auto-promote deterministic closure whose premises are all
+   declared/observed; camayoc mints the competency question before any
+   policy term. Model-inferred facts never qualify.
+4. **Scope: bulk engine output only.** The staged write-path domain/range
+   inference keeps today's atomic behavior; revisit once the regime is
+   proven.
+
+One refinement made at implementation time, recorded rather than silent:
+**the `sourceKind "inferred"` tag attaches at the graph level, not per
+subject.** Asserting `aegis:sourceKind` on a derived triple's *subject*
+would mistag the subject itself (an observed entity does not become
+inferred because one triple about it is derived). The companion graph
+carries the epistemic marker — its label, plus a meta-graph annotation —
+and each fact's transaction `source` still names the deriver.

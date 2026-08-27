@@ -575,10 +575,31 @@ pub fn cmd_db(args: &[String], db_path: &str) {
         cmd_db_attach(args, db_path);
         return;
     }
+    // quipu-0b6: one-time move of engine-derived facts (source
+    // owl:materialize / reasoner:*) out of their premise graphs into the
+    // companion inferred graphs the entailment regime places them in.
+    if sub == "migrate-inferred" {
+        let mut store = crate::cli_open::open_store(db_path);
+        let now = crate::cli::chrono_now();
+        match store.migrate_inferred(&now) {
+            Ok((graphs, facts)) => {
+                println!(
+                    "migrate-inferred: moved {facts} derived fact(s) across {graphs} graph(s) \
+                     into their companion inferred graphs"
+                );
+            }
+            Err(e) => {
+                eprintln!("migrate-inferred error: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if sub != "respace" {
         eprintln!(
             "usage: quipu db respace --into <space> --out <file> [--db <path>]\n       \
-             quipu db attach --list [--db <path>]"
+             quipu db attach --list [--db <path>]\n       \
+             quipu db migrate-inferred [--db <path>]"
         );
         std::process::exit(1);
     }

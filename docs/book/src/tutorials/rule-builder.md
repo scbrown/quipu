@@ -374,11 +374,12 @@ to lower ones).
 
 ### Inspecting Derived Facts
 
-To see what a specific rule derived, filter by source:
+Derived facts live in the companion inferred graph (quipu-0b6), so select it
+— or compose it with the base — explicitly:
 
 ```bash
-quipu read "SELECT ?e ?a ?v WHERE { ?e ?a ?v }" --db lab.db \
-  | grep "reasoner:runs_on_transitive"
+quipu read "SELECT ?e ?a ?v FROM <urn:quipu:graph:root#inferred> WHERE { ?e ?a ?v }" \
+  --db lab.db
 ```
 
 To re-run the reasoner and see what changed:
