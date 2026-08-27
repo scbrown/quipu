@@ -594,3 +594,48 @@ OPTIONS:
         env!("CARGO_PKG_VERSION")
     );
 }
+
+/// Apply the OWL write-time constraint policy (aegis-bmqup) and, opt-in, the
+/// reactive materialization observer (quipu-923). Split out of `main` so
+/// server.rs stays inside its file-size ratchet baseline.
+///
+/// Without the `clone_from` the flag is UNREACHABLE: the config field, the
+/// store field and the write gate can all exist and `owl.validate_on_write =
+/// true` still does nothing, because nothing carries it across — it shipped
+/// that way for one test cycle, caught only by an end-to-end write.
+pub(crate) fn apply_owl(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
+    #[cfg(feature = "owl")]
+    {
+        store.owl_config_mut().clone_from(&config.owl);
+        if config.owl.validate_on_write {
+            eprintln!(
+                "OWL write-validation enabled (disjointWith + FunctionalProperty enforced on every write)"
+            );
+        }
+        #[cfg(feature = "reactive-reasoner")]
+        if config.owl.reactive_materialize {
+            store.add_observer(std::sync::Arc::new(quipu::ReactiveOwl));
+            eprintln!(
+                "reactive OWL materialization enabled — loaded ontologies re-materialize \
+                 when touched vocabulary changes"
+            );
+        }
+        // A settable knob this build cannot act on must be LOUD, not silent.
+        #[cfg(not(feature = "reactive-reasoner"))]
+        if config.owl.reactive_materialize {
+            eprintln!(
+                "warning: owl.reactive_materialize is set but this build lacks the \
+                 reactive-reasoner feature — the observer is NOT registered"
+            );
+        }
+    }
+    #[cfg(not(feature = "owl"))]
+    {
+        let _ = store;
+        if config.owl.validate_on_write || config.owl.reactive_materialize {
+            eprintln!(
+                "warning: [quipu.owl] flags are set but this build lacks the owl feature — ignored"
+            );
+        }
+    }
+}

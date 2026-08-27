@@ -173,6 +173,15 @@ pub struct OwlConfig {
     /// moment the flag flipped, against a population never checked against them.
     /// Load the axioms, measure the existing violations, THEN enable.
     pub validate_on_write: bool,
+
+    /// Re-run OWL materialization when a committed write touches vocabulary
+    /// the loaded ontologies mention (quipu-923, the liveness half of the
+    /// one-shot-materialization gap). Requires both the `owl` and
+    /// `reactive-reasoner` features — the observer rides the same
+    /// post-commit infrastructure as the reactive Datalog reasoner. Default
+    /// false: materialization re-reads current facts, a per-write cost a
+    /// deployment should choose, not inherit.
+    pub reactive_materialize: bool,
 }
 
 /// Governance enforcement policy (the loom, write-path gate).

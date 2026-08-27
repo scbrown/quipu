@@ -65,6 +65,14 @@ missing and the recorded workaround was re-encoding OWL axioms as Datalog
 rules.) Each pass derives only facts not already present, so re-running
 materialization at fixpoint is a no-op and the report counts stay honest.
 
+Materialization can also stay **live**: with `[quipu.owl]
+reactive_materialize = true` (requires the `owl` and `reactive-reasoner`
+features — release `full` builds have both), the server re-runs
+materialization whenever a committed write touches vocabulary the loaded
+ontologies mention, so the closure extends as members arrive instead of going
+stale after load. Default off: it is a per-write cost a deployment should
+choose.
+
 ```turtle
 ex:fido a ex:Dog .
 ex:Dog rdfs:subClassOf ex:Mammal .

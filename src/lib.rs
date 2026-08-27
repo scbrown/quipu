@@ -31,6 +31,10 @@ pub mod onnx_embedder;
 pub mod explain;
 #[cfg(feature = "owl")]
 pub mod owl;
+// Reactive OWL rides the observer infrastructure, which is gated behind
+// `reactive-reasoner`; it needs both features.
+#[cfg(all(feature = "owl", feature = "reactive-reasoner"))]
+mod owl_reactive;
 pub mod pack;
 mod pack_turtle;
 pub mod path;
@@ -117,6 +121,8 @@ pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};
 pub use onnx_embedder::OnnxEmbeddingProvider;
 #[cfg(feature = "owl")]
 pub use owl::{MaterializeReport, Ontology, OwlViolation};
+#[cfg(all(feature = "owl", feature = "reactive-reasoner"))]
+pub use owl_reactive::ReactiveOwl;
 pub use proposal::{NewProposal, Proposal, ProposalKind, ProposalStatus};
 pub use provider::{
     DeclaredLabel, FederatedProvider, FederatedQuery, GraphProvider, LocalProvider,

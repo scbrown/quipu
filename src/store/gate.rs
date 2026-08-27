@@ -139,7 +139,7 @@ impl Store {
 
     /// Build the combined ontology cache if it is not already populated.
     #[cfg(feature = "owl")]
-    fn ensure_owl_cache(&mut self) -> Result<()> {
+    pub(crate) fn ensure_owl_cache(&mut self) -> Result<()> {
         if self.owl_cache.is_some() {
             return Ok(());
         }

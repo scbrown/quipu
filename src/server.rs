@@ -149,22 +149,10 @@ async fn main() {
         eprintln!("SHACL write-validation enabled (loaded shapes enforced on every write)");
     }
 
-    // Apply the OWL write-time constraint policy (aegis-bmqup). Without this
-    // line the flag is UNREACHABLE: the config field, the store field and the
-    // write gate can all exist and `owl.validate_on_write = true` in
-    // config.toml still does nothing, because nothing carries it across. That is
-    // not hypothetical — it shipped that way for the length of one test cycle,
-    // and the unit tests did not catch it because they set the store's config
-    // directly and never traversed this path. An end-to-end write did.
-    #[cfg(feature = "owl")]
-    {
-        store.owl_config_mut().clone_from(&config.owl);
-        if config.owl.validate_on_write {
-            eprintln!(
-                "OWL write-validation enabled (disjointWith + FunctionalProperty enforced on every write)"
-            );
-        }
-    }
+    // Apply the OWL write-time constraint policy and opt-in reactive
+    // materialization (aegis-bmqup, quipu-923) — see base::apply_owl for why
+    // the clone_from is load-bearing.
+    base::apply_owl(&mut store, &config);
 
     // Register the reactive reasoner so DERIVED facts stay fresh on write
     // (aegis-nnf0h). It was registered at src/cli.rs:582 and NOWHERE else, so the
