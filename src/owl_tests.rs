@@ -342,6 +342,122 @@ ex:fnA ex:calls ex:fnB .
     );
 }
 
+/// `owl:TransitiveProperty` must materialize the FULL closure (quipu-923).
+///
+/// Regression guard for the same dropped-axiom shape as aegis-qfncf: `Axioms`
+/// carried `transitive_properties`, `axiom_summary()` counted it, and
+/// `materialize()` never read it — a loaded transitive property returned
+/// success and derived nothing. A 3-link chain pins fixpoint (a→d), not one
+/// join pass (a→c only); the second materialize pins idempotence.
+#[test]
+fn materialize_transitive_property_full_closure() {
+    const TRANS_ONTOLOGY: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/> .
+
+ex:dependsOn a owl:ObjectProperty, owl:TransitiveProperty .
+"#;
+    let ont = Ontology::from_turtle(TRANS_ONTOLOGY).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+
+    let data = r#"
+@prefix ex: <http://example.org/> .
+ex:a ex:dependsOn ex:b .
+ex:b ex:dependsOn ex:c .
+ex:c ex:dependsOn ex:d .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        data.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let report = ont.materialize(&mut store, "2026-01-01T00:00:00Z").unwrap();
+    // Closure of a 3-link chain adds a→c, a→d, b→d.
+    assert_eq!(
+        report.transitive_inferences, 3,
+        "expected the full closure of a 3-link chain"
+    );
+
+    let full = crate::sparql::query(
+        &store,
+        "ASK { <http://example.org/a> <http://example.org/dependsOn> <http://example.org/d> }",
+    )
+    .unwrap();
+    assert!(
+        matches!(full, crate::sparql::QueryResult::Ask(true)),
+        "a should depend on d via the full transitive closure, not one join pass"
+    );
+
+    // Idempotence: everything is already asserted, so a re-run derives nothing.
+    let rerun = ont.materialize(&mut store, "2026-01-02T00:00:00Z").unwrap();
+    assert_eq!(
+        rerun.transitive_inferences, 0,
+        "re-running materialization must be a no-op for the closure"
+    );
+}
+
+/// `owl:equivalentProperty` must restate facts in BOTH directions (quipu-923).
+///
+/// Same recovered dead-end shape: parsed, counted, never materialized.
+#[test]
+fn materialize_equivalent_property_restates_both_directions() {
+    const EQUIV_ONTOLOGY: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/> .
+
+ex:wrote a owl:ObjectProperty ;
+    owl:equivalentProperty ex:authored .
+"#;
+    let ont = Ontology::from_turtle(EQUIV_ONTOLOGY).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+
+    let data = r#"
+@prefix ex: <http://example.org/> .
+ex:alice ex:wrote ex:paper1 .
+ex:bob ex:authored ex:paper2 .
+"#;
+    crate::rdf::ingest_rdf(
+        &mut store,
+        data.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let report = ont.materialize(&mut store, "2026-01-01T00:00:00Z").unwrap();
+    assert_eq!(
+        report.equivalent_property_inferences, 2,
+        "each direction restates its one fact"
+    );
+
+    for ask in [
+        "ASK { <http://example.org/alice> <http://example.org/authored> <http://example.org/paper1> }",
+        "ASK { <http://example.org/bob> <http://example.org/wrote> <http://example.org/paper2> }",
+    ] {
+        let result = crate::sparql::query(&store, ask).unwrap();
+        assert!(
+            matches!(result, crate::sparql::QueryResult::Ask(true)),
+            "equivalentProperty must restate in both directions: {ask}"
+        );
+    }
+
+    // Idempotence: both restatements now exist under both predicates.
+    let rerun = ont.materialize(&mut store, "2026-01-02T00:00:00Z").unwrap();
+    assert_eq!(
+        rerun.equivalent_property_inferences, 0,
+        "re-running materialization must be a no-op for equivalent properties"
+    );
+}
+
 /// The write path must REJECT an owl:disjointWith violation (aegis-bmqup).
 ///
 /// `Ontology::validate()` implemented this and had no caller in the server, while

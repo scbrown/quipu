@@ -42,7 +42,14 @@ On load, Quipu:
 | `owl:FunctionalProperty` | Write-time validation (opt-in): rejects a second value on a functional property |
 | `owl:SymmetricProperty` | Materialization: `(a P b)` produces `(b P a)` |
 | `owl:equivalentClass` | Materialization: instances of A become instances of B and vice versa |
+| `owl:TransitiveProperty` | Materialization: full closure — `(a P b)`, `(b P c)` produce `(a P c)`, chained to fixpoint |
+| `owl:equivalentProperty` | Materialization: facts under either property are restated under the other |
 | `rdfs:domain` / `rdfs:range` | Materialization: infers type from property usage |
+
+> `owl:TransitiveProperty` and `owl:equivalentProperty` were parsed and counted
+> but **not materialized** before 2026-08-27 — the same silently-dropped shape
+> `rdfs:subPropertyOf` had before aegis-qfncf. Loading one reported success and
+> derived nothing.
 
 ## Materialization
 

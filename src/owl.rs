@@ -86,6 +86,10 @@ pub struct MaterializeReport {
     pub inverse_inferences: usize,
     /// Symmetric property inferences.
     pub symmetric_inferences: usize,
+    /// Transitive property closure inferences.
+    pub transitive_inferences: usize,
+    /// `owl:equivalentProperty` inferences (fact restated under the equivalent).
+    pub equivalent_property_inferences: usize,
     /// Equivalent class type inferences.
     pub equivalent_class_inferences: usize,
     /// Domain/range type inferences.
@@ -122,6 +126,14 @@ pub enum ViolationKind {
         /// Number of values found.
         count: usize,
     },
+}
+
+/// Identity key for a (subject, value) fact under one predicate, used to skip
+/// restatements that already exist.
+fn fact_key(entity: i64, value: &Value) -> Vec<u8> {
+    let mut key = entity.to_be_bytes().to_vec();
+    key.extend(value.to_bytes());
+    key
 }
 
 // ── Ontology loading ─────────────────────────────────────────────────
@@ -296,6 +308,89 @@ impl Ontology {
                         op: Op::Assert,
                     });
                     report.symmetric_inferences += 1;
+                }
+            }
+        }
+
+        // 4b. Transitive properties: if (a P b) and (b P c), assert (a P c) —
+        // the full closure to fixpoint, not one join pass, so a→b→c→d yields
+        // a→d.
+        //
+        // This axiom class had the same defect 1b documents for subPropertyOf:
+        // `Axioms` carried `transitive_properties`, `axiom_summary()` counted
+        // it, `/ontology` reported it back — and nothing ever read it, so a
+        // loaded owl:TransitiveProperty returned success and materialized ZERO.
+        //
+        // Closure pairs already asserted are skipped, so re-running
+        // materialization derives nothing new and the report stays honest.
+        for prop in &self.axioms.transitive_properties {
+            // `lookup`, not `intern`, for the same reason as 1b.
+            let Some(prop_id) = store.lookup(prop)? else {
+                continue;
+            };
+            let facts = collect_predicate_facts(store, prop_id)?;
+            let mut adjacency: HashMap<i64, Vec<i64>> = HashMap::new();
+            let mut existing: HashSet<(i64, i64)> = HashSet::new();
+            for (s, v) in &facts {
+                if let Value::Ref(o_id) = v {
+                    adjacency.entry(*s).or_default().push(*o_id);
+                    existing.insert((*s, *o_id));
+                }
+            }
+            for &start in adjacency.keys() {
+                let mut reached: HashSet<i64> = HashSet::new();
+                let mut stack: Vec<i64> = adjacency[&start].clone();
+                while let Some(node) = stack.pop() {
+                    if !reached.insert(node) {
+                        continue;
+                    }
+                    if let Some(nexts) = adjacency.get(&node) {
+                        stack.extend(nexts.iter().copied());
+                    }
+                }
+                for target in reached {
+                    if target == start || existing.contains(&(start, target)) {
+                        continue;
+                    }
+                    datums.push(Datum {
+                        entity: start,
+                        attribute: prop_id,
+                        value: Value::Ref(target),
+                        valid_from: timestamp.to_string(),
+                        valid_to: None,
+                        op: Op::Assert,
+                    });
+                    report.transitive_inferences += 1;
+                }
+            }
+        }
+
+        // 4c. Equivalent properties: facts under either property restate under
+        // the other (bidirectional subproperty semantics). Same recovered
+        // dead-end shape as 1b and 4b — parsed, counted, never materialized.
+        for (p, q) in &self.axioms.equivalent_properties {
+            for (from, to) in [(p, q), (q, p)] {
+                let Some(from_id) = store.lookup(from)? else {
+                    continue;
+                };
+                let to_id = store.intern(to)?;
+                let already: HashSet<Vec<u8>> = collect_predicate_facts(store, to_id)?
+                    .iter()
+                    .map(|(s, v)| fact_key(*s, v))
+                    .collect();
+                for (s, v) in &collect_predicate_facts(store, from_id)? {
+                    if already.contains(&fact_key(*s, v)) {
+                        continue;
+                    }
+                    datums.push(Datum {
+                        entity: *s,
+                        attribute: to_id,
+                        value: v.clone(),
+                        valid_from: timestamp.to_string(),
+                        valid_to: None,
+                        op: Op::Assert,
+                    });
+                    report.equivalent_property_inferences += 1;
                 }
             }
         }
