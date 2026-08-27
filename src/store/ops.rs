@@ -75,26 +75,12 @@ impl Store {
         // Attachment first, ahead even of authority: a write to an attached
         // graph is not a permission question, it is a category error — that
         // graph's facts live in a file this store does not own (quipu #75).
-        self.assert_graph_is_writable(graph)?;
         // The inferred suffix is RESERVED (quipu-0b6): a companion graph holds
         // engine-derived entailments only, so an external write there could
         // forge reachability the reasoner never derived. Refused by SOURCE,
         // not by caller: only reasoner/materializer output, the plane's own
         // bookkeeping, and the one-time migration pass.
-        if graph != crate::schema::ROOT_GRAPH {
-            let iri = self.graph_iri_of(graph);
-            if super::inferred::is_inferred_graph_iri(&iri)
-                && !super::inferred::source_may_write_inferred(source)
-            {
-                return Err(Error::InvalidValue(format!(
-                    "graph <{iri}> is a companion inferred graph — the \
-                     '#inferred' suffix is reserved for engine-derived \
-                     entailments (quipu-0b6), so external writes are refused. \
-                     Write to the premise graph instead; the reasoner and \
-                     materializer populate the companion."
-                )));
-            }
-        }
+        self.assert_write_target_allowed(graph, source)?;
         // Authority first, before anything is staged: a write the chain may not
         // make should not reach the policy gate, the placement check, or the
         // fact table. SARC I5. This gate runs BEFORE the savepoint opens, so

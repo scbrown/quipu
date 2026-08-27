@@ -15,7 +15,6 @@
 //! (`urn:quipu:graph:root#inferred`, quipu-0b6) — where derived facts live —
 //! and depth is capped so mutually referring derivations terminate.
 
-use rusqlite::params;
 use serde_json::{Value as Json, json};
 
 use crate::error::{Error, Result};
@@ -25,6 +24,10 @@ use crate::reasoner::ast::{BodyAtom, Rule, Term};
 use crate::reasoner::{RuleSet, parse_rules};
 use crate::store::Store;
 use crate::types::Value;
+
+#[path = "explain/facts.rs"]
+mod facts;
+use facts::{display_value, exists_ref, fact_row, ref_pairs_for, refs_for, subjects_for};
 
 /// Default recursion depth for the derivation walk.
 pub const DEFAULT_EXPLAIN_DEPTH: usize = 5;
@@ -498,105 +501,6 @@ fn explain_owl(
         }));
     }
     Ok(json!({ "kind": "owl", "families": families }))
-}
-
-// ── Fact-log reads (ROOT-scoped) ─────────────────────────────────────
-
-fn fact_row(
-    store: &Store,
-    graphs: &[i64],
-    e: i64,
-    a: i64,
-    value: &Value,
-) -> Result<Option<(i64, Option<String>, String)>> {
-    let mut stmt = store.conn.prepare(&format!(
-        "SELECT f.tx, t.source, f.valid_from FROM facts f \
-         JOIN transactions t ON f.tx = t.id \
-         WHERE f.e = ?1 AND f.a = ?2 AND f.v = ?3 \
-           AND f.op = 1 AND f.valid_to IS NULL AND f.g IN ({}) \
-         ORDER BY f.tx DESC LIMIT 1",
-        graph_list(graphs)
-    ))?;
-    let mut rows = stmt.query(params![e, a, value.to_bytes()])?;
-    match rows.next()? {
-        Some(row) => Ok(Some((row.get(0)?, row.get(1)?, row.get(2)?))),
-        None => Ok(None),
-    }
-}
-
-/// Inline `IN (…)` list for the walk's graph set. Graph ids are internal
-/// integers, never user input, so formatting them inline is safe.
-fn graph_list(graphs: &[i64]) -> String {
-    graphs
-        .iter()
-        .map(i64::to_string)
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/// Current reference objects of `(e, a, ?o)`.
-fn refs_for(store: &Store, graphs: &[i64], e: i64, a: i64) -> Result<Vec<i64>> {
-    let mut stmt = store.conn.prepare(&format!(
-        "SELECT v FROM facts WHERE e = ?1 AND a = ?2 \
-         AND op = 1 AND valid_to IS NULL AND g IN ({})",
-        graph_list(graphs)
-    ))?;
-    collect_refs(stmt.query(params![e, a])?)
-}
-
-/// Current subjects of `(?s, a, o)`.
-fn subjects_for(store: &Store, graphs: &[i64], a: i64, o: i64) -> Result<Vec<i64>> {
-    let o_bytes = Value::Ref(o).to_bytes();
-    let mut stmt = store.conn.prepare(&format!(
-        "SELECT e FROM facts WHERE a = ?1 AND v = ?2 \
-         AND op = 1 AND valid_to IS NULL AND g IN ({})",
-        graph_list(graphs)
-    ))?;
-    let mut rows = stmt.query(params![a, o_bytes])?;
-    let mut out = Vec::new();
-    while let Some(row) = rows.next()? {
-        out.push(row.get(0)?);
-    }
-    Ok(out)
-}
-
-fn exists_ref(store: &Store, graphs: &[i64], e: i64, a: i64, o: i64) -> Result<bool> {
-    Ok(fact_row(store, graphs, e, a, &Value::Ref(o))?.is_some())
-}
-
-/// Current `(entity, ref-object)` pairs for a predicate.
-fn ref_pairs_for(store: &Store, graphs: &[i64], a: i64) -> Result<Vec<(i64, i64)>> {
-    let mut stmt = store.conn.prepare(&format!(
-        "SELECT e, v FROM facts WHERE a = ?1 \
-         AND op = 1 AND valid_to IS NULL AND g IN ({})",
-        graph_list(graphs)
-    ))?;
-    let mut rows = stmt.query(params![a])?;
-    let mut out = Vec::new();
-    while let Some(row) = rows.next()? {
-        let e: i64 = row.get(0)?;
-        if let Value::Ref(o) = Value::from_bytes(&row.get::<_, Vec<u8>>(1)?)? {
-            out.push((e, o));
-        }
-    }
-    Ok(out)
-}
-
-fn collect_refs(mut rows: rusqlite::Rows<'_>) -> Result<Vec<i64>> {
-    let mut out = Vec::new();
-    while let Some(row) = rows.next()? {
-        if let Value::Ref(o) = Value::from_bytes(&row.get::<_, Vec<u8>>(0)?)? {
-            out.push(o);
-        }
-    }
-    Ok(out)
-}
-
-fn display_value(store: &Store, value: &Value) -> Result<Json> {
-    Ok(match value {
-        Value::Ref(id) => json!(store.resolve(*id)?),
-        other => json!(format!("{other:?}")),
-    })
 }
 
 #[cfg(test)]

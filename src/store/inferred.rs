@@ -28,7 +28,7 @@
 
 use rusqlite::params;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -80,6 +80,29 @@ pub fn source_may_write_inferred(source: Option<&str>) -> bool {
 }
 
 impl Store {
+    /// Refuse external writes that target a reserved companion graph.
+    pub(crate) fn assert_write_target_allowed(
+        &self,
+        graph: i64,
+        source: Option<&str>,
+    ) -> Result<()> {
+        self.assert_graph_is_writable(graph)?;
+        if graph == crate::schema::ROOT_GRAPH {
+            return Ok(());
+        }
+        let iri = self.graph_iri_of(graph);
+        if is_inferred_graph_iri(&iri) && !source_may_write_inferred(source) {
+            return Err(Error::InvalidValue(format!(
+                "graph <{iri}> is a companion inferred graph — the \
+                 '#inferred' suffix is reserved for engine-derived \
+                 entailments (quipu-0b6), so external writes are refused. \
+                 Write to the premise graph instead; the reasoner and \
+                 materializer populate the companion."
+            )));
+        }
+        Ok(())
+    }
+
     /// The companion inferred-graph IRI for a premise graph id.
     pub fn companion_inferred_iri(&self, g: i64) -> Result<String> {
         if g == crate::schema::ROOT_GRAPH {

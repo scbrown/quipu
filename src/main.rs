@@ -27,6 +27,7 @@
 mod cli;
 mod cli_audit;
 mod cli_commands;
+mod cli_db;
 mod cli_explain;
 mod cli_fork;
 mod cli_graph;
