@@ -71,56 +71,42 @@ Negation uses the `not` keyword:
 reachable(?x, ?y), not blocked(?y)
 ```
 
-Negation is parsed and stratified but **not yet evaluated** — the evaluator
-will reject rules with negated body atoms with a clear error message. This
-is reserved for a future phase.
+Negation is **stratified negation-as-failure** (since 2026-08-27,
+quipu-923): a negated atom filters out rows matching the predicate's tuples
+from lower strata. Every variable in a negated atom must be bound by a
+positive atom (unsafe negation is rejected), and NAF is evaluated over the
+graph's materialized state — an open-world caveat to keep in mind when a
+predicate is only partially recorded.
 
 ### Supported Rule Shapes
 
-The evaluator currently supports two rule shapes:
+Since 2026-08-27 (quipu-923) rules compile to a general left-deep join
+pipeline, so the old 1-atom/2-atom shape caps are gone:
 
-#### Single-atom projection
+- **Any number of body atoms** — each further positive atom joins into the
+  accumulated bindings on the tuple of its shared variables.
 
-One body atom. The head projects a subset of its variables.
+  ```turtle
+  rule:head "path3(?a, ?d)" ;
+  rule:body "edge(?a, ?b), edge(?b, ?c), edge(?c, ?d)" .
+  ```
 
-```turtle
-rule:head "output(?x, ?y)" ;
-rule:body "input(?x, ?y)" .
-```
+- **Any number of shared variables** between atoms — including zero (a
+  cross join) and both columns (an intersection).
+- **Repeated variables within an atom** — `p(?x, ?x)` is an equality
+  selection over reflexive tuples.
+- **Constants in body atoms** — a selection; an un-interned constant makes
+  the rule unsatisfiable (derives nothing) rather than erroring.
+- **Stratified negation** — `not q(?x, ?y)` antijoins against the negated
+  predicate's lower-stratum tuples.
 
-Constraints:
+Constraints that remain:
 
-- Head must have exactly 2 arguments
-- Body atom must have exactly 2 arguments
-- No repeated variables within a body atom
-
-#### Two-atom join
-
-Two body atoms sharing exactly one variable (the join key).
-
-```turtle
-rule:head "affects(?pkg, ?svc)" ;
-rule:body "installedIn(?pkg, ?c), runsService(?c, ?svc)" .
-```
-
-Constraints:
-
-- Head must have exactly 2 arguments
-- Each body atom must have exactly 2 arguments
-- Body atoms must share exactly one variable
-- No repeated variables within a single body atom
-- No constants in body atoms
-
-#### What's not yet supported
-
-- Body with 3+ atoms
-- Negation-as-failure in body
-- Non-binary atoms (1 or 3+ arguments)
-- Constants in body atom positions
-- Repeated variables within a body atom (e.g., `p(?x, ?x)`)
-
-These shapes are parsed and stratified correctly — only evaluation rejects
-them. Future phases will extend compilation without changing the rule DSL.
+- Head and body atoms must have exactly 2 arguments (binary predicates)
+- At least one positive body atom
+- Every head variable and every negated-atom variable must be bound by a
+  positive atom
+- No string literals in atoms (facts are reference triples)
 
 ### Complete Example
 
@@ -388,22 +374,22 @@ your rules so negation only flows "downward" between strata.
 ### `Unsupported`
 
 ```text
-rule "R1" uses unsupported feature: body with more than 2 atoms
+rule "R1" uses unsupported feature: non-binary body atom
 ```
 
 The rule parsed and stratified successfully, but uses a shape the evaluator
-doesn't yet handle. Current unsupported features:
+doesn't handle. Current unsupported features (the 3-atom, negation,
+constant, and repeated-variable rejections were lifted 2026-08-27,
+quipu-923):
 
 | Feature | Message |
 |---------|---------|
-| 3+ body atoms | `body with more than 2 atoms` |
-| Negation in body | `negation-as-failure` |
 | Non-binary atoms | `non-binary head/body atom` |
-| Constants in body | `constant argument in body atom` |
-| Self-join variable | `repeated variable in a body atom` |
-| Missing join key | `two-atom body must share exactly one variable` |
+| Purely negative body | `body needs at least one positive atom` |
+| Unsafe negation | `unsafe negation: variable not bound by a positive atom` |
+| Unbound head variable | `head variable not bound by a positive body atom` |
 | Unknown head IRI | `head references an IRI that has never been interned` |
-| String in head | `string constant in head atom` |
+| String literals | `string constant in head atom` / `string constant in body atom` |
 
 ### `Store`
 
@@ -445,15 +431,6 @@ Or from Rust, filter the `source` field on returned `Fact` structs.
 arguments. This covers the vast majority of RDF-style relations
 (`subject predicate object`) but can't express ternary or higher-arity
 relations directly.
-
-**Two-atom body maximum.** Join rules can combine at most two body atoms.
-Longer joins can be decomposed into chains of two-atom rules with
-intermediate predicates.
-
-**No negation at evaluation time.** Negated body atoms are parsed and
-stratified correctly, but the evaluator rejects them. Stratification
-analysis is complete — when negation support lands, it will work without
-changes to existing rules.
 
 **Full re-derivation.** Each evaluation pass re-derives all facts for every
 rule in the affected strata, then diffs against the old state. This is

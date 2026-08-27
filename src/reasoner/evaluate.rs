@@ -127,10 +127,18 @@ fn run_stratum(
     }
 
     // Compile every rule; this may allocate helper variables on `iteration`.
+    // `world.tuples` is what negated atoms antijoin against — lower strata
+    // are complete by the time this stratum compiles.
     let mut plans: Vec<Plan> = Vec::with_capacity(rule_indices.len());
     for &idx in rule_indices {
         let rule = &ruleset.rules[idx];
-        plans.push(compile_rule(&mut iteration, rule, &world.const_ids, &vars)?);
+        plans.push(compile_rule(
+            &mut iteration,
+            rule,
+            &world.const_ids,
+            &vars,
+            &world.tuples,
+        )?);
     }
 
     // Main fixpoint loop.
@@ -189,26 +197,48 @@ pub(crate) fn project_rule_from_world(
 
 /// Project a rule's body against the world and add the resulting head
 /// tuples to `out`. This runs one final time after fixpoint to attribute
-/// each derived tuple back to the rule that produced it.
+/// each derived tuple back to the rule that produced it, and is also the
+/// reactive path's per-rule re-derivation. General over any body length
+/// (quipu-923): positive atoms join left-deep; negated atoms then filter,
+/// mirroring the compiled pipeline's stratified antijoin.
 fn project_rule_body(rule: &super::ast::Rule, world: &World, out: &mut BTreeSet<(i64, i64)>) {
     use super::ast::{BodyAtom, Term};
-    let body: Vec<&super::ast::Atom> = rule
-        .body
+    let mut positives: Vec<&super::ast::Atom> = Vec::new();
+    let mut negatives: Vec<&super::ast::Atom> = Vec::new();
+    for b in &rule.body {
+        match b {
+            BodyAtom::Positive(a) => positives.push(a),
+            BodyAtom::Negative(a) => negatives.push(a),
+        }
+    }
+    if positives.is_empty() {
+        return;
+    }
+    // Safety, mirroring compile: a negated atom over a variable no positive
+    // atom binds derives nothing rather than something surprising.
+    let positive_vars: BTreeSet<&str> = positives
         .iter()
-        .filter_map(|b| match b {
-            BodyAtom::Positive(a) => Some(a),
-            BodyAtom::Negative(_) => None,
+        .flat_map(|a| a.args.iter())
+        .filter_map(|t| match t {
+            Term::Var(v) => Some(v.as_str()),
+            _ => None,
         })
         .collect();
-
-    let head_slot =
-        |name: &str, row: &BTreeMap<&str, i64>| -> Option<i64> { row.get(name).copied() };
+    for neg in &negatives {
+        for term in &neg.args {
+            if let Term::Var(v) = term
+                && !positive_vars.contains(v.as_str())
+            {
+                return;
+            }
+        }
+    }
 
     let head_tuple = |row: &BTreeMap<&str, i64>| -> Option<(i64, i64)> {
         let mut out_row = [0_i64; 2];
         for (i, term) in rule.head.args.iter().enumerate() {
             out_row[i] = match term {
-                Term::Var(v) => head_slot(v.as_str(), row)?,
+                Term::Var(v) => row.get(v.as_str()).copied()?,
                 Term::Iri(iri) => *world.const_ids.get(iri)?,
                 Term::Str(_) => return None,
             };
@@ -216,47 +246,41 @@ fn project_rule_body(rule: &super::ast::Rule, world: &World, out: &mut BTreeSet<
         Some((out_row[0], out_row[1]))
     };
 
-    match body.len() {
-        1 => {
-            let a = body[0];
-            let Some(tuples) = world.tuples.get(&a.predicate) else {
-                return;
-            };
+    // Left-deep join over the positive atoms.
+    let mut rows: Vec<BTreeMap<&str, i64>> = vec![BTreeMap::new()];
+    for atom in &positives {
+        let Some(tuples) = world.tuples.get(&atom.predicate) else {
+            return;
+        };
+        let mut next = Vec::new();
+        for row in &rows {
             for &(c0, c1) in tuples {
-                let mut row: BTreeMap<&str, i64> = BTreeMap::new();
-                if !bind_atom(a, &[c0, c1], world, &mut row) {
-                    continue;
-                }
-                if let Some(t) = head_tuple(&row) {
-                    out.insert(t);
+                let mut candidate = row.clone();
+                if bind_atom(atom, &[c0, c1], world, &mut candidate) {
+                    next.push(candidate);
                 }
             }
         }
-        2 => {
-            let (l, r) = (body[0], body[1]);
-            let Some(l_tuples) = world.tuples.get(&l.predicate) else {
-                return;
-            };
-            let Some(r_tuples) = world.tuples.get(&r.predicate) else {
-                return;
-            };
-            for &(lc0, lc1) in l_tuples {
-                let mut row_l: BTreeMap<&str, i64> = BTreeMap::new();
-                if !bind_atom(l, &[lc0, lc1], world, &mut row_l) {
-                    continue;
-                }
-                for &(rc0, rc1) in r_tuples {
-                    let mut row = row_l.clone();
-                    if !bind_atom(r, &[rc0, rc1], world, &mut row) {
-                        continue;
-                    }
-                    if let Some(t) = head_tuple(&row) {
-                        out.insert(t);
-                    }
+        rows = next;
+        if rows.is_empty() {
+            return;
+        }
+    }
+
+    // Negation-as-failure over the world's (lower-stratum-complete) tuples.
+    'row: for row in rows {
+        for neg in &negatives {
+            // An absent predicate has no tuples: the negation holds vacuously.
+            for &(c0, c1) in world.tuples.get(&neg.predicate).into_iter().flatten() {
+                let mut probe = row.clone();
+                if bind_atom(neg, &[c0, c1], world, &mut probe) {
+                    continue 'row;
                 }
             }
         }
-        _ => {}
+        if let Some(t) = head_tuple(&row) {
+            out.insert(t);
+        }
     }
 }
 

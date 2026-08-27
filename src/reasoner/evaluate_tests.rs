@@ -575,3 +575,213 @@ ex:rev a rule:Rule ;
         "ex:c1 lost its only base support, so it must carry neither class"
     );
 }
+
+/// A 3-atom body chains through two joins (quipu-923, gap G4 — the compiler
+/// used to reject any body beyond 2 atoms).
+#[test]
+fn three_atom_body_joins_left_deep() {
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r a rule:Rule ; rule:id "PATH3" ;
+    rule:head "path3(?a, ?d)" ;
+    rule:body "edge(?a, ?b), edge(?b, ?c), edge(?c, ?d)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:a", &format!("{PFX}edge"), "ex:b");
+    assert_triple(&mut store, "ex:b", &format!("{PFX}edge"), "ex:c");
+    assert_triple(&mut store, "ex:c", &format!("{PFX}edge"), "ex:d");
+
+    let report = evaluate(&mut store, &rs, TS).expect("3-atom body must compile and evaluate");
+    // Chains of exactly length 3: a→d only.
+    assert_eq!(report.asserted, 1, "exactly one 3-edge chain exists");
+    let a = store.lookup("ex:a").unwrap().unwrap();
+    let d = store.lookup("ex:d").unwrap().unwrap();
+    let path3 = store.lookup(&format!("{PFX}path3")).unwrap().unwrap();
+    let derived: Vec<(i64, Value)> = store
+        .current_facts()
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == path3)
+        .map(|f| (f.entity, f.value))
+        .collect();
+    assert_eq!(derived, vec![(a, Value::Ref(d))]);
+}
+
+/// Two body atoms may share BOTH variables (the old compiler demanded
+/// exactly one shared variable).
+#[test]
+fn two_atoms_sharing_both_variables_intersect() {
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r a rule:Rule ; rule:id "BOTH" ;
+    rule:head "both(?x, ?y)" ;
+    rule:body "p(?x, ?y), q(?x, ?y)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:a", &format!("{PFX}p"), "ex:b");
+    assert_triple(&mut store, "ex:a", &format!("{PFX}p"), "ex:c");
+    assert_triple(&mut store, "ex:a", &format!("{PFX}q"), "ex:b");
+
+    let report = evaluate(&mut store, &rs, TS).expect("two shared variables must evaluate");
+    assert_eq!(
+        report.asserted, 1,
+        "only the (a, b) pair holds under BOTH predicates"
+    );
+    assert_eq!(
+        count_derived(&store, &format!("{PFX}both"), "reasoner:BOTH"),
+        1
+    );
+}
+
+/// A repeated variable within one atom is an equality selection (the old
+/// compiler rejected `p(?x, ?x)`).
+#[test]
+fn repeated_variable_selects_reflexive_tuples() {
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r a rule:Rule ; rule:id "SELF" ;
+    rule:head "selfloop(?x, ?x)" ;
+    rule:body "p(?x, ?x)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:a", &format!("{PFX}p"), "ex:a");
+    assert_triple(&mut store, "ex:a", &format!("{PFX}p"), "ex:b");
+
+    let report = evaluate(&mut store, &rs, TS).expect("repeated variable must evaluate");
+    assert_eq!(report.asserted, 1, "only p(a, a) is reflexive");
+    let a = store.lookup("ex:a").unwrap().unwrap();
+    let selfloop = store.lookup(&format!("{PFX}selfloop")).unwrap().unwrap();
+    let derived: Vec<(i64, Value)> = store
+        .current_facts()
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == selfloop)
+        .map(|f| (f.entity, f.value))
+        .collect();
+    assert_eq!(derived, vec![(a, Value::Ref(a))]);
+}
+
+/// Stratified negation-as-failure: rows matching the negated atom are
+/// dropped. The negated predicate is extensional (stratum 0), so it is
+/// complete before the rule's stratum runs — the stratifier's guarantee.
+#[test]
+fn stratified_negation_filters_matching_rows() {
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r a rule:Rule ; rule:id "NAF" ;
+    rule:head "unblessed(?x, ?y)" ;
+    rule:body "p(?x, ?y), not blessed(?x, ?y)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:a", &format!("{PFX}p"), "ex:b");
+    assert_triple(&mut store, "ex:c", &format!("{PFX}p"), "ex:d");
+    assert_triple(&mut store, "ex:a", &format!("{PFX}blessed"), "ex:b");
+
+    let report = evaluate(&mut store, &rs, TS).expect("stratified negation must evaluate");
+    assert_eq!(report.asserted, 1, "the blessed pair must be filtered out");
+    let c = store.lookup("ex:c").unwrap().unwrap();
+    let d = store.lookup("ex:d").unwrap().unwrap();
+    let unblessed = store.lookup(&format!("{PFX}unblessed")).unwrap().unwrap();
+    let derived: Vec<(i64, Value)> = store
+        .current_facts()
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == unblessed)
+        .map(|f| (f.entity, f.value))
+        .collect();
+    assert_eq!(derived, vec![(c, Value::Ref(d))]);
+}
+
+/// Negation chained over a DERIVED predicate: the negated predicate is
+/// itself a rule head, so the antijoin must see the lower stratum's output.
+#[test]
+fn negation_over_a_derived_predicate_uses_lower_stratum_output() {
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r1 a rule:Rule ; rule:id "COVERED" ;
+    rule:head "covered(?x, ?y)" ;
+    rule:body "p(?x, ?y)" .
+ex:r2 a rule:Rule ; rule:id "GAPS" ;
+    rule:head "gap(?x, ?y)" ;
+    rule:body "q(?x, ?y), not covered(?x, ?y)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:a", &format!("{PFX}p"), "ex:b");
+    assert_triple(&mut store, "ex:a", &format!("{PFX}q"), "ex:b");
+    assert_triple(&mut store, "ex:c", &format!("{PFX}q"), "ex:d");
+
+    let report = evaluate(&mut store, &rs, TS).expect("negation over derived must evaluate");
+    // covered(a,b) derives in the lower stratum; gap(c,d) is the only q pair
+    // not covered.
+    assert_eq!(
+        count_derived(&store, &format!("{PFX}covered"), "reasoner:COVERED"),
+        1
+    );
+    assert_eq!(
+        count_derived(&store, &format!("{PFX}gap"), "reasoner:GAPS"),
+        1
+    );
+    assert!(report.strata_run >= 2, "the two heads must stratify apart");
+    let c = store.lookup("ex:c").unwrap().unwrap();
+    let d = store.lookup("ex:d").unwrap().unwrap();
+    let gap = store.lookup(&format!("{PFX}gap")).unwrap().unwrap();
+    let derived: Vec<(i64, Value)> = store
+        .current_facts()
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == gap)
+        .map(|f| (f.entity, f.value))
+        .collect();
+    assert_eq!(derived, vec![(c, Value::Ref(d))]);
+}
+
+/// A negated atom over a variable no positive atom binds is rejected —
+/// unsafe negation must not silently derive.
+#[test]
+fn unsafe_negation_is_rejected() {
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:r a rule:Rule ; rule:id "UNSAFE" ;
+    rule:head "h(?x, ?y)" ;
+    rule:body "p(?x, ?y), not q(?x, ?z)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:a", &format!("{PFX}p"), "ex:b");
+    assert_triple(&mut store, "ex:a", &format!("{PFX}q"), "ex:c");
+
+    let err = evaluate(&mut store, &rs, TS).expect_err("unsafe negation must be rejected");
+    assert!(
+        format!("{err}").contains("unsafe negation"),
+        "expected an unsafe-negation rejection, got: {err}"
+    );
+}

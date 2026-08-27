@@ -356,49 +356,14 @@ rule:head "runsOn(?svc, ?host)" ;
 rule:body "service(?svc), assignedTo(?svc, ?host)" .
 ```
 
-**"two-atom body must share exactly one variable"**
-
-Two-atom join rules need a shared variable for the join key. If your body
-atoms have no common variables, there's nothing to join on. If they share
-two variables, the evaluator can't determine the join plan.
-
-```turtle
-# Bad: no shared variable
-rule:body "p(?a, ?b), q(?c, ?d)" .
-
-# Bad: two shared variables
-rule:body "p(?a, ?b), q(?a, ?b)" .
-
-# Good: one shared variable (?b is the join key)
-rule:body "p(?a, ?b), q(?b, ?c)" .
-```
-
-**"body with more than 2 atoms"**
-
-Break the rule into a chain. Instead of:
-
-```turtle
-# Not yet supported
-rule:head "result(?a, ?d)" ;
-rule:body "p(?a, ?b), q(?b, ?c), r(?c, ?d)" .
-```
-
-Create an intermediate predicate:
-
-```turtle
-ex:step1 a rule:Rule ;
-    rule:id "step1" ;
-    rule:head "pq(?a, ?c)" ;
-    rule:body "p(?a, ?b), q(?b, ?c)" .
-
-ex:step2 a rule:Rule ;
-    rule:id "step2" ;
-    rule:head "result(?a, ?d)" ;
-    rule:body "pq(?a, ?c), r(?c, ?d)" .
-```
-
-The stratifier handles the dependency automatically — `step2` evaluates
-after `step1` because it reads `pq` which `step1` produces.
+**Historical errors you will no longer see** (lifted 2026-08-27,
+quipu-923): `"two-atom body must share exactly one variable"` and `"body
+with more than 2 atoms"`. Bodies of any length now compile to a join
+pipeline — `p(?a, ?b), q(?b, ?c), r(?c, ?d)` works directly, atoms may
+share zero, one, or both variables, and `not q(?x, ?y)` applies stratified
+negation. Decomposing a long body into intermediate predicates (the old
+workaround) still works and remains useful when an intermediate relation is
+worth naming or reusing.
 
 **"rule set is not stratifiable: negation cycle through \[...\]"**
 
