@@ -390,17 +390,71 @@ aegis:freshness a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:comment "Whether the policy set behind this verdict was current when it was computed: \"fresh\" or \"stale\". Only two values, so a runtime with a third internal state must map it to the conservative one — the reading that cannot overstate." .
 
+# Camayoc's shuttle workflow-and-archive slice. These terms are intentionally
+# declared in Quipu's governed property catalogue as well as Camayoc's ontology:
+# the loaded governance shape set is the write boundary that sanctions them.
+
+aegis:runOf a owl:ObjectProperty ;
+    rdfs:label "run of" ;
+    rdfs:domain aegis:WorkflowRun ;
+    rdfs:range aegis:WorkflowDefinition ;
+    rdfs:comment "The durable WorkflowDefinition executed by this operational WorkflowRun, linking time-windowed run history back to its stable declared process." .
+
+aegis:inRun a owl:ObjectProperty ;
+    rdfs:label "in run" ;
+    rdfs:domain aegis:TransitionEvent ;
+    rdfs:range aegis:WorkflowRun ;
+    rdfs:comment "The WorkflowRun whose append-only history contains this TransitionEvent, allowing readers to reconstruct state without mutable status facts." .
+
+aegis:atStep a owl:ObjectProperty ;
+    rdfs:label "at step" ;
+    rdfs:domain aegis:TransitionEvent ;
+    rdfs:range aegis:WorkflowStep ;
+    rdfs:comment "The declared WorkflowStep at which a TransitionEvent occurred, connecting an observed transition back to the definition's prescriptive structure." .
+
+aegis:performedBy a owl:ObjectProperty ;
+    rdfs:label "performed by" ;
+    rdfs:range rdfs:Resource ;
+    rdfs:comment "The principal that performed and signed an event; shared by workflow history and any later attested activity, so it carries no materialising domain." .
+
+aegis:currentState a owl:DatatypeProperty ;
+    rdfs:label "current state" ;
+    rdfs:domain aegis:WorkflowRun ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A convenience projection of a WorkflowRun's latest append-only TransitionEvent, re-asserted rather than mutated so event history remains the truth." .
+
+aegis:fromState a owl:DatatypeProperty ;
+    rdfs:label "from state" ;
+    rdfs:domain aegis:TransitionEvent ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The state a TransitionEvent left, retained on the event so archived history can be replayed without reconstructing a prior mutable status." .
+
+aegis:toState a owl:DatatypeProperty ;
+    rdfs:label "to state" ;
+    rdfs:domain aegis:TransitionEvent ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The state a TransitionEvent entered, retained on the event as the append-only source from which currentState is projected." .
+
+aegis:createdAt a owl:DatatypeProperty ;
+    rdfs:label "created at" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "When an entity was created, serialized in the producer's canonical timestamp form; generic enough to carry no materialising domain." .
+
+aegis:sourceKind a owl:DatatypeProperty ;
+    rdfs:label "source kind" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "How a fact entered the graph: observed, declared, or inferred; a trust-plane tag shared across entity classes and therefore domain-free." .
+
 aegis:confidence a owl:DatatypeProperty ;
     rdfs:label "confidence" ;
     rdfs:domain aegis:Verdict ;
     rdfs:range xsd:string ;
     rdfs:comment "How much weight the verdict's evidence bears, as an input to adaptive response. Distinct from aegis:tier, which says what KIND of evidence it was; the same tier can carry different confidence depending on how much of the subject the check could see." .
 
-aegis:attests a owl:DatatypeProperty ;
+aegis:attests a rdf:Property ;
     rdfs:label "attests" ;
     rdfs:domain aegis:VerifierRegistration ;
-    rdfs:range xsd:string ;
-    rdfs:comment "What this registration vouches for — which verifier's signatures a reader should accept. Human-authored, and the root of trust: nothing in the automated path may mint one, or the chain verifies only against itself." .
+    rdfs:comment "What this registration vouches for — a compact policy id string or a governed subject IRI such as a workflow definition. Human-authored, and the root of trust: nothing in the automated path may mint one, or the chain verifies only against itself." .
 
 aegis:publicKey a owl:DatatypeProperty ;
     rdfs:label "public key" ;

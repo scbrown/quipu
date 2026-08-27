@@ -169,11 +169,52 @@ fn verifier_registration_shape() {
         validate_shapes(SHAPES, &ok).unwrap().conforms,
         "valid registration should conform"
     );
+    let workflow_iri = format!(
+        "{NS}\naegis:r a aegis:VerifierRegistration ; aegis:verifier \"shuttle\" ; aegis:attests <urn:shuttle:workflow:clbx2> .\n"
+    );
+    assert!(
+        validate_shapes(SHAPES, &workflow_iri).unwrap().conforms,
+        "a shuttle registration may attest a workflow IRI"
+    );
     let bad = format!("{NS}\naegis:r a aegis:VerifierRegistration ; aegis:verifier \"hank\" .\n");
     assert!(
         !validate_shapes(SHAPES, &bad).unwrap().conforms,
         "registration without an attested predicate must be rejected"
     );
+}
+
+#[test]
+fn shuttle_workflow_slice_conforms_and_is_governed() {
+    let data = format!(
+        "{NS}\n\
+         @prefix prov: <http://www.w3.org/ns/prov#> .\n\
+         aegis:w a aegis:WorkflowDefinition ; aegis:hasStep aegis:s .\n\
+         aegis:s a aegis:WorkflowStep .\n\
+         aegis:r a aegis:WorkflowRun ; aegis:runOf aegis:w ; aegis:currentState \"open\" ; \
+             aegis:createdAt \"2026-08-27T00:00:00Z\" ; aegis:sourceKind \"observed\" .\n\
+         aegis:e a aegis:TransitionEvent ; aegis:inRun aegis:r ; aegis:atStep aegis:s ; \
+             aegis:fromState \"open\" ; aegis:toState \"ready\" ; \
+             prov:endedAtTime \"2026-08-27T00:01:00Z\" ; aegis:performedBy aegis:ian ; \
+             aegis:signature \"deadbeef\" ; aegis:sourceKind \"observed\" .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        fb.conforms,
+        "shuttle export must conform: {:#?}",
+        fb.results
+    );
+
+    for class in [
+        "WorkflowDefinition",
+        "WorkflowStep",
+        "WorkflowRun",
+        "TransitionEvent",
+    ] {
+        assert!(
+            SHAPES.contains(&format!("sh:targetClass aegis:{class}")),
+            "{class} must be sanctioned by the loaded governance vocabulary"
+        );
+    }
 }
 
 // ── Tree-sitter-tier policy catalog (shapes/policies/treesitter.ttl) ──────────
@@ -853,11 +894,15 @@ fn declares_domain(block: &str) -> bool {
 
 /// The declaration block for `aegis:<property>`, or `None` if undeclared.
 fn declaration(property: &str) -> Option<&'static str> {
-    AEGIS_PROPERTIES
-        .split(&format!("aegis:{property} a owl:"))
-        .nth(1)?
-        .split(" .\n")
-        .next()
+    for marker in [
+        format!("aegis:{property} a owl:"),
+        format!("aegis:{property} a rdf:Property"),
+    ] {
+        if let Some(block) = AEGIS_PROPERTIES.split(&marker).nth(1) {
+            return block.split(" .\n").next();
+        }
+    }
+    None
 }
 
 #[test]

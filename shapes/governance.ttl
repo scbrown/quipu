@@ -108,6 +108,44 @@ aegis:TransitionShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] .
 
+# ═══════════════════════════════════════════════════════════════════
+# Shuttle workflow history — Camayoc's workflow-and-archive slice.
+#
+# Camayoc owns these terms in the shared aegis namespace.  Keeping their
+# write-time shapes here makes the vocabulary available wherever Quipu's
+# governance set is loaded; the constraints mirror shuttle's actual export
+# contract and leave the TransitionEvent as the append-only source of truth.
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:WorkflowDefinitionShape a sh:NodeShape ;
+    sh:targetClass aegis:WorkflowDefinition ;
+    sh:property [
+        sh:path aegis:hasStep ;
+        sh:class aegis:WorkflowStep ;
+        sh:minCount 1 ;
+    ] .
+
+aegis:WorkflowStepShape a sh:NodeShape ;
+    sh:targetClass aegis:WorkflowStep .
+
+aegis:WorkflowRunShape a sh:NodeShape ;
+    sh:targetClass aegis:WorkflowRun ;
+    sh:property [ sh:path aegis:runOf ; sh:class aegis:WorkflowDefinition ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:currentState ; sh:datatype xsd:string ; sh:minCount 1 ] ;
+    sh:property [ sh:path aegis:createdAt ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:sourceKind ; sh:hasValue "observed" ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+aegis:TransitionEventShape a sh:NodeShape ;
+    sh:targetClass aegis:TransitionEvent ;
+    sh:property [ sh:path aegis:inRun ; sh:class aegis:WorkflowRun ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:atStep ; sh:class aegis:WorkflowStep ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:fromState ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:toState ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path <http://www.w3.org/ns/prov#endedAtTime> ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:performedBy ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:signature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:sourceKind ; sh:hasValue "observed" ; sh:minCount 1 ; sh:maxCount 1 ] .
+
 # ── Artifact ───────────────────────────────────────────────────────
 # An entity standing for a thing produced or required (design doc, test
 # result, ADR, commit, review). Carries a Reference to a concrete target
@@ -642,7 +680,9 @@ aegis:VerifierRegistrationShape a sh:NodeShape ;
     sh:property [
         # The predicate-id(s) this identity is authorized to attest. Repeatable.
         sh:path aegis:attests ;
-        sh:datatype xsd:string ;
+        # Policy registrations use compact string ids; shuttle registrations
+        # attest a workflow IRI. Both are identifiers and both remain governed.
+        sh:or ( [ sh:datatype xsd:string ] [ sh:nodeKind sh:IRI ] ) ;
         sh:minCount 1 ;
     ] ;
     sh:property [
