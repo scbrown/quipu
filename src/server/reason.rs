@@ -28,7 +28,11 @@ pub(crate) async fn shapes(
     blocking(move || {
         let (out, work) = {
             let mut st = s.lock();
-            let out = quipu::tool_shapes(&mut st, &i)?;
+            // `&st`, not `&mut st`: `tool_shapes` writes through `&self`
+            // (interior mutability over the SQLite connection) — see the
+            // ro_handler! warning in tools.rs about what `&Store` does NOT
+            // prove. The write-endpoint classification lives in http_auth.
+            let out = quipu::tool_shapes(&st, &i)?;
             (out, st.take_deferred_embed())
         };
         if let Some(work) = work {
