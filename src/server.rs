@@ -48,7 +48,7 @@ use entity::{
     transactions,
 };
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
-use reason::{reason, shapes};
+use reason::{explain, reason, shapes};
 use tools::*;
 
 #[tokio::main]
@@ -460,6 +460,7 @@ async fn main() {
         .route("/episode/retract", post(retract_episode))
         .route("/shapes", post(shapes))
         .route("/reason", post(reason))
+        .route("/explain", post(explain))
         .route("/ontology", post(ontology))
         .route("/subscriptions", post(subscriptions))
         .route("/datasets", post(datasets))

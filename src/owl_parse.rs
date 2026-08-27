@@ -93,7 +93,7 @@ pub(super) fn extract_axioms(triples: &[(String, String, String)]) -> Axioms {
 
 /// Compute transitive closure of a relation.
 /// Returns a map: class -> set of all transitive superclasses.
-pub(super) fn transitive_closure(pairs: &[(String, String)]) -> HashMap<String, HashSet<String>> {
+pub(crate) fn transitive_closure(pairs: &[(String, String)]) -> HashMap<String, HashSet<String>> {
     let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
     for (sub, sup) in pairs {
         children.entry(sub.as_str()).or_default().push(sup.as_str());

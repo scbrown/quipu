@@ -22,6 +22,12 @@ use crate::types::{Op, Value};
 
 use owl_parse::{extract_axioms, parse_turtle_triples};
 
+/// Transitive closure of a subclass/subproperty relation: term → all
+/// transitive supers. Shared with `crate::explain`'s axiom-family resolution.
+pub(crate) fn transitive_closure(pairs: &[(String, String)]) -> HashMap<String, HashSet<String>> {
+    owl_parse::transitive_closure(pairs)
+}
+
 // ── OWL / RDF vocabulary IRIs ────────────────────────────────────────
 
 const OWL_DISJOINT_WITH: &str = "http://www.w3.org/2002/07/owl#disjointWith";

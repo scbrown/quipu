@@ -25,6 +25,10 @@ pub mod migration;
 pub mod namespace;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+// `explain` resolves OWL axiom families through the `owl` module, so the two
+// share the feature gate.
+#[cfg(feature = "owl")]
+pub mod explain;
 #[cfg(feature = "owl")]
 pub mod owl;
 pub mod pack;

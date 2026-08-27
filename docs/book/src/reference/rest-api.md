@@ -537,6 +537,28 @@ curl -s localhost:3030/reason -X POST \
 #  "per_rule":[{"rule":"R1","asserted":14},{"rule":"R2","asserted":0}]}
 ```
 
+### `POST /explain`
+
+Walk a fact's derivation chain from the provenance in the fact log. Read-only
+and open (no bearer token). Body: `s`, `p`, `o` (IRIs; a non-IRI `o` is
+treated as a string literal), optional `depth` (default 5).
+
+A base fact answers with its transaction and source. A `reasoner:<rule-id>`
+fact answers with the rule and the premise facts it currently re-matches; an
+`owl:materialize` fact answers with every axiom family that currently
+re-derives it — premises recursed, so the tree bottoms out in base facts.
+Support is **re-matched, not stored**: a premise retracted since derivation
+shows as absent support, which is itself diagnostic.
+
+```bash
+curl -s localhost:3030/explain -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"s": "http://example.org/a", "p": "http://example.org/dependsOn",
+       "o": "http://example.org/c"}'
+# {"fact":{...},"found":true,"tx":42,"source":"owl:materialize",
+#  "derivation":{"kind":"owl","families":[{"family":"transitive",...}]}}
+```
+
 ### `POST /search`
 
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,

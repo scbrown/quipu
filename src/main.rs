@@ -6,6 +6,7 @@
 //!   quipu cord [--type <IRI>] [--limit N] [--db <path>]  List entities
 //!   quipu unravel [--tx N] [--valid-at <date>] [--db <path>]  Time-travel query
 //!   quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]...  Impact walk
+//!   quipu explain <s> <p> <o> [--depth N]  Walk a derived fact back to its premises
 //!   quipu reason [--rules <file.ttl>] [--db <path>]  Run the Datalog reasoner
 //!   quipu validate --shapes <shapes.ttl> --data <data.ttl>  Validate without writing
 //!   quipu episode <file.json> [--db <path>]  Ingest a structured episode
@@ -26,6 +27,7 @@
 mod cli;
 mod cli_audit;
 mod cli_commands;
+mod cli_explain;
 mod cli_fork;
 mod cli_graph;
 mod cli_open;
@@ -79,6 +81,7 @@ fn main() {
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
         "impact" => cli::cmd_impact(&args, db_path),
+        "explain" => cli_explain::cmd_explain(&args, db_path),
         "project" => cli::cmd_project(&args, db_path),
         "report" => cli::cmd_report(&args, db_path),
         "reason" => cli::cmd_reason(&args, db_path),
@@ -259,6 +262,7 @@ COMMANDS:
     quipu cord [--type <IRI>] [--limit N] [--db <path>]
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
     quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]
+    quipu explain <subject-IRI> <predicate-IRI> <object> [--depth N] [--db <path>]
     quipu path <cone|backtest|draft> <trajectory-IRI> [options] [--db <path>]
     quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85] [--predicate <IRI>] [--graph <IRI>] [--db <path>]
     quipu report [--hubs N] [--surprises N] [--questions N] [--type <IRI>] [--predicate <IRI>] [--db <path>]

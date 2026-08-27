@@ -83,6 +83,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 pub const READ_ENDPOINTS: &[&str] = &[
     "/graphs",        // registry listing + kind capability probe (pooled read)
     "/path/cone",     // golden-path provenance cone (ro_handler, quipu-gp2)
+    "/explain",       // derivation-chain walk (quipu-923) — reads provenance, commits nothing
     "/path/backtest", // golden-path candidate backtest (ro_handler, quipu-gp3)
     "/",
     "/ui",

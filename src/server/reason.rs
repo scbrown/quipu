@@ -74,6 +74,52 @@ pub(crate) async fn shapes(
     .await
 }
 
+/// `POST /explain` — walk a fact's derivation chain (quipu-923, gap G8).
+///
+/// Body: `s`, `p`, `o` (IRIs; a non-IRI `o` is treated as a string literal),
+/// optional `depth`. Read-only: it resolves provenance already in the fact
+/// log and commits nothing, so it runs on the read pool.
+#[cfg(not(feature = "owl"))]
+pub(crate) async fn explain(
+    State(_s): State<SharedStore>,
+    axum::Json(_i): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    // Registered even without the feature, like /ontology: a 404 cannot
+    // distinguish "not compiled in" from "no route".
+    Err(quipu::Error::InvalidValue(
+        "/explain is registered but this binary was built WITHOUT the `owl` feature. \
+         Rebuild with --features owl (release builds use --features full)."
+            .into(),
+    )
+    .into())
+}
+
+/// `POST /explain` — walk a fact's derivation chain (quipu-923, gap G8).
+#[cfg(feature = "owl")]
+pub(crate) async fn explain(
+    State(s): State<SharedStore>,
+    axum::Json(i): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let field = |k: &str| -> Result<String, AppError> {
+            Ok(i.get(k)
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| {
+                    quipu::Error::InvalidValue(format!("missing required field `{k}` (an IRI)"))
+                })?
+                .to_string())
+        };
+        let (subject, predicate, object) = (field("s")?, field("p")?, field("o")?);
+        let depth = i
+            .get("depth")
+            .and_then(JsonValue::as_u64)
+            .map_or(quipu::explain::DEFAULT_EXPLAIN_DEPTH, |d| d as usize);
+        let tree = quipu::explain::explain(&s.read(), &subject, &predicate, &object, depth)?;
+        Ok(axum::Json(tree))
+    })
+    .await
+}
+
 /// `POST /reason` — run a Datalog ruleset to fixpoint and persist derivations.
 ///
 /// Body:
