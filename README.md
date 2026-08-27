@@ -98,9 +98,9 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 **🤖 AI-Native Features**
 
-- **Episode ingestion** — structured write path for agent-extracted knowledge. Typed nodes, edges, and provenance tracking (`prov:wasGeneratedBy`).
+- **Episode ingestion** — structured write path for agent-extracted knowledge. Typed nodes, edges, and provenance tracking (`prov:wasGeneratedBy`). A node name may appear only once per episode: repeated entries are rejected before any triples are written, since merging them would silently append a second description to the same entity.
 - **Hybrid search** — SPARQL filters candidates, vector similarity ranks them. Combine structured queries with semantic meaning in one call. Type constraints are pushed down into the vector index for O(log n) filtered search with LanceDB.
-- **Dual vector backends** — default SQLite (brute-force cosine similarity), plus a LanceDB backend (ANN with predicate pushdown, Arrow columnar storage) behind `--features lancedb`. Note: the `quipu` CLI / `quipu-server` do not yet select LanceDB from config — it is installed by an embedder via `Store::set_local_vector_backend`; `vector.backend` is not read by the binaries.
+- **Dual vector backends** — default SQLite (brute-force cosine similarity), plus a LanceDB backend (ANN with predicate pushdown, Arrow columnar storage) behind `--features lancedb`. `vector.backend` in config selects it in-binary: the CLI and server install the configured backend at open, so choosing LanceDB no longer requires an embedder to call `Store::set_local_vector_backend` by hand.
 - **Context pipeline** — unified knowledge context shaped for agent consumption. Text search + link expansion with configurable depth and budget.
 - **Agent-friendly feedback** — validation errors include what failed, where, why, and what the valid alternatives are.
 
@@ -114,11 +114,11 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 **⚙️ Infrastructure**
 
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
-- **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup, and `POST /query` with `"federated": true` fans out through the federated provider, reporting which members answered.
+- **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup, and `POST /query` with `"federated": true` fans out through the federated provider, reporting which members answered. Remotes carry declared trust labels at the federation edge, so a federated answer composes the labels of every member that contributed rather than silently inheriting the caller's.
 - **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.
 - **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 42 MCP tools for agent integration (43 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
-- **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. Version discovery is `git_only = true`: the baseline comes from this repository's tags, never the unrelated `quipu` crate on crates.io. CI runs fmt, clippy, tests, and markdown lint on every push. The current published release is v0.3.24; `/version` also reports the deployed git SHA so post-release deployments remain identifiable.
+- **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. Version discovery is `git_only = true`: the baseline comes from this repository's tags, never the unrelated `quipu` crate on crates.io. CI runs fmt, clippy, tests, and markdown lint on every push. The current published release is v0.3.27; `/version` also reports the deployed git SHA, which matters because a deployment can legitimately sit AHEAD of the newest tag — the SHA, not the version string, identifies what is actually running.
 
 ## 🚀 Quick Start
 
