@@ -126,12 +126,12 @@ pub struct ShareManifest {
     pub files: ShareFiles,
 }
 
-fn sha256(bytes: &[u8]) -> String {
+pub(crate) fn sha256(bytes: &[u8]) -> String {
     let digest = ring::digest::digest(&ring::digest::SHA256, bytes);
     format!("sha256:{}", hex::encode(digest.as_ref()))
 }
 
-fn manifest_bytes(manifest: &ShareManifest, include_id: bool) -> Result<Vec<u8>> {
+pub(crate) fn manifest_bytes(manifest: &ShareManifest, include_id: bool) -> Result<Vec<u8>> {
     let mut value = serde_json::to_value(manifest)
         .map_err(|e| Error::Serialization(format!("share manifest: {e}")))?;
     if !include_id {

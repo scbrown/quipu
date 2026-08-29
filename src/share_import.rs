@@ -1,0 +1,394 @@
+//! Quarantined import and composition for git-native knowledge shares.
+
+#![cfg(not(target_arch = "wasm32"))]
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use oxrdf::{NamedNode, NamedOrBlankNode, Term, Triple};
+use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Error, Result};
+use crate::share::{ShareManifest, manifest_bytes, sha256};
+use crate::store::Store;
+
+const SCHEMA_V1: &str = "https://github.com/scbrown/quipu/share-manifest/v1";
+const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+
+/// Wire request accepted by `POST /import`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShareImportRequest {
+    pub manifest: ShareManifest,
+    pub export_ntriples: String,
+    pub shapes_turtle: String,
+    pub source: String,
+    #[serde(default)]
+    pub actor: Option<String>,
+}
+
+/// Count split between admitted and quarantined triples.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ImportCounts {
+    pub accepted: usize,
+    pub quarantined: usize,
+}
+
+/// One foreign-to-local resolution decision or review candidate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportMatch {
+    pub foreign: String,
+    pub local: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score: Option<f64>,
+}
+
+/// Entity-resolution report for an imported graph.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ImportResolution {
+    pub exact_merges: Vec<ImportMatch>,
+    pub candidates: Vec<ImportMatch>,
+    pub unmatched: Vec<String>,
+}
+
+/// Local SHACL result and vocabulary findings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportValidation {
+    pub conforms: bool,
+    pub report: serde_json::Value,
+    pub off_vocabulary: Vec<String>,
+}
+
+/// Whether the staged graph may be promoted to ROOT.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromotionStatus {
+    pub eligible: bool,
+    pub blockers: Vec<String>,
+}
+
+/// Completed import decision.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShareImportResult {
+    pub outcome: String,
+    pub import_id: String,
+    pub share_id: String,
+    pub graph_hash: String,
+    pub staging_graph: String,
+    pub triples: ImportCounts,
+    pub resolution: ImportResolution,
+    pub validation: ImportValidation,
+    pub promotion: PromotionStatus,
+}
+
+/// Request for the separate ROOT-promotion operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromoteImportRequest {
+    pub share_id: String,
+    #[serde(default)]
+    pub actor: Option<String>,
+}
+
+/// Result of explicitly promoting a staged graph into ROOT.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromoteImportResult {
+    pub outcome: String,
+    pub share_id: String,
+    pub staging_graph: String,
+    pub tx_id: i64,
+    pub triples: usize,
+}
+
+fn hash_suffix(value: &str) -> Result<&str> {
+    value
+        .strip_prefix("sha256:")
+        .filter(|v| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or_else(|| Error::InvalidValue(format!("invalid sha256 identifier: {value}")))
+}
+
+fn staging_graph(share_id: &str, quarantine: bool) -> Result<String> {
+    let hash = hash_suffix(share_id)?;
+    let kind = if quarantine { "quarantine" } else { "staging" };
+    Ok(format!("urn:quipu:import:{kind}:{hash}"))
+}
+
+fn import_id(share_id: &str) -> Result<String> {
+    Ok(format!("urn:quipu:import:event:{}", hash_suffix(share_id)?))
+}
+
+fn verify_request(request: &ShareImportRequest) -> Result<()> {
+    if request.manifest.schema != SCHEMA_V1 {
+        return Err(Error::InvalidValue(format!(
+            "unsupported share manifest schema: {}",
+            request.manifest.schema
+        )));
+    }
+    if request.manifest.files.graph != "export.nt"
+        || request.manifest.files.shapes != "shapes.ttl"
+        || request
+            .manifest
+            .files
+            .turtle_view
+            .as_deref()
+            .is_some_and(|p| p != "export.ttl")
+    {
+        return Err(Error::InvalidValue(
+            "share manifest contains unsupported payload paths".into(),
+        ));
+    }
+    let graph_hash = sha256(request.export_ntriples.as_bytes());
+    if request.manifest.graph_hash != graph_hash {
+        return Err(Error::InvalidValue(format!(
+            "share graph hash mismatch: manifest={} actual={graph_hash}",
+            request.manifest.graph_hash
+        )));
+    }
+    let shapes_hash = sha256(request.shapes_turtle.as_bytes());
+    if request.manifest.shapes_hash != shapes_hash {
+        return Err(Error::InvalidValue(format!(
+            "share shapes hash mismatch: manifest={} actual={shapes_hash}",
+            request.manifest.shapes_hash
+        )));
+    }
+    let expected = sha256(&manifest_bytes(&request.manifest, false)?);
+    if request.manifest.share_id != expected {
+        return Err(Error::InvalidValue(format!(
+            "share id mismatch: manifest={} actual={expected}",
+            request.manifest.share_id
+        )));
+    }
+    Ok(())
+}
+
+fn parse_triples(input: &str) -> Result<Vec<Triple>> {
+    RdfParser::from_format(RdfFormat::NTriples)
+        .for_reader(input.as_bytes())
+        .map(|quad| {
+            quad.map(Triple::from)
+                .map_err(|e| Error::InvalidValue(format!("share export.nt parse: {e}")))
+        })
+        .collect()
+}
+
+fn labels(triples: &[Triple]) -> BTreeMap<String, String> {
+    let mut labels = BTreeMap::new();
+    for triple in triples {
+        if triple.predicate.as_str() != RDFS_LABEL {
+            continue;
+        }
+        let NamedOrBlankNode::NamedNode(subject) = &triple.subject else {
+            continue;
+        };
+        let Term::Literal(label) = &triple.object else {
+            continue;
+        };
+        labels
+            .entry(subject.as_str().to_string())
+            .or_insert_with(|| label.value().to_string());
+    }
+    labels
+}
+
+fn resolve_and_rewrite(store: &Store, triples: &mut [Triple]) -> Result<ImportResolution> {
+    let mut report = ImportResolution::default();
+    let mut replacements = BTreeMap::new();
+    for (foreign, label) in labels(triples) {
+        let result = crate::resolve_entity(store, &label, &[], 0.85, 5)?;
+        if result.candidates.is_empty() {
+            report.unmatched.push(foreign);
+            continue;
+        }
+        let top = &result.candidates[0];
+        if top.score == 1.0 && top.matched_on == "canonical_name:exact" {
+            replacements.insert(foreign.clone(), top.iri.clone());
+            report.exact_merges.push(ImportMatch {
+                foreign,
+                local: top.iri.clone(),
+                score: None,
+            });
+        } else {
+            for candidate in result.candidates {
+                report.candidates.push(ImportMatch {
+                    foreign: foreign.clone(),
+                    local: candidate.iri,
+                    score: Some(candidate.score),
+                });
+            }
+        }
+    }
+    for triple in triples {
+        if let NamedOrBlankNode::NamedNode(subject) = &triple.subject
+            && let Some(local) = replacements.get(subject.as_str())
+        {
+            triple.subject = NamedOrBlankNode::NamedNode(
+                NamedNode::new(local)
+                    .map_err(|e| Error::InvalidValue(format!("resolved subject IRI: {e}")))?,
+            );
+        }
+        if let Term::NamedNode(object) = &triple.object
+            && let Some(local) = replacements.get(object.as_str())
+        {
+            triple.object = Term::NamedNode(
+                NamedNode::new(local)
+                    .map_err(|e| Error::InvalidValue(format!("resolved object IRI: {e}")))?,
+            );
+        }
+    }
+    Ok(report)
+}
+
+fn serialize(triples: &[Triple]) -> Result<String> {
+    let mut lines = BTreeSet::new();
+    for triple in triples {
+        let mut writer = RdfSerializer::from_format(RdfFormat::NTriples).for_writer(Vec::new());
+        writer
+            .serialize_triple(triple)
+            .map_err(|e| Error::InvalidValue(format!("resolved RDF serialize: {e}")))?;
+        let bytes = writer
+            .finish()
+            .map_err(|e| Error::InvalidValue(format!("resolved RDF finish: {e}")))?;
+        lines.insert(
+            String::from_utf8(bytes)
+                .map_err(|e| Error::InvalidValue(format!("resolved RDF UTF-8: {e}")))?,
+        );
+    }
+    Ok(lines.into_iter().collect())
+}
+
+fn validate_local(store: &Store, data: &str) -> Result<ImportValidation> {
+    let sanctioned = crate::vocabulary::sanctioned(store)?;
+    let off_vocabulary = crate::vocabulary::ungoverned_types_in_turtle(data, &sanctioned);
+    #[cfg(feature = "shacl")]
+    let (conforms, report) = match store.get_combined_shapes()? {
+        Some(shapes) => {
+            let feedback = crate::shacl_context::validate_with_store_context(store, &shapes, data)?;
+            (
+                feedback.conforms,
+                serde_json::to_value(feedback)
+                    .map_err(|e| Error::Serialization(format!("SHACL report: {e}")))?,
+            )
+        }
+        None => (
+            true,
+            serde_json::json!({"conforms": true, "reason": "no local shapes loaded"}),
+        ),
+    };
+    #[cfg(not(feature = "shacl"))]
+    let (conforms, report) = (
+        true,
+        serde_json::json!({"conforms": true, "reason": "SHACL feature not compiled"}),
+    );
+    Ok(ImportValidation {
+        conforms,
+        report,
+        off_vocabulary,
+    })
+}
+
+/// Verify, resolve, validate, and stage one share without touching ROOT.
+pub fn import_share(
+    store: &mut Store,
+    request: &ShareImportRequest,
+    timestamp: &str,
+) -> Result<ShareImportResult> {
+    verify_request(request)?;
+    let mut triples = parse_triples(&request.export_ntriples)?;
+    let resolution = resolve_and_rewrite(store, &mut triples)?;
+    let resolved = serialize(&triples)?;
+    let validation = validate_local(store, &resolved)?;
+    let blockers = {
+        let mut values = Vec::new();
+        if !validation.conforms {
+            values.push("shacl_nonconforming".to_string());
+        }
+        if !validation.off_vocabulary.is_empty() {
+            values.push("off_vocabulary".to_string());
+        }
+        values
+    };
+    let quarantined = !blockers.is_empty();
+    let graph_iri = staging_graph(&request.manifest.share_id, quarantined)?;
+    let existing = store
+        .lookup(&graph_iri)?
+        .is_some_and(|g| store.graph_class(g).ok().flatten().as_deref() == Some("committed"));
+    let count = triples.len();
+    let outcome = if existing {
+        "unchanged"
+    } else {
+        let graph = store.graph_create(&graph_iri)?;
+        crate::rdf::ingest_rdf_to_graph(
+            store,
+            resolved.as_bytes(),
+            RdfFormat::NTriples,
+            None,
+            timestamp,
+            request.actor.as_deref(),
+            Some(&format!(
+                "share-import:{}:{}",
+                request.source, request.manifest.share_id
+            )),
+            graph,
+        )?;
+        if quarantined { "quarantined" } else { "staged" }
+    };
+    Ok(ShareImportResult {
+        outcome: outcome.into(),
+        import_id: import_id(&request.manifest.share_id)?,
+        share_id: request.manifest.share_id.clone(),
+        graph_hash: request.manifest.graph_hash.clone(),
+        staging_graph: graph_iri,
+        triples: if quarantined {
+            ImportCounts {
+                accepted: 0,
+                quarantined: count,
+            }
+        } else {
+            ImportCounts {
+                accepted: count,
+                quarantined: 0,
+            }
+        },
+        resolution,
+        validation,
+        promotion: PromotionStatus {
+            eligible: !quarantined,
+            blockers,
+        },
+    })
+}
+
+/// Explicitly copy an eligible staging graph into ROOT.
+pub fn promote_import(
+    store: &mut Store,
+    request: &PromoteImportRequest,
+    timestamp: &str,
+) -> Result<PromoteImportResult> {
+    let graph_iri = staging_graph(&request.share_id, false)?;
+    let graph = store.lookup(&graph_iri)?.ok_or_else(|| {
+        Error::InvalidValue(format!(
+            "no eligible staged import for {}",
+            request.share_id
+        ))
+    })?;
+    if store.graph_class(graph)?.as_deref() != Some("committed") {
+        return Err(Error::InvalidValue(format!(
+            "staging graph is not committed: {graph_iri}"
+        )));
+    }
+    let (bytes, count) =
+        crate::rdf::export_rdf_subset(store, RdfFormat::NTriples, Some(&graph_iri))?;
+    let (tx_id, _) = crate::rdf::ingest_rdf(
+        store,
+        bytes.as_slice(),
+        RdfFormat::NTriples,
+        None,
+        timestamp,
+        request.actor.as_deref(),
+        Some(&format!("share-promotion:{}", request.share_id)),
+    )?;
+    Ok(PromoteImportResult {
+        outcome: "promoted".into(),
+        share_id: request.share_id.clone(),
+        staging_graph: graph_iri,
+        tx_id,
+        triples: count,
+    })
+}
