@@ -386,9 +386,8 @@ aegis:signature a owl:DatatypeProperty ;
 
 aegis:freshness a owl:DatatypeProperty ;
     rdfs:label "freshness" ;
-    rdfs:domain aegis:Verdict ;
     rdfs:range xsd:string ;
-    rdfs:comment "Whether the policy set behind this verdict was current when it was computed: \"fresh\" or \"stale\". Only two values, so a runtime with a third internal state must map it to the conservative one — the reading that cannot overstate." .
+    rdfs:comment "Freshness of a claim relative to its source. VerdictShape constrains verdicts to fresh|stale; ExternalTruthMappingShape constrains mapped external truth to live|snapshot(ts)|frozen(window). No rdfs:domain: the predicate intentionally serves both carriers, and a domain would incorrectly retype every mapped Artifact, Metric, service or document as a Verdict." .
 
 # Camayoc's shuttle workflow-and-archive slice. These terms are intentionally
 # declared in Quipu's governed property catalogue as well as Camayoc's ontology:
