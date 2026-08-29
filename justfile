@@ -102,8 +102,10 @@ paper cmd="build":
 bench name *args:
     @if [ "{{ name }}" = "census" ]; then \
         cargo run --quiet --release --example census -- {{ args }}; \
+    elif [ "{{ name }}" = "merge" ]; then \
+        cargo run --quiet --release --example mergebench --features shacl -- {{ args }}; \
     else \
-        echo "unknown benchmark '{{ name }}' (available: census)"; exit 1; \
+        echo "unknown benchmark '{{ name }}' (available: census, merge)"; exit 1; \
     fi
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.

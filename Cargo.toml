@@ -57,6 +57,14 @@ name = "shacl_cost"
 path = "examples/shacl_cost.rs"
 required-features = ["shacl"]
 
+# The merge benchmark validates its own merge output with `quipu::Validator`,
+# which lives behind `shacl` — and it is a directory example, so cargo needs
+# the explicit path as well.
+[[example]]
+name = "mergebench"
+path = "examples/mergebench/main.rs"
+required-features = ["shacl"]
+
 [dependencies]
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).

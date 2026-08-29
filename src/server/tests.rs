@@ -172,6 +172,32 @@ async fn stats_uses_generation_cache_and_invalidates_on_write() {
 struct RecordingProvider {
     batches: Arc<parking_lot::Mutex<Vec<usize>>>,
 }
+
+/// Blocks the first batch until the test releases it, making the unlocked
+/// ONNX window deterministic instead of relying on scheduler timing.
+struct BlockingBatchProvider {
+    entered: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>>,
+    release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+    calls: std::sync::atomic::AtomicUsize,
+}
+impl EmbeddingProvider for BlockingBatchProvider {
+    fn embed_text(&self, _text: &str) -> quipu::Result<Vec<f32>> {
+        Ok(vec![0.1f32; 8])
+    }
+    fn embed_batch(&self, texts: &[&str]) -> quipu::Result<Vec<Vec<f32>>> {
+        let call = self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if call == 0 {
+            if let Some(tx) = self.entered.lock().unwrap().take() {
+                tx.send(()).unwrap();
+            }
+            self.release.lock().unwrap().recv().unwrap();
+        }
+        Ok(texts.iter().map(|_| vec![0.1f32; 8]).collect())
+    }
+    fn dimension(&self) -> usize {
+        8
+    }
+}
 impl EmbeddingProvider for RecordingProvider {
     fn embed_text(&self, _text: &str) -> quipu::Result<Vec<f32>> {
         self.batches.lock().push(1);
@@ -299,13 +325,17 @@ fn backfill_replaces_stale_current_vector() {
     )
     .unwrap();
 
-    assert_eq!(super::tools::backfill_embeddings(&mut store).unwrap(), 1);
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
     assert_eq!(
-        store.vector_count().unwrap(),
+        super::tools::backfill_embeddings(&shared).unwrap().embedded,
+        1
+    );
+    assert_eq!(
+        shared.lock().vector_count().unwrap(),
         1,
         "old vector stayed current"
     );
-    let matches = store.vector_search(&[0.1; 8], 1, None).unwrap();
+    let matches = shared.lock().vector_search(&[0.1; 8], 1, None).unwrap();
     assert_eq!(matches[0].text, "corrected text");
 }
 
@@ -328,8 +358,97 @@ fn backfill_enumerates_subjects_without_sparql() {
     )
     .unwrap();
 
-    assert_eq!(super::tools::backfill_embeddings(&mut store).unwrap(), 2);
-    assert_eq!(store.vector_count().unwrap(), 2);
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    assert_eq!(
+        super::tools::backfill_embeddings(&shared).unwrap().embedded,
+        2
+    );
+    assert_eq!(shared.lock().vector_count().unwrap(), 2);
+}
+
+/// gd26r acceptance: a multi-window backfill must not hold the writer lock
+/// across ONNX work, and an entity edited in that unlocked window must be
+/// retried rather than overwritten by the stale vector or silently omitted.
+#[test]
+fn backfill_yields_the_writer_lock_and_retries_stale_snapshots() {
+    use quipu::KnowledgeVectorStore as _;
+
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let provider = Arc::new(BlockingBatchProvider {
+        entered: std::sync::Mutex::new(Some(entered_tx)),
+        release: std::sync::Mutex::new(release_rx),
+        calls: std::sync::atomic::AtomicUsize::new(0),
+    });
+
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(provider.clone());
+    store.embedding_config_mut().dimension = 8;
+    quipu::ingest_rdf(
+        &mut store,
+        &b"<http://example.org/changing> <http://www.w3.org/2000/01/rdf-schema#label> \"before\" ."
+            [..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+
+    let backfill_store = shared.clone();
+    let backfill =
+        std::thread::spawn(move || super::tools::backfill_embeddings(&backfill_store).unwrap());
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("backfill never reached the first embedding batch");
+
+    // Equivalent store read while the provider is blocked. Pre-fix this waits
+    // behind the one full-pass lock and the timeout fails deterministically.
+    let (read_tx, read_rx) = std::sync::mpsc::channel();
+    let read_store = shared.clone();
+    std::thread::spawn(move || {
+        let count = read_store.lock().current_facts().unwrap().len();
+        read_tx.send(count).unwrap();
+    });
+    assert_eq!(
+        read_rx
+            .recv_timeout(std::time::Duration::from_millis(250))
+            .expect("store read could not complete while a backfill batch embedded"),
+        1
+    );
+
+    // Change the entity in the same unlocked window. The first vector is now
+    // stale; apply must requeue the entity and embed its new version.
+    {
+        let mut s = shared.lock();
+        quipu::ingest_rdf(
+            &mut s,
+            &b"<http://example.org/changing> <http://www.w3.org/2000/01/rdf-schema#label> \"after\" ."[..],
+            oxrdfio::RdfFormat::NTriples,
+            None,
+            "2026-01-02",
+            None,
+            None,
+        )
+        .unwrap();
+    }
+    release_tx.send(()).unwrap();
+
+    let outcome = backfill.join().unwrap();
+    assert_eq!(outcome.embedded, 1);
+    assert_eq!(outcome.stale_retries, 1);
+    assert_eq!(
+        provider.calls.load(std::sync::atomic::Ordering::SeqCst),
+        2,
+        "the stale entity was not requeued into a second bounded batch"
+    );
+    let s = shared.lock();
+    assert_eq!(s.vector_count().unwrap(), 1);
+    let matches = s.vector_search(&[0.1; 8], 1, None).unwrap();
+    assert!(matches[0].text.contains("after"));
+    assert!(!matches[0].text.contains("before"));
 }
 
 /// Every local JS module the UI imports must be a registered route AND
