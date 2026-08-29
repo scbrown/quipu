@@ -274,6 +274,41 @@ async fn deferred_embed_chunks_the_onnx_call_by_batch_size() {
     );
 }
 
+#[test]
+fn backfill_replaces_stale_current_vector() {
+    use quipu::KnowledgeVectorStore as _;
+
+    let batches = Arc::new(parking_lot::Mutex::new(vec![]));
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(RecordingProvider { batches }));
+    store.embedding_config_mut().dimension = 8;
+
+    let entity = store.intern("http://example.org/entity").unwrap();
+    store
+        .vector_store()
+        .embed_entity(entity, "obsolete text", &[0.1; 8], "1")
+        .unwrap();
+    quipu::ingest_rdf(
+        &mut store,
+        &b"<http://example.org/entity> <http://www.w3.org/2000/01/rdf-schema#label> \"corrected text\" ."[..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(super::tools::backfill_embeddings(&mut store).unwrap(), 1);
+    assert_eq!(
+        store.vector_count().unwrap(),
+        1,
+        "old vector stayed current"
+    );
+    let matches = store.vector_search(&[0.1; 8], 1, None).unwrap();
+    assert_eq!(matches[0].text, "corrected text");
+}
+
 /// Every local JS module the UI imports must be a registered route AND
 /// reachable without a bearer token, or the page dead-ends on a blank view.
 ///

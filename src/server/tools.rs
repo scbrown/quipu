@@ -399,6 +399,10 @@ pub(crate) fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Resu
         let embs = provider.embed_batch(&texts).map_err(|e| e.to_string())?;
         let vs = store.vector_store();
         for ((eid, text), emb) in pairs.iter().zip(embs.iter()) {
+            // Backfill is also the repair path for stale corpus entries. Close
+            // the prior current row first; otherwise both remain current and
+            // the search text lookup may return the obsolete one (aegis-eldb1).
+            vs.close_embedding(*eid, &ts).map_err(|e| e.to_string())?;
             vs.embed_entity(*eid, text, emb, &ts)
                 .map_err(|e| e.to_string())?;
             embedded += 1;
