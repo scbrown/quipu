@@ -65,6 +65,11 @@ name = "mergebench"
 path = "examples/mergebench/main.rs"
 required-features = ["shacl"]
 
+[[example]]
+name = "replay"
+path = "examples/replay/main.rs"
+required-features = ["shacl"]
+
 [dependencies]
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
