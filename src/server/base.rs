@@ -478,8 +478,7 @@ pub(crate) async fn query(
 
 /// POST /export — subset export (quipu #36): serialize one named graph's (or the
 /// ROOT default's) facts to RDF so a consumer can pull a scoped slice.
-/// Body: `{ "graph": "<iri>"?, "format": "turtle"|"ntriples"? }`. Returns the
-/// RDF document with the matching content-type; an unknown graph IRI -> 400.
+/// Body selects at most one scope: `graph`, `group_id`, or `construct`.
 pub(crate) async fn export(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
@@ -500,8 +499,26 @@ pub(crate) async fn export(
             }
         };
         let graph = input.get("graph").and_then(|v| v.as_str());
-        let store = store.lock();
-        let (bytes, _count) = quipu::export_rdf_subset(&store, format, graph)?;
+        let group = input.get("group_id").and_then(|v| v.as_str());
+        let construct = input.get("construct").and_then(|v| v.as_str());
+        if [graph.is_some(), group.is_some(), construct.is_some()]
+            .into_iter()
+            .filter(|selected| *selected)
+            .count()
+            > 1
+        {
+            return Err(quipu::Error::InvalidValue(
+                "export accepts only one of graph, group_id, or construct".into(),
+            )
+            .into());
+        }
+        let store = store.read();
+        let (bytes, _count) = match (group, construct) {
+            (Some(group_id), None) => quipu::export_rdf_group(&store, format, group_id)?,
+            (None, Some(query)) => quipu::export_rdf_construct(&store, format, query)?,
+            (None, None) => quipu::export_rdf_subset(&store, format, graph)?,
+            _ => unreachable!("mutually exclusive export scopes checked above"),
+        };
         Ok(([(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response())
     })
     .await

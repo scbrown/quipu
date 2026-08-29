@@ -319,14 +319,39 @@ pub fn cmd_export(args: &[String], db_path: &str) {
         .windows(2)
         .find(|w| w[0] == "--graph")
         .map(|w| w[1].as_str());
+    let group = args
+        .windows(2)
+        .find(|w| w[0] == "--group-id")
+        .map(|w| w[1].as_str());
+    let construct = args
+        .windows(2)
+        .find(|w| w[0] == "--construct")
+        .map(|w| w[1].as_str());
+
+    if [graph.is_some(), group.is_some(), construct.is_some()]
+        .into_iter()
+        .filter(|selected| *selected)
+        .count()
+        > 1
+    {
+        eprintln!("export accepts only one of --graph, --group-id, or --construct");
+        std::process::exit(1);
+    }
 
     let store = crate::cli_open::open_store(db_path);
 
-    let exported = match graph {
-        Some(iri) => {
+    let exported = match (graph, group, construct) {
+        (Some(iri), None, None) => {
             quipu::export_rdf_subset(&store, rdf_format, Some(iri)).map(|(bytes, _)| bytes)
         }
-        None => quipu::export_rdf(&store, rdf_format),
+        (None, Some(group_id), None) => {
+            quipu::export_rdf_group(&store, rdf_format, group_id).map(|(bytes, _)| bytes)
+        }
+        (None, None, Some(query)) => {
+            quipu::export_rdf_construct(&store, rdf_format, query).map(|(bytes, _)| bytes)
+        }
+        (None, None, None) => quipu::export_rdf(&store, rdf_format),
+        _ => unreachable!("mutually exclusive export scopes checked above"),
     };
     match exported {
         Ok(bytes) => {

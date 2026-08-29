@@ -26,12 +26,14 @@ Execute a SPARQL SELECT query.
 
 ### `quipu_export`
 
-Export a scoped subset of the graph as RDF: one named graph's facts, or the
-ROOT default graph when `graph` is omitted.
+Export deterministic RDF from ROOT, a named graph, an episode provenance group,
+or a SPARQL graph query. Scope parameters are mutually exclusive.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `graph` | No | Named-graph IRI to export (omit for ROOT; unknown IRI is an error) |
+| `group_id` | No | Export ROOT entities attributed to this episode group |
+| `construct` | No | SPARQL CONSTRUCT or DESCRIBE query whose graph is exported |
 | `format` | No | `turtle` (default) or `ntriples` |
 
 ### `quipu_knot`

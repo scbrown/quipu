@@ -466,10 +466,7 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 /// builds on. It exports one graph's OWN facts — the same scope a
 /// `GRAPH <iri> { … }` read sees — not a composed overlay view.
 ///
-/// Input: `{ "graph": "<iri>"?, "format": "turtle"|"ntriples"? }`. `graph`
-/// omitted -> the ROOT default graph (`g = 0`); an unknown graph IRI is an
-/// error. Output: `{ "rdf": "<document>", "format": "turtle",
-/// "graph": "<iri>"|null, "triples": N }`.
+/// Input selects at most one scope: `graph`, `group_id`, or `construct`.
 pub fn tool_export(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let format_str = input
         .get("format")
@@ -485,13 +482,32 @@ pub fn tool_export(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         }
     };
     let graph = input.get("graph").and_then(|v| v.as_str());
-    let (bytes, triples) = crate::export_rdf_subset(store, format, graph)?;
+    let group = input.get("group_id").and_then(|v| v.as_str());
+    let construct = input.get("construct").and_then(|v| v.as_str());
+    if [graph.is_some(), group.is_some(), construct.is_some()]
+        .into_iter()
+        .filter(|selected| *selected)
+        .count()
+        > 1
+    {
+        return Err(Error::InvalidValue(
+            "export accepts only one of graph, group_id, or construct".into(),
+        ));
+    }
+    let (bytes, triples) = match (group, construct) {
+        (Some(group_id), None) => crate::export_rdf_group(store, format, group_id)?,
+        (None, Some(query)) => crate::export_rdf_construct(store, format, query)?,
+        (None, None) => crate::export_rdf_subset(store, format, graph)?,
+        _ => unreachable!("mutually exclusive export scopes checked above"),
+    };
     let rdf = String::from_utf8(bytes)
         .map_err(|e| Error::InvalidValue(format!("export produced non-UTF8 RDF: {e}")))?;
     Ok(serde_json::json!({
         "rdf": rdf,
         "format": format_str,
         "graph": graph,
+        "group_id": group,
+        "construct": construct,
         "triples": triples,
     }))
 }

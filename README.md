@@ -90,7 +90,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 **🏛️ Knowledge Graph Core**
 
 - **Immutable bitemporal fact log** — every fact has transaction time and valid time. Time-travel to any point. Full audit trail. Contradiction detection.
-- **RDF data model** — IRIs, blank nodes, typed literals via oxrdf. Import/export Turtle, N-Triples, JSON-LD, RDF/XML.
+- **RDF data model** — IRIs, blank nodes, typed literals via oxrdf. Import/export Turtle, N-Triples, JSON-LD, RDF/XML. Exports are stably ordered and can be scoped to ROOT, one named graph, an episode provenance group, or a SPARQL CONSTRUCT result; server exports use the read pool rather than blocking writers.
 - **SPARQL 1.1** — SELECT, ASK, CONSTRUCT, DESCRIBE. BGP, JOIN, UNION, FILTER, OPTIONAL, VALUES, ORDER BY, GROUP BY, aggregates, HAVING, property paths, `IN`/`NOT IN`, RDFS subclass inference, and named-graph scoping (`GRAPH`, `FROM`, `FROM NAMED`).
 - **SHACL validation** — strict schema enforcement at write time. Structured feedback with severity, focus node, component, path, and message.
 - **Graph labels & kinds** — graphs carry declared labels on five axes (freshness, trust, policy, durability, `dataKind`); datasets compose them without ever widening, and every query answer reports the composed label. Opt-in floors can refuse queries that fall below a declared bar.

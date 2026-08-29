@@ -23,11 +23,13 @@ pub(super) fn defs() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_export",
-            "description": "Export a scoped SUBSET of the graph as RDF: one named graph's facts (quipu #36), or the ROOT default graph when 'graph' is omitted. The 'pull a scoped slice' primitive for subset-export and federation.",
+            "description": "Export deterministic RDF scoped to one named graph, provenance group, SPARQL CONSTRUCT, or ROOT when no scope is supplied. Scope fields are mutually exclusive.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "graph": { "type": "string", "description": "Named-graph IRI to export. Omit for the ROOT/default graph. Unknown IRI is an error." },
+                    "group_id": { "type": "string", "description": "Export ROOT entities attributed to episodes in this provenance group." },
+                    "construct": { "type": "string", "description": "SPARQL CONSTRUCT or DESCRIBE query whose graph result is exported." },
                     "format": { "type": "string", "enum": ["turtle", "ntriples"], "description": "RDF serialization (default: turtle)." }
                 }
             }

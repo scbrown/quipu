@@ -3226,6 +3226,26 @@ fn test_tool_export_named_graph_subset() {
         )
         .is_err()
     );
+
+    // Scope composition is explicit rather than precedence-based: a caller
+    // accidentally supplying two scopes gets a loud refusal.
+    assert!(
+        tool_export(
+            &store,
+            &serde_json::json!({
+                "graph": g_iri,
+                "group_id": "g",
+                "format": "ntriples"
+            })
+        )
+        .is_err()
+    );
+
+    let defs = tool_definitions();
+    let export = defs.iter().find(|d| d["name"] == "quipu_export").unwrap();
+    let props = &export["inputSchema"]["properties"];
+    assert!(props.get("group_id").is_some());
+    assert!(props.get("construct").is_some());
 }
 
 // ── Vocabulary gate (aegis-hpav5, promoted from aegis-7n1ya) ────

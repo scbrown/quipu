@@ -121,16 +121,23 @@ quipu validate --shapes schema.ttl --data test-data.ttl
 
 ### `quipu export`
 
-Export all current facts in an RDF format.
+Export deterministic RDF from ROOT or one explicit scope.
 
 ```bash
 quipu export --db my.db                        # N-Triples (default)
 quipu export --format turtle --db my.db        # Turtle
+quipu export --group-id project-a --db my.db   # provenance group
+quipu export --construct 'CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }' --db my.db
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--format <fmt>` | Output format: `ntriples` (default) or `turtle` |
+| `--graph <iri>` | Export one named graph |
+| `--group-id <id>` | Export entities attributed to one episode group |
+| `--construct <query>` | Export a SPARQL CONSTRUCT or DESCRIBE graph |
+
+The three scope flags are mutually exclusive. Omit all three for ROOT.
 
 ### `quipu stats`
 

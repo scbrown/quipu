@@ -906,9 +906,10 @@ renders on an air-gapped deploy. They are part of the UI, not the API surface.
 
 ### `POST /export`
 
-Export a scoped subset of the graph as RDF — one named graph's facts, or the
-ROOT default graph when `graph` is omitted (the "pull a scoped slice"
-primitive; mirrors the `quipu_export` MCP tool).
+Export deterministic RDF from ROOT, one named graph, one episode provenance
+group, or a SPARQL CONSTRUCT/DESCRIBE result. `graph`, `group_id`, and
+`construct` are mutually exclusive. The handler uses the read pool, so
+serializing a large export does not hold Quipu's writer lock.
 
 ```bash
 curl -s localhost:3030/export -X POST \
@@ -919,9 +920,14 @@ curl -s localhost:3030/export -X POST \
 | Field | Required | Description |
 |---|---|---|
 | `graph` | No | Named-graph IRI (omit for ROOT; unknown IRI → 400) |
+| `group_id` | No | ROOT entities attributed through `prov:wasGeneratedBy` to episodes in this group, plus those episode resources |
+| `construct` | No | SPARQL CONSTRUCT or DESCRIBE query to export |
 | `format` | No | `turtle` (default) or `ntriples` |
 
 Returns the RDF document itself with the matching content-type, not JSON.
+N-Triples output is lexically sorted and duplicate-free. Blank-node dataset
+canonicalization belongs to the share-bundle layer; raw export preserves blank
+node labels.
 
 ## Registries
 
