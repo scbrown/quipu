@@ -389,6 +389,48 @@ aegis:freshness a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:comment "Freshness of a claim relative to its source. VerdictShape constrains verdicts to fresh|stale; ExternalTruthMappingShape constrains mapped external truth to live|snapshot(ts)|frozen(window). No rdfs:domain: the predicate intentionally serves both carriers, and a domain would incorrectly retype every mapped Artifact, Metric, service or document as a Verdict." .
 
+aegis:source_uri a owl:DatatypeProperty ;
+    rdfs:label "external truth source URI" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Where an entity's external truth lives, including s3, https, file-at-revision, PromQL and MCP identifiers." .
+
+aegis:access_via a owl:DatatypeProperty ;
+    rdfs:label "external truth access method" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Executable read method for source_uri: mcp, rest, sparql-federated, file, or promql." .
+
+aegis:verified_by a owl:DatatypeProperty ;
+    rdfs:label "external truth verification method" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "How bytes read through a mapping are checked: a content hash, cosign signature, or Quipu certification seal identifier." .
+
+# Certified bundle envelope and its two independent signature claims. Domains
+# are omitted where a property is intentionally shared by bundle and seal.
+aegis:canonicalGraphHash a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "Digest of the RDFC-normalized triple set; the knowledge-state identity shared across git, OCI and object storage." .
+aegis:shapesBundleVersion a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "Named, versioned shapes bundle against which the graph was certified." .
+aegis:provenanceManifest a owl:ObjectProperty ;
+    rdfs:comment "Manifest IRI describing the sources and production lineage of a certified bundle or seal." .
+aegis:publisherAttestation a owl:ObjectProperty ; rdfs:range aegis:PublisherAttestation ;
+    rdfs:comment "The publisher-authorship claim attached to a certified share bundle." .
+aegis:certificationSeal a owl:ObjectProperty ; rdfs:range aegis:KnowledgeCertificationSeal ;
+    rdfs:comment "The independent Quipu conformance seal attached to a certified share bundle." .
+aegis:attestsBundle a owl:ObjectProperty ; rdfs:range aegis:CertifiedShareBundle ;
+    rdfs:comment "Bundle whose authorship a publisher attestation claims." .
+aegis:certifiesBundle a owl:ObjectProperty ; rdfs:range aegis:CertifiedShareBundle ;
+    rdfs:comment "Bundle whose conformance a Quipu certification seal claims." .
+aegis:signingKey a owl:ObjectProperty ; rdfs:range aegis:VerifierRegistration ;
+    rdfs:comment "Human-gated registered key used to verify an attestation signature." .
+aegis:attestationSignature a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "Cosign-compatible signature over the attestation's canonical claim." .
+aegis:shaclReportHash a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "Digest of the SHACL conformance report carried by the certification predicate." .
+aegis:scrubCheckPass a owl:DatatypeProperty ; rdfs:range xsd:boolean ;
+    rdfs:comment "True only when the outward-share internal-identifier scrub completed successfully." .
+aegis:frozenWindow a owl:ObjectProperty ;
+    rdfs:comment "Shuttle frozen-window IRI recording seal issuance in the append-only audit log." .
+
 # Camayoc's shuttle workflow-and-archive slice. These terms are intentionally
 # declared in Quipu's governed property catalogue as well as Camayoc's ontology:
 # the loaded governance shape set is the write boundary that sanctions them.

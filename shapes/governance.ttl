@@ -1032,3 +1032,54 @@ aegis:TrustBoundaryShape a sh:NodeShape ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
     ] .
+
+# ═══ External-truth mappings and certified share bundles (aegis-z9pn9) ═══
+# Camayoc knowledge packs and Quipu share bundles use one envelope:
+# CertifiedShareBundle. A mapping is carried directly by the entity whose
+# external truth it locates, not by a second shadow entity that can drift.
+
+aegis:ExternalTruthMappingShape a sh:NodeShape ;
+    sh:targetSubjectsOf aegis:source_uri ;
+    sh:property [ sh:path aegis:source_uri ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [
+        sh:path aegis:access_via ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( "mcp" "rest" "sparql-federated" "file" "promql" )
+    ] ;
+    sh:property [
+        sh:path aegis:freshness ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:pattern "^(live|snapshot\\([^()]+\\)|frozen\\([^()]+\\))$"
+    ] ;
+    sh:property [ sh:path aegis:verified_by ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# A .qpack is the archive encoding of this bundle, not a second semantic
+# format. canonicalGraphHash is over the RDFC-normalized triple set.
+aegis:CertifiedShareBundleShape a sh:NodeShape ;
+    sh:targetClass aegis:CertifiedShareBundle ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:canonicalGraphHash ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:shapesBundleVersion ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:provenanceManifest ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:publisherAttestation ; sh:class aegis:PublisherAttestation ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:certificationSeal ; sh:class aegis:KnowledgeCertificationSeal ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# Two signatures are two claims, hence two nodes. Both keys resolve to the
+# existing human-gated VerifierRegistration vocabulary used by shuttle.
+aegis:PublisherAttestationShape a sh:NodeShape ;
+    sh:targetClass aegis:PublisherAttestation ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:attestsBundle ; sh:class aegis:CertifiedShareBundle ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:signingKey ; sh:class aegis:VerifierRegistration ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:attestationSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+aegis:KnowledgeCertificationSealShape a sh:NodeShape ;
+    sh:targetClass aegis:KnowledgeCertificationSeal ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:certifiesBundle ; sh:class aegis:CertifiedShareBundle ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:canonicalGraphHash ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:shapesBundleVersion ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:shaclReportHash ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:scrubCheckPass ; sh:datatype xsd:boolean ; sh:hasValue true ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:provenanceManifest ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:signingKey ; sh:class aegis:VerifierRegistration ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:attestationSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:frozenWindow ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] .

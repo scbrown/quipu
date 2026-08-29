@@ -1,6 +1,6 @@
 #![cfg(feature = "shacl")]
 
-const SHAPES: &str = include_str!("../shapes/mappings-certification.ttl");
+const SHAPES: &str = include_str!("../shapes/governance.ttl");
 
 fn report(data: &str) -> quipu::ValidationFeedback {
     quipu::validate_shapes(SHAPES, data).expect("shape and fixture Turtle should parse")
@@ -43,18 +43,27 @@ fn certified_bundle_requires_both_distinct_signatures_and_a_passing_scrub() {
             aegis:publisherAttestation aegis:publisher-claim ;
             aegis:certificationSeal aegis:quipu-seal .
         aegis:publisher-claim a aegis:PublisherAttestation ;
+            rdfs:label "publisher attestation" ;
             aegis:attestsBundle aegis:bundle ; aegis:signingKey aegis:publisher-key ;
             aegis:attestationSignature "cosign:publisher" .
         aegis:quipu-seal a aegis:KnowledgeCertificationSeal ;
+            rdfs:label "Quipu certification seal" ;
             aegis:certifiesBundle aegis:bundle ; aegis:canonicalGraphHash "sha256:graph" ;
             aegis:shapesBundleVersion "aegis-ontology@1" ; aegis:shaclReportHash "sha256:report" ;
             aegis:scrubCheckPass true ; aegis:provenanceManifest aegis:manifest ;
             aegis:signingKey aegis:certifier-key ; aegis:attestationSignature "cosign:certifier" ;
             aegis:frozenWindow aegis:window-42 .
-        aegis:publisher-key a aegis:VerifierRegistration .
-        aegis:certifier-key a aegis:VerifierRegistration .
+        aegis:publisher-key a aegis:VerifierRegistration ;
+            aegis:verifier "group-publisher" ; aegis:attests aegis:bundle .
+        aegis:certifier-key a aegis:VerifierRegistration ;
+            aegis:verifier "quipu-certifier" ; aegis:attests aegis:bundle .
     "#;
-    assert!(report(valid).conforms);
+    let valid_report = report(valid);
+    assert!(
+        valid_report.conforms,
+        "valid certification fixture failed: {:#?}",
+        valid_report.results
+    );
 
     let failed_scrub = valid.replace("aegis:scrubCheckPass true", "aegis:scrubCheckPass false");
     assert!(!report(&failed_scrub).conforms);
