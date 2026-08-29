@@ -45,6 +45,7 @@ __pycache__/
 
 # Census benchmark run outputs (stores, manifests, metrics)
 benchmark/census/out/
+benchmark/mergebench/out/
 
 # DEMM-Bench run outputs (cases, scorer results, summaries)
 benchmark/demm/out/
