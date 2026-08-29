@@ -407,7 +407,7 @@ aegis:verified_by a owl:DatatypeProperty ;
 # Certified bundle envelope and its two independent signature claims. Domains
 # are omitted where a property is intentionally shared by bundle and seal.
 aegis:canonicalGraphHash a owl:DatatypeProperty ; rdfs:range xsd:string ;
-    rdfs:comment "Digest of the RDFC-normalized triple set; the knowledge-state identity shared across git, OCI and object storage." .
+    rdfs:comment "Quipu pack_manifest content_hash: sha256 over lexically sorted N-Triples for graph, shapes, queries and labels; the knowledge-state identity shared across git, OCI and object storage." .
 aegis:shapesBundleVersion a owl:DatatypeProperty ; rdfs:range xsd:string ;
     rdfs:comment "Named, versioned shapes bundle against which the graph was certified." .
 aegis:provenanceManifest a owl:ObjectProperty ;
@@ -429,7 +429,7 @@ aegis:shaclReportHash a owl:DatatypeProperty ; rdfs:range xsd:string ;
 aegis:scrubCheckPass a owl:DatatypeProperty ; rdfs:range xsd:boolean ;
     rdfs:comment "True only when the outward-share internal-identifier scrub completed successfully." .
 aegis:frozenWindow a owl:ObjectProperty ;
-    rdfs:comment "Shuttle frozen-window IRI recording seal issuance in the append-only audit log." .
+    rdfs:comment "Source shuttle window for a certified bundle cut from frozen operational data; omitted by static packs." .
 
 # Camayoc's shuttle workflow-and-archive slice. These terms are intentionally
 # declared in Quipu's governed property catalogue as well as Camayoc's ontology:

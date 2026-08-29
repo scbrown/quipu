@@ -70,4 +70,12 @@ fn certified_bundle_requires_both_distinct_signatures_and_a_passing_scrub() {
 
     let one_signature = valid.replace("aegis:publisherAttestation aegis:publisher-claim ;", "");
     assert!(!report(&one_signature).conforms);
+
+    // The generic envelope also certifies static packs (for example
+    // core.qpack.db), which have no shuttle source window.
+    let static_pack = valid.replace(
+        "            aegis:signingKey aegis:certifier-key ; aegis:attestationSignature \"cosign:certifier\" ;\n            aegis:frozenWindow aegis:window-42 .",
+        "            aegis:signingKey aegis:certifier-key ; aegis:attestationSignature \"cosign:certifier\" .",
+    );
+    assert!(report(&static_pack).conforms);
 }
