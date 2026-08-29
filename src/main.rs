@@ -12,6 +12,8 @@
 //!   quipu episode <file.json> [--db <path>]  Ingest a structured episode
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
+//!   quipu import <share-dir> [--source <uri>] [--actor <id>]  Stage a share
+//!   quipu import promote <share-id> [--actor <id>]  Promote a staged share
 //!   quipu stats [--db <path>]            Show store statistics
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
@@ -102,6 +104,7 @@ fn main() {
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_pack::cmd_pack(&args, db_path),
         "share" => cli_pack::cmd_share(&args, db_path),
+        "import" => cli_pack::cmd_import(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
         "graph" => cli_graph::cmd_graph(&args, db_path),

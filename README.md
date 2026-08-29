@@ -114,6 +114,8 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 **⚙️ Infrastructure**
 
+- **Git-native composition** — `quipu import <share-dir>` verifies the v1 manifest and payload hashes, resolves exact entity matches, surfaces fuzzy candidates for review, validates against local SHACL shapes, and stages each source in a named graph. Off-vocabulary or non-conforming shares remain quarantined; only `quipu import promote <share-id>` explicitly admits an eligible graph to ROOT.
+
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup, and `POST /query` with `"federated": true` fans out through the federated provider, reporting which members answered. Remotes carry declared trust labels at the federation edge, so a federated answer composes the labels of every member that contributed rather than silently inheriting the caller's.
 - **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.

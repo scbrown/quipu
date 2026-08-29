@@ -524,6 +524,50 @@ pub(crate) async fn export(
     .await
 }
 
+/// POST /import — verify and stage a share in a source-specific named graph.
+pub(crate) async fn import_share(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<quipu::share_import::ShareImportRequest>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let (result, work) = {
+            let mut st = store.lock();
+            let result =
+                quipu::share_import::import_share(&mut st, &input, &quipu::time::now_iso())?;
+            (result, st.take_deferred_embed())
+        };
+        if let Some(work) = work {
+            finish_deferred_embed(&store, &work)?;
+        }
+        Ok(axum::Json(serde_json::to_value(result).map_err(|e| {
+            quipu::Error::Serialization(format!("import response: {e}"))
+        })?))
+    })
+    .await
+}
+
+/// POST /import/promote — explicitly admit an eligible staged share to ROOT.
+pub(crate) async fn promote_import(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<quipu::share_import::PromoteImportRequest>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let (result, work) = {
+            let mut st = store.lock();
+            let result =
+                quipu::share_import::promote_import(&mut st, &input, &quipu::time::now_iso())?;
+            (result, st.take_deferred_embed())
+        };
+        if let Some(work) = work {
+            finish_deferred_embed(&store, &work)?;
+        }
+        Ok(axum::Json(serde_json::to_value(result).map_err(|e| {
+            quipu::Error::Serialization(format!("promotion response: {e}"))
+        })?))
+    })
+    .await
+}
+
 pub(crate) async fn knot(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,

@@ -409,25 +409,25 @@ aegis:verified_by a owl:DatatypeProperty ;
 aegis:canonicalGraphHash a owl:DatatypeProperty ; rdfs:range xsd:string ;
     rdfs:comment "Quipu pack_manifest content_hash: sha256 over lexically sorted N-Triples for graph, shapes, queries and labels; the knowledge-state identity shared across git, OCI and object storage." .
 aegis:shapesBundleVersion a owl:DatatypeProperty ; rdfs:range xsd:string ;
-    rdfs:comment "Named, versioned shapes bundle against which the graph was certified." .
+    rdfs:comment "Stable name and version of the governed shapes bundle against which the graph was validated when its certification seal was issued." .
 aegis:provenanceManifest a owl:ObjectProperty ;
     rdfs:comment "Manifest IRI describing the sources and production lineage of a certified bundle or seal." .
 aegis:publisherAttestation a owl:ObjectProperty ; rdfs:range aegis:PublisherAttestation ;
-    rdfs:comment "The publisher-authorship claim attached to a certified share bundle." .
+    rdfs:comment "The publisher-authorship claim attached to a certified share bundle, independently verifiable with its registered publisher key." .
 aegis:certificationSeal a owl:ObjectProperty ; rdfs:range aegis:KnowledgeCertificationSeal ;
-    rdfs:comment "The independent Quipu conformance seal attached to a certified share bundle." .
+    rdfs:comment "The independent Quipu conformance seal attached to a certified share bundle after shape validation and outward-share scrubbing." .
 aegis:attestsBundle a owl:ObjectProperty ; rdfs:range aegis:CertifiedShareBundle ;
-    rdfs:comment "Bundle whose authorship a publisher attestation claims." .
+    rdfs:comment "Certified share bundle whose authorship and canonical graph hash a publisher attestation cryptographically binds." .
 aegis:certifiesBundle a owl:ObjectProperty ; rdfs:range aegis:CertifiedShareBundle ;
-    rdfs:comment "Bundle whose conformance a Quipu certification seal claims." .
+    rdfs:comment "Certified share bundle whose shape conformance, scrub result, and canonical graph hash a Quipu certification seal binds." .
 aegis:signingKey a owl:ObjectProperty ; rdfs:range aegis:VerifierRegistration ;
-    rdfs:comment "Human-gated registered key used to verify an attestation signature." .
+    rdfs:comment "Human-gated verifier registration naming the public key used to authenticate and verify an attestation signature." .
 aegis:attestationSignature a owl:DatatypeProperty ; rdfs:range xsd:string ;
-    rdfs:comment "Cosign-compatible signature binding the attestation's canonical claim to its registered signing key, allowing offline integrity and publisher verification." .
+    rdfs:comment "Cosign-compatible signature binding the registered signing key to the attestation's canonical claim for independent verification." .
 aegis:shaclReportHash a owl:DatatypeProperty ; rdfs:range xsd:string ;
-    rdfs:comment "Digest of the SHACL conformance report carried by the certification predicate." .
+    rdfs:comment "Content digest of the complete SHACL conformance report, binding a certification seal to the exact validation evidence it summarizes." .
 aegis:scrubCheckPass a owl:DatatypeProperty ; rdfs:range xsd:boolean ;
-    rdfs:comment "True only when the outward-share internal-identifier scrub completed successfully." .
+    rdfs:comment "Boolean certification claim that is true only when the outward-share internal-identifier scrub completed successfully with no prohibited identifiers." .
 aegis:frozenWindow a owl:ObjectProperty ;
     rdfs:comment "Source shuttle window for a certified bundle cut from frozen operational data; omitted by static packs." .
 
