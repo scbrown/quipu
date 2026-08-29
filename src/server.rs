@@ -382,12 +382,12 @@ async fn main() {
 
     if args.iter().any(|a| a == "--embed-backfill") {
         eprintln!("Running embedding backfill for all entities...");
-        let outcome = {
-            let mut s = state.lock();
-            tools::backfill_embeddings(&mut s)
-        };
+        let outcome = tools::backfill_embeddings(&state);
         match outcome {
-            Ok(count) => eprintln!("Backfill complete: {count} entities embedded"),
+            Ok(outcome) => eprintln!(
+                "Backfill complete: {} entities embedded, {} stale snapshots retried",
+                outcome.embedded, outcome.stale_retries
+            ),
             // The flag is an EXPLICIT request for a capability. Serving on
             // without it produced a healthy-looking process whose semantic
             // search silently returned nothing (quipu #53) — the operator
