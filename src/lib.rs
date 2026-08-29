@@ -56,6 +56,8 @@ pub mod shacl_context;
 pub mod share;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_import;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod share_merge;
 pub mod signing;
 pub mod sparql;
 pub mod store;

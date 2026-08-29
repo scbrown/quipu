@@ -169,6 +169,29 @@ is sorted and duplicate-free; the manifest hashes the exact payload bytes and
 uses the anchored transaction timestamp, so unchanged state produces
 byte-identical output.
 
+### `quipu status` and `quipu merge`
+
+Compare an incoming share with local ROOT using the snapshot named by its
+`parent_share`, then reconnect the two histories with an RDF-aware three-way
+merge:
+
+```bash
+quipu status shares/alice-next --db my.db
+quipu merge shares/alice-next --actor reviewer --db my.db
+```
+
+The base snapshot must exist exactly once beneath the incoming share's parent
+directory. Missing or ambiguous lineage is refused. `status` reports additions,
+removals, divergence, and the same structured `DecisionRecord` conflicts that
+`merge` would encounter.
+
+Unconstrained multi-valued predicates use set union. A predicate governed by
+`sh:maxCount` becomes a conflict when the merged cardinality exceeds its bound;
+a delete racing a replacement on `sh:maxCount 1` is also a conflict. Conflicted
+slots are held at their base values and `merge` exits 2 without writing ROOT.
+A clean merge applies assertions and retractions atomically, with both the local
+graph hash and incoming `share_id` recorded as provenance parents.
+
 ### `quipu stats`
 
 Show store statistics.

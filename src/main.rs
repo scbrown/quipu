@@ -12,6 +12,8 @@
 //!   quipu episode <file.json> [--db <path>]  Ingest a structured episode
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
+//!   quipu status <share-dir> [--db <path>]  Report share divergence
+//!   quipu merge <share-dir> [--actor <id>] [--db <path>]  Reconnect a share
 //!   quipu import <share-dir> [--source <uri>] [--actor <id>]  Stage a share
 //!   quipu import promote <share-id> [--actor <id>]  Promote a staged share
 //!   quipu stats [--db <path>]            Show store statistics
@@ -104,6 +106,8 @@ fn main() {
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_pack::cmd_pack(&args, db_path),
         "share" => cli_pack::cmd_share(&args, db_path),
+        "status" => cli_pack::cmd_status(&args, db_path),
+        "merge" => cli_pack::cmd_merge(&args, db_path),
         "import" => cli_pack::cmd_import(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
@@ -294,6 +298,8 @@ COMMANDS:
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--turtle]
+    quipu status <share-dir> [--db <path>]
+    quipu merge <share-dir> [--actor <id>] [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]

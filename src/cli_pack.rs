@@ -178,6 +178,54 @@ pub fn cmd_share(args: &[String], db_path: &str) {
     }
 }
 
+/// `quipu status <share-dir>` — report divergence from the share's parent.
+pub fn cmd_status(args: &[String], db_path: &str) {
+    let dir = args
+        .get(2)
+        .filter(|s| !s.starts_with("--"))
+        .unwrap_or_else(|| {
+            eprintln!("usage: quipu status <share-dir> [--db <path>]");
+            std::process::exit(1);
+        });
+    let store = crate::cli_open::open_store(db_path);
+    match quipu::share_merge::status(&store, std::path::Path::new(dir)) {
+        Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
+        Err(error) => {
+            eprintln!("status error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `quipu merge <share-dir>` — shape-aware three-way reconnect into ROOT.
+pub fn cmd_merge(args: &[String], db_path: &str) {
+    let dir = args
+        .get(2)
+        .filter(|s| !s.starts_with("--"))
+        .unwrap_or_else(|| {
+            eprintln!("usage: quipu merge <share-dir> [--actor <id>] [--db <path>]");
+            std::process::exit(1);
+        });
+    let mut store = crate::cli_open::open_store(db_path);
+    match quipu::share_merge::merge(
+        &mut store,
+        std::path::Path::new(dir),
+        &chrono_now(),
+        flag_value(args, "--actor"),
+    ) {
+        Ok(result) => {
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+            if result.outcome == "conflicts" {
+                std::process::exit(2);
+            }
+        }
+        Err(error) => {
+            eprintln!("merge error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
 /// `quipu import <share-dir>` stages a verified share; promotion is separate.
 pub fn cmd_import(args: &[String], db_path: &str) {
     let mut store = crate::cli_open::open_store(db_path);
