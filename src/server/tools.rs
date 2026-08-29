@@ -363,15 +363,13 @@ pub(crate) async fn validate(
 
 pub(crate) fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Result<usize, String> {
     let provider = store.embedding_provider().ok_or(quipu::NO_PROVIDER_HELP)?;
-    let result = quipu::sparql_query(store, "SELECT DISTINCT ?s WHERE { ?s ?p ?o }")
-        .map_err(|e| format!("{e}"))?;
-    let entity_ids: Vec<i64> = result
-        .rows()
-        .iter()
-        .filter_map(|row| match row.get("s") {
-            Some(quipu::Value::Ref(id)) => Some(*id),
-            _ => None,
-        })
+    // Do not route a whole-store maintenance scan through the SPARQL evaluator:
+    // the production graph exceeds its query budget before embedding starts.
+    let entity_ids: std::collections::BTreeSet<i64> = store
+        .current_facts()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|fact| fact.entity)
         .collect();
     if entity_ids.is_empty() {
         return Ok(0);
@@ -382,6 +380,7 @@ pub(crate) fn backfill_embeddings(store: &mut quipu::Store) -> std::result::Resu
         .as_secs()
         .to_string();
     let mut embedded = 0;
+    let entity_ids: Vec<i64> = entity_ids.into_iter().collect();
     for chunk in entity_ids.chunks(32) {
         let pairs: Vec<(i64, String)> = chunk
             .iter()

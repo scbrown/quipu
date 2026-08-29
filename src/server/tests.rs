@@ -309,6 +309,29 @@ fn backfill_replaces_stale_current_vector() {
     assert_eq!(matches[0].text, "corrected text");
 }
 
+#[test]
+fn backfill_enumerates_subjects_without_sparql() {
+    use quipu::KnowledgeVectorStore as _;
+
+    let batches = Arc::new(parking_lot::Mutex::new(vec![]));
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(RecordingProvider { batches }));
+    store.embedding_config_mut().dimension = 8;
+    quipu::ingest_rdf(
+        &mut store,
+        &b"<http://example.org/a> <http://example.org/p> \"one\" .\n<http://example.org/a> <http://example.org/q> \"two\" .\n<http://example.org/b> <http://example.org/p> \"three\" .\n"[..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(super::tools::backfill_embeddings(&mut store).unwrap(), 2);
+    assert_eq!(store.vector_count().unwrap(), 2);
+}
+
 /// Every local JS module the UI imports must be a registered route AND
 /// reachable without a bearer token, or the page dead-ends on a blank view.
 ///
