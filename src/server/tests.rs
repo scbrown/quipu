@@ -7,7 +7,7 @@ use quipu::{EmbeddingProvider, Store};
 use serde_json::json;
 
 use super::SharedStore;
-use super::base::{STATS_CACHE, StatsCache, metrics_handler, stats};
+use super::base::{STATS_CACHE, StatsCache, export as export_handler, metrics_handler, stats};
 use super::tools::{episode, search};
 
 /// aegis-ibft0 acceptance: prove the HTTP handler's NEGATIVE outcome. A clean
@@ -441,6 +441,37 @@ async fn metrics_does_not_queue_behind_the_writer() {
     .await
     .expect("metrics queued behind the writer instead of using the read pool")
     .expect("metrics failed on a read-only pooled connection");
+    release_tx.send(()).unwrap();
+    thread.join().unwrap();
+}
+
+/// Export is read-only but can serialize tens of megabytes. Holding the writer
+/// for that interval stalls every ingest, so prove the HTTP path completes from
+/// a pooled connection while the writer is deliberately unavailable.
+#[tokio::test(flavor = "current_thread")]
+async fn export_does_not_queue_behind_the_writer() {
+    let (_dir, handle) = pooled_handle(1);
+    let shared = Arc::new(handle);
+    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let holder = shared.clone();
+    let thread = std::thread::spawn(move || {
+        let _writer = holder.lock();
+        locked_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    locked_rx.recv().unwrap();
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        export_handler(
+            State(shared.clone()),
+            axum::Json(json!({"format": "ntriples"})),
+        ),
+    )
+    .await
+    .expect("export queued behind the writer instead of using the read pool")
+    .expect("export failed on a read-only pooled connection");
     release_tx.send(()).unwrap();
     thread.join().unwrap();
 }
