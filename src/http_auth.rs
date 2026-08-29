@@ -38,6 +38,8 @@
 pub const WRITE_ENDPOINTS: &[&str] = &[
     "/knot",
     "/episode",
+    "/import",
+    "/import/promote",
     "/episodes/complete",
     "/retract",
     "/set",

@@ -39,8 +39,8 @@ mod tests;
 mod tools;
 
 use base::{
-    components_js, datalinks_js, export, graph_canvas_js, health, knot, metrics_handler,
-    print_usage, query, stats, three_js, ui, version,
+    components_js, datalinks_js, export, graph_canvas_js, health, import_share, knot,
+    metrics_handler, print_usage, promote_import, query, stats, three_js, ui, version,
 };
 use entity::{
     entity_conneg, entity_history, entity_html, entity_json, entity_turtle_suffix, events_commit,
@@ -419,6 +419,8 @@ async fn main() {
         .route("/metrics", get(metrics_handler))
         .route("/query", post(query))
         .route("/export", post(export))
+        .route("/import", post(import_share))
+        .route("/import/promote", post(promote_import))
         .route("/knot", post(knot))
         .route("/cord", post(cord))
         .route("/graph", post(graph_view))

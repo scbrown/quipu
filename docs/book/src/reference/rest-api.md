@@ -929,6 +929,29 @@ N-Triples output is lexically sorted and duplicate-free. Blank-node dataset
 canonicalization belongs to the share-bundle layer; raw export preserves blank
 node labels.
 
+## Share Import and Composition
+
+### `POST /import`
+
+Verify a v1 share manifest and its exact `export.nt` and `shapes.ttl` payloads,
+then stage the resolved triples in a per-share named graph. Exact canonical-name
+matches are rewritten to local IRIs; fuzzy matches are returned as review
+candidates and never merged automatically. Local loaded shapes remain the
+authority: bundled shapes are evidence only. Off-vocabulary or non-conforming
+data is retained in a quarantine graph and is not eligible for promotion.
+
+The request fields are `manifest`, `export_ntriples`, `shapes_turtle`, `source`,
+and optional `actor`. The response reports `staged`, `quarantined`, or
+`unchanged`, the stable import and graph IRIs, accepted/quarantined counts,
+resolution candidates, the SHACL report, and promotion blockers. This is an
+authenticated write endpoint.
+
+### `POST /import/promote`
+
+Explicitly copy an eligible staging graph into ROOT. The body is
+`{"share_id":"sha256:...","actor":"optional"}`. Quarantined shares have no
+eligible staging graph and are refused. Importing never promotes implicitly.
+
 ## Registries
 
 These mirror their MCP tools (see the [MCP reference](./mcp-tools.md)) —

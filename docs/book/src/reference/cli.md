@@ -703,6 +703,21 @@ it by content hash, deletes the local rows and re-attaches the pack
 read-only; the graph stays queryable at the same IRI and refuses writes
 until `thaw`. `list` prints `iri  class  kind  lifecycle  source` per graph.
 
+### `quipu import`
+
+Stage a git-native share directory without touching ROOT:
+
+```bash
+quipu import ./share --source https://example.org/alice --db my.db
+quipu import promote sha256:0123... --actor reviewer --db my.db
+```
+
+The first command reads `manifest.json`, `export.nt`, and `shapes.ttl`, verifies
+their hashes, resolves exact local identities, surfaces fuzzy review candidates,
+and quarantines facts that fail local vocabulary or SHACL checks. The second is
+the separate, explicit ROOT-admission step and only accepts eligible staged
+shares. Both print the same JSON fields as the REST endpoints.
+
 ### `quipu fork`
 
 Persistent named forks (quipu-gp5): fork ROOT as of any transaction into an

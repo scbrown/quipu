@@ -170,3 +170,63 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         }
     }
 }
+
+/// `quipu import <share-dir>` stages a verified share; promotion is separate.
+pub fn cmd_import(args: &[String], db_path: &str) {
+    let mut store = crate::cli_open::open_store(db_path);
+    let timestamp = chrono_now();
+    if args.get(2).map(String::as_str) == Some("promote") {
+        let share_id = args
+            .get(3)
+            .filter(|s| !s.starts_with("--"))
+            .unwrap_or_else(|| {
+                eprintln!("usage: quipu import promote <share-id> [--actor <id>] [--db <path>]");
+                std::process::exit(1);
+            });
+        let request = quipu::share_import::PromoteImportRequest {
+            share_id: share_id.clone(),
+            actor: flag_value(args, "--actor").map(String::from),
+        };
+        match quipu::share_import::promote_import(&mut store, &request, &timestamp) {
+            Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
+            Err(error) => {
+                eprintln!("import promotion error: {error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+    let dir = args
+        .get(2)
+        .filter(|s| !s.starts_with("--"))
+        .unwrap_or_else(|| {
+            eprintln!(
+                "usage: quipu import <share-dir> [--source <uri>] [--actor <id>] [--db <path>]"
+            );
+            std::process::exit(1);
+        });
+    let read = |name: &str| {
+        std::fs::read_to_string(std::path::Path::new(dir).join(name)).unwrap_or_else(|e| {
+            eprintln!("import error reading {dir}/{name}: {e}");
+            std::process::exit(1);
+        })
+    };
+    let manifest = serde_json::from_str(&read("manifest.json")).unwrap_or_else(|e| {
+        eprintln!("import manifest error: {e}");
+        std::process::exit(1);
+    });
+    let request = quipu::share_import::ShareImportRequest {
+        manifest,
+        export_ntriples: read("export.nt"),
+        shapes_turtle: read("shapes.ttl"),
+        source: flag_value(args, "--source").unwrap_or(dir).to_string(),
+        actor: flag_value(args, "--actor").map(String::from),
+    };
+    match quipu::share_import::import_share(&mut store, &request, &timestamp) {
+        Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
+        Err(error) => {
+            eprintln!("import error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
