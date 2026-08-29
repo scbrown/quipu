@@ -35,7 +35,10 @@ impl Report {
 
 /// Run every self-check. Exits non-zero if any fails.
 pub fn run(params: Params) {
-    let mut r = Report { passed: 0, failed: 0 };
+    let mut r = Report {
+        passed: 0,
+        failed: 0,
+    };
     println!("mergebench --selftest\n");
 
     validator_controls(&mut r);
@@ -78,7 +81,10 @@ fn validator_controls(r: &mut Report) {
             r.check(
                 "validator-negative-control",
                 c.conforms && c.violations == 0,
-                &format!("legal graph: conforms={} violations={}", c.conforms, c.violations),
+                &format!(
+                    "legal graph: conforms={} violations={}",
+                    c.conforms, c.violations
+                ),
             );
             r.check(
                 "validator-positive-control",
@@ -101,7 +107,10 @@ fn determinism(r: &mut Report, params: Params) {
     r.check(
         "determinism",
         same,
-        &format!("two runs at seed {} produced identical scenarios", params.seed),
+        &format!(
+            "two runs at seed {} produced identical scenarios",
+            params.seed
+        ),
     );
 }
 
@@ -161,7 +170,9 @@ fn stable_serialisation_is_stable(r: &mut Report, params: Params) {
                 continue;
             }
             if let Some(subj) = &subject {
-                out.entry(subj.clone()).or_default().push(stripped.to_string());
+                out.entry(subj.clone())
+                    .or_default()
+                    .push(stripped.to_string());
             }
         }
         out
@@ -181,7 +192,9 @@ fn stable_serialisation_is_stable(r: &mut Report, params: Params) {
     let mut shared_subjects = 0usize;
     let mut bad = 0usize;
     for (subject, ours_block) in &o {
-        let Some(theirs_block) = t.get(subject) else { continue };
+        let Some(theirs_block) = t.get(subject) else {
+            continue;
+        };
         shared_subjects += 1;
         if !consistent(ours_block, theirs_block) {
             bad += 1;
@@ -202,12 +215,19 @@ fn stable_serialisation_is_stable(r: &mut Report, params: Params) {
 fn line_merge_availability(r: &mut Report) {
     let available = strategies::git_available();
     let mut g = Graph::new();
-    g.insert(Triple::new(format!("{NS}x"), rdf_type(), iri(&format!("{NS}Entity"))));
+    g.insert(Triple::new(
+        format!("{NS}x"),
+        rdf_type(),
+        iri(&format!("{NS}Entity")),
+    ));
     let outcome = strategies::run("git-canonical", &g, &g, &g);
     r.check(
         "line-merge-availability-is-reported",
         outcome.available == available,
-        &format!("git present={available}, arm reports available={}", outcome.available),
+        &format!(
+            "git present={available}, arm reports available={}",
+            outcome.available
+        ),
     );
 }
 

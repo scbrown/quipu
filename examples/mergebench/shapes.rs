@@ -35,22 +35,43 @@ impl Predicate {
 /// Functional predicates: `sh:maxCount 1`. Divergent values here are the
 /// conflict class the paper is about.
 pub const FUNCTIONAL: &[Predicate] = &[
-    Predicate { name: "label", max_count: Some(1) },
-    Predicate { name: "status", max_count: Some(1) },
-    Predicate { name: "owner", max_count: Some(1) },
-    Predicate { name: "version", max_count: Some(1) },
+    Predicate {
+        name: "label",
+        max_count: Some(1),
+    },
+    Predicate {
+        name: "status",
+        max_count: Some(1),
+    },
+    Predicate {
+        name: "owner",
+        max_count: Some(1),
+    },
+    Predicate {
+        name: "version",
+        max_count: Some(1),
+    },
 ];
 
 /// Multi-valued predicates. Concurrent additions union; no conflict.
 pub const MULTI: &[Predicate] = &[
-    Predicate { name: "note", max_count: None },
-    Predicate { name: "relatedTo", max_count: None },
+    Predicate {
+        name: "note",
+        max_count: None,
+    },
+    Predicate {
+        name: "relatedTo",
+        max_count: None,
+    },
 ];
 
 /// Bounded predicates: multi-valued but capped. Union CAN overflow the bound,
 /// which is a conflict only a shape-aware operator can see — and a post-merge
 /// violation any operator that unions blindly will admit.
-pub const BOUNDED: &[Predicate] = &[Predicate { name: "tag", max_count: Some(4) }];
+pub const BOUNDED: &[Predicate] = &[Predicate {
+    name: "tag",
+    max_count: Some(4),
+}];
 
 /// Every predicate the generator writes.
 #[must_use]
@@ -64,7 +85,10 @@ pub fn all() -> Vec<&'static Predicate> {
 #[must_use]
 pub fn max_count(predicate_iri: &str) -> Option<usize> {
     let local = predicate_iri.strip_prefix(NS)?;
-    all().into_iter().find(|p| p.name == local).and_then(|p| p.max_count)
+    all()
+        .into_iter()
+        .find(|p| p.name == local)
+        .and_then(|p| p.max_count)
 }
 
 /// The shapes graph in Turtle, generated from the tables above so the

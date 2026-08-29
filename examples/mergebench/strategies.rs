@@ -30,7 +30,12 @@ pub struct Outcome {
 
 impl Outcome {
     fn clean(merged: Graph, conflicts: BTreeSet<Slot>) -> Self {
-        Self { merged, conflicts, unparseable_lines: 0, available: true }
+        Self {
+            merged,
+            conflicts,
+            unparseable_lines: 0,
+            available: true,
+        }
     }
 }
 
@@ -65,9 +70,7 @@ pub const ARMS: &[&str] = &[
 #[must_use]
 pub fn run(arm: &str, base: &Graph, ours: &Graph, theirs: &Graph) -> Outcome {
     match arm {
-        "git-turtle-reserialized" => {
-            git_line_merge(base, ours, theirs, Form::TurtleReserialized)
-        }
+        "git-turtle-reserialized" => git_line_merge(base, ours, theirs, Form::TurtleReserialized),
         "git-turtle-stable" => git_line_merge(base, ours, theirs, Form::TurtleStable),
         "git-canonical" => git_line_merge(base, ours, theirs, Form::Canonical),
         "union" => union(ours, theirs),
@@ -171,8 +174,10 @@ fn context_merge(base: &Graph, ours: &Graph, theirs: &Graph) -> Outcome {
         }
         nodes
     };
-    let contended: BTreeSet<String> =
-        touched(ours).intersection(&touched(theirs)).cloned().collect();
+    let contended: BTreeSet<String> = touched(ours)
+        .intersection(&touched(theirs))
+        .cloned()
+        .collect();
 
     let (b, o, t) = (by_slot(base), by_slot(ours), by_slot(theirs));
     let empty = BTreeSet::new();
@@ -353,7 +358,11 @@ fn parse_merge_output(text: &str, base: &Graph, canonical: bool) -> Outcome {
         };
         match parsed {
             LineResult::Triple(t) => {
-                if in_hunk { hunk.insert(t) } else { clean.insert(t) };
+                if in_hunk {
+                    hunk.insert(t)
+                } else {
+                    clean.insert(t)
+                };
             }
             LineResult::Skip => {}
             LineResult::Bad => bad += 1,
@@ -364,7 +373,12 @@ fn parse_merge_output(text: &str, base: &Graph, canonical: bool) -> Outcome {
     let b = by_slot(base);
     let clean_by_slot = by_slot(&clean);
     let merged = assemble(&b, &clean_by_slot, &conflicts);
-    Outcome { merged, conflicts, unparseable_lines: bad, available: true }
+    Outcome {
+        merged,
+        conflicts,
+        unparseable_lines: bad,
+        available: true,
+    }
 }
 
 /// What one line of merge output yielded.
@@ -448,9 +462,13 @@ fn expand_term(tok: &str) -> Option<String> {
         return Some(format!("{}{local}", shapes::NS));
     }
     if let Some(local) = tok.strip_prefix("rdf:") {
-        return Some(format!("http://www.w3.org/1999/02/22-rdf-syntax-ns#{local}"));
+        return Some(format!(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#{local}"
+        ));
     }
-    tok.strip_prefix('<').and_then(|v| v.strip_suffix('>')).map(str::to_string)
+    tok.strip_prefix('<')
+        .and_then(|v| v.strip_suffix('>'))
+        .map(str::to_string)
 }
 
 /// Read an object position: a quoted literal, or an IRI re-bracketed into the

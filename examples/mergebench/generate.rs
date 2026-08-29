@@ -94,21 +94,45 @@ fn base_graph(n: usize, rng: &mut SplitMix64) -> Graph {
     for i in 0..n {
         let s = entity(i);
         g.insert(Triple::new(&s, rdf_type(), iri(&format!("{NS}Entity"))));
-        g.insert(Triple::new(&s, format!("{NS}label"), lit(&format!("entity {i}"))));
+        g.insert(Triple::new(
+            &s,
+            format!("{NS}label"),
+            lit(&format!("entity {i}")),
+        ));
         g.insert(Triple::new(&s, format!("{NS}status"), lit("active")));
-        g.insert(Triple::new(&s, format!("{NS}owner"), iri(&format!("{NS}team{}", i % 5))));
+        g.insert(Triple::new(
+            &s,
+            format!("{NS}owner"),
+            iri(&format!("{NS}team{}", i % 5)),
+        ));
         g.insert(Triple::new(&s, format!("{NS}version"), lit("1")));
         // Two of the four allowed tags: the union of one addition per side
         // stays legal, a second addition per side overflows. The generator
         // does not choose which; the edit stream does.
-        g.insert(Triple::new(&s, format!("{NS}tag"), lit(&format!("t{}", i % 7))));
-        g.insert(Triple::new(&s, format!("{NS}tag"), lit(&format!("t{}", (i + 3) % 7))));
+        g.insert(Triple::new(
+            &s,
+            format!("{NS}tag"),
+            lit(&format!("t{}", i % 7)),
+        ));
+        g.insert(Triple::new(
+            &s,
+            format!("{NS}tag"),
+            lit(&format!("t{}", (i + 3) % 7)),
+        ));
         for k in 0..=(rng.below(2) as usize) {
-            g.insert(Triple::new(&s, format!("{NS}note"), lit(&format!("note {i}.{k}"))));
+            g.insert(Triple::new(
+                &s,
+                format!("{NS}note"),
+                lit(&format!("note {i}.{k}")),
+            ));
         }
         if n > 1 {
             let target = (i + 1 + rng.below(3) as usize) % n;
-            g.insert(Triple::new(&s, format!("{NS}relatedTo"), iri(&entity(target))));
+            g.insert(Triple::new(
+                &s,
+                format!("{NS}relatedTo"),
+                iri(&entity(target)),
+            ));
         }
     }
     g
@@ -185,7 +209,11 @@ fn apply_edits(
             _ => {
                 let alias = format!("{s}_{tag}{k}");
                 g.insert(Triple::new(&alias, rdf_type(), iri(&format!("{NS}Entity"))));
-                g.insert(Triple::new(&alias, format!("{NS}label"), lit(&format!("entity {idx}"))));
+                g.insert(Triple::new(
+                    &alias,
+                    format!("{NS}label"),
+                    lit(&format!("entity {idx}")),
+                ));
                 g.insert(Triple::new(&alias, format!("{NS}status"), lit("active")));
                 aliases.insert(alias, s.clone());
             }
@@ -326,7 +354,13 @@ pub fn scenario(params: Params) -> Scenario {
     let mut theirs = base.clone();
     let mut theirs_aliases = BTreeMap::new();
     let mut rng_t = SplitMix64::new(params.seed ^ 0x0000_0000_0000_00B2);
-    apply_edits(&mut theirs, &mut theirs_aliases, Side::Theirs, params, &mut rng_t);
+    apply_edits(
+        &mut theirs,
+        &mut theirs_aliases,
+        Side::Theirs,
+        params,
+        &mut rng_t,
+    );
 
     let truth = ground_truth(&base, &ours, &theirs, &ours_aliases, &theirs_aliases);
     Scenario {
