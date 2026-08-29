@@ -405,7 +405,10 @@ mod tests {
         crate::share::share(
             store,
             share_dir.to_str().unwrap(),
-            &crate::share::ShareOptions::default(),
+            &crate::share::ShareOptions {
+                no_shapes: true,
+                ..Default::default()
+            },
         )
         .unwrap();
         let read = |name: &str| std::fs::read_to_string(share_dir.join(name)).unwrap();

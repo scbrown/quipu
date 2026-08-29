@@ -122,7 +122,8 @@ pub fn cmd_share(args: &[String], db_path: &str) {
     let output = flag_value(args, "--output").unwrap_or_else(|| {
         eprintln!(
             "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
-             --construct <query>] [--shapes <name>]... [--parent-share <sha256:id>] [--turtle]"
+             --construct <query>] [--shapes <name>]... [--no-shapes] \
+             [--parent-share <sha256:id>] [--turtle]"
         );
         std::process::exit(1);
     });
@@ -150,9 +151,15 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         .filter(|w| w[0] == "--shapes")
         .map(|w| w[1].clone())
         .collect();
+    let no_shapes = args.iter().any(|arg| arg == "--no-shapes");
+    if no_shapes && args.iter().any(|arg| arg == "--shapes") {
+        eprintln!("share accepts either --shapes or --no-shapes, not both");
+        std::process::exit(1);
+    }
     let opts = quipu::share::ShareOptions {
         scope,
         shapes,
+        no_shapes,
         parent_share: flag_value(args, "--parent-share").map(String::from),
         turtle_view: args.iter().any(|arg| arg == "--turtle"),
     };

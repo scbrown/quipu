@@ -73,6 +73,8 @@ pub struct ShareOptions {
     pub scope: ShareScope,
     /// Shape registry entries to concatenate into `shapes.ttl`.
     pub shapes: Vec<String>,
+    /// Explicitly produce a shapes-free share.
+    pub no_shapes: bool,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
@@ -161,9 +163,21 @@ fn export_scope(store: &Store, scope: &ShareScope, format: oxrdfio::RdfFormat) -
     }
 }
 
-fn shapes_bytes(store: &Store, names: &[String]) -> Result<Vec<u8>> {
-    let requested: BTreeSet<&str> = names.iter().map(String::as_str).collect();
+fn shapes_bytes(store: &Store, names: &[String], no_shapes: bool) -> Result<Vec<u8>> {
     let available = store.list_shapes()?;
+    if no_shapes {
+        return Ok(Vec::new());
+    }
+    if available.is_empty() {
+        return Err(Error::InvalidValue(
+            "share: no loaded shape sets; load shapes first or explicitly pass --no-shapes".into(),
+        ));
+    }
+    let requested: BTreeSet<&str> = if names.is_empty() {
+        available.iter().map(|(name, _, _)| name.as_str()).collect()
+    } else {
+        names.iter().map(String::as_str).collect()
+    };
     let mut out = String::new();
     for name in requested {
         let (_, turtle, _) = available
@@ -200,7 +214,7 @@ pub fn share(store: &Store, out_dir: &str, opts: &ShareOptions) -> Result<ShareM
 
     let built = (|| -> Result<ShareManifest> {
         let graph = export_scope(store, &opts.scope, oxrdfio::RdfFormat::NTriples)?;
-        let shapes = shapes_bytes(store, &opts.shapes)?;
+        let shapes = shapes_bytes(store, &opts.shapes, opts.no_shapes)?;
         std::fs::write(build.join("export.nt"), &graph)
             .map_err(|e| Error::Store(format!("share: write export.nt: {e}")))?;
         std::fs::write(build.join("shapes.ttl"), &shapes)
@@ -282,6 +296,13 @@ mod tests {
             None,
         )
         .unwrap();
+        store
+            .load_shapes(
+                "fixture-shapes",
+                "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
+                "2026-08-29",
+            )
+            .unwrap();
         store
     }
 
@@ -399,6 +420,55 @@ mod tests {
         assert!(
             !missing.exists(),
             "a refused share left a partial directory"
+        );
+    }
+
+    #[test]
+    fn defaults_to_all_loaded_shapes_and_refuses_silent_empty_output() {
+        let store = fixture();
+        store
+            .load_shapes(
+                "another-shape",
+                "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
+                "2026-08-29",
+            )
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let out = root.path().join("all-shapes");
+        share(&store, out.to_str().unwrap(), &ShareOptions::default()).unwrap();
+        let text = std::fs::read_to_string(out.join("shapes.ttl")).unwrap();
+        assert!(text.contains("# --- another-shape ---"));
+        assert!(text.contains("# --- fixture-shapes ---"));
+
+        let empty_store = Store::open_in_memory().unwrap();
+        let refused = root.path().join("refused");
+        let error = share(
+            &empty_store,
+            refused.to_str().unwrap(),
+            &ShareOptions::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("no loaded shape sets"));
+        assert!(
+            !refused.exists(),
+            "a refused share left a partial directory"
+        );
+
+        let explicit = root.path().join("explicit-no-shapes");
+        share(
+            &empty_store,
+            explicit.to_str().unwrap(),
+            &ShareOptions {
+                no_shapes: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::metadata(explicit.join("shapes.ttl"))
+                .unwrap()
+                .len(),
+            0
         );
     }
 

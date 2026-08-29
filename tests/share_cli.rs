@@ -18,6 +18,13 @@ fn cli_writes_byte_identical_shares_for_unchanged_state() {
         None,
     )
     .unwrap();
+    store
+        .load_shapes(
+            "fixture-shapes",
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
+            "2026-08-29",
+        )
+        .unwrap();
     drop(store);
 
     let first = root.path().join("first");
@@ -49,4 +56,46 @@ fn cli_writes_byte_identical_shares_for_unchanged_state() {
             "{file} changed although graph state did not"
         );
     }
+}
+
+#[test]
+fn cli_refuses_empty_shapes_unless_explicitly_requested() {
+    let root = tempfile::tempdir().unwrap();
+    let db = root.path().join("empty.db");
+    drop(quipu::Store::open(db.to_str().unwrap()).unwrap());
+
+    let refused = root.path().join("refused");
+    let result = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .args([
+            "share",
+            "--output",
+            refused.to_str().unwrap(),
+            "--db",
+            db.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    assert!(String::from_utf8_lossy(&result.stderr).contains("no loaded shape sets"));
+    assert!(!refused.exists());
+
+    let explicit = root.path().join("explicit");
+    let result = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .args([
+            "share",
+            "--output",
+            explicit.to_str().unwrap(),
+            "--no-shapes",
+            "--db",
+            db.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    assert_eq!(
+        std::fs::metadata(explicit.join("shapes.ttl"))
+            .unwrap()
+            .len(),
+        0
+    );
 }

@@ -156,10 +156,14 @@ quipu share --output next-share --parent-share sha256:abc123 --db my.db
 | `--group-id <id>` | Share entities attributed to one episode group |
 | `--construct <query>` | Share a SPARQL CONSTRUCT or DESCRIBE result |
 | `--shapes <name>` | Include one loaded shape set; repeatable |
+| `--no-shapes` | Explicitly create a shapes-free share |
 | `--parent-share <id>` | Record the prior `share_id` in this lineage |
 | `--turtle` | Add the derived, human-readable `export.ttl` view |
 
-The three scope flags are mutually exclusive and default to ROOT. Required
+The three scope flags are mutually exclusive and default to ROOT. By default,
+the share includes every loaded shape set. An explicit `--shapes` selection
+narrows that set. If no shapes are loaded, the command refuses to produce a
+silent empty bundle unless `--no-shapes` is supplied. Required
 payloads are `export.nt`, `shapes.ttl`, and `manifest.json`. The graph payload
 is sorted and duplicate-free; the manifest hashes the exact payload bytes and
 uses the anchored transaction timestamp, so unchanged state produces

@@ -25,8 +25,11 @@ quipu share --output graph-share
 quipu share --output project-share --group-id project-a --shapes project-shapes --turtle
 ```
 
-Every share contains normative, sorted `export.nt`, `shapes.ttl` (present even
-when empty), and `manifest.json`. The manifest records the stable store id,
+Every share contains normative, sorted `export.nt`, a non-empty `shapes.ttl`,
+and `manifest.json`. By default all loaded shape sets are included; repeat
+`--shapes` to select a subset. A store with no loaded shapes is refused unless
+the producer deliberately requests a shapes-free bundle with `--no-shapes`.
+The manifest records the stable store id,
 transaction anchor, graph and shapes hashes, scope, and optional parent-share
 hash. `--turtle` adds a derived `export.ttl` for people; it is not the graph
 identity. The anchored transaction timestamp—not the wall clock—is used for

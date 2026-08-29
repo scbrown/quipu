@@ -293,7 +293,7 @@ COMMANDS:
     quipu graph import <db> --as <iri> [--db <path>]
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
-    quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--parent-share ID] [--turtle]
+    quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--turtle]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
