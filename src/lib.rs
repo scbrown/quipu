@@ -51,6 +51,8 @@ pub mod semweb;
 pub mod shacl;
 #[cfg(feature = "shacl")]
 pub mod shacl_context;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod share;
 pub mod signing;
 pub mod sparql;
 pub mod store;

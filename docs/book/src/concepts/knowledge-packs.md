@@ -16,6 +16,23 @@ and import. The artifact format *is* the database format — a pack is an
 ordinary Quipu SQLite store with a one-row `pack_manifest` table describing
 itself.
 
+For a git repository, use the complementary **share directory**. A pack is an
+attachable SQLite artifact; a share is the canonical, line-oriented interchange
+surface that makes review and three-way history meaningful:
+
+```bash
+quipu share --output graph-share
+quipu share --output project-share --group-id project-a --shapes project-shapes --turtle
+```
+
+Every share contains normative, sorted `export.nt`, `shapes.ttl` (present even
+when empty), and `manifest.json`. The manifest records the stable store id,
+transaction anchor, graph and shapes hashes, scope, and optional parent-share
+hash. `--turtle` adds a derived `export.ttl` for people; it is not the graph
+identity. The anchored transaction timestamp—not the wall clock—is used for
+`created_at`, so exporting unchanged state with the same options is
+byte-identical. Use `--parent-share sha256:...` when continuing a lineage.
+
 ## What goes in a pack
 
 - **Facts** — the current facts of the source graph, written through the

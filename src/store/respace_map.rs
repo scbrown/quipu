@@ -44,6 +44,8 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transactions", "timestamp", TermIdKind::None),
     ("transactions", "actor", TermIdKind::None),
     ("transactions", "source", TermIdKind::None),
+    ("store_identity", "id", TermIdKind::None),
+    ("store_identity", "store_id", TermIdKind::None),
     ("facts", "e", TermIdKind::Id),
     ("facts", "a", TermIdKind::Id),
     ("facts", "v", TermIdKind::RefBlob),

@@ -4,6 +4,7 @@
 //! moment a [`Store`] exists: the open variants, `init` and its migration
 //! ordering, and the read-only accessors over what was mounted at open.
 
+use ring::rand::{SecureRandom, SystemRandom};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{Store, TermCache, alias, attach, local_term_space, read_model};
@@ -139,6 +140,7 @@ impl Store {
     fn init_with_attachments(conn: Connection, attachments: &[attach::Attachment]) -> Result<Self> {
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(INIT_SQL)?;
+        Self::ensure_store_identity(&conn)?;
         conn.execute_batch(VECTORS_SQL)?;
         // Frozen packs re-attach on every open (deep freeze): read the
         // registry BEFORE attach_all so the caller's attachments and the
@@ -201,6 +203,36 @@ impl Store {
         store.facts_source = facts_source;
         store.resolve_sql = resolve_sql;
         Ok(store)
+    }
+
+    fn ensure_store_identity(conn: &Connection) -> Result<()> {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM store_identity WHERE id = 1)",
+            [],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            let mut bytes = [0_u8; 16];
+            SystemRandom::new()
+                .fill(&mut bytes)
+                .map_err(|_| Error::Store("cannot generate store identity".into()))?;
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            let hex = hex::encode(bytes);
+            let store_id = format!(
+                "urn:uuid:{}-{}-{}-{}-{}",
+                &hex[0..8],
+                &hex[8..12],
+                &hex[12..16],
+                &hex[16..20],
+                &hex[20..32]
+            );
+            conn.execute(
+                "INSERT INTO store_identity (id, store_id) VALUES (1, ?1)",
+                params![store_id],
+            )?;
+        }
+        Ok(())
     }
 
     /// The SQL [`Self::resolve`] runs. Exposed for the test that pins it

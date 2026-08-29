@@ -19,6 +19,17 @@ use crate::vector::KnowledgeVectorStore;
 use crate::vector_delegate::{DelegatingVectorStore, VectorSearchDelegate};
 
 impl Store {
+    /// Stable identity assigned once to this store and preserved on reopen.
+    pub fn store_id(&self) -> Result<String> {
+        self.conn
+            .query_row(
+                "SELECT store_id FROM store_identity WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
     /// Defer auto-embedding: writes collect embed work instead of running the
     /// ONNX embed under the caller's lock. The caller MUST drain with
     /// [`Self::take_deferred_embed`] after each write and finish via

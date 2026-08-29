@@ -139,6 +139,32 @@ quipu export --construct 'CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }' --db my.db
 
 The three scope flags are mutually exclusive. Omit all three for ROOT.
 
+### `quipu share`
+
+Write a deterministic directory intended for git storage and interchange.
+
+```bash
+quipu share --output knowledge-share --db my.db
+quipu share --output project-share --group-id project-a --shapes project-shapes --turtle
+quipu share --output next-share --parent-share sha256:abc123 --db my.db
+```
+
+| Flag | Description |
+|------|-------------|
+| `--output <dir>` | New destination directory (required; an existing path is refused) |
+| `--graph <iri>` | Share one named graph |
+| `--group-id <id>` | Share entities attributed to one episode group |
+| `--construct <query>` | Share a SPARQL CONSTRUCT or DESCRIBE result |
+| `--shapes <name>` | Include one loaded shape set; repeatable |
+| `--parent-share <id>` | Record the prior `share_id` in this lineage |
+| `--turtle` | Add the derived, human-readable `export.ttl` view |
+
+The three scope flags are mutually exclusive and default to ROOT. Required
+payloads are `export.nt`, `shapes.ttl`, and `manifest.json`. The graph payload
+is sorted and duplicate-free; the manifest hashes the exact payload bytes and
+uses the anchored transaction timestamp, so unchanged state produces
+byte-identical output.
+
 ### `quipu stats`
 
 Show store statistics.

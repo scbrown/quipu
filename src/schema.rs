@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     source    TEXT
 );
 
+CREATE TABLE IF NOT EXISTS store_identity (
+    id       INTEGER PRIMARY KEY CHECK (id = 1),
+    store_id TEXT NOT NULL UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS facts (
     e         INTEGER NOT NULL,
     a         INTEGER NOT NULL,

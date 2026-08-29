@@ -116,3 +116,57 @@ pub fn cmd_unpack(args: &[String], db_path: &str) {
         }
     }
 }
+
+/// `quipu share --output <dir>` — write a deterministic, git-native share.
+pub fn cmd_share(args: &[String], db_path: &str) {
+    let output = flag_value(args, "--output").unwrap_or_else(|| {
+        eprintln!(
+            "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
+             --construct <query>] [--shapes <name>]... [--parent-share <sha256:id>] [--turtle]"
+        );
+        std::process::exit(1);
+    });
+    let graph = flag_value(args, "--graph");
+    let group = flag_value(args, "--group-id");
+    let construct = flag_value(args, "--construct");
+    if [graph.is_some(), group.is_some(), construct.is_some()]
+        .into_iter()
+        .filter(|selected| *selected)
+        .count()
+        > 1
+    {
+        eprintln!("share accepts only one of --graph, --group-id, or --construct");
+        std::process::exit(1);
+    }
+    let scope = match (graph, group, construct) {
+        (Some(iri), None, None) => quipu::share::ShareScope::Graph(iri.into()),
+        (None, Some(id), None) => quipu::share::ShareScope::Group(id.into()),
+        (None, None, Some(query)) => quipu::share::ShareScope::Construct(query.into()),
+        (None, None, None) => quipu::share::ShareScope::Root,
+        _ => unreachable!("mutually exclusive share scopes checked above"),
+    };
+    let shapes = args
+        .windows(2)
+        .filter(|w| w[0] == "--shapes")
+        .map(|w| w[1].clone())
+        .collect();
+    let opts = quipu::share::ShareOptions {
+        scope,
+        shapes,
+        parent_share: flag_value(args, "--parent-share").map(String::from),
+        turtle_view: args.iter().any(|arg| arg == "--turtle"),
+    };
+    let store = crate::cli_open::open_store(db_path);
+    match quipu::share::share(&store, output, &opts) {
+        Ok(manifest) => {
+            println!("shared {}", manifest.share_id);
+            println!("  graph_hash: {}", manifest.graph_hash);
+            println!("  tx_anchor:  {}", manifest.tx_anchor);
+            println!("  output:     {output}");
+        }
+        Err(error) => {
+            eprintln!("share error: {error}");
+            std::process::exit(1);
+        }
+    }
+}

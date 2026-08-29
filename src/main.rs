@@ -100,6 +100,7 @@ fn main() {
         "stats" => cli_commands::cmd_stats(db_path),
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_pack::cmd_pack(&args, db_path),
+        "share" => cli_pack::cmd_share(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
         "graph" => cli_graph::cmd_graph(&args, db_path),
@@ -288,6 +289,7 @@ COMMANDS:
     quipu graph import <db> --as <iri> [--db <path>]
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
+    quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--parent-share ID] [--turtle]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
