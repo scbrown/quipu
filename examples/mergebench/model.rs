@@ -29,7 +29,11 @@ pub struct Triple {
 impl Triple {
     /// Build a triple from an IRI subject, IRI predicate, and object term.
     pub fn new(s: impl Into<String>, p: impl Into<String>, o: impl Into<String>) -> Self {
-        Self { s: s.into(), p: p.into(), o: o.into() }
+        Self {
+            s: s.into(),
+            p: p.into(),
+            o: o.into(),
+        }
     }
 
     /// The `(subject, predicate)` slot this triple occupies — the unit a
@@ -70,10 +74,10 @@ impl Triple {
         if !o.starts_with('<') && !o.starts_with('"') {
             return None;
         }
-        let o = o.strip_prefix('<').and_then(|v| v.strip_suffix('>')).map_or_else(
-            || o.to_string(),
-            |iri| format!("<{iri}>"),
-        );
+        let o = o
+            .strip_prefix('<')
+            .and_then(|v| v.strip_suffix('>'))
+            .map_or_else(|| o.to_string(), |iri| format!("<{iri}>"));
         Some(Self::new(s, p, o))
     }
 }
@@ -133,7 +137,13 @@ pub fn to_turtle(g: &Graph, perm: u64) -> String {
     }
     let mut subjects: Vec<&str> = by_subject.keys().copied().collect();
     rotate(&mut subjects, perm);
-    let within = |s: &str| if perm == 0 { 0 } else { perm.wrapping_add(s.len() as u64) };
+    let within = |s: &str| {
+        if perm == 0 {
+            0
+        } else {
+            perm.wrapping_add(s.len() as u64)
+        }
+    };
 
     let mut out = String::from("@prefix bench: <http://example.org/bench#> .\n");
     out.push_str("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n");
@@ -169,7 +179,10 @@ fn rotate<T>(v: &mut [T], seed: u64) {
 /// term that stays long needs its angle brackets (subjects and predicates
 /// arrive bare; objects arrive already bracketed or quoted).
 fn shorten(term: &str, angle: bool) -> String {
-    let bare = term.strip_prefix('<').and_then(|t| t.strip_suffix('>')).unwrap_or(term);
+    let bare = term
+        .strip_prefix('<')
+        .and_then(|t| t.strip_suffix('>'))
+        .unwrap_or(term);
     if let Some(local) = bare.strip_prefix(NS) {
         return format!("bench:{local}");
     }

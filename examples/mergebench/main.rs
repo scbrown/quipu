@@ -33,7 +33,12 @@ fn usage() -> ! {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let mut params = Params { entities: 200, edits_per_side: 200, overlap: 0.5, seed: 42 };
+    let mut params = Params {
+        entities: 200,
+        edits_per_side: 200,
+        overlap: 0.5,
+        seed: 42,
+    };
     let mut out = String::from("benchmark/mergebench/out");
     let mut sweep = false;
     let mut selftest = false;
@@ -103,8 +108,11 @@ fn run_one(params: Params, out: &str) {
         "arms": arms,
     });
     let path = format!("{out}/metrics-seed{}.json", params.seed);
-    std::fs::write(&path, format!("{}\n", serde_json::to_string_pretty(&body).unwrap()))
-        .expect("write metrics");
+    std::fs::write(
+        &path,
+        format!("{}\n", serde_json::to_string_pretty(&body).unwrap()),
+    )
+    .expect("write metrics");
     // The same numbers as a markdown table. Prose that quotes a figure cites
     // THIS file rather than retyping it — a hand-carried number is a number
     // with no command behind it.
@@ -113,7 +121,10 @@ fn run_one(params: Params, out: &str) {
 
     println!(
         "mergebench seed={} entities={} edits={} overlap={}",
-        params.seed, params.entities, params.edits_per_side * 2, params.overlap
+        params.seed,
+        params.entities,
+        params.edits_per_side * 2,
+        params.overlap
     );
     println!("oracle: {} conflicts {by_class:?}\n", scenario.truth.len());
     println!(
@@ -192,8 +203,10 @@ fn results_markdown(scenario: &generate::Scenario, arms: &[score::ArmMetrics]) -
             a.merge_us,
         ));
     }
-    s.push_str("\n## Recall by conflict class\n\nWhich conflicts an arm can SEE, \
-                rather than how many it raises.\n\n| arm |");
+    s.push_str(
+        "\n## Recall by conflict class\n\nWhich conflicts an arm can SEE, \
+                rather than how many it raises.\n\n| arm |",
+    );
     let classes: Vec<&String> = arms
         .first()
         .map(|a| a.recall_by_class.keys().collect())
@@ -230,7 +243,11 @@ fn run_sweep(base: Params, out: &str) {
     let mut rows = Vec::new();
     println!("{:>9} {:>9}  arm timings (us)", "entities", "triples");
     for entities in [50usize, 100, 200, 400, 800, 1600] {
-        let params = Params { entities, edits_per_side: entities, ..base };
+        let params = Params {
+            entities,
+            edits_per_side: entities,
+            ..base
+        };
         let scenario = generate::scenario(params);
         let arms = score::score(&scenario);
         println!(
@@ -250,7 +267,10 @@ fn run_sweep(base: Params, out: &str) {
         }));
     }
     let path = format!("{out}/sweep-seed{}.json", base.seed);
-    std::fs::write(&path, format!("{}\n", serde_json::to_string_pretty(&rows).unwrap()))
-        .expect("write sweep");
+    std::fs::write(
+        &path,
+        format!("{}\n", serde_json::to_string_pretty(&rows).unwrap()),
+    )
+    .expect("write sweep");
     println!("\n-> {path}");
 }

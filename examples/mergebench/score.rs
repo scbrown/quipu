@@ -88,8 +88,7 @@ pub fn score(scenario: &Scenario) -> Vec<ArmMetrics> {
         .iter()
         .map(|arm| {
             let t0 = Instant::now();
-            let outcome =
-                strategies::run(arm, &scenario.base, &scenario.ours, &scenario.theirs);
+            let outcome = strategies::run(arm, &scenario.base, &scenario.ours, &scenario.theirs);
             let merge_us = t0.elapsed().as_micros();
 
             let t1 = Instant::now();
@@ -155,7 +154,10 @@ fn metrics(
             .count();
         recall_by_class.insert(
             class.as_str().to_string(),
-            ClassRecall { declared: *declared, detected },
+            ClassRecall {
+                declared: *declared,
+                detected,
+            },
         );
     }
 

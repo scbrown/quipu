@@ -484,9 +484,16 @@ mod tests {
         assert_eq!(result.outcome, "quarantined");
         assert_eq!(result.triples.quarantined, 1);
         assert_eq!(result.promotion.blockers, vec!["off_vocabulary"]);
-        assert!(promote_import(&mut target, &PromoteImportRequest {
-            share_id: result.share_id,
-            actor: None,
-        }, TS).is_err());
+        assert!(
+            promote_import(
+                &mut target,
+                &PromoteImportRequest {
+                    share_id: result.share_id,
+                    actor: None,
+                },
+                TS
+            )
+            .is_err()
+        );
     }
 }
