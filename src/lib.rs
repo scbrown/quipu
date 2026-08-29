@@ -9,7 +9,7 @@ pub mod context;
 pub mod derivation;
 pub mod embedding;
 pub mod episode;
-pub mod error;
+pub  mod error;
 pub mod governance;
 pub mod graph;
 pub mod graph_view;
