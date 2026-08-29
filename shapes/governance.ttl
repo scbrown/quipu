@@ -24,6 +24,10 @@
 @prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix aegis:  <http://aegis.gastown.local/ontology/> .
+@prefix camayoc: <https://camayoc.dev/ontology#> .
+@prefix ql:     <http://semweb.mmlab.be/ns/ql#> .
+@prefix rml:    <http://semweb.mmlab.be/ns/rml#> .
+@prefix rr:     <http://www.w3.org/ns/r2rml#> .
 
 # ═══════════════════════════════════════════════════════════════════
 # Class hierarchy — reuse the existing governance types (RDFS subclass,
@@ -1087,3 +1091,54 @@ aegis:KnowledgeCertificationSealShape a sh:NodeShape ;
     # Static packs such as core.qpack.db have no window, so this is optional
     # on the generic certified-bundle envelope.
     sh:property [ sh:path aegis:frozenWindow ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
+
+# ═══ Camayoc governed RML/R2RML executor subset (aegis-9r8bp) ═══
+# These are standard RML/R2RML classes, not Camayoc aliases. The constraints
+# mirror Camayoc's implemented executor subset; joins, functions, and dynamic
+# predicates/graphs remain executor-preflight exclusions because this set does
+# not use closed-world SHACL checking.
+
+camayoc:RmlTriplesMapShape a sh:NodeShape ;
+    sh:targetClass rr:TriplesMap ;
+    sh:property [ sh:path rml:logicalSource ; sh:class rml:LogicalSource ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rr:subjectMap ; sh:class rr:SubjectMap ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rr:predicateObjectMap ; sh:class rr:PredicateObjectMap ] ;
+    sh:property [ sh:path rr:graph ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+camayoc:RmlLogicalSourceShape a sh:NodeShape ;
+    sh:targetClass rml:LogicalSource ;
+    sh:property [ sh:path rml:source ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [
+        sh:path rml:referenceFormulation ;
+        sh:in ( ql:CSV ql:JSONPath rr:SQL2008 ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1
+    ] ;
+    sh:property [ sh:path rml:iterator ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rml:query ; sh:datatype xsd:string ; sh:maxCount 1 ] .
+
+camayoc:RmlSubjectMapShape a sh:NodeShape ;
+    sh:targetClass rr:SubjectMap ;
+    sh:xone (
+        [ sh:property [ sh:path rr:constant ; sh:minCount 1 ; sh:maxCount 1 ] ]
+        [ sh:property [ sh:path rml:reference ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ]
+        [ sh:property [ sh:path rr:template ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ]
+    ) ;
+    sh:property [ sh:path rr:class ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rr:termType ; sh:in ( rr:IRI rr:Literal ) ; sh:maxCount 1 ] .
+
+camayoc:RmlPredicateObjectMapShape a sh:NodeShape ;
+    sh:targetClass rr:PredicateObjectMap ;
+    sh:property [ sh:path rr:predicate ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rr:objectMap ; sh:class rr:ObjectMap ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+camayoc:RmlObjectMapShape a sh:NodeShape ;
+    sh:targetClass rr:ObjectMap ;
+    sh:xone (
+        [ sh:property [ sh:path rr:constant ; sh:minCount 1 ; sh:maxCount 1 ] ]
+        [ sh:property [ sh:path rml:reference ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ]
+        [ sh:property [ sh:path rr:template ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ]
+    ) ;
+    sh:property [ sh:path rr:termType ; sh:in ( rr:IRI rr:Literal ) ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rr:datatype ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rr:language ; sh:datatype xsd:string ; sh:maxCount 1 ] .

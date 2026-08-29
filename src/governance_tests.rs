@@ -13,6 +13,51 @@ fn governance_shapes_parse() {
     Validator::from_turtle(SHAPES).expect("governance shapes should parse");
 }
 
+const RML_VALID: &str = r#"
+@prefix ex: <https://example.invalid/rml/> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+ex:map a rr:TriplesMap ; rml:logicalSource ex:source ; rr:subjectMap ex:subject ;
+    rr:predicateObjectMap ex:name ; rr:graph ex:target .
+ex:source a rml:LogicalSource ; rml:source ex:external-truth ;
+    rml:referenceFormulation ql:JSONPath ; rml:iterator "$[*]" .
+ex:subject a rr:SubjectMap ; rr:template "https://example.invalid/entity/{id}" ;
+    rr:class ex:Entity ; rr:termType rr:IRI .
+ex:name a rr:PredicateObjectMap ; rr:predicate ex:nameValue ; rr:objectMap ex:nameObject .
+ex:nameObject a rr:ObjectMap ; rml:reference "name" ; rr:termType rr:Literal .
+"#;
+
+#[test]
+fn camayoc_rml_subset_accepts_complete_mapping() {
+    let fb = validate_shapes(SHAPES, RML_VALID).unwrap();
+    assert!(
+        fb.conforms,
+        "complete RML mapping should conform: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn camayoc_rml_subset_refuses_missing_source_and_double_constructor() {
+    let data = r#"
+@prefix ex: <https://example.invalid/rml/> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+ex:map a rr:TriplesMap ; rml:logicalSource ex:source ; rr:subjectMap ex:subject ; rr:graph ex:target .
+ex:source a rml:LogicalSource ; rml:referenceFormulation ql:JSONPath .
+ex:subject a rr:SubjectMap ; rr:constant ex:fixed ; rr:template "https://example.invalid/entity/{id}" .
+"#;
+    let fb = validate_shapes(SHAPES, data).unwrap();
+    assert!(!fb.conforms, "malformed RML mapping must be refused");
+    assert_eq!(
+        fb.violations, 2,
+        "expected missing source plus xone violations: {:#?}",
+        fb.results
+    );
+}
+
 #[test]
 fn well_formed_workflow_and_step_conform() {
     let data = format!(
