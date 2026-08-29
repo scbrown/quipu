@@ -2,8 +2,6 @@
 
 use std::io::{self, BufRead, Read, Write};
 
-use oxrdfio::RdfFormat;
-
 use crate::cli::{chrono_now, flag_value, format_value, resolve_timestamp};
 
 pub fn cmd_episode(args: &[String], db_path: &str, config_base_ns: &str) {
@@ -293,74 +291,6 @@ pub fn cmd_repl(db_path: &str) {
 
         run_query(&store, trimmed);
         println!();
-    }
-}
-
-pub fn cmd_export(args: &[String], db_path: &str) {
-    let format = args
-        .windows(2)
-        .find(|w| w[0] == "--format")
-        .map_or("ntriples", |w| w[1].as_str());
-
-    let rdf_format = match format {
-        "ntriples" | "nt" => RdfFormat::NTriples,
-        "turtle" | "ttl" => RdfFormat::Turtle,
-        _ => {
-            eprintln!("unknown format: {format} (try: ntriples, turtle)");
-            std::process::exit(1);
-        }
-    };
-
-    // Subset export (quipu #36): `--graph <iri>` pulls one named graph's slice
-    // (or the ROOT default when omitted, which matches the pre-subset behaviour
-    // ONLY when there are no named graphs; with named graphs present, no --graph
-    // still exports every graph flattened, as before).
-    let graph = args
-        .windows(2)
-        .find(|w| w[0] == "--graph")
-        .map(|w| w[1].as_str());
-    let group = args
-        .windows(2)
-        .find(|w| w[0] == "--group-id")
-        .map(|w| w[1].as_str());
-    let construct = args
-        .windows(2)
-        .find(|w| w[0] == "--construct")
-        .map(|w| w[1].as_str());
-
-    if [graph.is_some(), group.is_some(), construct.is_some()]
-        .into_iter()
-        .filter(|selected| *selected)
-        .count()
-        > 1
-    {
-        eprintln!("export accepts only one of --graph, --group-id, or --construct");
-        std::process::exit(1);
-    }
-
-    let store = crate::cli_open::open_store(db_path);
-
-    let exported = match (graph, group, construct) {
-        (Some(iri), None, None) => {
-            quipu::export_rdf_subset(&store, rdf_format, Some(iri)).map(|(bytes, _)| bytes)
-        }
-        (None, Some(group_id), None) => {
-            quipu::export_rdf_group(&store, rdf_format, group_id).map(|(bytes, _)| bytes)
-        }
-        (None, None, Some(query)) => {
-            quipu::export_rdf_construct(&store, rdf_format, query).map(|(bytes, _)| bytes)
-        }
-        (None, None, None) => quipu::export_rdf(&store, rdf_format),
-        _ => unreachable!("mutually exclusive export scopes checked above"),
-    };
-    match exported {
-        Ok(bytes) => {
-            io::stdout().write_all(&bytes).unwrap();
-        }
-        Err(e) => {
-            eprintln!("error exporting: {e}");
-            std::process::exit(1);
-        }
     }
 }
 

@@ -1,4 +1,5 @@
 //! End-to-end contract for the git-native `quipu share` command.
+#![cfg(feature = "shacl")]
 
 use std::process::Command;
 

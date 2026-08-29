@@ -29,6 +29,7 @@ mod cli_audit;
 mod cli_commands;
 mod cli_db;
 mod cli_explain;
+mod cli_export;
 mod cli_fork;
 mod cli_graph;
 mod cli_open;
@@ -96,7 +97,7 @@ fn main() {
         "ontology" => cmd_ontology(&args, db_path),
         "validate" => cli_commands::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
-        "export" => cli_commands::cmd_export(&args, db_path),
+        "export" => cli_export::cmd_export(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_pack::cmd_pack(&args, db_path),

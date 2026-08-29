@@ -41,6 +41,7 @@ pub mod path;
 pub mod proposal;
 pub mod provider;
 pub mod rdf;
+mod rdf_export;
 pub mod reasoner;
 pub mod reconcile;
 pub mod report;
@@ -64,6 +65,8 @@ pub mod vector_delegate;
 pub mod vector_lance;
 pub mod vocabulary;
 pub mod w3c;
+
+pub use rdf_export::{export_rdf_construct, export_rdf_group};
 
 pub use config::{
     AttachmentConfig, EmbeddingConfig, FederationConfig, GovernanceConfig, QuipuConfig,
@@ -134,7 +137,7 @@ pub use provider::{
 };
 #[cfg(feature = "remote")]
 pub use provider::{RemoteProvider, federated_from_config};
-pub use rdf::{export_rdf, export_rdf_construct, export_rdf_group, export_rdf_subset, ingest_rdf};
+pub use rdf::{export_rdf, export_rdf_subset, ingest_rdf};
 #[cfg(feature = "reactive-reasoner")]
 pub use reasoner::reactive::ReactiveReasoner;
 pub use reconcile::{

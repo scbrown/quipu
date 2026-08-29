@@ -154,9 +154,9 @@ fn export_scope(store: &Store, scope: &ShareScope, format: oxrdfio::RdfFormat) -
         ShareScope::Graph(iri) => {
             crate::rdf::export_rdf_subset(store, format, Some(iri)).map(|v| v.0)
         }
-        ShareScope::Group(group) => crate::rdf::export_rdf_group(store, format, group).map(|v| v.0),
+        ShareScope::Group(group) => crate::export_rdf_group(store, format, group).map(|v| v.0),
         ShareScope::Construct(query) => {
-            crate::rdf::export_rdf_construct(store, format, query).map(|v| v.0)
+            crate::export_rdf_construct(store, format, query).map(|v| v.0)
         }
     }
 }
