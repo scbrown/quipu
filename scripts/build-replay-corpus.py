@@ -2,7 +2,9 @@
 """Build the ARM B replay corpus from a live Quipu store.
 
 Extracts the two recorded multi-agent divergence classes as a REPLAYABLE
-fixture, pseudonymised so the artifact carries no deployment identifier:
+fixture, anonymised so the artifact carries no deployment identifier and no way
+to recover one (see Pseudonymiser — "pseudonymised" was once true of this file
+in a sense that did not survive contact with a wordlist):
 
   alias-mint      two names silently minted for one entity, later repaired
                   by an owl:sameAs knot. Each surviving knot is one historical
@@ -15,7 +17,7 @@ never drops triples, so every cardinality the merge operator reasons about
 survives. Run with --verify to prove that on the emitted fixture.
 """
 
-import argparse, hashlib, json, os, re, sys, urllib.request
+import argparse, json, os, re, secrets, sys, urllib.request
 
 # The source store's namespace is deployment-specific and is NOT hardcoded here
 # (this file is public). Override with --namespace or REPLAY_NAMESPACE.
@@ -97,19 +99,40 @@ def classify(a, b):
 # ---- pseudonymisation -----------------------------------------------------
 
 class Pseudonymiser:
-    """Stable, collision-checked, and structure-preserving."""
+    """Stable within a run, collision-checked, structure-preserving — and with
+    NO PREIMAGE, which the first version of this class did not manage.
 
-    def __init__(self, salt):
-        self.salt, self.map, self.used = salt, {}, {}
+    It used to name each entity `sha256(salt + iri)[:10]`, with the salt
+    defaulting to a literal committed a few lines below in this public file. The
+    source namespace was the intended secret half; it appears in 66 files of this
+    repository. Both inputs to the digest therefore shipped with the artifact, so
+    a candidate IRI could be CONFIRMED by recomputing the digest and looking for
+    it in the emitted corpus.
+
+    Measured on the corpus that shipped: a ~60-word hand-typed wordlist recovered
+    41 real entity names — host names, service names, the whole crew roster —
+    from a file whose provenance line said "pseudonymised" and which passed every
+    pattern-matching scrub gate clean. No regex can see this class: there is no
+    forbidden string in the output. The leak is in the FUNCTION, not the bytes.
+
+    So the labels are now drawn from `secrets` and the map is never written down.
+    A digest invites "where is the key"; a random label has no key to find. The
+    cost is that the mapping is not reproducible across runs — which is the
+    property that was doing the damage, and the counts, classes and topology
+    (everything the merge operator and the build report reason about) are
+    identical either way.
+    """
+
+    def __init__(self):
+        self.map, self.used = {}, {}
 
     def name(self, iri, kind):
         if iri in self.map:
-            return self.map[iri]
-        h = hashlib.sha256((self.salt + iri).encode()).hexdigest()[:10]
-        out = PUB + f"{kind}-{h}"
-        prior = self.used.get(out)
-        if prior is not None and prior != iri:
-            raise SystemExit(f"pseudonym collision: {iri} and {prior}")
+            return self.map[iri]                 # stable WITHIN the run
+        while True:
+            out = PUB + f"{kind}-{secrets.token_hex(5)}"
+            if out not in self.used:
+                break
         self.used[out] = iri
         self.map[iri] = out
         return out
@@ -125,13 +148,29 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--endpoint", default=os.environ.get("QUIPU_SERVER", "http://localhost:8080"))
     ap.add_argument("--out", default="benchmark/replay/corpus")
-    ap.add_argument("--salt", default="mergebench-replay-v1")
+    # Accepted only so that an old invocation FAILS LOUDLY instead of silently
+    # doing something different from what it used to. Keeping the flag working
+    # "for compatibility" would preserve exactly the defect it caused: a fixed
+    # salt makes every emitted name confirmable by anyone holding the artifact.
+    ap.add_argument("--salt", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--verify", action="store_true")
     ap.add_argument("--namespace", default=ONT,
                     help="source store entity namespace (deployment-specific)")
     ap.add_argument("--deny-file", default=os.environ.get("REPLAY_DENY_FILE"),
                     help="extra scrub patterns, one regex per line (site-specific names)")
     args = ap.parse_args()
+
+    if args.salt is not None:
+        sys.exit(
+            "build-replay-corpus: --salt is REFUSED and the flag is gone.\n"
+            "  A fixed salt made every emitted name confirmable by anyone holding\n"
+            "  the artifact: the digest was sha256(salt + iri) and both halves\n"
+            "  shipped publicly, so a wordlist recovered 41 real entity names from\n"
+            "  the corpus that was published as 'pseudonymised'.\n"
+            "  Names now come from a CSPRNG and the mapping is discarded. If you\n"
+            "  need a stable mapping across runs, that requirement IS the leak —\n"
+            "  say so on the bead rather than restoring determinism here."
+        )
 
     global NAMESPACE
     NAMESPACE = args.namespace
@@ -164,7 +203,7 @@ def main():
             seen.add(k)
             undirected.append((a, b))
 
-    ps = Pseudonymiser(args.salt)
+    ps = Pseudonymiser()
     os.makedirs(args.out, exist_ok=True)
 
     alias_rows, counts = [], {"id-form": 0, "semantic": 0}

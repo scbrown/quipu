@@ -4,8 +4,9 @@ The honesty record for the divergence benchmark: what was built, what it can
 establish, what it cannot, and which designs were discarded. Read this before
 quoting a number from `RESULTS-seed<N>.md`.
 
-Provenance: plan and novelty ruling on bead `aegis-s9sjf`; this harness is
-`aegis-s9sjf.1`.
+Provenance: built to the project's recorded plan and novelty ruling, as Arm A of
+the evaluation. (Tracker references removed for public release — a private
+tracker id is unresolvable to a reader of this repository.)
 
 ## 1. What the harness does
 
@@ -38,8 +39,8 @@ working at a different granularity would need a different scorer.
 
 **Synthetic edit distribution.** The edit model is uniform over six operations
 and an overlap parameter. Real agent traffic is not uniform. That is Arm B's
-job (`aegis-s9sjf.2`), and no claim about real divergence rates may be sourced
-from this arm.
+job (`benchmark/replay`), and no claim about real divergence rates may be
+sourced from this arm.
 
 ## 3. The circularity, stated rather than managed away
 

@@ -21,7 +21,8 @@ harness's copy of the rules.
 
 ## The corpus
 
-Built by `scripts/build-replay-corpus.py` from the live aegis knowledge graph and
+Built by `scripts/build-replay-corpus.py` from the live aegis knowledge graph,
+anonymised (see the limits section — the first anonymisation was reversible), and
 committed at `benchmark/replay/corpus/corpus.json`.
 
 | quantity | value |
@@ -116,10 +117,32 @@ lineage — but do not use `share_id` as a content identity.
   operator was running and prevented 1,784 doublings.
 - **The comment bodies are synthetic.** Real ones are prose about the deployment.
   Only the *multiplicity* is real, which is all the merge reasons about.
-- **The corpus is pseudonymised.** Names are stable hashes; structure, cardinality
-  and class membership are preserved exactly. Verified injective over 1,076 names,
-  every one matching `entity-<hex>` — so no source identifier can survive by
-  construction, which is a stronger guarantee than the extractor's own scrub gate.
+- **The corpus is anonymised, and it was not always.** Structure, cardinality and
+  class membership are preserved exactly; injectivity is verified over 1,076
+  names, every one matching `entity-<hex>`.
+
+  This bullet used to end "so no source identifier can survive by construction,
+  which is a stronger guarantee than the extractor's own scrub gate." **That was
+  false, and it was false in the reassuring direction.** Names were
+  `sha256(salt + iri)[:10]` with the salt defaulting to a literal committed in
+  the public extractor and the source namespace appearing in 66 files of this
+  repository. Both inputs to the digest therefore shipped with the artifact, so
+  any candidate IRI could be *confirmed* by recomputing the digest and looking
+  for it here. A ~60-word hand-typed wordlist recovered 41 real entity names —
+  host names, service names, the full contributor roster.
+
+  Two things are worth keeping from that. First, "injective over 1,076 names,
+  every one matching `entity-<hex>`" was **true** and was offered as the evidence
+  for a claim it does not support: a bijection to opaque-looking labels says
+  nothing about whether the map can be inverted. Second, no pattern-matching
+  scrub gate could ever have caught it, because there is no forbidden string in
+  the file — which is why the claim survived one.
+
+  Names are now drawn from a CSPRNG and the mapping is discarded at build time,
+  so there is no preimage to recover rather than a key to keep. `python3
+  scripts/reseal-replay-corpus.py --check` re-runs the recovery attempt and is
+  wired into `scripts/arxiv-scrub-gate.sh`; it proves its own oracle against a
+  known-leaking fixture first, so a clean result is not merely a silent one.
 - **A conflict blocks the whole merge, not the conflicting slot.** `merge` returns
   `outcome: conflicts` with `asserted: 0` and writes nothing at all. On the real
   939-subject slice that means a single reconnect would write nothing until every
