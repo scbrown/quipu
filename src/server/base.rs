@@ -530,10 +530,7 @@ pub(crate) async fn share_payload(
     axum::Json(input): axum::Json<quipu::share::SharePayloadRequest>,
 ) -> Result<axum::Json<quipu::share::SharePayload>, AppError> {
     blocking(move || {
-        let limit = input
-            .max_bytes
-            .unwrap_or(quipu::share::SHARE_PAYLOAD_MAX_BYTES)
-            .min(quipu::share::SHARE_PAYLOAD_MAX_BYTES);
+        let limit = input.effective_max_bytes();
         let store = store.read();
         Ok(axum::Json(quipu::share::share_payload(
             &store,
