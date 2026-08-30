@@ -1,0 +1,52 @@
+\section{Limitations}
+\label{sec:limits}
+
+\paragraph{Alias divergence is invisible, and that is a property of the medium.}
+When two writers mint different names for one entity, the graphs disagree about
+the world while agreeing about every triple. No triple-level operator can see
+it, so a recall of $1.000$ is not achievable by anything in Table~\ref{tab:armA}.
+We left the class in the benchmark deliberately: it is the most common real
+divergence defect in the recorded corpus, and excluding it would have produced a
+shape-aware arm scoring $1.000$ on both precision and recall as an artefact of
+what we chose to measure. Resolving it needs entity resolution --- a different
+kind of system, working from labels and neighbourhoods rather than from triples,
+and one whose errors are not obviously cheaper than the ones it prevents.
+
+\paragraph{The $939$ is a counterfactual.} Those doublings arose from sequential
+re-posts through a single write path, not from a share, a divergence and a merge.
+The supported claim is narrow: had the same edits arrived as a divergence and
+been reconciled by this operator, each would have been surfaced as a decision
+instead of silently doubling. It is \emph{not} a claim that the operator was
+running and prevented $1{,}784$ doublings.
+
+\paragraph{Comment bodies in the corpus are synthetic.} Real values are prose
+about a deployment. Only the multiplicity is real --- which is all the merge
+reasons about, but it does mean the corpus cannot support any claim about value
+content.
+
+\paragraph{A conflict blocks the whole merge, not the conflicting slot.} The
+operator returns \texttt{conflicts} with nothing asserted. On a slice like the
+$939$-subject one, a single reconnect writes nothing until every contended slot
+is resolved. This is the conservative choice and it is a real usability cost;
+partial application with a held-back conflict set is future work.
+
+\paragraph{Ground graphs only.} The benchmark's graphs contain no blank nodes,
+so canonicalisation there reduces to sorting. RDFC-1.0 is the substrate we build
+on and is not exercised by this arm; nothing here is evidence about blank-node
+canonicalisation.
+
+\paragraph{Timing is indicative.} One machine, one process, single runs. The
+line-merge arms include process spawn for \texttt{git merge-file}, of order
+$5$\,ms, which dominates their timing at every size measured; those columns are
+not comparable with the in-process arms and we do not report them as if they
+were.
+
+\paragraph{Slot granularity is an assumption.} A conflict is reported over a
+$(subject, predicate)$ slot because that is the unit \texttt{sh:maxCount} is
+declared over. An operator working at another granularity would need a different
+scorer, and the comparison in Table~\ref{tab:armA} would not transfer unchanged.
+
+\paragraph{One deployment.} The recorded corpus comes from a single production
+store. Its class distribution --- alias-mint and functional-value doubling
+dominating --- may not generalise, and we make no claim about divergence rates
+in other systems from it.

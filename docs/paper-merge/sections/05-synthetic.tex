@@ -1,0 +1,100 @@
+\section{Arm A: a synthetic divergence benchmark}
+\label{sec:synthetic}
+
+\paragraph{Design.} One seeded base graph over a synthetic vocabulary is copied
+twice and edited independently --- separate random streams, so neither side's
+edits can be a function of the other's --- under a six-operation model: assert,
+retract, re-describe, re-type, alias-mint, node-add. An overlap parameter
+controls how often an edit targets a contended quarter of the entity set, so
+collision probability is set directly rather than left to chance. Eight
+strategies then merge $(\base, \ours, \theirs)$ and are scored against one
+oracle. There is no language model anywhere in the loop; the writers are
+deterministic, so a run is its own ground truth.
+
+\paragraph{The oracle is a function of published data.} \texttt{ground\_truth}
+takes the three graphs and the shapes and nothing else --- no edit log, no
+generator intent --- so a reader holding only the published inputs recomputes it
+exactly, and a generator bug cannot hide inside it. An instrument control
+asserts precisely that.
+
+\paragraph{The accounting contract.} Every arm answers two questions whose
+answers are in tension. \emph{Human decisions} is the number of slots it refused
+to settle; a refused slot is held at its base value in the output, so no arm can
+flag a conflict \emph{and} land a value for it. \emph{SHACL violations} counts
+violations in what it landed automatically, against the same shapes that defined
+the conflicts --- corruption it admitted without charging anyone. Either can be
+driven to zero by sacrificing the other, so neither is reportable alone.
+\emph{Triples lost} and \emph{triples spurious} are the third leg, and they
+catch the arm that admits no corruption and asks no questions because it
+discarded one side's work.
+
+\paragraph{Results.} Table~\ref{tab:armA} aggregates five seeds
+($1, 7, 42, 99, 2026$) at $200$ entities, $400$ edits per side and overlap
+$0.5$. Regenerate with \texttt{just bench merge --seed <N>}; instrument controls
+with \texttt{just bench merge --selftest} ($7$ properties, non-zero exit on any
+failure).
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{lrrrrrr}
+\toprule
+arm & decisions & precision & recall & SHACL & lost & spurious \\
+\midrule
+\texttt{git-turtle-reserialized} & 681--794 & 0.006--0.011 & 0.36--0.80 & 0--1 & 266--299 & 62--71 \\
+\texttt{git-turtle-stable}       & 41--59   & 0.049--0.119 & 0.20--0.70 & 0--3 & 39--57   & 12--24 \\
+\texttt{git-canonical}           & 106--144 & 0.028--0.057 & 0.30--0.70 & 0--3 & 95--128  & 18--31 \\
+\texttt{union}                   & 0        & ---          & 0.00       & 53--72 & 2--7   & 112--136 \\
+\texttt{lww-theirs}              & 0        & ---          & 0.00       & 0--1 & 7--16    & 4--10 \\
+\texttt{triple-3way}             & 0        & ---          & 0.00       & 3--6 & 2--7     & 7--17 \\
+\ctx                             & 159--182 & 0.025--0.046 & 0.50--0.80 & 0    & 128--150 & 63--72 \\
+\op                              & 4--8     & \textbf{1.000} & 0.50--0.80 & \textbf{0} & \textbf{0} & \textbf{0} \\
+\bottomrule
+\end{tabular}
+\caption{Eight strategies, five seeds, ranges across seeds. Recall is bounded
+above by $1$ minus the alias-mint fraction for \emph{every} arm
+(\S\ref{sec:limits}). The line-merge arms shell out to real \texttt{git
+merge-file}; where git is absent they report \emph{unavailable}, never zero.}
+\label{tab:armA}
+\end{table}
+
+Three readings matter.
+
+\paragraph{The comparison with the nearest neighbour is not about detection.}
+Summed over the five seeds the oracle contains $54$ conflicts, of which $21$ are
+alias-mint and $33$ are visible at triple level. \op raised exactly those $33$,
+with zero false positives at every individual seed. \ctx raised the
+\emph{same} $33$ --- identical recall, seed by seed --- and $812$ others, for
+$845$ questions in total. The schema does not find conflicts the node-overlap
+heuristic misses. It distinguishes the ones that need a person from the $812$
+that do not, which is a $25.6\times$ difference in the quantity the operator is
+actually spending: attention.
+
+\paragraph{The zero columns are not all worth the same.} \texttt{union},
+\texttt{lww-theirs} and \texttt{triple-3way} each report $0$ human decisions, and
+none of them resolved anything. \texttt{union} admitted $53$--$72$ SHACL
+violations. \texttt{lww-theirs} admitted almost none --- and silently dropped
+$7$--$16$ triples and fabricated $4$--$10$, which is what last-writer-wins looks
+like when you count what it discarded rather than what it complained about. Only
+\op holds all three at zero while still asking.
+
+\paragraph{A hypothesis of ours did not survive.} We predicted that
+canonicalisation alone would materially beat non-canonical line merge. Against
+the re-serialised arm it does: unparseable output lines go from $116$--$169$ to
+$0$. Against a \emph{stably} serialised Turtle file it does not.
+\texttt{git-canonical} raises \emph{more} conflicts ($106$--$144$) than
+\texttt{git-turtle-stable} ($41$--$59$), because sorting scatters each subject's
+triples into one sorted run where two sides' additions land adjacent and collide,
+whereas subject-grouped Turtle absorbed them into a block. The honest statement
+is narrower than the hypothesis: canonicalisation buys syntactic integrity and
+independence from serialisation order, and it does not by itself reduce conflict
+count. It is a trade, and we report it as one.
+
+\paragraph{The circularity, stated rather than managed away.} \op and the oracle
+both read the same shapes graph, and for the triple-visible classes their rules
+coincide by construction. \op's precision of $1.000$ on this arm is therefore a
+property of the design, not evidence about it. We do not repair this by making
+the oracle cleverer, which would only move the coincidence somewhere less
+visible. We handle it by reporting per-class results so a reader can see which
+rows are definitional, by confining this arm's contribution to the \emph{cost of
+the alternatives}, and by taking correctness evidence from \S\ref{sec:replay},
+where the operator under test is the shipped one and disagreement is a finding.

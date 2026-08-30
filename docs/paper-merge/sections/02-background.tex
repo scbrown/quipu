@@ -1,0 +1,40 @@
+\section{Background}
+\label{sec:background}
+
+\paragraph{The unit of change.} An RDF graph is a set of triples. Two
+serialisations of one graph may differ in every byte --- Turtle groups by
+subject, N-Triples does not, and neither fixes an order within a group. A diff
+over serialised text therefore reports differences that do not exist in the
+data. Taking the triple as the unit of change removes that entire category:
+a three-way merge becomes set algebra over $(\base, \ours, \theirs)$, and no
+result depends on how any side chose to write its file.
+
+Blank nodes are the exception, since they have no stable name across
+serialisations. RDFC-1.0 (formerly URDNA2015) assigns canonical labels and makes
+graph-level equality decidable. Our operator sits on top of that substrate; the
+benchmark in \S\ref{sec:synthetic} uses ground graphs only, so it does not
+exercise blank-node canonicalisation and is not evidence about it.
+
+\paragraph{Where conflict comes from.} Set algebra alone answers only part of
+the question. If both sides add a triple, the union holds both. That is correct
+for a person's email addresses and wrong for their date of birth, and nothing in
+the triples distinguishes the two cases. The distinction is in the schema: a
+SHACL shape with \texttt{sh:maxCount 1} on a property path states that the slot
+holds at most one value. A merge that unions into such a slot has not resolved
+the divergence; it has produced a graph that violates the very constraint the
+store enforces on ordinary writes.
+
+This gives a conflict predicate with three properties we care about. It is
+\emph{declared}, not inferred from edit patterns. It is \emph{already present},
+because the shapes are what the store validates against. And it is
+\emph{auditable}, because the same shapes graph can be run over the merge output
+--- so the definition of a conflict and the test for a bad resolution are one
+artefact rather than two that can drift apart.
+
+\paragraph{Shares.} The operator reconciles \emph{share bundles}: a directory
+holding a canonical N-Triples export, the shapes that govern it, and a manifest
+carrying a content hash of the graph and the identifier of the share it was
+derived from. The parent pointer is what supplies $\base$, so fork-point
+anchoring is by content hash rather than by wall-clock time or by a
+centrally-issued sequence number. Two peers who have never spoken can therefore
+establish a common ancestor from the bundles alone.

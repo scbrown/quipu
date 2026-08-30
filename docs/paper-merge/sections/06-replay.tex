@@ -1,0 +1,91 @@
+\section{Arms B and C: recorded divergence, shipped operator}
+\label{sec:replay}
+
+The synthetic arm can measure what the alternatives cost. It cannot be evidence
+that our operator is correct, because its oracle and its operator share a
+definition. This arm removes that circularity twice over: the corpus is
+\emph{recorded} production divergence rather than generated, and the operator
+under test is the shipped \texttt{share\_merge} driven through real bundles.
+Here a disagreement between operator and expectation is a finding rather than a
+harness bug.
+
+\paragraph{The corpus.} Extracted from a live multi-agent knowledge graph in
+which software agents and people had been writing concurrently for months, and
+committed as a fixture. Entity names are replaced by random labels and the
+mapping is discarded at build time; structure, cardinality and class membership
+are preserved exactly, and injectivity is verified over the $1{,}076$ names.
+Two divergence classes were recorded.
+
+\emph{Alias-mint}: two names silently minted for one entity, later repaired by a
+person asserting \texttt{owl:sameAs}. There are $171$ raw \texttt{sameAs} edges,
+which reduce to $105$ distinct undirected repairs ($66$ edges were one repair
+recorded twice). Each is one repair a person actually performed --- the
+manual-effort baseline. \textbf{The class splits, and the split matters}: $52$
+of the $105$ are \emph{id-form}, two spellings of the same commit identifier,
+which a normalisation rule could retire without asking anyone; the other $53$
+are two English phrasings of one concept, where nothing but a person can decide.
+Reporting $105$ as one undifferentiated ``human decisions'' figure would
+overstate the irreducible cost roughly twofold.
+
+\emph{Comment-double}: a \texttt{sh:maxCount 1} description predicate that the
+production append path doubled instead of replacing --- $939$ affected subjects
+carrying $1{,}784$ excess values.
+
+\paragraph{Results.} Table~\ref{tab:armB} reports the replay. Regenerate with
+\texttt{cargo run --example replay --features shacl}.
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{lrrl}
+\toprule
+scenario & decisions & historical & outcome \\
+\midrule
+\texttt{alias-id-form}   & 0   & 46 & merged --- \textbf{false negative} \\
+\texttt{alias-semantic}  & 0   & 47 & merged --- \textbf{false negative} \\
+\texttt{comment-double}  & 939 & 0  & conflicts --- raised as decisions \\
+\texttt{sameas-repair}   & 0   & 20 & merged --- repair survives (wanted) \\
+\bottomrule
+\end{tabular}
+\caption{Recorded divergence replayed against the shipped operator. $12$ pairs
+($6$ id-form, $6$ semantic) were excluded as \emph{chained} --- sharing an
+endpoint with another pair --- because including them measures an incidental
+collision on the shared endpoint rather than alias detection.}
+\label{tab:armB}
+\end{table}
+
+\paragraph{The operator is blind to the entire alias class: $0$ of $93$.} This
+reproduces the synthetic arm's $0$ of $4$ on data nobody generated for the
+purpose, and it is the honest false-negative column. Two names for one entity is
+invisible to \emph{any} triple-level operator, shape-aware included; no schema
+fixes it, because it is a limit of the medium the operator works in.
+
+\paragraph{The operator raises $939$ decisions on a class production surfaced
+none of.} The same class produced $1{,}784$ silent excess values through the
+append path. This is a counterfactual and must be read as one
+(\S\ref{sec:limits}).
+
+\paragraph{A repair survives a concurrent edit.} \texttt{owl:sameAs} carries no
+cardinality constraint, so a repair asserted on one side unions rather than
+racing an edit to the aliased node on the other. A merge that could drop repairs
+would make the repair path itself unreliable, so this outcome is the wanted one
+rather than an incidental one.
+
+\paragraph{The negative control.} Rerunning with the description predicate's
+\texttt{maxCount} unbound takes \texttt{comment-double} from $939$ decisions to
+$0$, everything merging cleanly. The decisions are therefore \emph{shape-derived}
+--- not manufactured by the harness --- and this control arm doubles as the
+closest thing to a simulation of the production append path: it reproduces the
+doubling. That is the paper's thesis stated as an experiment. Unbind the
+constraint and the conflict ceases to exist; the schema is what made it one.
+
+\paragraph{Arm C: share, diverge, reconnect.} A case study walks the full
+lifecycle on a real bundle and verifies all eight hops: share a base bundle;
+a peer publishes a divergent share naming it as parent; we edit locally; status
+before reconnect reports \texttt{diverged} with $+40$ triples each side and $0$
+conflicts; the merge asserts $40$ and retracts $0$; the transaction records two
+parents; both sides' work is present afterwards ($40/40$ each); and status after
+reconnect reports nothing outstanding. One detail is worth carrying: the graph
+hash is stable across runs while the share identifier is not, because the
+manifest embeds a timestamp. Fork-point anchoring depends on the graph hash, so
+lineage is unaffected --- but a share identifier must not be used as a content
+identity.

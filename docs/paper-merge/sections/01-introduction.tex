@@ -1,0 +1,62 @@
+\section{Introduction}
+
+A knowledge graph that more than one writer can edit will diverge, and something
+has to put it back together. The obvious move is to reuse the tooling that
+already solves this for source code: keep the graph in a file, keep the file in
+git, and let a line merge reconcile two versions.
+
+That move fails in a specific and instructive way. A line merge understands a
+document as an ordered sequence of lines, and a graph is neither ordered nor a
+sequence. Two writers who add unrelated facts about the same entity produce
+adjacent edits and a textual conflict. Two writers who re-serialise the same
+unchanged graph produce a diff of everything. Meanwhile a writer who sets a
+second value on a property the ontology says holds exactly one --- the change
+that genuinely cannot be reconciled without a decision --- produces a clean,
+conflict-free merge, because the two values live on different lines and nothing
+in the file says they compete.
+
+The failure is not that line merge is bad at graphs. It is that conflict is a
+\emph{semantic} property of the data model, and a line merge is being asked to
+infer it from a syntactic one. Our position is that an RDF merge should take
+conflict from the place the data model already defines it: the schema.
+
+\paragraph{This paper.} We describe an operator with two halves. Triples are
+canonicalised and merged as sets, so serialisation order cannot manufacture a
+conflict. A SHACL shapes graph then decides which slots the set algebra is
+allowed to settle on its own: where a shape declares \texttt{sh:maxCount 1} and
+the two sides carry different values, the operator refuses and records a
+decision; everywhere else, it unions. Because the shapes are already present ---
+they are what validates writes into the store --- the merge policy is not a
+second configuration to keep in step with the ontology. It \emph{is} the
+ontology.
+
+\paragraph{What we are not claiming.} Three-way merge over canonicalised RDF is
+not new, and we searched before writing. Quit Store~\cite{arndt2019quit} places
+RDF under git with merge strategies, including a Context Merge that reconciles
+by node overlap; TerminusDB offers diff and patch over a versioned graph; RDF
+Patch and LD Patch standardise change description; RDFC-1.0 gives canonical
+labelling for graphs with blank nodes, which we build on rather than beside. To
+our knowledge --- and scoped to that search --- what has not been reported is an
+evaluation of \emph{SHACL-derived} conflict semantics against those neighbours
+in a deployed system. That evaluation is the contribution, and the framing of
+the operator as an extension of Context Merge rather than a replacement for it
+is deliberate.
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item A three-way merge operator over canonical triples whose conflict
+        predicate is derived from SHACL cardinality, with post-merge validation
+        against the same shapes, implemented in a production store
+        (\S\ref{sec:operator}, \S\ref{sec:impl}).
+  \item A divergence benchmark with an oracle recomputable by a reader from
+        published data alone, scoring eight strategies under one accounting
+        contract, and a result that contradicts one of our own hypotheses
+        (\S\ref{sec:synthetic}).
+  \item A replay of recorded multi-agent divergence from a production graph
+        against the shipped operator, which reproduces the synthetic arm's
+        blind spot on real data and quantifies the benefit on a class that
+        production surfaced nothing of (\S\ref{sec:replay}).
+  \item A stated limit --- alias divergence is invisible to triple-level merge
+        --- reported as a measured false-negative column rather than excluded
+        from the benchmark (\S\ref{sec:limits}).
+\end{enumerate}

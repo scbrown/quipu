@@ -1,0 +1,55 @@
+\section{Related work}
+\label{sec:related}
+
+\paragraph{Git-backed RDF versioning.} Quit Store~\cite{arndt2019quit} is the
+closest neighbour and the reason this paper makes no priority claim. It places
+RDF under git, versions quads with commit-level provenance, and supplies merge
+strategies --- including a Context Merge that reconciles by node overlap. The
+triple-set framing of three-way merge is present there; we are not introducing
+it.
+
+Our delta is where the conflict predicate comes from. Context Merge derives
+contention from the \emph{shape of the change} --- whether the two sides touched
+overlapping context. We derive it from the \emph{shape of the data}, as declared
+in SHACL. The consequence is measurable rather than rhetorical, and it is the
+central result of \S\ref{sec:synthetic}: across five seeds the two approaches
+detect an identical set of $33$ triple-visible conflicts, and the context
+heuristic asks $845$ questions where cardinality asks $33$. Overlap is a good
+proxy for ``these edits are related''. It is a poor proxy for ``these edits
+cannot both be true'', and only the second needs a person. We therefore position
+this operator as an extension of that line of work: the algebra is theirs, the
+conflict predicate is the contribution.
+
+\paragraph{Diff and patch over versioned graphs.} TerminusDB~\cite{terminusdb} provides diff and
+patch over a versioned graph store. RDF Patch and LD Patch standardise the
+description of change sets. These solve the representation and transport of a
+delta; they are complementary to, and do not decide, what makes two deltas
+irreconcilable.
+
+\paragraph{Canonicalisation.} W3C RDF Dataset Canonicalization~\cite{rdfc2024} (RDFC-1.0,
+formerly URDNA2015) gives deterministic labelling of blank nodes and hence
+decidable graph equality. We build directly on it: it is what makes ``the same
+triple'' well defined across two independently serialised bundles, and it is a
+substrate rather than a competitor. R43ples~\cite{graube2014r43ples} and archiving systems such as
+OSTRICH address efficient storage and querying of revision histories, a
+different problem from reconciling two live divergent copies.
+
+\paragraph{Convergent replicated types.} CRDT constructions for RDF, such as
+SU-Set~\cite{ibanez2012suset}, guarantee convergence without coordination. They and this operator make
+opposite trades deliberately. A CRDT resolves every case automatically, which
+requires that some rule always picks a winner; for a functional predicate whose
+two values are both asserted in good faith, any such rule silently discards
+somebody's knowledge. We would rather stop and ask, and accept that this means
+a merge can fail. Where automatic convergence is required, a CRDT is the right
+tool and this is not; where the graph is a shared record of what is believed to
+be true, a silently dropped assertion is the more expensive failure. Operational
+transformation has the same shape of trade in a different lineage.
+
+\paragraph{Schema-aware merging elsewhere.} Ontology alignment and matching
+address a related question --- reconciling different conceptualisations --- but
+operate on schema-to-schema correspondence rather than on three-way
+reconciliation of instance data under a shared schema. Structured merge tools
+for source code (semi-structured and AST merges) share our motivation exactly:
+raise the merge above lines to the level at which the medium defines conflict.
+Our claim is the RDF instance of that principle, with SHACL supplying the
+structure.

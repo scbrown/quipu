@@ -1,0 +1,27 @@
+\section{Conclusion}
+
+Merging knowledge graphs by merging their text asks a line-oriented tool to
+infer a semantic property, and it fails in both directions: it manufactures
+conflicts from serialisation order and misses the divergences that genuinely
+cannot be reconciled automatically. Taking the canonical triple as the unit of
+change removes the first failure entirely. Taking the conflict predicate from a
+SHACL shapes graph addresses the second, and does so without adding a policy
+that has to be maintained alongside the ontology --- because it \emph{is} the
+ontology, and the same shapes then audit the result.
+
+The evaluation supports a narrow claim, which is the one we make. Against the
+nearest neighbour, schema-derived conflict semantics do not detect more: they
+detect the same $33$ triple-visible conflicts across five seeds while asking
+$33$ questions rather than $845$, with no triples lost, none fabricated and no
+constraint violations admitted. Replaying $105$ real repairs and $939$ real
+duplicate-value incidents against the shipped operator reproduces that benefit
+on data nobody generated for the purpose --- and reproduces the blind spot too:
+alias divergence is invisible to triple-level merge, $0$ of $93$, and no schema
+will fix it.
+
+Two directions follow. Partial application would let a merge land its
+uncontended slots and hold back only the contended ones, removing the cost
+noted in \S\ref{sec:limits}. And the alias class, which dominates the recorded
+corpus and which this operator cannot see, is where entity resolution would have
+to meet merge --- with the open question being whether its errors are cheaper
+than the divergence it repairs.

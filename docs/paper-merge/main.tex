@@ -1,0 +1,60 @@
+% Shape-Aware Three-Way Merge for RDF Knowledge Graphs
+%
+% The SECOND paper in this repository. docs/paper/ is the Quipu store paper
+% ("A Governed Bitemporal Knowledge Graph Store"); this is a separate work with
+% its own build recipe: `just paper-merge`.
+%
+% Every number traces to benchmark/mergebench/ (Arm A) or benchmark/replay/
+% (Arms B and C). Read those directories' BUILD_REPORT.md before quoting one:
+% they are the honesty records, and one of the plan's own hypotheses does not
+% survive Arm A.
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{xspace}
+
+\newcommand{\sys}{Quipu\xspace}
+\newcommand{\op}{\textsc{shape-aware}\xspace}
+\newcommand{\ctx}{\textsc{context-merge}\xspace}
+\newcommand{\base}{G_{b}}
+\newcommand{\ours}{G_{o}}
+\newcommand{\theirs}{G_{t}}
+
+\title{\textbf{Shape-Aware Three-Way Merge for RDF Knowledge Graphs}\\
+\large The schema defines the conflict: an implementation and evaluation}
+\author{Steve Brown\thanks{\textsc{orcid}
+\href{https://orcid.org/0009-0009-1720-1785}{\nolinkurl{0009-0009-1720-1785}}.
+With implementation and drafting assistance from Claude (Anthropic).
+\textbf{Artifact availability:} the merge operator, the divergence benchmark
+(\texttt{benchmark/mergebench/}) and the recorded-divergence replay corpus
+(\texttt{benchmark/replay/}) behind every number reported here are in the
+development repository, \texttt{github.com/scbrown/quipu}. Each result table
+names the command that regenerates it.}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\input{sections/00-abstract}
+\input{sections/01-introduction}
+\input{sections/02-background}
+\input{sections/03-operator}
+\input{sections/04-implementation}
+\input{sections/05-synthetic}
+\input{sections/06-replay}
+\input{sections/07-limitations}
+\input{sections/08-related}
+\input{sections/09-conclusion}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

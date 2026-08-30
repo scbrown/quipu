@@ -1,0 +1,34 @@
+\section{Implementation}
+\label{sec:impl}
+
+The operator ships in \sys, a governed bitemporal RDF store, as
+\texttt{share\_merge} (approximately 480 lines of Rust). It exposes two entry
+points. \texttt{status} loads an incoming bundle, resolves the common ancestor
+through the manifest's parent pointer, and reports what each side added and
+removed together with the contended slots --- without writing anything, so a
+peer can be inspected before it is merged. \texttt{merge} performs the algebra
+of \S\ref{sec:operator} and commits, recording both parent share identifiers on
+the transaction.
+
+Three implementation choices are worth naming because they affect what the
+evaluation can claim.
+
+\paragraph{The shapes come from the bundle, not the store.} Cardinality is read
+from the shapes carried inside the share being merged, not from the local
+store's copy. A peer's constraints therefore travel with its data, and merging
+does not silently reinterpret their graph under our schema.
+
+\paragraph{Conflict is reported at slot granularity, with its evidence.} A
+\texttt{DecisionRecord} carries the subject, the predicate, the declared
+\texttt{maxCount}, and the base, ours and theirs value sets. The person
+resolving it is not told that a conflict exists and left to find it; they are
+told which constraint made it one and what the three candidate states were.
+
+\paragraph{The evaluated operator is the shipped one.} The benchmark of
+\S\ref{sec:synthetic} contains its own reference implementation of every arm,
+including ours, so that all eight are scored under one accounting contract. The
+replay of \S\ref{sec:replay} deliberately does \emph{not}: it drives
+\texttt{share\_merge::\{status,merge\}} through real bundles built by the
+production share path. This matters because a benchmark's copy of an operator
+can agree with a benchmark's copy of an oracle for reasons that have nothing to
+do with the deployed system.

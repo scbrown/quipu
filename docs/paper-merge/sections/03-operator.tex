@@ -1,0 +1,57 @@
+\section{The operator}
+\label{sec:operator}
+
+Let $\base$, $\ours$ and $\theirs$ be sets of canonical triples, and let $S$ be a
+SHACL shapes graph. A \emph{slot} is a pair $(s, p)$ of subject and predicate;
+we write $G[s,p] = \{\, o : (s,p,o) \in G \,\}$ for the values a graph carries in
+a slot. The slot is the unit of conflict because it is the unit
+\texttt{sh:maxCount} is declared over.
+
+\paragraph{Additions and removals.} Each side's change relative to the base is
+$A_x = G_x \setminus \base$ and $R_x = \base \setminus G_x$ for $x \in
+\{o, t\}$. These are exact: no heuristic decides whether a triple was
+``modified'' rather than removed and re-added, because at triple granularity
+there is no such distinction to make.
+
+\paragraph{Functional slots.} Let $\mathit{max}_S(s,p)$ be the maximum
+cardinality $S$ declares for $p$ on $s$, or $\infty$ where none is declared. A
+slot is \emph{contended} when
+\[
+  \mathit{max}_S(s,p) = 1
+  \;\wedge\;
+  \ours[s,p] \neq \theirs[s,p]
+  \;\wedge\;
+  \ours[s,p] \neq \base[s,p]
+  \;\wedge\;
+  \theirs[s,p] \neq \base[s,p].
+\]
+Both sides must have moved. If only one side changed a functional slot, the
+other side's value is still the base value, there is no disagreement, and the
+change applies --- a merge that stopped to ask about it would be charging a
+person for a decision nobody needs to make.
+
+\paragraph{The merge.} If any slot is contended, the operator returns
+\texttt{conflicts} and writes nothing; each contended slot is reported with its
+base, ours and theirs values, and the declared cardinality that made it a
+conflict. Otherwise the result is
+\[
+  G_m \;=\; \bigl( \ours \cup \theirs \bigr) \setminus \bigl( R_o \cup R_t \bigr),
+\]
+a retraction on either side being honoured against the other side's retained
+triples. The transaction records \emph{both} parent share identifiers, so the
+merge is itself provenance: the lineage of a merged graph is inspectable in the
+same way a merge commit's is.
+
+\paragraph{Two properties worth stating.} The operator never lands a value for a
+slot it flagged --- a conflicted merge writes nothing at all --- so it cannot
+score well by both refusing a decision and quietly resolving it. And because
+$G_m$ is defined by set operations over canonical triples, it is commutative in
+$\ours$ and $\theirs$ and independent of serialisation.
+
+\paragraph{Post-merge validation.} $G_m$ is validated against $S$. This is not
+belt-and-braces: it is the falsifiable form of the design claim. If conflict
+semantics really are derivable from cardinality, then a merge that consulted the
+shapes should not be able to produce a graph those same shapes reject. Any
+violation in $G_m$ is corruption the operator admitted without charging anyone
+for it, and \S\ref{sec:synthetic} reports that column for every strategy
+precisely so the claim can fail.
