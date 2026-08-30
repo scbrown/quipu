@@ -46,7 +46,7 @@ would overstate the irreducible cost by about a factor of two.
 
 ## Results
 
-```
+```text
 scenario         decisions historical   outcome
 alias-id-form            0         46    merged     FALSE NEGATIVE
 alias-semantic           0         47    merged     FALSE NEGATIVE
@@ -76,7 +76,7 @@ hazard and are reported rather than dropped.
 
 `--negative-control` reruns everything with `rdfs:comment` unbound:
 
-```
+```text
 comment-double           0          0    merged
 ```
 
@@ -92,7 +92,7 @@ silent on the alias class) and exits non-zero on failure.
 
 `--case-study` walks the lifecycle on a real bundle and verifies every hop:
 
-```
+```text
 1. SHARE base bundle          share_id sha256:…  graph_hash sha256:476d6…
 2. DIVERGE peer publishes     parent = the base share_id
 3. DIVERGE we edit locally
