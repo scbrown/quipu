@@ -160,6 +160,23 @@ pub enum AccessDecision {
     ReadOnly,
 }
 
+/// Server-established identity attached to an authenticated write request.
+///
+/// The shared bearer is deliberately not a crew identity. Until session
+/// attestation lands, writes using it receive this explicit legacy principal
+/// instead of trusting an actor supplied in the request body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthenticatedPrincipal(&'static str);
+
+impl AuthenticatedPrincipal {
+    pub const LEGACY_SHARED_BEARER: Self = Self("legacy-shared-bearer");
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
+}
+
 /// Decide whether a request may proceed.
 ///
 /// Reads (`is_write == false`) are always allowed. Writes are rejected when the

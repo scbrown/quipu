@@ -510,13 +510,22 @@ async fn main() {
                         .get(axum::http::header::AUTHORIZATION)
                         .and_then(|v| v.to_str().ok())
                         .map(str::to_string);
-                    match quipu::http_auth::authorize(
+                    let decision = quipu::http_auth::authorize(
                         is_write,
                         read_only,
                         auth_token.as_deref(),
                         auth_header.as_deref(),
-                    ) {
-                        quipu::http_auth::AccessDecision::Allow => next.run(req).await,
+                    );
+                    match decision {
+                        quipu::http_auth::AccessDecision::Allow => {
+                            let mut req = req;
+                            if is_write && auth_token.is_some() {
+                                req.extensions_mut().insert(
+                                    quipu::http_auth::AuthenticatedPrincipal::LEGACY_SHARED_BEARER,
+                                );
+                            }
+                            next.run(req).await
+                        }
                         // BOTH refusals carry a JSON body, and that is the whole
                         // point of aegis-zodg0. `StatusCode::into_response()`
                         // yields a bare status with a ZERO-LENGTH body, so

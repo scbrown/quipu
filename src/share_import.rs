@@ -114,6 +114,13 @@ fn import_id(share_id: &str) -> Result<String> {
     Ok(format!("urn:quipu:import:event:{}", hash_suffix(share_id)?))
 }
 
+fn provenance_source(prefix: &str, id: &str, claim: Option<&str>) -> String {
+    claim.map_or_else(
+        || format!("{prefix}:{id}"),
+        |actor| format!("{prefix}:{id}:claimed-actor={actor}"),
+    )
+}
+
 fn verify_request(request: &ShareImportRequest) -> Result<()> {
     if request.manifest.schema != SCHEMA_V1 {
         return Err(Error::InvalidValue(format!(
@@ -288,6 +295,7 @@ pub fn import_share(
     store: &mut Store,
     request: &ShareImportRequest,
     timestamp: &str,
+    authenticated_actor: Option<&str>,
 ) -> Result<ShareImportResult> {
     verify_request(request)?;
     let mut triples = parse_triples(&request.export_ntriples)?;
@@ -320,10 +328,11 @@ pub fn import_share(
             RdfFormat::NTriples,
             None,
             timestamp,
-            request.actor.as_deref(),
-            Some(&format!(
-                "share-import:{}:{}",
-                request.source, request.manifest.share_id
+            authenticated_actor,
+            Some(&provenance_source(
+                &format!("share-import:{}", request.source),
+                &request.manifest.share_id,
+                request.actor.as_deref(),
             )),
             graph,
         )?;
@@ -360,6 +369,7 @@ pub fn promote_import(
     store: &mut Store,
     request: &PromoteImportRequest,
     timestamp: &str,
+    authenticated_actor: Option<&str>,
 ) -> Result<PromoteImportResult> {
     let graph_iri = staging_graph(&request.share_id, false)?;
     let graph = store.lookup(&graph_iri)?.ok_or_else(|| {
@@ -381,8 +391,12 @@ pub fn promote_import(
         RdfFormat::NTriples,
         None,
         timestamp,
-        request.actor.as_deref(),
-        Some(&format!("share-promotion:{}", request.share_id)),
+        authenticated_actor,
+        Some(&provenance_source(
+            "share-promotion",
+            &request.share_id,
+            request.actor.as_deref(),
+        )),
     )?;
     Ok(PromoteImportResult {
         outcome: "promoted".into(),
@@ -436,7 +450,7 @@ mod tests {
         ).unwrap();
         let (_dir, request) = request(&source);
         let mut target = Store::open_in_memory().unwrap();
-        let staged = import_share(&mut target, &request, TS).unwrap();
+        let staged = import_share(&mut target, &request, TS, Some("legacy-shared-bearer")).unwrap();
         assert_eq!(staged.outcome, "staged");
         assert!(staged.promotion.eligible);
         assert!(target.lookup(&staged.staging_graph).unwrap().is_some());
@@ -448,10 +462,44 @@ mod tests {
                 actor: Some("reviewer".into()),
             },
             TS,
+            Some("legacy-shared-bearer"),
         )
         .unwrap();
         assert_eq!(promoted.outcome, "promoted");
         assert_eq!(promoted.triples, 1);
+        let transactions = target.list_transactions().unwrap();
+        let import_tx = transactions
+            .iter()
+            .find(|tx| {
+                tx.source
+                    .as_deref()
+                    .is_some_and(|s| s.starts_with("share-import:"))
+            })
+            .unwrap();
+        assert_eq!(import_tx.actor.as_deref(), Some("legacy-shared-bearer"));
+        assert!(
+            import_tx
+                .source
+                .as_deref()
+                .unwrap()
+                .contains("claimed-actor=alice")
+        );
+        let promotion_tx = transactions
+            .iter()
+            .find(|tx| {
+                tx.source
+                    .as_deref()
+                    .is_some_and(|s| s.starts_with("share-promotion:"))
+            })
+            .unwrap();
+        assert_eq!(promotion_tx.actor.as_deref(), Some("legacy-shared-bearer"));
+        assert!(
+            promotion_tx
+                .source
+                .as_deref()
+                .unwrap()
+                .contains("claimed-actor=reviewer")
+        );
     }
 
     #[test]
@@ -460,7 +508,7 @@ mod tests {
         let (_dir, mut request) = request(&source);
         request.export_ntriples.push_str("# tampered\n");
         let mut target = Store::open_in_memory().unwrap();
-        assert!(import_share(&mut target, &request, TS).is_err());
+        assert!(import_share(&mut target, &request, TS, None).is_err());
         assert!(
             target
                 .lookup(&staging_graph(&request.manifest.share_id, false).unwrap())
@@ -483,7 +531,7 @@ mod tests {
         ).unwrap();
         let (_dir, request) = request(&source);
         let mut target = Store::open_in_memory().unwrap();
-        let result = import_share(&mut target, &request, TS).unwrap();
+        let result = import_share(&mut target, &request, TS, None).unwrap();
         assert_eq!(result.outcome, "quarantined");
         assert_eq!(result.triples.quarantined, 1);
         assert_eq!(result.promotion.blockers, vec!["off_vocabulary"]);
@@ -494,7 +542,8 @@ mod tests {
                     share_id: result.share_id,
                     actor: None,
                 },
-                TS
+                TS,
+                None,
             )
             .is_err()
         );

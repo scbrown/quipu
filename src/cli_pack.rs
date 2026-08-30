@@ -242,7 +242,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             share_id: share_id.clone(),
             actor: flag_value(args, "--actor").map(String::from),
         };
-        match quipu::share_import::promote_import(&mut store, &request, &timestamp) {
+        match quipu::share_import::promote_import(&mut store, &request, &timestamp, None) {
             Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
             Err(error) => {
                 eprintln!("import promotion error: {error}");
@@ -277,7 +277,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         source: flag_value(args, "--source").unwrap_or(dir).to_string(),
         actor: flag_value(args, "--actor").map(String::from),
     };
-    match quipu::share_import::import_share(&mut store, &request, &timestamp) {
+    match quipu::share_import::import_share(&mut store, &request, &timestamp, None) {
         Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
         Err(error) => {
             eprintln!("import error: {error}");
