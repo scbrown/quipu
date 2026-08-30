@@ -964,6 +964,31 @@ impl Store {
     /// "Still referenced" is deliberately broad — subject or object of any
     /// surviving fact. A node reachable by any edge must stay findable by name.
     fn identity_orphans(&self, in_scope: &[Fact], source_tag: &str) -> Result<Vec<IdentityOrphan>> {
+        let started = crate::time::Stopwatch::start();
+        let limit_ms = self.search_config().query_timeout_ms;
+        let deadline = (limit_ms > 0).then(|| crate::time::Deadline::after_millis(limit_ms));
+        self.identity_orphans_until(in_scope, source_tag, started, deadline)
+    }
+
+    pub(super) fn identity_orphans_until(
+        &self,
+        in_scope: &[Fact],
+        source_tag: &str,
+        started: crate::time::Stopwatch,
+        deadline: Option<crate::time::Deadline>,
+    ) -> Result<Vec<IdentityOrphan>> {
+        let check_deadline = || {
+            if deadline.is_some_and(|dl| dl.passed()) {
+                return Err(crate::error::Error::QueryTimeout {
+                    elapsed_ms: started.elapsed_ms(),
+                    limit_ms: deadline
+                        .map(|dl| dl.millis_from(&started))
+                        .unwrap_or_default(),
+                });
+            }
+            Ok(())
+        };
+        check_deadline()?;
         let (label_id, type_id) = self.identity_predicate_ids()?;
         if label_id.is_none() && type_id.is_none() {
             return Ok(Vec::new());
@@ -979,6 +1004,10 @@ impl Store {
 
         let mut orphans = Vec::new();
         for entity in entities {
+            // This is internal write planning, not SPARQL, but it runs while
+            // the caller owns the sole writer mutex. Apply the same configured
+            // budget so a future bad plan cannot park every writer for hours.
+            check_deadline()?;
             // Would the entity still be referenced at all once this episode's
             // facts are gone? If not, it leaves the graph whole — not a ghost.
             if !self.has_surviving_reference(entity, source_tag)? {
@@ -1011,14 +1040,30 @@ impl Store {
     /// `source_tag`'s transaction(s)?
     fn has_surviving_reference(&self, entity: i64, source_tag: &str) -> Result<bool> {
         let as_object = Value::Ref(entity).to_bytes();
-        let mut stmt = self.conn.prepare(
+        // Keep subject and object probes separate. The former is covered by
+        // idx_geav; the latter by the partial idx_active_vge. Combining them as
+        // `(f.e = ? OR f.v = ?)` made SQLite abandon both access paths and
+        // full-scan `facts` once PER candidate entity. A large snapshot /knot
+        // therefore spent hours in identity_orphans while holding the sole
+        // writer mutex (aegis-ffeud, captured in a live gdb backtrace).
+        let mut subject = self.conn.prepare(
             "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
              WHERE f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
-               AND (f.e = ?1 OR f.v = ?2) \
-               AND (t.source IS NULL OR t.source <> ?3) \
+               AND f.e = ?1 \
+               AND (t.source IS NULL OR t.source <> ?2) \
              LIMIT 1",
         )?;
-        Ok(stmt.exists(params![entity, as_object, source_tag])?)
+        if subject.exists(params![entity, source_tag])? {
+            return Ok(true);
+        }
+        let mut object = self.conn.prepare(
+            "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
+             WHERE f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
+               AND f.v = ?1 \
+               AND (t.source IS NULL OR t.source <> ?2) \
+             LIMIT 1",
+        )?;
+        Ok(object.exists(params![as_object, source_tag])?)
     }
 
     /// Does `entity` carry an active `predicate` fact from outside `source_tag`?

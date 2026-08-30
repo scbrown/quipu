@@ -1017,6 +1017,58 @@ fn named_graph_migration_is_additive_and_defaults_existing_facts_to_root() {
 }
 
 #[test]
+fn active_object_reference_probe_uses_the_reverse_value_index() {
+    // aegis-ffeud: identity_orphans called the old `(f.e = ? OR f.v = ?)`
+    // predicate once per snapshot entity. With no value-leading index SQLite
+    // full-scanned the multi-GB facts log each time, holding the global writer
+    // mutex for hours. Pin the reverse-reference arm to an indexed plan; a
+    // functional retraction test alone stays green while taking 2.5 hours.
+    let store = Store::open_in_memory().unwrap();
+    let ref_value = Value::Ref(42).to_bytes();
+    let mut stmt = store
+        .conn
+        .prepare(
+            "EXPLAIN QUERY PLAN \
+             SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
+             WHERE f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
+               AND f.v = ?1 \
+               AND (t.source IS NULL OR t.source <> ?2) \
+             LIMIT 1",
+        )
+        .unwrap();
+    let details: Vec<String> = stmt
+        .query_map(params![ref_value, "snapshot:probe"], |row| row.get(3))
+        .unwrap()
+        .map(|row| row.unwrap())
+        .collect();
+    assert!(
+        details.iter().any(|d| d.contains("idx_active_vge")),
+        "reverse-reference probe must use idx_active_vge, plan={details:?}"
+    );
+    assert!(
+        !details.iter().any(|d| d.contains("SCAN f")),
+        "reverse-reference probe must not full-scan facts, plan={details:?}"
+    );
+}
+
+#[test]
+fn identity_orphan_planning_obeys_the_store_query_budget() {
+    let store = Store::open_in_memory().unwrap();
+    let err = store
+        .identity_orphans_until(
+            &[],
+            "snapshot:probe",
+            crate::time::Stopwatch::start(),
+            Some(crate::time::Deadline::after_millis(0)),
+        )
+        .unwrap_err();
+    assert!(
+        matches!(err, crate::Error::QueryTimeout { limit_ms: 0, .. }),
+        "expected an immediate timeout, got {err}"
+    );
+}
+
+#[test]
 fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
     // Regression for aegis-akb8. The test above calls migrate_named_graphs()
     // DIRECTLY, so it never runs schema::INIT_SQL first — and INIT_SQL is where
