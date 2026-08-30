@@ -151,6 +151,13 @@ gate() {
     say "           (a PROJECTION of the policy graph — regenerate with"
     say "            goldblum policy/emit-scrub-config.py; if the graph has"
     say "            gained a pattern since, this gate is behind it)"
+    say "           REGENERATE FROM A CHECKOUT YOU HAVE JUST FETCHED, and run"
+    say "           the pre-push guard's --selftest afterwards. A stale copy of"
+    say "           that emitter writes a config whose private-IP arm matches"
+    say "           NOTHING under grep -E, and it exits 0 saying it wrote the"
+    say "           file. Measured 2026-08-30: this line said only \"goldblum\","
+    say "           the obvious checkout was 426 commits behind, and following"
+    say "           this very instruction disabled an arm of the live guard."
   else
     say "  CANNOT TELL — no usable pattern config at $CONF."
     say "  A publication gate that cannot read the policy has nothing to say"

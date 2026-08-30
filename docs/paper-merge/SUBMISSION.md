@@ -100,14 +100,24 @@ takes one or the other.
 | policy projection | the gate was run against the config that the pre-push guard's own selftest **passes**; see the note below |
 
 **Note on the policy projection, because it is the one thing a reader should not
-take on trust.** Regenerating the pattern config from the live graph on
-2026-08-30 produced a config that **breaks its consumers** — the graph's private-
-IPv4 pattern contains `\d`, which `grep -E` reads as a literal `d`. The gate
-caught it and refused to report (exit 2, "CONTROL FAILED"); the pre-push guard's
-selftest caught it too. The working projection was restored and re-verified by
-selftest before the gate result above was taken. The emitter defect is tracked
-separately; it does not affect this artifact, and the gate result above is from a
-run whose instrument was control-proven.
+take on trust.** Regenerating the pattern config on 2026-08-30 produced a config
+that **breaks its consumers**: the private-IPv4 arm contained `\d`, which
+`grep -E` reads as a literal `d`, so it matched nothing. The gate caught it and
+refused to report (exit 2, "CONTROL FAILED"); the pre-push guard's selftest
+caught it independently. The working config was restored and re-verified by
+selftest — failing under the bad config, passing under the good one, both
+observed — before the gate result above was taken.
+
+The cause was **not** a defect in the generator. It was that the generator was
+run from a checkout 426 commits behind its origin; the current one translates the
+construct and refuses to emit anything `grep -E` would misread. The installed
+config was then proven byte-identical to a fresh generation from current source,
+so the projection behind the verdict above is current, not merely working.
+
+None of this touches the artifact. It is recorded because "the gate passed" is
+worth exactly as much as the instrument behind it, and for four minutes that
+instrument was provably dead — which is the situation this gate's controls exist
+to make visible rather than survivable.
 
 ---
 
