@@ -1,0 +1,388 @@
+//! Session workload attestation shared by HTTP writes and knowledge shares.
+//!
+//! This module is deliberately transport-neutral. A protected caller-owned
+//! registry supplies the session binding; the verifier selects one canonical
+//! payload builder by an explicit domain tag and consumes a nonce only after
+//! every binding and signature check succeeds.
+
+#![cfg(not(target_arch = "wasm32"))]
+
+use std::collections::{HashMap, HashSet};
+use std::sync::Mutex;
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Error, Result};
+use crate::share::sha256;
+
+pub const WRITE_V1: &str = "quipu-write-v1";
+pub const SHARE_V1: &str = "quipu-share-v1";
+
+/// Server-protected binding installed by a trusted introducer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionBinding {
+    pub agent: String,
+    pub session: String,
+    pub public_key: String,
+    pub key_id: String,
+    pub introducer: String,
+    pub issued_at_epoch: u64,
+    pub expires_at_epoch: u64,
+    pub revoked: bool,
+}
+
+impl SessionBinding {
+    pub fn new(
+        agent: impl Into<String>,
+        session: impl Into<String>,
+        public_key: impl Into<String>,
+        introducer: impl Into<String>,
+        issued_at_epoch: u64,
+        expires_at_epoch: u64,
+    ) -> Result<Self> {
+        let public_key = public_key.into();
+        let raw = hex::decode(&public_key)
+            .map_err(|_| Error::InvalidValue("session public key is not lowercase hex".into()))?;
+        if public_key != public_key.to_ascii_lowercase() || raw.len() != 32 {
+            return Err(Error::InvalidValue(
+                "session public key must be 32-byte lowercase hex".into(),
+            ));
+        }
+        if expires_at_epoch <= issued_at_epoch {
+            return Err(Error::InvalidValue(
+                "session binding expiry must follow issuance".into(),
+            ));
+        }
+        Ok(Self {
+            agent: agent.into(),
+            session: session.into(),
+            key_id: sha256(&raw),
+            public_key,
+            introducer: introducer.into(),
+            issued_at_epoch,
+            expires_at_epoch,
+            revoked: false,
+        })
+    }
+}
+
+/// External signature envelope carried beside the application payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttestationEnvelope {
+    pub version: String,
+    pub key_id: String,
+    pub session: String,
+    pub introducer: String,
+    pub issued_at_epoch: u64,
+    pub nonce: String,
+    pub signature: String,
+}
+
+/// Fields uniquely binding one HTTP mutation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WriteBinding<'a> {
+    pub method: &'a str,
+    pub path: &'a str,
+    pub content_type: &'a str,
+    pub body_sha256: &'a str,
+}
+
+/// Fields uniquely binding one validated v1 share manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShareBinding<'a> {
+    pub share_id: &'a str,
+    pub graph_hash: &'a str,
+    pub shapes_hash: &'a str,
+    pub tx_anchor: i64,
+}
+
+/// The only two application payloads accepted by the common verifier.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SignedBinding<'a> {
+    Write(WriteBinding<'a>),
+    Share(ShareBinding<'a>),
+}
+
+impl SignedBinding<'_> {
+    #[must_use]
+    pub const fn version(&self) -> &'static str {
+        match self {
+            Self::Write(_) => WRITE_V1,
+            Self::Share(_) => SHARE_V1,
+        }
+    }
+}
+
+/// Identity Quipu may stamp after successful verification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifiedPrincipal {
+    pub agent: String,
+    pub session: String,
+    pub key_id: String,
+    pub introducer: String,
+}
+
+/// Protected session and replay state. It is not graph-writable.
+#[derive(Debug, Default)]
+pub struct BindingRegistry {
+    bindings: Mutex<HashMap<String, SessionBinding>>,
+    nonces: Mutex<HashSet<(String, String)>>,
+}
+
+impl BindingRegistry {
+    pub fn register(&self, binding: SessionBinding) -> Result<()> {
+        let mut bindings = self.bindings.lock().expect("binding registry poisoned");
+        match bindings.get(&binding.session) {
+            Some(existing) if existing == &binding => Ok(()),
+            Some(_) => Err(Error::InvalidValue(format!(
+                "conflicting session binding: {}",
+                binding.session
+            ))),
+            None => {
+                if bindings.values().any(|b| b.key_id == binding.key_id) {
+                    return Err(Error::InvalidValue(format!(
+                        "session public key already bound: {}",
+                        binding.key_id
+                    )));
+                }
+                bindings.insert(binding.session.clone(), binding);
+                Ok(())
+            }
+        }
+    }
+
+    pub fn revoke(&self, session: &str) -> Result<()> {
+        let mut bindings = self.bindings.lock().expect("binding registry poisoned");
+        let binding = bindings
+            .get_mut(session)
+            .ok_or_else(|| Error::InvalidValue(format!("unbound session: {session}")))?;
+        binding.revoked = true;
+        Ok(())
+    }
+
+    pub fn verify(
+        &self,
+        envelope: &AttestationEnvelope,
+        payload: &SignedBinding<'_>,
+        now_epoch: u64,
+        allowed_skew_secs: u64,
+    ) -> Result<VerifiedPrincipal> {
+        validate_envelope(envelope, payload)?;
+        let binding = self
+            .bindings
+            .lock()
+            .expect("binding registry poisoned")
+            .get(&envelope.session)
+            .cloned()
+            .ok_or_else(|| Error::InvalidValue("unbound attestation session".into()))?;
+        if binding.revoked {
+            return Err(Error::InvalidValue("revoked attestation session".into()));
+        }
+        if now_epoch > binding.expires_at_epoch || now_epoch < binding.issued_at_epoch {
+            return Err(Error::InvalidValue(
+                "expired or not-yet-valid session binding".into(),
+            ));
+        }
+        if envelope.key_id != binding.key_id || envelope.introducer != binding.introducer {
+            return Err(Error::InvalidValue(
+                "attestation does not match protected session binding".into(),
+            ));
+        }
+        if envelope.issued_at_epoch.abs_diff(now_epoch) > allowed_skew_secs {
+            return Err(Error::InvalidValue(
+                "attestation issuance is outside the accepted clock window".into(),
+            ));
+        }
+        let message = canonical_message(envelope, payload);
+        if !crate::signing::verify_hex(&binding.public_key, &message, &envelope.signature) {
+            return Err(Error::InvalidValue(
+                "attestation signature does not verify".into(),
+            ));
+        }
+        let replay_key = (binding.session.clone(), envelope.nonce.clone());
+        if !self
+            .nonces
+            .lock()
+            .expect("nonce registry poisoned")
+            .insert(replay_key)
+        {
+            return Err(Error::InvalidValue("attestation nonce replay".into()));
+        }
+        Ok(VerifiedPrincipal {
+            agent: binding.agent,
+            session: binding.session,
+            key_id: binding.key_id,
+            introducer: binding.introducer,
+        })
+    }
+}
+
+fn validate_envelope(envelope: &AttestationEnvelope, payload: &SignedBinding<'_>) -> Result<()> {
+    if envelope.version != payload.version() {
+        return Err(Error::InvalidValue(format!(
+            "attestation domain mismatch: envelope={} payload={}",
+            envelope.version,
+            payload.version()
+        )));
+    }
+    if envelope.nonce.len() != 32
+        || envelope.nonce != envelope.nonce.to_ascii_lowercase()
+        || !envelope.nonce.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return Err(Error::InvalidValue(
+            "attestation nonce must be 128-bit lowercase hex".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Deterministic bytes selected by the explicit application-domain tag.
+#[must_use]
+pub fn canonical_message(envelope: &AttestationEnvelope, payload: &SignedBinding<'_>) -> Vec<u8> {
+    let common = format!(
+        "key_id={}\nsession={}\nintroducer={}\nissued_at={}\nnonce={}\n",
+        envelope.key_id,
+        envelope.session,
+        envelope.introducer,
+        envelope.issued_at_epoch,
+        envelope.nonce
+    );
+    match payload {
+        SignedBinding::Write(write) => format!(
+            "{WRITE_V1}\n{common}method={}\npath={}\ncontent_type={}\nbody_sha256={}\n",
+            write.method, write.path, write.content_type, write.body_sha256
+        )
+        .into_bytes(),
+        SignedBinding::Share(share) => format!(
+            "{SHARE_V1}\n{common}share_id={}\ngraph_hash={}\nshapes_hash={}\ntx_anchor={}\n",
+            share.share_id, share.graph_hash, share.shapes_hash, share.tx_anchor
+        )
+        .into_bytes(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ring::rand::SystemRandom;
+    use ring::signature::{Ed25519KeyPair, KeyPair};
+
+    use super::*;
+
+    const NOW: u64 = 1_800_000_000;
+    const NONCE: &str = "0123456789abcdef0123456789abcdef";
+
+    fn fixture() -> (BindingRegistry, Ed25519KeyPair, SessionBinding) {
+        let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
+        let key = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
+        let binding = SessionBinding::new(
+            "urn:agent:malcolm",
+            "session-1",
+            hex::encode(key.public_key().as_ref()),
+            "creel-extension:key-1",
+            NOW - 60,
+            NOW + 60,
+        )
+        .unwrap();
+        let registry = BindingRegistry::default();
+        registry.register(binding.clone()).unwrap();
+        (registry, key, binding)
+    }
+
+    fn share<'a>() -> SignedBinding<'a> {
+        SignedBinding::Share(ShareBinding {
+            share_id: "sha256:share",
+            graph_hash: "sha256:graph",
+            shapes_hash: "sha256:shapes",
+            tx_anchor: 42,
+        })
+    }
+
+    fn envelope(binding: &SessionBinding) -> AttestationEnvelope {
+        AttestationEnvelope {
+            version: SHARE_V1.into(),
+            key_id: binding.key_id.clone(),
+            session: binding.session.clone(),
+            introducer: binding.introducer.clone(),
+            issued_at_epoch: NOW,
+            nonce: NONCE.into(),
+            signature: String::new(),
+        }
+    }
+
+    fn sign(key: &Ed25519KeyPair, envelope: &mut AttestationEnvelope, payload: &SignedBinding<'_>) {
+        envelope.signature = crate::signing::sign_hex(key, &canonical_message(envelope, payload));
+    }
+
+    #[test]
+    fn both_domains_use_one_verifier_and_distinct_canonical_builders() {
+        let (registry, key, binding) = fixture();
+        let payload = share();
+        let mut env = envelope(&binding);
+        sign(&key, &mut env, &payload);
+        let principal = registry.verify(&env, &payload, NOW, 30).unwrap();
+        assert_eq!(principal.agent, "urn:agent:malcolm");
+
+        let write = SignedBinding::Write(WriteBinding {
+            method: "POST",
+            path: "/episode",
+            content_type: "application/json",
+            body_sha256: "sha256:body",
+        });
+        env.version = WRITE_V1.into();
+        env.nonce = "abcdef0123456789abcdef0123456789".into();
+        sign(&key, &mut env, &write);
+        assert!(registry.verify(&env, &write, NOW, 30).is_ok());
+    }
+
+    #[test]
+    fn tamper_substitution_replay_and_domain_downgrade_are_rejected() {
+        let (registry, key, binding) = fixture();
+        let payload = share();
+        let mut env = envelope(&binding);
+        sign(&key, &mut env, &payload);
+        let mut tampered = share();
+        let SignedBinding::Share(ref mut share) = tampered else {
+            unreachable!()
+        };
+        share.graph_hash = "sha256:altered";
+        assert!(registry.verify(&env, &tampered, NOW, 30).is_err());
+
+        assert!(registry.verify(&env, &payload, NOW, 30).is_ok());
+        assert!(registry.verify(&env, &payload, NOW, 30).is_err());
+
+        let mut wrong_domain = envelope(&binding);
+        wrong_domain.version = WRITE_V1.into();
+        sign(&key, &mut wrong_domain, &payload);
+        assert!(registry.verify(&wrong_domain, &payload, NOW, 30).is_err());
+    }
+
+    #[test]
+    fn unbound_expired_revoked_and_malformed_nonce_are_rejected_without_consuming_nonce() {
+        let (registry, key, binding) = fixture();
+        let payload = share();
+        let mut env = envelope(&binding);
+        sign(&key, &mut env, &payload);
+
+        env.session = "unknown".into();
+        assert!(registry.verify(&env, &payload, NOW, 30).is_err());
+        env.session = binding.session.clone();
+        env.nonce = "not-a-nonce".into();
+        assert!(registry.verify(&env, &payload, NOW, 30).is_err());
+        env.nonce = NONCE.into();
+        assert!(registry.verify(&env, &payload, NOW + 120, 30).is_err());
+        registry.revoke(&binding.session).unwrap();
+        assert!(registry.verify(&env, &payload, NOW, 30).is_err());
+    }
+
+    #[test]
+    fn registration_is_idempotent_but_conflicts_and_key_reuse_refuse() {
+        let (registry, _key, binding) = fixture();
+        registry.register(binding.clone()).unwrap();
+        let mut conflict = binding.clone();
+        conflict.agent = "urn:agent:other".into();
+        assert!(registry.register(conflict).is_err());
+        let mut reused = binding;
+        reused.session = "session-2".into();
+        assert!(registry.register(reused).is_err());
+    }
+}

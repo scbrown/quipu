@@ -48,6 +48,8 @@ pub mod report;
 pub mod resolution;
 pub mod schema;
 pub mod semweb;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod session_attestation;
 #[cfg(feature = "shacl")]
 pub mod shacl;
 #[cfg(feature = "shacl")]
