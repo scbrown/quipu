@@ -524,6 +524,23 @@ pub(crate) async fn export(
     .await
 }
 
+/// POST /share — return a canonical share bundle to callers on another host.
+pub(crate) async fn share_payload(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<quipu::share::SharePayloadRequest>,
+) -> Result<axum::Json<quipu::share::SharePayload>, AppError> {
+    blocking(move || {
+        let limit = input.effective_max_bytes();
+        let store = store.read();
+        Ok(axum::Json(quipu::share::share_payload(
+            &store,
+            &input.options(),
+            limit,
+        )?))
+    })
+    .await
+}
+
 /// POST /import — verify and stage a share in a source-specific named graph.
 pub(crate) async fn import_share(
     State(store): State<SharedStore>,

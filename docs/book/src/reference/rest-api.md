@@ -67,6 +67,13 @@ Authorization: Bearer <token>
 Reads — `/query`, `/search`, entity lookups, `/health`, `/version` — need no
 credential and answer normally.
 
+`POST /share` is also read-only. It returns the canonical Git-share manifest and
+exact file contents in one JSON response, allowing a proxy on another host to
+forward Quipu's own canonicalization, hashes, and share ID instead of reproducing
+them. The body accepts `scope`, `shapes`, `no_shapes`, `parent_share`,
+`turtle_view`, and an optional `max_bytes` that can lower (but not raise) the 8
+MiB server cap.
+
 **The authoritative list is `http_auth::WRITE_ENDPOINTS` in `src/http_auth.rs`, not
 this page.** It is enforced: `write_endpoints_cover_every_route` fails the build if
 any registered route is unclassified, so the code cannot drift from itself — but

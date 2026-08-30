@@ -36,6 +36,15 @@ identity. The anchored transaction timestamp—not the wall clock—is used for
 `created_at`, so exporting unchanged state with the same options is
 byte-identical. Use `--parent-share sha256:...` when continuing a lineage.
 
+Remote callers can request the identical artifact without access to the server's
+filesystem using `POST /share`. The response is
+`{"manifest": {...}, "files": {"manifest.json": "...", "export.nt": "...", "shapes.ttl": "..."}}`;
+`export.ttl` is also present when `turtle_view` is true. Request fields mirror the
+CLI options: `scope`, `shapes`, `no_shapes`, `parent_share`, and `turtle_view`.
+An optional `max_bytes` may lower the server's 8 MiB response cap. Every string in
+`files` is the exact UTF-8 file content, so consumers reconstruct the directory
+without reimplementing manifest canonicalization, hashes, or share IDs.
+
 ## What goes in a pack
 
 - **Facts** — the current facts of the source graph, written through the

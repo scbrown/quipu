@@ -7,8 +7,48 @@ use quipu::{EmbeddingProvider, Store};
 use serde_json::json;
 
 use super::SharedStore;
-use super::base::{STATS_CACHE, StatsCache, export as export_handler, metrics_handler, stats};
+use super::base::{
+    STATS_CACHE, StatsCache, export as export_handler, metrics_handler, share_payload, stats,
+};
 use super::tools::{episode, search};
+
+#[tokio::test]
+async fn post_share_returns_reconstructable_canonical_files() {
+    let store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes(
+            "http-share-test",
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
+            "2026-08-29",
+        )
+        .unwrap();
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+
+    let response = share_payload(
+        State(shared),
+        axum::Json(quipu::share::SharePayloadRequest::default()),
+    )
+    .await
+    .expect("POST /share should return a remote payload")
+    .0;
+    let hash = |bytes: &[u8]| {
+        let digest = ring::digest::digest(&ring::digest::SHA256, bytes);
+        format!("sha256:{}", hex::encode(digest.as_ref()))
+    };
+
+    assert_eq!(response.files.len(), 3);
+    assert_eq!(
+        response.manifest.graph_hash,
+        hash(response.files["export.nt"].as_bytes())
+    );
+    assert_eq!(
+        response.manifest.shapes_hash,
+        hash(response.files["shapes.ttl"].as_bytes())
+    );
+    let manifest: quipu::share::ShareManifest =
+        serde_json::from_str(&response.files["manifest.json"]).unwrap();
+    assert_eq!(manifest, response.manifest);
+}
 
 /// aegis-ibft0 acceptance: prove the HTTP handler's NEGATIVE outcome. A clean
 /// payload passing would also pass on the buggy append-two-comments behavior.

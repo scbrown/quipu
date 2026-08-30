@@ -2,7 +2,7 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde::ser::SerializeStruct;
@@ -79,6 +79,59 @@ pub struct ShareOptions {
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
     pub turtle_view: bool,
+}
+
+/// Default upper bound for a payload-returning share response.
+pub const SHARE_PAYLOAD_MAX_BYTES: usize = 8 * 1024 * 1024;
+
+/// HTTP-friendly options for building a share payload in memory.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SharePayloadRequest {
+    /// Scope to export.
+    #[serde(default)]
+    pub scope: ShareScope,
+    /// Shape registry entries to concatenate into `shapes.ttl`.
+    #[serde(default)]
+    pub shapes: Vec<String>,
+    /// Explicitly produce a shapes-free share.
+    #[serde(default)]
+    pub no_shapes: bool,
+    /// Prior share id in this lineage.
+    pub parent_share: Option<String>,
+    /// Also include a human-readable `export.ttl` derived view.
+    #[serde(default)]
+    pub turtle_view: bool,
+    /// Optional lower response limit; callers cannot raise the server cap.
+    pub max_bytes: Option<usize>,
+}
+
+impl SharePayloadRequest {
+    /// Convert the wire request to the canonical producer options.
+    pub fn options(&self) -> ShareOptions {
+        ShareOptions {
+            scope: self.scope.clone(),
+            shapes: self.shapes.clone(),
+            no_shapes: self.no_shapes,
+            parent_share: self.parent_share.clone(),
+            turtle_view: self.turtle_view,
+        }
+    }
+
+    /// Apply the fixed server ceiling to the optional caller limit.
+    pub fn effective_max_bytes(&self) -> usize {
+        self.max_bytes
+            .unwrap_or(SHARE_PAYLOAD_MAX_BYTES)
+            .min(SHARE_PAYLOAD_MAX_BYTES)
+    }
+}
+
+/// A complete share returned to a remote caller without server-local paths.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharePayload {
+    /// Canonical manifest, also present byte-for-byte as `files["manifest.json"]`.
+    pub manifest: ShareManifest,
+    /// Exact UTF-8 file contents keyed by canonical share filename.
+    pub files: BTreeMap<String, String>,
 }
 
 /// Producer identity recorded in a share manifest.
@@ -189,6 +242,90 @@ fn shapes_bytes(store: &Store, names: &[String], no_shapes: bool) -> Result<Vec<
     Ok(out.into_bytes())
 }
 
+fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
+    let graph = export_scope(store, &opts.scope, oxrdfio::RdfFormat::NTriples)?;
+    let shapes = shapes_bytes(store, &opts.shapes, opts.no_shapes)?;
+    let turtle = if opts.turtle_view {
+        Some(export_scope(
+            store,
+            &opts.scope,
+            oxrdfio::RdfFormat::Turtle,
+        )?)
+    } else {
+        None
+    };
+
+    let tx_anchor = store.latest_tx_id()?;
+    let created_at = if tx_anchor == 0 {
+        "1970-01-01T00:00:00Z".to_string()
+    } else {
+        store
+            .get_transaction(tx_anchor)?
+            .ok_or_else(|| Error::Store(format!("share: missing anchor tx {tx_anchor}")))?
+            .timestamp
+    };
+    let mut manifest = ShareManifest {
+        schema: "https://github.com/scbrown/quipu/share-manifest/v1".into(),
+        share_id: String::new(),
+        store_id: store.store_id()?,
+        tx_anchor,
+        graph_hash: sha256(&graph),
+        shapes_hash: sha256(&shapes),
+        scope: opts.scope.clone(),
+        parent_share: opts.parent_share.clone(),
+        created_at,
+        producer: ShareProducer {
+            name: "quipu".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+        },
+        files: ShareFiles {
+            graph: "export.nt".into(),
+            shapes: "shapes.ttl".into(),
+            turtle_view: turtle.as_ref().map(|_| "export.ttl".to_string()),
+        },
+    };
+    manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
+
+    let mut files = BTreeMap::new();
+    files.insert(
+        "manifest.json".into(),
+        String::from_utf8(manifest_bytes(&manifest, true)?)
+            .map_err(|e| Error::Serialization(format!("share manifest UTF-8: {e}")))?,
+    );
+    files.insert(
+        "export.nt".into(),
+        String::from_utf8(graph)
+            .map_err(|e| Error::Serialization(format!("share graph UTF-8: {e}")))?,
+    );
+    files.insert(
+        "shapes.ttl".into(),
+        String::from_utf8(shapes)
+            .map_err(|e| Error::Serialization(format!("share shapes UTF-8: {e}")))?,
+    );
+    if let Some(turtle) = turtle {
+        files.insert(
+            "export.ttl".into(),
+            String::from_utf8(turtle)
+                .map_err(|e| Error::Serialization(format!("share Turtle UTF-8: {e}")))?,
+        );
+    }
+    Ok(SharePayload { manifest, files })
+}
+
+/// Build a complete share response with the same canonical producer as [`share`].
+pub fn share_payload(store: &Store, opts: &ShareOptions, max_bytes: usize) -> Result<SharePayload> {
+    let payload = build_share_payload(store, opts)?;
+    let encoded_len = serde_json::to_vec(&payload)
+        .map_err(|e| Error::Serialization(format!("share response: {e}")))?
+        .len();
+    if encoded_len > max_bytes {
+        return Err(Error::InvalidValue(format!(
+            "share: response is {encoded_len} bytes, exceeding max_bytes {max_bytes}"
+        )));
+    }
+    Ok(payload)
+}
+
 /// Write a deterministic share directory.
 ///
 /// The timestamp is derived from `tx_anchor`, rather than wall time, so two
@@ -213,58 +350,12 @@ pub fn share(store: &Store, out_dir: &str, opts: &ShareOptions) -> Result<ShareM
         .map_err(|e| Error::Store(format!("share: create build directory: {e}")))?;
 
     let built = (|| -> Result<ShareManifest> {
-        let graph = export_scope(store, &opts.scope, oxrdfio::RdfFormat::NTriples)?;
-        let shapes = shapes_bytes(store, &opts.shapes, opts.no_shapes)?;
-        std::fs::write(build.join("export.nt"), &graph)
-            .map_err(|e| Error::Store(format!("share: write export.nt: {e}")))?;
-        std::fs::write(build.join("shapes.ttl"), &shapes)
-            .map_err(|e| Error::Store(format!("share: write shapes.ttl: {e}")))?;
-
-        let turtle_view = if opts.turtle_view {
-            let bytes = export_scope(store, &opts.scope, oxrdfio::RdfFormat::Turtle)?;
-            std::fs::write(build.join("export.ttl"), bytes)
-                .map_err(|e| Error::Store(format!("share: write export.ttl: {e}")))?;
-            Some("export.ttl".to_string())
-        } else {
-            None
-        };
-
-        let tx_anchor = store.latest_tx_id()?;
-        let created_at = if tx_anchor == 0 {
-            "1970-01-01T00:00:00Z".to_string()
-        } else {
-            store
-                .get_transaction(tx_anchor)?
-                .ok_or_else(|| Error::Store(format!("share: missing anchor tx {tx_anchor}")))?
-                .timestamp
-        };
-        let mut manifest = ShareManifest {
-            schema: "https://github.com/scbrown/quipu/share-manifest/v1".into(),
-            share_id: String::new(),
-            store_id: store.store_id()?,
-            tx_anchor,
-            graph_hash: sha256(&graph),
-            shapes_hash: sha256(&shapes),
-            scope: opts.scope.clone(),
-            parent_share: opts.parent_share.clone(),
-            created_at,
-            producer: ShareProducer {
-                name: "quipu".into(),
-                version: env!("CARGO_PKG_VERSION").into(),
-            },
-            files: ShareFiles {
-                graph: "export.nt".into(),
-                shapes: "shapes.ttl".into(),
-                turtle_view,
-            },
-        };
-        manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
-        std::fs::write(
-            build.join("manifest.json"),
-            manifest_bytes(&manifest, true)?,
-        )
-        .map_err(|e| Error::Store(format!("share: write manifest.json: {e}")))?;
-        Ok(manifest)
+        let payload = build_share_payload(store, opts)?;
+        for (name, contents) in &payload.files {
+            std::fs::write(build.join(name), contents.as_bytes())
+                .map_err(|e| Error::Store(format!("share: write {name}: {e}")))?;
+        }
+        Ok(payload.manifest)
     })();
 
     match built {
@@ -281,210 +372,4 @@ pub fn share(store: &Store, out_dir: &str, opts: &ShareOptions) -> Result<ShareM
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn fixture() -> Store {
-        let mut store = Store::open_in_memory().unwrap();
-        crate::rdf::ingest_rdf(
-            &mut store,
-            &b"<urn:z> <urn:p> \"last\" .\n<urn:a> <urn:p> \"first\" .\n"[..],
-            oxrdfio::RdfFormat::NTriples,
-            None,
-            "2026-08-29T00:00:00Z",
-            None,
-            None,
-        )
-        .unwrap();
-        store
-            .load_shapes(
-                "fixture-shapes",
-                "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
-                "2026-08-29",
-            )
-            .unwrap();
-        store
-    }
-
-    #[test]
-    fn unchanged_state_produces_byte_identical_share_payloads() {
-        let store = fixture();
-        let root = tempfile::tempdir().unwrap();
-        let a = root.path().join("a");
-        let b = root.path().join("b");
-        let opts = ShareOptions {
-            turtle_view: true,
-            ..Default::default()
-        };
-        let ma = share(&store, a.to_str().unwrap(), &opts).unwrap();
-        let mb = share(&store, b.to_str().unwrap(), &opts).unwrap();
-        assert_eq!(ma, mb);
-        for file in ["manifest.json", "export.nt", "shapes.ttl", "export.ttl"] {
-            assert_eq!(
-                std::fs::read(a.join(file)).unwrap(),
-                std::fs::read(b.join(file)).unwrap()
-            );
-        }
-    }
-
-    #[test]
-    fn manifest_hashes_match_exact_payload_bytes() {
-        let store = fixture();
-        let root = tempfile::tempdir().unwrap();
-        let out = root.path().join("share");
-        let manifest = share(&store, out.to_str().unwrap(), &ShareOptions::default()).unwrap();
-        assert_eq!(
-            manifest.graph_hash,
-            sha256(&std::fs::read(out.join("export.nt")).unwrap())
-        );
-        assert_eq!(
-            manifest.shapes_hash,
-            sha256(&std::fs::read(out.join("shapes.ttl")).unwrap())
-        );
-        let stored: ShareManifest =
-            serde_json::from_slice(&std::fs::read(out.join("manifest.json")).unwrap()).unwrap();
-        assert_eq!(
-            stored.share_id,
-            sha256(&manifest_bytes(&stored, false).unwrap())
-        );
-        assert_eq!(stored.scope, ShareScope::Root);
-    }
-
-    #[test]
-    fn parent_share_changes_envelope_identity_not_graph_identity() {
-        let store = fixture();
-        let root = tempfile::tempdir().unwrap();
-        let a = root.path().join("a");
-        let b = root.path().join("b");
-        let first = share(&store, a.to_str().unwrap(), &ShareOptions::default()).unwrap();
-        let second = share(
-            &store,
-            b.to_str().unwrap(),
-            &ShareOptions {
-                parent_share: Some(first.share_id.clone()),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        assert_eq!(first.graph_hash, second.graph_hash);
-        assert_ne!(first.share_id, second.share_id);
-        assert_eq!(
-            second.parent_share.as_deref(),
-            Some(first.share_id.as_str())
-        );
-    }
-
-    #[test]
-    fn shape_selection_is_sorted_and_missing_names_fail_without_output() {
-        let store = fixture();
-        store
-            .load_shapes(
-                "z-shape",
-                "@prefix sh: <http://www.w3.org/ns/shacl#> .",
-                "2026-08-29",
-            )
-            .unwrap();
-        store
-            .load_shapes(
-                "a-shape",
-                "@prefix sh: <http://www.w3.org/ns/shacl#> .",
-                "2026-08-29",
-            )
-            .unwrap();
-        let root = tempfile::tempdir().unwrap();
-        let out = root.path().join("sorted");
-        share(
-            &store,
-            out.to_str().unwrap(),
-            &ShareOptions {
-                shapes: vec!["z-shape".into(), "a-shape".into()],
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        let text = std::fs::read_to_string(out.join("shapes.ttl")).unwrap();
-        assert!(text.find("a-shape").unwrap() < text.find("z-shape").unwrap());
-
-        let missing = root.path().join("missing");
-        assert!(
-            share(
-                &store,
-                missing.to_str().unwrap(),
-                &ShareOptions {
-                    shapes: vec!["does-not-exist".into()],
-                    ..Default::default()
-                }
-            )
-            .is_err()
-        );
-        assert!(
-            !missing.exists(),
-            "a refused share left a partial directory"
-        );
-    }
-
-    #[test]
-    fn defaults_to_all_loaded_shapes_and_refuses_silent_empty_output() {
-        let store = fixture();
-        store
-            .load_shapes(
-                "another-shape",
-                "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
-                "2026-08-29",
-            )
-            .unwrap();
-        let root = tempfile::tempdir().unwrap();
-        let out = root.path().join("all-shapes");
-        share(&store, out.to_str().unwrap(), &ShareOptions::default()).unwrap();
-        let text = std::fs::read_to_string(out.join("shapes.ttl")).unwrap();
-        assert!(text.contains("# --- another-shape ---"));
-        assert!(text.contains("# --- fixture-shapes ---"));
-
-        let empty_store = Store::open_in_memory().unwrap();
-        let refused = root.path().join("refused");
-        let error = share(
-            &empty_store,
-            refused.to_str().unwrap(),
-            &ShareOptions::default(),
-        )
-        .unwrap_err();
-        assert!(error.to_string().contains("no loaded shape sets"));
-        assert!(
-            !refused.exists(),
-            "a refused share left a partial directory"
-        );
-
-        let explicit = root.path().join("explicit-no-shapes");
-        share(
-            &empty_store,
-            explicit.to_str().unwrap(),
-            &ShareOptions {
-                no_shapes: true,
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        assert_eq!(
-            std::fs::metadata(explicit.join("shapes.ttl"))
-                .unwrap()
-                .len(),
-            0
-        );
-    }
-
-    #[test]
-    fn store_identity_survives_reopen() {
-        let root = tempfile::tempdir().unwrap();
-        let db = root.path().join("store.db");
-        let first = Store::open(db.to_str().unwrap())
-            .unwrap()
-            .store_id()
-            .unwrap();
-        let second = Store::open(db.to_str().unwrap())
-            .unwrap()
-            .store_id()
-            .unwrap();
-        assert_eq!(first, second);
-        assert!(first.starts_with("urn:uuid:"));
-    }
-}
+mod tests;
