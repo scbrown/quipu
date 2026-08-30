@@ -917,6 +917,44 @@ fn path_zero_or_more() {
 }
 
 #[test]
+fn unbound_zero_or_more_keeps_identity_for_terms_without_path_edges() {
+    let mut store = test_store_with_graph();
+    let turtle = r#"
+@prefix ex: <http://example.org/> .
+ex:isolated ex:name "isolated" ; ex:owner ex:keeper .
+"#;
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-04-04T00:00:01Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let result = query(
+        &store,
+        "SELECT ?canon ?owner WHERE { \
+         ?entity <http://example.org/name> \"isolated\" . \
+         ?entity (<http://example.org/edge>|^<http://example.org/edge>)* ?canon . \
+         ?canon <http://example.org/owner> ?owner }",
+    )
+    .unwrap();
+
+    assert_eq!(result.rows().len(), 1);
+    assert_eq!(
+        value_to_iri(&store, result.rows()[0].get("canon").unwrap()),
+        "http://example.org/isolated"
+    );
+    assert_eq!(
+        value_to_iri(&store, result.rows()[0].get("owner").unwrap()),
+        "http://example.org/keeper"
+    );
+}
+
+#[test]
 fn path_one_or_more() {
     let store = test_store_with_graph();
     let result = query(

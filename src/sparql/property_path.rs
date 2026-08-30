@@ -204,8 +204,12 @@ fn eval_transitive(
             }
         }
         if include_zero {
-            for &(_, o) in &one_step {
-                push_unique(&mut results, (o, o));
+            // `p*` includes the zero-length path for every graph term, not
+            // only terms that participate in a `p` edge.  Seeding identity
+            // from `one_step` silently dropped isolated terms; a surrounding
+            // join could therefore lose a perfectly valid `?x p* ?x` row.
+            for node in all_node_ids(store, ctx)? {
+                push_unique(&mut results, (node, node));
             }
         }
         Ok(results)
@@ -249,7 +253,7 @@ fn add_identity_pairs(
         (None, Some(o)) => push_unique(pairs, (o, o)),
         (None, None) => {
             let mut nodes: HashSet<i64> = pairs.iter().flat_map(|&(s, o)| [s, o]).collect();
-            for id in all_entity_ids(store, ctx)? {
+            for id in all_node_ids(store, ctx)? {
                 nodes.insert(id);
             }
             for n in nodes {
@@ -326,13 +330,13 @@ fn query_pairs(
     Ok(results)
 }
 
-fn all_entity_ids(store: &Store, ctx: &TemporalContext) -> Result<Vec<i64>> {
+fn all_node_ids(store: &Store, ctx: &TemporalContext) -> Result<Vec<i64>> {
     let mut conds = vec!["op = 1".to_string()];
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     add_graph_condition(&mut conds, &mut params, ctx)?;
     add_temporal_conditions(&mut conds, &mut params, ctx);
     let sql = format!(
-        "SELECT DISTINCT e FROM {} WHERE {}",
+        "SELECT DISTINCT e, v FROM {} WHERE {}",
         store.facts_source(),
         conds.join(" AND ")
     );
@@ -340,11 +344,15 @@ fn all_entity_ids(store: &Store, ctx: &TemporalContext) -> Result<Vec<i64>> {
     let refs: Vec<&dyn rusqlite::types::ToSql> =
         params.iter().map(std::convert::AsRef::as_ref).collect();
     let mut rows = stmt.query(refs.as_slice())?;
-    let mut ids = Vec::new();
+    let mut ids = HashSet::new();
     while let Some(row) = rows.next()? {
-        ids.push(row.get(0)?);
+        ids.insert(row.get(0)?);
+        let value = Value::from_bytes(&row.get::<_, Vec<u8>>(1)?)?;
+        if let Value::Ref(id) = value {
+            ids.insert(id);
+        }
     }
-    Ok(ids)
+    Ok(ids.into_iter().collect())
 }
 
 /// Restrict every path step to the enclosing dataset graph scope.
