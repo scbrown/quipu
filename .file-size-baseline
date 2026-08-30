@@ -8,5 +8,8 @@ src/episode/mod.rs 645
 src/graph.rs 514
 src/mcp/named_query.rs 537
 src/rdf.rs 710
+src/server.rs 506
+src/server/base.rs 506
+src/share_import.rs 506
 src/store/labels.rs 762
 src/store/ops.rs 631
