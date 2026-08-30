@@ -10,6 +10,7 @@ use super::SharedStore;
 use super::base::{
     STATS_CACHE, StatsCache, export as export_handler, metrics_handler, share_payload, stats,
 };
+use super::entity::{SPOTLIGHT_CACHE, spotlight_handler};
 use super::tools::{episode, search};
 
 #[tokio::test]
@@ -651,7 +652,7 @@ async fn metrics_does_not_queue_behind_the_writer() {
     });
     locked_rx.recv().unwrap();
 
-    tokio::time::timeout(
+    let _response = tokio::time::timeout(
         std::time::Duration::from_secs(1),
         metrics_handler(State(shared.clone())),
     )
@@ -689,6 +690,41 @@ async fn export_does_not_queue_behind_the_writer() {
     .await
     .expect("export queued behind the writer instead of using the read pool")
     .expect("export failed on a read-only pooled connection");
+    release_tx.send(()).unwrap();
+    thread.join().unwrap();
+}
+
+/// A cold Spotlight cache fill performs a full-label SPARQL fetch. At production
+/// size that outlives Bobbin's 2s timeout, and `spawn_blocking` keeps executing
+/// after the client leaves. If the fetch takes the writer, repeated cold calls
+/// wedge both reads and writes. Holding the writer is the exact discriminator:
+/// Spotlight can finish only when its complete cold path uses the read pool.
+#[tokio::test(flavor = "current_thread")]
+async fn cold_spotlight_does_not_queue_behind_the_writer() {
+    let (_dir, handle) = pooled_handle(1);
+    let shared = Arc::new(handle);
+    *SPOTLIGHT_CACHE.lock().unwrap() = None;
+
+    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let holder = shared.clone();
+    let thread = std::thread::spawn(move || {
+        let _writer = holder.lock();
+        locked_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    locked_rx.recv().unwrap();
+
+    let _response = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        spotlight_handler(
+            State(shared.clone()),
+            axum::Json(json!({"text": "anything", "confidence": 0.5})),
+        ),
+    )
+    .await
+    .expect("cold Spotlight queued behind the writer instead of using the read pool")
+    .expect("cold Spotlight failed on a read-only pooled connection");
     release_tx.send(()).unwrap();
     thread.join().unwrap();
 }

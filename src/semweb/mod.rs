@@ -56,16 +56,41 @@ pub struct LabeledEntity {
 /// reader on the server for minutes (abandoned requests keep executing under
 /// a sync mutex, so client timeouts amplify instead of shedding load).
 pub fn fetch_labeled_entities(store: &Store) -> Result<Vec<LabeledEntity>> {
-    let result = crate::sparql_query(
+    fetch_labeled_entities_until(store, None)
+}
+
+/// Fetch labeled entities under an explicit deadline.
+///
+/// Spotlight uses this form for cold cache fills. A client disconnect does not
+/// cancel `spawn_blocking`, so the server must carry its own budget into both
+/// `SQLite`'s progress handler and the Rust-side row materialization loop.
+pub fn fetch_labeled_entities_until(
+    store: &Store,
+    deadline: Option<crate::time::Deadline>,
+) -> Result<Vec<LabeledEntity>> {
+    let started = crate::time::Stopwatch::start();
+    let result = crate::sparql::query_temporal(
         store,
         "SELECT ?s ?label ?type WHERE { \
          ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label . \
          OPTIONAL { ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type } \
          }",
+        &crate::sparql::TemporalContext {
+            deadline,
+            ..Default::default()
+        },
     )?;
 
     let mut entities = Vec::new();
     for row in result.rows() {
+        if deadline.is_some_and(|d| d.passed()) {
+            return Err(crate::Error::QueryTimeout {
+                elapsed_ms: started.elapsed_ms(),
+                limit_ms: deadline
+                    .map(|d| d.millis_from(&started))
+                    .unwrap_or_default(),
+            });
+        }
         let iri = match row.get("s") {
             Some(Value::Ref(id)) => store.resolve(*id).unwrap_or_default(),
             _ => continue,
@@ -341,6 +366,20 @@ mod tests {
         let result = spotlight(&store, "hello world", 0.5).unwrap();
         let annotations = result["annotations"].as_array().unwrap();
         assert!(annotations.is_empty());
+    }
+
+    #[test]
+    fn labeled_entity_fetch_honors_an_expired_deadline() {
+        let store = Store::open_in_memory().unwrap();
+        let Err(err) =
+            fetch_labeled_entities_until(&store, Some(crate::time::Deadline::after_millis(0)))
+        else {
+            panic!("an expired cold-fetch budget did not cancel the query");
+        };
+        assert!(
+            matches!(err, crate::Error::QueryTimeout { .. }),
+            "expected QueryTimeout, got {err}"
+        );
     }
 
     #[test]

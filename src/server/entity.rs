@@ -259,14 +259,18 @@ pub(crate) fn turtle_response(t: Vec<u8>) -> axum::response::Response {
 /// FETCH itself (full-label SPARQL + per-row IRI resolution, 2-3s at 11k+
 /// entities), not the scan. So the fetch result is cached and keyed on
 /// `Store::latest_tx_id()`: under a spotlight burst only the first call pays
-/// the fetch; the rest hold the store lock for one indexed MAX. Any write
+/// the fetch; the rest hold one read-pool connection for one indexed MAX. Any write
 /// moves the generation and invalidates naturally.
 pub(crate) struct SpotlightCache {
     generation: i64,
     entities: Arc<Vec<semweb::LabeledEntity>>,
 }
 
-static SPOTLIGHT_CACHE: Mutex<Option<SpotlightCache>> = Mutex::new(None);
+pub(crate) static SPOTLIGHT_CACHE: Mutex<Option<SpotlightCache>> = Mutex::new(None);
+
+/// Longer than the measured healthy cold fill (2-3s), but short enough that an
+/// abandoned request cannot occupy a pooled reader indefinitely.
+const SPOTLIGHT_FETCH_BUDGET_MS: u64 = 5_000;
 
 pub(crate) async fn spotlight_handler(
     State(store): State<SharedStore>,
@@ -281,18 +285,24 @@ pub(crate) async fn spotlight_handler(
             .get("confidence")
             .and_then(serde_json::Value::as_f64)
             .unwrap_or(0.5);
-        // Reader-starvation fix, both halves: the store lock is held only for
-        // a generation check (indexed MAX) and — when the graph changed — one
-        // entity fetch that refills the cache; the O(entities × text) scan
-        // runs outside every lock.
+        // Serialize cache fills BEFORE taking a pooled connection. Acquiring in
+        // the opposite order lets timed-out callers occupy every reader while
+        // they wait for this mutex, recreating starvation outside the writer.
+        // The cold full-label fetch is read-only and must never take the writer:
+        // at production size it takes 2-3s, longer than Bobbin's client timeout,
+        // so abandoned requests otherwise amplify into a wedged store.
         let entities = {
-            let store = store.lock();
-            let generation = store.latest_tx_id()?;
             let mut cache = SPOTLIGHT_CACHE.lock().unwrap();
+            let store = store.read();
+            let generation = store.latest_tx_id()?;
             match cache.as_ref() {
                 Some(c) if c.generation == generation => c.entities.clone(),
                 _ => {
-                    let fresh = Arc::new(semweb::fetch_labeled_entities(&store)?);
+                    let deadline = quipu::time::Deadline::after_millis(SPOTLIGHT_FETCH_BUDGET_MS);
+                    let fresh = Arc::new(semweb::fetch_labeled_entities_until(
+                        &store,
+                        Some(deadline),
+                    )?);
                     *cache = Some(SpotlightCache {
                         generation,
                         entities: fresh.clone(),
