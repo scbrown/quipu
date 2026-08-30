@@ -61,14 +61,15 @@ Stiwi's to do, and is marked so.
 - [x] ~~Build the PDF.~~ Rebuilt 2026-08-30 after the above: 11 pages, **0
       unresolved references or citations, 0 BibTeX warnings** (the one remaining
       warning, an unsortable authorless `terminusdb` entry, was fixed with a
-      `key`). `main.pdf` is committed and tracks this source.
+      `key`). `main.pdf` is a BUILD OUTPUT and is not tracked (`.gitignore`,
+      symmetric with `docs/paper`); rebuild it with the `just` recipe.
 - [x] ~~Run the scrub gate over the finished artifact.~~ **PASS**, exit 0, all
       three arms with controls proven, 7/7 components. Re-run after every source
       change; it is cheap.
 - [x] ~~Author metadata.~~ Acknowledgement and artifact-availability text
       confirmed; ORCID present. `\date` is now **pinned** rather than `\today`,
-      because `main.pdf` is committed and a floating date made every rebuild
-      differ from the committed artifact for a reason unrelated to the paper.
+      so that two builds of the same source are byte-identical; `\today` made
+      every rebuild differ for a reason unrelated to the paper.
 - [ ] **STIWI: the submission itself.** Public disclosure from his account. See
       `SUBMISSION.md` in this directory for the prepared metadata (categories,
       abstract, license) and the one decision that is still open — the reversible
