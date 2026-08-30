@@ -91,7 +91,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 - **Immutable bitemporal fact log** — every fact has transaction time and valid time. Time-travel to any point. Full audit trail. Contradiction detection.
 - **RDF data model** — IRIs, blank nodes, typed literals via oxrdf. Import/export Turtle, N-Triples, JSON-LD, RDF/XML. Exports are stably ordered and can be scoped to ROOT, one named graph, an episode provenance group, or a SPARQL CONSTRUCT result; server exports use the read pool rather than blocking writers.
-- **Git-native knowledge shares** — `quipu share` writes canonical `export.nt`, `shapes.ttl`, and a lineage-aware `manifest.json`; unchanged graph state produces byte-identical files and stable hashes for meaningful git diffs.
+- **Git-native knowledge shares** — `quipu share` writes canonical `export.nt`, `shapes.ttl`, and a lineage-aware `manifest.json`; unchanged graph state produces byte-identical files and stable hashes for meaningful git diffs. Remote consumers use read-only `POST /share` to receive that exact manifest and file set without access to the server filesystem.
 - **Shape-aware reconnect** — `quipu status` previews base/ROOT/incoming divergence, while `quipu merge` unions multi-valued RDF and emits structured decisions for `sh:maxCount` conflicts before any write.
 - **SPARQL 1.1** — SELECT, ASK, CONSTRUCT, DESCRIBE. BGP, JOIN, UNION, FILTER, OPTIONAL, VALUES, ORDER BY, GROUP BY, aggregates, HAVING, property paths, `IN`/`NOT IN`, RDFS subclass inference, and named-graph scoping (`GRAPH`, `FROM`, `FROM NAMED`).
 - **SHACL validation** — strict schema enforcement at write time. Structured feedback with severity, focus node, component, path, and message.
