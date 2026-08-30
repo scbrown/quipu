@@ -268,9 +268,9 @@ pub(crate) struct SpotlightCache {
 
 pub(crate) static SPOTLIGHT_CACHE: Mutex<Option<SpotlightCache>> = Mutex::new(None);
 
-/// Longer than the measured healthy cold fill (2-3s), but short enough that an
+/// Longer than the measured healthy cold fill, but short enough that an
 /// abandoned request cannot occupy a pooled reader indefinitely.
-const SPOTLIGHT_FETCH_BUDGET_MS: u64 = 5_000;
+const SPOTLIGHT_FETCH_BUDGET_MS: u64 = 10_000;
 
 pub(crate) async fn spotlight_handler(
     State(store): State<SharedStore>,
@@ -285,14 +285,23 @@ pub(crate) async fn spotlight_handler(
             .get("confidence")
             .and_then(serde_json::Value::as_f64)
             .unwrap_or(0.5);
-        // Serialize cache fills BEFORE taking a pooled connection. Acquiring in
-        // the opposite order lets timed-out callers occupy every reader while
-        // they wait for this mutex, recreating starvation outside the writer.
+        // Admit exactly one cache fill BEFORE taking a pooled connection.
+        // Followers fail open with no annotations instead of waiting: a timed-
+        // out client leaves spawn_blocking running, so a blocking mutex here
+        // turns a request burst into a serialized queue of abandoned fills.
+        // Acquiring a reader before admission would occupy every pooled reader
+        // while followers waited, recreating starvation outside the writer.
         // The cold full-label fetch is read-only and must never take the writer:
         // at production size it takes 2-3s, longer than Bobbin's client timeout,
         // so abandoned requests otherwise amplify into a wedged store.
         let entities = {
-            let mut cache = SPOTLIGHT_CACHE.lock().unwrap();
+            let mut cache = match SPOTLIGHT_CACHE.try_lock() {
+                Ok(cache) => cache,
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    return Ok(axum::Json(semweb::spotlight_over(&[], text, confidence)));
+                }
+                Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            };
             let store = store.read();
             let generation = store.latest_tx_id()?;
             match cache.as_ref() {

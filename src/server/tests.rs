@@ -729,6 +729,38 @@ async fn cold_spotlight_does_not_queue_behind_the_writer() {
     thread.join().unwrap();
 }
 
+/// A request burst must produce one cache-fill leader, not a serialized queue
+/// of abandoned fills. Holding the admission mutex models that leader; a
+/// follower must immediately degrade to an empty annotation set.
+#[tokio::test(flavor = "current_thread")]
+async fn cold_spotlight_follower_does_not_queue_behind_the_fill() {
+    let shared = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let leader = std::thread::spawn(move || {
+        let _fill = SPOTLIGHT_CACHE.lock().unwrap();
+        locked_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    locked_rx.recv().unwrap();
+
+    let response = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        spotlight_handler(
+            State(shared),
+            axum::Json(json!({"text": "anything", "confidence": 0.5})),
+        ),
+    )
+    .await
+    .expect("Spotlight follower queued behind the active cache fill")
+    .expect("Spotlight follower did not degrade gracefully");
+    assert_eq!(response.0["annotations"], json!([]));
+    release_tx.send(()).unwrap();
+    leader.join().unwrap();
+}
+
 /// Run `f` on a thread and FAIL — rather than hang — if it does not finish.
 ///
 /// Every assertion below is about a lock being AVAILABLE, and the way that
