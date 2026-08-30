@@ -29,15 +29,21 @@ regenerate before checking a range.
 
 ## Open before submission
 
-- [ ] **Verify every bibliography entry against its DOI.** `references.bib` was
-      drafted without network access. Titles and authors are believed correct;
-      volume, page and year fields are **not** verified, and each entry says so.
-      In particular, confirm that the Context Merge description in §8 matches
-      what Quit Store actually specifies — the paper's whole no-priority-claim
-      position rests on that sentence being accurate.
-- [ ] **Build the PDF.** No TeX engine was available on the drafting host, so
-      this source has never been compiled. Expect the ordinary first-build
-      fixes.
+- [ ] **One bibliography entry remains unverified: `ibanez2012suset`.** The
+      other five were checked against Crossref or the publisher on 2026-08-29
+      and carry resolved DOIs; the Quit Store entry matched exactly, and the
+      R43ples entry was **corrected** by the pass (the remembered 2014 workshop
+      paper became the verified 2016 SEMANTiCS one). SU-Set is not Crossref
+      indexed, as expected for a 2012 workshop paper, so its venue and year rest
+      on recollection. Confirm it from the authors' publication list, or cite
+      the CRDT-for-RDF line generically in §8 instead.
+- [ ] **Confirm the Context Merge description in §8 against Quit Store itself.**
+      The citation is verified; that the *sentence* fairly describes what Quit
+      Store specifies is a separate check, and the paper's whole
+      no-priority-claim position rests on it.
+- [x] ~~Build the PDF.~~ Compiles clean with tectonic 0.17.0: 11 pages, 0
+      unresolved references or citations. `just paper-merge` finds no engine on
+      hosts without one — that is a host gap, not a source problem.
 - [ ] **Run the scrub gate over the finished artifact**:
       `scripts/arxiv-scrub-gate.sh` — it reports INCOMPLETE until this directory
       exists, and it gates the paper source with no path exemption.

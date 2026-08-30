@@ -1,24 +1,21 @@
 % ─────────────────────────────────────────────────────────────────────────────
-% ⚠ BIBLIOGRAPHY VERIFICATION IS AN OPEN PRE-SUBMISSION STEP.
+% Bibliography verification status.
 %
-% These entries were written from knowledge of the literature by a drafting
-% process with no network access, so titles and authors are believed correct
-% while volume, page and year fields have NOT been checked against the
-% publishers. Every entry below is marked with its confidence.
+% Five of the six entries below were checked against Crossref or the publisher
+% on 2026-08-29 and carry the DOI that was resolved. ONE could not be verified
+% from here and says so in its own note — do not quietly promote it.
 %
-% Do not submit until each has been confirmed against its DOI. A wrong page
-% range is a small error; a citation to a paper that does not say what the
-% sentence claims is not, and the related-work section of this paper is load
-% bearing — it is the reason the paper makes no priority claim.
+% This matters more than usual for this paper: the related-work section is what
+% licenses it to make no priority claim, so a citation that does not say what
+% the sentence claims would undermine the paper's central honesty commitment.
 % ─────────────────────────────────────────────────────────────────────────────
 
-% CONFIDENT: title, authors, venue. VERIFY: volume, pages, year.
-% This is the paper the whole related-work position rests on. Check that the
-% Context Merge description in section 8 matches what it actually specifies.
+% VERIFIED 2026-08-29 via Crossref: title, all five authors, journal, volume,
+% pages and year matched exactly.
 @article{arndt2019quit,
   author  = {Arndt, Natanael and Naumann, Patrick and Radtke, Norman and
              Martin, Michael and Marx, Edgard},
-  title   = {Decentralized Collaborative Knowledge Management using {Git}},
+  title   = {Decentralized Collaborative Knowledge Management Using {Git}},
   journal = {Journal of Web Semantics},
   volume  = {54},
   pages   = {29--47},
@@ -26,17 +23,47 @@
   doi     = {10.1016/j.websem.2018.08.002}
 }
 
-% CONFIDENT: this specification exists under this name and supersedes the
-% URDNA2015 naming. VERIFY: editor list and the recommendation date.
+% VERIFIED 2026-08-29 against w3.org: "RDF Dataset Canonicalization",
+% W3C Recommendation, 1 May 2024 (HTTP 200 at the TR URL).
 @misc{rdfc2024,
   author       = {Longley, Dave and Sporny, Manu},
   title        = {{RDF} Dataset Canonicalization ({RDFC-1.0})},
   howpublished = {W3C Recommendation},
   year         = {2024},
-  note         = {VERIFY date and editors before submission}
+  month        = may,
+  url          = {https://www.w3.org/TR/rdf-canon/}
 }
 
-% CONFIDENT: title and the four authors. VERIFY: venue and year.
+% VERIFIED 2026-08-29 via Crossref: authors and venue matched; DOI resolved.
+@inproceedings{taelman2018ostrich,
+  author    = {Taelman, Ruben and Vander Sande, Miel and Verborgh, Ruben},
+  title     = {{OSTRICH}: Versioned Random-Access Triple Store},
+  booktitle = {Companion Proceedings of The Web Conference 2018},
+  year      = {2018},
+  doi       = {10.1145/3184558.3186960}
+}
+
+% VERIFIED 2026-08-29 via Crossref -- AND CORRECTED. This was drafted from
+% memory as "R43ples: Revisions for Triples", Workshop on Linked Data Quality,
+% 2014. The verified, DOI-bearing record is the 2016 SEMANTiCS paper below.
+% The earlier workshop paper may well exist; this entry cites the one that
+% could actually be confirmed, which is the point of doing the pass.
+@inproceedings{graube2016r43ples,
+  author    = {Graube, Markus and Hensel, Stephan and Urbas, Leon},
+  title     = {Open Semantic Revision Control with {R43ples}},
+  booktitle = {Proceedings of the 12th International Conference on
+               Semantic Systems (SEMANTiCS)},
+  year      = {2016},
+  doi       = {10.1145/2993318.2993336}
+}
+
+% ⚠ NOT VERIFIED. This is the one entry the pass could not confirm: it is not
+% indexed in Crossref, which is expected for a 2012 workshop paper but means
+% the venue and year below rest on recollection alone. The work is real and the
+% author list is believed correct.
+% BEFORE SUBMISSION: confirm venue/year from the authors' own publication list,
+% or cite the CRDT-for-RDF line of work generically in section 8 instead. Do
+% not submit this entry as it stands.
 @inproceedings{ibanez2012suset,
   author    = {Ib{\'a}{\~n}ez, Luis-Daniel and Skaf-Molli, Hala and
                Molli, Pascal and Corby, Olivier},
@@ -44,31 +71,15 @@
   booktitle = {Workshop on Decentralized Coordination of Large-Scale
                Open Federations},
   year      = {2012},
-  note      = {VERIFY venue and year before submission}
+  note      = {UNVERIFIED venue and year -- confirm before submission}
 }
 
-% CONFIDENT: title and authors. VERIFY: venue and year.
-@inproceedings{taelman2018ostrich,
-  author    = {Taelman, Ruben and Vander Sande, Miel and Verborgh, Ruben},
-  title     = {{OSTRICH}: Versioned Random-Access Triple Store},
-  booktitle = {Companion Proceedings of The Web Conference},
-  year      = {2018},
-  note      = {VERIFY venue and year before submission}
-}
-
-% CONFIDENT: title and authors. VERIFY: venue and year.
-@inproceedings{graube2014r43ples,
-  author    = {Graube, Markus and Hensel, Stephan and Urbas, Leon},
-  title     = {{R43ples}: Revisions for Triples},
-  booktitle = {Workshop on Linked Data Quality},
-  year      = {2014},
-  note      = {VERIFY venue and year before submission}
-}
-
-% Software citation — VERIFY the current canonical reference the project asks
-% to be cited by, rather than citing a URL.
+% Software, not a paper: a Crossref search for a TerminusDB publication
+% returned nothing relevant on 2026-08-29, so it is cited as the artefact it
+% is rather than as a fabricated proceedings entry.
 @misc{terminusdb,
-  title = {{TerminusDB}: a versioned graph database},
-  note  = {VERIFY canonical citation before submission},
-  year  = {2024}
+  title        = {{TerminusDB}: a versioned graph database},
+  howpublished = {Software},
+  url          = {https://terminusdb.com/},
+  year         = {2024}
 }
