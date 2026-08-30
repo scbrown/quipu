@@ -238,7 +238,7 @@ fn alias_scenario(pairs: &[AliasPair], class: &str) -> (Scenario, usize) {
         // Our side adds a fact to the entity it knows.
         ours.push_str(&lit(&p.left, COMMENT, "our description"));
         // Their side re-words the NAME and so mints a second node for the
-        // same underlying thing — the aegis-6pd03 incident, exactly.
+        // same underlying thing — the recorded alias-mint incident, exactly.
         theirs.push_str(&iri(&p.right, TYPE, "https://example.org/kg/Entity"));
         theirs.push_str(&lit(&p.right, LABEL, "the entity"));
         theirs.push_str(&lit(&p.right, COMMENT, "their description"));

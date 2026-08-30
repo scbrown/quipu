@@ -3,22 +3,38 @@
 
 \paragraph{Git-backed RDF versioning.} Quit Store~\cite{arndt2019quit} is the
 closest neighbour and the reason this paper makes no priority claim. It places
-RDF under git, versions quads with commit-level provenance, and supplies merge
-strategies --- including a Context Merge that reconciles by node overlap. The
-triple-set framing of three-way merge is present there; we are not introducing
-it.
+RDF under git --- the system's own gloss on its name is ``Quads in Git'' ---
+versions quads with commit-level provenance, and supplies merge strategies,
+including a Context Merge that identifies conflicts by node overlap and hands
+them to a person. The triple-set framing of three-way merge is present there; we
+are not introducing it.
 
 Our delta is where the conflict predicate comes from. Context Merge derives
-contention from the \emph{shape of the change} --- whether the two sides touched
-overlapping context. We derive it from the \emph{shape of the data}, as declared
-in SHACL. The consequence is measurable rather than rhetorical, and it is the
-central result of \S\ref{sec:synthetic}: across five seeds the two approaches
-detect an identical set of $33$ triple-visible conflicts, and the context
-heuristic asks $845$ questions where cardinality asks $33$. Overlap is a good
-proxy for ``these edits are related''. It is a poor proxy for ``these edits
-cannot both be true'', and only the second needs a person. We therefore position
-this operator as an extension of that line of work: the algebra is theirs, the
-conflict predicate is the contribution.
+contention from the \emph{shape of the change}: it marks the subject and object
+of every added or removed statement with the commit it came from, and a node
+marked by both sides becomes a conflict. We derive it from the \emph{shape of
+the data}, as declared in SHACL. The difference is a deliberate design choice on
+their part rather than an oversight, and they state it: Quit Store declines to
+encode semantic rules and relies on the pure RDF data model instead, and it
+presents Context Merge as a \emph{supervised} approach to identifying conflicts
+rather than as a decision procedure. Our claim is correspondingly narrow. SHACL
+is exactly the source of semantic rules they chose not to hard-code, and what
+lets us consult it is circumstance rather than insight: in a shapes-governed
+store those rules are already present, already authored by the people who
+authored the data, and already the contract the graph is validated against.
+
+The consequence is measurable rather than rhetorical, and it is the central
+result of \S\ref{sec:synthetic}: across five seeds the two approaches detect an
+identical set of $33$ triple-visible conflicts, and the context heuristic asks
+$845$ questions where cardinality asks $33$. Overlap is a good proxy for ``these
+edits are related'', which is what Context Merge sets out to find. It is a poor
+proxy for ``these edits cannot both be true'', which is the smaller question that
+actually needs a person --- and Context Merge does not claim to answer it. The
+$845$ against $33$ therefore measures two different questions being asked, not
+one strategy failing at the other's task: it quantifies what the extra
+information buys, and that information is only available to a merge that has a
+shapes graph to consult. We position this operator as an extension of that line
+of work: the algebra is theirs, the conflict predicate is the contribution.
 
 \paragraph{Diff and patch over versioned graphs.} TerminusDB~\cite{terminusdb} provides diff and
 patch over a versioned graph store. RDF Patch and LD Patch standardise the
@@ -31,7 +47,7 @@ formerly URDNA2015) gives deterministic labelling of blank nodes and hence
 decidable graph equality. We build directly on it: it is what makes ``the same
 triple'' well defined across two independently serialised bundles, and it is a
 substrate rather than a competitor. R43ples~\cite{graube2016r43ples} and archiving systems such as
-OSTRICH address efficient storage and querying of revision histories, a
+OSTRICH~\cite{taelman2018ostrich} address efficient storage and querying of revision histories, a
 different problem from reconciling two live divergent copies.
 
 \paragraph{Convergent replicated types.} CRDT constructions for RDF, such as

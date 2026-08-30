@@ -1,9 +1,18 @@
 % ─────────────────────────────────────────────────────────────────────────────
 % Bibliography verification status.
 %
-% Five of the six entries below were checked against Crossref or the publisher
-% on 2026-08-29 and carry the DOI that was resolved. ONE could not be verified
-% from here and says so in its own note — do not quietly promote it.
+% Every entry below has been checked against Crossref, OpenAlex, DBLP or the
+% publisher and carries the identifier that was resolved. Five were verified on
+% 2026-08-29; the sixth (SU-Set) resisted verification that day, was carried
+% with an explicit UNVERIFIED note rather than quietly promoted, and was
+% resolved on 2026-08-30 — by finding that the remembered TITLE AND VENUE
+% did not exist and that the work is published under a different title. That
+% correction is recorded in its own note.
+%
+% Two entries in this file were drafted from memory and both turned out to name
+% a record that does not exist (R43ples, SU-Set). Neither was caught by reading
+% the draft; both were caught by asking an index for the exact string. That is
+% the check worth repeating, not the reading.
 %
 % This matters more than usual for this paper: the related-work section is what
 % licenses it to make no priority claim, so a citation that does not say what
@@ -46,8 +55,12 @@
 % VERIFIED 2026-08-29 via Crossref -- AND CORRECTED. This was drafted from
 % memory as "R43ples: Revisions for Triples", Workshop on Linked Data Quality,
 % 2014. The verified, DOI-bearing record is the 2016 SEMANTiCS paper below.
-% The earlier workshop paper may well exist; this entry cites the one that
-% could actually be confirmed, which is the point of doing the pass.
+% The earlier workshop paper DOES exist -- confirmed 2026-08-30 at CEUR-WS
+% Vol-1215 paper-03, "R43ples: Revisions for Triples - An Approach for Version
+% Control in the Semantic Web", same three authors (HTTP 200, 654 KiB PDF).
+% We still cite the 2016 SEMANTiCS paper: it is the DOI-bearing archival
+% version of the same system, and section 8 cites R43ples for the mature
+% capability rather than for priority.
 @inproceedings{graube2016r43ples,
   author    = {Graube, Markus and Hensel, Stephan and Urbas, Leon},
   title     = {Open Semantic Revision Control with {R43ples}},
@@ -57,27 +70,40 @@
   doi       = {10.1145/2993318.2993336}
 }
 
-% ⚠ NOT VERIFIED. This is the one entry the pass could not confirm: it is not
-% indexed in Crossref, which is expected for a 2012 workshop paper but means
-% the venue and year below rest on recollection alone. The work is real and the
-% author list is believed correct.
-% BEFORE SUBMISSION: confirm venue/year from the authors' own publication list,
-% or cite the CRDT-for-RDF line of work generically in section 8 instead. Do
-% not submit this entry as it stands.
+% VERIFIED 2026-08-30 -- AND CORRECTED, more heavily than any other entry.
+% This was drafted from memory as "SU-Set: An Operation-based CRDT for Triple
+% Stores", Workshop on Decentralized Coordination of Large-Scale Open
+% Federations, 2012. NO SUCH RECORD EXISTS: zero hits in DBLP (checked against
+% Skaf-Molli's complete author record), Crossref and OpenAlex. The remembered
+% author list, however, was exactly right, and SU-Set is real -- it is the name
+% of the CRDT, not of a paper. It is DEFINED in the WWW 2012 companion paper
+% below, whose publisher abstract ends: "In this paper, we define SU-Set, a
+% CRDT for RDF-Graph that supports SPARQL Update 1.1 operations."
+% DOI resolved via Crossref; venue, pages and year agree across Crossref,
+% OpenAlex and DBLP. The cite key is unchanged so that section 8 still reads
+% naturally; the note below carries the name a reader will be looking for.
 @inproceedings{ibanez2012suset,
   author    = {Ib{\'a}{\~n}ez, Luis-Daniel and Skaf-Molli, Hala and
                Molli, Pascal and Corby, Olivier},
-  title     = {{SU-Set}: An Operation-based {CRDT} for Triple Stores},
-  booktitle = {Workshop on Decentralized Coordination of Large-Scale
-               Open Federations},
+  title     = {Synchronizing Semantic Stores with Commutative Replicated
+               Data Types},
+  booktitle = {Proceedings of the 21st International Conference on World Wide
+               Web ({WWW} '12 Companion)},
+  pages     = {1091--1096},
   year      = {2012},
-  note      = {UNVERIFIED venue and year -- confirm before submission}
+  doi       = {10.1145/2187980.2188246},
+  note      = {Defines {SU-Set}. Extended version: Ib{\'a}{\~n}ez et al.,
+               Live Linked Data: Synchronising Semantic Stores with Commutative
+               Replicated Data Types, \emph{International Journal of Metadata,
+               Semantics and Ontologies} 8(2):119--133, 2013,
+               \textsc{doi}:10.1504/IJMSO.2013.056605}
 }
 
 % Software, not a paper: a Crossref search for a TerminusDB publication
 % returned nothing relevant on 2026-08-29, so it is cited as the artefact it
 % is rather than as a fabricated proceedings entry.
 @misc{terminusdb,
+  key          = {TerminusDB},
   title        = {{TerminusDB}: a versioned graph database},
   howpublished = {Software},
   url          = {https://terminusdb.com/},
