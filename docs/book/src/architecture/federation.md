@@ -1,5 +1,13 @@
 # Federation
 
+Federation and Git-native shares are complementary boundaries. The
+`[[quipu.federation.remotes]]` configuration drives live read fan-out through
+`federated_from_config`; it does not silently publish local facts or bypass the
+share scrub gate. Durable exchange uses a canonical share followed by explicit
+import, quarantine, and promotion. This keeps remote availability and local
+publication policy independent: adding a read peer cannot turn it into an
+outbound replication target.
+
 > **Implementation status (2026-08-25):** ✅ **Built.** In `src/provider/`
 > (with tests): the `GraphProvider` trait, `ProviderStatus`, `LocalProvider`,
 > `FederatedProvider` with outcome-reporting `query_all`, and — behind the

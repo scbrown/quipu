@@ -36,6 +36,15 @@ identity. The anchored transaction timestamp—not the wall clock—is used for
 `created_at`, so exporting unchanged state with the same options is
 byte-identical. Use `--parent-share sha256:...` when continuing a lineage.
 
+Before any bundle is returned or its output directory is published, Quipu
+evaluates every block-tier `InternalIdentifierPattern` present in the local
+policy graph against the exact graph, shapes, and optional Turtle bytes. A hit
+refuses the entire share and leaves no partial directory. The gate never
+rewrites a match: IRIs are entity identity, so replacing a private-looking IRI
+would silently create a different graph. Warning-tier rules remain advisory,
+and a store with no such policy catalogue retains Quipu's deployment-neutral
+default rather than inheriting homelab-specific patterns.
+
 Remote callers can request the identical artifact without access to the server's
 filesystem using `POST /share`. The response is
 `{"manifest": {...}, "files": {"manifest.json": "...", "export.nt": "...", "shapes.ttl": "..."}}`;
@@ -44,6 +53,12 @@ CLI options: `scope`, `shapes`, `no_shapes`, `parent_share`, and `turtle_view`.
 An optional `max_bytes` may lower the server's 8 MiB response cap. Every string in
 `files` is the exact UTF-8 file content, so consumers reconstruct the directory
 without reimplementing manifest canonicalization, hashes, or share IDs.
+
+JSON-LD is deliberately not a share payload in v1. Quipu's JSON-LD endpoint is
+an entity-oriented negotiated view, not a canonical RDF-dataset serializer;
+adding it would create bytes whose ordering and identity contract are weaker
+than the sorted N-Triples producer. `export.nt` remains normative and
+`export.ttl` remains the optional human-readable derived view.
 
 ## What goes in a pack
 
