@@ -8,6 +8,7 @@ mod conneg;
 pub use conneg::{entity_json_ld, entity_turtle, preview_card};
 
 use serde_json::{Value as JsonValue, json};
+use std::collections::HashMap;
 
 use crate::error::Result;
 use crate::store::Store;
@@ -69,20 +70,31 @@ pub fn fetch_labeled_entities_until(
     deadline: Option<crate::time::Deadline>,
 ) -> Result<Vec<LabeledEntity>> {
     let started = crate::time::Stopwatch::start();
-    let result = crate::sparql::query_temporal(
+    // Keep these as two indexed single-pattern queries and join in Rust. The
+    // equivalent OPTIONAL query makes the generic evaluator materialize and
+    // merge the whole label × type binding set; on the production-sized graph
+    // that exceeded 30 seconds while each indexed arm completes in <250ms.
+    let labels = crate::sparql::query_temporal(
         store,
-        "SELECT ?s ?label ?type WHERE { \
-         ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label . \
-         OPTIONAL { ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type } \
-         }",
+        "SELECT ?s ?label WHERE { \
+         ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label }",
+        &crate::sparql::TemporalContext {
+            deadline,
+            ..Default::default()
+        },
+    )?;
+    let types = crate::sparql::query_temporal(
+        store,
+        "SELECT ?s ?type WHERE { \
+         ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type }",
         &crate::sparql::TemporalContext {
             deadline,
             ..Default::default()
         },
     )?;
 
-    let mut entities = Vec::new();
-    for row in result.rows() {
+    let mut types_by_entity: HashMap<i64, Vec<String>> = HashMap::new();
+    for row in types.rows() {
         if deadline.is_some_and(|d| d.passed()) {
             return Err(crate::Error::QueryTimeout {
                 elapsed_ms: started.elapsed_ms(),
@@ -91,23 +103,50 @@ pub fn fetch_labeled_entities_until(
                     .unwrap_or_default(),
             });
         }
-        let iri = match row.get("s") {
-            Some(Value::Ref(id)) => store.resolve(*id).unwrap_or_default(),
+        let (Some(Value::Ref(entity)), Some(Value::Ref(entity_type))) =
+            (row.get("s"), row.get("type"))
+        else {
+            continue;
+        };
+        types_by_entity
+            .entry(*entity)
+            .or_default()
+            .push(store.resolve(*entity_type).unwrap_or_default());
+    }
+
+    let mut entities = Vec::new();
+    for row in labels.rows() {
+        if deadline.is_some_and(|d| d.passed()) {
+            return Err(crate::Error::QueryTimeout {
+                elapsed_ms: started.elapsed_ms(),
+                limit_ms: deadline
+                    .map(|d| d.millis_from(&started))
+                    .unwrap_or_default(),
+            });
+        }
+        let entity_id = match row.get("s") {
+            Some(Value::Ref(id)) => *id,
             _ => continue,
         };
+        let iri = store.resolve(entity_id).unwrap_or_default();
         let label = match row.get("label") {
             Some(Value::Str(s)) => s.clone(),
             _ => continue,
         };
-        let entity_type = match row.get("type") {
-            Some(Value::Ref(id)) => store.resolve(*id).unwrap_or_default(),
-            _ => String::new(),
-        };
-        entities.push(LabeledEntity {
-            iri,
-            label,
-            entity_type,
-        });
+        match types_by_entity.get(&entity_id) {
+            Some(types) if !types.is_empty() => {
+                entities.extend(types.iter().cloned().map(|entity_type| LabeledEntity {
+                    iri: iri.clone(),
+                    label: label.clone(),
+                    entity_type,
+                }));
+            }
+            _ => entities.push(LabeledEntity {
+                iri,
+                label,
+                entity_type: String::new(),
+            }),
+        }
     }
     Ok(entities)
 }
