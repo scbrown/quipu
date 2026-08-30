@@ -23,9 +23,10 @@ lost, none fabricated, and no SHACL violations admitted. The context-overlap
 baseline detected the \emph{same} $33$ conflicts and asked $845$ questions to do
 it. We also report a limit no schema removes: when two sides mint different
 names for one entity, the divergence is invisible to any triple-level operator,
-including this one --- $21$ of $54$ synthetic conflicts and $93$ of $93$ alias
-repairs in a recorded corpus. Replaying $105$ real repairs and $939$ real
-duplicate-value incidents from a production graph against the shipped operator
-reproduces both the blindness and the benefit on data nobody generated for the
+including this one. Replaying a recorded production corpus against the shipped
+operator --- $105$ repairs a person actually performed, $93$ of them after
+excluding $12$ chained pairs, and $939$ real duplicate-value incidents ---
+reproduces both the blindness ($0$ of $93$ alias repairs, matching $0$ of $21$
+on the synthetic arm) and the benefit, on data nobody generated for the
 purpose.
 \end{abstract}

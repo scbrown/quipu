@@ -8,6 +8,11 @@ Prepared by arnold, 2026-08-30, against `main.tex` at this commit. If the source
 changes, rebuild and re-read the abstract below — it is a transcription of the
 PDF, not a second draft of it.
 
+Re-transcribed by kelly, 2026-08-30, after the pre-submission review changed the
+abstract's third paragraph (it reported 105 and 93 for the same quantity four
+lines apart). The abstract below is a fresh extraction from the rebuilt PDF and
+was diffed against it.
+
 ---
 
 ## 1. The one decision that is not a form field
@@ -71,7 +76,7 @@ Version control works for source code because its merge understands the medium: 
 
 We do not claim the first three-way merge for RDF. Git-backed RDF versioning with merge strategies is established prior work, and the closest neighbour -- Quit Store's Context Merge -- is included here as a baseline that this operator extends rather than replaces. Our contribution is an implementation in a production multi-agent store and an evaluation of what schema-derived conflict semantics buys against that neighbour and against six other strategies.
 
-On a synthetic divergence benchmark over five seeds, the shape-aware operator raised 33 conflicts, all true positives, with no false positives, no triples lost, none fabricated, and no SHACL violations admitted. The context-overlap baseline detected the same 33 conflicts and asked 845 questions to do it. We also report a limit no schema removes: when two sides mint different names for one entity, the divergence is invisible to any triple-level operator, including this one -- 21 of 54 synthetic conflicts and 93 of 93 alias repairs in a recorded corpus. Replaying 105 real repairs and 939 real duplicate-value incidents from a production graph against the shipped operator reproduces both the blindness and the benefit on data nobody generated for the purpose.
+On a synthetic divergence benchmark over five seeds, the shape-aware operator raised 33 conflicts, all true positives, with no false positives, no triples lost, none fabricated, and no SHACL violations admitted. The context-overlap baseline detected the same 33 conflicts and asked 845 questions to do it. We also report a limit no schema removes: when two sides mint different names for one entity, the divergence is invisible to any triple-level operator, including this one. Replaying a recorded production corpus against the shipped operator -- 105 repairs a person actually performed, 93 of them after excluding 12 chained pairs, and 939 real duplicate-value incidents -- reproduces both the blindness (0 of 93 alias repairs, matching 0 of 21 on the synthetic arm) and the benefit, on data nobody generated for the purpose.
 
 ---
 

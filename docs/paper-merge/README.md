@@ -23,8 +23,10 @@ Read each benchmark's `BUILD_REPORT.md` — the honesty record — **before quot
 a number**. They state what each arm can and cannot establish, and one of the
 plan's own hypotheses does not survive Arm A.
 
-The Arm A table in §5 aggregates seeds 1, 7, 42, 99 and 2026 at 200 entities,
-400 edits and overlap 0.5. `benchmark/mergebench/out/` is gitignored, so
+The Arm A table in §5 aggregates seeds 1, 7, 42, 99 and 2026 at the harness
+defaults — 200 entities, **200 edits per side** (400 in total) and overlap 0.5.
+`--edits` sets the count *per side*, so `--edits 400` is a different scenario
+and reproduces none of the table. `benchmark/mergebench/out/` is gitignored, so
 regenerate before checking a range.
 
 ## Open before submission
@@ -61,15 +63,19 @@ Stiwi's to do, and is marked so.
 - [x] ~~Build the PDF.~~ Rebuilt 2026-08-30 after the above: 11 pages, **0
       unresolved references or citations, 0 BibTeX warnings** (the one remaining
       warning, an unsortable authorless `terminusdb` entry, was fixed with a
-      `key`). `main.pdf` is a BUILD OUTPUT and is not tracked (`.gitignore`,
-      symmetric with `docs/paper`); rebuild it with the `just` recipe.
+      `key`). `main.pdf` **is tracked** as of `c362091` — it was untracked in
+      `7646260` and restored, so the `.gitignore` note that used to stand here
+      was wrong in both directions; rebuild it with the `just` recipe after any
+      source change.
 - [x] ~~Run the scrub gate over the finished artifact.~~ **PASS**, exit 0, all
       three arms with controls proven, 7/7 components. Re-run after every source
       change; it is cheap.
 - [x] ~~Author metadata.~~ Acknowledgement and artifact-availability text
       confirmed; ORCID present. `\date` is now **pinned** rather than `\today`,
-      so that two builds of the same source are byte-identical; `\today` made
-      every rebuild differ for a reason unrelated to the paper.
+      so a rebuild does not change the paper's date; `\today` made every rebuild
+      differ for a reason unrelated to the paper. It does not buy byte-identity
+      — the two committed PDF blobs are 98,381 and 98,384 bytes and extract to
+      identical text — so compare rebuilds by `pdftotext`, not by `sha256`.
 - [ ] **STIWI: the submission itself.** Public disclosure from his account. See
       `SUBMISSION.md` in this directory for the prepared metadata (categories,
       abstract, license) and the one decision that is still open — the reversible

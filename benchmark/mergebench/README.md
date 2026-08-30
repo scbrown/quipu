@@ -41,8 +41,9 @@ MERGEBENCH_DUMP=/tmp/dump just bench merge     # writes merge-<form>.out
   - `model.rs` — triples, graphs, and the two serialisations the line-merge
     arms are measured on.
   - `generate.rs` — the base graph, the two divergent edit streams, and
-    `ground_truth`, which derives the oracle from the three graphs and the
-    shapes rather than from what the generator intended.
+    `ground_truth`, which derives the triple-visible oracle from the three
+    graphs and the shapes rather than from what the generator intended, and
+    takes the alias maps for the one class no oracle can read off the triples.
   - `strategies.rs` — the eight arms.
   - `score.rs` — the metrics.
   - `selftest.rs` — the instrument controls.
@@ -91,7 +92,9 @@ outside the harness. It proves, and exits non-zero if it cannot:
   the graph is legal (both directions — a checker that never fires and one that
   always fires produce indistinguishable columns);
 - two runs at one seed are identical;
-- the oracle is recomputable from the three published graphs alone;
+- the oracle's triple-visible classes are recomputable from the three published
+  graphs alone (the alias-mint class cannot be, by construction — the control
+  reports both counts; see `BUILD_REPORT.md` §3);
 - `git-turtle-stable` is genuinely stably serialised (a regression: it was not,
   and reported 121 unparseable lines that were the harness's fault, not git's);
 - an absent `git` is reported as unavailable rather than as a clean sweep;

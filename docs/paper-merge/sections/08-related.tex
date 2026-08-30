@@ -23,6 +23,19 @@ lets us consult it is circumstance rather than insight: in a shapes-governed
 store those rules are already present, already authored by the people who
 authored the data, and already the contract the graph is validated against.
 
+They go one step further than declining, and it is worth stating plainly because
+it is the closest any prior work comes to the idea in this paper: Quit Store's
+discussion names SHACL itself, proposing that users define application-domain
+rules as ontological restrictions and that adherence to them be enforced by
+continuous integration over the repository. The \emph{placement} is then the
+whole of our delta. There, shapes are a quality gate applied to a merge that has
+already happened; here, shape cardinality is the conflict predicate that decides
+what the merge is permitted to settle at all, and the post-merge check they
+propose is additionally what we run to audit the result
+(\S\ref{sec:operator}). This operator therefore does not introduce SHACL to RDF
+merging. It moves it from after the merge to inside it, and the $845$-against-$33$
+result below is the measurement of what that move buys.
+
 The consequence is measurable rather than rhetorical, and it is the central
 result of \S\ref{sec:synthetic}: across five seeds the two approaches detect an
 identical set of $33$ triple-visible conflicts, and the context heuristic asks
