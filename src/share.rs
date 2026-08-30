@@ -242,6 +242,65 @@ fn shapes_bytes(store: &Store, names: &[String], no_shapes: bool) -> Result<Vec<
     Ok(out.into_bytes())
 }
 
+fn outward_scrub_patterns(store: &Store) -> Result<Vec<(String, regex::Regex)>> {
+    const QUERY: &str = "PREFIX aegis: <http://aegis.gastown.local/ontology/> \
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
+        SELECT ?label ?regex WHERE { \
+          ?rule a aegis:InternalIdentifierPattern ; \
+                rdfs:label ?label ; \
+                aegis:regex ?regex ; \
+                aegis:enforcementTier \"block\" . \
+        } ORDER BY ?label ?regex";
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(store, QUERY)?
+    else {
+        return Err(Error::Store(
+            "share scrub: InternalIdentifierPattern query did not return rows".into(),
+        ));
+    };
+    rows.into_iter()
+        .map(|row| {
+            let label = match row.get("label") {
+                Some(crate::types::Value::Str(value)) => value.clone(),
+                _ => {
+                    return Err(Error::Store(
+                        "share scrub: pattern has no string label".into(),
+                    ));
+                }
+            };
+            let Some(crate::types::Value::Str(source)) = row.get("regex") else {
+                return Err(Error::Store(format!(
+                    "share scrub: pattern {label:?} has no string regex"
+                )));
+            };
+            let compiled = regex::Regex::new(source).map_err(|error| {
+                Error::InvalidValue(format!(
+                    "share scrub: pattern {label:?} has invalid regex: {error}"
+                ))
+            })?;
+            Ok((label, compiled))
+        })
+        .collect()
+}
+
+fn scrub_outward_payload(store: &Store, files: &BTreeMap<String, String>) -> Result<()> {
+    for (label, pattern) in outward_scrub_patterns(store)? {
+        for (name, contents) in files {
+            if name == "manifest.json" {
+                continue;
+            }
+            if let Some(hit) = pattern.find(contents) {
+                return Err(Error::PolicyDenied(format!(
+                    "share scrub refused {name}: InternalIdentifierPattern {label:?} matched bytes {}..{}; \
+                     identifiers are entity identity and are never rewritten at this boundary",
+                    hit.start(),
+                    hit.end()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
     let graph = export_scope(store, &opts.scope, oxrdfio::RdfFormat::NTriples)?;
     let shapes = shapes_bytes(store, &opts.shapes, opts.no_shapes)?;
@@ -309,6 +368,7 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
                 .map_err(|e| Error::Serialization(format!("share Turtle UTF-8: {e}")))?,
         );
     }
+    scrub_outward_payload(store, &files)?;
     Ok(SharePayload { manifest, files })
 }
 

@@ -108,6 +108,62 @@ fn payload_limit_refuses_oversized_response() {
 }
 
 #[test]
+fn outward_share_refuses_block_tier_internal_identifier_without_rewriting() {
+    let mut store = fixture();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+<urn:leak> <urn:p> "private.example" .
+"#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-29T00:00:01Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    let root = tempfile::tempdir().unwrap();
+    let out = root.path().join("refused");
+    let error = share(&store, out.to_str().unwrap(), &ShareOptions::default()).unwrap_err();
+    assert!(error.to_string().contains("private host"));
+    assert!(!error.to_string().contains("private.example"));
+    assert!(!out.exists(), "a refused share left a partial directory");
+    assert!(matches!(
+        crate::sparql::query(&store, "ASK { <urn:leak> <urn:p> \"private.example\" }").unwrap(),
+        crate::sparql::QueryResult::Ask(true)
+    ));
+}
+
+#[test]
+fn outward_share_ignores_warn_tier_and_absent_catalog() {
+    let mut store = fixture();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:warning-only a aegis:InternalIdentifierPattern ;
+    rdfs:label "warning only" ;
+    aegis:regex "first" ;
+    aegis:enforcementTier "warn" .
+"#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-29T00:00:01Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let payload = share_payload(&store, &ShareOptions::default(), SHARE_PAYLOAD_MAX_BYTES).unwrap();
+    assert!(payload.files["export.nt"].contains("first"));
+}
+
+#[test]
 fn parent_share_changes_envelope_identity_not_graph_identity() {
     let store = fixture();
     let root = tempfile::tempdir().unwrap();
