@@ -136,6 +136,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // Subset export (quipu #36): serializes one named graph's (or ROOT's) facts
     // to RDF. Pure read.
     "/export",
+    // Canonical share serialization: returns the export and manifest without
+    // writing either to the server filesystem.
+    "/share",
     // Resolution dry-run: reads labels + vector store, writes
     // nothing — the read-only twin of the resolution /episode performs.
     "/resolve",
