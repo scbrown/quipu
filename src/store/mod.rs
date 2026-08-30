@@ -8,6 +8,7 @@ pub mod forks;
 pub mod freeze;
 mod freeze_io;
 mod gate;
+mod identity;
 pub mod import;
 pub mod inferred;
 pub mod labels;
