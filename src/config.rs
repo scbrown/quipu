@@ -419,6 +419,16 @@ pub struct ServerConfig {
     /// writes, preserving today's LAN-trusted behaviour.
     pub auth_token: Option<String>,
 
+    /// Temporary previous bearer accepted during a bounded credential-rotation
+    /// grace window. Requires `auth_token` and an absolute
+    /// `previous_auth_token_expires_at_epoch_secs`; the server refuses invalid
+    /// pairs at startup. Remove this value and restart to invalidate it explicitly.
+    pub previous_auth_token: Option<String>,
+
+    /// Absolute UTC Unix epoch second when `previous_auth_token` stops being
+    /// valid. Absolute time prevents a restart from renewing the grace window.
+    pub previous_auth_token_expires_at_epoch_secs: Option<u64>,
+
     /// Reject all write endpoints with 403 (hq-azs). Reads stay available.
     pub read_only: bool,
 
@@ -448,6 +458,8 @@ impl Default for ServerConfig {
             enabled: false,
             bind: "127.0.0.1:3030".to_string(),
             auth_token: None,
+            previous_auth_token: None,
+            previous_auth_token_expires_at_epoch_secs: None,
             read_only: false,
             cors_allowed_origins: Vec::new(),
             read_pool_size: 4,

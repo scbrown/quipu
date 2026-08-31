@@ -21,6 +21,12 @@ base_ns = "http://example.org/kb/"
 enabled = false
 # Bind address
 bind = "127.0.0.1:3030"
+# Require this bearer on write endpoints.
+# auth_token = "current-token"
+# During a credential rotation only, accept the old bearer for at most 24h.
+# Use an absolute deadline so restarting cannot renew the old bearer.
+# previous_auth_token = "old-token"
+# previous_auth_token_expires_at_epoch_secs = 2000000000
 
 [quipu.events]
 # Event-log retention. Unset (the default) keeps every event forever.
@@ -53,6 +59,8 @@ stops being read.
 | `server.enabled` | `false` | Enable REST API server |
 | `server.bind` | `127.0.0.1:3030` | Server bind address |
 | `server.auth_token` | unset | Bearer token required on write endpoints when set |
+| `server.previous_auth_token` | unset | Previous write bearer accepted temporarily during rotation; requires `server.auth_token` and a positive grace duration |
+| `server.previous_auth_token_expires_at_epoch_secs` | unset | Absolute UTC Unix epoch expiry for the previous bearer; must be future and at most 24 hours away when starting |
 | `server.read_only` | `false` | Refuse all write endpoints |
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
@@ -81,6 +89,22 @@ stops being read.
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 | `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |
+
+## Zero-downtime bearer rotation
+
+Quipu captures bearer configuration at startup. To rotate without a write
+freeze, configure the new value as `server.auth_token`, the old value as
+`server.previous_auth_token`, and a short
+`server.previous_auth_token_expires_at_epoch_secs`, then restart `quipu-server`. Both
+bearers authenticate writes until the grace deadline; request telemetry records
+`authenticated_current` or `authenticated_previous` without recording either
+secret.
+
+After consumers have switched, remove both `previous_auth_token` fields and
+restart again. That explicitly invalidates the old bearer immediately. If the
+cleanup restart is delayed, the old bearer still expires at the startup-derived
+deadline, and a restart never extends it. Invalid pairs, identical bearers,
+expired deadlines, and deadlines over 24 hours away make startup fail closed.
 
 ## Attachments
 
