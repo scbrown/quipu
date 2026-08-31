@@ -8,7 +8,7 @@ use serde_json::json;
 
 use super::SharedStore;
 use super::base::{
-    STATS_CACHE, StatsCache, export as export_handler, metrics_handler, share_payload, stats,
+    STATS_CACHE, StatsCache, export as export_handler, metrics_handler, query, share_payload, stats,
 };
 use super::entity::{SPOTLIGHT_CACHE, spotlight_handler};
 use super::tools::{episode, search};
@@ -77,6 +77,28 @@ async fn post_episode_refuses_one_node_name_twice_and_writes_nothing() {
             .unwrap()
             .is_none(),
         "the refused HTTP request must commit no partial node"
+    );
+}
+
+#[tokio::test]
+async fn query_response_carries_structured_usage_metadata() {
+    let store = Store::open_in_memory().unwrap();
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    let response = query(
+        State(shared),
+        axum::http::HeaderMap::new(),
+        axum::Json(json!({"query": "SELECT ?s WHERE { ?s ?p ?o }"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        response
+            .extensions()
+            .get::<quipu::request_usage::RequestUsage>(),
+        Some(&quipu::request_usage::RequestUsage {
+            query_shape: quipu::request_usage::QueryShape::Select,
+            result_size: 0,
+        })
     );
 }
 

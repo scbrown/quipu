@@ -920,6 +920,23 @@ Prometheus scrape endpoint (`text/plain; version=0.0.4`). Request counters
 come from the middleware; graph-size gauges cost one cheap SQL aggregate —
 deliberately not `/stats`' full scan.
 
+Caller attribution uses the normalized `X-Quipu-Client` header (falling back
+to `User-Agent`, then `unattributed`) and is capped at 32 identities; overflow
+folds into `other` rather than creating unbounded Prometheus cardinality:
+
+- `quipu_http_client_requests_total{client,endpoint}` — request count;
+- `quipu_http_client_request_seconds_total{client,endpoint}` — wall time;
+- `quipu_store_wait_seconds_total{client,endpoint}` — time waiting to acquire a
+  store connection;
+- `quipu_store_held_seconds_total{client,endpoint}` — store capacity consumed.
+
+The server also writes one-line JSON request events to stderr for journald/Loki.
+`request_start` makes a request that never completes visible. `request_complete`
+adds `status`, `duration_ms`, and the actual `auth_outcome`; `/query` responses
+also add `query_shape` and `result_size`. Logs contain normalized attribution
+and bounded metadata, never the Authorization header or response body. Slow or
+failed query text retains its existing separate diagnostic line.
+
 ### UI assets (not documented individually)
 
 `GET /` and `GET /ui` serve the built-in web UI; `GET /quipu-components.js`,

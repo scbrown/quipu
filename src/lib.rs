@@ -45,6 +45,7 @@ mod rdf_export;
 pub mod reasoner;
 pub mod reconcile;
 pub mod report;
+pub mod request_usage;
 pub mod resolution;
 pub mod schema;
 pub mod semweb;
