@@ -932,6 +932,51 @@ fn test_tool_query_not_truncated_when_under_ceiling() {
 }
 
 #[test]
+fn service_row_ceiling_does_not_truncate_aggregate_inputs() {
+    let mut store = test_store_with_data();
+    let full = crate::sparql::query(&store, "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }").unwrap();
+    let expected = full.rows()[0].get("n").cloned().unwrap();
+    store.search_config_mut().max_sparql_rows = 1;
+
+    let result = tool_query(
+        &store,
+        &serde_json::json!({ "query": "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }" }),
+    )
+    .unwrap();
+
+    assert_eq!(result["count"], 1);
+    assert_eq!(result["truncated"], false);
+    assert_eq!(result["rows"][0]["n"], value_to_json(&store, &expected));
+}
+
+#[test]
+fn service_row_ceiling_does_not_push_through_filter() {
+    let mut store = test_store_with_data();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        "<http://example.org/carol> <http://example.org/age> \"35\"^^<http://www.w3.org/2001/XMLSchema#integer> .".as_bytes(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-08-31T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store.search_config_mut().max_sparql_rows = 1;
+
+    let result = tool_query(
+        &store,
+        &serde_json::json!({
+            "query": "SELECT ?s WHERE { ?s <http://example.org/age> ?age . FILTER(?age = 35) }"
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(result["count"], 1, "Carol must survive the filter");
+    assert_eq!(result["truncated"], false);
+}
+
+#[test]
 fn test_tool_episode_surfaces_resolution_hints() {
     // hq-uye: the episode handler must read the store's resolution policy and
     // surface dedup hints in its response (the engine was previously inert).

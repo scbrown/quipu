@@ -89,7 +89,12 @@ pub(crate) fn resolution_contentions_json(contentions: &[Contention]) -> Vec<Jso
 /// `max_sparql_rows` ceiling (hq-gkd) from one place — a LIMIT-less query cannot
 /// dump the whole fact log to either serializer.
 pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bool)> {
-    let (query_str, ctx) = query_context(store, input)?;
+    let (query_str, mut ctx) = query_context(store, input)?;
+    let max_rows = store.search_config().max_sparql_rows;
+    // Stop a wholly prefix-safe SELECT after one row beyond the response
+    // ceiling. The extra row preserves the `truncated: true` signal. Unsafe
+    // plans ignore this hint and retain full evaluation semantics.
+    ctx.result_limit = Some(max_rows.saturating_add(1));
 
     // quipu #70: per-row labels are OPT-IN and only annotate under `GRAPH ?g`.
     // Off by default so no existing response shape changes.
@@ -102,8 +107,6 @@ pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bo
     } else {
         sparql::query_temporal(store, query_str, &ctx)?
     };
-    let max_rows = store.search_config().max_sparql_rows;
-
     Ok(match result {
         QueryResult::Select {
             variables,
