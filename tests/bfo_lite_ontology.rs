@@ -130,7 +130,7 @@ fn canonical_relation_backbone_is_parseable_and_complete() {
 #[test]
 fn exported_domain_instances_partition_into_continuants_and_occurrents() {
     let mut store = Store::open_in_memory().unwrap();
-    for ttl in DOMAIN_SHAPES.iter().chain([&BFO_LITE].into_iter()) {
+    for ttl in DOMAIN_SHAPES.iter().chain([&BFO_LITE]) {
         ingest_rdf(
             &mut store,
             ttl.as_bytes(),
