@@ -1,0 +1,151 @@
+# A thin BFO 2020 upper spine for the Aegis domain ontology.
+#
+# This file deliberately does not import all of BFO. It uses the canonical
+# BFO/RO IRIs for the two top-level categories and the small relation backbone
+# Quipu needs, while retaining the domain vocabulary in the Aegis namespace.
+# Canonical source: https://github.com/BFO-ontology/BFO-2020/tree/master/21838-2/owl
+# Relation source: https://github.com/oborel/obo-relations
+
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix obo:   <http://purl.obolibrary.org/obo/> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+# BFO 2020's exhaustive top-level split. Disjointness makes an accidental
+# double classification observable when OWL validation is enabled.
+obo:BFO_0000002 a owl:Class ;
+    rdfs:label "continuant" ;
+    owl:disjointWith obo:BFO_0000003 .
+
+obo:BFO_0000003 a owl:Class ;
+    rdfs:label "occurrent" .
+
+# Durable things: material infrastructure, people, roles, information
+# artifacts, configurations, plans, rules, and records. Existing Aegis
+# subclass chains remain authoritative; only their roots are attached here.
+aegis:APIEndpoint rdfs:subClassOf obo:BFO_0000002 .
+aegis:AnsibleGroup rdfs:subClassOf obo:BFO_0000002 .
+aegis:AnsibleRole rdfs:subClassOf obo:BFO_0000002 .
+aegis:Artifact rdfs:subClassOf obo:BFO_0000002 .
+aegis:Attraction rdfs:subClassOf obo:BFO_0000002 .
+aegis:Bead rdfs:subClassOf obo:BFO_0000002 .
+aegis:Bundle rdfs:subClassOf obo:BFO_0000002 .
+aegis:CIWorkflow rdfs:subClassOf obo:BFO_0000002 .
+aegis:Capability rdfs:subClassOf obo:BFO_0000002 .
+aegis:CertifiedShareBundle rdfs:subClassOf obo:BFO_0000002 .
+aegis:Chunk rdfs:subClassOf obo:BFO_0000002 .
+aegis:CodeModule rdfs:subClassOf obo:BFO_0000002 .
+aegis:CodeSymbol rdfs:subClassOf obo:BFO_0000002 .
+aegis:Commit rdfs:subClassOf obo:BFO_0000002 .
+aegis:Component rdfs:subClassOf obo:BFO_0000002 .
+aegis:Concept rdfs:subClassOf obo:BFO_0000002 .
+aegis:ConfigFile rdfs:subClassOf obo:BFO_0000002 .
+aegis:ConfigSetting rdfs:subClassOf obo:BFO_0000002 .
+aegis:Credential rdfs:subClassOf obo:BFO_0000002 .
+aegis:CrewMember rdfs:subClassOf obo:BFO_0000002 .
+aegis:CrewRole rdfs:subClassOf obo:BFO_0000002 .
+aegis:CronJob rdfs:subClassOf obo:BFO_0000002 .
+aegis:DataCorpus rdfs:subClassOf obo:BFO_0000002 .
+aegis:DecisionRequest rdfs:subClassOf obo:BFO_0000002 .
+aegis:DesignPrinciple rdfs:subClassOf obo:BFO_0000002 .
+aegis:DesiredCrewShape rdfs:subClassOf obo:BFO_0000002 .
+aegis:DesiredCrewSlot rdfs:subClassOf obo:BFO_0000002 .
+aegis:DockerImage rdfs:subClassOf obo:BFO_0000002 .
+aegis:Document rdfs:subClassOf obo:BFO_0000002 .
+aegis:FamilyMember rdfs:subClassOf obo:BFO_0000002 .
+aegis:Feature rdfs:subClassOf obo:BFO_0000002 .
+aegis:Formula rdfs:subClassOf obo:BFO_0000002 .
+aegis:GitCommit rdfs:subClassOf obo:BFO_0000002 .
+aegis:GitRepo rdfs:subClassOf obo:BFO_0000002 .
+aegis:GoogleAccount rdfs:subClassOf obo:BFO_0000002 .
+aegis:Host rdfs:subClassOf obo:BFO_0000002 .
+aegis:KnowledgeCertificationSeal rdfs:subClassOf obo:BFO_0000002 .
+aegis:Limitation rdfs:subClassOf obo:BFO_0000002 .
+aegis:MCPServer rdfs:subClassOf obo:BFO_0000002 .
+aegis:MLModel rdfs:subClassOf obo:BFO_0000002 .
+aegis:MediaLibrary rdfs:subClassOf obo:BFO_0000002 .
+aegis:Metric rdfs:subClassOf obo:BFO_0000002 .
+aegis:MonitoringProbe rdfs:subClassOf obo:BFO_0000002 .
+aegis:Movie rdfs:subClassOf obo:BFO_0000002 .
+aegis:NFSExport rdfs:subClassOf obo:BFO_0000002 .
+aegis:NetworkSegment rdfs:subClassOf obo:BFO_0000002 .
+aegis:Observation rdfs:subClassOf obo:BFO_0000002 .
+aegis:OperatingPoint rdfs:subClassOf obo:BFO_0000002 .
+aegis:OperationalFact rdfs:subClassOf obo:BFO_0000002 .
+aegis:OperationalKnowledge rdfs:subClassOf obo:BFO_0000002 .
+aegis:OperatorGroup rdfs:subClassOf obo:BFO_0000002 .
+aegis:Overseer rdfs:subClassOf obo:BFO_0000002 .
+aegis:Person rdfs:subClassOf obo:BFO_0000002 .
+aegis:PlanStep rdfs:subClassOf obo:BFO_0000002 .
+aegis:Plugin rdfs:subClassOf obo:BFO_0000002 .
+aegis:Polecat rdfs:subClassOf obo:BFO_0000002 .
+aegis:PrecedentLink rdfs:subClassOf obo:BFO_0000002 .
+aegis:Predicate rdfs:subClassOf obo:BFO_0000002 .
+aegis:Principal rdfs:subClassOf obo:BFO_0000002 .
+aegis:Probe rdfs:subClassOf obo:BFO_0000002 .
+aegis:PublisherAttestation rdfs:subClassOf obo:BFO_0000002 .
+aegis:PushgatewayJob rdfs:subClassOf obo:BFO_0000002 .
+aegis:Requirement rdfs:subClassOf obo:BFO_0000002 .
+aegis:ResponsibilityDomain rdfs:subClassOf obo:BFO_0000002 .
+aegis:ReverseProxyRoute rdfs:subClassOf obo:BFO_0000002 .
+aegis:Rig rdfs:subClassOf obo:BFO_0000002 .
+aegis:Script rdfs:subClassOf obo:BFO_0000002 .
+aegis:Section rdfs:subClassOf obo:BFO_0000002 .
+aegis:SecurityFinding rdfs:subClassOf obo:BFO_0000002 .
+aegis:Selector rdfs:subClassOf obo:BFO_0000002 .
+aegis:Service rdfs:subClassOf obo:BFO_0000002 .
+aegis:Skill rdfs:subClassOf obo:BFO_0000002 .
+aegis:SoftwareVersion rdfs:subClassOf obo:BFO_0000002 .
+aegis:Step rdfs:subClassOf obo:BFO_0000002 .
+aegis:StoragePool rdfs:subClassOf obo:BFO_0000002 .
+aegis:SystemdTimer rdfs:subClassOf obo:BFO_0000002 .
+aegis:TVSeries rdfs:subClassOf obo:BFO_0000002 .
+aegis:TerraformResource rdfs:subClassOf obo:BFO_0000002 .
+aegis:TextRule rdfs:subClassOf obo:BFO_0000002 .
+aegis:ThemePark rdfs:subClassOf obo:BFO_0000002 .
+aegis:Tool rdfs:subClassOf obo:BFO_0000002 .
+aegis:ToolClass rdfs:subClassOf obo:BFO_0000002 .
+aegis:TraefikRoute rdfs:subClassOf obo:BFO_0000002 .
+aegis:TraitValue rdfs:subClassOf obo:BFO_0000002 .
+aegis:Transition rdfs:subClassOf obo:BFO_0000002 .
+aegis:VerifierRegistration rdfs:subClassOf obo:BFO_0000002 .
+aegis:Watchlist rdfs:subClassOf obo:BFO_0000002 .
+aegis:Workflow rdfs:subClassOf obo:BFO_0000002 .
+aegis:WorkflowDefinition rdfs:subClassOf obo:BFO_0000002 .
+aegis:WorkflowStep rdfs:subClassOf obo:BFO_0000002 .
+aegis:Workstream rdfs:subClassOf obo:BFO_0000002 .
+aegis:ZFSDataset rdfs:subClassOf obo:BFO_0000002 .
+
+# Things that happen and unfold in time. These are the event-sourced log side
+# of Quipu; their associated definitions and records remain continuants.
+aegis:Incident rdfs:subClassOf obo:BFO_0000003 .
+aegis:ThemeParkVisit rdfs:subClassOf obo:BFO_0000003 .
+aegis:TransitionEvent rdfs:subClassOf obo:BFO_0000003 .
+aegis:WorkflowRun rdfs:subClassOf obo:BFO_0000003 .
+
+# Minimal BFO/RO relation backbone. Consumers should use these canonical IRIs
+# directly rather than minting synonymous Aegis predicates.
+obo:BFO_0000050 a owl:ObjectProperty ;
+    rdfs:label "part of" ;
+    owl:inverseOf obo:BFO_0000051 .
+
+obo:BFO_0000051 a owl:ObjectProperty ;
+    rdfs:label "has part" .
+
+obo:BFO_0000056 a owl:ObjectProperty ;
+    rdfs:label "participates in" ;
+    rdfs:domain obo:BFO_0000002 ;
+    rdfs:range obo:BFO_0000003 ;
+    owl:inverseOf obo:BFO_0000057 .
+
+obo:BFO_0000057 a owl:ObjectProperty ;
+    rdfs:label "has participant" ;
+    rdfs:domain obo:BFO_0000003 ;
+    rdfs:range obo:BFO_0000002 .
+
+obo:BFO_0000055 a owl:ObjectProperty ;
+    rdfs:label "realizes" .
+
+obo:RO_0000087 a owl:ObjectProperty ;
+    rdfs:label "has role" .
