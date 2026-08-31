@@ -162,6 +162,144 @@ pub enum AccessDecision {
     ReadOnly,
 }
 
+/// Low-cardinality bearer generation for security telemetry. Never contains
+/// token material or a caller-controlled label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthGeneration {
+    /// A read endpoint required no credential.
+    NotRequired,
+    /// Writes are open because no current bearer is configured.
+    OpenWrite,
+    /// The current (primary) bearer authenticated the request.
+    Current,
+    /// The temporary previous bearer authenticated within its grace window.
+    Previous,
+}
+
+/// Hard ceiling for a previous bearer grace window. Rotation is an operational
+/// bridge, not a second permanent credential.
+pub const MAX_PREVIOUS_BEARER_GRACE_SECONDS: u64 = 86_400;
+
+/// Access decision plus the bounded generation label used by request logs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Authorization {
+    /// Allow, unauthorized, or read-only.
+    pub decision: AccessDecision,
+    /// Present only for allowed requests.
+    pub generation: Option<AuthGeneration>,
+}
+
+/// Startup-captured bearer policy. The previous token has an absolute expiry
+/// taken directly from config, so restarts cannot renew a forgotten grace
+/// credential into a permanent second key.
+#[derive(Clone)]
+pub struct BearerPolicy {
+    current: Option<String>,
+    previous: Option<ExpiringBearer>,
+}
+
+#[derive(Clone)]
+struct ExpiringBearer {
+    token: String,
+    expires_at_epoch_secs: u64,
+}
+
+impl BearerPolicy {
+    /// Build and validate a startup policy without ever formatting token values
+    /// into an error. `now_epoch_secs` is injected for deterministic tests.
+    pub fn new(
+        current: Option<String>,
+        previous: Option<String>,
+        previous_expires_at_epoch_secs: Option<u64>,
+        now_epoch_secs: u64,
+    ) -> Result<Self, &'static str> {
+        let previous = match (current.as_deref(), previous, previous_expires_at_epoch_secs) {
+            (_, None, None) => None,
+            (_, None, Some(_)) => {
+                return Err("previous bearer expiry requires previous_auth_token");
+            }
+            (None, Some(_), _) => return Err("previous bearer requires current auth_token"),
+            (Some(_), Some(_), None) => {
+                return Err("previous bearer requires an absolute expiry");
+            }
+            (Some(_), Some(_), Some(expires_at)) if expires_at <= now_epoch_secs => {
+                return Err("previous bearer expiry is not in the future");
+            }
+            (Some(_), Some(_), Some(expires_at))
+                if expires_at - now_epoch_secs > MAX_PREVIOUS_BEARER_GRACE_SECONDS =>
+            {
+                return Err("previous bearer expiry exceeds the 24-hour maximum");
+            }
+            (Some(current_token), Some(previous_token), Some(expires_at_epoch_secs)) => {
+                if constant_time_eq(current_token.as_bytes(), previous_token.as_bytes()) {
+                    return Err("current and previous bearer must be distinct");
+                }
+                Some(ExpiringBearer {
+                    token: previous_token,
+                    expires_at_epoch_secs,
+                })
+            }
+        };
+        Ok(Self { current, previous })
+    }
+
+    /// Whether write endpoints require authentication.
+    #[must_use]
+    pub fn requires_auth(&self) -> bool {
+        self.current.is_some()
+    }
+}
+
+/// Authorize against the startup bearer policy and identify which bounded key
+/// generation matched. Both comparisons are constant-time.
+#[must_use]
+pub fn authorize_bearers(
+    is_write: bool,
+    read_only: bool,
+    policy: &BearerPolicy,
+    auth_header: Option<&str>,
+    now_epoch_secs: u64,
+) -> Authorization {
+    if !is_write {
+        return Authorization {
+            decision: AccessDecision::Allow,
+            generation: Some(AuthGeneration::NotRequired),
+        };
+    }
+    if read_only {
+        return Authorization {
+            decision: AccessDecision::ReadOnly,
+            generation: None,
+        };
+    }
+    let Some(current) = policy.current.as_deref() else {
+        return Authorization {
+            decision: AccessDecision::Allow,
+            generation: Some(AuthGeneration::OpenWrite),
+        };
+    };
+    let presented = auth_header.and_then(parse_bearer);
+    if presented.is_some_and(|token| constant_time_eq(token.as_bytes(), current.as_bytes())) {
+        return Authorization {
+            decision: AccessDecision::Allow,
+            generation: Some(AuthGeneration::Current),
+        };
+    }
+    if let (Some(presented), Some(previous)) = (presented, policy.previous.as_ref())
+        && now_epoch_secs < previous.expires_at_epoch_secs
+        && constant_time_eq(presented.as_bytes(), previous.token.as_bytes())
+    {
+        return Authorization {
+            decision: AccessDecision::Allow,
+            generation: Some(AuthGeneration::Previous),
+        };
+    }
+    Authorization {
+        decision: AccessDecision::Unauthorized,
+        generation: None,
+    }
+}
+
 /// Server-established identity attached to an authenticated write request.
 ///
 /// The shared bearer is deliberately not a crew identity. Until session
@@ -275,6 +413,136 @@ mod tests {
         assert_eq!(
             authorize(true, false, Some("secret"), Some("Bearer secret")),
             AccessDecision::Allow
+        );
+    }
+
+    #[test]
+    fn bounded_rotation_accepts_both_then_expires_previous() {
+        let policy = BearerPolicy::new(
+            Some("new-secret".into()),
+            Some("old-secret".into()),
+            Some(1_060),
+            1_000,
+        )
+        .unwrap();
+        assert_eq!(
+            authorize_bearers(true, false, &policy, Some("Bearer new-secret"), 1_001),
+            Authorization {
+                decision: AccessDecision::Allow,
+                generation: Some(AuthGeneration::Current),
+            }
+        );
+        assert_eq!(
+            authorize_bearers(true, false, &policy, Some("Bearer old-secret"), 1_059),
+            Authorization {
+                decision: AccessDecision::Allow,
+                generation: Some(AuthGeneration::Previous),
+            }
+        );
+        assert_eq!(
+            authorize_bearers(true, false, &policy, Some("Bearer old-secret"), 1_060),
+            Authorization {
+                decision: AccessDecision::Unauthorized,
+                generation: None,
+            }
+        );
+        assert_eq!(
+            authorize_bearers(true, false, &policy, Some("Bearer new-secret"), 1_060),
+            Authorization {
+                decision: AccessDecision::Allow,
+                generation: Some(AuthGeneration::Current),
+            }
+        );
+
+        // Explicit invalidation is a config removal + restart. It need not wait
+        // for the natural deadline, and the current bearer remains valid.
+        let invalidated = BearerPolicy::new(Some("new-secret".into()), None, None, 1_020).unwrap();
+        assert_eq!(
+            authorize_bearers(true, false, &invalidated, Some("Bearer old-secret"), 1_020),
+            Authorization {
+                decision: AccessDecision::Unauthorized,
+                generation: None,
+            }
+        );
+        assert_eq!(
+            authorize_bearers(true, false, &invalidated, Some("Bearer new-secret"), 1_020),
+            Authorization {
+                decision: AccessDecision::Allow,
+                generation: Some(AuthGeneration::Current),
+            }
+        );
+    }
+
+    #[test]
+    fn invalid_grace_configurations_fail_closed_without_secret_text() {
+        for (current, previous, expires_at, expected) in [
+            (
+                None,
+                Some("old".into()),
+                Some(1_060),
+                "previous bearer requires current auth_token",
+            ),
+            (
+                Some("new".into()),
+                None,
+                Some(1_060),
+                "previous bearer expiry requires previous_auth_token",
+            ),
+            (
+                Some("new".into()),
+                Some("old".into()),
+                None,
+                "previous bearer requires an absolute expiry",
+            ),
+            (
+                Some("same".into()),
+                Some("same".into()),
+                Some(1_060),
+                "current and previous bearer must be distinct",
+            ),
+            (
+                Some("new".into()),
+                Some("old".into()),
+                Some(1_000),
+                "previous bearer expiry is not in the future",
+            ),
+            (
+                Some("new".into()),
+                Some("old".into()),
+                Some(1_000 + MAX_PREVIOUS_BEARER_GRACE_SECONDS + 1),
+                "previous bearer expiry exceeds the 24-hour maximum",
+            ),
+        ] {
+            assert_eq!(
+                BearerPolicy::new(current, previous, expires_at, 1_000).err(),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn restart_does_not_extend_previous_bearer_expiry() {
+        let first = BearerPolicy::new(
+            Some("new-secret".into()),
+            Some("old-secret".into()),
+            Some(1_060),
+            1_000,
+        )
+        .unwrap();
+        let restarted = BearerPolicy::new(
+            Some("new-secret".into()),
+            Some("old-secret".into()),
+            Some(1_060),
+            1_050,
+        )
+        .unwrap();
+        assert_eq!(
+            authorize_bearers(true, false, &first, Some("Bearer old-secret"), 1_059).decision,
+            AccessDecision::Allow
+        );
+        assert_eq!(
+            authorize_bearers(true, false, &restarted, Some("Bearer old-secret"), 1_060).decision,
+            AccessDecision::Unauthorized
         );
     }
 

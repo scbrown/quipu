@@ -354,13 +354,33 @@ async fn main() {
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
     // in quipu::http_auth (unit-tested); this only wires it into axum.
-    let auth_token = config.server.auth_token.clone();
+    let auth_policy = match quipu::http_auth::BearerPolicy::new(
+        config.server.auth_token.clone(),
+        config.server.previous_auth_token.clone(),
+        config.server.previous_auth_token_expires_at_epoch_secs,
+        quipu::time::epoch_secs(),
+    ) {
+        Ok(policy) => policy,
+        Err(reason) => {
+            eprintln!("error: invalid [quipu.server] bearer rotation configuration: {reason}");
+            std::process::exit(2);
+        }
+    };
     let read_only = config.server.read_only;
     if read_only {
         eprintln!("server is READ-ONLY — write endpoints will return 403");
     }
-    if auth_token.is_some() {
+    if auth_policy.requires_auth() {
         eprintln!("write endpoints require a bearer token");
+    }
+    if config.server.previous_auth_token.is_some() {
+        eprintln!(
+            "temporary previous bearer enabled until UTC epoch second {}",
+            config
+                .server
+                .previous_auth_token_expires_at_epoch_secs
+                .unwrap_or_default()
+        );
     }
 
     // CORS: an allowlist restricts cross-origin requests when configured; an
@@ -507,7 +527,7 @@ async fn main() {
         // before the guard runs.
         .layer(axum::middleware::from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
-                let auth_token = auth_token.clone();
+                let auth_policy = auth_policy.clone();
                 async move {
                     let path = req.uri().path().to_string();
                     let is_write = quipu::http_auth::is_write_endpoint(&path);
@@ -516,27 +536,42 @@ async fn main() {
                         .get(axum::http::header::AUTHORIZATION)
                         .and_then(|v| v.to_str().ok())
                         .map(str::to_string);
-                    let decision = quipu::http_auth::authorize(
+                    let authorization = quipu::http_auth::authorize_bearers(
                         is_write,
                         read_only,
-                        auth_token.as_deref(),
+                        &auth_policy,
                         auth_header.as_deref(),
+                        quipu::time::epoch_secs(),
                     );
-                    match decision {
+                    match authorization.decision {
                         quipu::http_auth::AccessDecision::Allow => {
                             let mut req = req;
-                            if is_write && auth_token.is_some() {
+                            if matches!(
+                                authorization.generation,
+                                Some(
+                                    quipu::http_auth::AuthGeneration::Current
+                                        | quipu::http_auth::AuthGeneration::Previous
+                                )
+                            ) {
                                 req.extensions_mut().insert(
                                     quipu::http_auth::AuthenticatedPrincipal::LEGACY_SHARED_BEARER,
                                 );
                             }
                             let mut response = next.run(req).await;
-                            let outcome = if !is_write {
-                                quipu::request_usage::AuthOutcome::NotRequired
-                            } else if auth_token.is_some() {
-                                quipu::request_usage::AuthOutcome::Authenticated
-                            } else {
-                                quipu::request_usage::AuthOutcome::OpenWrite
+                            let outcome = match authorization.generation {
+                                Some(quipu::http_auth::AuthGeneration::NotRequired) => {
+                                    quipu::request_usage::AuthOutcome::NotRequired
+                                }
+                                Some(quipu::http_auth::AuthGeneration::OpenWrite) => {
+                                    quipu::request_usage::AuthOutcome::OpenWrite
+                                }
+                                Some(quipu::http_auth::AuthGeneration::Current) => {
+                                    quipu::request_usage::AuthOutcome::AuthenticatedCurrent
+                                }
+                                Some(quipu::http_auth::AuthGeneration::Previous) => {
+                                    quipu::request_usage::AuthOutcome::AuthenticatedPrevious
+                                }
+                                None => quipu::request_usage::AuthOutcome::Pending,
                             };
                             response.extensions_mut().insert(outcome);
                             response
