@@ -30,11 +30,11 @@ fn assert_incremental_matches_rebuild(store: &mut Store, model: &mut ReadModel, 
     store
         .transact(datums, "2026-01-01T00:00:00Z", Some("test"), None)
         .unwrap();
-    model.apply_all(datums);
+    model.apply_all(store, datums);
     let rebuilt = ReadModel::build(store, crate::schema::ROOT_GRAPH).unwrap();
     assert_eq!(
-        model.triples_sorted(),
-        rebuilt.triples_sorted(),
+        model.triples_sorted(store).unwrap(),
+        rebuilt.triples_sorted(store).unwrap(),
         "incremental model diverged from a rebuild"
     );
     assert_eq!(model.len(), rebuilt.len(), "triple counts diverged");
@@ -63,20 +63,51 @@ fn build_indexes_every_permutation() {
         .unwrap();
 
     let model = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
-    assert_eq!(model.by_subject(e), [(a, v.clone())]);
-    assert_eq!(model.by_predicate(a), [(e, v.clone())]);
-    assert_eq!(model.by_predicate_object(a, &v), [e]);
-    assert!(model.contains(e, a, &v));
+    assert_eq!(model.by_subject(&s, e).unwrap(), [(a, v.clone())]);
+    assert_eq!(model.by_predicate(&s, a).unwrap(), [(e, v.clone())]);
+    assert_eq!(model.by_predicate_object(&s, a, &v).unwrap(), [e]);
+    assert!(model.contains(&s, e, a, &v).unwrap());
+}
+
+#[test]
+fn heap_backed_literals_are_lazy_but_still_queryable() {
+    let mut s = store();
+    let d = Datum {
+        entity: s.intern("http://example.org/a").unwrap(),
+        attribute: s.intern("http://example.org/description").unwrap(),
+        value: Value::Str("large attribute payload".repeat(100)),
+        valid_from: "2026-01-01T00:00:00Z".to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    s.transact(
+        std::slice::from_ref(&d),
+        "2026-01-01T00:00:00Z",
+        Some("test"),
+        None,
+    )
+    .unwrap();
+    let model = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
+    assert_eq!(model.lazy_value_count(), 1);
+    assert_eq!(
+        model.by_subject(&s, d.entity).unwrap(),
+        [(d.attribute, d.value)]
+    );
 }
 
 #[test]
 fn a_missing_key_answers_empty_rather_than_panicking() {
     let s = store();
     let model = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
-    assert!(model.by_subject(999).is_empty());
-    assert!(model.by_predicate(999).is_empty());
-    assert!(model.by_predicate_object(999, &Value::Int(1)).is_empty());
-    assert!(!model.contains(1, 2, &Value::Int(3)));
+    assert!(model.by_subject(&s, 999).unwrap().is_empty());
+    assert!(model.by_predicate(&s, 999).unwrap().is_empty());
+    assert!(
+        model
+            .by_predicate_object(&s, 999, &Value::Int(1))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!model.contains(&s, 1, 2, &Value::Int(3)).unwrap());
 }
 
 #[test]
@@ -133,19 +164,28 @@ fn a_retracted_triple_leaves_all_three_indexes() {
         Op::Assert,
     );
     let (e, a, v) = (d.entity, d.attribute, d.value.clone());
-    model.apply(&d);
-    model.apply(&Datum {
-        op: Op::Retract,
-        ..d
-    });
+    model.apply(&s, &d);
+    model.apply(
+        &s,
+        &Datum {
+            op: Op::Retract,
+            ..d
+        },
+    );
 
-    assert!(model.by_subject(e).is_empty(), "spo still holds it");
-    assert!(model.by_predicate(a).is_empty(), "pso still holds it");
     assert!(
-        model.by_predicate_object(a, &v).is_empty(),
+        model.by_subject(&s, e).unwrap().is_empty(),
+        "spo still holds it"
+    );
+    assert!(
+        model.by_predicate(&s, a).unwrap().is_empty(),
+        "pso still holds it"
+    );
+    assert!(
+        model.by_predicate_object(&s, a, &v).unwrap().is_empty(),
         "pos still holds it"
     );
-    assert!(!model.contains(e, a, &v));
+    assert!(!model.contains(&s, e, a, &v).unwrap());
 }
 
 /// Asserting the same triple twice must not double-count — SQL's `SELECT
@@ -161,12 +201,18 @@ fn a_repeated_assert_is_idempotent() {
         "http://example.org/b",
         Op::Assert,
     );
-    model.apply(&d);
-    model.apply(&d);
+    model.apply(&s, &d);
+    model.apply(&s, &d);
     assert_eq!(model.len(), 1);
-    assert_eq!(model.by_subject(d.entity).len(), 1);
-    assert_eq!(model.by_predicate(d.attribute).len(), 1);
-    assert_eq!(model.by_predicate_object(d.attribute, &d.value).len(), 1);
+    assert_eq!(model.by_subject(&s, d.entity).unwrap().len(), 1);
+    assert_eq!(model.by_predicate(&s, d.attribute).unwrap().len(), 1);
+    assert_eq!(
+        model
+            .by_predicate_object(&s, d.attribute, &d.value)
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 /// Retracting something absent is a no-op, not an underflow. `triples` is a
@@ -182,7 +228,7 @@ fn retracting_an_absent_triple_is_a_no_op() {
         "http://example.org/b",
         Op::Retract,
     );
-    model.apply(&d);
+    model.apply(&s, &d);
     assert!(model.is_empty());
 }
 
@@ -199,11 +245,14 @@ fn a_tombstone_removes_like_a_retraction() {
         "http://example.org/b",
         Op::Assert,
     );
-    model.apply(&d);
-    model.apply(&Datum {
-        op: Op::Tombstone,
-        ..d
-    });
+    model.apply(&s, &d);
+    model.apply(
+        &s,
+        &Datum {
+            op: Op::Tombstone,
+            ..d
+        },
+    );
     assert!(model.is_empty());
 }
 
@@ -224,7 +273,7 @@ fn an_already_closed_assert_is_not_indexed() {
             Op::Assert,
         )
     };
-    model.apply(&d);
+    model.apply(&s, &d);
     assert!(model.is_empty());
 }
 
@@ -273,7 +322,9 @@ fn a_mixed_write_sequence_stays_equal_to_a_rebuild() {
         }],
     );
     assert!(
-        model.contains(a_p_c.entity, a_p_c.attribute, &a_p_c.value),
+        model
+            .contains(&s, a_p_c.entity, a_p_c.attribute, &a_p_c.value)
+            .unwrap(),
         "retracting a sibling must not take the whole bucket"
     );
     // Retract the rest.
@@ -305,22 +356,33 @@ fn typed_literals_are_distinct_index_keys() {
     let a = s.intern("http://example.org/p").unwrap();
 
     for value in [Value::Int(1), Value::Str("1".to_string())] {
-        model.apply(&Datum {
-            entity: e,
-            attribute: a,
-            value,
-            valid_from: "2026-01-01T00:00:00Z".to_string(),
-            valid_to: None,
-            op: Op::Assert,
-        });
+        model.apply(
+            &s,
+            &Datum {
+                entity: e,
+                attribute: a,
+                value,
+                valid_from: "2026-01-01T00:00:00Z".to_string(),
+                valid_to: None,
+                op: Op::Assert,
+            },
+        );
     }
     assert_eq!(
         model.len(),
         2,
         "Int(1) and Str(\"1\") are different triples"
     );
-    assert_eq!(model.by_predicate_object(a, &Value::Int(1)), [e]);
-    assert_eq!(model.by_predicate_object(a, &Value::Str("1".into())), [e]);
+    assert_eq!(
+        model.by_predicate_object(&s, a, &Value::Int(1)).unwrap(),
+        [e]
+    );
+    assert_eq!(
+        model
+            .by_predicate_object(&s, a, &Value::Str("1".into()))
+            .unwrap(),
+        [e]
+    );
 }
 
 // --- Residency and the scope guard (quipu-syt) -----------------------------
@@ -367,8 +429,8 @@ fn a_write_maintains_the_resident_model() {
 
     let rebuilt = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
     assert_eq!(
-        s.read_model().unwrap().triples_sorted(),
-        rebuilt.triples_sorted(),
+        s.read_model().unwrap().triples_sorted(&s).unwrap(),
+        rebuilt.triples_sorted(&s).unwrap(),
         "maintained model diverged from a rebuild"
     );
 }
@@ -575,14 +637,20 @@ fn the_object_index_answers_and_de_indexes() {
         Op::Assert,
     );
     let (e, a, v) = (d.entity, d.attribute, d.value.clone());
-    model.apply(&d);
-    assert_eq!(model.by_object(&v), [(e, a)]);
+    model.apply(&s, &d);
+    assert_eq!(model.by_object(&s, &v).unwrap(), [(e, a)]);
 
-    model.apply(&Datum {
-        op: Op::Retract,
-        ..d
-    });
-    assert!(model.by_object(&v).is_empty(), "osp still holds it");
+    model.apply(
+        &s,
+        &Datum {
+            op: Op::Retract,
+            ..d
+        },
+    );
+    assert!(
+        model.by_object(&s, &v).unwrap().is_empty(),
+        "osp still holds it"
+    );
 }
 
 /// The unbound fallback must enumerate exactly the triples the other indexes
@@ -610,11 +678,13 @@ fn iter_triples_matches_the_other_indexes() {
     assert_incremental_matches_rebuild(&mut s, &mut model, &ds);
 
     let mut seen: Vec<(i64, i64, Vec<u8>)> = model
-        .iter_triples()
+        .triples(&s)
+        .unwrap()
+        .into_iter()
         .map(|(e, a, v)| (e, a, v.to_bytes()))
         .collect();
     seen.sort_unstable();
-    assert_eq!(seen, model.triples_sorted());
+    assert_eq!(seen, model.triples_sorted(&s).unwrap());
     assert_eq!(seen.len(), 2);
 }
 
@@ -1284,10 +1354,15 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
         )
         .unwrap();
 
-    let caught_up = reader.read_model().unwrap().triples_sorted();
+    let caught_up = reader
+        .read_model()
+        .unwrap()
+        .triples_sorted(&reader)
+        .unwrap();
     let rebuilt = ReadModel::build(&reader, crate::schema::ROOT_GRAPH)
         .unwrap()
-        .triples_sorted();
+        .triples_sorted(&reader)
+        .unwrap();
     assert_eq!(
         caught_up, rebuilt,
         "the caught-up model diverged from a rebuild — a drifting index answers \

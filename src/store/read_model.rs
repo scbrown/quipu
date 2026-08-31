@@ -125,7 +125,7 @@ impl Store {
                 let changes = self.facts_changed_since_in_graph(graph, built_at)?;
                 let mut models = self.read_model.borrow_mut();
                 if let Some(model) = models.get_mut(&graph) {
-                    model.apply_all(&changes);
+                    model.apply_all(self, &changes);
                     model.set_built_at_tx(latest);
                 }
             }
@@ -177,7 +177,7 @@ impl Store {
         };
         match effective {
             Some(datums) => {
-                model.apply_all(datums);
+                model.apply_all(self, datums);
                 // Re-stamp, or the freshness check in `read_model_for` would
                 // rebuild on the very next read and undo quipu-m9h.
                 model.set_built_at_tx(tx_id);

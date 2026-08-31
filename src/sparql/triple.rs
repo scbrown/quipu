@@ -456,48 +456,45 @@ pub(super) fn eval_triple_pattern_from_model(
     let model = store.read_model_for(graph)?;
     let mut candidates: Vec<(i64, i64, Value)> = match (subject, predicate, &object) {
         (Some(e), Some(a), Some(v)) => {
-            if model.contains(e, a, v) {
+            if model.contains(store, e, a, v)? {
                 vec![(e, a, v.clone())]
             } else {
                 vec![]
             }
         }
         (Some(e), Some(a), None) => model
-            .by_subject(e)
+            .by_subject(store, e)?
             .iter()
             .filter(|(pa, _)| *pa == a)
             .map(|(pa, v)| (e, *pa, v.clone()))
             .collect(),
         (Some(e), None, Some(v)) => model
-            .by_subject(e)
+            .by_subject(store, e)?
             .iter()
             .filter(|(_, pv)| *pv == *v)
             .map(|(pa, pv)| (e, *pa, pv.clone()))
             .collect(),
         (Some(e), None, None) => model
-            .by_subject(e)
+            .by_subject(store, e)?
             .iter()
             .map(|(pa, pv)| (e, *pa, pv.clone()))
             .collect(),
         (None, Some(a), Some(v)) => model
-            .by_predicate_object(a, v)
+            .by_predicate_object(store, a, v)?
             .iter()
             .map(|e| (*e, a, v.clone()))
             .collect(),
         (None, Some(a), None) => model
-            .by_predicate(a)
+            .by_predicate(store, a)?
             .iter()
             .map(|(e, pv)| (*e, a, pv.clone()))
             .collect(),
         (None, None, Some(v)) => model
-            .by_object(v)
+            .by_object(store, v)?
             .iter()
             .map(|(e, a)| (*e, *a, v.clone()))
             .collect(),
-        (None, None, None) => model
-            .iter_triples()
-            .map(|(e, a, v)| (e, a, v.clone()))
-            .collect(),
+        (None, None, None) => model.triples(store)?,
     };
     candidates.sort_unstable_by_key(|l| (l.0, l.1, l.2.to_bytes()));
 

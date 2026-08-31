@@ -24,6 +24,7 @@ use std::collections::HashSet;
 use std::time::Instant;
 
 use quipu::Store;
+use quipu::sparql::QueryResult;
 use quipu::store::read_model::ReadModel;
 use quipu::types::Value;
 
@@ -45,14 +46,22 @@ fn rss_kb() -> u64 {
 /// `?d <pred> ?s . ?s a <type_iri>` as a hash join: build a set from the type
 /// side, probe it with the edge side. This is the operation `eval_bgp`
 /// currently performs as one SQL statement per accumulated row.
-fn two_hop(model: &ReadModel, pred: i64, rdf_type: i64, type_id: i64) -> Vec<(i64, i64)> {
+fn two_hop(
+    store: &Store,
+    model: &ReadModel,
+    pred: i64,
+    rdf_type: i64,
+    type_id: i64,
+) -> Vec<(i64, i64)> {
     let typed: HashSet<i64> = model
-        .by_predicate_object(rdf_type, &Value::Ref(type_id))
+        .by_predicate_object(store, rdf_type, &Value::Ref(type_id))
+        .expect("type lookup")
         .iter()
         .copied()
         .collect();
     model
-        .by_predicate(pred)
+        .by_predicate(store, pred)
+        .expect("predicate lookup")
         .iter()
         .filter_map(|(subject, value)| match value {
             Value::Ref(target) if typed.contains(target) => Some((*subject, *target)),
@@ -97,18 +106,36 @@ fn main() {
     };
 
     // Warm once so the reported figure is the join, not first-touch paging.
-    let _ = two_hop(&model, pred, rdf_type, type_id);
+    let _ = two_hop(&store, &model, pred, rdf_type, type_id);
     let started = Instant::now();
-    let rows = two_hop(&model, pred, rdf_type, type_id);
+    let rows = two_hop(&store, &model, pred, rdf_type, type_id);
     println!(
         "2-hop join     : {:>9.3}ms ({} rows, unlimited)",
         started.elapsed().as_secs_f64() * 1000.0,
         rows.len()
     );
 
+    let query =
+        format!("SELECT ?d ?s WHERE {{ ?d <{NS}targets> ?s . ?s a <{NS}Service> }} LIMIT 100");
+    let mut samples = Vec::with_capacity(100);
+    for iteration in 0..101 {
+        let started = Instant::now();
+        let result = quipu::sparql_query(&store, &query).expect("SPARQL 2-hop query");
+        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+        assert!(matches!(result, QueryResult::Select { ref rows, .. } if rows.len() == 100));
+        if iteration > 0 {
+            samples.push(elapsed_ms);
+        }
+    }
+    samples.sort_by(f64::total_cmp);
+    println!("/query p99     : {:>9.3}ms (100 warm samples)", samples[98]);
+
     if let Ok(Some(subject)) = store.lookup(&format!("{NS}service-1")) {
         let started = Instant::now();
-        let n = model.by_subject(subject).len();
+        let n = model
+            .by_subject(&store, subject)
+            .expect("subject lookup")
+            .len();
         println!(
             "point lookup   : {:>9.4}ms ({n} facts)",
             started.elapsed().as_secs_f64() * 1000.0
