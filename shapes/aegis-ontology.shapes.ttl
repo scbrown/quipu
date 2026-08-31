@@ -784,7 +784,12 @@ aegis:DirectiveShape a sh:NodeShape ;
     ] ;
     sh:property [
         sh:path aegis:issuedBy ;
-        sh:datatype xsd:string ;
+        # Preserve legacy string issuers while allowing the relational form
+        # (`aegis:issuedBy aegis:Stiwi`) used by graph-native provenance.
+        # `sh:class` is deliberately absent: validation is payload-scoped, so
+        # requiring it would force every directive write to repeat the
+        # already-stored issuer type.
+        sh:or ( [ sh:datatype xsd:string ] [ sh:nodeKind sh:IRI ] ) ;
         sh:maxCount 1 ;
     ] ;
     sh:property [

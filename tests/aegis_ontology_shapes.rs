@@ -36,6 +36,37 @@ fn internal_identifier_patterns_are_declared_as_text_rules() {
 }
 
 #[test]
+fn directive_issuer_accepts_legacy_text_and_an_entity_iri() {
+    let fixture = |issuer: &str| {
+        format!(
+            r#"
+                @prefix aegis: <http://aegis.gastown.local/ontology/> .
+                @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+                aegis:test-directive a aegis:Directive ;
+                    rdfs:label "Test directive" ;
+                    aegis:issuedBy {issuer} .
+            "#
+        )
+    };
+
+    assert!(
+        quipu::validate_shapes(SHAPES, &fixture("\"Stiwi\""))
+            .unwrap()
+            .conforms
+    );
+    assert!(
+        quipu::validate_shapes(SHAPES, &fixture("aegis:Stiwi"))
+            .unwrap()
+            .conforms
+    );
+    assert!(
+        !quipu::validate_shapes(SHAPES, &fixture("42"))
+            .unwrap()
+            .conforms
+    );
+}
+
+#[test]
 fn desired_crew_shape_accepts_a_scoped_composable_plan() {
     let valid = r#"
         @prefix aegis: <http://aegis.gastown.local/ontology/> .
