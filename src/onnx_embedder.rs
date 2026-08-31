@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use ndarray::Array2;
 use ort::session::Session;
 use ort::value::Tensor;
-use tokenizers::Tokenizer;
+use tokenizers::{PaddingStrategy, Tokenizer};
 
 use crate::embedding::EmbeddingProvider;
 use crate::error::Result;
@@ -57,6 +57,7 @@ impl OnnxEmbeddingProvider {
                 ..Default::default()
             }))
             .map_err(|e| crate::Error::Store(format!("Tokenizer truncation config failed: {e}")))?;
+        use_batch_longest_padding(&mut tokenizer);
 
         Ok(Self {
             session: Mutex::new(session),
@@ -187,6 +188,19 @@ impl OnnxEmbeddingProvider {
     }
 }
 
+/// Do not inherit the model bundle's fixed 128-token padding.
+///
+/// The attention mask already makes padded positions semantically inert, but
+/// `Fixed(128)` still makes `ONNX` compute every short entity as 128 tokens.
+/// Padding only to the longest input in this batch preserves the real-token
+/// embedding while bounding inference time and arena memory by actual input.
+fn use_batch_longest_padding(tokenizer: &mut Tokenizer) {
+    if let Some(padding) = tokenizer.get_padding_mut() {
+        padding.strategy = PaddingStrategy::BatchLongest;
+        padding.pad_to_multiple_of = None;
+    }
+}
+
 impl EmbeddingProvider for OnnxEmbeddingProvider {
     fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let results = self.embed_batch_inner(&[text])?;
@@ -202,5 +216,26 @@ impl EmbeddingProvider for OnnxEmbeddingProvider {
 
     fn dimension(&self) -> usize {
         self.dim
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_model_padding_is_replaced_with_batch_longest() {
+        let mut tokenizer = Tokenizer::new(tokenizers::models::wordlevel::WordLevel::default());
+        tokenizer.with_padding(Some(tokenizers::PaddingParams {
+            strategy: PaddingStrategy::Fixed(128),
+            pad_to_multiple_of: Some(8),
+            ..Default::default()
+        }));
+
+        use_batch_longest_padding(&mut tokenizer);
+
+        let padding = tokenizer.get_padding().unwrap();
+        assert!(matches!(padding.strategy, PaddingStrategy::BatchLongest));
+        assert_eq!(padding.pad_to_multiple_of, None);
     }
 }
