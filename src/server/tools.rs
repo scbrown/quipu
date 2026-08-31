@@ -9,6 +9,7 @@ use axum::extract::State;
 use serde_json::{Value as JsonValue, json};
 
 use super::SharedStore;
+use super::admission::write_blocking;
 use super::base::{AppError, blocking};
 
 macro_rules! ro_handler {
@@ -104,7 +105,7 @@ macro_rules! rw_handler {
             State(s): State<SharedStore>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
-            blocking(move || {
+            write_blocking(move || {
                 // Phase 1 under the lock: the transaction itself (plus cheap
                 // embed-work collection). Phase 2 (ONNX embed) runs after the
                 // guard drops; phase 3 relocks to write vectors. See
@@ -159,7 +160,7 @@ macro_rules! embed_handler {
                         }
                     }
                 }
-                Ok(axum::Json($tool(&s.lock(), &i)?))
+                Ok(axum::Json($tool(&s.vector_read(), &i)?))
             })
             .await
         }

@@ -223,6 +223,77 @@ async fn precomputed_embedding_bypasses_the_provider() {
     );
 }
 
+/// Supplied-vector search is read-only. It must use the WAL read pool rather
+/// than queueing behind an unrelated writer, or concurrent mixed load turns
+/// every search into writer-lock latency.
+#[tokio::test(flavor = "current_thread")]
+async fn precomputed_search_does_not_queue_behind_the_writer() {
+    let (_dir, handle) = pooled_handle(1);
+    let shared = Arc::new(handle);
+    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let holder = shared.clone();
+    let thread = std::thread::spawn(move || {
+        let _writer = holder.lock();
+        locked_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    locked_rx.recv().unwrap();
+
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        search(
+            State(shared),
+            axum::Json(json!({ "embedding": vec![0.2f32; 384], "limit": 1 })),
+        ),
+    )
+    .await
+    .expect("precomputed search queued behind the writer instead of using the read pool")
+    .expect("precomputed search failed on a read-only pooled connection");
+    release_tx.send(()).unwrap();
+    thread.join().unwrap();
+}
+
+/// Tokio cannot cancel blocking tasks after they start. Admission therefore
+/// has to happen in async space: cancelling a waiter must prevent its closure
+/// from ever entering the blocking pool.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancelled_write_waiter_never_starts_blocking_work() {
+    let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let leader = tokio::spawn(super::admission::write_blocking_with(
+        admission,
+        move || {
+            started_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            Ok(())
+        },
+    ));
+    started_rx.await.unwrap();
+
+    let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let ran_in_waiter = ran.clone();
+    let waiter = tokio::spawn(super::admission::write_blocking_with(
+        admission,
+        move || {
+            ran_in_waiter.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        },
+    ));
+    tokio::task::yield_now().await;
+    waiter.abort();
+    assert!(waiter.await.unwrap_err().is_cancelled());
+
+    release_tx.send(()).unwrap();
+    leader.await.unwrap().unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    assert!(
+        !ran.load(std::sync::atomic::Ordering::SeqCst),
+        "cancelled write entered spawn_blocking and survived its HTTP future"
+    );
+}
+
 /// /stats returns the generation-keyed cache when `Store::latest_tx_id()`
 /// is unchanged, and recomputes when it moves (a write). Both paths are proven by
 /// poisoning `STATS_CACHE` at a matching vs a stale generation — matching returns the
@@ -655,6 +726,7 @@ fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreHandle) {
     }
     let handle = super::StoreHandle {
         writer: parking_lot::FairMutex::new(store),
+        vector_reads_pooled: true,
         federation: quipu::config::FederationConfig::default(),
         readers: super::ReadPool {
             conns,

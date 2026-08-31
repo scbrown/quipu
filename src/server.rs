@@ -24,6 +24,8 @@ const THREE_JS: &str = include_str!("../ui/vendor/three.module.min.js");
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
 // explicitly.
+#[path = "server/admission.rs"]
+mod admission;
 #[path = "server/base.rs"]
 mod base;
 #[path = "server/entity.rs"]
@@ -343,9 +345,11 @@ async fn main() {
         eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
     }
 
+    let vector_reads_pooled = store.has_sqlite_vector_backend();
     let state: SharedStore = Arc::new(StoreHandle {
         writer: FairMutex::new(store),
         readers: read_pool,
+        vector_reads_pooled,
         federation: config.federation.clone(),
         #[cfg(feature = "reactive-reasoner")]
         reasoner: reactive_reasoner,
