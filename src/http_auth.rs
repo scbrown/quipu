@@ -123,6 +123,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/report",
     "/context",
     "/entity/{iri}",
+    "/entity",
     "/entity/{iri}/json",
     "/entity/{iri}/ttl",
     "/entity/{iri}/html",

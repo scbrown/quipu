@@ -10,8 +10,57 @@ use super::SharedStore;
 use super::base::{
     STATS_CACHE, StatsCache, export as export_handler, metrics_handler, query, share_payload, stats,
 };
-use super::entity::{SPOTLIGHT_CACHE, spotlight_handler};
+use super::entity::{EntityParams, SPOTLIGHT_CACHE, entity_query_conneg, spotlight_handler};
 use super::tools::{episode, search};
+
+#[tokio::test]
+async fn query_form_entity_dereferences_json_ld_and_html() {
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let iri = "https://example.org/resource/one#it";
+
+    let mut json_headers = axum::http::HeaderMap::new();
+    json_headers.insert(
+        axum::http::header::ACCEPT,
+        "application/ld+json".parse().unwrap(),
+    );
+    let json_response = entity_query_conneg(
+        State(shared.clone()),
+        axum::extract::Query(EntityParams { iri: iri.into() }),
+        json_headers,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        json_response.headers()[axum::http::header::CONTENT_TYPE],
+        "application/ld+json"
+    );
+    let body = axum::body::to_bytes(json_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let document: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(document["@id"], iri);
+    assert!(document.get("@context").is_some());
+
+    let html_response = entity_query_conneg(
+        State(shared),
+        axum::extract::Query(EntityParams { iri: iri.into() }),
+        axum::http::HeaderMap::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        html_response.headers()[axum::http::header::CONTENT_TYPE],
+        "text/html; charset=utf-8"
+    );
+    let body = axum::body::to_bytes(html_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("class=\"card\""));
+    assert!(html.contains(">it</div>"));
+}
 
 #[tokio::test]
 async fn post_share_returns_reconstructable_canonical_files() {

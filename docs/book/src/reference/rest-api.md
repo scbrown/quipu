@@ -1160,12 +1160,21 @@ Query via `GET /events?types=write.refused`, or count by gate with the CLI:
 
 Standards-flavoured read endpoints for semantic-web tooling.
 
+### `GET /changes`
+
+Returns fact-level change records after the optional `since` transaction.
+`capture` selects `new_values`, `old_and_new_values`, or `new_row`; `graph`
+optionally scopes the feed to one graph IRI. The response includes `next_tx`
+and a watermark so consumers can distinguish an idle feed from a stalled one.
+
 ### `GET /entity/{iri}`
 
 Content-negotiated entity page: `Accept: application/ld+json` → JSON-LD,
 `text/turtle` → Turtle, anything else → the web UI's HTML page for the
 entity. `GET /entity/{iri}/json`, `GET /entity/{iri}/ttl` and
 `GET /entity/{iri}/html` pin the format in the path instead of the header.
+For a full IRI containing path separators or a fragment, use the equivalent
+query form: `GET /entity?iri=https%3A%2F%2Fexample.org%2Fresource%231`.
 
 ### `POST /spotlight`
 

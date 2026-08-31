@@ -13,8 +13,8 @@ use serde_json::{Value as JsonValue, json};
 
 use quipu::semweb;
 
+use super::SharedStore;
 use super::base::{AppError, blocking};
-use super::{SharedStore, UI_HTML};
 
 pub(crate) async fn entity_history(
     State(store): State<SharedStore>,
@@ -230,6 +230,28 @@ pub(crate) async fn entity_conneg(
     Path(iri): Path<String>,
     headers: HeaderMap,
 ) -> Result<axum::response::Response, AppError> {
+    entity_response(store, semweb::decode_iri(&iri), headers).await
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct EntityParams {
+    pub(crate) iri: String,
+}
+
+/// Query-form dereference endpoint for IRIs containing `/` and `#`.
+pub(crate) async fn entity_query_conneg(
+    State(store): State<SharedStore>,
+    Query(params): Query<EntityParams>,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, AppError> {
+    entity_response(store, params.iri, headers).await
+}
+
+async fn entity_response(
+    store: SharedStore,
+    iri: String,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, AppError> {
     let accept = headers
         .get("accept")
         .and_then(|v| v.to_str().ok())
@@ -237,15 +259,17 @@ pub(crate) async fn entity_conneg(
     let json_ld = accept.contains("application/ld+json") || accept.contains("application/json");
     let turtle = accept.contains("text/turtle") || accept.contains("application/x-turtle");
     if !json_ld && !turtle {
-        return Ok(Html(UI_HTML).into_response());
+        return blocking(move || {
+            Ok(Html(semweb::preview_card(&store.lock(), &iri)?).into_response())
+        })
+        .await;
     }
     blocking(move || {
-        let decoded = semweb::decode_iri(&iri);
         let store = store.lock();
         if json_ld {
-            Ok(json_ld_response(semweb::entity_json_ld(&store, &decoded)?))
+            Ok(json_ld_response(semweb::entity_json_ld(&store, &iri)?))
         } else {
-            Ok(turtle_response(semweb::entity_turtle(&store, &decoded)?))
+            Ok(turtle_response(semweb::entity_turtle(&store, &iri)?))
         }
     })
     .await
@@ -274,10 +298,16 @@ pub(crate) async fn entity_turtle_suffix(
 }
 
 pub(crate) async fn entity_html(
-    State(_s): State<SharedStore>,
-    Path(_i): Path<String>,
-) -> Html<&'static str> {
-    Html(UI_HTML)
+    State(store): State<SharedStore>,
+    Path(iri): Path<String>,
+) -> Result<Html<String>, AppError> {
+    blocking(move || {
+        Ok(Html(semweb::preview_card(
+            &store.lock(),
+            &semweb::decode_iri(&iri),
+        )?))
+    })
+    .await
 }
 
 pub(crate) fn json_ld_response(j: JsonValue) -> axum::response::Response {

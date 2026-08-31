@@ -48,9 +48,9 @@ use base::{
     version,
 };
 use entity::{
-    changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_turtle_suffix,
-    events_commit, events_get, fragments_handler, preview_handler, reconcile_handler,
-    spotlight_handler, transactions,
+    changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
+    entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
+    reconcile_handler, spotlight_handler, transactions,
 };
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use reason::{explain, reason, shapes};
@@ -486,6 +486,7 @@ async fn main() {
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
         // Entity + history
+        .route("/entity", get(entity_query_conneg))
         .route("/entity/{iri}", get(entity_conneg))
         .route("/entity/{iri}/json", get(entity_json))
         .route("/entity/{iri}/ttl", get(entity_turtle_suffix))
