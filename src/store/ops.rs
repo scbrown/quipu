@@ -949,80 +949,8 @@ impl Store {
             .collect())
     }
 
-    /// Term ids for `rdfs:label` and `rdf:type`, or `None` if never interned
-    /// (in which case no fact can carry that predicate).
-    fn identity_predicate_ids(&self) -> Result<(Option<i64>, Option<i64>)> {
-        Ok((
-            self.lookup(crate::namespace::RDFS_LABEL)?,
-            self.lookup(crate::namespace::RDF_TYPE)?,
-        ))
-    }
-
-    /// Entities that `in_scope` (an episode's active facts) would leave without
-    /// a label and/or a type, while OTHER writes still reference them.
-    ///
-    /// "Still referenced" is deliberately broad — subject or object of any
-    /// surviving fact. A node reachable by any edge must stay findable by name.
-    fn identity_orphans(&self, in_scope: &[Fact], source_tag: &str) -> Result<Vec<IdentityOrphan>> {
-        let (label_id, type_id) = self.identity_predicate_ids()?;
-        if label_id.is_none() && type_id.is_none() {
-            return Ok(Vec::new());
-        }
-
-        let mut entities: Vec<i64> = in_scope
-            .iter()
-            .filter(|f| Some(f.attribute) == label_id || Some(f.attribute) == type_id)
-            .map(|f| f.entity)
-            .collect();
-        entities.sort_unstable();
-        entities.dedup();
-
-        let mut orphans = Vec::new();
-        for entity in entities {
-            // Would the entity still be referenced at all once this episode's
-            // facts are gone? If not, it leaves the graph whole — not a ghost.
-            if !self.has_surviving_reference(entity, source_tag)? {
-                continue;
-            }
-            let declared_label = in_scope
-                .iter()
-                .any(|f| f.entity == entity && Some(f.attribute) == label_id);
-            let declared_type = in_scope
-                .iter()
-                .any(|f| f.entity == entity && Some(f.attribute) == type_id);
-            // Another episode may independently assert a label/type; then ours
-            // is not the node's only identity and losing it orphans nothing.
-            let lost_label =
-                declared_label && !self.has_surviving_predicate(entity, label_id, source_tag)?;
-            let lost_type =
-                declared_type && !self.has_surviving_predicate(entity, type_id, source_tag)?;
-            if lost_label || lost_type {
-                orphans.push(IdentityOrphan {
-                    entity,
-                    lost_label,
-                    lost_type,
-                });
-            }
-        }
-        Ok(orphans)
-    }
-
-    /// Is `entity` the subject or object of any active fact NOT written by
-    /// `source_tag`'s transaction(s)?
-    fn has_surviving_reference(&self, entity: i64, source_tag: &str) -> Result<bool> {
-        let as_object = Value::Ref(entity).to_bytes();
-        let mut stmt = self.conn.prepare(
-            "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
-             WHERE f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
-               AND (f.e = ?1 OR f.v = ?2) \
-               AND (t.source IS NULL OR t.source <> ?3) \
-             LIMIT 1",
-        )?;
-        Ok(stmt.exists(params![entity, as_object, source_tag])?)
-    }
-
     /// Does `entity` carry an active `predicate` fact from outside `source_tag`?
-    fn has_surviving_predicate(
+    pub(super) fn has_surviving_predicate(
         &self,
         entity: i64,
         predicate: Option<i64>,

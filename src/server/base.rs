@@ -279,6 +279,8 @@ pub(crate) async fn query(
     headers: HeaderMap,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::response::Response, AppError> {
+    let query_shape =
+        quipu::request_usage::classify_query(input.get("query").and_then(JsonValue::as_str));
     // Content negotiation (aegis-u7ag): an explicit standard Accept header opts
     // into the W3C SPARQL 1.1 results/RDF shape; absent / */* / application/json
     // keeps the default bespoke rows shape byte-for-byte, so existing callers are
@@ -417,7 +419,14 @@ pub(crate) async fn query(
                 if truncated {
                     body["truncated"] = json!(true);
                 }
-                return Ok(axum::Json(body).into_response());
+                let mut response = axum::Json(body).into_response();
+                response
+                    .extensions_mut()
+                    .insert(quipu::request_usage::RequestUsage {
+                        query_shape,
+                        result_size: json_rows.len(),
+                    });
+                return Ok(response);
             }
 
             if let Some(fmt) = quipu::w3c::negotiate(&accept) {
@@ -437,14 +446,34 @@ pub(crate) async fn query(
                     {
                         headers.insert(axum::http::HeaderName::from_static("x-quipu-inference"), v);
                     }
-                    return Ok((headers, body).into_response());
+                    let result_size = match &result {
+                        quipu::QueryResult::Select { rows, .. } => rows.len(),
+                        quipu::QueryResult::Graph(triples) => triples.len(),
+                        quipu::QueryResult::Ask(_) => 1,
+                    };
+                    let mut response = (headers, body).into_response();
+                    response
+                        .extensions_mut()
+                        .insert(quipu::request_usage::RequestUsage {
+                            query_shape,
+                            result_size,
+                        });
+                    return Ok(response);
                 }
                 // Format did not fit the result variant (e.g. text/turtle for a SELECT);
                 // fall through to the default shape rather than erroring.
             }
 
             let result = quipu::tool_query(store, &input)?;
-            Ok(axum::Json(result).into_response())
+            let result_size = quipu::request_usage::json_result_size(&result);
+            let mut response = axum::Json(result).into_response();
+            response
+                .extensions_mut()
+                .insert(quipu::request_usage::RequestUsage {
+                    query_shape,
+                    result_size,
+                });
+            Ok(response)
         };
 
         let result = run(&store);

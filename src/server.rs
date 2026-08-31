@@ -524,7 +524,16 @@ async fn main() {
                                     quipu::http_auth::AuthenticatedPrincipal::LEGACY_SHARED_BEARER,
                                 );
                             }
-                            next.run(req).await
+                            let mut response = next.run(req).await;
+                            let outcome = if !is_write {
+                                quipu::request_usage::AuthOutcome::NotRequired
+                            } else if auth_token.is_some() {
+                                quipu::request_usage::AuthOutcome::Authenticated
+                            } else {
+                                quipu::request_usage::AuthOutcome::OpenWrite
+                            };
+                            response.extensions_mut().insert(outcome);
+                            response
                         }
                         // BOTH refusals carry a JSON body, and that is the whole
                         // point of aegis-zodg0. `StatusCode::into_response()`
@@ -558,7 +567,7 @@ async fn main() {
                             } else {
                                 ""
                             };
-                            (
+                            let mut response = (
                                 StatusCode::UNAUTHORIZED,
                                 axum::Json(serde_json::json!({
                                     "error": format!(
@@ -571,21 +580,31 @@ async fn main() {
                                     "reason": "missing_or_invalid_bearer_token",
                                 })),
                             )
-                                .into_response()
+                                .into_response();
+                            response.extensions_mut().insert(
+                                quipu::request_usage::AuthOutcome::Unauthorized,
+                            );
+                            response
                         }
-                        quipu::http_auth::AccessDecision::ReadOnly => (
-                            StatusCode::FORBIDDEN,
-                            axum::Json(serde_json::json!({
-                                "error": format!(
-                                    "read-only mode: {path} is a WRITE endpoint and this server was \
-                                     started read-only, so no credential will authorize it. Restart \
-                                     without read-only to permit writes."
-                                ),
-                                "endpoint": path,
-                                "reason": "server_is_read_only",
-                            })),
-                        )
-                            .into_response(),
+                        quipu::http_auth::AccessDecision::ReadOnly => {
+                            let mut response = (
+                                StatusCode::FORBIDDEN,
+                                axum::Json(serde_json::json!({
+                                    "error": format!(
+                                        "read-only mode: {path} is a WRITE endpoint and this server was \
+                                         started read-only, so no credential will authorize it. Restart \
+                                         without read-only to permit writes."
+                                    ),
+                                    "endpoint": path,
+                                    "reason": "server_is_read_only",
+                                })),
+                            )
+                                .into_response();
+                            response
+                                .extensions_mut()
+                                .insert(quipu::request_usage::AuthOutcome::ReadOnly);
+                            response
+                        }
                     }
                 }
             },
@@ -628,6 +647,11 @@ async fn main() {
                         .get(axum::http::header::USER_AGENT)
                         .and_then(|v| v.to_str().ok()),
                 );
+                let task = quipu::metrics::normalize_task(
+                    req.headers()
+                        .get("x-quipu-task")
+                        .and_then(|v| v.to_str().ok()),
+                );
                 // Log at START with an id, then again at completion. The
                 // request that never completes is exactly the one an RCA
                 // needs, and completion-only logging guarantees it is the one
@@ -638,19 +662,51 @@ async fn main() {
                 static REQ_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
                 let id = REQ_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 eprintln!(
-                    "{} req#{id} client={client} {method} {path} ...",
-                    quipu::time::now_iso()
+                    "{}",
+                    quipu::request_usage::structured_request_log(
+                        "request_start",
+                        id,
+                        &client,
+                        &task,
+                        method.as_str(),
+                        &path,
+                        &endpoint,
+                        None,
+                        None,
+                        quipu::request_usage::AuthOutcome::Pending,
+                        None,
+                    )
                 );
                 let started = std::time::Instant::now();
                 let resp = next.run(req).await;
                 let status = resp.status().as_u16();
                 let elapsed = started.elapsed().as_secs_f64();
                 quipu::metrics::metrics().observe_request(&endpoint, status, elapsed);
-                quipu::metrics::metrics().observe_client(&client, &endpoint, elapsed);
+                quipu::metrics::metrics().observe_client(&client, &task, &endpoint, elapsed);
+                let auth = resp
+                    .extensions()
+                    .get::<quipu::request_usage::AuthOutcome>()
+                    .copied()
+                    .unwrap_or(quipu::request_usage::AuthOutcome::Pending);
+                let usage = resp
+                    .extensions()
+                    .get::<quipu::request_usage::RequestUsage>()
+                    .copied();
                 eprintln!(
-                    "{} req#{id} client={client} {method} {path} -> {status} in {}ms",
-                    quipu::time::now_iso(),
-                    started.elapsed().as_millis()
+                    "{}",
+                    quipu::request_usage::structured_request_log(
+                        "request_complete",
+                        id,
+                        &client,
+                        &task,
+                        method.as_str(),
+                        &path,
+                        &endpoint,
+                        Some(status),
+                        Some(started.elapsed().as_millis()),
+                        auth,
+                        usage,
+                    )
                 );
                 resp
             },

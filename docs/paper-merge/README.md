@@ -23,33 +23,65 @@ Read each benchmark's `BUILD_REPORT.md` — the honesty record — **before quot
 a number**. They state what each arm can and cannot establish, and one of the
 plan's own hypotheses does not survive Arm A.
 
-The Arm A table in §5 aggregates seeds 1, 7, 42, 99 and 2026 at 200 entities,
-400 edits and overlap 0.5. `benchmark/mergebench/out/` is gitignored, so
+The Arm A table in §5 aggregates seeds 1, 7, 42, 99 and 2026 at the harness
+defaults — 200 entities, **200 edits per side** (400 in total) and overlap 0.5.
+`--edits` sets the count *per side*, so `--edits 400` is a different scenario
+and reproduces none of the table. `benchmark/mergebench/out/` is gitignored, so
 regenerate before checking a range.
 
 ## Open before submission
 
-- [ ] **One bibliography entry remains unverified: `ibanez2012suset`.** The
-      other five were checked against Crossref or the publisher on 2026-08-29
-      and carry resolved DOIs; the Quit Store entry matched exactly, and the
-      R43ples entry was **corrected** by the pass (the remembered 2014 workshop
-      paper became the verified 2016 SEMANTiCS one). SU-Set is not Crossref
-      indexed, as expected for a 2012 workshop paper, so its venue and year rest
-      on recollection. Confirm it from the authors' publication list, or cite
-      the CRDT-for-RDF line generically in §8 instead.
-- [ ] **Confirm the Context Merge description in §8 against Quit Store itself.**
-      The citation is verified; that the *sentence* fairly describes what Quit
-      Store specifies is a separate check, and the paper's whole
-      no-priority-claim position rests on it.
-- [x] ~~Build the PDF.~~ Compiles clean with tectonic 0.17.0: 11 pages, 0
-      unresolved references or citations. `just paper-merge` finds no engine on
-      hosts without one — that is a host gap, not a source problem.
-- [ ] **Run the scrub gate over the finished artifact**:
-      `scripts/arxiv-scrub-gate.sh` — it reports INCOMPLETE until this directory
-      exists, and it gates the paper source with no path exemption.
-- [ ] **Author metadata**: `main.tex` mirrors the store paper's author block.
-      Confirm the acknowledgement and artifact-availability text, and add a
-      Zenodo DOI if this artifact is archived separately.
+Everything below that a crew member can settle is settled. What remains is
+Stiwi's to do, and is marked so.
+
+- [x] ~~One bibliography entry remains unverified: `ibanez2012suset`.~~
+      **Resolved 2026-08-30 — by finding the remembered record does not exist.**
+      There is no paper titled "SU-Set: An Operation-based CRDT for Triple
+      Stores": zero hits in DBLP (checked against Skaf-Molli's complete author
+      record, not a keyword search), Crossref and OpenAlex. SU-Set is the name
+      of the **CRDT**, not of a paper. It is defined in Ibáñez et al.,
+      *Synchronizing Semantic Stores with Commutative Replicated Data Types*,
+      WWW '12 Companion, pp. 1091–1096, `10.1145/2187980.2188246` — whose
+      publisher abstract ends "In this paper, we define SU-Set, a CRDT for
+      RDF-Graph that supports SPARQL Update 1.1 operations." The remembered
+      author list was exactly right, which is why the entry looked sound. The
+      key is unchanged; the entry's `note` carries the name and the 2013 IJMSO
+      extended version. **All six entries now carry a resolved identifier.**
+- [x] ~~Confirm the Context Merge description in §8 against Quit Store itself.~~
+      **Checked 2026-08-30 against the paper's own §8.4**, read from the source
+      PDF rather than from the abstract. Every claim held: Quit is "Quads in
+      Git"; Context Merge "produces merge conflicts, as soon as the changes of
+      both merged commits overlap at a node", marking the subject and object of
+      each added or removed statement with its originating commit. §8 was
+      **strengthened for fairness, not corrected for error**: it now says Context
+      Merge *identifies* conflicts and hands them to a person (its own section
+      heading is "A Supervised Approach to Identify Conflicts") rather than
+      "reconciles"; it records that avoiding semantic rules is Quit Store's
+      stated, deliberate choice rather than an oversight; and it frames 845-vs-33
+      as two different questions being asked, not one strategy failing at the
+      other's task. The no-priority-claim position is stronger for it.
+- [x] ~~Build the PDF.~~ Rebuilt 2026-08-30 after the above: 11 pages, **0
+      unresolved references or citations, 0 BibTeX warnings** (the one remaining
+      warning, an unsortable authorless `terminusdb` entry, was fixed with a
+      `key`). `main.pdf` **is tracked** as of `c362091` — it was untracked in
+      `7646260` and restored, so the `.gitignore` note that used to stand here
+      was wrong in both directions; rebuild it with the `just` recipe after any
+      source change.
+- [x] ~~Run the scrub gate over the finished artifact.~~ **PASS**, exit 0, all
+      three arms with controls proven, 7/7 components. Re-run after every source
+      change; it is cheap.
+- [x] ~~Author metadata.~~ Acknowledgement and artifact-availability text
+      confirmed; ORCID present. `\date` is now **pinned** rather than `\today`,
+      so a rebuild does not change the paper's date; `\today` made every rebuild
+      differ for a reason unrelated to the paper. It does not buy byte-identity
+      — the two committed PDF blobs are 98,381 and 98,384 bytes and extract to
+      identical text — so compare rebuilds by `pdftotext`, not by `sha256`.
+- [ ] **STIWI: the submission itself.** Public disclosure from his account. See
+      `SUBMISSION.md` in this directory for the prepared metadata (categories,
+      abstract, license) and the one decision that is still open — the reversible
+      corpus blob still reachable in public history at `8b369b2`.
+- [ ] **STIWI (optional): Zenodo DOI.** Only if this artifact is archived
+      separately from the repository; nothing in the paper depends on it.
 
 ## Claim discipline
 

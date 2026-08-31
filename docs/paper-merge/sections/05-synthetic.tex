@@ -11,11 +11,19 @@ strategies then merge $(\base, \ours, \theirs)$ and are scored against one
 oracle. There is no language model anywhere in the loop; the writers are
 deterministic, so a run is its own ground truth.
 
-\paragraph{The oracle is a function of published data.} \texttt{ground\_truth}
-takes the three graphs and the shapes and nothing else --- no edit log, no
-generator intent --- so a reader holding only the published inputs recomputes it
-exactly, and a generator bug cannot hide inside it. An instrument control
-asserts precisely that.
+\paragraph{The oracle is recomputable by a reader, with one stated exception.}
+For the three triple-visible classes, \texttt{ground\_truth} derives the oracle
+from the three graphs and the shapes and nothing else --- no edit log, no
+generator intent --- so a reader holding only the published inputs recomputes
+them exactly, and a generator bug cannot hide inside them. An instrument control
+asserts precisely that and reports the count it recovered. The alias-mint class
+is the exception, and necessarily so: two names for one entity is by
+construction invisible in the triples (\S\ref{sec:limits}), so no oracle could
+recover it from them. Those slots come from the generator's mint log. They are
+$21$ of the $54$ conflicts summed over the five seeds, and \emph{every} arm in
+Table~\ref{tab:armA} detects $0$ of them, ours included --- so the class bounds
+the recall column and touches nothing else: no arm's precision or
+true-positive count depends on a number the reader cannot recompute.
 
 \paragraph{The accounting contract.} Every arm answers two questions whose
 answers are in tension. \emph{Human decisions} is the number of slots it refused
@@ -29,8 +37,9 @@ catch the arm that admits no corruption and asks no questions because it
 discarded one side's work.
 
 \paragraph{Results.} Table~\ref{tab:armA} aggregates five seeds
-($1, 7, 42, 99, 2026$) at $200$ entities, $400$ edits per side and overlap
-$0.5$. Regenerate with \texttt{just bench merge --seed <N>}; instrument controls
+($1, 7, 42, 99, 2026$) at $200$ entities, $200$ edits per side ($400$ in total)
+and overlap $0.5$ --- the harness defaults, so the command below reproduces it
+unchanged. Regenerate with \texttt{just bench merge --seed <N>}; instrument controls
 with \texttt{just bench merge --selftest} ($7$ properties, non-zero exit on any
 failure).
 

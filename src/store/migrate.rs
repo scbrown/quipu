@@ -32,7 +32,11 @@ impl Store {
         if !has_g {
             conn.execute_batch("ALTER TABLE facts ADD COLUMN g INTEGER NOT NULL DEFAULT 0;")?;
         }
-        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);")?;
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);\
+             CREATE INDEX IF NOT EXISTS idx_active_vge ON facts(v, g, e)\
+               WHERE op = 1 AND valid_to IS NULL;",
+        )?;
         Ok(())
     }
 

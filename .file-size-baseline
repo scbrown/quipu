@@ -12,4 +12,4 @@ src/server.rs 506
 src/server/base.rs 506
 src/share_import.rs 506
 src/store/labels.rs 762
-src/store/ops.rs 631
+src/store/ops.rs 580

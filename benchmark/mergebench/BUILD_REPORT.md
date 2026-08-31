@@ -51,11 +51,29 @@ property of the design, not evidence about it.
 
 This is not hidden by making the oracle cleverer. It is handled three ways:
 
-1. **The oracle is a function of published data.** `ground_truth` takes the
+1. **The oracle is recomputable by a reader, with one stated exception.** For
+   the three triple-visible classes `ground_truth` derives the oracle from the
    three graphs and the shapes and nothing else — no edit log, no generator
-   intent. `--selftest` proves a reader holding only those inputs recomputes it
-   exactly. An oracle derived from the generator's intent would score the
-   generator and would be uncheckable by anyone else.
+   intent — and `--selftest` proves a reader holding only those inputs
+   recomputes them exactly, printing the count it recovered. An oracle derived
+   throughout from the generator's intent would score the generator and would be
+   uncheckable by anyone else.
+
+   **The alias-mint class is the exception, and it is not optional.** Two names
+   for one entity is by construction invisible in the triples — that is §4, the
+   paper's own limitation, and the reason the class is in the benchmark at all —
+   so no oracle could recover those slots from the three graphs. `ground_truth`
+   therefore takes the two alias maps as arguments alongside the graphs, and the
+   selftest says so in its own PASS line rather than in a footnote:
+
+       PASS  oracle-recomputable: 8 triple-visible conflicts recovered from the
+             three graphs alone (4 alias conflicts need the mint log, as documented)
+
+   What that costs is bounded and worth stating: across seeds 1, 7, 42, 99 and
+   2026 the class is **21 of 54** oracle conflicts, and **every arm detects 0 of
+   them, the shape-aware one included**. So it bounds the recall column and
+   nothing else — no arm's precision or true-positive count rests on a number a
+   reader cannot recompute.
 2. **Results are reported per conflict class**, so a reader can see exactly
    which rows are definitional and which are not.
 3. **The synthetic arm's contribution is the COST of the alternatives**, not
