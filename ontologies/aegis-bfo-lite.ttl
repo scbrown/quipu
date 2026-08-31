@@ -12,11 +12,16 @@
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 
-# BFO 2020's exhaustive top-level split. Disjointness makes an accidental
-# double classification observable when OWL validation is enabled.
+# BFO 2020's exhaustive top-level split. The canonical ontology declares these
+# roots disjoint; this compatibility layer deliberately does not repeat that
+# constraint yet. The current graph contains a small number of historical nodes
+# dual-typed as both an event (Incident) and its durable record (Bead or
+# Observation). Enforcing disjointness here would make loading the vocabulary a
+# breaking migration. The coverage test below still prevents a DOMAIN CLASS
+# from being assigned to both roots; instance-identity cleanup can precede a
+# later strict BFO import.
 obo:BFO_0000002 a owl:Class ;
-    rdfs:label "continuant" ;
-    owl:disjointWith obo:BFO_0000003 .
+    rdfs:label "continuant" .
 
 obo:BFO_0000003 a owl:Class ;
     rdfs:label "occurrent" .

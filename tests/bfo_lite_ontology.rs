@@ -108,7 +108,7 @@ fn canonical_relation_backbone_is_parseable_and_complete() {
     let ontology = Ontology::from_turtle(BFO_LITE).expect("BFO-lite ontology parses");
     let summary = ontology.axiom_summary();
 
-    assert_eq!(summary["disjoint_with"], 1);
+    assert_eq!(summary["disjoint_with"], 0);
     assert_eq!(summary["inverse_of"], 2);
     assert_eq!(summary["domains"], 2);
     assert_eq!(summary["ranges"], 2);
