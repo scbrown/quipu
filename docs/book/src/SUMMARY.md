@@ -44,6 +44,7 @@
 # Architecture
 
 - [EAVT Fact Log](architecture/eavt.md)
+- [Change Feed](architecture/change-feed.md)
 - [RDF Data Model](architecture/rdf.md)
 - [SPARQL Engine](architecture/sparql.md)
 - [The In-Memory Read Model](architecture/read-model.md)

@@ -30,6 +30,7 @@
 
 mod cli;
 mod cli_audit;
+mod cli_changes;
 mod cli_commands;
 mod cli_db;
 mod cli_explain;
@@ -111,6 +112,7 @@ fn main() {
         "import" => cli_pack::cmd_import(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
+        "changes" => cli_changes::cmd_changes(&args, db_path),
         "graph" => cli_graph::cmd_graph(&args, db_path),
         "fork" => cli_fork::cmd_fork(&args, db_path),
         "unpack" => cli_pack::cmd_unpack(&args, db_path),

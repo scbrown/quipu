@@ -48,9 +48,9 @@ use base::{
     version,
 };
 use entity::{
-    entity_conneg, entity_history, entity_html, entity_json, entity_turtle_suffix, events_commit,
-    events_get, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
-    transactions,
+    changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_turtle_suffix,
+    events_commit, events_get, fragments_handler, preview_handler, reconcile_handler,
+    spotlight_handler, transactions,
 };
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use reason::{explain, reason, shapes};
@@ -493,6 +493,7 @@ async fn main() {
         .route("/entity_history", post(entity_history))
         .route("/transactions", get(transactions))
         // Event log pull API (event-log P1)
+        .route("/changes", get(changes_get))
         .route("/events", get(events_get))
         .route("/events/commit", post(events_commit))
         // Semantic web APIs (Phase 4)

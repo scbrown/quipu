@@ -68,6 +68,53 @@ pub(crate) struct EventParams {
     consumer: Option<String>,
 }
 
+/// Query parameters for the change feed (quipu-2ae).
+#[derive(serde::Deserialize)]
+pub(crate) struct ChangeParams {
+    /// Serve transactions STRICTLY AFTER this id (default 0 = from genesis).
+    since: Option<i64>,
+    /// Max transactions per page (whole transactions only).
+    limit: Option<i64>,
+    /// `new_values` (default) | `old_and_new_values` | `new_row`.
+    capture: Option<String>,
+    /// Graph IRI to scope to; absent spans all graphs.
+    graph: Option<String>,
+}
+
+/// GET /changes — pull fact-level change records in commit order.
+///
+/// The page's `next_tx` is the cursor for the next call; `watermark_tx` /
+/// `watermark_timestamp` distinguish an idle store from a broken feed. Per
+/// entity, records arrive in commit order; across entities there is no
+/// ordering promise. See `store::changes` for the full contract.
+pub(crate) async fn changes_get(
+    State(store): State<SharedStore>,
+    Query(p): Query<ChangeParams>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let store = store.lock();
+        let capture = match p.capture.as_deref() {
+            None => quipu::store::changes::Capture::NewValues,
+            Some(name) => quipu::store::changes::Capture::parse(name).ok_or_else(|| {
+                quipu::Error::InvalidValue(format!(
+                    "capture must be new_values, old_and_new_values, or new_row; got {name:?}"
+                ))
+            })?,
+        };
+        let graph =
+            match p.graph.as_deref() {
+                None => None,
+                Some(iri) => Some(store.lookup(iri)?.ok_or_else(|| {
+                    quipu::Error::InvalidValue(format!("unknown graph IRI: {iri}"))
+                })?),
+            };
+        let limit = usize::try_from(p.limit.unwrap_or(100).clamp(1, 10_000)).unwrap_or(100);
+        let page = store.changes_after(p.since.unwrap_or(0), limit, capture, graph)?;
+        Ok(axum::Json(page.to_json()))
+    })
+    .await
+}
+
 /// GET /events — pull a batch of graph-change events in offset order.
 /// Response: `{events, next_offset, lag, committed_offset?}`; pass
 /// `next_offset` back as `since` (or POST /events/commit it) to page forward.
