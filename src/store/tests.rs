@@ -1395,6 +1395,138 @@ fn overlay_writes_do_not_touch_root() {
 }
 
 #[test]
+fn governed_compose_lets_the_parent_win_and_ignores_overlay_masks() {
+    // quipu-e61: the quarantine-plane read. Spanner's rule, adopted verbatim:
+    // statically defined properties take precedence over a dynamic property
+    // of the same name — here, the governed parent over the low-trust overlay.
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://ex/svc").unwrap();
+    let cores = store.intern("http://ex/cpuCores").unwrap(); // governed claims it
+    let guess = store.intern("http://ex/guessedOwner").unwrap(); // only the overlay does
+    let d = |a: i64, v: &str, op| Datum {
+        entity: e,
+        attribute: a,
+        value: Value::Str(v.to_string()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op,
+    };
+    store
+        .transact(
+            &[d(cores, "8", Op::Assert)],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+
+    let ov = store.overlay_create("http://ex/graph/inferred", 0).unwrap();
+    // The low-trust plane disagrees about a governed predicate, extends with
+    // a predicate the parent never claims, and tries to mask the parent fact.
+    store
+        .overlay_write(
+            ov,
+            Op::Assert,
+            e,
+            cores,
+            Value::Str("4".into()),
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+    store
+        .overlay_write(
+            ov,
+            Op::Assert,
+            e,
+            guess,
+            Value::Str("ian".into()),
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+    store
+        .overlay_write(
+            ov,
+            Op::Tombstone,
+            e,
+            cores,
+            Value::Str("8".into()),
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+
+    // Scratch semantics (nearest wins): the overlay's collision AND its mask
+    // both take effect — "8" is tombstoned, "4" shadows.
+    let scratch = store.compose_view(ov).unwrap();
+    let scratch_cores: Vec<String> = scratch
+        .iter()
+        .filter(|f| f.attribute == cores)
+        .map(|f| format!("{:?}", f.value))
+        .collect();
+    assert_eq!(scratch_cores, vec![r#"Str("4")"#]);
+
+    // Governed semantics: the parent's fact survives BOTH the collision and
+    // the tombstone; the extension the parent claims nothing about is kept.
+    let governed = store.compose_view_governed(ov).unwrap();
+    let governed_cores: Vec<String> = governed
+        .iter()
+        .filter(|f| f.attribute == cores)
+        .map(|f| format!("{:?}", f.value))
+        .collect();
+    assert_eq!(
+        governed_cores,
+        vec![r#"Str("8")"#],
+        "the governed value wins deterministically; the quarantined one is suppressed"
+    );
+    assert!(
+        governed.iter().any(|f| f.attribute == guess),
+        "an extension on an unclaimed (entity, attribute) slot is kept"
+    );
+    assert_eq!(
+        governed.len(),
+        2,
+        "exactly cores(8) + guessedOwner, nothing else"
+    );
+}
+
+#[test]
+fn governed_compose_tombstone_still_masks_the_overlays_own_facts() {
+    // A tombstone is the overlay retracting ITS OWN contribution from the
+    // composed view — that half keeps working under governed precedence;
+    // only masking the PARENT is refused.
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let e = store.intern("http://ex/svc").unwrap();
+    let guess = store.intern("http://ex/guessedOwner").unwrap();
+    let ov = store.overlay_create("http://ex/graph/inferred", 0).unwrap();
+    store
+        .overlay_write(
+            ov,
+            Op::Assert,
+            e,
+            guess,
+            Value::Str("ian".into()),
+            "2026-01-02T00:00:00Z",
+        )
+        .unwrap();
+    store
+        .overlay_write(
+            ov,
+            Op::Tombstone,
+            e,
+            guess,
+            Value::Str("ian".into()),
+            "2026-01-03T00:00:00Z",
+        )
+        .unwrap();
+    let governed = store.compose_view_governed(ov).unwrap();
+    assert!(
+        governed.is_empty(),
+        "the overlay's own tombstoned contribution stays out: {governed:#?}"
+    );
+}
+
+#[test]
 fn compose_view_dedupes_reasserted_root_facts() {
     // Regression (found in the 69co live deploy): a base fact re-asserted across
     // transactions leaves multiple current op=1 rows; compose_view must return

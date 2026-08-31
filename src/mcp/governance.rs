@@ -565,10 +565,15 @@ pub fn tool_overlay_write(store: &mut Store, input: &JsonValue) -> Result<JsonVa
 }
 
 /// MCP tool: `quipu_overlay_compose` -- resolve an overlay's composed view over
-/// `[overlay > parent-branch-root]` (asserted-and-not-tombstoned, nearest wins).
+/// `[overlay > parent-branch-root]`.
 ///
-/// Input: `{ "overlay": "<iri>" }`. Output:
-/// `{ "triples": [{subject, predicate, object}], "count": N }`.
+/// Input: `{ "overlay": "<iri>", "precedence"?: "nearest" | "governed" }`.
+/// `nearest` (the default) is the scratch-layer read: asserted-and-not-
+/// tombstoned, nearest-overlay-wins. `governed` is the quarantine-plane read
+/// (quipu-e61): the parent's facts always win — overlay values for a
+/// same-subject-same-predicate slot the parent claims are suppressed, and
+/// overlay tombstones cannot mask parent facts. Output:
+/// `{ "triples": [{subject, predicate, object}], "count": N, "precedence" }`.
 pub fn tool_overlay_compose(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let overlay_iri = input
         .get("overlay")
@@ -577,7 +582,19 @@ pub fn tool_overlay_compose(store: &Store, input: &JsonValue) -> Result<JsonValu
     let overlay_g = store
         .lookup(overlay_iri)?
         .ok_or_else(|| Error::InvalidValue(format!("overlay '{overlay_iri}' is not interned")))?;
-    let facts = store.compose_view(overlay_g)?;
+    let precedence = input
+        .get("precedence")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("nearest");
+    let facts = match precedence {
+        "nearest" => store.compose_view(overlay_g)?,
+        "governed" => store.compose_view_governed(overlay_g)?,
+        other => {
+            return Err(Error::InvalidValue(format!(
+                "precedence must be 'nearest' or 'governed', got {other:?}"
+            )));
+        }
+    };
     let triples: Vec<JsonValue> = facts
         .iter()
         .map(|f| {
@@ -588,7 +605,11 @@ pub fn tool_overlay_compose(store: &Store, input: &JsonValue) -> Result<JsonValu
             })
         })
         .collect();
-    Ok(serde_json::json!({ "count": triples.len(), "triples": triples }))
+    Ok(serde_json::json!({
+        "count": triples.len(),
+        "triples": triples,
+        "precedence": precedence,
+    }))
 }
 
 #[cfg(test)]
