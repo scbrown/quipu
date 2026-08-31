@@ -1094,9 +1094,16 @@ aegis:KnowledgeCertificationSealShape a sh:NodeShape ;
 
 # ═══ Camayoc governed RML/R2RML executor subset (aegis-9r8bp) ═══
 # These are standard RML/R2RML classes, not Camayoc aliases. The constraints
-# mirror Camayoc's implemented executor subset; joins, functions, and dynamic
+# mirror Camayoc's implemented executor subset; functions and dynamic
 # predicates/graphs remain executor-preflight exclusions because this set does
 # not use closed-world SHACL checking.
+#
+# Referencing object maps (rr:parentTriplesMap + rr:joinCondition, and only
+# those two terms) are admitted structurally as of quipu-8c0 — Spanner Graph's
+# SOURCE KEY / DESTINATION KEY edge model is exactly this construct, and the
+# stack's foreign-key-shaped edges need it. The executor's own v2 support
+# (camayoc-5bf) gates actual execution; a mapping can be well-formed here and
+# still be refused by an executor that predates joins.
 
 camayoc:RmlTriplesMapShape a sh:NodeShape ;
     sh:targetClass rr:TriplesMap ;
@@ -1130,7 +1137,30 @@ camayoc:RmlSubjectMapShape a sh:NodeShape ;
 camayoc:RmlPredicateObjectMapShape a sh:NodeShape ;
     sh:targetClass rr:PredicateObjectMap ;
     sh:property [ sh:path rr:predicate ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
-    sh:property [ sh:path rr:objectMap ; sh:class rr:ObjectMap ; sh:minCount 1 ; sh:maxCount 1 ] .
+    # The object may be a value map or a referencing object map (an edge to
+    # another triples map's subjects); each value must be one or the other.
+    sh:property [
+        sh:path rr:objectMap ;
+        sh:or ( [ sh:class rr:ObjectMap ] [ sh:class rr:RefObjectMap ] ) ;
+        sh:minCount 1 ;
+        sh:maxCount 1
+    ] .
+
+# A referencing object map is the R2RML spelling of "this foreign-key-shaped
+# column pair is an edge": the generated object is the parent triples map's
+# subject for the row(s) the join conditions select. The join is required even
+# same-source — an implicit identity join would make edge semantics depend on
+# which logical source two maps happen to share, and explicit is what a
+# governed subset can preflight.
+camayoc:RmlRefObjectMapShape a sh:NodeShape ;
+    sh:targetClass rr:RefObjectMap ;
+    sh:property [ sh:path rr:parentTriplesMap ; sh:class rr:TriplesMap ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rr:joinCondition ; sh:class rr:Join ; sh:minCount 1 ] .
+
+camayoc:RmlJoinConditionShape a sh:NodeShape ;
+    sh:targetClass rr:Join ;
+    sh:property [ sh:path rr:child ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rr:parent ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
 
 camayoc:RmlObjectMapShape a sh:NodeShape ;
     sh:targetClass rr:ObjectMap ;
