@@ -296,12 +296,7 @@ pub(crate) async fn query(
     // than threaded through a request extension: it is a short string op, and one
     // shared function is a stronger guarantee of agreement than one shared value
     // passed through two layers.
-    let client = quipu::metrics::normalize_client(
-        headers.get("x-quipu-client").and_then(|v| v.to_str().ok()),
-        headers
-            .get(axum::http::header::USER_AGENT)
-            .and_then(|v| v.to_str().ok()),
-    );
+    let client = super::query_usage::client(&headers);
 
     blocking(move || {
         // Query TEXT at START, before taking the store lock: the query that
@@ -309,13 +304,7 @@ pub(crate) async fn query(
         // record. Completion-only text logging is how the mfg0 killer query
         // stayed invisible for its entire ~4h burn.
         {
-            let text: String = input
-                .get("query")
-                .and_then(|v| v.as_str())
-                .unwrap_or("<no query field>")
-                .chars()
-                .take(300)
-                .collect();
+            let text = super::query_usage::query_text(&input);
             eprintln!("{} query start: {text}", quipu::time::now_iso());
         }
         // WAIT is measured across the acquisition, HELD from just after it
@@ -419,14 +408,11 @@ pub(crate) async fn query(
                 if truncated {
                     body["truncated"] = json!(true);
                 }
-                let mut response = axum::Json(body).into_response();
-                response
-                    .extensions_mut()
-                    .insert(quipu::request_usage::RequestUsage {
-                        query_shape,
-                        result_size: json_rows.len(),
-                    });
-                return Ok(response);
+                return Ok(super::query_usage::annotate(
+                    axum::Json(body).into_response(),
+                    query_shape,
+                    json_rows.len(),
+                ));
             }
 
             if let Some(fmt) = quipu::w3c::negotiate(&accept) {
@@ -446,19 +432,11 @@ pub(crate) async fn query(
                     {
                         headers.insert(axum::http::HeaderName::from_static("x-quipu-inference"), v);
                     }
-                    let result_size = match &result {
-                        quipu::QueryResult::Select { rows, .. } => rows.len(),
-                        quipu::QueryResult::Graph(triples) => triples.len(),
-                        quipu::QueryResult::Ask(_) => 1,
-                    };
-                    let mut response = (headers, body).into_response();
-                    response
-                        .extensions_mut()
-                        .insert(quipu::request_usage::RequestUsage {
-                            query_shape,
-                            result_size,
-                        });
-                    return Ok(response);
+                    return Ok(super::query_usage::annotate(
+                        (headers, body).into_response(),
+                        query_shape,
+                        super::query_usage::result_size(&result),
+                    ));
                 }
                 // Format did not fit the result variant (e.g. text/turtle for a SELECT);
                 // fall through to the default shape rather than erroring.
@@ -466,14 +444,11 @@ pub(crate) async fn query(
 
             let result = quipu::tool_query(store, &input)?;
             let result_size = quipu::request_usage::json_result_size(&result);
-            let mut response = axum::Json(result).into_response();
-            response
-                .extensions_mut()
-                .insert(quipu::request_usage::RequestUsage {
-                    query_shape,
-                    result_size,
-                });
-            Ok(response)
+            Ok(super::query_usage::annotate(
+                axum::Json(result).into_response(),
+                query_shape,
+                result_size,
+            ))
         };
 
         let result = run(&store);
@@ -491,13 +466,7 @@ pub(crate) async fn query(
         // see (the body is consumed by then).
         let elapsed_ms = started.elapsed().as_millis();
         if elapsed_ms > 1_000 || result.is_err() {
-            let text: String = input
-                .get("query")
-                .and_then(|v| v.as_str())
-                .unwrap_or("<no query field>")
-                .chars()
-                .take(300)
-                .collect();
+            let text = super::query_usage::query_text(&input);
             eprintln!("query {elapsed_ms}ms: {text}");
         }
         result
