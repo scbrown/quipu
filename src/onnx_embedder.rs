@@ -7,7 +7,6 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use ndarray::Array2;
-use ort::ep::CPU;
 use ort::session::Session;
 use ort::value::Tensor;
 use tokenizers::{PaddingStrategy, Tokenizer};
@@ -41,13 +40,6 @@ impl OnnxEmbeddingProvider {
     ) -> Result<Self> {
         let session = Session::builder()
             .and_then(|b| b.with_intra_threads(1))
-            // Inputs vary with the episode batch and token length. ORT's CPU
-            // arena and memory-pattern cache retain the largest allocation,
-            // turning a transient embedding into a permanent RSS high-water.
-            .and_then(|b| b.with_memory_pattern(false))
-            .and_then(|b| {
-                b.with_execution_providers([CPU::default().with_arena_allocator(false).build()])
-            })
             .and_then(|b| b.commit_from_file(model_path))
             .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))?;
 
