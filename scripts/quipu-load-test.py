@@ -67,11 +67,38 @@ def get_text(base_url: str, path: str, timeout: float) -> str:
         return response.read().decode()
 
 
+def post_json(base_url: str, path: str, payload: dict, timeout: float) -> dict:
+    request = urllib.request.Request(
+        base_url + path,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "X-Quipu-Client": "load-test"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read())
+
+
 def seed(base_url: str, count: int, timeout: float) -> None:
+    ontology = post(
+        base_url,
+        "/ontology",
+        {
+            "action": "load",
+            "name": "load-test-ontology",
+            "turtle": """@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://aegis.gastown.local/ontology/> .
+ex:LoadFixture rdfs:subClassOf ex:Thing .
+""",
+        },
+        timeout,
+        "seed_ontology",
+    )
+    if ontology.status != "ok":
+        raise RuntimeError(f"ontology seed failed: {ontology.status}")
     nodes = [
         {
             "name": f"load-{hashlib.sha256(str(index).encode()).hexdigest()[:20]}",
-            "type": "Thing",
+            "type": "LoadFixture",
             "description": f"deterministic load fixture {index}",
         }
         for index in range(count)
@@ -79,16 +106,36 @@ def seed(base_url: str, count: int, timeout: float) -> None:
     sample = post(
         base_url,
         "/episode",
-        {"name": "load-test-fixture", "source": "scripts/quipu-load-test.py", "nodes": nodes},
+        {
+            "name": "load-test-fixture",
+            "source": "scripts/quipu-load-test.py",
+            "nodes": nodes,
+            "edges": [{
+                "source": "LoadFixture",
+                "target": "Thing",
+                "relation": "rdfs:subClassOf",
+            }],
+        },
         timeout,
         "seed",
     )
     if sample.status != "ok":
         raise RuntimeError(f"fixture seed failed: {sample.status}")
+    inferred = post_json(
+        base_url,
+        "/query",
+        {"query": "SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a <http://aegis.gastown.local/ontology/Thing> }"},
+        timeout,
+    )
+    actual = inferred.get("rows", [{}])[0].get("n")
+    if actual != count or inferred.get("inference", {}).get("applied") is not True:
+        raise RuntimeError(
+            f"formal-default check failed: inferred Thing count={actual}, expected={count}, response={inferred}"
+        )
 
 
 def request_for(sequence: int) -> tuple[str, str, dict]:
-    kind = sequence % 4
+    kind = sequence % 5
     if kind == 0:
         return "query_bounded", "/query", {
             "query": "SELECT ?p ?o WHERE { <http://aegis.gastown.local/ontology/load-5feceb66ffc86f38d952> ?p ?o } LIMIT 20"
@@ -98,13 +145,17 @@ def request_for(sequence: int) -> tuple[str, str, dict]:
             "query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"
         }
     if kind == 2:
+        return "query_inferred_type", "/query", {
+            "query": "SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a <http://aegis.gastown.local/ontology/Thing> }"
+        }
+    if kind == 3:
         return "search", "/search", {"embedding": [0.0] * 384, "limit": 5}
     return "episode", "/episode", {
         "name": f"load-write-{sequence}",
         "source": "scripts/quipu-load-test.py",
         "nodes": [{
             "name": f"write-{hashlib.sha256(f'write-{sequence}'.encode()).hexdigest()[:20]}",
-            "type": "Thing",
+            "type": "LoadFixture",
             "description": f"mixed-load write {sequence}",
         }],
     }

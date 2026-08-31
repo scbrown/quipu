@@ -339,6 +339,16 @@ fn empty_file_gives_defaults() {
     let file: ConfigFile = toml::from_str(toml_str).unwrap();
     let cfg = file.quipu;
     assert_eq!(cfg.store_path, PathBuf::from(".bobbin/quipu/quipu.db"));
+    assert!(
+        cfg.owl.reactive_materialize,
+        "formal deployments keep loaded OWL entailments live by default"
+    );
+}
+
+#[test]
+fn reactive_owl_can_be_explicitly_disabled() {
+    let file: ConfigFile = toml::from_str("[quipu.owl]\nreactive_materialize = false\n").unwrap();
+    assert!(!file.quipu.owl.reactive_materialize);
 }
 
 #[test]

@@ -1,4 +1,4 @@
-//! RDFS type-hierarchy helpers and the asserted-only migration marker.
+//! RDFS type-hierarchy evaluation and inference reporting helpers.
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
@@ -7,7 +7,8 @@ use crate::namespace;
 use crate::store::Store;
 use crate::types::Value;
 
-use super::TemporalContext;
+use super::pattern_util::bind_var;
+use super::{Bindings, TemporalContext};
 
 pub const RDF_TYPE: &str = namespace::RDF_TYPE;
 const RDFS_SUBCLASS_OF: &str = namespace::RDFS_SUBCLASS_OF;
@@ -58,7 +59,102 @@ pub fn collect_class_and_subclasses(store: &Store, class_iri: &str) -> Result<Ve
     Ok(result)
 }
 
-/// One type constant whose former subclass expansion is now withheld.
+/// Evaluate a constant rdf:type pattern over the class and all subclasses.
+pub fn eval_type_pattern_with_subclasses(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    class_ids: &[i64],
+    ctx: &TemporalContext,
+    limit: Option<usize>,
+) -> Result<Vec<Bindings>> {
+    let Some(type_pred_id) = store.lookup(RDF_TYPE)? else {
+        return Ok(vec![]);
+    };
+    let subject_ids =
+        if let Some(iri) = super::pattern_util::resolve_subject_pattern(&tp.subject, bindings) {
+            let ids = store.lookup_all(&iri)?;
+            if ids.is_empty() {
+                return Ok(vec![]);
+            }
+            Some(ids)
+        } else {
+            None
+        };
+    let mut results = Vec::new();
+    // An entity may assert both a subclass and its superclass. Entailment
+    // produces one graph triple, not one row per proof path.
+    let mut seen_entities = std::collections::HashSet::new();
+    for class_id in class_ids {
+        let mut conditions = vec![
+            "a = ?1".to_string(),
+            "v = ?2".to_string(),
+            "op = 1".to_string(),
+            "g = 0".to_string(),
+        ];
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+            Box::new(type_pred_id),
+            Box::new(Value::Ref(*class_id).to_bytes()),
+        ];
+        if let Some(ids) = &subject_ids {
+            conditions.push(super::sql_in::sql_id_in("e", ids, &mut params));
+        }
+        if let Some(vt) = &ctx.valid_at {
+            conditions.push(format!("valid_from <= ?{}", params.len() + 1));
+            params.push(Box::new(vt.clone()));
+            conditions.push(format!(
+                "(valid_to IS NULL OR valid_to > ?{})",
+                params.len()
+            ));
+        } else if let Some(tx) = ctx.as_of_tx {
+            conditions.push(format!(
+                "(valid_to IS NULL OR retracted_tx > ?{})",
+                params.len() + 1
+            ));
+            params.push(Box::new(tx));
+        } else {
+            conditions.push("valid_to IS NULL".to_string());
+        }
+        if let Some(tx) = ctx.as_of_tx {
+            conditions.push(format!("tx <= ?{}", params.len() + 1));
+            params.push(Box::new(tx));
+        }
+        let sql = format!(
+            "SELECT DISTINCT e, v FROM facts WHERE {}",
+            conditions.join(" AND ")
+        );
+        let refs: Vec<&dyn rusqlite::types::ToSql> =
+            params.iter().map(std::convert::AsRef::as_ref).collect();
+        let mut stmt = store.prepare(&sql)?;
+        let mut rows = stmt.query(refs.as_slice())?;
+        while let Some(row) = rows.next()? {
+            let mut next = bindings.clone();
+            let mut compatible = true;
+            let entity: i64 = row.get(0)?;
+            let canonical = store.canonical_id(entity)?;
+            if !seen_entities.insert(canonical) {
+                continue;
+            }
+            if let TermPattern::Variable(var) = &tp.subject {
+                bind_var(
+                    &mut next,
+                    var.as_str(),
+                    Value::Ref(canonical),
+                    &mut compatible,
+                );
+            }
+            if compatible {
+                results.push(next);
+            }
+            if limit.is_some_and(|cap| results.len() >= cap) {
+                return Ok(results);
+            }
+        }
+    }
+    Ok(results)
+}
+
+/// One type constant whose query expands over subclasses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WithheldType {
     /// The IRI written in the query.
@@ -68,22 +164,18 @@ pub struct WithheldType {
     pub subclasses: Vec<String>,
 }
 
-/// Which type constants in `query` would have been widened before asserted-only?
+/// Which type constants in `query` are widened by subclass entailment?
 ///
 /// # Why this exists
 ///
-/// Before the migration, `?s a <T>` expanded over `rdfs:subClassOf`, while
-/// `?s a ?t . FILTER(?t = <T>)` matched literally. The constant form is now
-/// asserted-only too, per SPARQL simple entailment. The inferred question remains
-/// available explicitly as `?s a/rdfs:subClassOf* <T>`.
-///
-/// The semantic flip would itself silently change counts, so the response names
-/// only the constants for which expansion was withheld. The marker is omitted for
-/// all unaffected traffic; presence remains the signal.
+/// `?s a <T>` expands over `rdfs:subClassOf`, while `?s a ?t . FILTER(?t =
+/// <T>)` remains a literal asserted-only census. The response marker names the
+/// constants whose subclasses were included; it is omitted when no expansion
+/// exists, so presence remains the signal.
 ///
 /// # Accuracy
 ///
-/// Gated on exactly the former evaluator conditions: default graph only,
+/// Gated on exactly the evaluator conditions: default graph only,
 /// rdf:type predicate, constant IRI object. A leaf type is omitted because the
 /// flip does not change its answer.
 ///

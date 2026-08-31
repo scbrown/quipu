@@ -1,8 +1,11 @@
 # Mixed load performance ratchet
 
 `scripts/quipu-load-test.py` drives a running Quipu server through a deterministic
-mix of bounded SPARQL, full-graph SPARQL, precomputed-vector search, and episode
-writes. It steps through concurrency 1, 4, and 8 and records p50/p95/p99 latency,
+mix of bounded SPARQL, full-graph SPARQL, inferred `rdf:type` SPARQL,
+precomputed-vector search, and episode writes. The fixture loads a subclass
+ontology and writes instances of that subclass, so both the query-time RDFS
+expansion and default reactive OWL write path are exercised. It steps through
+concurrency 1, 4, and 8 and records p50/p95/p99 latency,
 throughput, HTTP error classes, and server peak RSS.
 
 The CI job starts an empty ephemeral server and publishes both the JSON report and

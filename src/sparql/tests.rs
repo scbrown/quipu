@@ -2206,9 +2206,7 @@ ex:t2 a ex:Tool .
 }
 
 #[test]
-fn the_two_type_forms_are_asserted_only_and_agree() {
-    // The ruling: simple entailment in both forms. Inference remains available
-    // through the explicit property path test below.
+fn constant_type_is_inferred_while_variable_filter_is_asserted_only() {
     let store = inference_store();
     let inferred = crate::mcp::tool_query(
         &store,
@@ -2225,19 +2223,18 @@ fn the_two_type_forms_are_asserted_only_and_agree() {
     )
     .unwrap();
     assert_eq!(
-        inferred["rows"][0]["n"], 1,
-        "constant form is asserted-only"
+        inferred["rows"][0]["n"], 3,
+        "constant form includes subclasses"
     );
     assert_eq!(
         asserted["rows"][0]["n"], 1,
         "variable form is asserted-only"
     );
-    assert_eq!(inferred["rows"][0]["n"], asserted["rows"][0]["n"]);
+    assert_ne!(inferred["rows"][0]["n"], asserted["rows"][0]["n"]);
 }
 
 #[test]
-fn withheld_inference_is_announced_when_the_flip_changed_the_answer() {
-    // The flip must not recreate the silent count change it removes.
+fn applied_inference_is_announced_when_subclasses_expand_the_answer() {
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2246,11 +2243,11 @@ fn withheld_inference_is_announced_when_the_flip_changed_the_answer() {
              SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ex:Service }"}),
     )
     .unwrap();
-    assert_eq!(out["rows"][0]["n"], 1);
-    assert_eq!(out["inference"]["applied"], false);
-    let withheld = &out["inference"]["withheldTypes"][0];
-    assert_eq!(withheld["type"], "http://example.org/Service");
-    let subs: Vec<String> = withheld["subclasses"]
+    assert_eq!(out["rows"][0]["n"], 3);
+    assert_eq!(out["inference"]["applied"], true);
+    let expanded = &out["inference"]["expandedTypes"][0];
+    assert_eq!(expanded["type"], "http://example.org/Service");
+    let subs: Vec<String> = expanded["subclasses"]
         .as_array()
         .unwrap()
         .iter()
@@ -2258,6 +2255,22 @@ fn withheld_inference_is_announced_when_the_flip_changed_the_answer() {
         .collect();
     assert!(subs.contains(&"http://example.org/WebApplication".to_string()));
     assert!(subs.contains(&"http://example.org/SearchService".to_string()));
+}
+
+#[test]
+fn joined_type_query_keeps_subclass_entailment() {
+    let store = inference_store();
+    let out = crate::mcp::tool_query(
+        &store,
+        &serde_json::json!({"query":
+            "PREFIX ex: <http://example.org/> \
+             SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { \
+               ?s a ex:Service . ?s a ?assertedType \
+             }"}),
+    )
+    .unwrap();
+    assert_eq!(out["rows"][0]["n"], 3);
+    assert_eq!(out["inference"]["applied"], true);
 }
 
 #[test]
@@ -2302,7 +2315,7 @@ fn a_leaf_type_is_the_control_that_proves_the_marker_is_specific() {
 }
 
 #[test]
-fn ask_carries_the_withheld_marker_too() {
+fn ask_carries_the_applied_marker_too() {
     // ASK is a boolean, so the count-changing semantic flip is especially easy
     // to miss without the marker. svc2 is only WebApplication, not Service.
     let store = inference_store();
@@ -2312,10 +2325,10 @@ fn ask_carries_the_withheld_marker_too() {
             "PREFIX ex: <http://example.org/> ASK { ex:svc2 a ex:Service }"}),
     )
     .unwrap();
-    assert_eq!(out["result"], false);
-    assert_eq!(out["inference"]["applied"], false);
+    assert_eq!(out["result"], true);
+    assert_eq!(out["inference"]["applied"], true);
     assert_eq!(
-        out["inference"]["withheldTypes"][0]["type"],
+        out["inference"]["expandedTypes"][0]["type"],
         "http://example.org/Service"
     );
 }
@@ -2337,7 +2350,7 @@ fn an_asserted_ask_and_a_leaf_ask_mark_only_the_changed_form() {
 }
 
 #[test]
-fn the_marker_reports_withheld_expansion_even_when_the_boolean_stays_true() {
+fn the_marker_reports_applied_expansion_even_when_the_boolean_stays_true() {
     // svc1 is directly asserted Service, so the value does not change, but the
     // query form did change and must still announce that fact.
     let store = inference_store();
@@ -2348,11 +2361,11 @@ fn the_marker_reports_withheld_expansion_even_when_the_boolean_stays_true() {
     )
     .unwrap();
     assert_eq!(out["result"], true);
-    assert_eq!(out["inference"]["applied"], false);
+    assert_eq!(out["inference"]["applied"], true);
 }
 
 #[test]
-fn a_false_ask_still_says_inference_was_withheld() {
+fn a_false_ask_still_says_inference_was_applied() {
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2361,11 +2374,11 @@ fn a_false_ask_still_says_inference_was_withheld() {
     )
     .unwrap();
     assert_eq!(out["result"], false);
-    assert_eq!(out["inference"]["applied"], false);
+    assert_eq!(out["inference"]["applied"], true);
 }
 
 #[test]
-fn construct_carries_the_withheld_marker_too() {
+fn construct_carries_the_applied_marker_too() {
     let store = inference_store();
     let out = crate::mcp::tool_query(
         &store,
@@ -2374,8 +2387,8 @@ fn construct_carries_the_withheld_marker_too() {
              CONSTRUCT { ?s a ex:Service } WHERE { ?s a ex:Service }"}),
     )
     .unwrap();
-    assert_eq!(out["count"], 1);
-    assert_eq!(out["inference"]["applied"], false);
+    assert_eq!(out["count"], 3);
+    assert_eq!(out["inference"]["applied"], true);
 }
 
 #[test]
@@ -2389,11 +2402,11 @@ fn the_note_explains_the_explicit_inferred_form() {
     .unwrap();
     let note = out["inference"]["note"].as_str().unwrap();
     assert!(note.contains("asserted-only"), "got: {note}");
-    assert!(note.contains("a/rdfs:subClassOf*"), "got: {note}");
+    assert!(note.contains("subclass expansion"), "got: {note}");
 }
 
 #[test]
-fn the_w3c_shapes_get_the_withheld_marker_as_a_header_value() {
+fn the_w3c_shapes_get_the_applied_marker_as_a_header_value() {
     // `Accept: application/sparql-results+json` reopens the whole defect: the
     // spec body has nowhere to put the marker, so on that path it must ride a
     // header or be silently dropped. Presence is still the signal, and the
@@ -2407,7 +2420,7 @@ fn the_w3c_shapes_get_the_withheld_marker_as_a_header_value() {
     .unwrap();
     assert_eq!(
         crate::mcp::inference_header(&inferred).as_deref(),
-        Some("withheld: http://example.org/Service")
+        Some("applied: http://example.org/Service")
     );
 
     // Control: the header is absent exactly when the JSON field would be.
@@ -2438,7 +2451,7 @@ fn the_explicit_path_form_preserves_the_inferred_question() {
              SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ex:Service }"}),
     )
     .unwrap();
-    assert_eq!(constant["rows"][0]["n"], 1);
+    assert_eq!(constant["rows"][0]["n"], 3);
 }
 
 /// Canonical rendering of a `QueryResult` for equality assertions.

@@ -158,7 +158,7 @@ pub struct ShaclConfig {
 }
 
 /// OWL write-time constraint policy (aegis-bmqup).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct OwlConfig {
     /// Enforce `owl:disjointWith` and `owl:FunctionalProperty` from the
@@ -179,9 +179,18 @@ pub struct OwlConfig {
     /// one-shot-materialization gap). Requires both the `owl` and
     /// `reactive-reasoner` features — the observer rides the same
     /// post-commit infrastructure as the reactive Datalog reasoner. Default
-    /// false: materialization re-reads current facts, a per-write cost a
-    /// deployment should choose, not inherit.
+    /// true: Quipu's formal default keeps loaded OWL entailments live. Set
+    /// false explicitly only for an asserted-only deployment.
     pub reactive_materialize: bool,
+}
+
+impl Default for OwlConfig {
+    fn default() -> Self {
+        Self {
+            validate_on_write: false,
+            reactive_materialize: true,
+        }
+    }
 }
 
 /// Governance enforcement policy (the loom, write-path gate).

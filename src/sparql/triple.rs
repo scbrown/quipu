@@ -16,6 +16,9 @@ use super::pattern_util::{
     bind_var, resolve_object_pattern, resolve_predicate_pattern, resolve_subject_pattern,
     triple_pattern_vars,
 };
+use super::rdfs::{
+    collect_class_and_subclasses, eval_type_pattern_with_subclasses, is_rdf_type_pattern,
+};
 use super::{Bindings, GraphScope, TemporalContext};
 
 /// Evaluate a basic graph pattern -- a set of triple patterns.
@@ -39,7 +42,14 @@ pub fn eval_bgp(
     // routing it through the model would make it pay for building one, which
     // measured as a 0.12ms -> 320ms regression. Two or more patterns is exactly
     // where the nested loop turns quadratic and the build pays for itself.
-    if patterns.len() >= 2 && crate::store::read_model::read_model_applicable(store, ctx) {
+    // The read model currently indexes asserted triples. Keep constant
+    // rdf:type patterns on the entailment-aware evaluator so a join cannot
+    // silently change the answer back to asserted-only.
+    let needs_type_entailment = patterns.iter().any(is_rdf_type_pattern);
+    if patterns.len() >= 2
+        && !needs_type_entailment
+        && crate::store::read_model::read_model_applicable(store, ctx)
+    {
         return super::join::eval_bgp_hash_join(store, patterns, ctx, seed);
     }
 
@@ -114,6 +124,18 @@ fn eval_triple_pattern_limited(
 ) -> Result<Vec<Bindings>> {
     if limit == Some(0) {
         return Ok(vec![]);
+    }
+    // Formal default: a constant rdf:type query uses the loaded RDFS class
+    // hierarchy. Named graphs remain literal because the hierarchy is rooted
+    // in the default graph and must not leak across graph boundaries.
+    if ctx.graph.is_root_default()
+        && is_rdf_type_pattern(tp)
+        && let TermPattern::NamedNode(class_node) = &tp.object
+    {
+        let class_ids = collect_class_and_subclasses(store, class_node.as_str())?;
+        if !class_ids.is_empty() {
+            return eval_type_pattern_with_subclasses(store, tp, bindings, &class_ids, ctx, limit);
+        }
     }
     // Build SQL query with conditions based on bound values.
     let mut conditions = Vec::new();
