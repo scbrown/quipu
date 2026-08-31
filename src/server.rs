@@ -628,6 +628,11 @@ async fn main() {
                         .get(axum::http::header::USER_AGENT)
                         .and_then(|v| v.to_str().ok()),
                 );
+                let task = quipu::metrics::normalize_task(
+                    req.headers()
+                        .get("x-quipu-task")
+                        .and_then(|v| v.to_str().ok()),
+                );
                 // Log at START with an id, then again at completion. The
                 // request that never completes is exactly the one an RCA
                 // needs, and completion-only logging guarantees it is the one
@@ -638,7 +643,7 @@ async fn main() {
                 static REQ_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
                 let id = REQ_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 eprintln!(
-                    "{} req#{id} client={client} {method} {path} ...",
+                    "{} req#{id} client={client} task={task} {method} {path} ...",
                     quipu::time::now_iso()
                 );
                 let started = std::time::Instant::now();
@@ -646,9 +651,9 @@ async fn main() {
                 let status = resp.status().as_u16();
                 let elapsed = started.elapsed().as_secs_f64();
                 quipu::metrics::metrics().observe_request(&endpoint, status, elapsed);
-                quipu::metrics::metrics().observe_client(&client, &endpoint, elapsed);
+                quipu::metrics::metrics().observe_client(&client, &task, &endpoint, elapsed);
                 eprintln!(
-                    "{} req#{id} client={client} {method} {path} -> {status} in {}ms",
+                    "{} req#{id} client={client} task={task} {method} {path} -> {status} in {}ms",
                     quipu::time::now_iso(),
                     started.elapsed().as_millis()
                 );

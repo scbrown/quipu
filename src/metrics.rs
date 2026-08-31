@@ -106,6 +106,31 @@ pub fn normalize_client(explicit: Option<&str>, user_agent: Option<&str>) -> Str
     }
 }
 
+/// Normalise the optional work-item identity supplied in `X-Quipu-Task`.
+///
+/// Unlike [`normalize_client`], this has no fallback: a User-Agent identifies
+/// software, never the bead whose work caused the request. Missing or invalid
+/// values are therefore explicitly `unattributed` rather than silently joined
+/// to an arbitrary task. The independent cardinality cap in [`request_key`]
+/// folds excess task identities into `other`.
+#[must_use]
+pub fn normalize_task(explicit: Option<&str>) -> String {
+    let Some(raw) = explicit.map(str::trim).filter(|s| !s.is_empty()) else {
+        return "unattributed".to_string();
+    };
+    let cleaned: String = raw
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        .take(64)
+        .collect();
+    if cleaned.is_empty() {
+        "unattributed".to_string()
+    } else {
+        cleaned
+    }
+}
+
 /// Upper bounds (seconds) of the duration histogram buckets; +Inf is implicit.
 const BUCKETS: [f64; 8] = [0.005, 0.025, 0.1, 0.5, 1.0, 2.5, 10.0, 30.0];
 
@@ -130,6 +155,14 @@ struct Hist {
 /// by removing the cap.
 const MAX_CLIENTS: usize = 32;
 
+/// Maximum distinct task identities retained per process. Task ids are more
+/// numerous than client kinds, but remain caller-controlled metric labels, so
+/// they need a separate finite budget rather than consuming the client cap.
+const MAX_TASKS: usize = 128;
+
+type ClientTaskEndpoint = (String, String, String);
+type RequestObservation = (u64, f64);
+
 fn client_key<V>(
     map: &BTreeMap<(String, String), V>,
     client: &str,
@@ -151,6 +184,40 @@ fn client_key<V>(
     }
 }
 
+fn request_key<V>(
+    map: &BTreeMap<ClientTaskEndpoint, V>,
+    client: &str,
+    task: &str,
+    endpoint: &str,
+) -> ClientTaskEndpoint {
+    let known_clients: BTreeSet<&str> = map
+        .keys()
+        .map(|(known_client, _, _)| known_client.as_str())
+        .filter(|known_client| *known_client != "other")
+        .collect();
+    let known_tasks: BTreeSet<&str> = map
+        .keys()
+        .map(|(_, known_task, _)| known_task.as_str())
+        .filter(|known_task| *known_task != "other")
+        .collect();
+    let bounded_client = if known_clients.contains(client) || known_clients.len() < MAX_CLIENTS - 1
+    {
+        client
+    } else {
+        "other"
+    };
+    let bounded_task = if known_tasks.contains(task) || known_tasks.len() < MAX_TASKS - 1 {
+        task
+    } else {
+        "other"
+    };
+    (
+        bounded_client.to_string(),
+        bounded_task.to_string(),
+        endpoint.to_string(),
+    )
+}
+
 #[derive(Default)]
 pub struct Metrics {
     /// (endpoint template, status) -> request count.
@@ -159,14 +226,14 @@ pub struct Metrics {
     durations: Mutex<BTreeMap<String, Hist>>,
     /// /policy/check outcome -> count.
     policy: Mutex<BTreeMap<String, u64>>,
-    /// (client, endpoint template) -> (request count, summed seconds).
+    /// (client, task, endpoint template) -> (request count, summed seconds).
     ///
     /// A SUM and a COUNT rather than a per-client histogram: the question this
     /// exists to answer (aegis-ma1hy) is "which caller accounts for what
     /// fraction of /query TIME", which is a ratio of sums. A histogram per
     /// client would multiply series by the bucket count to answer a question
     /// nobody asked.
-    clients: Mutex<BTreeMap<(String, String), (u64, f64)>>,
+    clients: Mutex<BTreeMap<ClientTaskEndpoint, RequestObservation>>,
     /// (client, endpoint) -> (seconds WAITING for the store lock, seconds HOLDING it).
     ///
     /// The distinction this exists for (`aegis-vxl81`): the wall-clock figure in
@@ -224,7 +291,7 @@ impl Metrics {
     ///
     /// Folds into `other` past [`MAX_CLIENTS`] distinct values — see that
     /// constant for why the cap is not optional.
-    pub fn observe_client(&self, client: &str, endpoint: &str, seconds: f64) {
+    pub fn observe_client(&self, client: &str, task: &str, endpoint: &str, seconds: f64) {
         let mut map = self.clients.lock().unwrap();
         // `MAX_CLIENTS - 1`, not `MAX_CLIENTS`: the `other` bucket needs a slot
         // of its own, or the cap is silently one higher than the constant says.
@@ -232,7 +299,7 @@ impl Metrics {
         // Endpoint series do not consume this identity budget: route templates
         // are bounded independently, and counting pairs caused real callers to
         // fold after a few multi-endpoint clients (aegis-vxl81).
-        let key = client_key(&map, client, endpoint);
+        let key = request_key(&map, client, task, endpoint);
         let e = map.entry(key).or_insert((0, 0.0));
         e.0 += 1;
         e.1 += seconds;
@@ -327,27 +394,29 @@ impl Metrics {
         // sums, and the ratio is taken over increase() of BOTH, so it is
         // reset-safe in a way a bare counter read is not.
         out.push_str(
-            "# HELP quipu_http_client_requests_total Requests served, by normalised caller and route template.\n\
+            "# HELP quipu_http_client_requests_total Requests served, by normalised caller, task, and route template.\n\
              # TYPE quipu_http_client_requests_total counter\n",
         );
-        for ((client, ep), (n, _secs)) in self.clients.lock().unwrap().iter() {
+        for ((client, task, ep), (n, _secs)) in self.clients.lock().unwrap().iter() {
             let _ = writeln!(
                 out,
-                "quipu_http_client_requests_total{{client=\"{}\",endpoint=\"{}\"}} {n}",
+                "quipu_http_client_requests_total{{client=\"{}\",task=\"{}\",endpoint=\"{}\"}} {n}",
                 esc(client),
+                esc(task),
                 esc(ep)
             );
         }
 
         out.push_str(
-            "# HELP quipu_http_client_request_seconds_total Cumulative request seconds, by normalised caller and route template.\n\
+            "# HELP quipu_http_client_request_seconds_total Cumulative request seconds, by normalised caller, task, and route template.\n\
              # TYPE quipu_http_client_request_seconds_total counter\n",
         );
-        for ((client, ep), (_n, secs)) in self.clients.lock().unwrap().iter() {
+        for ((client, task, ep), (_n, secs)) in self.clients.lock().unwrap().iter() {
             let _ = writeln!(
                 out,
-                "quipu_http_client_request_seconds_total{{client=\"{}\",endpoint=\"{}\"}} {secs}",
+                "quipu_http_client_request_seconds_total{{client=\"{}\",task=\"{}\",endpoint=\"{}\"}} {secs}",
                 esc(client),
+                esc(task),
                 esc(ep)
             );
         }
@@ -499,6 +568,13 @@ mod tests {
         assert_eq!(normalize_client(Some(&"x".repeat(200)), None).len(), 32);
         // Non-ASCII that filters to nothing must not produce an empty label.
         assert_eq!(normalize_client(Some("日本語"), None), "unattributed");
+
+        assert_eq!(normalize_task(Some("aegis-3AYBC")), "aegis-3aybc");
+        assert_eq!(normalize_task(None), "unattributed");
+        assert_eq!(normalize_task(Some("   ")), "unattributed");
+        assert_eq!(normalize_task(Some("bad\n task!")), "badtask");
+        assert_eq!(normalize_task(Some(&"x".repeat(200))).len(), 64);
+        assert_eq!(normalize_task(Some("日本語")), "unattributed");
     }
 
     #[test]
@@ -506,7 +582,7 @@ mod tests {
         let m = Metrics::default();
         // Far more distinct callers than the cap, all on one endpoint.
         for i in 0..(MAX_CLIENTS * 4) {
-            m.observe_client(&format!("caller{i}"), "/query", 0.1);
+            m.observe_client(&format!("caller{i}"), "unattributed", "/query", 0.1);
         }
         let text = m.render(0, 0, 0);
         let clients: BTreeSet<&str> = text
@@ -541,20 +617,45 @@ mod tests {
         // pairs and folded the next legitimate caller into `other`.
         for i in 0..MAX_CLIENTS {
             let endpoint = format!("/route/{i}");
-            m.observe_client("existing", &endpoint, 0.1);
+            m.observe_client("existing", "unattributed", &endpoint, 0.1);
             m.observe_store_time("existing", &endpoint, 0.0, 0.1);
         }
-        m.observe_client("new-caller", "/query", 0.1);
+        m.observe_client("new-caller", "unattributed", "/query", 0.1);
         m.observe_store_time("new-caller", "/query", 0.0, 0.1);
 
         let text = m.render(0, 0, 0);
         assert!(text.contains(
-            "quipu_http_client_requests_total{client=\"new-caller\",endpoint=\"/query\"} 1"
+            "quipu_http_client_requests_total{client=\"new-caller\",task=\"unattributed\",endpoint=\"/query\"} 1"
         ));
         assert!(text.contains(
             "quipu_store_held_seconds_total{client=\"new-caller\",endpoint=\"/query\"} 0.1"
         ));
-        assert!(!text.contains("client=\"other\",endpoint=\"/query\""));
+        assert!(!text.contains(
+            "quipu_http_client_requests_total{client=\"other\",task=\"unattributed\",endpoint=\"/query\"}"
+        ));
+    }
+
+    #[test]
+    fn task_cardinality_is_independent_capped_and_overflow_is_visible() {
+        let m = Metrics::default();
+        for i in 0..(MAX_TASKS * 2) {
+            m.observe_client("query-first", &format!("aegis-{i}"), "/query", 0.1);
+        }
+        let text = m.render(0, 0, 0);
+        let tasks: BTreeSet<&str> = text
+            .lines()
+            .filter(|l| l.starts_with("quipu_http_client_requests_total"))
+            .filter_map(|line| line.split("task=\"").nth(1)?.split('"').next())
+            .collect();
+        assert!(tasks.len() <= MAX_TASKS);
+        assert!(text.contains("client=\"query-first\",task=\"other\""));
+        assert!(!text.contains("client=\"other\",task="));
+        let total: u64 = text
+            .lines()
+            .filter(|l| l.starts_with("quipu_http_client_requests_total"))
+            .filter_map(|l| l.rsplit(' ').next()?.parse::<u64>().ok())
+            .sum();
+        assert_eq!(total as usize, MAX_TASKS * 2);
     }
 
     #[test]
@@ -610,20 +711,20 @@ mod tests {
     #[test]
     fn client_time_attribution_sums_and_start_time_is_absent_until_recorded() {
         let m = Metrics::default();
-        m.observe_client("hank", "/query", 2.0);
-        m.observe_client("hank", "/query", 3.0);
-        m.observe_client("bobbin", "/query", 1.0);
+        m.observe_client("hank", "aegis-3aybc", "/query", 2.0);
+        m.observe_client("hank", "aegis-3aybc", "/query", 3.0);
+        m.observe_client("bobbin", "unattributed", "/query", 1.0);
         let text = m.render(0, 0, 0);
         assert!(
             text.contains(
-                "quipu_http_client_requests_total{client=\"hank\",endpoint=\"/query\"} 2"
+                "quipu_http_client_requests_total{client=\"hank\",task=\"aegis-3aybc\",endpoint=\"/query\"} 2"
             )
         );
         assert!(text.contains(
-            "quipu_http_client_request_seconds_total{client=\"hank\",endpoint=\"/query\"} 5"
+            "quipu_http_client_request_seconds_total{client=\"hank\",task=\"aegis-3aybc\",endpoint=\"/query\"} 5"
         ));
         assert!(text.contains(
-            "quipu_http_client_request_seconds_total{client=\"bobbin\",endpoint=\"/query\"} 1"
+            "quipu_http_client_request_seconds_total{client=\"bobbin\",task=\"unattributed\",endpoint=\"/query\"} 1"
         ));
         // 5 of 6 seconds are hank's — the ratio this whole change exists to make
         // computable (aegis-ma1hy: 65.6% of /query load was unattributable).

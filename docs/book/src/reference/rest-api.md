@@ -97,6 +97,24 @@ the cause, so `curl -s` cannot render an auth failure as an empty result:
 
 `reason` is the stable field to branch on; `error` is prose and may be reworded.
 
+## Request Attribution
+
+Callers can attach two optional headers to every endpoint:
+
+| Header | Meaning | Missing/invalid value |
+|--------|---------|-----------------------|
+| `X-Quipu-Client` | Stable caller kind, such as `query-first` or `graph-extract` | Falls back to `User-Agent`, then `unattributed` |
+| `X-Quipu-Task` | Work-item join key, normally a bead id such as `aegis-3aybc` | `unattributed`; there is deliberately no inferred fallback |
+
+Both values appear in request start/completion logs. The `client`, `task`, and
+route-template dimensions are also exported by
+`quipu_http_client_requests_total` and
+`quipu_http_client_request_seconds_total`. Client and task identities have
+independent cardinality budgets; excess caller-controlled values fold into a
+visible `other` bucket instead of growing the registry without bound. Use
+`increase(...[window])` for counter comparisons so process restarts do not
+invalidate the result.
+
 ## Endpoints
 
 All POST endpoints accept `Content-Type: application/json`.
