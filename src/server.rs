@@ -30,8 +30,12 @@ mod base;
 mod entity;
 #[path = "server/handle.rs"]
 mod handle;
+#[path = "server/query_usage.rs"]
+mod query_usage;
 #[path = "server/reason.rs"]
 mod reason;
+#[path = "server/request_middleware.rs"]
+mod request_middleware;
 #[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
@@ -624,93 +628,7 @@ async fn main() {
         // from — the whole incident was reconstructed from gdb.
         // stderr on purpose: stdout is block-buffered under systemd, stderr is
         // not, and the journal timestamps every line itself.
-        .layer(axum::middleware::from_fn(
-            |req: axum::extract::Request, next: axum::middleware::Next| async move {
-                let method = req.method().clone();
-                let path = req.uri().path().to_string();
-                // The ROUTE TEMPLATE (`/entity/{iri}`), not the raw path, so
-                // metric label cardinality stays bounded. Absent for 404s.
-                let endpoint = req
-                    .extensions()
-                    .get::<axum::extract::MatchedPath>()
-                    .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
-                // WHO is calling (aegis-ma1hy). Read here, before the request is
-                // consumed by next.run. Computed once and used for BOTH the
-                // metric label and the log lines: the log is what an RCA reads
-                // when the metric has already been reset by a restart, and the
-                // two disagreeing would be worse than either alone.
-                let client = quipu::metrics::normalize_client(
-                    req.headers()
-                        .get("x-quipu-client")
-                        .and_then(|v| v.to_str().ok()),
-                    req.headers()
-                        .get(axum::http::header::USER_AGENT)
-                        .and_then(|v| v.to_str().ok()),
-                );
-                let task = quipu::metrics::normalize_task(
-                    req.headers()
-                        .get("x-quipu-task")
-                        .and_then(|v| v.to_str().ok()),
-                );
-                // Log at START with an id, then again at completion. The
-                // request that never completes is exactly the one an RCA
-                // needs, and completion-only logging guarantees it is the one
-                // missing from the log (the mfg0 wedge left NO trace of the
-                // killer query). The id ties the two lines together across
-                // interleaved requests; the inline timestamp survives
-                // plain-file stderr redirects where no journald stamps lines.
-                static REQ_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-                let id = REQ_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                eprintln!(
-                    "{}",
-                    quipu::request_usage::structured_request_log(
-                        "request_start",
-                        id,
-                        &client,
-                        &task,
-                        method.as_str(),
-                        &path,
-                        &endpoint,
-                        None,
-                        None,
-                        quipu::request_usage::AuthOutcome::Pending,
-                        None,
-                    )
-                );
-                let started = std::time::Instant::now();
-                let resp = next.run(req).await;
-                let status = resp.status().as_u16();
-                let elapsed = started.elapsed().as_secs_f64();
-                quipu::metrics::metrics().observe_request(&endpoint, status, elapsed);
-                quipu::metrics::metrics().observe_client(&client, &task, &endpoint, elapsed);
-                let auth = resp
-                    .extensions()
-                    .get::<quipu::request_usage::AuthOutcome>()
-                    .copied()
-                    .unwrap_or(quipu::request_usage::AuthOutcome::Pending);
-                let usage = resp
-                    .extensions()
-                    .get::<quipu::request_usage::RequestUsage>()
-                    .copied();
-                eprintln!(
-                    "{}",
-                    quipu::request_usage::structured_request_log(
-                        "request_complete",
-                        id,
-                        &client,
-                        &task,
-                        method.as_str(),
-                        &path,
-                        &endpoint,
-                        Some(status),
-                        Some(started.elapsed().as_millis()),
-                        auth,
-                        usage,
-                    )
-                );
-                resp
-            },
-        ))
+        .layer(axum::middleware::from_fn(request_middleware::log_request))
         .with_state(state);
 
     // Event push P2: the delivery worker. A 2s tick over deliver_tick with the
