@@ -39,10 +39,7 @@ impl OnnxEmbeddingProvider {
         max_seq_len: usize,
     ) -> Result<Self> {
         let session = Session::builder()
-            // MiniLM inference is the synchronous tail of every auto-embedded
-            // write. Two intra-op workers match the production CPU quota and
-            // avoid leaving half the allotted compute idle.
-            .and_then(|b| b.with_intra_threads(2))
+            .and_then(|b| b.with_intra_threads(1))
             .and_then(|b| b.commit_from_file(model_path))
             .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))?;
 
