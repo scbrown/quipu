@@ -1,5 +1,6 @@
 @prefix aegis: <http://aegis.gastown.local/ontology/> .
 @prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 
 # Scalar identifiers emitted by the repository and episode ingestion paths.
 # Quipu's bitemporal write path supersedes an earlier current value when OWL
@@ -11,3 +12,7 @@ aegis:sha        a owl:FunctionalProperty .
 aegis:hash       a owl:FunctionalProperty .
 aegis:contentHash a owl:FunctionalProperty .
 aegis:groupId    a owl:FunctionalProperty .
+
+# A node has one current description. Quipu closes an earlier value and keeps
+# it in bitemporal/provenance history; two competing values in one batch fail.
+rdfs:comment     a owl:FunctionalProperty .

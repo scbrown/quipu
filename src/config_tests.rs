@@ -340,6 +340,10 @@ fn empty_file_gives_defaults() {
     let cfg = file.quipu;
     assert_eq!(cfg.store_path, PathBuf::from(".bobbin/quipu/quipu.db"));
     assert!(
+        cfg.owl.validate_on_write,
+        "formal constraints protect writes by default"
+    );
+    assert!(
         cfg.owl.reactive_materialize,
         "formal deployments keep loaded OWL entailments live by default"
     );
@@ -349,6 +353,12 @@ fn empty_file_gives_defaults() {
 fn reactive_owl_can_be_explicitly_disabled() {
     let file: ConfigFile = toml::from_str("[quipu.owl]\nreactive_materialize = false\n").unwrap();
     assert!(!file.quipu.owl.reactive_materialize);
+}
+
+#[test]
+fn owl_write_validation_can_be_explicitly_disabled() {
+    let file: ConfigFile = toml::from_str("[quipu.owl]\nvalidate_on_write = false\n").unwrap();
+    assert!(!file.quipu.owl.validate_on_write);
 }
 
 #[test]

@@ -165,13 +165,9 @@ pub struct OwlConfig {
     /// persistently-loaded ontologies on every write, rejecting the transaction
     /// when a proposed batch violates one.
     ///
-    /// Default FALSE, mirroring `shacl.validate_on_write` — and deliberately so
-    /// rather than on-by-default. `Ontology::validate()` shipped with NO CALLER
-    /// while `docs/book/src/concepts/owl.md` claimed write-time enforcement, so
-    /// turning it on is a behaviour change for every existing deployment: axioms
-    /// that have been accumulating unenforced would start rejecting writes the
-    /// moment the flag flipped, against a population never checked against them.
-    /// Load the axioms, measure the existing violations, THEN enable.
+    /// Default true: loaded functional-property and disjointness axioms are an
+    /// admission policy, not inert documentation. Deployments that intentionally
+    /// accept inconsistent writes may opt out explicitly.
     pub validate_on_write: bool,
 
     /// Re-run OWL materialization when a committed write touches vocabulary
@@ -187,7 +183,7 @@ pub struct OwlConfig {
 impl Default for OwlConfig {
     fn default() -> Self {
         Self {
-            validate_on_write: false,
+            validate_on_write: true,
             reactive_materialize: true,
         }
     }
