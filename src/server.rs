@@ -13,21 +13,17 @@ use axum::{
 };
 use quipu::EmbeddingProvider;
 
-const UI_HTML: &str = include_str!("../ui/index.html");
-const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
-const GRAPH_CANVAS_JS: &str = include_str!("../ui/graph-canvas.js");
-const DATALINKS_JS: &str = include_str!("../ui/datalinks.js");
-// Vendored, not fetched: the UI must render on an air-gapped deploy, so the
-// only 3D dependency ships in the binary like every other UI asset.
-const THREE_JS: &str = include_str!("../ui/vendor/three.module.min.js");
-
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
 // explicitly.
 #[path = "server/admission.rs"]
 mod admission;
+#[path = "server/assets.rs"]
+mod assets;
 #[path = "server/base.rs"]
 mod base;
+#[path = "server/bead_ingress.rs"]
+mod bead_ingress;
 #[path = "server/entity.rs"]
 mod entity;
 #[path = "server/handle.rs"]
@@ -437,6 +433,7 @@ async fn main() {
         .route("/unravel", post(unravel))
         .route("/validate", post(validate))
         .route("/episode", post(episode))
+        .route("/ingress/bead", post(bead_ingress::bead_ingress))
         .route("/search", post(search))
         // Read-only resolution dry-run: "what would resolution
         // say about this name?" WITHOUT writing. Before this route, the answer
