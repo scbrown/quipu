@@ -416,7 +416,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Web components | ✅ | Embeddable `<quipu-*>` elements |
 | Semantic Web APIs | ✅ | Spotlight, TPF, OpenRefine reconciliation |
 | MCP tools (42; 44 with `owl`) | ✅ | Agent integration |
-| Python bindings | 🔜 | Planned |
+| Python bindings | ✅ | `quipu-client` under `python/` — REST client, stdlib-only |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |
 | GraphProvider federation trait | ✅ | `RemoteProvider`, startup health checks, `federated: true` on `/query` |

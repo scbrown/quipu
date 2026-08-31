@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quipu-client"
+version = "0.1.0"
+description = "Thin, typed Python client for the Quipu REST API (stdlib only)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+# Zero runtime dependencies is a design constraint, not an accident: the
+# client is stdlib urllib all the way down, so installing it can never fail
+# on a transitive pin. Tests need pytest; that is a dev tool, not a runtime
+# dependency.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/scbrown/quipu"
+Documentation = "https://github.com/scbrown/quipu/tree/main/docs/book/src/reference/python-client.md"
+
+[tool.setuptools]
+packages = ["quipu_client"]

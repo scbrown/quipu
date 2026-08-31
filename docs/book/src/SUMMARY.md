@@ -36,6 +36,7 @@
 
 - [CLI Commands](reference/cli.md)
 - [REST API](reference/rest-api.md)
+- [Python Client](reference/python-client.md)
 - [MCP Tools](reference/mcp-tools.md)
 - [Reasoner](reference/reasoner.md)
 - [Rust API](reference/api.md)
