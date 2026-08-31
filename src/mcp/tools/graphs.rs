@@ -36,26 +36,32 @@ pub fn tool_graph_list(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         kind.as_ref().map(crate::lattice_kind::DataKind::as_str),
         lifecycle,
     )?;
-    let rows: Vec<JsonValue> = graphs
-        .iter()
-        .map(|gi| {
-            serde_json::json!({
-                "iri": gi.iri,
-                "g": gi.g,
-                "class": gi.class,
-                "source": gi.source,
-                "lifecycle": gi.lifecycle,
-                "labels": {
-                    "freshness": gi.freshness,
-                    "durability": gi.durability,
-                    "trust_rank": gi.trust_rank,
-                    "trust_chain": gi.trust_chain,
-                    "policy": gi.policy,
-                    "kind": gi.kind,
-                },
-            })
-        })
-        .collect();
+    let mut rows: Vec<JsonValue> = Vec::with_capacity(graphs.len());
+    for gi in &graphs {
+        let mut row = serde_json::json!({
+            "iri": gi.iri,
+            "g": gi.g,
+            "class": gi.class,
+            "source": gi.source,
+            "lifecycle": gi.lifecycle,
+            "labels": {
+                "freshness": gi.freshness,
+                "durability": gi.durability,
+                "trust_rank": gi.trust_rank,
+                "trust_chain": gi.trust_chain,
+                "policy": gi.policy,
+                "kind": gi.kind,
+            },
+        });
+        // A mapped graph serves its materialization stamp (quipu-212): the
+        // mapping, the source subject, and the verified source hash of the
+        // last RML materialization — the comparands a freshness verdict
+        // needs. Omitted rather than faked when the graph has none.
+        if let Some(m) = store.mapped_provenance(gi.g)? {
+            row["materialization"] = m.to_json();
+        }
+        rows.push(row);
+    }
     Ok(serde_json::json!({ "count": rows.len(), "graphs": rows }))
 }
 

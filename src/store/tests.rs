@@ -1395,6 +1395,68 @@ fn overlay_writes_do_not_touch_root() {
 }
 
 #[test]
+fn a_mapped_graph_serves_its_materialization_stamp() {
+    // quipu-212: the last RML materialization's provenance is parsed back
+    // from the transaction record — no second store to drift — and a graph
+    // with no RML history reports nothing rather than something.
+    use crate::types::{Op, Value};
+    let mut store = Store::open_in_memory().unwrap();
+    let g = store.graph_create("http://ex/graph/mapped").unwrap();
+    let e = store.intern("http://ex/thing").unwrap();
+    let a = store.intern("http://ex/label").unwrap();
+    let d = |v: &str| Datum {
+        entity: e,
+        attribute: a,
+        value: Value::Str(v.into()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    let provenance =
+        "rml:https://ex/mapping/m1|mapping=sha256:aa|source=https://ex/truth/t1|verified=sha256:bb";
+    store
+        .transact_to_graph(
+            &[d("v1")],
+            "2026-01-01T00:00:00Z",
+            None,
+            Some(provenance),
+            g,
+        )
+        .unwrap();
+    // A later NON-RML write to the same graph must not shadow the RML record.
+    store
+        .transact_to_graph(&[d("v2")], "2026-01-02T00:00:00Z", None, Some("manual"), g)
+        .unwrap();
+
+    let m = store.mapped_provenance(g).unwrap().expect("stamp present");
+    assert_eq!(m.mapping_iri, "https://ex/mapping/m1");
+    assert_eq!(m.mapping_hash, "sha256:aa");
+    assert_eq!(m.source_subject, "https://ex/truth/t1");
+    assert_eq!(m.verified_hash, "sha256:bb");
+    assert_eq!(m.timestamp.as_deref(), Some("2026-01-01T00:00:00Z"));
+
+    // Omitted rather than faked: ROOT has no RML materialization here.
+    assert!(store.mapped_provenance(0).unwrap().is_none());
+
+    // And the graph listing serves it.
+    let listed = crate::tool_graph_list(&store, &serde_json::json!({})).unwrap();
+    let row = listed["graphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["iri"] == "http://ex/graph/mapped")
+        .expect("mapped graph listed");
+    assert_eq!(row["materialization"]["verified_hash"], "sha256:bb");
+    let root_row = listed["graphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["g"] == 0)
+        .expect("ROOT listed");
+    assert!(root_row.get("materialization").is_none());
+}
+
+#[test]
 fn governed_compose_lets_the_parent_win_and_ignores_overlay_masks() {
     // quipu-e61: the quarantine-plane read. Spanner's rule, adopted verbatim:
     // statically defined properties take precedence over a dynamic property

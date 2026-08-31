@@ -675,6 +675,14 @@ cache (freshness / durability / trust / policy / kind). Query params: `kind`
 **capability probe** for the graph-kinds surface: a 404 means the store
 predates it — treat that as "cannot tell", never as "no graphs".
 
+A graph whose latest RML materialization is on record additionally serves a
+`materialization` object (quipu-212): the mapping IRI, mapping-closure hash,
+external-truth subject, **verified source hash**, transaction, and timestamp
+of the last executor commit — the comparands a freshness verdict needs
+(camayoc's `rml_executor.py freshness`/`remap` read them from here). Parsed
+from transaction provenance, so it cannot drift from what actually
+committed; omitted rather than faked on graphs with no RML history.
+
 ```bash
 curl -s 'localhost:3030/graphs?kind=operational'
 ```
