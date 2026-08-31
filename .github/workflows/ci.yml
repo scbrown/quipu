@@ -247,6 +247,51 @@ jobs:
       - run: scripts/test-check-file-size.sh
       - run: scripts/check-file-size.sh
 
+  load-test:
+    name: Mixed load performance ratchet
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-load-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Harness self-test
+        run: scripts/quipu-load-test.py --self-test
+      - name: Build server
+        run: cargo build --locked --features full --bin quipu-server
+      - name: Run mixed load ratchet
+        run: |
+          DB="$(mktemp --suffix=.db)"
+          target/debug/quipu-server --db "$DB" --bind 127.0.0.1:3030 >server.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do
+            curl --fail --silent http://127.0.0.1:3030/health >/dev/null && break
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3030/health >/dev/null
+          scripts/quipu-load-test.py \
+            --baseline benchmark/load-test-baseline.json \
+            --output load-test-report.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quipu-load-test-report
+          path: |
+            load-test-report.json
+            server.log
+
   shapes:
     name: Shape invariants
     runs-on: ubuntu-latest
