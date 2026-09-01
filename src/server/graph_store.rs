@@ -11,6 +11,17 @@ use serde::Deserialize;
 
 use super::{SharedStore, base::blocking, tools::finish_deferred_embed};
 
+pub(crate) fn routes() -> axum::Router<SharedStore> {
+    axum::Router::new().route(
+        "/rdf-graph-store",
+        axum::routing::get(graph_store_get)
+            .head(graph_store_get)
+            .put(graph_store_put)
+            .post(graph_store_post)
+            .delete(graph_store_delete),
+    )
+}
+
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct GraphSelector {
     graph: Option<String>,

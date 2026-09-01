@@ -13,19 +13,13 @@ use axum::{
 };
 use quipu::EmbeddingProvider;
 
-const UI_HTML: &str = include_str!("../ui/index.html");
-const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
-const GRAPH_CANVAS_JS: &str = include_str!("../ui/graph-canvas.js");
-const DATALINKS_JS: &str = include_str!("../ui/datalinks.js");
-// Vendored, not fetched: the UI must render on an air-gapped deploy, so the
-// only 3D dependency ships in the binary like every other UI asset.
-const THREE_JS: &str = include_str!("../ui/vendor/three.module.min.js");
-
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
 // explicitly.
 #[path = "server/admission.rs"]
 mod admission;
+#[path = "server/assets.rs"]
+mod assets;
 #[path = "server/base.rs"]
 mod base;
 #[path = "server/entity.rs"]
@@ -46,17 +40,16 @@ mod tests;
 #[path = "server/tools.rs"]
 mod tools;
 
+use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 use base::{
-    components_js, datalinks_js, export, graph_canvas_js, health, import_share, knot,
-    metrics_handler, print_usage, promote_import, query, share_payload, stats, three_js, ui,
-    version,
+    export, health, import_share, knot, metrics_handler, print_usage, promote_import, query,
+    share_payload, stats, version,
 };
 use entity::{
     changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
     entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
     reconcile_handler, spotlight_handler, transactions,
 };
-use graph_store::{graph_store_delete, graph_store_get, graph_store_post, graph_store_put};
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use reason::{explain, reason, shapes};
 use tools::*;
@@ -431,13 +424,7 @@ async fn main() {
         .route("/metrics", get(metrics_handler))
         .route("/query", post(query))
         .route("/export", post(export))
-        .route("/rdf-graph-store",
-            get(graph_store_get)
-                .head(graph_store_get)
-                .put(graph_store_put)
-                .post(graph_store_post)
-                .delete(graph_store_delete),
-        )
+        .merge(graph_store::routes())
         .route("/share", post(share_payload))
         .route("/import", post(import_share))
         .route("/import/promote", post(promote_import))
