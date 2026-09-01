@@ -379,11 +379,11 @@ mod tests {
             while let Some(idx) = remaining.find(".route(") {
                 remaining = &remaining[idx + ".route(".len()..];
                 let candidate = remaining.trim_start();
-                if let Some(path) = candidate.strip_prefix('"') {
-                    if let Some(end) = path.find('"') {
-                        paths.push(path[..end].to_string());
-                        remaining = &path[end + 1..];
-                    }
+                if let Some(path) = candidate.strip_prefix('"')
+                    && let Some(end) = path.find('"')
+                {
+                    paths.push(path[..end].to_string());
+                    remaining = &path[end + 1..];
                 }
             }
         }
