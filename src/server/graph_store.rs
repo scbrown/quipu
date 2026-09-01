@@ -29,6 +29,7 @@ pub(crate) struct GraphSelector {
 }
 
 impl GraphSelector {
+    #[allow(clippy::result_large_err)]
     fn target(&self) -> Result<Option<&str>, Response> {
         match (self.graph.as_deref(), self.default.is_some()) {
             (Some(_), true) | (None, false) => Err((
@@ -45,6 +46,7 @@ impl GraphSelector {
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn response_format(headers: &HeaderMap) -> Result<(oxrdfio::RdfFormat, &'static str), Response> {
     let accept = headers
         .get(header::ACCEPT)
@@ -63,6 +65,7 @@ fn response_format(headers: &HeaderMap) -> Result<(oxrdfio::RdfFormat, &'static 
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn request_format(headers: &HeaderMap) -> Result<oxrdfio::RdfFormat, Response> {
     let content_type = headers
         .get(header::CONTENT_TYPE)
@@ -182,10 +185,10 @@ async fn write_graph(
     .await
     {
         Ok((existed, _, deferred)) => {
-            if let Some(work) = deferred {
-                if let Err(e) = finish_deferred_embed(&store, &work) {
-                    return e.into_response();
-                }
+            if let Some(work) = deferred
+                && let Err(e) = finish_deferred_embed(&store, &work)
+            {
+                return e.into_response();
             }
             if existed {
                 StatusCode::NO_CONTENT.into_response()

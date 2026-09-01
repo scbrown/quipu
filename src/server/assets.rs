@@ -2,12 +2,12 @@
 
 use axum::response::{Html, IntoResponse};
 
-const UI_HTML: &str = include_str!("../../ui/index.html");
-const COMPONENTS_JS: &str = include_str!("../../ui/quipu-components.js");
-const GRAPH_CANVAS_JS: &str = include_str!("../../ui/graph-canvas.js");
-const DATALINKS_JS: &str = include_str!("../../ui/datalinks.js");
+pub(crate) const UI_HTML: &str = include_str!("../../ui/index.html");
+pub(crate) const COMPONENTS_JS: &str = include_str!("../../ui/quipu-components.js");
+pub(crate) const GRAPH_CANVAS_JS: &str = include_str!("../../ui/graph-canvas.js");
+pub(crate) const DATALINKS_JS: &str = include_str!("../../ui/datalinks.js");
 // Vendored, not fetched: the UI must render on an air-gapped deploy.
-const THREE_JS: &str = include_str!("../../ui/vendor/three.module.min.js");
+pub(crate) const THREE_JS: &str = include_str!("../../ui/vendor/three.module.min.js");
 
 pub(crate) async fn ui() -> Html<&'static str> {
     Html(UI_HTML)

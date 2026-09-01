@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
-    response::{Html, IntoResponse},
+    response::IntoResponse,
 };
 use serde_json::{Value as JsonValue, json};
 
