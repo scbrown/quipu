@@ -64,6 +64,30 @@ impl Store {
         Ok(g)
     }
 
+    /// Remove a committed named graph from the registry after its facts have
+    /// been retracted. ROOT and non-committed graph classes are never removable
+    /// through the Graph Store protocol.
+    pub fn graph_unregister(&self, g: i64) -> Result<()> {
+        if g == crate::schema::ROOT_GRAPH {
+            return Err(Error::InvalidValue(
+                "the default graph cannot be unregistered".into(),
+            ));
+        }
+        match self.graph_class(g)?.as_deref() {
+            Some("committed") => {
+                self.conn
+                    .execute("DELETE FROM graphs WHERE g = ?1", params![g])?;
+                Ok(())
+            }
+            Some(other) => Err(Error::InvalidValue(format!(
+                "graph g={g} is class '{other}', not a committed graph"
+            ))),
+            None => Err(Error::InvalidValue(format!(
+                "graph g={g} is not registered"
+            ))),
+        }
+    }
+
     /// Register an overlay-class graph bound to a committed `parent_branch`
     /// (pass `0` for ROOT). Returns the overlay's graph id (the interned term id
     /// of `overlay_iri`). Idempotent: re-creating with the SAME parent is a

@@ -30,6 +30,8 @@ mod admission;
 mod base;
 #[path = "server/entity.rs"]
 mod entity;
+#[path = "server/graph_store.rs"]
+mod graph_store;
 #[path = "server/handle.rs"]
 mod handle;
 #[path = "server/query_usage.rs"]
@@ -54,6 +56,7 @@ use entity::{
     entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
     reconcile_handler, spotlight_handler, transactions,
 };
+use graph_store::{graph_store_delete, graph_store_get, graph_store_post, graph_store_put};
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use reason::{explain, reason, shapes};
 use tools::*;
@@ -428,6 +431,13 @@ async fn main() {
         .route("/metrics", get(metrics_handler))
         .route("/query", post(query))
         .route("/export", post(export))
+        .route("/rdf-graph-store",
+            get(graph_store_get)
+                .head(graph_store_get)
+                .put(graph_store_put)
+                .post(graph_store_post)
+                .delete(graph_store_delete),
+        )
         .route("/share", post(share_payload))
         .route("/import", post(import_share))
         .route("/import/promote", post(promote_import))
@@ -514,7 +524,7 @@ async fn main() {
                 let auth_token = auth_token.clone();
                 async move {
                     let path = req.uri().path().to_string();
-                    let is_write = quipu::http_auth::is_write_endpoint(&path);
+                    let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
                     let auth_header = req
                         .headers()
                         .get(axum::http::header::AUTHORIZATION)

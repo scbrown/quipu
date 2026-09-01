@@ -954,6 +954,27 @@ renders on an air-gapped deploy. They are part of the UI, not the API surface.
 
 ## Export
 
+### `GET|HEAD|PUT|POST|DELETE /rdf-graph-store`
+
+SPARQL 1.1 Graph Store HTTP Protocol using indirect graph identification.
+Select exactly one target with `?graph=<absolute-IRI>` or `?default`. `GET`
+returns the graph in the RDF syntax requested by `Accept`; `HEAD` returns the
+same status and headers without a body. `PUT` replaces the graph, `POST` merges
+the payload, and `DELETE` removes its contents (and a named graph's registry
+entry). Writes use the same bearer-token and read-only enforcement as Quipu's
+native write APIs.
+
+```bash
+curl localhost:3030/rdf-graph-store?graph=http%3A%2F%2Fexample.org%2Fg \
+  -X PUT -H 'Content-Type: text/turtle' --data-binary '@graph.ttl'
+curl localhost:3030/rdf-graph-store?graph=http%3A%2F%2Fexample.org%2Fg \
+  -H 'Accept: application/n-triples'
+```
+
+Supported request and response syntaxes are Turtle (`text/turtle`) and
+N-Triples (`application/n-triples`). Unsupported request media types return
+415; unsupported response types return 406; unknown named graphs return 404.
+
 ### `POST /export`
 
 Export deterministic RDF from ROOT, one named graph, one episode provenance

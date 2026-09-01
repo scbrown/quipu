@@ -142,7 +142,7 @@ pub use provider::{
 };
 #[cfg(feature = "remote")]
 pub use provider::{RemoteProvider, federated_from_config};
-pub use rdf::{export_rdf, export_rdf_subset, ingest_rdf};
+pub use rdf::{delete_rdf_graph, export_rdf, export_rdf_subset, ingest_rdf, replace_rdf_graph};
 #[cfg(feature = "reactive-reasoner")]
 pub use reasoner::reactive::ReactiveReasoner;
 pub use reconcile::{
