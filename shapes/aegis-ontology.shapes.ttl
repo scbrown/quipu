@@ -1107,11 +1107,12 @@ aegis:DockerImageShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
-# ── Bead ────��─────────────────────────────────��──────────────────
+# ── WorkItem ────��─────────────────────────────��──────────────────
 #
-# A work item tracked in beads.
+# Tracker-agnostic work. Beads/st records are one Camayoc ingress source;
+# Quipu does not mint a tracker-specific class.
 
-# ── BeadScope (aegis-6adcf / aegis-368cu.5, ian 2026-08-23) ────────────────
+# ── WorkItemScope (aegis-6adcf / aegis-368cu.5, ian 2026-08-23) ────────────
 #
 # Tier 2 of the bead-scope contract. Tier 1 landed as /propose proposal_id 6 —
 # and an ACCEPTED PROPOSAL IS LOST ON REDEPLOY unless it is also in this file,
@@ -1149,17 +1150,16 @@ aegis:DockerImageShape a sh:NodeShape ;
 #                  grantsAction "edit","commit","push","deploy" ;
 #                  scopeProvenance "declared"
 #
-# A SECOND shape on aegis:Bead is intentional and valid SHACL: BeadShape below
-# governs bead identity, this one governs scope. Kept separate so the scope
-# contract can be read, revised or retired without touching bead identity.
-aegis:BeadScopeShape a sh:NodeShape ;
-    sh:targetClass aegis:Bead ;
+# Scope applies to the tracker-agnostic WorkItem Camayoc owns. Identity and
+# lifecycle fields are governed by Camayoc's core shape, not duplicated here.
+aegis:WorkItemScopeShape a sh:NodeShape ;
+    sh:targetClass aegis:WorkItem ;
     # I2 (verify_shape_invariants.py): a targetClass shape that requires
     # nothing asserts nothing. This block is that floor and NOTHING MORE —
     # it does not weaken rule 1 above, because a label is independent of
     # scope: a bead with no scope at all still satisfies it, which is the
-    # whole point. Already true of the data (BeadShape below requires the
-    # same, 547 live Beads), so it refuses nothing that exists. Do not read
+    # whole point. Camayoc's WorkItem shape already requires the same label,
+    # so it refuses nothing that conforms there. Do not read
     # it as licence to add a second sh:minCount 1 here.
     sh:property [
         sh:path rdfs:label ;
@@ -1191,28 +1191,6 @@ aegis:BeadScopeShape a sh:NodeShape ;
         sh:minCount 0 ;
         sh:maxCount 1 ;
         sh:in ( "declared" "derived" "observed" ) ;
-    ] .
-
-aegis:BeadShape a sh:NodeShape ;
-    sh:targetClass aegis:Bead ;
-    sh:property [
-        sh:path aegis:beadId ;
-        sh:datatype xsd:string ;
-        sh:maxCount 1 ;
-    ] ;
-    sh:property [
-        sh:path aegis:priority ;
-        sh:datatype xsd:string ;
-        sh:maxCount 1 ;
-    ] ;
-    sh:property [
-        sh:path aegis:status ;
-        sh:datatype xsd:string ;
-        sh:maxCount 1 ;
-    ] ;
-    sh:property [
-        sh:path rdfs:label ;
-        sh:minCount 1 ;
     ] .
 
 # ══════��════════════════════════════════════════════════════════════
@@ -1880,7 +1858,7 @@ aegis:ManagedByShape a sh:PropertyShape ;
 aegis:ImplementsShape a sh:PropertyShape ;
     # HELD — see section header. No target on purpose.
     sh:path aegis:implements ;
-    sh:class aegis:Bead .
+    sh:class aegis:WorkItem .
 
 aegis:ConfiguredInShape a sh:PropertyShape ;
     # HELD — see section header. No target on purpose.
