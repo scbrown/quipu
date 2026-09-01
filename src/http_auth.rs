@@ -375,13 +375,14 @@ mod tests {
         ];
         let mut paths = Vec::new();
         for src in sources {
-            for line in src.lines() {
-                // Match `.route("<path>"` — tolerant of leading whitespace and the
-                // rest of the call. One route per line; scan each line once.
-                if let Some(idx) = line.find(".route(\"") {
-                    let rest = &line[idx + ".route(\"".len()..];
-                    if let Some(end) = rest.find('"') {
-                        paths.push(rest[..end].to_string());
+            let mut remaining = src;
+            while let Some(idx) = remaining.find(".route(") {
+                remaining = &remaining[idx + ".route(".len()..];
+                let candidate = remaining.trim_start();
+                if let Some(path) = candidate.strip_prefix('"') {
+                    if let Some(end) = path.find('"') {
+                        paths.push(path[..end].to_string());
+                        remaining = &path[end + 1..];
                     }
                 }
             }
