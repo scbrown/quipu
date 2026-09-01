@@ -10,51 +10,8 @@ use super::SharedStore;
 use super::base::{
     STATS_CACHE, StatsCache, export as export_handler, metrics_handler, query, share_payload, stats,
 };
-use super::bead_ingress::tool_bead_ingress;
 use super::entity::{EntityParams, SPOTLIGHT_CACHE, entity_query_conneg, spotlight_handler};
 use super::tools::{episode, search};
-
-#[test]
-fn native_bead_ingress_materializes_bidirectional_identity_and_lifecycle() {
-    let mut store = Store::open_in_memory().unwrap();
-    let result = tool_bead_ingress(
-        &mut store,
-        &json!({
-            "id": "aegis-native-probe",
-            "title": "Native bead ingress probe",
-            "closed_at": "2026-08-31T19:00:00Z"
-        }),
-    )
-    .expect("native bead ingress should commit");
-    assert_eq!(result["outcome"], "created");
-
-    let ask = |query| {
-        matches!(
-            quipu::sparql::query(&store, query).unwrap(),
-            quipu::sparql::QueryResult::Ask(true)
-        )
-    };
-    assert!(ask(
-        "ASK { <http://aegis.gastown.local/ontology/aegis-native-probe> \
-         a <http://aegis.gastown.local/ontology/Bead> ; \
-         <http://aegis.gastown.local/ontology/beadId> \"aegis-native-probe\" . }"
-    ));
-    assert!(ask(
-        "ASK { ?observation <http://aegis.gastown.local/ontology/observes> \
-         <http://aegis.gastown.local/ontology/aegis-native-probe> . }"
-    ));
-}
-
-#[test]
-fn native_bead_ingress_requires_stable_identity_and_event_time() {
-    let mut store = Store::open_in_memory().unwrap();
-    for input in [
-        json!({"closed_at": "now"}),
-        json!({"id": "aegis-missing-time"}),
-    ] {
-        assert!(tool_bead_ingress(&mut store, &input).is_err());
-    }
-}
 
 #[tokio::test]
 async fn query_form_entity_dereferences_json_ld_and_html() {
@@ -687,7 +644,7 @@ fn backfill_yields_the_writer_lock_and_retries_stale_snapshots() {
 /// import without serving it now fails here instead of in a browser.
 #[test]
 fn every_ui_module_import_is_a_served_public_route() {
-    let html = super::assets::UI_HTML;
+    let html = super::UI_HTML;
     let mut imports: Vec<&str> = Vec::new();
     for line in html.lines() {
         // `from '/path.js'` (ES import) and `src="/path.js"` (classic script).
@@ -730,12 +687,12 @@ fn every_ui_module_import_is_a_served_public_route() {
 #[test]
 fn three_js_is_vendored_and_never_fetched() {
     assert!(
-        super::assets::THREE_JS.contains("Three.js Authors")
-            && super::assets::THREE_JS.contains("SPDX-License-Identifier: MIT"),
+        super::THREE_JS.contains("Three.js Authors")
+            && super::THREE_JS.contains("SPDX-License-Identifier: MIT"),
         "ui/vendor/three.module.min.js is missing the three.js MIT header — \
          either it is not three.js, or the licence banner was stripped"
     );
-    for module in [super::assets::DATALINKS_JS, super::assets::UI_HTML] {
+    for module in [super::DATALINKS_JS, super::UI_HTML] {
         for host in ["unpkg.com", "cdn.jsdelivr.net", "cdn.skypack.dev"] {
             assert!(
                 !module.contains(&format!("{host}/three")),

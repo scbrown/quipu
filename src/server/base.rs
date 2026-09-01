@@ -14,11 +14,11 @@ use axum::{
 };
 use serde_json::{Value as JsonValue, json};
 
-use super::SharedStore;
 use super::tools::finish_deferred_embed;
+use super::{COMPONENTS_JS, DATALINKS_JS, GRAPH_CANVAS_JS, SharedStore, THREE_JS, UI_HTML};
 
 pub(crate) async fn ui() -> Html<&'static str> {
-    Html(super::assets::UI_HTML)
+    Html(UI_HTML)
 }
 
 /// quipu #47: report the configured federation remotes at startup, and prove
@@ -87,28 +87,28 @@ pub(crate) fn report_federation(store: &quipu::Store, federation: &quipu::Federa
 pub(crate) async fn components_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript")],
-        super::assets::COMPONENTS_JS,
+        COMPONENTS_JS,
     )
 }
 
 pub(crate) async fn graph_canvas_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript")],
-        super::assets::GRAPH_CANVAS_JS,
+        GRAPH_CANVAS_JS,
     )
 }
 
 pub(crate) async fn datalinks_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript")],
-        super::assets::DATALINKS_JS,
+        DATALINKS_JS,
     )
 }
 
 pub(crate) async fn three_js() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "application/javascript")],
-        super::assets::THREE_JS,
+        THREE_JS,
     )
 }
 
