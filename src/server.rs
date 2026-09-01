@@ -13,21 +13,19 @@ use axum::{
 };
 use quipu::EmbeddingProvider;
 
-const UI_HTML: &str = include_str!("../ui/index.html");
-const COMPONENTS_JS: &str = include_str!("../ui/quipu-components.js");
-const GRAPH_CANVAS_JS: &str = include_str!("../ui/graph-canvas.js");
-const DATALINKS_JS: &str = include_str!("../ui/datalinks.js");
-// Vendored, not fetched: the UI must render on an air-gapped deploy, so the
-// only 3D dependency ships in the binary like every other UI asset.
-const THREE_JS: &str = include_str!("../ui/vendor/three.module.min.js");
-
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
 // explicitly.
+#[path = "server/admission.rs"]
+mod admission;
+#[path = "server/assets.rs"]
+mod assets;
 #[path = "server/base.rs"]
 mod base;
 #[path = "server/entity.rs"]
 mod entity;
+#[path = "server/graph_store.rs"]
+mod graph_store;
 #[path = "server/handle.rs"]
 mod handle;
 #[path = "server/query_usage.rs"]
@@ -42,15 +40,15 @@ mod tests;
 #[path = "server/tools.rs"]
 mod tools;
 
+use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 use base::{
-    components_js, datalinks_js, export, graph_canvas_js, health, import_share, knot,
-    metrics_handler, print_usage, promote_import, query, share_payload, stats, three_js, ui,
-    version,
+    export, health, import_share, knot, metrics_handler, print_usage, promote_import, query,
+    share_payload, stats, version,
 };
 use entity::{
-    entity_conneg, entity_history, entity_html, entity_json, entity_turtle_suffix, events_commit,
-    events_get, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
-    transactions,
+    changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
+    entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
+    reconcile_handler, spotlight_handler, transactions,
 };
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use reason::{explain, reason, shapes};
@@ -343,9 +341,11 @@ async fn main() {
         eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
     }
 
+    let vector_reads_pooled = store.has_sqlite_vector_backend();
     let state: SharedStore = Arc::new(StoreHandle {
         writer: FairMutex::new(store),
         readers: read_pool,
+        vector_reads_pooled,
         federation: config.federation.clone(),
         #[cfg(feature = "reactive-reasoner")]
         reasoner: reactive_reasoner,
@@ -424,6 +424,7 @@ async fn main() {
         .route("/metrics", get(metrics_handler))
         .route("/query", post(query))
         .route("/export", post(export))
+        .merge(graph_store::routes())
         .route("/share", post(share_payload))
         .route("/import", post(import_share))
         .route("/import/promote", post(promote_import))
@@ -486,6 +487,7 @@ async fn main() {
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
         // Entity + history
+        .route("/entity", get(entity_query_conneg))
         .route("/entity/{iri}", get(entity_conneg))
         .route("/entity/{iri}/json", get(entity_json))
         .route("/entity/{iri}/ttl", get(entity_turtle_suffix))
@@ -493,6 +495,7 @@ async fn main() {
         .route("/entity_history", post(entity_history))
         .route("/transactions", get(transactions))
         // Event log pull API (event-log P1)
+        .route("/changes", get(changes_get))
         .route("/events", get(events_get))
         .route("/events/commit", post(events_commit))
         // Semantic web APIs (Phase 4)
@@ -508,7 +511,7 @@ async fn main() {
                 let auth_token = auth_token.clone();
                 async move {
                     let path = req.uri().path().to_string();
-                    let is_write = quipu::http_auth::is_write_endpoint(&path);
+                    let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
                     let auth_header = req
                         .headers()
                         .get(axum::http::header::AUTHORIZATION)

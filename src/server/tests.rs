@@ -10,8 +10,57 @@ use super::SharedStore;
 use super::base::{
     STATS_CACHE, StatsCache, export as export_handler, metrics_handler, query, share_payload, stats,
 };
-use super::entity::{SPOTLIGHT_CACHE, spotlight_handler};
+use super::entity::{EntityParams, SPOTLIGHT_CACHE, entity_query_conneg, spotlight_handler};
 use super::tools::{episode, search};
+
+#[tokio::test]
+async fn query_form_entity_dereferences_json_ld_and_html() {
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let iri = "https://example.org/resource/one#it";
+
+    let mut json_headers = axum::http::HeaderMap::new();
+    json_headers.insert(
+        axum::http::header::ACCEPT,
+        "application/ld+json".parse().unwrap(),
+    );
+    let json_response = entity_query_conneg(
+        State(shared.clone()),
+        axum::extract::Query(EntityParams { iri: iri.into() }),
+        json_headers,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        json_response.headers()[axum::http::header::CONTENT_TYPE],
+        "application/ld+json"
+    );
+    let body = axum::body::to_bytes(json_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let document: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(document["@id"], iri);
+    assert!(document.get("@context").is_some());
+
+    let html_response = entity_query_conneg(
+        State(shared),
+        axum::extract::Query(EntityParams { iri: iri.into() }),
+        axum::http::HeaderMap::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        html_response.headers()[axum::http::header::CONTENT_TYPE],
+        "text/html; charset=utf-8"
+    );
+    let body = axum::body::to_bytes(html_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("class=\"card\""));
+    assert!(html.contains(">it</div>"));
+}
 
 #[tokio::test]
 async fn post_share_returns_reconstructable_canonical_files() {
@@ -171,6 +220,77 @@ async fn precomputed_embedding_bypasses_the_provider() {
     assert!(
         start.elapsed() < std::time::Duration::from_millis(150),
         "the sleepy provider was consulted despite a pre-computed embedding"
+    );
+}
+
+/// Supplied-vector search is read-only. It must use the WAL read pool rather
+/// than queueing behind an unrelated writer, or concurrent mixed load turns
+/// every search into writer-lock latency.
+#[tokio::test(flavor = "current_thread")]
+async fn precomputed_search_does_not_queue_behind_the_writer() {
+    let (_dir, handle) = pooled_handle(1);
+    let shared = Arc::new(handle);
+    let (locked_tx, locked_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let holder = shared.clone();
+    let thread = std::thread::spawn(move || {
+        let _writer = holder.lock();
+        locked_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+    });
+    locked_rx.recv().unwrap();
+
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        search(
+            State(shared),
+            axum::Json(json!({ "embedding": vec![0.2f32; 384], "limit": 1 })),
+        ),
+    )
+    .await
+    .expect("precomputed search queued behind the writer instead of using the read pool")
+    .expect("precomputed search failed on a read-only pooled connection");
+    release_tx.send(()).unwrap();
+    thread.join().unwrap();
+}
+
+/// Tokio cannot cancel blocking tasks after they start. Admission therefore
+/// has to happen in async space: cancelling a waiter must prevent its closure
+/// from ever entering the blocking pool.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancelled_write_waiter_never_starts_blocking_work() {
+    let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let leader = tokio::spawn(super::admission::write_blocking_with(
+        admission,
+        move || {
+            started_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            Ok(())
+        },
+    ));
+    started_rx.await.unwrap();
+
+    let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let ran_in_waiter = ran.clone();
+    let waiter = tokio::spawn(super::admission::write_blocking_with(
+        admission,
+        move || {
+            ran_in_waiter.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        },
+    ));
+    tokio::task::yield_now().await;
+    waiter.abort();
+    assert!(waiter.await.unwrap_err().is_cancelled());
+
+    release_tx.send(()).unwrap();
+    leader.await.unwrap().unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    assert!(
+        !ran.load(std::sync::atomic::Ordering::SeqCst),
+        "cancelled write entered spawn_blocking and survived its HTTP future"
     );
 }
 
@@ -524,7 +644,7 @@ fn backfill_yields_the_writer_lock_and_retries_stale_snapshots() {
 /// import without serving it now fails here instead of in a browser.
 #[test]
 fn every_ui_module_import_is_a_served_public_route() {
-    let html = super::UI_HTML;
+    let html = super::assets::UI_HTML;
     let mut imports: Vec<&str> = Vec::new();
     for line in html.lines() {
         // `from '/path.js'` (ES import) and `src="/path.js"` (classic script).
@@ -567,12 +687,12 @@ fn every_ui_module_import_is_a_served_public_route() {
 #[test]
 fn three_js_is_vendored_and_never_fetched() {
     assert!(
-        super::THREE_JS.contains("Three.js Authors")
-            && super::THREE_JS.contains("SPDX-License-Identifier: MIT"),
+        super::assets::THREE_JS.contains("Three.js Authors")
+            && super::assets::THREE_JS.contains("SPDX-License-Identifier: MIT"),
         "ui/vendor/three.module.min.js is missing the three.js MIT header — \
          either it is not three.js, or the licence banner was stripped"
     );
-    for module in [super::DATALINKS_JS, super::UI_HTML] {
+    for module in [super::assets::DATALINKS_JS, super::assets::UI_HTML] {
         for host in ["unpkg.com", "cdn.jsdelivr.net", "cdn.skypack.dev"] {
             assert!(
                 !module.contains(&format!("{host}/three")),
@@ -606,6 +726,7 @@ fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreHandle) {
     }
     let handle = super::StoreHandle {
         writer: parking_lot::FairMutex::new(store),
+        vector_reads_pooled: true,
         federation: quipu::config::FederationConfig::default(),
         readers: super::ReadPool {
             conns,

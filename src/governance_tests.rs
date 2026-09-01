@@ -58,6 +58,65 @@ ex:subject a rr:SubjectMap ; rr:constant ex:fixed ; rr:template "https://example
     );
 }
 
+const RML_REF_PREFIXES: &str = r#"
+@prefix ex: <https://example.invalid/rml/> .
+@prefix ql: <http://semweb.mmlab.be/ns/ql#> .
+@prefix rml: <http://semweb.mmlab.be/ns/rml#> .
+@prefix rr: <http://www.w3.org/ns/r2rml#> .
+ex:orders a rr:TriplesMap ; rml:logicalSource ex:src ; rr:subjectMap ex:orderSubject ;
+    rr:predicateObjectMap ex:placedBy ; rr:graph ex:target .
+ex:customers a rr:TriplesMap ; rml:logicalSource ex:src ; rr:subjectMap ex:customerSubject ;
+    rr:graph ex:target .
+ex:src a rml:LogicalSource ; rml:source ex:external-truth ;
+    rml:referenceFormulation ql:CSV .
+ex:orderSubject a rr:SubjectMap ; rr:template "https://example.invalid/order/{id}" .
+ex:customerSubject a rr:SubjectMap ; rr:template "https://example.invalid/customer/{cid}" .
+"#;
+
+#[test]
+fn camayoc_rml_subset_accepts_referencing_object_map() {
+    // The FK-shaped edge case (quipu-8c0): the object of `placedBy` is the
+    // customer map's subject for the row the join selects.
+    let data = format!(
+        "{RML_REF_PREFIXES}\n\
+         ex:placedBy a rr:PredicateObjectMap ; rr:predicate ex:placedByCustomer ; rr:objectMap ex:ref .\n\
+         ex:ref a rr:RefObjectMap ; rr:parentTriplesMap ex:customers ; rr:joinCondition ex:join .\n\
+         ex:join a rr:Join ; rr:child \"customer_id\" ; rr:parent \"cid\" .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(
+        fb.conforms,
+        "referencing object map with a join should conform: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn camayoc_rml_subset_refuses_joinless_referencing_object_map() {
+    // No implicit identity join in the governed subset: a ref object map
+    // without an explicit join condition is malformed, even same-source.
+    let data = format!(
+        "{RML_REF_PREFIXES}\n\
+         ex:placedBy a rr:PredicateObjectMap ; rr:predicate ex:placedByCustomer ; rr:objectMap ex:ref .\n\
+         ex:ref a rr:RefObjectMap ; rr:parentTriplesMap ex:customers .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(!fb.conforms, "a joinless ref object map must be refused");
+}
+
+#[test]
+fn camayoc_rml_subset_refuses_half_a_join_condition() {
+    // A join with a child and no parent selects nothing decidable.
+    let data = format!(
+        "{RML_REF_PREFIXES}\n\
+         ex:placedBy a rr:PredicateObjectMap ; rr:predicate ex:placedByCustomer ; rr:objectMap ex:ref .\n\
+         ex:ref a rr:RefObjectMap ; rr:parentTriplesMap ex:customers ; rr:joinCondition ex:join .\n\
+         ex:join a rr:Join ; rr:child \"customer_id\" .\n"
+    );
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(!fb.conforms, "a join without rr:parent must be refused");
+}
+
 #[test]
 fn well_formed_workflow_and_step_conform() {
     let data = format!(

@@ -30,6 +30,10 @@ pub(crate) type SharedStore = Arc<StoreHandle>;
 pub(crate) struct StoreHandle {
     pub(crate) writer: FairMutex<quipu::Store>,
     pub(crate) readers: ReadPool,
+    /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
+    /// clone boxed external/LanceDB backends. Keep those searches on the writer
+    /// so moving `SQLite` search to WAL readers never changes backend semantics.
+    pub(crate) vector_reads_pooled: bool,
     /// The configured federation remotes, held for the per-request federated
     /// query path (quipu-tkh). Empty means `federated: true` fans out to the
     /// local store alone.
@@ -95,6 +99,7 @@ impl StoreHandle {
     #[cfg(test)]
     pub(crate) fn writer_only(store: quipu::Store) -> Self {
         Self {
+            vector_reads_pooled: store.has_sqlite_vector_backend(),
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             federation: quipu::config::FederationConfig::default(),
@@ -149,5 +154,14 @@ impl StoreHandle {
             );
         }
         guard
+    }
+
+    /// A read connection that preserves the configured vector backend.
+    pub(crate) fn vector_read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        if self.vector_reads_pooled {
+            self.read()
+        } else {
+            self.lock()
+        }
     }
 }

@@ -43,6 +43,11 @@ test-fixtures/*.db-shm
 .logs/
 __pycache__/
 
+# Python packaging artifacts (pip install ./python builds in place)
+python/build/
+python/dist/
+*.egg-info/
+
 # Census benchmark run outputs (stores, manifests, metrics)
 benchmark/census/out/
 benchmark/mergebench/out/

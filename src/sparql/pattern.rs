@@ -49,6 +49,34 @@ pub fn eval_pattern(
     eval_pattern_seeded(store, pattern, ctx, &Bindings::new())
 }
 
+/// Evaluate a top-level result with the service response ceiling pushed to the
+/// SQL leaf only when doing so preserves SPARQL semantics.
+///
+/// `query_result` historically truncated only after the evaluator had
+/// materialized every solution. On the production graph, a plain `?s ?p ?o`
+/// scan therefore built hundreds of thousands of bindings to return 10,000,
+/// consuming seconds and gigabytes under concurrency. A prefix-safe plan can
+/// stop at `max_sparql_rows + 1` (the extra row proves truncation) without
+/// changing which prefix is returned. Any operator that can drop, reorder,
+/// combine, or collapse rows keeps the uncapped evaluator.
+pub fn eval_pattern_result_limited(
+    store: &Store,
+    pattern: &GraphPattern,
+    ctx: &TemporalContext,
+) -> Result<(Vec<Bindings>, Vec<String>)> {
+    let Some(cap) = ctx.result_limit else {
+        return eval_pattern(store, pattern, ctx);
+    };
+    if !limit_pushdown_safe(pattern) {
+        return eval_pattern(store, pattern, ctx);
+    }
+    let capped = TemporalContext {
+        row_limit: Some(ctx.row_limit.map_or(cap, |existing| existing.min(cap))),
+        ..ctx.clone()
+    };
+    eval_pattern(store, pattern, &capped)
+}
+
 /// Evaluate a graph pattern SEEDED with pre-bound variables (`seed`), which
 /// initialise every leaf (BGP / property path) so evaluation is CONSTRAINED by
 /// them — the SPARQL EXISTS substitution semantics. A bound ?s makes a path

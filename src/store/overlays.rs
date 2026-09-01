@@ -64,6 +64,30 @@ impl Store {
         Ok(g)
     }
 
+    /// Remove a committed named graph from the registry after its facts have
+    /// been retracted. ROOT and non-committed graph classes are never removable
+    /// through the Graph Store protocol.
+    pub fn graph_unregister(&self, g: i64) -> Result<()> {
+        if g == crate::schema::ROOT_GRAPH {
+            return Err(Error::InvalidValue(
+                "the default graph cannot be unregistered".into(),
+            ));
+        }
+        match self.graph_class(g)?.as_deref() {
+            Some("committed") => {
+                self.conn
+                    .execute("DELETE FROM graphs WHERE g = ?1", params![g])?;
+                Ok(())
+            }
+            Some(other) => Err(Error::InvalidValue(format!(
+                "graph g={g} is class '{other}', not a committed graph"
+            ))),
+            None => Err(Error::InvalidValue(format!(
+                "graph g={g} is not registered"
+            ))),
+        }
+    }
+
     /// Register an overlay-class graph bound to a committed `parent_branch`
     /// (pass `0` for ROOT). Returns the overlay's graph id (the interned term id
     /// of `overlay_iri`). Idempotent: re-creating with the SAME parent is a
@@ -240,6 +264,48 @@ impl Store {
                  AND NOT EXISTS ( \
                    SELECT 1 FROM facts o WHERE o.g = ?1 AND o.op = 1 AND o.valid_to IS NULL \
                      AND o.e = r.e AND o.a = r.a AND o.v = r.v) \
+             ) GROUP BY e, a, v ORDER BY e, a",
+        )?;
+        Self::collect_facts(&mut stmt, params![overlay_g, root_g])
+    }
+
+    /// Governed-wins composition (quipu-e61): resolve `[overlay > parent]`
+    /// with the precedence Spanner applies to dynamic properties — the
+    /// statically governed side shadows the dynamic side, not the reverse.
+    ///
+    /// This is the read for quarantine planes: a low-trust overlay may EXTEND
+    /// the governed graph but never alter what it says. Concretely —
+    ///
+    /// - every live parent assertion is present: overlay asserts cannot
+    ///   collide it away and overlay tombstones cannot mask it;
+    /// - an overlay assertion is present only for `(entity, attribute)` slots
+    ///   the parent claims nothing about (collision resolution is at the
+    ///   same-subject-same-predicate level, matching Spanner's same-NAME
+    ///   rule, not at triple granularity — a quarantined second value for a
+    ///   governed predicate is exactly the masquerade this read exists to
+    ///   suppress);
+    /// - an overlay tombstone masks only the overlay's own contributions.
+    ///
+    /// Promotion out of quarantine stays what it is everywhere else: an
+    /// explicit governed write, never a precedence flip. Use
+    /// [`Store::compose_view`] for scratch-layer semantics
+    /// (nearest-overlay-wins); the two reads answer different questions and
+    /// deliberately coexist.
+    pub fn compose_view_governed(&self, overlay_g: i64) -> Result<Vec<Fact>> {
+        let root_g = self.overlay_parent(overlay_g)?;
+        let mut stmt = self.conn.prepare(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM ( \
+               SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
+               WHERE g = ?2 AND op = 1 AND valid_to IS NULL \
+               UNION ALL \
+               SELECT o.e, o.a, o.v, o.tx, o.valid_from, o.valid_to, o.op FROM facts o \
+               WHERE o.g = ?1 AND o.op = 1 AND o.valid_to IS NULL \
+                 AND NOT EXISTS ( \
+                   SELECT 1 FROM facts r WHERE r.g = ?2 AND r.op = 1 AND r.valid_to IS NULL \
+                     AND r.e = o.e AND r.a = o.a) \
+                 AND NOT EXISTS ( \
+                   SELECT 1 FROM facts t WHERE t.g = ?1 AND t.op = 2 AND t.valid_to IS NULL \
+                     AND t.e = o.e AND t.a = o.a AND t.v = o.v) \
              ) GROUP BY e, a, v ORDER BY e, a",
         )?;
         Self::collect_facts(&mut stmt, params![overlay_g, root_g])

@@ -1,11 +1,18 @@
 # Design: Spanner-class capabilities over any structured data
 
-> **Implementation status (2026-08-31):** 🔮 **Design only.** This is an
-> investigation of Google Cloud Spanner (state of 2025–2026, Spanner Graph GA)
-> and a capability-by-capability mapping onto the quipu stack. Nothing in this
-> document is implemented by this document; where a row says ✅ the capability
-> already exists in quipu or camayoc and is cross-referenced. Follow-up work is
-> tracked as beads (see §6).
+> **Implementation status (2026-08-31):** ✅ **All four proposed capabilities
+> (§4) are implemented and shipped**, same day as the investigation:
+> §4.1 referencing object maps — governance shapes (quipu-8c0, `b93f8a5`) and
+> executor v2 joins (camayoc-5bf, camayoc `17b4920`); §4.2 mapping freshness —
+> the materialization stamp on `GET /graphs` (quipu-212 store half,
+> `5a3f666`) and `freshness`/`remap` in the executor (camayoc `7e158e8`);
+> §4.3 governed-wins precedence — `compose_view_governed`, exposed as
+> `precedence=governed` on overlay compose (quipu-e61, `8319891`); §4.4 the
+> change feed — `store::changes`, `quipu changes`, `GET /changes`
+> (quipu-2ae, `e81bce4`, book page `architecture/change-feed.md`). §4.5
+> (stored-query results as mappable logical sources) remains open by design —
+> it rides on RML v2's `rr:SQL2008` lane and needs its own bead when a
+> concrete consumer appears. §5's out-of-scope list stands.
 
 ## 1. Why Spanner, and what "not just rows" means
 

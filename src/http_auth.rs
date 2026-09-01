@@ -83,6 +83,8 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    // Method-sensitive: GET/HEAD are reads; PUT/POST/DELETE are writes.
+    "/rdf-graph-store",
     "/graphs",        // registry listing + kind capability probe (pooled read)
     "/path/cone",     // golden-path provenance cone (ro_handler, quipu-gp2)
     "/explain",       // derivation-chain walk (quipu-923) — reads provenance, commits nothing
@@ -123,12 +125,14 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/report",
     "/context",
     "/entity/{iri}",
+    "/entity",
     "/entity/{iri}/json",
     "/entity/{iri}/ttl",
     "/entity/{iri}/html",
     "/entity_history",
     "/transactions",
-    "/events", // pull-batch event log read (event-log P1); the commit half is a write
+    "/events",  // pull-batch event log read (event-log P1); the commit half is a write
+    "/changes", // fact-level change feed (quipu-2ae): pull-only, cursor is a tx id
     "/spotlight",
     "/fragments",
     "/reconcile",
@@ -147,6 +151,15 @@ pub const READ_ENDPOINTS: &[&str] = &[
 /// Whether `path` is a write endpoint subject to auth / read-only policy.
 pub fn is_write_endpoint(path: &str) -> bool {
     WRITE_ENDPOINTS.contains(&path)
+}
+
+/// Classify routes whose write-ness depends on the HTTP method.
+pub fn is_write_request(path: &str, method: &str) -> bool {
+    if path == "/rdf-graph-store" {
+        matches!(method, "PUT" | "POST" | "DELETE")
+    } else {
+        is_write_endpoint(path)
+    }
 }
 
 /// Outcome of an access-control check.
@@ -316,6 +329,15 @@ mod tests {
         assert!(!is_write_endpoint("/query"));
         assert!(!is_write_endpoint("/search"));
         assert!(!is_write_endpoint("/health"));
+    }
+
+    #[test]
+    fn graph_store_classification_is_method_sensitive() {
+        assert!(!is_write_request("/rdf-graph-store", "GET"));
+        assert!(!is_write_request("/rdf-graph-store", "HEAD"));
+        for method in ["PUT", "POST", "DELETE"] {
+            assert!(is_write_request("/rdf-graph-store", method), "{method}");
+        }
     }
 
     #[test]

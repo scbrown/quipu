@@ -36,6 +36,7 @@
 
 - [CLI Commands](reference/cli.md)
 - [REST API](reference/rest-api.md)
+- [Python Client](reference/python-client.md)
 - [MCP Tools](reference/mcp-tools.md)
 - [Reasoner](reference/reasoner.md)
 - [Rust API](reference/api.md)
@@ -43,6 +44,7 @@
 # Architecture
 
 - [EAVT Fact Log](architecture/eavt.md)
+- [Change Feed](architecture/change-feed.md)
 - [RDF Data Model](architecture/rdf.md)
 - [SPARQL Engine](architecture/sparql.md)
 - [The In-Memory Read Model](architecture/read-model.md)

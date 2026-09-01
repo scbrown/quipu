@@ -99,15 +99,11 @@ entailment lives in the companion, not beside its premises.
 > the doc, not the code: a capability claim in a manual is not tested, it is
 > BELIEVED, so it stops the reader checking the very thing that is broken.
 
-Two OWL constraints can be enforced at write time. They are **off by default** —
-set `owl.validate_on_write = true` (mirroring `shacl.validate_on_write`), and
-build with the `owl` feature.
-
-The default is off on purpose. Axioms may have accumulated in a store while
-nothing enforced them, so enabling this can start rejecting writes against a
-population that was never checked. **Load the axioms, measure the existing
-violations, then enable**. In one real store a single functional-property
-candidate had 205 live violations at the moment it would have been declared.
+Two OWL constraints are enforced at write time by default when built with the
+`owl` feature. Set `owl.validate_on_write = false` only for an explicitly
+informal deployment. Before adopting new axioms, measure the existing graph:
+turning an incompatible declaration into live policy can reject future writes
+that touch historical drift.
 
 **Disjoint classes**: If `ex:Person owl:disjointWith ex:Robot`, then an entity
 cannot be typed as both. Attempting to assert `ex:alice a ex:Robot` when
@@ -115,7 +111,9 @@ cannot be typed as both. Attempting to assert `ex:alice a ex:Robot` when
 is rolled back.
 
 **Functional properties**: If `ex:ssn a owl:FunctionalProperty`, an entity can
-have at most one value. A second, different value is rejected.
+have at most one current value. A later value supersedes the earlier one while
+preserving history; two competing values in one batch are rejected because the
+write provides no ordering.
 
 Both reject the whole transaction: the constraint runs inside the write's
 savepoint, so a violating batch commits nothing. Violations are reported

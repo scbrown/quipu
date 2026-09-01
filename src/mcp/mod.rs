@@ -89,7 +89,12 @@ pub(crate) fn resolution_contentions_json(contentions: &[Contention]) -> Vec<Jso
 /// `max_sparql_rows` ceiling (hq-gkd) from one place — a LIMIT-less query cannot
 /// dump the whole fact log to either serializer.
 pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bool)> {
-    let (query_str, ctx) = query_context(store, input)?;
+    let (query_str, mut ctx) = query_context(store, input)?;
+    let max_rows = store.search_config().max_sparql_rows;
+    // Stop a wholly prefix-safe SELECT after one row beyond the response
+    // ceiling. The extra row preserves the `truncated: true` signal. Unsafe
+    // plans ignore this hint and retain full evaluation semantics.
+    ctx.result_limit = Some(max_rows.saturating_add(1));
 
     // quipu #70: per-row labels are OPT-IN and only annotate under `GRAPH ?g`.
     // Off by default so no existing response shape changes.
@@ -102,8 +107,6 @@ pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bo
     } else {
         sparql::query_temporal(store, query_str, &ctx)?
     };
-    let max_rows = store.search_config().max_sparql_rows;
-
     Ok(match result {
         QueryResult::Select {
             variables,
@@ -227,9 +230,9 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
     ))
 }
 
-/// Which type constants in this request now withhold former subclass expansion.
+/// Which type constants in this request expand over subclasses.
 ///
-/// Empty when the asserted-only migration did not alter this query. The marker
+/// Empty when subclass entailment does not alter this query. The marker
 /// is omitted in that common case; see [`crate::sparql::rdfs::withheld_types`].
 pub fn query_inference(store: &Store, input: &JsonValue) -> Result<Vec<rdfs::WithheldType>> {
     let (query_str, ctx) = query_context(store, input)?;
@@ -330,17 +333,16 @@ fn add_inference(out: &mut JsonValue, withheld: &[rdfs::WithheldType]) {
         obj.insert(
             "inference".to_string(),
             serde_json::json!({
-                "applied": false,
-                "withheldTypes": types,
-                "note": "asserted-only since the SPARQL type-form migration; rdfs:subClassOf \
-            expansion was withheld. For the inferred answer use ?s a/rdfs:subClassOf* <Type>",
+                "applied": true,
+                "expandedTypes": types,
+                "note": "RDFS subclass expansion was applied to the constant rdf:type pattern; use a variable type plus FILTER for an asserted-only census",
             }),
         );
     }
 }
 
-/// The asserted-only migration marker as an HTTP header value, or `None` when
-/// this query was unchanged.
+/// The subclass-entailment marker as an HTTP header value, or `None` when this
+/// query was not expanded.
 ///
 /// The W3C-negotiated response shapes (`application/sparql-results+json|xml`,
 /// `text/turtle`) are fixed by spec: there is no place in a `{"head":{},
@@ -350,13 +352,13 @@ fn add_inference(out: &mut JsonValue, withheld: &[rdfs::WithheldType]) {
 /// without touching the body a conformant parser will read.
 ///
 /// Names only the affected type constants, not their subclass sets — a header is
-/// bounded. The full `withheldTypes` detail is one Accept-free request away.
+/// bounded. The full `expandedTypes` detail is one Accept-free request away.
 pub fn inference_header(withheld: &[rdfs::WithheldType]) -> Option<String> {
     if withheld.is_empty() {
         return None;
     }
     Some(format!(
-        "withheld: {}",
+        "applied: {}",
         withheld
             .iter()
             .map(|e| e.type_iri.as_str())

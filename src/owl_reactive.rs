@@ -7,9 +7,8 @@
 //! [`TransactObserver`] that re-runs [`crate::owl::Ontology::materialize`]
 //! when a committed delta touches vocabulary the loaded ontologies mention.
 //!
-//! Opt-in via `owl.reactive_materialize` (mirroring `reactive-reasoner`'s
-//! posture): materialization re-reads the store's current facts, which is a
-//! per-write cost a deployment should choose, not inherit.
+//! Enabled by default via `owl.reactive_materialize`; deployments that need an
+//! asserted-only write path can disable it explicitly.
 //!
 //! Re-materialization is safe to repeat: since the fixpoint change, a pass
 //! stages only facts not already present, so a no-op delta produces no write
@@ -171,6 +170,41 @@ ex:dependsOn a owl:ObjectProperty, owl:TransitiveProperty .
             matches!(result, crate::sparql::QueryResult::Ask(true)),
             "the closure must extend reactively as members arrive"
         );
+    }
+
+    #[test]
+    fn inverse_and_symmetric_axioms_remain_live_after_load() {
+        const ONT: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/> .
+ex:authors owl:inverseOf ex:authoredBy .
+ex:friendOf a owl:SymmetricProperty .
+"#;
+        let mut store = Store::open_in_memory().unwrap();
+        store.load_ontology("relations", ONT, TS).unwrap();
+        store.add_observer(Arc::new(ReactiveOwl));
+
+        crate::rdf::ingest_rdf(
+            &mut store,
+            b"@prefix ex: <http://example.org/> .\nex:alice ex:authors ex:paper .\nex:alice ex:friendOf ex:bob .\n".as_ref(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+
+        for query in [
+            "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/paper> <http://example.org/authoredBy> <http://example.org/alice> }",
+            "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> { <http://example.org/bob> <http://example.org/friendOf> <http://example.org/alice> }",
+        ] {
+            let result = crate::sparql::query(&store, query).unwrap();
+            assert!(
+                matches!(result, crate::sparql::QueryResult::Ask(true)),
+                "missing reactive entailment for {query}"
+            );
+        }
     }
 
     /// An irrelevant write must not trigger a materialization pass — pinned

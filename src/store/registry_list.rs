@@ -7,7 +7,7 @@
 //! latter. Silent zero rows is the failure mode this distinction exists to
 //! prevent.
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
 use crate::error::Result;
 use crate::schema::ROOT_GRAPH_IRI;
@@ -141,6 +141,95 @@ impl Store {
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(ids)
+    }
+
+    /// The latest RML materialization that wrote into graph `g`, if any
+    /// (quipu-212). Parsed from the executor's transaction provenance
+    /// convention — `rml:<mapping>|mapping=<hash>|source=<subject>|
+    /// verified=<hash>` — so serving it costs no new storage and cannot
+    /// drift from what actually committed. `None` means the graph has no
+    /// RML materialization on record; the field is then omitted rather
+    /// than faked, per the freshness discipline.
+    pub fn mapped_provenance(&self, g: i64) -> Result<Option<Materialization>> {
+        let row: Option<(i64, Option<String>, String)> = self
+            .conn
+            .query_row(
+                "SELECT t.id, t.timestamp, t.source FROM transactions t \
+                 WHERE t.source LIKE 'rml:%' \
+                   AND EXISTS (SELECT 1 FROM facts f WHERE f.tx = t.id AND f.g = ?1) \
+                 ORDER BY t.id DESC LIMIT 1",
+                params![g],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        Ok(row.and_then(|(tx, timestamp, source)| {
+            Materialization::parse(&source).map(|mut m| {
+                m.tx = tx;
+                m.timestamp = timestamp;
+                m
+            })
+        }))
+    }
+}
+
+/// One RML materialization, as recorded in transaction provenance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Materialization {
+    /// The `rr:TriplesMap` IRI that produced the write.
+    pub mapping_iri: String,
+    /// Hash of the mapping closure at execution time.
+    pub mapping_hash: String,
+    /// The governed external-truth subject the source was verified against.
+    pub source_subject: String,
+    /// Hash of the source bytes actually read — the staleness comparand.
+    pub verified_hash: String,
+    /// The materializing transaction.
+    pub tx: i64,
+    /// Its commit timestamp.
+    pub timestamp: Option<String>,
+}
+
+impl Materialization {
+    /// Parse the executor's provenance string; anything that does not carry
+    /// all four fields is not an RML materialization record.
+    fn parse(source: &str) -> Option<Self> {
+        let rest = source.strip_prefix("rml:")?;
+        let mut mapping_iri = None;
+        let mut mapping_hash = None;
+        let mut source_subject = None;
+        let mut verified_hash = None;
+        for (i, part) in rest.split('|').enumerate() {
+            if i == 0 {
+                mapping_iri = Some(part.to_string());
+            } else if let Some(v) = part.strip_prefix("mapping=") {
+                mapping_hash = Some(v.to_string());
+            } else if let Some(v) = part.strip_prefix("source=") {
+                source_subject = Some(v.to_string());
+            } else if let Some(v) = part.strip_prefix("verified=") {
+                verified_hash = Some(v.to_string());
+            }
+        }
+        Some(Self {
+            mapping_iri: mapping_iri?,
+            mapping_hash: mapping_hash?,
+            source_subject: source_subject?,
+            verified_hash: verified_hash?,
+            tx: 0,
+            timestamp: None,
+        })
+    }
+
+    /// JSON as served on the graph listing.
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "mapping": self.mapping_iri,
+            "mapping_hash": self.mapping_hash,
+            "source": self.source_subject,
+            "verified_hash": self.verified_hash,
+            "tx": self.tx,
+            "timestamp": self.timestamp,
+        })
     }
 }
 

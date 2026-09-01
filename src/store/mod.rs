@@ -2,6 +2,7 @@
 
 pub mod alias;
 pub mod attach;
+pub mod changes;
 pub mod datasets;
 pub mod events;
 pub mod forks;

@@ -13,8 +13,8 @@ use serde_json::{Value as JsonValue, json};
 
 use quipu::semweb;
 
+use super::SharedStore;
 use super::base::{AppError, blocking};
-use super::{SharedStore, UI_HTML};
 
 pub(crate) async fn entity_history(
     State(store): State<SharedStore>,
@@ -66,6 +66,53 @@ pub(crate) struct EventParams {
     group: Option<String>,
     /// Resume from this consumer's durable committed offset.
     consumer: Option<String>,
+}
+
+/// Query parameters for the change feed (quipu-2ae).
+#[derive(serde::Deserialize)]
+pub(crate) struct ChangeParams {
+    /// Serve transactions STRICTLY AFTER this id (default 0 = from genesis).
+    since: Option<i64>,
+    /// Max transactions per page (whole transactions only).
+    limit: Option<i64>,
+    /// `new_values` (default) | `old_and_new_values` | `new_row`.
+    capture: Option<String>,
+    /// Graph IRI to scope to; absent spans all graphs.
+    graph: Option<String>,
+}
+
+/// GET /changes — pull fact-level change records in commit order.
+///
+/// The page's `next_tx` is the cursor for the next call; `watermark_tx` /
+/// `watermark_timestamp` distinguish an idle store from a broken feed. Per
+/// entity, records arrive in commit order; across entities there is no
+/// ordering promise. See `store::changes` for the full contract.
+pub(crate) async fn changes_get(
+    State(store): State<SharedStore>,
+    Query(p): Query<ChangeParams>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let store = store.lock();
+        let capture = match p.capture.as_deref() {
+            None => quipu::store::changes::Capture::NewValues,
+            Some(name) => quipu::store::changes::Capture::parse(name).ok_or_else(|| {
+                quipu::Error::InvalidValue(format!(
+                    "capture must be new_values, old_and_new_values, or new_row; got {name:?}"
+                ))
+            })?,
+        };
+        let graph =
+            match p.graph.as_deref() {
+                None => None,
+                Some(iri) => Some(store.lookup(iri)?.ok_or_else(|| {
+                    quipu::Error::InvalidValue(format!("unknown graph IRI: {iri}"))
+                })?),
+            };
+        let limit = usize::try_from(p.limit.unwrap_or(100).clamp(1, 10_000)).unwrap_or(100);
+        let page = store.changes_after(p.since.unwrap_or(0), limit, capture, graph)?;
+        Ok(axum::Json(page.to_json()))
+    })
+    .await
 }
 
 /// GET /events — pull a batch of graph-change events in offset order.
@@ -183,6 +230,28 @@ pub(crate) async fn entity_conneg(
     Path(iri): Path<String>,
     headers: HeaderMap,
 ) -> Result<axum::response::Response, AppError> {
+    entity_response(store, semweb::decode_iri(&iri), headers).await
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct EntityParams {
+    pub(crate) iri: String,
+}
+
+/// Query-form dereference endpoint for IRIs containing `/` and `#`.
+pub(crate) async fn entity_query_conneg(
+    State(store): State<SharedStore>,
+    Query(params): Query<EntityParams>,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, AppError> {
+    entity_response(store, params.iri, headers).await
+}
+
+async fn entity_response(
+    store: SharedStore,
+    iri: String,
+    headers: HeaderMap,
+) -> Result<axum::response::Response, AppError> {
     let accept = headers
         .get("accept")
         .and_then(|v| v.to_str().ok())
@@ -190,15 +259,17 @@ pub(crate) async fn entity_conneg(
     let json_ld = accept.contains("application/ld+json") || accept.contains("application/json");
     let turtle = accept.contains("text/turtle") || accept.contains("application/x-turtle");
     if !json_ld && !turtle {
-        return Ok(Html(UI_HTML).into_response());
+        return blocking(move || {
+            Ok(Html(semweb::preview_card(&store.lock(), &iri)?).into_response())
+        })
+        .await;
     }
     blocking(move || {
-        let decoded = semweb::decode_iri(&iri);
         let store = store.lock();
         if json_ld {
-            Ok(json_ld_response(semweb::entity_json_ld(&store, &decoded)?))
+            Ok(json_ld_response(semweb::entity_json_ld(&store, &iri)?))
         } else {
-            Ok(turtle_response(semweb::entity_turtle(&store, &decoded)?))
+            Ok(turtle_response(semweb::entity_turtle(&store, &iri)?))
         }
     })
     .await
@@ -227,10 +298,16 @@ pub(crate) async fn entity_turtle_suffix(
 }
 
 pub(crate) async fn entity_html(
-    State(_s): State<SharedStore>,
-    Path(_i): Path<String>,
-) -> Html<&'static str> {
-    Html(UI_HTML)
+    State(store): State<SharedStore>,
+    Path(iri): Path<String>,
+) -> Result<Html<String>, AppError> {
+    blocking(move || {
+        Ok(Html(semweb::preview_card(
+            &store.lock(),
+            &semweb::decode_iri(&iri),
+        )?))
+    })
+    .await
 }
 
 pub(crate) fn json_ld_response(j: JsonValue) -> axum::response::Response {

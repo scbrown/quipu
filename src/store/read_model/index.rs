@@ -1,269 +1,332 @@
-//! The in-memory index itself: `ReadModel` and nothing else.
-//!
-//! Split out of `read_model.rs` because that file passed the repo's size guard
-//! (aegis-98gai grew it to 601 lines against a 522 baseline). The seam is not
-//! arbitrary — the two halves answer different questions and have different
-//! reasons to change:
-//!
-//!   * HERE: what an in-memory triple index holds and how it is maintained.
-//!     Pure data structure; knows about `Datum` and `Value`, not about SQL,
-//!     transactions or freshness.
-//!   * `read_model.rs`: WHEN a resident model may be trusted — the
-//!     applicability guard, the size budget, and the freshness check against
-//!     the database.
-//!
-//! Raising the baseline instead would have been the easier move and the wrong
-//! one: the guard exists to stop exactly the growth that produced it.
-
-use std::collections::HashMap;
+//! Compact in-memory indexes over graph fact pointers.
 
 use crate::error::Result;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
+use rusqlite::params;
+use std::collections::{HashMap, hash_map::DefaultHasher};
+use std::hash::{Hash, Hasher};
 
-/// The three access patterns `facts`' SQL indexes serve, held in memory.
-///
-/// Keyed by term id throughout — resolution to IRIs goes through the store's
-/// term cache, so this holds no strings.
+type FactId = u32;
+
+#[derive(Debug)]
+enum ValueSlot {
+    Inline(Value),
+    LazyRow(i64),
+}
+
+#[derive(Debug)]
+struct FactPointer {
+    entity: i64,
+    attribute: i64,
+    value_fingerprint: u64,
+    value: ValueSlot,
+}
+
+impl FactPointer {
+    fn value(&self, store: &Store) -> Result<Value> {
+        match &self.value {
+            ValueSlot::Inline(value) => Ok(value.clone()),
+            ValueSlot::LazyRow(rowid) => {
+                let mut stmt = store.prepare("SELECT v FROM facts WHERE rowid = ?1")?;
+                let bytes: Vec<u8> = stmt.query_row(params![rowid], |row| row.get(0))?;
+                Value::from_bytes(&bytes)
+            }
+        }
+    }
+}
+
+fn fingerprint(bytes: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn resident(value: &Value) -> bool {
+    matches!(
+        value,
+        Value::Ref(_) | Value::Int(_) | Value::Float(_) | Value::Bool(_)
+    )
+}
+
+/// Four access indexes containing only compact pointers into one fact arena.
 #[derive(Debug, Default)]
 pub struct ReadModel {
-    /// The graph this model covers. `0` is ROOT.
     graph: i64,
-    /// entity → (attribute, value). Serves `<s> ?p ?o`.
-    spo: HashMap<i64, Vec<(i64, Value)>>,
-    /// attribute → (entity, value). Serves `?s <p> ?o`.
-    pso: HashMap<i64, Vec<(i64, Value)>>,
-    /// (attribute, value-bytes) → entities. Serves `?s <p> <o>` and `?s a <T>`.
-    pos: HashMap<(i64, Vec<u8>), Vec<i64>>,
-    /// value-bytes → (entity, attribute). Serves `?s ?p <o>`, which the other
-    /// three cannot without a scan — SQL reaches for `idx_vaet` here, so a model
-    /// without this index would be a REGRESSION on that shape rather than a
-    /// speedup.
-    osp: HashMap<Vec<u8>, Vec<(i64, i64)>>,
-    /// Distinct triples held, maintained incrementally so `len` is not a scan.
+    facts: Vec<Option<FactPointer>>,
+    spo: HashMap<i64, Vec<FactId>>,
+    pso: HashMap<i64, Vec<FactId>>,
+    pos: HashMap<(i64, u64), Vec<FactId>>,
+    osp: HashMap<u64, Vec<FactId>>,
     triples: usize,
-    /// The store's `latest_tx_id()` when this model was built or last
-    /// maintained. A model whose stamp no longer matches the database is STALE
-    /// and must be rebuilt before it answers anything (aegis-98gai).
     built_at_tx: i64,
 }
 
 impl ReadModel {
-    /// Build from one graph's currently-valid asserted facts.
-    ///
-    /// # Errors
-    /// [`crate::Error::Sqlite`] if the fact scan fails.
+    /// Build from one graph's current facts. Heap-backed values are decoded
+    /// once to classify them, then released; only `SQLite` row pointers remain.
     pub fn build(store: &Store, graph: i64) -> Result<Self> {
-        // STAMP BEFORE SCANNING, never after. Between the two there is no lock
-        // held over the database, so a write that lands mid-scan would other-
-        // wise be stamped as included when the scan may have missed it. Taking
-        // the stamp first can only make the model look staler than it is, which
-        // costs a rebuild; the other order silently serves a gap.
         let built_at_tx = store.latest_tx_id()?;
         let mut model = Self {
             graph,
             built_at_tx,
             ..Default::default()
         };
-        for fact in store.current_facts_in_graph(graph)? {
-            model.insert(fact.entity, fact.attribute, &fact.value);
+        let mut stmt = store.prepare(
+            "SELECT MIN(rowid), e, a, v FROM facts \
+             WHERE op = 1 AND valid_to IS NULL AND g = ?1 \
+             GROUP BY e, a, v ORDER BY e, a",
+        )?;
+        let mut rows = stmt.query(params![graph])?;
+        while let Some(row) = rows.next()? {
+            let rowid: i64 = row.get(0)?;
+            let entity: i64 = row.get(1)?;
+            let attribute: i64 = row.get(2)?;
+            let bytes: Vec<u8> = row.get(3)?;
+            let value = Value::from_bytes(&bytes)?;
+            let slot = if resident(&value) {
+                ValueSlot::Inline(value)
+            } else {
+                ValueSlot::LazyRow(rowid)
+            };
+            model.insert_pointer(entity, attribute, fingerprint(&bytes), slot);
         }
         Ok(model)
     }
 
-    /// The `latest_tx_id()` this model is current as of.
     #[must_use]
     pub fn built_at_tx(&self) -> i64 {
         self.built_at_tx
     }
-
-    /// Re-stamp after an incremental maintain, so a write the model DID absorb
-    /// does not force the next reader to rebuild it.
     pub(crate) fn set_built_at_tx(&mut self, tx_id: i64) {
         self.built_at_tx = tx_id;
     }
-
-    /// The graph this model covers.
     #[must_use]
     pub fn graph(&self) -> i64 {
         self.graph
     }
-
-    /// Distinct triples held.
     #[must_use]
     pub fn len(&self) -> usize {
         self.triples
     }
-
-    /// Whether the model holds no triples.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.triples == 0
     }
 
-    /// `<s> ?p ?o` — every (predicate, object) for a subject.
+    /// Number of heap-backed values represented only by `SQLite` row pointers.
     #[must_use]
-    pub fn by_subject(&self, entity: i64) -> &[(i64, Value)] {
-        self.spo.get(&entity).map_or(&[], Vec::as_slice)
-    }
-
-    /// `?s <p> ?o` — every (subject, object) for a predicate.
-    #[must_use]
-    pub fn by_predicate(&self, attribute: i64) -> &[(i64, Value)] {
-        self.pso.get(&attribute).map_or(&[], Vec::as_slice)
-    }
-
-    /// `?s <p> <o>` — every subject with this exact predicate and object. The
-    /// build side of a hash join, and what makes `?s a <Type>` a lookup rather
-    /// than a scan.
-    #[must_use]
-    pub fn by_predicate_object(&self, attribute: i64, value: &Value) -> &[i64] {
-        self.pos
-            .get(&(attribute, value.to_bytes()))
-            .map_or(&[], Vec::as_slice)
-    }
-
-    /// `?s ?p <o>` — every (subject, predicate) pointing at this object.
-    #[must_use]
-    pub fn by_object(&self, value: &Value) -> &[(i64, i64)] {
-        self.osp.get(&value.to_bytes()).map_or(&[], Vec::as_slice)
-    }
-
-    /// Every triple held, as `(entity, attribute, value)`. The unbound-pattern
-    /// fallback, and O(store) exactly as the SQL scan it replaces is.
-    pub fn iter_triples(&self) -> impl Iterator<Item = (i64, i64, &Value)> {
-        self.spo
+    pub fn lazy_value_count(&self) -> usize {
+        self.facts
             .iter()
-            .flat_map(|(e, entries)| entries.iter().map(move |(a, v)| (*e, *a, v)))
+            .filter_map(Option::as_ref)
+            .filter(|fact| matches!(fact.value, ValueSlot::LazyRow(_)))
+            .count()
     }
 
-    /// Whether a specific triple is present.
-    #[must_use]
-    pub fn contains(&self, entity: i64, attribute: i64, value: &Value) -> bool {
-        self.by_predicate_object(attribute, value).contains(&entity)
+    fn fact(&self, id: FactId) -> &FactPointer {
+        self.facts[id as usize]
+            .as_ref()
+            .expect("indexes never retain removed fact ids")
     }
 
-    /// Apply one committed datum.
-    ///
-    /// [`Op::Assert`] inserts; [`Op::Retract`] and [`Op::Tombstone`] remove.
-    /// **Removal is the half that earns the tests** — an index that only ever
-    /// appends would answer with facts the store has retracted, and would do it
-    /// silently.
-    ///
-    /// A datum carrying a `valid_to` is already closed and is therefore not
-    /// current, so it is skipped rather than inserted: `build` loads
-    /// `valid_to IS NULL`, and an incremental path that disagreed with the
-    /// build would make the two diverge over time.
-    pub fn apply(&mut self, datum: &Datum) {
+    pub fn by_subject(&self, store: &Store, entity: i64) -> Result<Vec<(i64, Value)>> {
+        self.spo.get(&entity).map_or_else(
+            || Ok(Vec::new()),
+            |ids| {
+                ids.iter()
+                    .map(|id| {
+                        let fact = self.fact(*id);
+                        Ok((fact.attribute, fact.value(store)?))
+                    })
+                    .collect()
+            },
+        )
+    }
+
+    pub fn by_predicate(&self, store: &Store, attribute: i64) -> Result<Vec<(i64, Value)>> {
+        self.pso.get(&attribute).map_or_else(
+            || Ok(Vec::new()),
+            |ids| {
+                ids.iter()
+                    .map(|id| {
+                        let fact = self.fact(*id);
+                        Ok((fact.entity, fact.value(store)?))
+                    })
+                    .collect()
+            },
+        )
+    }
+
+    pub fn by_predicate_object(
+        &self,
+        store: &Store,
+        attribute: i64,
+        value: &Value,
+    ) -> Result<Vec<i64>> {
+        let fp = fingerprint(&value.to_bytes());
+        self.pos.get(&(attribute, fp)).map_or_else(
+            || Ok(Vec::new()),
+            |ids| {
+                ids.iter().try_fold(Vec::new(), |mut out, id| {
+                    let fact = self.fact(*id);
+                    if fact.value(store)? == *value {
+                        out.push(fact.entity);
+                    }
+                    Ok(out)
+                })
+            },
+        )
+    }
+
+    pub fn by_object(&self, store: &Store, value: &Value) -> Result<Vec<(i64, i64)>> {
+        let fp = fingerprint(&value.to_bytes());
+        self.osp.get(&fp).map_or_else(
+            || Ok(Vec::new()),
+            |ids| {
+                ids.iter().try_fold(Vec::new(), |mut out, id| {
+                    let fact = self.fact(*id);
+                    if fact.value(store)? == *value {
+                        out.push((fact.entity, fact.attribute));
+                    }
+                    Ok(out)
+                })
+            },
+        )
+    }
+
+    pub fn triples(&self, store: &Store) -> Result<Vec<(i64, i64, Value)>> {
+        self.facts
+            .iter()
+            .filter_map(Option::as_ref)
+            .map(|fact| Ok((fact.entity, fact.attribute, fact.value(store)?)))
+            .collect()
+    }
+
+    pub fn contains(
+        &self,
+        store: &Store,
+        entity: i64,
+        attribute: i64,
+        value: &Value,
+    ) -> Result<bool> {
+        Ok(self
+            .by_predicate_object(store, attribute, value)?
+            .contains(&entity))
+    }
+
+    pub fn apply(&mut self, store: &Store, datum: &Datum) {
         match datum.op {
-            Op::Assert => {
-                if datum.valid_to.is_none() {
-                    self.insert(datum.entity, datum.attribute, &datum.value);
-                }
-            }
-            Op::Retract | Op::Tombstone => {
-                self.remove(datum.entity, datum.attribute, &datum.value);
-            }
+            Op::Assert if datum.valid_to.is_none() => self.insert(store, datum),
+            Op::Assert => {}
+            Op::Retract | Op::Tombstone => self.remove(store, datum),
         }
     }
 
-    /// Apply a batch of committed datums in order.
-    pub fn apply_all(&mut self, datums: &[Datum]) {
+    pub fn apply_all(&mut self, store: &Store, datums: &[Datum]) {
         for datum in datums {
-            self.apply(datum);
+            self.apply(store, datum);
         }
     }
 
-    /// Insert a triple into all three indexes, idempotently.
-    ///
-    /// Idempotence matters: the same `(e, a, v)` can be asserted twice (a
-    /// re-ingest, an overlay echoing a root fact), and duplicate index entries
-    /// would make a join emit duplicate rows that SQL's `SELECT DISTINCT` never
-    /// produced.
-    fn insert(&mut self, entity: i64, attribute: i64, value: &Value) {
-        let key = (attribute, value.to_bytes());
-        let subjects = self.pos.entry(key).or_default();
-        if subjects.contains(&entity) {
+    fn insert(&mut self, store: &Store, datum: &Datum) {
+        let bytes = datum.value.to_bytes();
+        let fp = fingerprint(&bytes);
+        if self.pos.get(&(datum.attribute, fp)).is_some_and(|ids| {
+            ids.iter().any(|id| {
+                let fact = self.fact(*id);
+                fact.entity == datum.entity
+                    && fact.value(store).is_ok_and(|value| value == datum.value)
+            })
+        }) {
             return;
         }
-        subjects.push(entity);
-        self.osp
-            .entry(value.to_bytes())
-            .or_default()
-            .push((entity, attribute));
-        self.spo
-            .entry(entity)
-            .or_default()
-            .push((attribute, value.clone()));
-        self.pso
-            .entry(attribute)
-            .or_default()
-            .push((entity, value.clone()));
+        let slot = if resident(&datum.value) {
+            ValueSlot::Inline(datum.value.clone())
+        } else {
+            // Committed maintenance runs after the row exists. Keep the literal
+            // out of memory just like a full build; the fallback preserves
+            // correctness if a standalone caller applies an uncommitted datum.
+            let rowid = store
+                .prepare(
+                    "SELECT rowid FROM facts WHERE e = ?1 AND a = ?2 AND v = ?3 \
+                     AND g = ?4 AND op = 1 AND valid_to IS NULL \
+                     ORDER BY rowid DESC LIMIT 1",
+                )
+                .ok()
+                .and_then(|mut stmt| {
+                    stmt.query_row(
+                        params![datum.entity, datum.attribute, bytes, self.graph],
+                        |row| row.get(0),
+                    )
+                    .ok()
+                });
+            rowid.map_or_else(
+                || ValueSlot::Inline(datum.value.clone()),
+                ValueSlot::LazyRow,
+            )
+        };
+        self.insert_pointer(datum.entity, datum.attribute, fp, slot);
+    }
+
+    fn insert_pointer(&mut self, entity: i64, attribute: i64, fp: u64, value: ValueSlot) {
+        let id = FactId::try_from(self.facts.len()).expect("read model exceeds u32 fact ids");
+        self.facts.push(Some(FactPointer {
+            entity,
+            attribute,
+            value_fingerprint: fp,
+            value,
+        }));
+        self.spo.entry(entity).or_default().push(id);
+        self.pso.entry(attribute).or_default().push(id);
+        self.pos.entry((attribute, fp)).or_default().push(id);
+        self.osp.entry(fp).or_default().push(id);
         self.triples += 1;
     }
 
-    /// Remove a triple from all three indexes.
-    ///
-    /// Emptied buckets are dropped rather than left behind: a store that churns
-    /// through predicates would otherwise accumulate empty `Vec`s forever, and
-    /// an empty bucket is indistinguishable from an absent one to every reader.
-    fn remove(&mut self, entity: i64, attribute: i64, value: &Value) {
-        let key = (attribute, value.to_bytes());
-        let Some(subjects) = self.pos.get_mut(&key) else {
+    fn remove(&mut self, store: &Store, datum: &Datum) {
+        let fp = fingerprint(&datum.value.to_bytes());
+        let Some(id) = self.pos.get(&(datum.attribute, fp)).and_then(|ids| {
+            ids.iter().copied().find(|id| {
+                let fact = self.fact(*id);
+                fact.entity == datum.entity
+                    && fact.value(store).is_ok_and(|value| value == datum.value)
+            })
+        }) else {
             return;
         };
-        let Some(pos) = subjects.iter().position(|s| *s == entity) else {
-            return;
-        };
-        subjects.swap_remove(pos);
-        if subjects.is_empty() {
-            self.pos.remove(&key);
-        }
-
-        if let Some(entries) = self.spo.get_mut(&entity) {
-            if let Some(i) = entries
-                .iter()
-                .position(|(a, v)| *a == attribute && v == value)
-            {
-                entries.swap_remove(i);
-            }
-            if entries.is_empty() {
-                self.spo.remove(&entity);
-            }
-        }
-        if let Some(entries) = self.pso.get_mut(&attribute) {
-            if let Some(i) = entries.iter().position(|(e, v)| *e == entity && v == value) {
-                entries.swap_remove(i);
-            }
-            if entries.is_empty() {
-                self.pso.remove(&attribute);
-            }
-        }
-        let obj_key = value.to_bytes();
-        if let Some(entries) = self.osp.get_mut(&obj_key) {
-            if let Some(i) = entries
-                .iter()
-                .position(|(e, a)| *e == entity && *a == attribute)
-            {
-                entries.swap_remove(i);
-            }
-            if entries.is_empty() {
-                self.osp.remove(&obj_key);
-            }
-        }
+        let fact = self.fact(id);
+        let (entity, attribute, value_fingerprint) =
+            (fact.entity, fact.attribute, fact.value_fingerprint);
+        Self::remove_id(&mut self.spo, &entity, id);
+        Self::remove_id(&mut self.pso, &attribute, id);
+        Self::remove_id(&mut self.pos, &(attribute, value_fingerprint), id);
+        Self::remove_id(&mut self.osp, &value_fingerprint, id);
+        self.facts[id as usize] = None;
         self.triples -= 1;
     }
 
-    /// Every triple held, sorted — the comparison surface for the differential
-    /// tests that prove an incrementally-updated model equals a rebuilt one.
-    #[must_use]
-    pub fn triples_sorted(&self) -> Vec<(i64, i64, Vec<u8>)> {
-        let mut out: Vec<(i64, i64, Vec<u8>)> = self
-            .spo
-            .iter()
-            .flat_map(|(e, entries)| entries.iter().map(move |(a, v)| (*e, *a, v.to_bytes())))
+    fn remove_id<K: Eq + Hash>(map: &mut HashMap<K, Vec<FactId>>, key: &K, id: FactId) {
+        let empty = if let Some(ids) = map.get_mut(key) {
+            if let Some(pos) = ids.iter().position(|candidate| *candidate == id) {
+                ids.swap_remove(pos);
+            }
+            ids.is_empty()
+        } else {
+            false
+        };
+        if empty {
+            map.remove(key);
+        }
+    }
+
+    pub fn triples_sorted(&self, store: &Store) -> Result<Vec<(i64, i64, Vec<u8>)>> {
+        let mut out: Vec<_> = self
+            .triples(store)?
+            .into_iter()
+            .map(|(e, a, v)| (e, a, v.to_bytes()))
             .collect();
         out.sort_unstable();
-        out
+        Ok(out)
     }
 }

@@ -369,12 +369,18 @@ without touching the committed layer.
 
 ### `quipu_overlay_compose`
 
-Resolve an overlay's composed view over `[overlay > parent-branch-root]`:
-asserted-and-not-tombstoned, nearest wins. Read-only.
+Resolve an overlay's composed view over `[overlay > parent-branch-root]`.
+Read-only. Two precedence modes: `nearest` (default, the scratch-layer read —
+asserted-and-not-tombstoned, nearest wins) and `governed` (the
+quarantine-plane read — the parent's facts always win: an overlay value on a
+same-subject-same-predicate slot the parent claims is suppressed, and an
+overlay tombstone cannot mask a parent fact; it only masks the overlay's own
+contributions).
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `overlay` | Yes | Overlay graph IRI |
+| `precedence` | No | `nearest` (default) or `governed` |
 
 ### `quipu_search_nodes`
 

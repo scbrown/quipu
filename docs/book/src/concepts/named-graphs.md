@@ -89,6 +89,16 @@ one uniform read:
   present iff **asserted and not tombstoned**, nearest-overlay-wins. Overlay
   asserts shadow the parent; overlay tombstones hide parent triples;
   everything else falls through.
+- **Governed precedence** (`"precedence": "governed"` on the same tool /
+  endpoint) inverts who wins, for reading a **quarantine plane** over a
+  governed graph (quipu-e61, adopted from Spanner's
+  statically-defined-properties-win-over-dynamic rule): the parent's facts
+  are always present — an overlay value on a same-subject-same-predicate
+  slot the parent claims is suppressed, and an overlay tombstone cannot mask
+  a parent fact (it still masks the overlay's own contributions). A
+  low-trust plane may *extend* the governed graph but never alter what it
+  says; promotion out of quarantine remains an explicit governed write,
+  never a precedence flip.
 
 Many tenants can extend the same base independently this way, and a
 committed read never sees any of them unless the query names the overlay.

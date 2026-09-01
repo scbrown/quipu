@@ -675,6 +675,14 @@ cache (freshness / durability / trust / policy / kind). Query params: `kind`
 **capability probe** for the graph-kinds surface: a 404 means the store
 predates it — treat that as "cannot tell", never as "no graphs".
 
+A graph whose latest RML materialization is on record additionally serves a
+`materialization` object (quipu-212): the mapping IRI, mapping-closure hash,
+external-truth subject, **verified source hash**, transaction, and timestamp
+of the last executor commit — the comparands a freshness verdict needs
+(camayoc's `rml_executor.py freshness`/`remap` read them from here). Parsed
+from transaction provenance, so it cannot drift from what actually
+committed; omitted rather than faked on graphs with no RML history.
+
 ```bash
 curl -s 'localhost:3030/graphs?kind=operational'
 ```
@@ -946,6 +954,27 @@ renders on an air-gapped deploy. They are part of the UI, not the API surface.
 
 ## Export
 
+### `GET|HEAD|PUT|POST|DELETE /rdf-graph-store`
+
+SPARQL 1.1 Graph Store HTTP Protocol using indirect graph identification.
+Select exactly one target with `?graph=<absolute-IRI>` or `?default`. `GET`
+returns the graph in the RDF syntax requested by `Accept`; `HEAD` returns the
+same status and headers without a body. `PUT` replaces the graph, `POST` merges
+the payload, and `DELETE` removes its contents (and a named graph's registry
+entry). Writes use the same bearer-token and read-only enforcement as Quipu's
+native write APIs.
+
+```bash
+curl localhost:3030/rdf-graph-store?graph=http%3A%2F%2Fexample.org%2Fg \
+  -X PUT -H 'Content-Type: text/turtle' --data-binary '@graph.ttl'
+curl localhost:3030/rdf-graph-store?graph=http%3A%2F%2Fexample.org%2Fg \
+  -H 'Accept: application/n-triples'
+```
+
+Supported request and response syntaxes are Turtle (`text/turtle`) and
+N-Triples (`application/n-triples`). Unsupported request media types return
+415; unsupported response types return 406; unknown named graphs return 404.
+
 ### `POST /export`
 
 Export deterministic RDF from ROOT, one named graph, one episode provenance
@@ -1152,12 +1181,21 @@ Query via `GET /events?types=write.refused`, or count by gate with the CLI:
 
 Standards-flavoured read endpoints for semantic-web tooling.
 
+### `GET /changes`
+
+Returns fact-level change records after the optional `since` transaction.
+`capture` selects `new_values`, `old_and_new_values`, or `new_row`; `graph`
+optionally scopes the feed to one graph IRI. The response includes `next_tx`
+and a watermark so consumers can distinguish an idle feed from a stalled one.
+
 ### `GET /entity/{iri}`
 
 Content-negotiated entity page: `Accept: application/ld+json` → JSON-LD,
 `text/turtle` → Turtle, anything else → the web UI's HTML page for the
 entity. `GET /entity/{iri}/json`, `GET /entity/{iri}/ttl` and
 `GET /entity/{iri}/html` pin the format in the path instead of the header.
+For a full IRI containing path separators or a fragment, use the equivalent
+query form: `GET /entity?iri=https%3A%2F%2Fexample.org%2Fresource%231`.
 
 ### `POST /spotlight`
 
