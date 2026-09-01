@@ -366,16 +366,23 @@ mod tests {
     /// endpoint list drifted (aegis-2f4n), so the enforcer must not need the
     /// wiring to be compiled.
     fn routes_in_server_source() -> Vec<String> {
-        let src = include_str!("server.rs");
+        // Keep this source-level invariant independent of the server feature
+        // matrix, but include router fragments that `server.rs` merges. A
+        // route moved into one of those fragments is still a registered route.
+        let sources = [
+            include_str!("server.rs"),
+            include_str!("server/graph_store.rs"),
+        ];
         let mut paths = Vec::new();
-        for line in src.lines() {
-            // Match `.route("<path>"` — tolerant of leading whitespace and the
-            // rest of the call. One route per line in this file; assert that
-            // assumption cheaply by scanning each line once.
-            if let Some(idx) = line.find(".route(\"") {
-                let rest = &line[idx + ".route(\"".len()..];
-                if let Some(end) = rest.find('"') {
-                    paths.push(rest[..end].to_string());
+        for src in sources {
+            for line in src.lines() {
+                // Match `.route("<path>"` — tolerant of leading whitespace and the
+                // rest of the call. One route per line; scan each line once.
+                if let Some(idx) = line.find(".route(\"") {
+                    let rest = &line[idx + ".route(\"".len()..];
+                    if let Some(end) = rest.find('"') {
+                        paths.push(rest[..end].to_string());
+                    }
                 }
             }
         }
