@@ -62,6 +62,22 @@ impl Deadline {
         }
     }
 
+    /// Milliseconds remaining until this deadline, saturating at zero.
+    #[must_use]
+    pub fn remaining_millis(&self) -> u64 {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.0
+                .saturating_duration_since(std::time::Instant::now())
+                .as_millis()
+                .min(u128::from(u64::MAX)) as u64
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            (self.0 - js_sys::Date::now()).max(0.0) as u64
+        }
+    }
+
     /// Milliseconds between `start` and this deadline (saturating) — the
     /// effective budget a query ran under, for timeout reporting.
     #[must_use]

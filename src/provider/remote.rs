@@ -486,9 +486,30 @@ mod remote_tests {
         let addr = listener.local_addr().unwrap();
         let handle = std::thread::spawn(move || {
             let (mut sock, _) = listener.accept().unwrap();
+            let mut bytes = Vec::new();
             let mut buf = [0u8; 4096];
-            let n = sock.read(&mut buf).unwrap();
-            let req = String::from_utf8_lossy(&buf[..n]).to_string();
+            loop {
+                let n = sock.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                bytes.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&bytes);
+                let Some(head_end) = text.find("\r\n\r\n") else {
+                    continue;
+                };
+                let content_len = text[..head_end]
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("Content-Length: ")
+                            .and_then(|v| v.parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+                if bytes.len() >= head_end + 4 + content_len {
+                    break;
+                }
+            }
+            let req = String::from_utf8_lossy(&bytes).to_string();
             let resp = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\
                  Content-Length: {}\r\nConnection: close\r\n\r\n{body}",

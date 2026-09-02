@@ -89,7 +89,17 @@ pub(crate) fn resolution_contentions_json(contentions: &[Contention]) -> Vec<Jso
 /// `max_sparql_rows` ceiling (hq-gkd) from one place — a LIMIT-less query cannot
 /// dump the whole fact log to either serializer.
 pub fn query_result(store: &Store, input: &JsonValue) -> Result<(QueryResult, bool)> {
+    query_result_with_federation(store, input, None)
+}
+
+/// [`query_result`] with the server's configured SERVICE allowlist installed.
+pub fn query_result_with_federation(
+    store: &Store,
+    input: &JsonValue,
+    federation: Option<std::sync::Arc<crate::config::FederationConfig>>,
+) -> Result<(QueryResult, bool)> {
     let (query_str, mut ctx) = query_context(store, input)?;
+    ctx.service_remotes = federation;
     let max_rows = store.search_config().max_sparql_rows;
     // Stop a wholly prefix-safe SELECT after one row beyond the response
     // ceiling. The extra row preserves the `truncated: true` signal. Unsafe
@@ -372,6 +382,15 @@ pub fn inference_header(withheld: &[rdfs::WithheldType]) -> Option<String> {
 /// Input: `{ "query": "SELECT/ASK/CONSTRUCT/DESCRIBE ...", "valid_at": "...", "tx": N }`
 /// Output depends on query form.
 pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    tool_query_with_federation(store, input, None)
+}
+
+/// [`tool_query`] with configured remotes available to SPARQL `SERVICE`.
+pub fn tool_query_with_federation(
+    store: &Store,
+    input: &JsonValue,
+    federation: Option<std::sync::Arc<crate::config::FederationConfig>>,
+) -> Result<JsonValue> {
     // quipu #68: label floors are enforced HERE, at the service boundary, and
     // deliberately not inside `query_temporal`.
     //
@@ -389,7 +408,7 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         store.check_label_floor(&member_ids)?;
     }
 
-    let (result, truncated) = query_result(store, input)?;
+    let (result, truncated) = query_result_with_federation(store, input, federation)?;
     // Announce subclass inference when it widened the answer. Omitted entirely
     // when it did not, so the field's PRESENCE is the signal — a marker that
     // appears on every response is one readers stop seeing.

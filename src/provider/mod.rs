@@ -7,12 +7,16 @@
 mod label;
 #[cfg(feature = "remote")]
 mod remote;
+#[cfg(feature = "remote")]
+mod service;
 
 pub use label::{
     DeclaredLabel, check_federated_floor, check_member_floor, federated_dataset_labels,
 };
 #[cfg(feature = "remote")]
 pub use remote::{RemoteProvider, federated_from_config};
+#[cfg(feature = "remote")]
+pub use service::query_configured_service;
 
 use serde_json::Value as JsonValue;
 
