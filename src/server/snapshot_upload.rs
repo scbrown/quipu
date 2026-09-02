@@ -55,7 +55,7 @@ async fn promote(
     let upload_id = input
         .get("upload_id")
         .and_then(JsonValue::as_str)
-        .ok_or_else(|| AppError(quipu::Error::InvalidValue("missing upload_id".into())))?
+        .ok_or_else(|| quipu::Error::InvalidValue("missing upload_id".into()))?
         .to_string();
     if let Some(state) = promotions()
         .lock()
@@ -68,7 +68,7 @@ async fn promote(
                 serde_json::json!({"upload_id": upload_id, "pending": true}),
             )),
             PromotionState::Complete(result) => Ok(Json(result)),
-            PromotionState::Failed(error) => Err(AppError(quipu::Error::InvalidValue(error))),
+            PromotionState::Failed(error) => Err(quipu::Error::InvalidValue(error).into()),
         };
     }
     promotions()
@@ -91,14 +91,14 @@ async fn promote(
             };
             (result, locked.take_deferred_embed())
         };
-        if let Some(work) = work {
-            if let Err(error) = finish_deferred_embed(&store, &work) {
-                promotions()
-                    .lock()
-                    .expect("promotion state lock")
-                    .insert(upload_id, PromotionState::Failed(error.to_string()));
-                return;
-            }
+        if let Some(work) = work
+            && let Err(error) = finish_deferred_embed(&store, &work)
+        {
+            promotions()
+                .lock()
+                .expect("promotion state lock")
+                .insert(upload_id, PromotionState::Failed(format!("{error:?}")));
+            return;
         }
         promotions()
             .lock()
