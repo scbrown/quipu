@@ -148,7 +148,18 @@ pub fn eval_pattern_seeded(
 
         GraphPattern::Project { inner, variables } => {
             let (rows, _) = eval_pattern_seeded(store, inner, ctx, seed)?;
-            let var_names: Vec<String> = variables.iter().map(|v| v.as_str().to_string()).collect();
+            let mut var_names: Vec<String> =
+                variables.iter().map(|v| v.as_str().to_string()).collect();
+            // SERVICE provenance is response metadata, not a query variable the
+            // remote graph pattern must explicitly project. Preserve it through
+            // the outer SELECT projection exactly as native federation does.
+            for meta in ["_provider", "_trust", "_freshness"] {
+                if rows.iter().any(|row| row.contains_key(meta))
+                    && !var_names.iter().any(|v| v == meta)
+                {
+                    var_names.push(meta.to_string());
+                }
+            }
             let projected: Vec<Bindings> = rows
                 .into_iter()
                 .map(|row| {
@@ -412,6 +423,79 @@ pub fn eval_pattern_seeded(
                 }
             }
             Ok((rows, vars))
+        }
+
+        #[cfg(feature = "remote")]
+        GraphPattern::Service {
+            name,
+            inner,
+            silent,
+        } => {
+            let endpoint = match name {
+                NamedNodePattern::NamedNode(iri) => iri.as_str(),
+                NamedNodePattern::Variable(_) => {
+                    return Err(Error::InvalidValue(
+                        "variable SERVICE endpoints are refused; use a configured endpoint IRI"
+                            .into(),
+                    ));
+                }
+            };
+            let Some(remotes) = &ctx.service_remotes else {
+                return if *silent {
+                    Ok((vec![seed.clone()], seed.keys().cloned().collect()))
+                } else {
+                    Err(Error::InvalidValue(format!(
+                        "SERVICE endpoint '{endpoint}' is unavailable: no configured remotes"
+                    )))
+                };
+            };
+            let remote_query = format!("SELECT * WHERE {{ {inner} }}");
+            let outcome = crate::provider::query_configured_service(
+                remotes,
+                endpoint,
+                &remote_query,
+                ctx.deadline.map(|deadline| deadline.remaining_millis()),
+            );
+            let (result, provider, label) = match outcome {
+                Ok(v) => v,
+                Err(_) if *silent => {
+                    return Ok((vec![seed.clone()], seed.keys().cloned().collect()));
+                }
+                Err(e) => return Err(e),
+            };
+            let crate::sparql::QueryResult::Select {
+                mut variables,
+                rows,
+            } = result
+            else {
+                return Err(Error::InvalidValue(
+                    "SERVICE endpoint returned a non-SELECT result".into(),
+                ));
+            };
+            for meta in ["_provider", "_trust", "_freshness"] {
+                if !variables.iter().any(|v| v == meta)
+                    && (meta == "_provider"
+                        || (meta == "_trust" && label.trust.is_some())
+                        || (meta == "_freshness" && label.freshness.is_some()))
+                {
+                    variables.push(meta.to_string());
+                }
+            }
+            let mut bounded = Vec::new();
+            for (i, mut row) in rows.into_iter().enumerate() {
+                super::pattern_util::check_eval_budget(ctx, i, bounded.len())?;
+                row.insert("_provider".into(), Value::Str(provider.clone()));
+                if let Some(trust) = &label.trust {
+                    row.insert("_trust".into(), Value::Str(trust.to_string()));
+                }
+                if let Some(freshness) = &label.freshness {
+                    row.insert("_freshness".into(), Value::Str(freshness.to_string()));
+                }
+                if let Some(merged) = merge_bindings(seed, &row) {
+                    bounded.push(merged);
+                }
+            }
+            Ok((bounded, variables))
         }
 
         _ => Err(Error::InvalidValue(format!(

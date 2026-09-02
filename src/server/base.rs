@@ -384,7 +384,11 @@ pub(crate) async fn query(
             }
 
             if let Some(fmt) = quipu::w3c::negotiate(&accept) {
-                let (result, _truncated) = quipu::query_result(store, &input)?;
+                let (result, _truncated) = quipu::query_result_with_federation(
+                    store,
+                    &input,
+                    Some(std::sync::Arc::new(federation.clone())),
+                )?;
                 if let Some((content_type, body)) = quipu::w3c::serialize(store, &result, fmt)? {
                     // The spec shapes have nowhere to carry the subclass-inference
                     // marker, so it rides a header instead of being dropped. Without
@@ -410,7 +414,11 @@ pub(crate) async fn query(
                 // fall through to the default shape rather than erroring.
             }
 
-            let result = quipu::tool_query(store, &input)?;
+            let result = quipu::tool_query_with_federation(
+                store,
+                &input,
+                Some(std::sync::Arc::new(federation.clone())),
+            )?;
             let result_size = quipu::request_usage::json_result_size(&result);
             Ok(super::query_usage::annotate(
                 axum::Json(result).into_response(),

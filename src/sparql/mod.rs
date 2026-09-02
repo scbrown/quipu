@@ -174,6 +174,12 @@ pub struct TemporalContext {
     /// joins) must see the complete input, so [`pattern`] applies it only when
     /// the entire path to the BGP leaf is Project/Reduced/BGP.
     pub result_limit: Option<usize>,
+    /// Configured federation remotes available to SPARQL `SERVICE` patterns.
+    ///
+    /// `None` refuses every remote SERVICE. The server installs its operator-
+    /// controlled `[[quipu.federation.remotes]]` list here, making that list
+    /// the SSRF allowlist as well as the source of timeout, auth and provenance.
+    pub service_remotes: Option<std::sync::Arc<crate::config::FederationConfig>>,
 }
 
 /// Execute a SPARQL query against the store (current state).

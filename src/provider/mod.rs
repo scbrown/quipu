@@ -12,7 +12,7 @@ pub use label::{
     DeclaredLabel, check_federated_floor, check_member_floor, federated_dataset_labels,
 };
 #[cfg(feature = "remote")]
-pub use remote::{RemoteProvider, federated_from_config};
+pub use remote::{RemoteProvider, federated_from_config, query_configured_service};
 
 use serde_json::Value as JsonValue;
 
