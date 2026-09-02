@@ -992,6 +992,20 @@ aegis:GitRepoShape a sh:NodeShape ;
 aegis:ConfigFileShape a sh:NodeShape ;
     sh:targetClass aegis:ConfigFile ;
     sh:property [
+        # Exact lookup key used by config-drift consumers. Optional during the
+        # migration of pre-existing ConfigFile entities; unique when present.
+        sh:path aegis:configPath ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # Full lowercase SHA-256 of canonicalized proposed content.
+        sh:path aegis:contentSha256 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[0-9a-f]{64}$" ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
         sh:path aegis:path ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;

@@ -149,6 +149,9 @@ Quipu ships with shapes for the Aegis infrastructure ontology in the
   and negative values mean space freed. Command and filesystem identity use
   canonical classes rather than raw arguments or paths; aggregate counts and
   quantiles belong in a separate summary entity.
+- `ConfigFile` — optional migration-safe `configPath` and `contentSha256`
+  facts support exact drift lookups. When present, each is single-valued and
+  the digest must be a full lowercase SHA-256 hexadecimal string.
 - Common properties: hostname, ipAddress, memoryMB, cpuCores, dependsOn
 
 Load them with:

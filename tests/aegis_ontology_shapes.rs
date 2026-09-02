@@ -145,6 +145,44 @@ fn command_disk_impact_requires_each_raw_sample_field() {
 }
 
 #[test]
+fn config_file_accepts_exact_path_and_lowercase_sha256() {
+    let data = r#"
+        @prefix aegis: <http://aegis.gastown.local/ontology/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        aegis:test-config a aegis:ConfigFile ;
+            rdfs:label "crew configuration" ;
+            aegis:configPath "/etc/example/config.toml" ;
+            aegis:contentSha256 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" .
+    "#;
+    assert!(quipu::validate_shapes(SHAPES, data).unwrap().conforms);
+}
+
+#[test]
+fn config_file_rejects_noncanonical_or_ambiguous_digest_facts() {
+    let invalid = [
+        r#"
+            @prefix aegis: <http://aegis.gastown.local/ontology/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            aegis:test-config a aegis:ConfigFile ;
+                rdfs:label "crew configuration" ;
+                aegis:configPath "/etc/example/config.toml" ;
+                aegis:contentSha256 "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF" .
+        "#,
+        r#"
+            @prefix aegis: <http://aegis.gastown.local/ontology/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            aegis:test-config a aegis:ConfigFile ;
+                rdfs:label "crew configuration" ;
+                aegis:configPath "/etc/example/config.toml", "/etc/example/other.toml" ;
+                aegis:contentSha256 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" .
+        "#,
+    ];
+    for data in invalid {
+        assert!(!quipu::validate_shapes(SHAPES, data).unwrap().conforms);
+    }
+}
+
+#[test]
 fn desired_crew_shape_accepts_a_scoped_composable_plan() {
     let valid = r#"
         @prefix aegis: <http://aegis.gastown.local/ontology/> .
