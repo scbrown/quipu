@@ -4,7 +4,11 @@ use axum::{Json, Router, extract::State, routing::post};
 use quipu::store::snapshot_upload;
 use serde_json::Value as JsonValue;
 
-use super::{AppError, SharedStore, blocking, finish_deferred_embed};
+use super::{
+    SharedStore,
+    base::{AppError, blocking},
+    tools::finish_deferred_embed,
+};
 
 pub(crate) fn routes() -> Router<SharedStore> {
     Router::new()
