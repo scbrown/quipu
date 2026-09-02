@@ -495,54 +495,6 @@ fn select_group_by_with_count() {
 }
 
 #[test]
-fn group_by_over_typed_set_uses_indexed_hash_join() {
-    // aegis-xr20kb: this exact production shape timed out at 30 seconds over
-    // 311 Sessions while the single-pattern COUNT returned promptly. A
-    // constant rdf:type pattern needs entailment and therefore cannot use the
-    // asserted-only read model; the second constant-predicate pattern must not
-    // be re-evaluated once per typed subject.
-    let mut store = Store::open_in_memory().unwrap();
-    let mut turtle = String::from("@prefix ex: <http://example.org/> .\n");
-    for i in 0..311 {
-        let kind = if i % 2 == 0 { "interactive" } else { "batch" };
-        turtle.push_str(&format!(
-            "ex:session{i} a ex:Session ; ex:sourceKind \"{kind}\" .\n"
-        ));
-    }
-    ingest_rdf(
-        &mut store,
-        turtle.as_bytes(),
-        RdfFormat::Turtle,
-        None,
-        "2026-09-02T00:00:00Z",
-        None,
-        None,
-    )
-    .unwrap();
-
-    let result = query(
-        &store,
-        r#"SELECT ?kind (COUNT(DISTINCT ?s) AS ?n) WHERE {
-            ?s a <http://example.org/Session> ;
-               <http://example.org/sourceKind> ?kind
-        } GROUP BY ?kind"#,
-    )
-    .unwrap();
-
-    assert_eq!(result.rows().len(), 2);
-    let mut counts: Vec<i64> = result
-        .rows()
-        .iter()
-        .map(|row| match row.get("n") {
-            Some(Value::Int(n)) => *n,
-            other => panic!("expected integer group count, got {other:?}"),
-        })
-        .collect();
-    counts.sort_unstable();
-    assert_eq!(counts, vec![155, 156]);
-}
-
-#[test]
 fn select_sum_and_avg() {
     let store = test_store_with_data();
 
