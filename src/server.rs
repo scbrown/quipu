@@ -42,7 +42,6 @@ mod tests;
 #[path = "server/tools.rs"]
 mod tools;
 
-use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 use base::{
     export, health, import_share, knot, metrics_handler, print_usage, promote_import, query,
     share_payload, stats, version,
@@ -413,12 +412,7 @@ async fn main() {
 
     let app = Router::new()
         // UI
-        .route("/", get(ui))
-        .route("/ui", get(ui))
-        .route("/quipu-components.js", get(components_js))
-        .route("/graph-canvas.js", get(graph_canvas_js))
-        .route("/datalinks.js", get(datalinks_js))
-        .route("/vendor/three.module.min.js", get(three_js))
+        .merge(assets::routes())
         // Core API
         .route("/health", get(health))
         .route("/version", get(version))
