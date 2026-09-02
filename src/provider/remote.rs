@@ -157,11 +157,20 @@ pub fn query_configured_service(
     if let Some(token) = &remote.auth_token {
         request = request.set("Authorization", &format!("Bearer {token}"));
     }
+    let started = std::time::Instant::now();
     let response = request.send_string(sparql).map_err(|e| {
-        Error::InvalidValue(format!(
-            "SERVICE remote '{}' at {requested}: {e}",
-            remote.name
-        ))
+        let elapsed = started.elapsed();
+        if elapsed >= std::time::Duration::from_millis(effective_timeout) {
+            Error::QueryTimeout {
+                elapsed_ms: elapsed.as_millis(),
+                limit_ms: u128::from(effective_timeout),
+            }
+        } else {
+            Error::InvalidValue(format!(
+                "SERVICE remote '{}' at {requested}: {e}",
+                remote.name
+            ))
+        }
     })?;
     let text = response.into_string().map_err(|e| {
         Error::Serialization(format!(
