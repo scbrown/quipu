@@ -12,7 +12,7 @@ use crate::store::Store;
 use crate::types::Value;
 
 use super::pattern_util::{check_eval_budget, triple_pattern_vars};
-use super::triple::eval_triple_pattern_from_model;
+use super::triple::{eval_triple_pattern, eval_triple_pattern_from_model};
 use super::{Bindings, TemporalContext};
 
 /// Evaluate a BGP by hash-joining each pattern's rows, rather than re-evaluating
@@ -32,6 +32,7 @@ pub(super) fn eval_bgp_hash_join(
     patterns: &[TriplePattern],
     ctx: &TemporalContext,
     seed: &Bindings,
+    from_model: bool,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
     // Every pattern is evaluated exactly once either way, so ORDERING the
     // joins by measured cardinality is free (quipu-0lr): the counts are not
@@ -57,7 +58,15 @@ pub(super) fn eval_bgp_hash_join(
     let mut evaluated: Vec<Vec<Bindings>> = Vec::with_capacity(patterns.len());
     for (i, tp) in patterns.iter().enumerate() {
         check_eval_budget(ctx, i, 0)?;
-        let rows = eval_triple_pattern_from_model(store, tp, seed, graph)?;
+        let rows = if from_model {
+            eval_triple_pattern_from_model(store, tp, seed, graph)?
+        } else {
+            // This arm is selected only when every predicate is a constant,
+            // so each SQL evaluation is an indexed predicate scan rather than
+            // an unbound whole-store materialization. Constant rdf:type keeps
+            // its subclass-aware evaluator here.
+            eval_triple_pattern(store, tp, seed, ctx)?
+        };
         // An empty pattern empties every join it participates in.
         if rows.is_empty() {
             return Ok((Vec::new(), all_vars));

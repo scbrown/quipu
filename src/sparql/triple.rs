@@ -46,11 +46,26 @@ pub fn eval_bgp(
     // rdf:type patterns on the entailment-aware evaluator so a join cannot
     // silently change the answer back to asserted-only.
     let needs_type_entailment = patterns.iter().any(is_rdf_type_pattern);
-    if patterns.len() >= 2
-        && !needs_type_entailment
-        && crate::store::read_model::read_model_applicable(store, ctx)
-    {
-        return super::join::eval_bgp_hash_join(store, patterns, ctx, seed);
+    let model_applicable = crate::store::read_model::read_model_applicable(store, ctx);
+    if patterns.len() >= 2 && !needs_type_entailment && model_applicable {
+        return super::join::eval_bgp_hash_join(store, patterns, ctx, seed, true);
+    }
+
+    // A constant rdf:type arm cannot use the asserted-only read model, but a
+    // BGP whose predicates are all constants can still evaluate each indexed
+    // predicate ONCE through SQL and hash-join the resulting bindings. Without
+    // this plan, `?s a Session ; sourceKind ?k` evaluates the second pattern
+    // once per Session. On the million-fact production store, 311 subjects
+    // consumed the full 30-second budget and GROUP BY therefore returned 408
+    // (or no groups) even though each predicate has only hundreds of matches.
+    // Keep variable-predicate patterns on the seeded plan: evaluating one of
+    // those unbound could materialize the whole store.
+    let indexed_sql_hash_join = needs_type_entailment
+        && patterns
+            .iter()
+            .all(|tp| matches!(tp.predicate, NamedNodePattern::NamedNode(_)));
+    if patterns.len() >= 2 && indexed_sql_hash_join {
+        return super::join::eval_bgp_hash_join(store, patterns, ctx, seed, false);
     }
 
     let mut result_rows: Vec<Bindings> = vec![seed.clone()];
