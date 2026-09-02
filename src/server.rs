@@ -42,8 +42,8 @@ mod tools;
 
 use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 use base::{
-    export, health, import_share, knot, metrics_handler, print_usage, promote_import, query,
-    share_payload, stats, version,
+    export, health, import_share, knot, metrics_handler, print_usage, promote_import,
+    promote_snapshot_upload, query, share_payload, stage_snapshot_part, stats, version,
 };
 use entity::{
     changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
@@ -429,6 +429,8 @@ async fn main() {
         .route("/import", post(import_share))
         .route("/import/promote", post(promote_import))
         .route("/knot", post(knot))
+        .route("/knot/stage", post(stage_snapshot_part))
+        .route("/knot/promote", post(promote_snapshot_upload))
         .route("/cord", post(cord))
         .route("/graph", post(graph_view))
         .route("/unravel", post(unravel))

@@ -294,10 +294,10 @@ pub fn promote_snapshot_upload(store: &mut Store, input: &JsonValue) -> Result<J
     if result.get("conforms").and_then(JsonValue::as_bool) == Some(false) {
         return Ok(result);
     }
-    store.conn.execute(
-        "DELETE FROM snapshot_uploads WHERE upload_id=?1",
-        params![upload_id],
-    )?;
+    // Keep the content-addressed stage until its TTL. If the response is lost,
+    // the producer can repeat promote safely: tool_knot's snapshot replacement
+    // is itself idempotent, while deleting here would turn an indeterminate
+    // successful promotion into an unrecoverable "unknown upload" response.
     let object = result.as_object_mut().expect("knot returns object");
     object.insert("upload_id".into(), JsonValue::String(upload_id.to_string()));
     object.insert("content_hash".into(), JsonValue::String(content_hash));
@@ -360,6 +360,13 @@ mod tests {
         .unwrap();
         assert_eq!(result["promoted"], true);
         assert_eq!(result["content_hash"], parts[0]["content_hash"]);
+        let repeated = promote_snapshot_upload(
+            &mut store,
+            &serde_json::json!({"upload_id": parts[0]["upload_id"]}),
+        )
+        .unwrap();
+        assert_eq!(repeated["promoted"], true);
+        assert_eq!(repeated["content_hash"], parts[0]["content_hash"]);
     }
 
     #[test]

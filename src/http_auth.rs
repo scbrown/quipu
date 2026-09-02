@@ -37,6 +37,8 @@
 /// be inferred for you.
 pub const WRITE_ENDPOINTS: &[&str] = &[
     "/knot",
+    "/knot/stage",
+    "/knot/promote",
     "/episode",
     "/import",
     "/import/promote",

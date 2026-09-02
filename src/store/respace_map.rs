@@ -178,6 +178,25 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("forks", "fork_tx", TermIdKind::None),
     ("forks", "created_at", TermIdKind::None),
     ("forks", "status", TermIdKind::None),
+    // -- resumable snapshot upload staging (aegis-tzhyzq) --
+    // Content addresses, producer keys, metadata and raw Turtle bytes are all
+    // deliberately external to the interned term-id space.
+    ("snapshot_uploads", "upload_id", TermIdKind::None),
+    ("snapshot_uploads", "snapshot", TermIdKind::None),
+    ("snapshot_uploads", "content_hash", TermIdKind::None),
+    ("snapshot_uploads", "total_parts", TermIdKind::None),
+    ("snapshot_uploads", "total_bytes", TermIdKind::None),
+    ("snapshot_uploads", "timestamp", TermIdKind::None),
+    ("snapshot_uploads", "actor", TermIdKind::None),
+    ("snapshot_uploads", "source", TermIdKind::None),
+    ("snapshot_uploads", "graph", TermIdKind::None),
+    ("snapshot_uploads", "created_at", TermIdKind::None),
+    ("snapshot_uploads", "expires_at", TermIdKind::None),
+    ("snapshot_upload_parts", "upload_id", TermIdKind::None),
+    ("snapshot_upload_parts", "part_number", TermIdKind::None),
+    ("snapshot_upload_parts", "part_hash", TermIdKind::None),
+    ("snapshot_upload_parts", "byte_count", TermIdKind::None),
+    ("snapshot_upload_parts", "payload", TermIdKind::None),
     // -- vector::VECTORS_SQL --
     // `entity_id` IS a term id: `embedding::build_entity_text` feeds it straight
     // to `Store::entity_facts`, i.e. it is a `facts.e`. Nothing in #74's scope,

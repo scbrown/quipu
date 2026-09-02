@@ -578,6 +578,39 @@ pub(crate) async fn knot(
     .await
 }
 
+pub(crate) async fn stage_snapshot_part(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        let mut st = store.lock();
+        Ok(axum::Json(
+            quipu::store::snapshot_upload::stage_snapshot_part(&mut st, &input)?,
+        ))
+    })
+    .await
+}
+
+pub(crate) async fn promote_snapshot_upload(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    blocking(move || {
+        // Promotion runs the ordinary knot path, including validation and
+        // deferred embedding. Staged bytes remain inert until this handler.
+        let (result, work) = {
+            let mut st = store.lock();
+            let result = quipu::store::snapshot_upload::promote_snapshot_upload(&mut st, &input)?;
+            (result, st.take_deferred_embed())
+        };
+        if let Some(work) = work {
+            finish_deferred_embed(&store, &work)?;
+        }
+        Ok(axum::Json(result))
+    })
+    .await
+}
+
 // ⚠ ro_handler! / rw_handler! ARE A NAMING CONVENTION, NOT A TYPE GUARANTEE
 // (aegis-e163). ro_handler! hands the tool a `&Store` and rw_handler! a
 // `&mut Store`, but `&Store` is NOT a read-only capability here: `Store` writes
