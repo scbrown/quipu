@@ -1578,6 +1578,28 @@ aegis:CIWorkflowShape a sh:NodeShape ;
     sh:targetClass aegis:CIWorkflow ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
 
+aegis:CiJobShape a sh:NodeShape ;
+    sh:targetClass aegis:CiJob ;
+    sh:property [
+        sh:path aegis:localEquivalent ;
+        sh:class aegis:LocalCommand ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:gatesPath ;
+        sh:datatype xsd:string ;
+    ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
+aegis:LocalCommandShape a sh:NodeShape ;
+    sh:targetClass aegis:LocalCommand ;
+    sh:property [
+        sh:path aegis:commandText ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+
 aegis:PushgatewayJobShape a sh:NodeShape ;
     sh:targetClass aegis:PushgatewayJob ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .

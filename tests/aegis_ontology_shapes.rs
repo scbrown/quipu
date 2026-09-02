@@ -183,6 +183,31 @@ fn config_file_rejects_noncanonical_or_ambiguous_digest_facts() {
 }
 
 #[test]
+fn ci_job_accepts_a_typed_local_equivalent_and_gated_paths() {
+    let data = r#"
+        @prefix aegis: <http://aegis.gastown.local/ontology/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        aegis:test-job a aegis:CiJob ; rdfs:label "shape checks" ;
+            aegis:localEquivalent aegis:test-command ;
+            aegis:gatesPath "shapes/", "tests/" .
+        aegis:test-command a aegis:LocalCommand ; rdfs:label "local shape checks" ;
+            aegis:commandText "just test --test aegis_ontology_shapes" .
+    "#;
+    assert!(quipu::validate_shapes(SHAPES, data).unwrap().conforms);
+}
+
+#[test]
+fn ci_job_rejects_untyped_or_ambiguous_local_equivalents() {
+    let data = r#"
+        @prefix aegis: <http://aegis.gastown.local/ontology/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        aegis:test-job a aegis:CiJob ; rdfs:label "shape checks" ;
+            aegis:localEquivalent aegis:one, aegis:two .
+    "#;
+    assert!(!quipu::validate_shapes(SHAPES, data).unwrap().conforms);
+}
+
+#[test]
 fn desired_crew_shape_accepts_a_scoped_composable_plan() {
     let valid = r#"
         @prefix aegis: <http://aegis.gastown.local/ontology/> .
