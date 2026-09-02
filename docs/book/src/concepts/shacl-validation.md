@@ -144,6 +144,11 @@ Quipu ships with shapes for the Aegis infrastructure ontology in the
 
 - `LXCContainer`, `ProxmoxNode`, `BareMetalHost` — compute resources
 - `SystemdService`, `WebApplication`, `Database` — services
+- `CommandDiskImpactObservation` — one privacy-preserving command/filesystem
+  measurement. `diskDeltaBytes` is signed: positive values mean space consumed
+  and negative values mean space freed. Command and filesystem identity use
+  canonical classes rather than raw arguments or paths; aggregate counts and
+  quantiles belong in a separate summary entity.
 - Common properties: hostname, ipAddress, memoryMB, cpuCores, dependsOn
 
 Load them with:

@@ -818,6 +818,50 @@ aegis:ObservationShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── CommandDiskImpactObservation ──────────────────────────────────
+#
+# One measured command/filesystem sample. Positive diskDeltaBytes means
+# consumed space; negative means the command freed space. Aggregates such as
+# sample count and quantiles deliberately belong to a separate summary type.
+
+aegis:CommandDiskImpactObservation rdfs:subClassOf aegis:Observation .
+
+aegis:CommandDiskImpactObservationShape a sh:NodeShape ;
+    sh:targetClass aegis:CommandDiskImpactObservation ;
+    sh:property [
+        sh:path aegis:commandSignature ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        # Canonical classes, never raw argv or an absolute cwd:
+        # binary:subcommand|repo:<class>|cwd:<class>
+        sh:pattern "^[^\\s/]+:[^\\s/]+\\|repo:[a-z0-9._-]+\\|cwd:[a-z0-9._-]+$" ;
+    ] ;
+    sh:property [
+        sh:path aegis:filesystemIdentity ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        # Distinguishes root, tmpfs and other mounts without storing raw paths.
+        sh:pattern "^(root|tmpfs|mount):[a-z0-9._-]+$" ;
+    ] ;
+    sh:property [
+        sh:path aegis:diskDeltaBytes ;
+        sh:datatype xsd:integer ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:observedAt ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] .
+
 # ── DecisionRecord ──────────���────────────────────────────────��───
 #
 # An architectural decision record (ADR).

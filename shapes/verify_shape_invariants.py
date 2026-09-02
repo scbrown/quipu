@@ -15,7 +15,10 @@ Exits non-zero on violation. Static checks need no server.
 
 WHY EACH INVARIANT EXISTS — each is a bug that actually happened:
 
-  I1  The only sh:minCount 1 in the file are rdfs:label. Required scalar
+  I1  The only sh:minCount 1 in the file are rdfs:label, unless the requirement
+      is backed either by measured 100% emitter coverage for a populated class,
+      or by schema-first conformance fixtures for a brand-new class with zero
+      instances. Required scalar
       identity predicates (ctId, skillName, formulaName, beadId, hash, path,
       roleName, schedule, hostname, backend, pool, email, title) were required
       by the shapes and emitted by nothing: 133 violations across 11 populated
@@ -118,9 +121,10 @@ AEGIS_NS = "http://aegis.gastown.local/ontology/"
 # requirement that had been proven looked identical to one somebody added on a
 # hunch, and the gate stayed red with no way to distinguish them.
 #
-# An entry here is a claim that live coverage was MEASURED AT 100%. Carry the
-# number and the date, and re-measure before trusting an old one -- coverage is
-# a property of the emitter, and emitters change.
+# An entry here is normally a claim that live coverage was MEASURED AT 100%.
+# For a brand-new, zero-instance class that must exist before its emitter, a
+# schema-first contract is allowed only when tests prove the complete valid
+# record and every required-field negative arm. Carry which proof applies.
 #
 #   POST /query on the quipu server:
 #     SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE {
@@ -136,6 +140,14 @@ REQUIRED_PREDICATE_PROVEN = {
         "7/7 TextRule instances (via rdfs:subClassOf*) 2026-08-24 grant",
     ("aegis:TextRuleShape", "aegis:enforcementTier"):
         "7/7 TextRule instances (via rdfs:subClassOf*) 2026-08-24 grant",
+    ("aegis:CommandDiskImpactObservationShape", "aegis:commandSignature"):
+        "schema-first zero-instance contract + positive/negative fixtures 2026-09-02 ian",
+    ("aegis:CommandDiskImpactObservationShape", "aegis:filesystemIdentity"):
+        "schema-first zero-instance contract + positive/negative fixtures 2026-09-02 ian",
+    ("aegis:CommandDiskImpactObservationShape", "aegis:diskDeltaBytes"):
+        "schema-first zero-instance contract + positive/negative fixtures 2026-09-02 ian",
+    ("aegis:CommandDiskImpactObservationShape", "aegis:observedAt"):
+        "schema-first zero-instance contract + positive/negative fixtures 2026-09-02 ian",
 }
 
 
@@ -378,14 +390,14 @@ def main():
     failures = []
     proven = []
 
-    # I1 — only rdfs:label may be required, unless coverage was PROVEN.
+    # I1 — only rdfs:label may be required, unless the requirement is justified.
     for s in shapes:
         for p in s["props"]:
             if p["minCount"] and p["path"] != "rdfs:label":
                 if (s["name"], p["path"]) in REQUIRED_PREDICATE_PROVEN:
                     proven.append(
-                        f"I1 {s['name']} requires {p['path']} — allowed, coverage "
-                        f"proven: {REQUIRED_PREDICATE_PROVEN[(s['name'], p['path'])]}"
+                        f"I1 {s['name']} requires {p['path']} — allowed, requirement "
+                        f"justified: {REQUIRED_PREDICATE_PROVEN[(s['name'], p['path'])]}"
                     )
                     continue
                 failures.append(
