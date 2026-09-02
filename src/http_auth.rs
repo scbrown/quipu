@@ -38,7 +38,6 @@
 pub const WRITE_ENDPOINTS: &[&str] = &[
     "/knot",
     "/episode",
-    "/ingress/bead",
     "/import",
     "/import/promote",
     "/episodes/complete",
@@ -303,7 +302,6 @@ mod tests {
     #[test]
     fn write_endpoint_classification() {
         assert!(is_write_endpoint("/episode"));
-        assert!(is_write_endpoint("/ingress/bead"));
         assert!(is_write_endpoint("/retract"));
         assert!(is_write_endpoint("/set"));
         assert!(is_write_endpoint("/proposal/accept"));

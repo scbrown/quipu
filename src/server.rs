@@ -22,8 +22,6 @@ mod admission;
 mod assets;
 #[path = "server/base.rs"]
 mod base;
-#[path = "server/bead_ingress.rs"]
-mod bead_ingress;
 #[path = "server/entity.rs"]
 mod entity;
 #[path = "server/graph_store.rs"]
@@ -42,6 +40,7 @@ mod tests;
 #[path = "server/tools.rs"]
 mod tools;
 
+use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 use base::{
     export, health, import_share, knot, metrics_handler, print_usage, promote_import, query,
     share_payload, stats, version,
@@ -412,7 +411,12 @@ async fn main() {
 
     let app = Router::new()
         // UI
-        .merge(assets::routes())
+        .route("/", get(ui))
+        .route("/ui", get(ui))
+        .route("/quipu-components.js", get(components_js))
+        .route("/graph-canvas.js", get(graph_canvas_js))
+        .route("/datalinks.js", get(datalinks_js))
+        .route("/vendor/three.module.min.js", get(three_js))
         // Core API
         .route("/health", get(health))
         .route("/version", get(version))
@@ -430,7 +434,6 @@ async fn main() {
         .route("/unravel", post(unravel))
         .route("/validate", post(validate))
         .route("/episode", post(episode))
-        .merge(bead_ingress::routes())
         .route("/search", post(search))
         // Read-only resolution dry-run: "what would resolution
         // say about this name?" WITHOUT writing. Before this route, the answer

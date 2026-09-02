@@ -7,6 +7,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use ndarray::Array2;
+use ort::ep::CPU;
 use ort::session::Session;
 use ort::value::Tensor;
 use tokenizers::{PaddingStrategy, Tokenizer};
@@ -40,6 +41,16 @@ impl OnnxEmbeddingProvider {
     ) -> Result<Self> {
         let session = Session::builder()
             .and_then(|b| b.with_intra_threads(1))
+            // Request shapes vary with batch size and token length. ORT's CPU
+            // arena and memory-pattern cache otherwise retain the largest
+            // allocation. Under sustained embedding traffic that correlated
+            // with monotonic RSS growth to the service cap and >100% CPU
+            // (aegis-2s6xpb). Prefer returning allocations to the OS over
+            // optimizing a shape that is not stable between requests.
+            .and_then(|b| b.with_memory_pattern(false))
+            .and_then(|b| {
+                b.with_execution_providers([CPU::default().with_arena_allocator(false).build()])
+            })
             .and_then(|b| b.commit_from_file(model_path))
             .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))?;
 
