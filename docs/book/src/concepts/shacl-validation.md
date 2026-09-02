@@ -152,6 +152,9 @@ Quipu ships with shapes for the Aegis infrastructure ontology in the
 - `ConfigFile` — optional migration-safe `configPath` and `contentSha256`
   facts support exact drift lookups. When present, each is single-valued and
   the digest must be a full lowercase SHA-256 hexadecimal string.
+- `CiJob` and `LocalCommand` — map a CI job to at most one typed local
+  equivalent, the repository paths it gates, and the command text used to run
+  that equivalent before push.
 - Common properties: hostname, ipAddress, memoryMB, cpuCores, dependsOn
 
 Load them with:
