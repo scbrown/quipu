@@ -34,6 +34,8 @@ mod query_usage;
 mod reason;
 #[path = "server/request_middleware.rs"]
 mod request_middleware;
+#[path = "server/service_description.rs"]
+mod service_description;
 #[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
@@ -421,6 +423,7 @@ async fn main() {
         .route("/health", get(health))
         .route("/version", get(version))
         .route("/stats", get(stats))
+        .route("/.well-known/void", get(service_description::service_description))
         .route("/metrics", get(metrics_handler))
         .route("/query", post(query))
         .route("/export", post(export))

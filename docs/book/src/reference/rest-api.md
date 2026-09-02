@@ -13,6 +13,14 @@ quipu-server --db my.db --bind 0.0.0.0:3030
 | `--db <path>` | Store database path (default: `.bobbin/quipu/quipu.db`) |
 | `--bind <addr>` | Bind address (default: `127.0.0.1:3030`) |
 
+## `GET /.well-known/void`
+
+Returns a live VoID and SPARQL 1.1 Service Description projection. The default
+representation is Turtle; send `Accept: application/ld+json` for JSON-LD. The
+document advertises the query endpoint, exact dataset and named-graph counts,
+used vocabulary namespaces, executable result formats, and compiled entailment
+features. Quipu's share `manifest.json` remains the integrity contract.
+
 ## Read Concurrency
 
 Reads are served from a pool of read-only connections; writes keep the single

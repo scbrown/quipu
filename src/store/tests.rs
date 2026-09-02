@@ -76,6 +76,37 @@ fn round_trip_write_read() {
 }
 
 #[test]
+fn standards_inventory_is_derived_from_live_facts() {
+    let mut store = test_store();
+    let entity = store.intern("http://example.org/alice").unwrap();
+    let predicate = store.intern("http://example.org/vocab/name").unwrap();
+    store
+        .transact(
+            &[Datum {
+                entity,
+                attribute: predicate,
+                value: Value::Str("Alice".into()),
+                valid_from: "2026-09-01".into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            "2026-09-01",
+            None,
+            Some("standards-inventory-test"),
+        )
+        .unwrap();
+
+    assert_eq!(
+        store.graph_fact_counts().unwrap(),
+        vec![(crate::schema::ROOT_GRAPH_IRI.into(), 1)]
+    );
+    assert_eq!(
+        store.predicate_vocabularies().unwrap(),
+        vec!["http://example.org/vocab/".to_string()]
+    );
+}
+
+#[test]
 fn current_facts_for_attributes_reads_only_requested_predicates() {
     let mut store = Store::open_in_memory().unwrap();
     let e = store.intern("http://example.org/entity").unwrap();

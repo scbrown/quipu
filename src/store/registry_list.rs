@@ -42,6 +42,57 @@ pub struct GraphInfo {
 }
 
 impl Store {
+    /// Live triple counts for every registered graph, excluding the metadata graph.
+    ///
+    /// This is the read-side inventory used by standards descriptions. Counts
+    /// use the same live-fact predicate as graph queries (`op = 1` and no
+    /// `valid_to`), so the advertised inventory cannot drift from queryable
+    /// state.
+    pub fn graph_fact_counts(&self) -> Result<Vec<(String, u64)>> {
+        let meta_g = self.meta_graph_id()?;
+        let mut stmt = self.conn.prepare(
+            "SELECT gr.g, COUNT(f.e) FROM graphs gr \
+             LEFT JOIN facts f ON f.g = gr.g AND f.op = 1 AND f.valid_to IS NULL \
+             WHERE gr.g <> ?1 GROUP BY gr.g ORDER BY gr.g",
+        )?;
+        let rows = stmt
+            .query_map([meta_g], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        rows.into_iter()
+            .map(|(g, count)| {
+                let iri = if g == 0 {
+                    ROOT_GRAPH_IRI.to_string()
+                } else {
+                    self.resolve(g)?
+                };
+                Ok((iri, u64::try_from(count).unwrap_or(0)))
+            })
+            .collect()
+    }
+
+    /// Vocabulary namespace IRIs actually used by live predicates.
+    pub fn predicate_vocabularies(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT t.iri FROM facts f JOIN terms t ON t.id = f.a \
+             WHERE f.op = 1 AND f.valid_to IS NULL ORDER BY t.iri",
+        )?;
+        let predicates = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut namespaces: Vec<String> = predicates
+            .into_iter()
+            .filter_map(|iri| {
+                let cut = iri.rfind(['#', '/']).map(|i| i + 1)?;
+                Some(iri[..cut].to_string())
+            })
+            .collect();
+        namespaces.sort();
+        namespaces.dedup();
+        Ok(namespaces)
+    }
+
     /// Every registered graph, optionally filtered by kind and/or lifecycle.
     ///
     /// The meta-graph is excluded (it holds labels *about* graphs); ROOT is

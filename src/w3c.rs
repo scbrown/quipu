@@ -50,6 +50,26 @@ pub enum ResultFormat {
     NTriples,
 }
 
+/// Standard format IRIs advertised by the service description.
+///
+/// This registry sits beside [`negotiate`], so metadata and executable
+/// content negotiation share one source of truth.
+pub const SUPPORTED_RESULT_FORMATS: [(&str, &str); 4] = [
+    (
+        "application/sparql-results+json",
+        "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
+    ),
+    (
+        "application/sparql-results+xml",
+        "http://www.w3.org/ns/formats/SPARQL_Results_XML",
+    ),
+    ("text/turtle", "http://www.w3.org/ns/formats/Turtle"),
+    (
+        "application/n-triples",
+        "http://www.w3.org/ns/formats/N-Triples",
+    ),
+];
+
 /// Pick a standard format from an HTTP `Accept` header value.
 ///
 /// Returns `None` for an absent/empty header, `*/*`, `application/json`, or any
