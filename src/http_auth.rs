@@ -374,6 +374,7 @@ mod tests {
         let sources = [
             include_str!("server.rs"),
             include_str!("server/graph_store.rs"),
+            include_str!("server/snapshot_upload.rs"),
         ];
         let mut paths = Vec::new();
         for src in sources {
