@@ -1,4 +1,4 @@
-//! VoID and SPARQL 1.1 Service Description interoperability projection.
+//! `VoID` and SPARQL 1.1 Service Description interoperability projection.
 
 use axum::{
     extract::State,
