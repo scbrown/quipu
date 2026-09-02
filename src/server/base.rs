@@ -8,10 +8,12 @@
 use std::sync::{Arc, Mutex};
 
 use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
+    body::Bytes,
+    extract::{OriginalUri, Query, State},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
+use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
 
 use super::SharedStore;
@@ -242,10 +244,88 @@ pub(crate) async fn stats(
     .await
 }
 
+/// Conservative bounds for the two standard SPARQL Protocol transports.
+/// GET is intentionally small enough for common proxies; clients with larger
+/// queries have the standard `application/sparql-query` POST form available.
+pub(crate) const MAX_QUERY_URI_BYTES: usize = 8 * 1024;
+pub(crate) const MAX_SPARQL_QUERY_BYTES: usize = 1024 * 1024;
+
+#[derive(Deserialize)]
+pub(crate) struct QueryParams {
+    pub(crate) query: String,
+}
+
+/// SPARQL 1.1 Query Protocol GET: `/query?query=...`.
+pub(crate) async fn query_get(
+    State(store): State<SharedStore>,
+    headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
+    Query(params): Query<QueryParams>,
+) -> Result<axum::response::Response, AppError> {
+    if uri.to_string().len() > MAX_QUERY_URI_BYTES {
+        return Ok((StatusCode::URI_TOO_LONG, "query URI exceeds 8192 bytes").into_response());
+    }
+    query_core(store, headers, json!({"query": params.query})).await
+}
+
+/// SPARQL 1.1 Query Protocol POST plus the legacy JSON request form.
+pub(crate) async fn query_post(
+    State(store): State<SharedStore>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<axum::response::Response, AppError> {
+    if body.len() > MAX_SPARQL_QUERY_BYTES {
+        return Ok((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "query body exceeds 1048576 bytes",
+        )
+            .into_response());
+    }
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map_or("", str::trim)
+        .to_ascii_lowercase();
+    let input = match content_type.as_str() {
+        "application/json" => serde_json::from_slice(&body).map_err(|e| {
+            AppError::from(quipu::Error::InvalidValue(format!(
+                "invalid JSON query request: {e}"
+            )))
+        })?,
+        "application/sparql-query" => {
+            let text = std::str::from_utf8(&body).map_err(|e| {
+                AppError::from(quipu::Error::InvalidValue(format!(
+                    "SPARQL query body is not UTF-8: {e}"
+                )))
+            })?;
+            json!({"query": text})
+        }
+        _ => {
+            return Ok((
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json or application/sparql-query",
+            )
+                .into_response());
+        }
+    };
+    query_core(store, headers, input).await
+}
+
+/// Direct legacy JSON entry point retained for unit callers.
+#[cfg(test)]
 pub(crate) async fn query(
     State(store): State<SharedStore>,
     headers: HeaderMap,
     axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::response::Response, AppError> {
+    query_core(store, headers, input).await
+}
+
+async fn query_core(
+    store: SharedStore,
+    headers: HeaderMap,
+    input: JsonValue,
 ) -> Result<axum::response::Response, AppError> {
     let query_shape =
         quipu::request_usage::classify_query(input.get("query").and_then(JsonValue::as_str));

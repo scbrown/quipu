@@ -147,15 +147,33 @@ curl localhost:3030/stats
 
 Response: `{"facts": 1234, "entities": 56, "predicates": 12}`
 
-### `POST /query`
+### `GET /query` and `POST /query`
 
-Execute a SPARQL query.
+Execute a SPARQL query. Quipu implements the SPARQL 1.1 Query Protocol GET and
+direct-query POST transports, while retaining its JSON POST extension:
 
 ```bash
+# Standard GET (request target limited to 8 KiB)
+curl -G localhost:3030/query \
+  -H 'Accept: application/sparql-results+json' \
+  --data-urlencode 'query=SELECT ?s WHERE { ?s ?p ?o } LIMIT 5'
+
+# Standard direct-query POST (body limited to 1 MiB)
+curl localhost:3030/query -X POST \
+  -H 'Content-Type: application/sparql-query' \
+  -H 'Accept: text/turtle' \
+  --data 'CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 5'
+
+# Quipu JSON extension
 curl -s localhost:3030/query -X POST \
   -H "Content-Type: application/json" \
   -d '{"query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 5"}'
 ```
+
+For `SELECT` and `ASK`, request `application/sparql-results+json` or
+`application/sparql-results+xml`. For `CONSTRUCT` and `DESCRIBE`, request
+`text/turtle` or `application/n-triples`. All transports share the configured
+query deadline and return HTTP 408 when evaluation exceeds it.
 
 Optional fields: `valid_at` (ISO-8601), `tx` (integer), `graph` (a
 named-graph IRI or dataset name that scopes the query's *default* graph

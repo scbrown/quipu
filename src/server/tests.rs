@@ -2,13 +2,18 @@
 
 use std::sync::Arc;
 
-use axum::{extract::State, response::IntoResponse};
+use axum::{
+    body::Bytes,
+    extract::{OriginalUri, Query, State},
+    response::IntoResponse,
+};
 use quipu::{EmbeddingProvider, Store};
 use serde_json::json;
 
 use super::SharedStore;
 use super::base::{
-    STATS_CACHE, StatsCache, export as export_handler, metrics_handler, query, share_payload, stats,
+    MAX_QUERY_URI_BYTES, QueryParams, STATS_CACHE, StatsCache, export as export_handler,
+    metrics_handler, query, query_get, query_post, share_payload, stats,
 };
 use super::entity::{EntityParams, SPOTLIGHT_CACHE, entity_query_conneg, spotlight_handler};
 use super::tools::{episode, search};
@@ -148,6 +153,152 @@ async fn query_response_carries_structured_usage_metadata() {
             query_shape: quipu::request_usage::QueryShape::Select,
             result_size: 0,
         })
+    );
+}
+
+fn query_headers(content_type: &str, accept: &str) -> axum::http::HeaderMap {
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        content_type.parse().unwrap(),
+    );
+    headers.insert(axum::http::header::ACCEPT, accept.parse().unwrap());
+    headers
+}
+
+#[tokio::test]
+async fn sparql_protocol_get_negotiates_select_results() {
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let response = query_get(
+        State(shared),
+        query_headers("application/json", "application/sparql-results+json"),
+        OriginalUri(
+            "/query?query=SELECT%20%3Fs%20WHERE%20%7B%20%3Fs%20%3Fp%20%3Fo%20%7D"
+                .parse()
+                .unwrap(),
+        ),
+        Query(QueryParams {
+            query: "SELECT ?s WHERE { ?s ?p ?o }".into(),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        response.headers()[axum::http::header::CONTENT_TYPE],
+        "application/sparql-results+json"
+    );
+}
+
+#[tokio::test]
+async fn sparql_protocol_post_supports_ask_and_graph_negotiation() {
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let ask = query_post(
+        State(shared.clone()),
+        query_headers(
+            "application/sparql-query; charset=utf-8",
+            "application/sparql-results+xml",
+        ),
+        Bytes::from_static(b"ASK { ?s ?p ?o }"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(ask.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        ask.headers()[axum::http::header::CONTENT_TYPE],
+        "application/sparql-results+xml"
+    );
+
+    let graph = query_post(
+        State(shared),
+        query_headers("application/sparql-query", "text/turtle"),
+        Bytes::from_static(b"CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(graph.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        graph.headers()[axum::http::header::CONTENT_TYPE],
+        "text/turtle"
+    );
+}
+
+#[tokio::test]
+async fn legacy_json_post_and_protocol_rejections_are_preserved() {
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let legacy = query_post(
+        State(shared.clone()),
+        query_headers("application/json", "application/json"),
+        Bytes::from_static(br#"{"query":"ASK { ?s ?p ?o }"}"#),
+    )
+    .await
+    .unwrap();
+    assert_eq!(legacy.status(), axum::http::StatusCode::OK);
+
+    let unsupported = query_post(
+        State(shared.clone()),
+        query_headers("text/plain", "application/json"),
+        Bytes::from_static(b"ASK {}"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        unsupported.status(),
+        axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE
+    );
+
+    let long_uri = format!("/query?query={}", "x".repeat(MAX_QUERY_URI_BYTES));
+    let too_long = query_get(
+        State(shared),
+        axum::http::HeaderMap::new(),
+        OriginalUri(long_uri.parse().unwrap()),
+        Query(QueryParams {
+            query: "ASK {}".into(),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(too_long.status(), axum::http::StatusCode::URI_TOO_LONG);
+}
+
+#[tokio::test]
+async fn sparql_protocol_post_uses_the_existing_query_deadline() {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = (0..100)
+        .map(|i| format!("<http://example.org/s{i}> <http://example.org/p> \"{i}\" ."))
+        .collect::<Vec<_>>()
+        .join("\n");
+    quipu::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-09-02T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store.search_config_mut().query_timeout_ms = 1;
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    let err = query_post(
+        State(shared),
+        query_headers(
+            "application/sparql-query",
+            "application/sparql-results+json",
+        ),
+        Bytes::from_static(b"SELECT ?s WHERE { ?s ?p ?o . ?a ?b ?c . ?d ?e ?f . ?g ?h ?i }"),
+    )
+    .await
+    .expect_err("a standard transport must retain the configured query deadline");
+    assert_eq!(
+        err.into_response().status(),
+        axum::http::StatusCode::REQUEST_TIMEOUT
     );
 }
 
