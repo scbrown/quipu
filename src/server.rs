@@ -436,7 +436,7 @@ async fn main() {
         .route("/unravel", post(unravel))
         .route("/validate", post(validate))
         .route("/episode", post(episode))
-        .route("/ingress/bead", post(bead_ingress::bead_ingress))
+        .merge(bead_ingress::routes())
         .route("/search", post(search))
         // Read-only resolution dry-run: "what would resolution
         // say about this name?" WITHOUT writing. Before this route, the answer

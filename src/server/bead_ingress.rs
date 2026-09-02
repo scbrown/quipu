@@ -8,6 +8,10 @@ use super::admission::write_blocking;
 use super::base::AppError;
 use super::tools::finish_deferred_embed;
 
+pub(crate) fn routes() -> axum::Router<SharedStore> {
+    axum::Router::new().route("/ingress/bead", axum::routing::post(bead_ingress))
+}
+
 pub(crate) fn tool_bead_ingress(
     store: &mut quipu::Store,
     input: &JsonValue,
