@@ -28,6 +28,8 @@ mod entity;
 mod graph_store;
 #[path = "server/handle.rs"]
 mod handle;
+#[path = "server/publication.rs"]
+mod publication;
 #[path = "server/query_usage.rs"]
 mod query_usage;
 #[path = "server/reason.rs"]
@@ -47,16 +49,14 @@ mod tools;
 use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 #[cfg(test)]
 use base::query;
-use base::{
-    export, health, metrics_handler, print_usage, query_get, query_post, share_payload, stats,
-    version,
-};
+use base::{health, metrics_handler, print_usage, query_get, query_post, stats, version};
 use entity::{
     changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
     entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
     reconcile_handler, spotlight_handler, transactions,
 };
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
+use publication::{export, share_payload};
 use reason::{explain, reason, shapes};
 use tools::*;
 
@@ -75,19 +75,7 @@ async fn main() {
         return;
     }
 
-    let db_flag = args
-        .windows(2)
-        .find(|w| w[0] == "--db")
-        .map(|w| w[1].as_str());
-
-    let bind_flag = args
-        .windows(2)
-        .find(|w| w[0] == "--bind")
-        .map(|w| w[1].as_str());
-
-    let config = quipu::QuipuConfig::load(std::path::Path::new("."))
-        .with_db_override(db_flag)
-        .with_bind_override(bind_flag);
+    let config = base::load_config(&args);
 
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();

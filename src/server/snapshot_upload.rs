@@ -28,9 +28,9 @@ use super::{
 
 pub(crate) fn routes() -> Router<SharedStore> {
     Router::new()
-        .route("/import", post(super::base::import_share))
-        .route("/import/promote", post(super::base::promote_import))
-        .route("/knot", post(super::base::knot))
+        .route("/import", post(super::publication::import_share))
+        .route("/import/promote", post(super::publication::promote_import))
+        .route("/knot", post(super::publication::knot))
         .route("/knot/stage", post(stage_part))
         .route("/knot/promote", post(promote))
 }
