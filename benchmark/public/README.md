@@ -1,0 +1,55 @@
+# Public benchmark evaluation
+
+This directory runs version-pinned, public benchmark material against an
+ephemeral Quipu store. It does not use a production graph.
+
+## SPARQL 1.1 syntax
+
+The first executable slice scores the W3C RDF Tests SPARQL 1.1 query-syntax
+manifest. It includes only Working Group-approved positive and negative syntax
+tests. A positive test passes when Quipu's parser accepts it; a negative test
+passes when Quipu emits its explicit `SPARQL parse error` diagnostic. Runtime
+evaluation errors are therefore not misreported as grammar failures.
+
+```sh
+git clone https://github.com/w3c/rdf-tests /tmp/rdf-tests
+git -C /tmp/rdf-tests checkout 369a90d1a60c021b746df2e411da0ff36258a758
+python3 benchmark/public/sparql11_syntax.py \
+  --suite /tmp/rdf-tests/sparql/sparql11/syntax-query \
+  --quipu "$(cargo metadata --no-deps --format-version 1 | \
+    python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')/release/quipu" \
+  --output benchmark/public/results/sparql11-syntax.json
+```
+
+The output records the suite revision, Quipu revision/version, per-test result,
+and totals. The script refuses a dirty or differently pinned suite unless
+`--allow-unpinned-suite` is explicit.
+
+## Phase-one benchmark choices
+
+| Layer | Public artifact | Decision |
+|---|---|---|
+| conformance | W3C RDF Tests, SPARQL 1.1 | Selected; syntax runner implemented here. Query-evaluation manifests are the next slice. |
+| performance | WatDiv 0.6 | Selected over LUBM because its query-shape diversity directly tests pathological join shapes; its publisher supplies 10M, 100M, and 1B datasets. |
+| extraction | Text2KGBench | Feasible in principle, but not store-only: it requires a frozen model/prompt configuration and ontology-guided triple scorer. Keep it in the Caboodle end-to-end phase. |
+
+WatDiv ingest is currently blocked on a general RDF bulk-loader. Quipu's `/import`
+accepts Quipu share bundles, not arbitrary benchmark N-Triples, while `knot` is a
+governed transactional assertion path rather than a billion-triple loader. Do not
+quote a large-scale performance number until the identical WatDiv dataset can be
+loaded into both Quipu and the comparator with measured counts.
+
+## Claim boundary
+
+This is a parser-conformance score, not a claim of full SPARQL 1.1 compliance.
+Protocol, query evaluation, update, entailment, and result-format manifests remain
+separate test classes and must be reported separately.
+
+## Baseline result
+
+At Quipu `3254199f` and W3C RDF Tests `369a90d1`, **84/86 approved
+query-syntax cases pass (97.7%)**. The two accepted-by-W3C forms Quipu rejects
+are `IN(1,<x>)` (`syntax-oneof-03.rq`) and a relative graph IRI in a
+`CONSTRUCT FROM` query (`syntax-construct-where-02.rq`). The JSON report carries
+the complete 86-case ledger. This number says nothing about query-result
+correctness; evaluation manifests are deliberately excluded.

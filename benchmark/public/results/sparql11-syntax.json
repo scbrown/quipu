@@ -1,0 +1,616 @@
+{
+  "benchmark": "W3C RDF Tests SPARQL 1.1 approved query syntax",
+  "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
+  "quipu_revision": "3254199f2554a77baca349bfb34b09109f79e6b3",
+  "quipu_version": "quipu 0.3.27",
+  "scope": "parser syntax only; evaluation and protocol excluded",
+  "totals": {
+    "passed": 84,
+    "failed": 2,
+    "cases": 86
+  },
+  "results": [
+    {
+      "test": "syntax-select-expr-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-select-expr-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-select-expr-03.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-select-expr-04.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-select-expr-05.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-03.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-04.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-05.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-06.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-07.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-08.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-09.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-10.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-11.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-12.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-13.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-14.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-aggregate-15.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-subquery-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-subquery-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-subquery-03.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-not-exists-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-not-exists-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-not-exists-03.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-exists-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-exists-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-exists-03.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-minus-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-oneof-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-oneof-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-oneof-03.rq",
+      "expect": "accept",
+      "observed": "reject",
+      "passed": false,
+      "diagnostic": "query error: SPARQL parse error: error at 2:1: expected one of COALESCE, CONTAINS, DATATYPE, STRAFTER, TIMEZONE, [_], isTriple, sameTerm"
+    },
+    {
+      "test": "syntax-bindings-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-bindings-02a.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-bindings-03a.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-bindings-05a.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-bind-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-construct-where-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-construct-where-02.rq",
+      "expect": "accept",
+      "observed": "reject",
+      "passed": false,
+      "diagnostic": "query error: SPARQL parse error: error at 2:12: expected IRI parsing failed"
+    },
+    {
+      "test": "syn-bad-01.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 3:1: expected one of \"$\", \"(\", \":\", \"<\", \"?\", ABS, AVG, DAY, IRI, MAX, MD5, MIN, NOT, NOW, SELECT * is not authorized with GROUP BY, STR, SUM, URI, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}'], [_]"
+    },
+    {
+      "test": "syn-bad-02.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 3:1: expected one of \"$\", \"(\", \":\", \"<\", \"?\", ABS, AVG, DAY, IRI, MAX, MD5, MIN, NOT, NOW, STR, SUM, The SELECT contains a variable that is unbound, URI, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}'], [_]"
+    },
+    {
+      "test": "syn-bad-03.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 2:1: expected one of Duplicated variable name in SELECT, [_]"
+    },
+    {
+      "test": "syn-bad-04.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 1:18: expected NOT"
+    },
+    {
+      "test": "syn-bad-05.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 1:16: expected DISTINCT"
+    },
+    {
+      "test": "syn-bad-06.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 1:23: expected ENCODE_FOR_URI"
+    },
+    {
+      "test": "syn-bad-07.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 1:23: expected OPTIONAL"
+    },
+    {
+      "test": "syn-bad-08.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 1:29: expected OPTIONAL"
+    },
+    {
+      "test": "syntax-bindings-09.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 1:20: expected one of HAVING, OFFSET, OPTIONAL, VALUES"
+    },
+    {
+      "test": "qname-escape-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "qname-escape-03.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-BINDscope1.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-BINDscope2.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-BINDscope3.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-BINDscope4.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-BINDscope5.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-BINDscope6.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 8:1: expected one of BIND, [_]"
+    },
+    {
+      "test": "syntax-BINDscope7.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 10:1: expected one of BIND, [_]"
+    },
+    {
+      "test": "syntax-BINDscope8.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 11:1: expected [_]"
+    },
+    {
+      "test": "syntax-propertyPaths-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-SELECTscope1.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syntax-SELECTscope2.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 5:1: expected one of LATERAL, SERVICE, The SELECT overrides an existing variable using an expression, [_]"
+    },
+    {
+      "test": "syntax-SELECTscope3.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-01.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-02.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-03.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-04.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-05.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-06.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-07.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-08.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-pname-09.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    },
+    {
+      "test": "syn-bad-pname-01.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 2:11: expected \"<\""
+    },
+    {
+      "test": "syn-bad-pname-02.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 2:11: expected \"<\""
+    },
+    {
+      "test": "syn-bad-pname-03.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 2:10: expected CONSTRUCT"
+    },
+    {
+      "test": "syn-bad-pname-04.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 2:10: expected CONSTRUCT"
+    },
+    {
+      "test": "syn-bad-pname-05.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 1:10: expected CONSTRUCT"
+    },
+    {
+      "test": "syn-bad-pname-06.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 6:1: expected OPTIONAL"
+    },
+    {
+      "test": "syn-bad-pname-07.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 1:10: expected CONSTRUCT"
+    },
+    {
+      "test": "syn-bad-pname-08.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 4:11: expected OPTIONAL"
+    },
+    {
+      "test": "syn-bad-pname-09.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 4:11: expected one of \"!\", \"$\", \"(\", \":\", \"<\", \"?\", \"^\", \"a\", OPTIONAL, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}']"
+    },
+    {
+      "test": "syn-bad-pname-10.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
+    },
+    {
+      "test": "syn-bad-pname-11.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
+    },
+    {
+      "test": "syn-bad-pname-12.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
+    },
+    {
+      "test": "syn-bad-pname-13.rq",
+      "expect": "reject",
+      "observed": "reject",
+      "passed": true,
+      "diagnostic": "query error: SPARQL parse error: error at 4:11: expected OPTIONAL"
+    },
+    {
+      "test": "syn-pp-in-collection.rq",
+      "expect": "accept",
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
+    }
+  ]
+}
