@@ -36,6 +36,8 @@ mod reason;
 mod request_middleware;
 #[path = "server/service_description.rs"]
 mod service_description;
+#[path = "server/snapshot_upload.rs"]
+mod snapshot_upload;
 #[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
@@ -43,10 +45,7 @@ mod tests;
 mod tools;
 
 use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
-use base::{
-    export, health, import_share, knot, metrics_handler, print_usage, promote_import,
-    promote_snapshot_upload, query, share_payload, stage_snapshot_part, stats, version,
-};
+use base::{export, health, metrics_handler, print_usage, query, share_payload, stats, version};
 use entity::{
     changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
     entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
@@ -429,11 +428,7 @@ async fn main() {
         .route("/export", post(export))
         .merge(graph_store::routes())
         .route("/share", post(share_payload))
-        .route("/import", post(import_share))
-        .route("/import/promote", post(promote_import))
-        .route("/knot", post(knot))
-        .route("/knot/stage", post(stage_snapshot_part))
-        .route("/knot/promote", post(promote_snapshot_upload))
+        .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
         .route("/graph", post(graph_view))
         .route("/unravel", post(unravel))
