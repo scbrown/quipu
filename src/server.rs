@@ -22,6 +22,8 @@ mod admission;
 mod assets;
 #[path = "server/base.rs"]
 mod base;
+#[path = "server/bead_ingress.rs"]
+mod bead_ingress;
 #[path = "server/entity.rs"]
 mod entity;
 #[path = "server/graph_store.rs"]
@@ -434,6 +436,7 @@ async fn main() {
         .route("/unravel", post(unravel))
         .route("/validate", post(validate))
         .route("/episode", post(episode))
+        .route("/ingress/bead", post(bead_ingress::bead_ingress))
         .route("/search", post(search))
         // Read-only resolution dry-run: "what would resolution
         // say about this name?" WITHOUT writing. Before this route, the answer
