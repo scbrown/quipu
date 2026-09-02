@@ -144,6 +144,33 @@ CREATE TABLE IF NOT EXISTS consumers (
     updated_at       TEXT
 );
 
+-- Resumable bulk snapshot staging (aegis-tzhyzq). Staged bytes are inert:
+-- only /knot/promote feeds a fully verified payload into the fact-log write
+-- path. TTL bounds abandoned uploads; immutable manifest fields and per-part
+-- hashes make retries idempotent rather than accumulative.
+CREATE TABLE IF NOT EXISTS snapshot_uploads (
+    upload_id    TEXT PRIMARY KEY,
+    snapshot     TEXT    NOT NULL,
+    content_hash TEXT    NOT NULL,
+    total_parts  INTEGER NOT NULL,
+    total_bytes  INTEGER NOT NULL,
+    timestamp    TEXT    NOT NULL,
+    actor        TEXT,
+    source       TEXT,
+    graph        TEXT,
+    created_at   INTEGER NOT NULL,
+    expires_at   INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS snapshot_upload_parts (
+    upload_id   TEXT    NOT NULL REFERENCES snapshot_uploads(upload_id) ON DELETE CASCADE,
+    part_number INTEGER NOT NULL,
+    part_hash   TEXT    NOT NULL,
+    byte_count  INTEGER NOT NULL,
+    payload     BLOB    NOT NULL,
+    PRIMARY KEY (upload_id, part_number)
+);
+CREATE INDEX IF NOT EXISTS idx_snapshot_uploads_expiry ON snapshot_uploads(expires_at);
+
 -- Event push subscriptions (event-log P2): who wants which events delivered
 -- where. Delivery cursors reuse the consumers table under "sub:<id>", so the
 -- pull and push APIs share one at-least-once offset semantics.

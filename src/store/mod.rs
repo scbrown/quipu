@@ -29,6 +29,7 @@ mod respace_map;
 mod retraction;
 mod serialize;
 mod settings;
+pub mod snapshot_upload;
 pub mod terms;
 pub(crate) use terms::TermCache;
 #[cfg(test)]
