@@ -17,6 +17,33 @@ fn relative_iris_parse_against_the_default_query_base() {
             .contains("http://example.invalid/file")
     );
 }
+
+#[test]
+fn numeric_builtins_preserve_types_and_xpath_rounding() {
+    let store = Store::open_in_memory().unwrap();
+    let result = query(
+        &store,
+        r#"PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT ?abs ?ceil ?floor ?round WHERE {
+              BIND(ABS(-2) AS ?abs)
+              BIND(CEIL("1.1"^^xsd:decimal) AS ?ceil)
+              BIND(FLOOR("-1.1"^^xsd:decimal) AS ?floor)
+              BIND(ROUND("-1.5"^^xsd:decimal) AS ?round)
+            }"#,
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    assert_eq!(row.get("abs"), Some(&Value::Int(2)));
+    for (name, lexical) in [("ceil", "2"), ("floor", "-2"), ("round", "-1")] {
+        assert_eq!(
+            row.get(name),
+            Some(&Value::Typed {
+                lexical: lexical.into(),
+                datatype: crate::namespace::XSD_DECIMAL.into(),
+            })
+        );
+    }
+}
 use crate::rdf::ingest_rdf;
 use oxrdfio::RdfFormat;
 

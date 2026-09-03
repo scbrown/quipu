@@ -295,6 +295,42 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             .first()
             .and_then(|e| eval_expr(store, e, row))
             .map(|v| Value::Str(value_to_string(store, &v).to_uppercase())),
+        Expression::FunctionCall(Function::Abs, args) => {
+            numeric_unary(store, args, row, i64::checked_abs, f64::abs)
+        }
+        Expression::FunctionCall(Function::Ceil, args) => {
+            numeric_unary(store, args, row, Some, f64::ceil)
+        }
+        Expression::FunctionCall(Function::Floor, args) => {
+            numeric_unary(store, args, row, Some, f64::floor)
+        }
+        // SPARQL ROUND follows XPath: a half-way value rounds toward positive
+        // infinity. Rust's f64::round instead rounds halves away from zero.
+        Expression::FunctionCall(Function::Round, args) => {
+            numeric_unary(store, args, row, Some, |value| (value + 0.5).floor())
+        }
+        _ => None,
+    }
+}
+
+fn numeric_unary(
+    store: &Store,
+    args: &[Expression],
+    row: &Bindings,
+    integer: impl FnOnce(i64) -> Option<i64>,
+    float: impl FnOnce(f64) -> f64,
+) -> Option<Value> {
+    let value = eval_expr(store, args.first()?, row)?;
+    match value {
+        Value::Int(value) => integer(value).map(Value::Int),
+        Value::Float(value) => Some(Value::Float(float(value))),
+        Value::Typed { lexical, datatype } if namespace::is_numeric_datatype(&datatype) => {
+            let result = float(lexical.parse::<f64>().ok()?);
+            Some(Value::Typed {
+                lexical: result.to_string(),
+                datatype,
+            })
+        }
         _ => None,
     }
 }
