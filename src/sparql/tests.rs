@@ -79,6 +79,39 @@ fn string_builtins_preserve_language_and_use_character_indices() {
     assert_eq!(row.get("after"), Some(&lang("c", "en")));
     assert_eq!(row.get("replaced"), Some(&Value::Str("a-ba-b".into())));
 }
+
+#[test]
+fn hash_builtins_digest_utf8_lexical_bytes() {
+    let store = Store::open_in_memory().unwrap();
+    let result = query(
+        &store,
+        r#"SELECT ?md5 ?sha1 ?sha256 ?sha512 WHERE {
+          BIND(MD5("é") AS ?md5)
+          BIND(SHA1("é") AS ?sha1)
+          BIND(SHA256("é") AS ?sha256)
+          BIND(SHA512("é") AS ?sha512)
+        }"#,
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    assert_eq!(
+        row.get("md5"),
+        Some(&Value::Str("66ddcd97cfdeabb2f6fb8a999b4bc76f".into()))
+    );
+    assert_eq!(
+        row.get("sha1"),
+        Some(&Value::Str(
+            "bf15be717ac1b080b4f1c456692825891ff5073d".into()
+        ))
+    );
+    assert_eq!(
+        row.get("sha256"),
+        Some(&Value::Str(
+            "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c".into()
+        ))
+    );
+    assert_eq!(row.get("sha512"), Some(&Value::Str("9e2ad28633f24451bd4f3c1cb20586a21a44c3aeedbdc01b9cc8fa72917ea7bd689c82b8bf1fef89b911cf8cc46fa2c1ccc10087b2094fd4d3350ecd88526a2c".into())));
+}
 use crate::rdf::ingest_rdf;
 use oxrdfio::RdfFormat;
 

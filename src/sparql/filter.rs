@@ -314,6 +314,10 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             string_partition(store, args, row, true)
         }
         Expression::FunctionCall(Function::Replace, args) => replace(store, args, row),
+        Expression::FunctionCall(
+            function @ (Function::Md5 | Function::Sha1 | Function::Sha256 | Function::Sha512),
+            args,
+        ) => hash_string(store, function, args, row),
         Expression::FunctionCall(Function::Abs, args) => {
             numeric_unary(store, args, row, i64::checked_abs, f64::abs)
         }
@@ -441,6 +445,27 @@ fn encode_for_uri(value: &str) -> String {
         }
     }
     result
+}
+
+fn hash_string(
+    store: &Store,
+    function: &spargebra::algebra::Function,
+    args: &[Expression],
+    row: &Bindings,
+) -> Option<Value> {
+    use md5::Digest as _;
+    use spargebra::algebra::Function;
+
+    let (value, _) = string_literal(eval_expr(store, args.first()?, row)?)?;
+    let bytes = value.as_bytes();
+    let digest = match function {
+        Function::Md5 => hex::encode(md5::Md5::digest(bytes)),
+        Function::Sha1 => hex::encode(sha1::Sha1::digest(bytes)),
+        Function::Sha256 => hex::encode(sha2::Sha256::digest(bytes)),
+        Function::Sha512 => hex::encode(sha2::Sha512::digest(bytes)),
+        _ => return None,
+    };
+    Some(Value::Str(digest))
 }
 
 fn numeric_unary(
