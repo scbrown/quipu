@@ -103,6 +103,7 @@ rudof_lib = { version = "0.2.8", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 axum = { version = "0.8", optional = true }
+url = { version = "2", optional = true }
 tower-http = { version = "0.6", features = ["cors"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 petgraph = "0.7"
@@ -143,7 +144,7 @@ owl = []
 # crate compiles for wasm32 (mio has no wasm target) — see
 # docs/design/wasm-support.md §4.3.
 remote = ["dep:ureq"]
-server = ["dep:axum", "dep:tower-http", "dep:tokio", "remote"]
+server = ["dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "remote"]
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:tokio"]
 onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
 reactive-reasoner = []

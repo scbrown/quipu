@@ -304,6 +304,47 @@ async fn legacy_json_post_and_protocol_rejections_are_preserved() {
 }
 
 #[tokio::test]
+async fn sparql_protocol_form_post_and_default_formats() {
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let form = query_post(
+        State(shared.clone()),
+        query_headers("application/x-www-form-urlencoded", ""),
+        Bytes::from_static(b"query=ASK%20%7B%7D"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(form.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        form.headers()[axum::http::header::CONTENT_TYPE],
+        "application/sparql-results+json"
+    );
+
+    let graph = query_post(
+        State(shared.clone()),
+        query_headers("application/sparql-query", ""),
+        Bytes::from_static(b"CONSTRUCT { <http://example/s> <http://example/p> 1 } WHERE {}"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(graph.status(), axum::http::StatusCode::OK);
+    assert_eq!(
+        graph.headers()[axum::http::header::CONTENT_TYPE],
+        "text/turtle"
+    );
+
+    let duplicate = query_post(
+        State(shared),
+        query_headers("application/x-www-form-urlencoded", ""),
+        Bytes::from_static(b"query=ASK%20%7B%7D&query=ASK%20%7B%7D"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(duplicate.status(), axum::http::StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn sparql_protocol_post_uses_the_existing_query_deadline() {
     let mut store = Store::open_in_memory().unwrap();
     let turtle = (0..100)

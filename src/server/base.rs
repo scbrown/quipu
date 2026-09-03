@@ -279,7 +279,7 @@ pub(crate) async fn query_get(
     query_core(
         store,
         headers,
-        json!({"query": params.query, "verbose": query_flag(params.verbose.as_deref())}),
+        json!({"query": params.query, "verbose": query_flag(params.verbose.as_deref()), "_sparql_protocol": true}),
     )
     .await
 }
@@ -319,12 +319,27 @@ pub(crate) async fn query_post(
                     "SPARQL query body is not UTF-8: {e}"
                 )))
             })?;
-            json!({"query": text})
+            json!({"query": text, "_sparql_protocol": true})
+        }
+        "application/x-www-form-urlencoded" => {
+            let fields: Vec<_> = url::form_urlencoded::parse(&body).collect();
+            let queries: Vec<_> = fields
+                .iter()
+                .filter_map(|(name, value)| (name == "query").then_some(value.as_ref()))
+                .collect();
+            if queries.len() != 1 {
+                return Ok((
+                    StatusCode::BAD_REQUEST,
+                    "form body must contain exactly one query parameter",
+                )
+                    .into_response());
+            }
+            json!({"query": queries[0], "_sparql_protocol": true})
         }
         _ => {
             return Ok((
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                "Content-Type must be application/json or application/sparql-query",
+                "Content-Type must be application/json, application/sparql-query, or application/x-www-form-urlencoded",
             )
                 .into_response());
         }
@@ -496,7 +511,24 @@ async fn query_core(
                 ));
             }
 
-            if let Some(fmt) = quipu::w3c::negotiate(&accept) {
+            let format = quipu::w3c::negotiate(&accept).or_else(|| {
+                input
+                    .get("_sparql_protocol")
+                    .and_then(JsonValue::as_bool)
+                    .filter(|enabled| *enabled)
+                    .and_then(|_| match query_shape {
+                        quipu::request_usage::QueryShape::Select
+                        | quipu::request_usage::QueryShape::Ask => {
+                            Some(quipu::w3c::ResultFormat::SparqlJson)
+                        }
+                        quipu::request_usage::QueryShape::Construct
+                        | quipu::request_usage::QueryShape::Describe => {
+                            Some(quipu::w3c::ResultFormat::Turtle)
+                        }
+                        _ => None,
+                    })
+            });
+            if let Some(fmt) = format {
                 let (result, _truncated) = quipu::query_result_with_federation(
                     store,
                     &input,
