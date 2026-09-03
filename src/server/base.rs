@@ -511,7 +511,7 @@ async fn query_core(
                 ));
             }
 
-            let format = quipu::w3c::negotiate(&accept).or_else(|| {
+            let format = quipu::w3c::negotiate(&accept).or({
                 input
                     .get("_sparql_protocol")
                     .and_then(JsonValue::as_bool)
