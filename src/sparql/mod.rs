@@ -480,7 +480,8 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         .map(|dl| ProgressGuard::install(&store.conn, dl))
         .transpose()?;
 
-    let result = eval_parsed(store, parsed, &ctx);
+    let base_iri = parsed.base_iri().map(ToString::to_string);
+    let result = filter::with_base_iri(base_iri.as_deref(), || eval_parsed(store, parsed, &ctx));
     match result {
         // Any failure past the deadline is reported as the timeout it is: the
         // proximate error (a SQLITE_INTERRUPT, or the evaluator's own check)

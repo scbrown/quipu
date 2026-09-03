@@ -1,7 +1,8 @@
 //! FILTER expression evaluation and literal-to-value conversion.
 
-use oxrdf::Literal;
+use oxrdf::{Literal, NamedNode};
 use spargebra::algebra::{Expression, Function};
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use super::TemporalContext;
@@ -12,6 +13,19 @@ use crate::store::Store;
 use crate::types::Value;
 
 use super::Bindings;
+
+thread_local! {
+    static QUERY_BASE_IRI: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+pub(super) fn with_base_iri<T>(base_iri: Option<&str>, evaluate: impl FnOnce() -> T) -> T {
+    QUERY_BASE_IRI.with(|slot| {
+        let previous = slot.replace(base_iri.map(str::to_string));
+        let result = evaluate();
+        slot.replace(previous);
+        result
+    })
+}
 
 /// Evaluate a FILTER expression against a binding row.
 ///
@@ -378,6 +392,11 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             store.intern(&iri).ok().map(Value::Ref)
         }
         Expression::FunctionCall(Function::StrUuid, _) => Some(Value::Str(generated_uuid())),
+        Expression::FunctionCall(Function::Iri, args) => {
+            let lexical = value_to_string(store, &eval_expr(store, args.first()?, row)?);
+            let iri = resolve_query_iri(&lexical)?;
+            store.intern(&iri).ok().map(Value::Ref)
+        }
         Expression::FunctionCall(Function::Custom(function), args)
             if function.as_str() == namespace::XSD_DOUBLE =>
         {
@@ -549,6 +568,26 @@ fn canonical_double(value: f64) -> String {
         format!("{mantissa}.0")
     };
     format!("{mantissa}E{}", exponent.parse::<i32>().unwrap_or(0))
+}
+
+fn resolve_query_iri(value: &str) -> Option<String> {
+    if NamedNode::new(value).is_ok() {
+        return Some(value.to_string());
+    }
+    QUERY_BASE_IRI.with(|slot| {
+        let base = slot.borrow();
+        let base = base.as_deref()?;
+        if value.starts_with('/') {
+            let scheme = base.find("://")? + 3;
+            let authority_end = base[scheme..]
+                .find('/')
+                .map_or(base.len(), |offset| scheme + offset);
+            Some(format!("{}{}", &base[..authority_end], value))
+        } else {
+            let directory_end = base.rfind('/').map_or(base.len(), |index| index + 1);
+            Some(format!("{}{}", &base[..directory_end], value))
+        }
+    })
 }
 
 fn string_literal(value: Value) -> Option<(String, Option<String>)> {
