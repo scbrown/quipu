@@ -65,7 +65,7 @@ quipu import promote <share-id> --actor alice
 ```
 
 `quipu import` verifies before storing anything. It recomputes the payload hash
-and refuses a mismatch (`src/share_import.rs`, `verify_request`):
+and refuses a mismatch (`src/share_import.rs`, `verify_share`):
 
 ```text
 share graph hash mismatch: manifest=… actual=…
@@ -196,7 +196,7 @@ appear at every layer:
 |---|---|
 | **CLI** | `quipu share` / `import` / `import promote` / `status` / `merge` |
 | **MCP** | `quipu_export`, `quipu_import`, `quipu_import_promote` |
-| **Bobbin** | `src/knowledge/share_contract.rs` plus `tests/fixtures/quipu-share-v1/` |
+| **Bobbin** | `bobbin:src/knowledge/share_contract.rs` plus its `quipu-share-v1` fixtures |
 
 The MCP layer is worth a second look, because the discipline is in the **tool
 contract**, not merely in the documentation. `quipu_import`'s own description reads
@@ -223,7 +223,7 @@ are stated here rather than left to be inferred from careful wording.
 | Provider model, declared trust/freshness, per-member outcomes | ✅ Built (`src/provider/`) |
 | SPARQL `SERVICE` to operator-configured endpoints | ✅ Built (feature `remote`) |
 | MCP share tools — `quipu_export` / `quipu_import` / `quipu_import_promote` | ✅ Built and provisioned |
-| Bobbin share **contract** + `quipu-share-v1` fixtures | ✅ Built (`src/knowledge/share_contract.rs`) |
+| Bobbin share **contract** + `quipu-share-v1` fixtures | ✅ Built (`bobbin:src/knowledge/share_contract.rs`) |
 | Bobbin **runtime adapter** — producing and consuming bundles live | 🔶 **Designed, not built.** The contract and fixtures exist; the adapter does not yet. |
 | External share **attestation** — proving *who* produced a share | 🔶 **Designed, not built.** Hash verification proves a share is intact; it does not yet prove authorship. |
 | A single re-runnable end-to-end demo transcript | 🔶 **Designed, not built.** Each command above is verified individually; the scripted walkthrough is not yet published. |

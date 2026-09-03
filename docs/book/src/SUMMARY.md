@@ -35,6 +35,7 @@
 # Reference
 
 - [CLI Commands](reference/cli.md)
+- [CLI: Sharing & Packs](reference/cli-sharing.md)
 - [REST API](reference/rest-api.md)
 - [Python Client](reference/python-client.md)
 - [MCP Tools](reference/mcp-tools.md)
