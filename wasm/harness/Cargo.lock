@@ -616,8 +616,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "quipu"
-version = "0.3.23"
+name = "quipu-ai"
+version = "0.3.27"
 dependencies = [
  "datafrog",
  "getrandom 0.3.4",
@@ -645,7 +645,7 @@ name = "quipu-wasm-harness"
 version = "0.0.0"
 dependencies = [
  "js-sys",
- "quipu",
+ "quipu-ai",
  "rusqlite",
  "serde_json",
  "sqlite-wasm-rs",

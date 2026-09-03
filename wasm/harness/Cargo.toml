@@ -16,7 +16,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-quipu = { path = "../..", default-features = false }
+quipu = { package = "quipu-ai", path = "../..", default-features = false }
 # Direct dep only for the journal-mode probe (`journal_mode` export) — quipu
 # owns the store's connection and does not expose raw pragmas.
 rusqlite = "0.40"

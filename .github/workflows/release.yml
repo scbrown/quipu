@@ -281,7 +281,7 @@ jobs:
             # the tag from the manifest avoids depending on the shape of the
             # action's `releases` JSON output, which is undocumented.
             VERSION="$(cargo metadata --no-deps --format-version 1 \
-              | jq -r '.packages[] | select(.name == "quipu") | .version')"
+              | jq -r '.packages[] | select(.name == "quipu-ai") | .version')"
             TAG="v${VERSION}"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
