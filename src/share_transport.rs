@@ -126,6 +126,23 @@ pub fn read_local(reference: &str) -> Result<ShareImportRequest> {
     request_from_files(&files, reference)
 }
 
+/// Reads a share from a local directory/archive or an HTTP(S) reference.
+pub fn read_reference(reference: &str) -> Result<ShareImportRequest> {
+    if reference.starts_with("https://") || reference.starts_with("http://") {
+        #[cfg(feature = "remote")]
+        {
+            return read_url(reference);
+        }
+        #[cfg(not(feature = "remote"))]
+        {
+            return Err(Error::InvalidValue(
+                "URL share import requires the remote feature".into(),
+            ));
+        }
+    }
+    read_local(reference)
+}
+
 #[cfg(feature = "remote")]
 fn fetch(url: &str) -> Result<Vec<u8>> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
@@ -181,20 +198,7 @@ pub fn import_in_memory(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<(crate::Store, crate::share_import::ShareImportResult)> {
-    let mut request = if reference.starts_with("https://") || reference.starts_with("http://") {
-        #[cfg(feature = "remote")]
-        {
-            read_url(reference)?
-        }
-        #[cfg(not(feature = "remote"))]
-        {
-            return Err(Error::InvalidValue(
-                "URL share import requires the remote feature".into(),
-            ));
-        }
-    } else {
-        read_local(reference)?
-    };
+    let mut request = read_reference(reference)?;
     request.actor = actor.map(str::to_string);
     let mut store = crate::Store::open_in_memory()?;
     let result = crate::share_import::import_share(&mut store, &request, timestamp, actor)?;

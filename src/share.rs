@@ -406,19 +406,12 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
 }
 
 fn manifest_turtle(manifest: &ShareManifest) -> String {
-    let id = format!(
-        "urn:{}",
-        manifest
-            .share_id
-            .strip_prefix("sha256:")
-            .unwrap_or(&manifest.share_id)
-    );
+    let id = format!("urn:{}", manifest.share_id);
     let literal = |value: &str| serde_json::to_string(value).expect("string JSON cannot fail");
     let parent = manifest
         .parent_share
         .as_ref()
         .map_or_else(String::new, |parent| {
-            let parent = parent.strip_prefix("sha256:").unwrap_or(parent);
             format!(" ;\n  prov:wasRevisionOf <urn:{parent}>")
         });
     format!(

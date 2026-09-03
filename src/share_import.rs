@@ -121,7 +121,7 @@ fn provenance_source(prefix: &str, id: &str, claim: Option<&str>) -> String {
     )
 }
 
-fn verify_request(request: &ShareImportRequest) -> Result<()> {
+pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
     if request.manifest.schema != SCHEMA_V1 {
         return Err(Error::InvalidValue(format!(
             "unsupported share manifest schema: {}",
@@ -307,7 +307,7 @@ pub fn import_share(
     timestamp: &str,
     authenticated_actor: Option<&str>,
 ) -> Result<ShareImportResult> {
-    verify_request(request)?;
+    verify_share(request)?;
     let mut triples = parse_triples(&request.export_ntriples)?;
     let resolution = resolve_and_rewrite(store, &mut triples)?;
     let resolved = serialize(&triples)?;

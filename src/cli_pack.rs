@@ -181,6 +181,19 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         turtle_view: args.iter().any(|arg| arg == "--turtle"),
     };
     let store = crate::cli_open::open_store(db_path);
+    if let Some(parent) = flag_value(args, "--since") {
+        match quipu::share_delta::write_delta(&store, parent, output, &opts) {
+            Ok(manifest) => println!(
+                "shared delta {} from {}",
+                manifest.delta_id, manifest.parent_share
+            ),
+            Err(error) => {
+                eprintln!("share delta error: {error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     match quipu::share::share(&store, output, &opts) {
         Ok(manifest) => {
             println!("shared {}", manifest.share_id);
@@ -246,6 +259,30 @@ pub fn cmd_merge(args: &[String], db_path: &str) {
 /// `quipu import <share-dir>` stages a verified share; promotion is separate.
 pub fn cmd_import(args: &[String], db_path: &str) {
     let timestamp = chrono_now();
+    if args.get(2).map(String::as_str) == Some("delta") {
+        let parent = args.get(3).unwrap_or_else(|| {
+            eprintln!("usage: quipu import delta <parent-share> <delta-share>");
+            std::process::exit(1);
+        });
+        let delta = args.get(4).unwrap_or_else(|| {
+            eprintln!("usage: quipu import delta <parent-share> <delta-share>");
+            std::process::exit(1);
+        });
+        let actor = flag_value(args, "--actor");
+        let imported = quipu::share_delta::materialize(parent, delta).and_then(|mut request| {
+            request.actor = actor.map(String::from);
+            let mut store = quipu::Store::open_in_memory()?;
+            quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
+        });
+        match imported {
+            Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
+            Err(error) => {
+                eprintln!("delta import error: {error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if args.get(2).map(String::as_str) == Some("promote") {
         let mut store = crate::cli_open::open_store(db_path);
         let share_id = args

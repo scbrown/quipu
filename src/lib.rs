@@ -62,6 +62,8 @@ pub mod shacl_context;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod share_delta;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;

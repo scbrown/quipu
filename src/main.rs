@@ -15,6 +15,7 @@
 //!   quipu status <share-dir> [--db <path>]  Report share divergence
 //!   quipu merge <share-dir> [--actor <id>] [--db <path>]  Reconnect a share
 //!   quipu import <share-dir|archive|URL> [--actor <id>]  Verify into memory
+//!   quipu import delta <parent-share> <delta-share>  Verify a delta chain
 //!   quipu import promote <share-id> [--actor <id>]  Promote a staged share
 //!   quipu stats [--db <path>]            Show store statistics
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
