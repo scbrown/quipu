@@ -105,6 +105,10 @@ class LedgerShapeTests(unittest.TestCase):
                 evaluation_row(f":e{index}", "unsupported", "entailment") for index in range(70)
             ])))
             (results / REPORT.SHACL_LEDGER).write_text(json.dumps({"results": []}))
+            (results / REPORT.FEDERATED_LEDGER).write_text(json.dumps(ledger([
+                evaluation_row(f":service{index}", "unsupported", "federated-query", "service/manifest.ttl")
+                for index in range(7)
+            ])))
             with self.assertRaises(REPORT.LedgerError) as caught:
                 REPORT.load(results)
             self.assertIn("brand-new-class", str(caught.exception))

@@ -133,6 +133,22 @@ jobs:
             --baseline benchmark/public/results/sparql11-evaluation.json \
             --candidate /tmp/sparql11-evaluation.json
 
+      - name: SPARQL 1.1 federated query (SERVICE)
+        continue-on-error: true
+        run: |
+          python3 benchmark/public/sparql11_federated.py \
+            --suite /tmp/rdf-tests/sparql/sparql11 \
+            --quipu "${{ steps.bin.outputs.path }}" \
+            --output /tmp/sparql11-federated-query.json
+
+      - name: Fail only on federated-query regression
+        run: |
+          test -s /tmp/sparql11-federated-query.json \
+            || { echo "the federated-query runner produced no ledger" >&2; exit 2; }
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/sparql11-federated-query.json \
+            --candidate /tmp/sparql11-federated-query.json
+
       - name: W3C SHACL Core and SPARQL non-goal inventory
         continue-on-error: true
         run: |
@@ -167,6 +183,7 @@ jobs:
             /tmp/sparql11-syntax.json
             /tmp/sparql11-evaluation.json
             /tmp/sparql11-entailment.json
+            /tmp/sparql11-federated-query.json
             /tmp/shacl-core.json
           if-no-files-found: warn
           retention-days: 90

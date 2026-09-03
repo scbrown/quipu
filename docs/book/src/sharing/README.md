@@ -181,10 +181,14 @@ It is narrower than SPARQL 1.1's open federation, by design:
   `_freshness` where you declared them. A federated answer cannot arrive
   anonymous.
 
-**Quipu makes no `SERVICE` conformance claim.** The pinned W3C ledger scores
-query evaluation, protocol, update, entailment and result formats; `SERVICE` is
-not among them. See [SPARQL 1.1 conformance](../benchmarks/conformance.md) for
-what is actually measured, and what is not.
+The pinned W3C federated-query ledger scores all seven approved `SERVICE`
+cases. Quipu implements `SERVICE` as a query-planned remote subquery path using
+the same operator-configured declarations and labels as `RemoteProvider`; it is
+not the `GraphProvider` whole-query fanout path, and it is not open federation.
+The variable-endpoint case is a deliberate policy
+deviation because query data cannot widen the operator's remote allowlist.
+See [SPARQL 1.1 conformance](../benchmarks/conformance.md) for the measured
+score and named verdicts.
 
 ## The whole stack speaks it
 

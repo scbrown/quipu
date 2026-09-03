@@ -161,9 +161,11 @@ sufficient and adds no dependency:
 
 ## 7. Deliberately out of scope
 
-- **SERVICE keyword.** Federating via SPARQL 1.1 `SERVICE` inside a query is a
-  different feature: it needs the evaluator to plan sub-queries per endpoint.
-  This design federates whole queries, which is what `FederatedProvider` models.
+- **Open SERVICE destinations.** SPARQL 1.1 `SERVICE` is now implemented as a
+  query-planned subquery path using the same remote declarations and labels.
+  It is deliberately separate from `GraphProvider`'s whole-query fanout.
+  Variable endpoints remain out of scope by policy: query data cannot widen
+  the operator's remote allowlist.
 - **Join pushdown.** Every provider gets the full query text and answers
   independently; results are unioned, not joined across providers.
 - **Write federation.** Remotes are read-only. There is no distributed

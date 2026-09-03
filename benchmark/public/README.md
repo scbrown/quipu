@@ -55,6 +55,22 @@ Add `--class query-evaluation`, `protocol`, `update`, `entailment`, or
 exit means at least one executable test failed or the harness could not evaluate
 it; the JSON ledger is still written in full.
 
+The separate federated-query runner maps the W3C suite's declared example
+endpoints to isolated local Quipu servers and scores all seven approved
+`SERVICE` cases:
+
+```sh
+python3 benchmark/public/sparql11_federated.py \
+  --suite /tmp/rdf-tests/sparql/sparql11 \
+  --quipu "$QUIPU_BIN" \
+  --output benchmark/public/results/sparql11-federated-query.json
+```
+
+This is distinct from `GraphProvider` whole-query fanout. `SERVICE` plans a
+remote subquery but shares the operator-configured endpoint declarations and
+labels. Variable endpoints are recorded as a deliberate policy deviation,
+never omitted from the denominator.
+
 At Quipu `a0fc8fc` and W3C RDF Tests `369a90d1`, the independently reported
 results are:
 

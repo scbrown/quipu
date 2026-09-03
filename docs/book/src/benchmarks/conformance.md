@@ -19,7 +19,7 @@ You can re-derive every number on this page yourself — the commands are below.
 For what Quipu does with a graph once it is correct — handing it to another
 store, and composing another store's without trusting it — see
 [Sharing & Federation](../sharing/README.md). That page states its own claim
-boundary for `SERVICE`, which is scored by none of the classes below.
+boundary for `SERVICE`, including the configured-endpoint policy deviation scored below.
 
 ## What was measured
 
@@ -42,11 +42,12 @@ carries a named reason further down this page.
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
 | query evaluation | 168 | 0 | 0 | 0 | 168 |
+| federated query (`SERVICE`) | 1 | 5 | 0 | 1 | 7 |
 | result format | 10 | 0 | 0 | 0 | 10 |
 | protocol | 34 | 0 | 0 | 0 | 34 |
 | update | 37 | 0 | 0 | 0 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **335** | **0** | **0** | **70** | **405** |
+| **all classes** | **336** | **5** | **0** | **71** | **412** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -77,6 +78,22 @@ moves the most per fix.
 Every test that does not pass is listed here with its W3C identifier, so a
 claim of progress can be checked against a specific case rather than a count.
 
+## Federated query (`SERVICE`)
+
+Quipu passes **1/7** approved W3C Basic Federated Query cases.
+`SERVICE` is a query-planned subquery path using the same declarations and labels as `RemoteProvider`; it is separate from `GraphProvider` whole-query fanout and is not open federation.
+The variable-endpoint case is a deliberate policy deviation because query data cannot widen the configured remote allowlist.
+
+| Test | Name | Status | Reason |
+|---|---|---|---|
+| `:service1` | SERVICE test 1 | failed | `actual vars/rows ['s', 'o1', 'o2'] []; expected ['s', 'o1', 'o2'] [('http://example.org/a…` |
+| `:service2` | SERVICE test 2 | failed | `actual vars/rows ['s', 'o1', 'o2', '_provider'] [('"http://example.org/a"', '"Alan"', '(u…` |
+| `:service3` | SERVICE test 3 | failed | `actual vars/rows ['s', 'o1', 'o2', '_provider'] [('"http://example.org/a"', '"Alan"', '(u…` |
+| `:service4a` | SERVICE test 4a with VALUES clause | failed | `actual vars/rows ['s', 'o1', 'o2'] [('http://example.org/a', '"Alan"', 'http://example.or…` |
+| `:service5` | SERVICE test 5 | unsupported | `variable SERVICE endpoints are deliberately refused; endpoints must be operator-configured` |
+| `:service6` | SERVICE test 6 | failed | `actual vars/rows ['s', 'o1', 'o2', '_provider'] [('"http://example.org/a"', '"Alan"', '(u…` |
+| `:service7` | SERVICE test 7 | passed |  |
+
 ## Why a class is unsupported
 
 Grouped by the reason the runner recorded.
@@ -89,6 +106,7 @@ Grouped by the reason the runner recorded.
 | OWL-RDF-Based entailment regime is not implemented | 11 | entailment |
 | RIF entailment regime is not implemented | 4 | entailment |
 | D entailment regime is not implemented | 2 | entailment |
+| variable SERVICE endpoints are deliberately refused; endpoints must be operator-configured | 1 | federated query (`SERVICE`) |
 
 ## Re-derive these numbers
 
@@ -102,9 +120,11 @@ python3 benchmark/public/sparql11_syntax.py --suite "$SUITE/syntax-query" \
   --quipu "$QUIPU_BIN" --output /tmp/sparql11-syntax.json
 python3 benchmark/public/sparql11_evaluation.py --suite "$SUITE" \
   --quipu "$QUIPU_BIN" --output /tmp/sparql11-evaluation.json
+python3 benchmark/public/sparql11_federated.py --suite "$SUITE" \
+  --quipu "$QUIPU_BIN" --output /tmp/sparql11-federated-query.json
 ```
 
-A nonzero exit from the evaluation runner is expected while any test fails: it
+A nonzero exit from an incomplete runner is expected while any test fails: it
 writes the complete ledger first, then reports that not everything passed. Use
 the regression gate below to tell *worse than committed* apart from *not yet
 perfect*.
@@ -130,6 +150,7 @@ get worse.
 
 - [`benchmark/public/results/sparql11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-syntax.json)
 - [`benchmark/public/results/sparql11-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-evaluation.json)
+- [`benchmark/public/results/sparql11-federated-query.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-federated-query.json)
 
 Each row records its class, test identifier, manifest, query and result paths,
 status, and diagnostic or unsupported reason.

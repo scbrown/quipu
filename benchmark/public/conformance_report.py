@@ -27,6 +27,7 @@ SYNTAX_LEDGER = "sparql11-syntax.json"
 EVALUATION_LEDGER = "sparql11-evaluation.json"
 ENTAILMENT_LEDGER = "sparql11-entailment.json"
 SHACL_LEDGER = "shacl-core.json"
+FEDERATED_LEDGER = "sparql11-federated-query.json"
 
 CLASS_LABELS = {
     "syntax": "query syntax",
@@ -35,6 +36,7 @@ CLASS_LABELS = {
     "update": "update",
     "entailment": "entailment",
     "result-format": "result format",
+    "federated-query": "federated query (`SERVICE`)",
 }
 
 # Order the page and the badge set. Syntax first because it is the one class
@@ -43,6 +45,7 @@ CLASS_LABELS = {
 CLASS_ORDER = [
     "syntax",
     "query-evaluation",
+    "federated-query",
     "result-format",
     "protocol",
     "update",
@@ -100,7 +103,8 @@ def load(results_dir: Path) -> dict:
     evaluation_path = results_dir / EVALUATION_LEDGER
     entailment_path = results_dir / ENTAILMENT_LEDGER
     shacl_path = results_dir / SHACL_LEDGER
-    for path in (syntax_path, evaluation_path, entailment_path, shacl_path):
+    federated_path = results_dir / FEDERATED_LEDGER
+    for path in (syntax_path, evaluation_path, entailment_path, shacl_path, federated_path):
         if not path.is_file():
             raise LedgerError(f"missing ledger: {path}")
 
@@ -108,6 +112,7 @@ def load(results_dir: Path) -> dict:
     evaluation = json.loads(evaluation_path.read_text())
     entailment = json.loads(entailment_path.read_text())
     shacl = json.loads(shacl_path.read_text())
+    federated = json.loads(federated_path.read_text())
 
     classes: dict[str, dict] = {}
 
@@ -137,6 +142,10 @@ def load(results_dir: Path) -> dict:
     if len(entailment_rows) != 70:
         raise LedgerError(f"{entailment_path} must carry exactly 70 result rows")
     classes["entailment"] = {"rows": entailment_rows, "counts": tally(entailment_rows)}
+    federated_rows = federated.get("results", [])
+    if len(federated_rows) != 7:
+        raise LedgerError(f"{federated_path} must carry exactly 7 result rows")
+    classes["federated-query"] = {"rows": federated_rows, "counts": tally(federated_rows)}
 
     unknown = set(classes) - set(CLASS_ORDER)
     if unknown:
@@ -217,7 +226,7 @@ def render_markdown(data: dict) -> str:
         "For what Quipu does with a graph once it is correct — handing it to another",
         "store, and composing another store's without trusting it — see",
         "[Sharing & Federation](../sharing/README.md). That page states its own claim",
-        "boundary for `SERVICE`, which is scored by none of the classes below.",
+        "boundary for `SERVICE`, including the configured-endpoint policy deviation scored below.",
         "",
         "## What was measured",
         "",
@@ -338,6 +347,18 @@ def render_markdown(data: dict) -> str:
         out += _table(["Test", "Name", "Status", "Reason"], detail_rows)
         out += ["", "</details>", ""]
 
+    federated = classes["federated-query"]
+    out += [
+        "## Federated query (`SERVICE`)", "",
+        f"Quipu passes **{federated['counts']['passed']}/{federated['counts']['cases']}** approved W3C Basic Federated Query cases.",
+        "`SERVICE` is a query-planned subquery path using the same declarations and labels as `RemoteProvider`; it is separate from `GraphProvider` whole-query fanout and is not open federation.",
+        "The variable-endpoint case is a deliberate policy deviation because query data cannot widen the configured remote allowlist.",
+        "", "| Test | Name | Status | Reason |", "|---|---|---|---|",
+    ]
+    for row in federated["rows"]:
+        out.append(f"| `{row['id']}` | {row['name']} | {row['status']} | {_brief(reason_of(row))} |")
+    out.append("")
+
     out += ["## Why a class is unsupported", "", "Grouped by the reason the runner recorded.", ""]
     reasons: dict[str, list[str]] = {}
     for name in CLASS_ORDER:
@@ -371,9 +392,11 @@ def render_markdown(data: dict) -> str:
         '  --quipu "$QUIPU_BIN" --output /tmp/sparql11-syntax.json',
         'python3 benchmark/public/sparql11_evaluation.py --suite "$SUITE" \\',
         '  --quipu "$QUIPU_BIN" --output /tmp/sparql11-evaluation.json',
+        'python3 benchmark/public/sparql11_federated.py --suite "$SUITE" \\',
+        '  --quipu "$QUIPU_BIN" --output /tmp/sparql11-federated-query.json',
         "```",
         "",
-        "A nonzero exit from the evaluation runner is expected while any test fails: it",
+        "A nonzero exit from an incomplete runner is expected while any test fails: it",
         "writes the complete ledger first, then reports that not everything passed. Use",
         "the regression gate below to tell *worse than committed* apart from *not yet",
         "perfect*.",
@@ -401,6 +424,8 @@ def render_markdown(data: dict) -> str:
         "(https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-syntax.json)",
         "- [`benchmark/public/results/sparql11-evaluation.json`]"
         "(https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-evaluation.json)",
+        "- [`benchmark/public/results/sparql11-federated-query.json`]"
+        "(https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-federated-query.json)",
         "",
         "Each row records its class, test identifier, manifest, query and result paths,",
         "status, and diagnostic or unsupported reason.",
