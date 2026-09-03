@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu passes **86/86** approved SPARQL 1.1
-> *query-syntax* tests and **150/168** approved
+> *query-syntax* tests and **168/168** approved
 > *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
@@ -21,7 +21,7 @@ You can re-derive every number on this page yourself — the commands are below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `093d107622bea57b78109a579e500b5ce193db02` |
+| Quipu revision (evaluation) | `07173bd8f3bdbfe8af504074521e215126317840` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
 | Quipu version | `quipu 0.3.27` |
 | Store isolation | one temporary SQLite store per executable test |
@@ -36,12 +36,12 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 150 | 0 | 4 | 14 | 168 |
-| result format | 2 | 1 | 0 | 4 | 7 |
+| query evaluation | 168 | 0 | 0 | 0 | 168 |
+| result format | 4 | 3 | 0 | 0 | 7 |
 | protocol | 0 | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **238** | **1** | **4** | **159** | **402** |
+| **all classes** | **258** | **3** | **0** | **141** | **402** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -55,80 +55,22 @@ moves the most per fix.
 
 | Family | Passed | Failed | Error | Unsupported | Cases |
 |---|---:|---:|---:|---:|---:|
-| `functions` | 55 | 0 | 0 | 2 | 57 |
-| `property-path` | 20 | 0 | 0 | 4 | 24 |
+| `functions` | 57 | 0 | 0 | 0 | 57 |
+| `property-path` | 24 | 0 | 0 | 0 | 24 |
 | `aggregates` | 22 | 0 | 0 | 0 | 22 |
-| `subquery` | 4 | 0 | 4 | 6 | 14 |
+| `subquery` | 14 | 0 | 0 | 0 | 14 |
 | `negation` | 11 | 0 | 0 | 0 | 11 |
 | `bind` | 10 | 0 | 0 | 0 | 10 |
 | `bindings` | 10 | 0 | 0 | 0 | 10 |
 | `project-expression` | 7 | 0 | 0 | 0 | 7 |
-| `exists` | 4 | 0 | 0 | 1 | 5 |
-| `construct` | 3 | 0 | 0 | 1 | 4 |
+| `exists` | 5 | 0 | 0 | 0 | 5 |
+| `construct` | 4 | 0 | 0 | 0 | 4 |
 | `grouping` | 4 | 0 | 0 | 0 | 4 |
 
 ### The not-yet-passing tests, named
 
 Every test that does not pass is listed here with its W3C identifier, so a
 claim of progress can be checked against a specific case rather than a count.
-
-<details>
-<summary><code>functions</code> — 2 of 57 not passing</summary>
-
-| Test | Name | Status | Reason |
-|---|---|---|---|
-| `:bnode01` | BNODE(str) | unsupported | `blank-node isomorphism is not implemented` |
-| `:bnode02` | BNODE() | unsupported | `blank-node isomorphism is not implemented` |
-
-</details>
-
-<details>
-<summary><code>property-path</code> — 4 of 24 not passing</summary>
-
-| Test | Name | Status | Reason |
-|---|---|---|---|
-| `:pp06` | (pp06) Path with two graphs | unsupported | `named-graph fixture loading is not implemented` |
-| `:pp07` | (pp07) Path with one graph | unsupported | `named-graph fixture loading is not implemented` |
-| `:pp34` | (pp34) Named Graph 1 | unsupported | `named-graph fixture loading is not implemented` |
-| `:pp35` | (pp35) Named Graph 2 | unsupported | `named-graph fixture loading is not implemented` |
-
-</details>
-
-<details>
-<summary><code>subquery</code> — 10 of 14 not passing</summary>
-
-| Test | Name | Status | Reason |
-|---|---|---|---|
-| `:subquery01` | sq01 - Subquery within graph pattern | unsupported | `named-graph fixture loading is not implemented` |
-| `:subquery02` | sq02 - Subquery within graph pattern, graph variable is bound | unsupported | `named-graph fixture loading is not implemented` |
-| `:subquery03` | sq03 - Subquery within graph pattern, graph variable is not bound | unsupported | `named-graph fixture loading is not implemented` |
-| `:subquery04` | sq04 - Subquery within graph pattern, default graph does not apply | unsupported | `named-graph fixture loading is not implemented` |
-| `:subquery05` | sq05 - Subquery within graph pattern, from named applies | unsupported | `named-graph fixture loading is not implemented` |
-| `:subquery06` | sq06 - Subquery with graph pattern, from named applies | error | `error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column…` |
-| `:subquery07` | sq07 - Subquery with from  | unsupported | `named-graph fixture loading is not implemented` |
-| `:subquery08` | sq08 - Subquery with aggregate | error | `error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column…` |
-| `:subquery09` | sq09 - Nested Subqueries | error | `error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column…` |
-| `:subquery10` | sq10 - Subquery with exists | error | `error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column…` |
-
-</details>
-
-<details>
-<summary><code>exists</code> — 1 of 5 not passing</summary>
-
-| Test | Name | Status | Reason |
-|---|---|---|---|
-| `:exists03` | Exists within graph pattern | unsupported | `named-graph fixture loading is not implemented` |
-
-</details>
-
-<details>
-<summary><code>construct</code> — 1 of 4 not passing</summary>
-
-| Test | Name | Status | Reason |
-|---|---|---|---|
-| `:constructwhere04` | constructwhere04 - CONSTRUCT WHERE | unsupported | `named-graph fixture loading is not implemented` |
-
-</details>
 
 ## Why a class is unsupported
 
@@ -139,8 +81,6 @@ Grouped by the reason the runner recorded.
 | manifest entailment-regime setup is not implemented | 70 | entailment |
 | Quipu exposes no SPARQL Update execution surface | 37 | update |
 | W3C HTTP request-sequence executor is not implemented | 34 | protocol |
-| named-graph fixture loading is not implemented | 12 | query evaluation |
-| blank-node isomorphism is not implemented | 6 | query evaluation, result format |
 
 ## Re-derive these numbers
 

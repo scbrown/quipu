@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "093d107622bea57b78109a579e500b5ce193db02",
+  "quipu_revision": "07173bd8f3bdbfe8af504074521e215126317840",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -22,9 +22,7 @@
   "classes": {
     "query-evaluation": {
       "cases": 168,
-      "error": 4,
-      "passed": 150,
-      "unsupported": 14
+      "passed": 168
     },
     "protocol": {
       "cases": 34,
@@ -40,9 +38,8 @@
     },
     "result-format": {
       "cases": 7,
-      "failed": 1,
-      "passed": 2,
-      "unsupported": 4
+      "failed": 3,
+      "passed": 4
     }
   },
   "results": [
@@ -503,8 +500,8 @@
       "manifest": "construct/manifest.ttl",
       "query": "construct/constructwhere04.rq",
       "result": "construct/constructwhere04result.ttl",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -533,8 +530,8 @@
       "manifest": "exists/manifest.ttl",
       "query": "exists/exists03.rq",
       "result": "exists/exists03.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -923,8 +920,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/bnode01.rq",
       "result": "functions/bnode01.srx",
-      "status": "unsupported",
-      "reason": "blank-node isomorphism is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -993,8 +990,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/bnode02.rq",
       "result": "functions/bnode02.srx",
-      "status": "unsupported",
-      "reason": "blank-node isomorphism is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1383,8 +1380,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp06.rq",
       "result": "property-path/pp06.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1393,8 +1390,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp06.rq",
       "result": "property-path/pp07.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1553,8 +1550,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-ng-01.rq",
       "result": "property-path/path-ng-01.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1563,8 +1560,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-ng-02.rq",
       "result": "property-path/path-ng-01.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1593,8 +1590,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq01.rq",
       "result": "subquery/sq01.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1603,8 +1600,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq02.rq",
       "result": "subquery/sq02.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1613,8 +1610,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq03.rq",
       "result": "subquery/sq03.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1623,8 +1620,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq04.rq",
       "result": "subquery/sq04.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1633,8 +1630,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq05.rq",
       "result": "subquery/sq05.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1643,8 +1640,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq06.rq",
       "result": "subquery/sq06.srx",
-      "status": "error",
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column 57: Invalid IRI code point '\n'"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1653,8 +1650,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq07.rq",
       "result": "subquery/sq07.srx",
-      "status": "unsupported",
-      "reason": "named-graph fixture loading is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1663,8 +1660,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq08.rq",
       "result": "subquery/sq08.srx",
-      "status": "error",
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column 57: Invalid IRI code point '\n'"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1673,8 +1670,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq09.rq",
       "result": "subquery/sq09.srx",
-      "status": "error",
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column 57: Invalid IRI code point '\n'"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1683,8 +1680,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq10.rq",
       "result": "subquery/sq10.srx",
-      "status": "error",
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column 57: Invalid IRI code point '\n'"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -3143,8 +3140,8 @@
       "manifest": "csv-tsv-res/manifest.ttl",
       "query": "csv-tsv-res/csvtsv01.rq",
       "result": "csv-tsv-res/csvtsv01.tsv",
-      "status": "unsupported",
-      "reason": "blank-node isomorphism is not implemented"
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "result-format",
@@ -3153,8 +3150,8 @@
       "manifest": "csv-tsv-res/manifest.ttl",
       "query": "csv-tsv-res/csvtsv02.rq",
       "result": "csv-tsv-res/csvtsv02.tsv",
-      "status": "unsupported",
-      "reason": "blank-node isomorphism is not implemented"
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "result-format",
@@ -3173,8 +3170,8 @@
       "manifest": "json-res/manifest.ttl",
       "query": "json-res/jsonres01.rq",
       "result": "json-res/jsonres01.srj",
-      "status": "unsupported",
-      "reason": "blank-node isomorphism is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "result-format",
@@ -3183,8 +3180,8 @@
       "manifest": "json-res/manifest.ttl",
       "query": "json-res/jsonres02.rq",
       "result": "json-res/jsonres02.srj",
-      "status": "unsupported",
-      "reason": "blank-node isomorphism is not implemented"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "result-format",
