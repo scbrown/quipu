@@ -40,6 +40,8 @@ All notable changes to this project will be documented in this file.
 - *(share)* Canonicalize and describe share payloads (.5)([ef9e406](https://github.com/scbrown/quipu/commit/ef9e4068d851d1597bb572458f512c2488f3583e))
 - *(share)* Add parent-bound delta artifacts (.5)([5179018](https://github.com/scbrown/quipu/commit/5179018fbbc6c8812eae004fe6be1e690609f80c))
 
+
+
 ### Changed
 
 - *(pack)* Isolate verified load path([a349689](https://github.com/scbrown/quipu/commit/a3496898af390c95adc01c642469b8e4f26dcd65))
@@ -55,6 +57,8 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - *(sparql)* Support feature-unified pattern enums (.1)([c558b8e](https://github.com/scbrown/quipu/commit/c558b8ecddd13d00649a24698b6f7660b4c7d116))
+
+
 
 ### Testing
 
