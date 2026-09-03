@@ -235,7 +235,7 @@ pub(crate) async fn entity_conneg(
         store,
         semweb::decode_iri(&iri),
         headers,
-        params.expanded.unwrap_or(false),
+        output_flag(params.expanded.as_deref()),
     )
     .await
 }
@@ -243,12 +243,12 @@ pub(crate) async fn entity_conneg(
 #[derive(serde::Deserialize)]
 pub(crate) struct EntityParams {
     pub(crate) iri: String,
-    pub(crate) expanded: Option<bool>,
+    pub(crate) expanded: Option<String>,
 }
 
 #[derive(Default, serde::Deserialize)]
 pub(crate) struct OutputParams {
-    pub(crate) expanded: Option<bool>,
+    pub(crate) expanded: Option<String>,
 }
 
 /// Query-form dereference endpoint for IRIs containing `/` and `#`.
@@ -257,7 +257,13 @@ pub(crate) async fn entity_query_conneg(
     Query(params): Query<EntityParams>,
     headers: HeaderMap,
 ) -> Result<axum::response::Response, AppError> {
-    entity_response(store, params.iri, headers, params.expanded.unwrap_or(false)).await
+    entity_response(
+        store,
+        params.iri,
+        headers,
+        output_flag(params.expanded.as_deref()),
+    )
+    .await
 }
 
 async fn entity_response(
@@ -300,11 +306,15 @@ pub(crate) async fn entity_json(
         let j = semweb::entity_json_ld_mode(
             &store.lock(),
             &semweb::decode_iri(&iri),
-            params.expanded.unwrap_or(false),
+            output_flag(params.expanded.as_deref()),
         )?;
         Ok(json_ld_response(j))
     })
     .await
+}
+
+fn output_flag(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
 }
 
 pub(crate) async fn entity_turtle_suffix(

@@ -263,7 +263,7 @@ pub(crate) const MAX_SPARQL_QUERY_BYTES: usize = 1024 * 1024;
 #[derive(Deserialize)]
 pub(crate) struct QueryParams {
     pub(crate) query: String,
-    pub(crate) verbose: Option<bool>,
+    pub(crate) verbose: Option<String>,
 }
 
 /// SPARQL 1.1 Query Protocol GET: `/query?query=...`.
@@ -279,9 +279,13 @@ pub(crate) async fn query_get(
     query_core(
         store,
         headers,
-        json!({"query": params.query, "verbose": params.verbose.unwrap_or(false)}),
+        json!({"query": params.query, "verbose": query_flag(params.verbose.as_deref())}),
     )
     .await
+}
+
+fn query_flag(value: Option<&str>) -> bool {
+    value.is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
 }
 
 /// SPARQL 1.1 Query Protocol POST plus the legacy JSON request form.

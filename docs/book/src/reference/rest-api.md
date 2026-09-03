@@ -179,7 +179,7 @@ query deadline and return HTTP 408 when evaluation exceeds it.
 
 Quipu's JSON extension compacts result IRIs to CURIEs by default using prefixes
 declared by the currently loaded shape sets; unknown namespaces remain full
-IRIs. Pass `"verbose": true` in a JSON request, or `?verbose=true` on GET, to
+IRIs. Pass `"verbose": true` in a JSON request, or `?verbose=1` on GET, to
 return full IRIs. Standards result formats always retain their prescribed RDF
 term representation.
 
@@ -1231,7 +1231,7 @@ entity. `GET /entity/{iri}/json`, `GET /entity/{iri}/ttl` and
 For a full IRI containing path separators or a fragment, use the equivalent
 query form: `GET /entity?iri=https%3A%2F%2Fexample.org%2Fresource%231`.
 JSON-LD is compacted by default with a generated `@context` derived from the
-loaded shape prefixes. Add `?expanded=true` for full IRIs and no compact
+loaded shape prefixes. Add `?expanded=1` for full IRIs and no compact
 context.
 
 ### `POST /spotlight`
