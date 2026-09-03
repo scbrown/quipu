@@ -204,6 +204,22 @@ fn date_time_components_preserve_lexical_timezone() {
     assert_eq!(row.get("tz"), Some(&Value::Str("-08:30".into())));
     assert_eq!(row.get("local_tz"), Some(&Value::Str(String::new())));
 }
+
+#[test]
+fn conditional_expressions_short_circuit_errors() {
+    let store = Store::open_in_memory().unwrap();
+    let result = query(
+        &store,
+        r#"SELECT ?choice ?fallback WHERE {
+          BIND(IF(1 = 1, "yes", 1 / 0) AS ?choice)
+          BIND(COALESCE(?missing, 1 / 0, "fallback") AS ?fallback)
+        }"#,
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    assert_eq!(row.get("choice"), Some(&Value::Str("yes".into())));
+    assert_eq!(row.get("fallback"), Some(&Value::Str("fallback".into())));
+}
 use crate::rdf::ingest_rdf;
 use oxrdfio::RdfFormat;
 
@@ -252,7 +268,13 @@ fn bind_evaluates_numeric_arithmetic() {
     assert_eq!(row.get("sum"), Some(&Value::Int(14)));
     assert_eq!(row.get("difference"), Some(&Value::Int(3)));
     assert_eq!(row.get("product"), Some(&Value::Int(12)));
-    assert_eq!(row.get("quotient"), Some(&Value::Float(2.0)));
+    assert_eq!(
+        row.get("quotient"),
+        Some(&Value::Typed {
+            lexical: "2.0".into(),
+            datatype: crate::namespace::XSD_DECIMAL.into(),
+        })
+    );
     assert_eq!(row.get("negative"), Some(&Value::Int(-4)));
 }
 

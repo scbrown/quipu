@@ -270,19 +270,37 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             numeric_binary(store, left, right, row, i64::checked_mul, |a, b| a * b)
         }
         Expression::Divide(left, right) => {
-            let divisor = eval_expr(store, right, row)?.as_f64()?;
+            let dividend = eval_expr(store, left, row)?;
+            let divisor_value = eval_expr(store, right, row)?;
+            let divisor = divisor_value.as_f64()?;
             if divisor == 0.0 {
                 return None;
             }
-            Some(Value::Float(
-                eval_expr(store, left, row)?.as_f64()? / divisor,
-            ))
+            let quotient = dividend.as_f64()? / divisor;
+            if matches!(dividend, Value::Int(_)) && matches!(divisor_value, Value::Int(_)) {
+                Some(Value::Typed {
+                    lexical: format_decimal(quotient),
+                    datatype: namespace::XSD_DECIMAL.to_string(),
+                })
+            } else {
+                Some(Value::Float(quotient))
+            }
         }
         Expression::UnaryPlus(inner) => eval_expr(store, inner, row),
         Expression::UnaryMinus(inner) => match eval_expr(store, inner, row)? {
             Value::Int(value) => value.checked_neg().map(Value::Int),
             value => Some(Value::Float(-value.as_f64()?)),
         },
+        Expression::If(condition, when_true, when_false) => {
+            if eval_expression_boolean(store, condition, row)? {
+                eval_expr(store, when_true, row)
+            } else {
+                eval_expr(store, when_false, row)
+            }
+        }
+        Expression::Coalesce(expressions) => expressions
+            .iter()
+            .find_map(|expression| eval_expr(store, expression, row)),
         // String-valued builtins so nested calls like CONTAINS(LCASE(STR(?s)), ..)
         // resolve correctly (GH#12).
         Expression::FunctionCall(Function::Str, args) => args
@@ -386,6 +404,46 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
     }
 }
 
+fn eval_expression_boolean(store: &Store, expr: &Expression, row: &Bindings) -> Option<bool> {
+    match expr {
+        Expression::Equal(left, right) | Expression::SameTerm(left, right) => {
+            Some(expr_eq(store, left, right, row))
+        }
+        Expression::Greater(left, right) => {
+            Some(compare_values(store, left, right, row, |order| {
+                order == std::cmp::Ordering::Greater
+            }))
+        }
+        Expression::GreaterOrEqual(left, right) => {
+            Some(compare_values(store, left, right, row, |order| {
+                order != std::cmp::Ordering::Less
+            }))
+        }
+        Expression::Less(left, right) => Some(compare_values(store, left, right, row, |order| {
+            order == std::cmp::Ordering::Less
+        })),
+        Expression::LessOrEqual(left, right) => {
+            Some(compare_values(store, left, right, row, |order| {
+                order != std::cmp::Ordering::Greater
+            }))
+        }
+        Expression::And(left, right) => Some(
+            eval_expression_boolean(store, left, row)?
+                && eval_expression_boolean(store, right, row)?,
+        ),
+        Expression::Or(left, right) => Some(
+            eval_expression_boolean(store, left, row)?
+                || eval_expression_boolean(store, right, row)?,
+        ),
+        Expression::Not(inner) => Some(!eval_expression_boolean(store, inner, row)?),
+        Expression::Bound(variable) => Some(row.contains_key(variable.as_str())),
+        Expression::FunctionCall(function, args) => {
+            eval_bool_function(store, function, args, row).ok()
+        }
+        _ => effective_boolean_value(&eval_expr(store, expr, row)?),
+    }
+}
+
 fn string_literal(value: Value) -> Option<(String, Option<String>)> {
     match value {
         Value::Str(lexical) => Some((lexical, None)),
@@ -455,6 +513,15 @@ fn canonical_seconds(seconds: &str) -> Option<String> {
         Some(whole.to_string())
     } else {
         Some(format!("{whole}.{fraction}"))
+    }
+}
+
+fn format_decimal(value: f64) -> String {
+    let rendered = value.to_string();
+    if rendered.contains('.') {
+        rendered
+    } else {
+        format!("{rendered}.0")
     }
 }
 
