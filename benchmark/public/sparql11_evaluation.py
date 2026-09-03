@@ -272,6 +272,16 @@ def actual_result(stdout: str) -> tuple[list[str], list[tuple[str, ...]]] | bool
     return variables, rows
 
 
+def reorder_rows(
+    variables: list[str], rows: list[tuple[str, ...]], expected_variables: list[str]
+) -> list[tuple[str, ...]] | None:
+    """Align bindings by variable name; SPARQL result column order is immaterial."""
+    if set(variables) != set(expected_variables):
+        return None
+    positions = {variable: index for index, variable in enumerate(variables)}
+    return [tuple(row[positions[variable]] for variable in expected_variables) for row in rows]
+
+
 def unsupported_reason(case: Case) -> str | None:
     if case.test_class == "protocol":
         return "W3C HTTP request-sequence executor is not implemented"
@@ -333,7 +343,8 @@ def run_case(case: Case, quipu: Path) -> dict[str, object]:
             expected_vars, expected_rows = expected
             if any(value.startswith("_:") for row in expected_rows for value in row):
                 return {**base, "status": "unsupported", "reason": "blank-node isomorphism is not implemented"}
-            passed = actual_vars == expected_vars and Counter(actual_rows) == Counter(expected_rows)
+            aligned_rows = reorder_rows(actual_vars, actual_rows, expected_vars)
+            passed = aligned_rows is not None and Counter(aligned_rows) == Counter(expected_rows)
         return {
             **base,
             "status": "passed" if passed else "failed",

@@ -258,6 +258,29 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
         Expression::NamedNode(n) => store.lookup(n.as_str()).ok().flatten().map(Value::Ref),
         Expression::Literal(lit) => Some(literal_to_value(lit)),
+        Expression::Add(left, right) => {
+            numeric_binary(store, left, right, row, i64::checked_add, |a, b| a + b)
+        }
+        Expression::Subtract(left, right) => {
+            numeric_binary(store, left, right, row, i64::checked_sub, |a, b| a - b)
+        }
+        Expression::Multiply(left, right) => {
+            numeric_binary(store, left, right, row, i64::checked_mul, |a, b| a * b)
+        }
+        Expression::Divide(left, right) => {
+            let divisor = eval_expr(store, right, row)?.as_f64()?;
+            if divisor == 0.0 {
+                return None;
+            }
+            Some(Value::Float(
+                eval_expr(store, left, row)?.as_f64()? / divisor,
+            ))
+        }
+        Expression::UnaryPlus(inner) => eval_expr(store, inner, row),
+        Expression::UnaryMinus(inner) => match eval_expr(store, inner, row)? {
+            Value::Int(value) => value.checked_neg().map(Value::Int),
+            value => Some(Value::Float(-value.as_f64()?)),
+        },
         // String-valued builtins so nested calls like CONTAINS(LCASE(STR(?s)), ..)
         // resolve correctly (GH#12).
         Expression::FunctionCall(Function::Str, args) => args
@@ -273,6 +296,22 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             .and_then(|e| eval_expr(store, e, row))
             .map(|v| Value::Str(value_to_string(store, &v).to_uppercase())),
         _ => None,
+    }
+}
+
+fn numeric_binary(
+    store: &Store,
+    left: &Expression,
+    right: &Expression,
+    row: &Bindings,
+    integer: impl FnOnce(i64, i64) -> Option<i64>,
+    float: impl FnOnce(f64, f64) -> f64,
+) -> Option<Value> {
+    let left = eval_expr(store, left, row)?;
+    let right = eval_expr(store, right, row)?;
+    match (&left, &right) {
+        (Value::Int(left), Value::Int(right)) => integer(*left, *right).map(Value::Int),
+        _ => Some(Value::Float(float(left.as_f64()?, right.as_f64()?))),
     }
 }
 

@@ -48,6 +48,13 @@ class EvaluationManifestTests(unittest.TestCase):
     def test_expected_uri_matches_the_cli_reference_rendering(self):
         self.assertEqual(MODULE.term("uri", "http://example.test/resource"), "http://example.test/resource")
 
+    def test_result_columns_are_compared_by_variable_name(self):
+        self.assertEqual(
+            MODULE.reorder_rows(["o", "s"], [("value", "subject")], ["s", "o"]),
+            [("subject", "value")],
+        )
+        self.assertIsNone(MODULE.reorder_rows(["s"], [("subject",)], ["s", "o"]))
+
     def test_class_specific_unsupported_reasons_are_explicit(self):
         case = MODULE.Case("update", pathlib.Path("m"), ":u", "u", "UpdateEvaluationTest", None, (), (), None)
         self.assertIn("SPARQL Update", MODULE.unsupported_reason(case))

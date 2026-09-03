@@ -54,6 +54,22 @@ ex:carol a ex:Employee ;
 }
 
 #[test]
+fn bind_evaluates_numeric_arithmetic() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "SELECT ?sum ?difference ?product ?quotient ?negative WHERE { VALUES ?n { 4 } BIND(?n + 10 AS ?sum) BIND(?n - 1 AS ?difference) BIND(?n * 3 AS ?product) BIND(?n / 2 AS ?quotient) BIND(-?n AS ?negative) }",
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    assert_eq!(row.get("sum"), Some(&Value::Int(14)));
+    assert_eq!(row.get("difference"), Some(&Value::Int(3)));
+    assert_eq!(row.get("product"), Some(&Value::Int(12)));
+    assert_eq!(row.get("quotient"), Some(&Value::Float(2.0)));
+    assert_eq!(row.get("negative"), Some(&Value::Int(-4)));
+}
+
+#[test]
 fn select_all_triples() {
     let store = test_store_with_data();
     let result = query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").unwrap();
