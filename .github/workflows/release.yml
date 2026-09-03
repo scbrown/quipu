@@ -16,6 +16,12 @@ permissions:
   pull-requests: write
   contents: write
 
+# Only the newest main commit can produce a release. The CI waiter otherwise
+# occupies one runner for up to 50 minutes per superseded push.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci-correctness:
     name: Wait for CI correctness

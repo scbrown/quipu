@@ -396,8 +396,8 @@ jobs:
   # compiles, executes, or validates production behavior/invariants.
   release-correctness:
     name: Release correctness
-    if: always() && github.event_name != 'push'
-    needs: [clippy, test, extended-features, build, build-full, wasm, check, shapes]
+    if: always()
+    needs: [clippy, test, build, check]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass
@@ -411,3 +411,21 @@ jobs:
             exit 1
           fi
           echo "All release correctness jobs passed."
+
+  extended-correctness:
+    name: Extended correctness
+    if: always() && github.event_name != 'push'
+    needs: [extended-features, build-full, wasm, source-size, load-test, shapes, lint-markdown]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every extended surface to pass
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          failed="$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' <<<"$NEEDS_JSON")"
+          if [ -n "$failed" ]; then
+            echo "::error::extended correctness failed:" >&2
+            printf '%s\n' "$failed" >&2
+            exit 1
+          fi
+          echo "All extended surfaces passed."
