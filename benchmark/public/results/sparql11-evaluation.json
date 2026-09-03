@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "9b8ce87636743c608c0eb6f070223897a862776d",
+  "quipu_revision": "cc61bdf84dc6282bebfa7238ab4008a00988740f",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 29,
-      "passed": 116,
+      "failed": 26,
+      "passed": 119,
       "unsupported": 19
     },
     "protocol": {
@@ -1014,8 +1014,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/if01.rq",
       "result": "functions/if01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1034,8 +1034,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/coalesce01.rq",
       "result": "functions/coalesce01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1154,8 +1154,8 @@
       "manifest": "grouping/manifest.ttl",
       "query": "grouping/group04.rq",
       "result": "grouping/group04.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",

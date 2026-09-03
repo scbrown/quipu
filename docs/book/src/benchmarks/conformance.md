@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu passes **86/86** approved SPARQL 1.1
-> *query-syntax* tests and **116/168** approved
+> *query-syntax* tests and **119/168** approved
 > *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
@@ -21,7 +21,7 @@ You can re-derive every number on this page yourself — the commands are below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `9b8ce87636743c608c0eb6f070223897a862776d` |
+| Quipu revision (evaluation) | `cc61bdf84dc6282bebfa7238ab4008a00988740f` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
 | Quipu version | `quipu 0.3.27` |
 | Store isolation | one temporary SQLite store per executable test |
@@ -36,12 +36,12 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 116 | 29 | 4 | 19 | 168 |
+| query evaluation | 119 | 26 | 4 | 19 | 168 |
 | result format | 2 | 1 | 0 | 4 | 7 |
 | protocol | 0 | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **204** | **30** | **4** | **164** | **402** |
+| **all classes** | **207** | **27** | **4** | **164** | **402** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -55,7 +55,7 @@ moves the most per fix.
 
 | Family | Passed | Failed | Error | Unsupported | Cases |
 |---|---:|---:|---:|---:|---:|
-| `functions` | 48 | 7 | 0 | 2 | 57 |
+| `functions` | 50 | 5 | 0 | 2 | 57 |
 | `property-path` | 18 | 2 | 0 | 4 | 24 |
 | `aggregates` | 13 | 9 | 0 | 0 | 22 |
 | `subquery` | 2 | 0 | 4 | 8 | 14 |
@@ -65,7 +65,7 @@ moves the most per fix.
 | `project-expression` | 4 | 3 | 0 | 0 | 7 |
 | `exists` | 4 | 0 | 0 | 1 | 5 |
 | `construct` | 0 | 0 | 0 | 4 | 4 |
-| `grouping` | 3 | 1 | 0 | 0 | 4 |
+| `grouping` | 4 | 0 | 0 | 0 | 4 |
 
 ### The not-yet-passing tests, named
 
@@ -73,14 +73,12 @@ Every test that does not pass is listed here with its W3C identifier, so a
 claim of progress can be checked against a specific case rather than a count.
 
 <details>
-<summary><code>functions</code> — 9 of 57 not passing</summary>
+<summary><code>functions</code> — 7 of 57 not passing</summary>
 
 | Test | Name | Status | Reason |
 |---|---|---|---|
 | `:bnode01` | BNODE(str) | unsupported | `blank-node isomorphism is not implemented` |
 | `:bnode02` | BNODE() | unsupported | `blank-node isomorphism is not implemented` |
-| `:coalesce01` | COALESCE() | failed | `actual result differs from expected multiset` |
-| `:if01` | IF() | failed | `actual result differs from expected multiset` |
 | `:iri01` | IRI()/URI() | failed | `actual result differs from expected multiset` |
 | `:now01` | NOW() | failed | `actual result differs from expected multiset` |
 | `:rand01` | RAND() | failed | `actual result differs from expected multiset` |
@@ -184,15 +182,6 @@ claim of progress can be checked against a specific case rather than a count.
 | `:constructwhere02` | constructwhere02 - CONSTRUCT WHERE | unsupported | `expected result format .ttl is not comparable` |
 | `:constructwhere03` | constructwhere03 - CONSTRUCT WHERE | unsupported | `expected result format .ttl is not comparable` |
 | `:constructwhere04` | constructwhere04 - CONSTRUCT WHERE | unsupported | `named-graph fixture loading is not implemented` |
-
-</details>
-
-<details>
-<summary><code>grouping</code> — 1 of 4 not passing</summary>
-
-| Test | Name | Status | Reason |
-|---|---|---|---|
-| `:group04` | Group-4 | failed | `actual result differs from expected multiset` |
 
 </details>
 
