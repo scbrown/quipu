@@ -1,7 +1,7 @@
 //! FILTER expression evaluation and literal-to-value conversion.
 
 use oxrdf::Literal;
-use spargebra::algebra::Expression;
+use spargebra::algebra::{Expression, Function};
 
 use super::TemporalContext;
 
@@ -137,7 +137,6 @@ fn eval_bool_function(
     args: &[Expression],
     row: &Bindings,
 ) -> Result<bool> {
-    use spargebra::algebra::Function;
     let str_arg = |i: usize| -> Option<String> {
         args.get(i)
             .and_then(|e| eval_expr(store, e, row))
@@ -257,7 +256,6 @@ fn value_to_string(store: &Store, v: &Value) -> String {
 
 /// Evaluate an expression to a Value.
 pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Value> {
-    use spargebra::algebra::Function;
     match expr {
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
         Expression::NamedNode(n) => store.lookup(n.as_str()).ok().flatten().map(Value::Ref),
@@ -319,6 +317,25 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             } else {
                 Some(Value::Typed { lexical, datatype })
             }
+        }
+        Expression::FunctionCall(
+            function @ (Function::Year
+            | Function::Month
+            | Function::Day
+            | Function::Hours
+            | Function::Minutes
+            | Function::Seconds
+            | Function::Timezone
+            | Function::Tz),
+            args,
+        ) => {
+            let Value::Typed { lexical, datatype } = eval_expr(store, args.first()?, row)? else {
+                return None;
+            };
+            if datatype != namespace::XSD_DATE_TIME {
+                return None;
+            }
+            date_time_component(function, &lexical)
         }
         Expression::FunctionCall(Function::LCase, args) => args
             .first()
@@ -386,6 +403,79 @@ fn simple_string_literal(value: Value) -> Option<String> {
         Value::Typed { lexical, datatype } if datatype == namespace::XSD_STRING => Some(lexical),
         _ => None,
     }
+}
+
+fn date_time_component(function: &Function, lexical: &str) -> Option<Value> {
+    let (date, time) = lexical.split_once('T')?;
+    let mut date_parts = date.rsplitn(3, '-');
+    let day = date_parts.next()?.parse::<i64>().ok()?;
+    let month = date_parts.next()?.parse::<i64>().ok()?;
+    let year = date_parts.next()?.parse::<i64>().ok()?;
+
+    let (clock, timezone) = if let Some(clock) = time.strip_suffix('Z') {
+        (clock, Some("Z"))
+    } else if let Some(offset_at) = time
+        .char_indices()
+        .skip(1)
+        .find_map(|(index, character)| matches!(character, '+' | '-').then_some(index))
+    {
+        (&time[..offset_at], Some(&time[offset_at..]))
+    } else {
+        (time, None)
+    };
+    let mut clock_parts = clock.split(':');
+    let hours = clock_parts.next()?.parse::<i64>().ok()?;
+    let minutes = clock_parts.next()?.parse::<i64>().ok()?;
+    let seconds = clock_parts.next()?;
+
+    match function {
+        Function::Year => Some(Value::Int(year)),
+        Function::Month => Some(Value::Int(month)),
+        Function::Day => Some(Value::Int(day)),
+        Function::Hours => Some(Value::Int(hours)),
+        Function::Minutes => Some(Value::Int(minutes)),
+        Function::Seconds => Some(Value::Typed {
+            lexical: canonical_seconds(seconds)?,
+            datatype: namespace::XSD_DECIMAL.to_string(),
+        }),
+        Function::Tz => Some(Value::Str(timezone.unwrap_or_default().to_string())),
+        Function::Timezone => timezone.map(|timezone| Value::Typed {
+            lexical: timezone_duration(timezone),
+            datatype: namespace::XSD_DAY_TIME_DURATION.to_string(),
+        }),
+        _ => None,
+    }
+}
+
+fn canonical_seconds(seconds: &str) -> Option<String> {
+    let (whole, fraction) = seconds.split_once('.').unwrap_or((seconds, ""));
+    let whole = whole.parse::<u64>().ok()?;
+    let fraction = fraction.trim_end_matches('0');
+    if fraction.is_empty() {
+        Some(whole.to_string())
+    } else {
+        Some(format!("{whole}.{fraction}"))
+    }
+}
+
+fn timezone_duration(timezone: &str) -> String {
+    if timezone == "Z" || timezone == "+00:00" || timezone == "-00:00" {
+        return "PT0S".to_string();
+    }
+    let sign = if timezone.starts_with('-') { "-" } else { "" };
+    let mut parts = timezone[1..].split(':');
+    let hours = parts.next().unwrap_or("0").trim_start_matches('0');
+    let minutes = parts.next().unwrap_or("0").trim_start_matches('0');
+    let mut duration = format!("{sign}PT");
+    if !hours.is_empty() {
+        duration.push_str(hours);
+        duration.push('H');
+    }
+    if !minutes.is_empty() {
+        duration.push_str(minutes);
+        duration.push('M');
+    }
+    duration
 }
 
 fn lang_matches(tag: &str, range: &str) -> bool {
@@ -507,7 +597,6 @@ fn hash_string(
     row: &Bindings,
 ) -> Option<Value> {
     use md5::Digest as _;
-    use spargebra::algebra::Function;
 
     let (value, _) = string_literal(eval_expr(store, args.first()?, row)?)?;
     let bytes = value.as_bytes();

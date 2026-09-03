@@ -160,6 +160,50 @@ fn language_and_datatype_constructors_round_trip() {
     assert!(row.contains_key("good_lang"));
     assert_eq!(row.get("good_dt"), Some(&Value::Str("hello".into())));
 }
+
+#[test]
+fn date_time_components_preserve_lexical_timezone() {
+    let store = Store::open_in_memory().unwrap();
+    let result = query(
+        &store,
+        r#"PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        SELECT ?year ?month ?day ?hours ?minutes ?seconds ?timezone ?tz ?local_tz WHERE {
+          BIND("2010-12-21T15:38:02.5-08:30"^^xsd:dateTime AS ?date)
+          BIND(YEAR(?date) AS ?year)
+          BIND(MONTH(?date) AS ?month)
+          BIND(DAY(?date) AS ?day)
+          BIND(HOURS(?date) AS ?hours)
+          BIND(MINUTES(?date) AS ?minutes)
+          BIND(SECONDS(?date) AS ?seconds)
+          BIND(TIMEZONE(?date) AS ?timezone)
+          BIND(TZ(?date) AS ?tz)
+          BIND(TZ("2011-02-01T01:02:03"^^xsd:dateTime) AS ?local_tz)
+        }"#,
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    assert_eq!(row.get("year"), Some(&Value::Int(2010)));
+    assert_eq!(row.get("month"), Some(&Value::Int(12)));
+    assert_eq!(row.get("day"), Some(&Value::Int(21)));
+    assert_eq!(row.get("hours"), Some(&Value::Int(15)));
+    assert_eq!(row.get("minutes"), Some(&Value::Int(38)));
+    assert_eq!(
+        row.get("seconds"),
+        Some(&Value::Typed {
+            lexical: "2.5".into(),
+            datatype: crate::namespace::XSD_DECIMAL.into(),
+        })
+    );
+    assert_eq!(
+        row.get("timezone"),
+        Some(&Value::Typed {
+            lexical: "-PT8H30M".into(),
+            datatype: crate::namespace::XSD_DAY_TIME_DURATION.into(),
+        })
+    );
+    assert_eq!(row.get("tz"), Some(&Value::Str("-08:30".into())));
+    assert_eq!(row.get("local_tz"), Some(&Value::Str(String::new())));
+}
 use crate::rdf::ingest_rdf;
 use oxrdfio::RdfFormat;
 
