@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "5a59e829fa43dd4d47c9945712b12cf981494543",
+  "quipu_revision": "093d107622bea57b78109a579e500b5ce193db02",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "passed": 145,
-      "unsupported": 19
+      "passed": 150,
+      "unsupported": 14
     },
     "protocol": {
       "cases": 34,
@@ -473,8 +473,8 @@
       "manifest": "construct/manifest.ttl",
       "query": "construct/constructwhere01.rq",
       "result": "construct/constructwhere01result.ttl",
-      "status": "unsupported",
-      "reason": "expected result format .ttl is not comparable"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -483,8 +483,8 @@
       "manifest": "construct/manifest.ttl",
       "query": "construct/constructwhere02.rq",
       "result": "construct/constructwhere02result.ttl",
-      "status": "unsupported",
-      "reason": "expected result format .ttl is not comparable"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -493,8 +493,8 @@
       "manifest": "construct/manifest.ttl",
       "query": "construct/constructwhere03.rq",
       "result": "construct/constructwhere03result.ttl",
-      "status": "unsupported",
-      "reason": "expected result format .ttl is not comparable"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1703,8 +1703,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq12.rq",
       "result": "subquery/sq12_out.ttl",
-      "status": "unsupported",
-      "reason": "expected result format .ttl is not comparable"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1723,8 +1723,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq14.rq",
       "result": "subquery/sq14-out.ttl",
-      "status": "unsupported",
-      "reason": "expected result format .ttl is not comparable"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "protocol",

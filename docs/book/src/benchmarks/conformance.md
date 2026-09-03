@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu passes **86/86** approved SPARQL 1.1
-> *query-syntax* tests and **145/168** approved
+> *query-syntax* tests and **150/168** approved
 > *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
@@ -21,7 +21,7 @@ You can re-derive every number on this page yourself — the commands are below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `5a59e829fa43dd4d47c9945712b12cf981494543` |
+| Quipu revision (evaluation) | `093d107622bea57b78109a579e500b5ce193db02` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
 | Quipu version | `quipu 0.3.27` |
 | Store isolation | one temporary SQLite store per executable test |
@@ -36,12 +36,12 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 145 | 0 | 4 | 19 | 168 |
+| query evaluation | 150 | 0 | 4 | 14 | 168 |
 | result format | 2 | 1 | 0 | 4 | 7 |
 | protocol | 0 | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **233** | **1** | **4** | **164** | **402** |
+| **all classes** | **238** | **1** | **4** | **159** | **402** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -58,13 +58,13 @@ moves the most per fix.
 | `functions` | 55 | 0 | 0 | 2 | 57 |
 | `property-path` | 20 | 0 | 0 | 4 | 24 |
 | `aggregates` | 22 | 0 | 0 | 0 | 22 |
-| `subquery` | 2 | 0 | 4 | 8 | 14 |
+| `subquery` | 4 | 0 | 4 | 6 | 14 |
 | `negation` | 11 | 0 | 0 | 0 | 11 |
 | `bind` | 10 | 0 | 0 | 0 | 10 |
 | `bindings` | 10 | 0 | 0 | 0 | 10 |
 | `project-expression` | 7 | 0 | 0 | 0 | 7 |
 | `exists` | 4 | 0 | 0 | 1 | 5 |
-| `construct` | 0 | 0 | 0 | 4 | 4 |
+| `construct` | 3 | 0 | 0 | 1 | 4 |
 | `grouping` | 4 | 0 | 0 | 0 | 4 |
 
 ### The not-yet-passing tests, named
@@ -95,7 +95,7 @@ claim of progress can be checked against a specific case rather than a count.
 </details>
 
 <details>
-<summary><code>subquery</code> — 12 of 14 not passing</summary>
+<summary><code>subquery</code> — 10 of 14 not passing</summary>
 
 | Test | Name | Status | Reason |
 |---|---|---|---|
@@ -109,8 +109,6 @@ claim of progress can be checked against a specific case rather than a count.
 | `:subquery08` | sq08 - Subquery with aggregate | error | `error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column…` |
 | `:subquery09` | sq09 - Nested Subqueries | error | `error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column…` |
 | `:subquery10` | sq10 - Subquery with exists | error | `error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column…` |
-| `:subquery12` | sq12 - Subquery in CONSTRUCT with built-ins | unsupported | `expected result format .ttl is not comparable` |
-| `:subquery14` | sq14 - limit by resource | unsupported | `expected result format .ttl is not comparable` |
 
 </details>
 
@@ -124,13 +122,10 @@ claim of progress can be checked against a specific case rather than a count.
 </details>
 
 <details>
-<summary><code>construct</code> — 4 of 4 not passing</summary>
+<summary><code>construct</code> — 1 of 4 not passing</summary>
 
 | Test | Name | Status | Reason |
 |---|---|---|---|
-| `:constructwhere01` | constructwhere01 - CONSTRUCT WHERE | unsupported | `expected result format .ttl is not comparable` |
-| `:constructwhere02` | constructwhere02 - CONSTRUCT WHERE | unsupported | `expected result format .ttl is not comparable` |
-| `:constructwhere03` | constructwhere03 - CONSTRUCT WHERE | unsupported | `expected result format .ttl is not comparable` |
 | `:constructwhere04` | constructwhere04 - CONSTRUCT WHERE | unsupported | `named-graph fixture loading is not implemented` |
 
 </details>
@@ -146,7 +141,6 @@ Grouped by the reason the runner recorded.
 | W3C HTTP request-sequence executor is not implemented | 34 | protocol |
 | named-graph fixture loading is not implemented | 12 | query evaluation |
 | blank-node isomorphism is not implemented | 6 | query evaluation, result format |
-| expected result format .ttl is not comparable | 5 | query evaluation |
 
 ## Re-derive these numbers
 
