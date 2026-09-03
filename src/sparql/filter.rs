@@ -283,6 +283,20 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
                     lexical: format_decimal(quotient),
                     datatype: namespace::XSD_DECIMAL.to_string(),
                 })
+            } else if dividend.datatype() == Some(namespace::XSD_DOUBLE)
+                || divisor_value.datatype() == Some(namespace::XSD_DOUBLE)
+            {
+                Some(Value::Typed {
+                    lexical: canonical_double(quotient),
+                    datatype: namespace::XSD_DOUBLE.to_string(),
+                })
+            } else if dividend.datatype() == Some(namespace::XSD_DECIMAL)
+                || divisor_value.datatype() == Some(namespace::XSD_DECIMAL)
+            {
+                Some(Value::Typed {
+                    lexical: format_decimal(quotient),
+                    datatype: namespace::XSD_DECIMAL.to_string(),
+                })
             } else {
                 Some(Value::Float(quotient))
             }
@@ -342,6 +356,16 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             store.intern(&iri).ok().map(Value::Ref)
         }
         Expression::FunctionCall(Function::StrUuid, _) => Some(Value::Str(generated_uuid())),
+        Expression::FunctionCall(Function::Custom(function), args)
+            if function.as_str() == namespace::XSD_DOUBLE =>
+        {
+            let lexical = value_to_string(store, &eval_expr(store, args.first()?, row)?);
+            let value = lexical.parse::<f64>().ok()?;
+            Some(Value::Typed {
+                lexical: canonical_double(value),
+                datatype: namespace::XSD_DOUBLE.to_string(),
+            })
+        }
         Expression::FunctionCall(Function::StrLang, args) => {
             let lexical = simple_string_literal(eval_expr(store, args.first()?, row)?)?;
             let (lang, _) = string_literal(eval_expr(store, args.get(1)?, row)?)?;
@@ -492,6 +516,17 @@ fn generated_uuid() -> String {
         0x8000 | ((second >> 48) & 0x3fff),
         second & 0xffff_ffff_ffff
     )
+}
+
+fn canonical_double(value: f64) -> String {
+    let rendered = format!("{value:E}");
+    let (mantissa, exponent) = rendered.split_once('E').unwrap_or((&rendered, "0"));
+    let mantissa = if mantissa.contains('.') {
+        mantissa.to_string()
+    } else {
+        format!("{mantissa}.0")
+    };
+    format!("{mantissa}E{}", exponent.parse::<i32>().unwrap_or(0))
 }
 
 fn string_literal(value: Value) -> Option<(String, Option<String>)> {
@@ -761,7 +796,26 @@ fn numeric_binary(
     let right = eval_expr(store, right, row)?;
     match (&left, &right) {
         (Value::Int(left), Value::Int(right)) => integer(*left, *right).map(Value::Int),
-        _ => Some(Value::Float(float(left.as_f64()?, right.as_f64()?))),
+        _ => {
+            let value = float(left.as_f64()?, right.as_f64()?);
+            if left.datatype() == Some(namespace::XSD_DOUBLE)
+                || right.datatype() == Some(namespace::XSD_DOUBLE)
+            {
+                Some(Value::Typed {
+                    lexical: canonical_double(value),
+                    datatype: namespace::XSD_DOUBLE.to_string(),
+                })
+            } else if left.datatype() == Some(namespace::XSD_DECIMAL)
+                || right.datatype() == Some(namespace::XSD_DECIMAL)
+            {
+                Some(Value::Typed {
+                    lexical: format_decimal(value),
+                    datatype: namespace::XSD_DECIMAL.to_string(),
+                })
+            } else {
+                Some(Value::Float(value))
+            }
+        }
     }
 }
 
@@ -815,10 +869,10 @@ pub fn literal_to_value(lit: &Literal) -> Value {
             .value()
             .parse::<i64>()
             .map_or_else(|_| typed(), Value::Int),
-        namespace::XSD_DOUBLE => lit
-            .value()
-            .parse::<f64>()
-            .map_or_else(|_| typed(), Value::Float),
+        // Preserve the lexical form and datatype. Numeric comparison and
+        // arithmetic use `Value::as_f64`, while MIN/MAX and result formats
+        // must still return the original RDF term (e.g. `1.0E2`^^xsd:double).
+        namespace::XSD_DOUBLE => typed(),
         namespace::XSD_BOOLEAN => Value::Bool(matches!(lit.value(), "true" | "1")),
         // RDF 1.1: a plain literal's datatype IS xsd:string, so Str is lossless.
         namespace::XSD_STRING => Value::Str(lit.value().to_string()),

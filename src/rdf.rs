@@ -67,11 +67,14 @@ fn literal_to_value(lit: &Literal) -> Result<Value> {
             Ok(Value::Int(n))
         }
         namespace::XSD_DOUBLE => {
-            let f: f64 = lit
+            let value = lit
                 .value()
-                .parse()
+                .parse::<f64>()
                 .map_err(|e| Error::InvalidValue(format!("bad float literal: {e}")))?;
-            Ok(Value::Float(f))
+            Ok(Value::Typed {
+                lexical: canonical_double(value),
+                datatype: dt.to_string(),
+            })
         }
         namespace::XSD_BOOLEAN => {
             let b = matches!(lit.value(), "true" | "1");
@@ -93,6 +96,17 @@ fn literal_to_value(lit: &Literal) -> Result<Value> {
             })
         }
     }
+}
+
+fn canonical_double(value: f64) -> String {
+    let rendered = format!("{value:E}");
+    let (mantissa, exponent) = rendered.split_once('E').unwrap_or((&rendered, "0"));
+    let mantissa = if mantissa.contains('.') {
+        mantissa.to_string()
+    } else {
+        format!("{mantissa}.0")
+    };
+    format!("{mantissa}E{}", exponent.parse::<i32>().unwrap_or(0))
 }
 
 /// Convert a `Value` back to an oxrdf `Term` for serialization.
@@ -360,7 +374,13 @@ ex:bob a ex:Person ;
             .iter()
             .find(|f| f.attribute == height_id)
             .unwrap();
-        assert_eq!(height_fact.value, Value::Float(1.65));
+        assert_eq!(
+            height_fact.value,
+            Value::Typed {
+                lexical: "1.65E0".into(),
+                datatype: namespace::XSD_DOUBLE.into(),
+            }
+        );
 
         let active_id = store.lookup("http://example.org/active").unwrap().unwrap();
         let active_fact = alice_facts
@@ -465,7 +485,10 @@ ex:bob a ex:Person ;
                     "3.25",
                     NamedNode::new_unchecked(format!("{xsd}double")),
                 ),
-                Value::Float(3.25),
+                Value::Typed {
+                    lexical: "3.25E0".into(),
+                    datatype: format!("{xsd}double"),
+                },
             ),
             (
                 Literal::new_typed_literal(

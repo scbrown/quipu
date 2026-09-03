@@ -335,8 +335,9 @@ pub fn eval_pattern_seeded(
 
                 // Compute aggregates.
                 for (i, (_, agg_expr)) in aggregates.iter().enumerate() {
-                    let agg_val = eval_aggregate(store, agg_expr, group_rows);
-                    result_row.insert(agg_vars[i].clone(), agg_val);
+                    if let Some(agg_val) = eval_aggregate(store, agg_expr, group_rows) {
+                        result_row.insert(agg_vars[i].clone(), agg_val);
+                    }
                 }
 
                 result_rows.push(result_row);

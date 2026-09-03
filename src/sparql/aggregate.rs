@@ -9,7 +9,11 @@ use super::Bindings;
 use super::filter::eval_expr;
 
 /// Evaluate an aggregate expression over a group of rows.
-pub fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings]) -> Value {
+pub fn eval_aggregate(
+    store: &Store,
+    agg: &AggregateExpression,
+    rows: &[Bindings],
+) -> Option<Value> {
     match agg {
         AggregateExpression::CountSolutions { distinct } => {
             if *distinct {
@@ -25,9 +29,9 @@ pub fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings
                         }
                     })
                     .count();
-                Value::Int(count as i64)
+                Some(Value::Int(count as i64))
             } else {
-                Value::Int(rows.len() as i64)
+                Some(Value::Int(rows.len() as i64))
             }
         }
         AggregateExpression::FunctionCall {
@@ -49,10 +53,14 @@ pub fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings
                 values = deduped;
             }
             match name {
-                AggregateFunction::Count => Value::Int(values.len() as i64),
+                AggregateFunction::Count => Some(Value::Int(values.len() as i64)),
                 AggregateFunction::Sum => {
+                    if values.iter().any(|value| value.as_f64().is_none()) {
+                        return None;
+                    }
                     let mut sum = 0.0f64;
                     let mut all_int = true;
+                    let mut any_double = false;
                     for v in &values {
                         // as_f64 also sees numeric Typed literals (xsd:long,
                         // xsd:decimal, …), which keep their datatype rather
@@ -60,57 +68,76 @@ pub fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings
                         if let Some(n) = v.as_f64() {
                             sum += n;
                             all_int &= is_integral(v);
+                            any_double |= v.datatype() == Some(crate::namespace::XSD_DOUBLE);
                         }
                     }
                     if all_int {
-                        Value::Int(sum as i64)
+                        Some(Value::Int(sum as i64))
+                    } else if any_double {
+                        Some(typed_number(sum, crate::namespace::XSD_DOUBLE))
                     } else {
-                        Value::Float(sum)
+                        Some(typed_number(sum, crate::namespace::XSD_DECIMAL))
                     }
                 }
                 AggregateFunction::Avg => {
                     if values.is_empty() {
-                        return Value::Int(0);
+                        return None;
+                    }
+                    if values.iter().any(|value| value.as_f64().is_none()) {
+                        return None;
                     }
                     let mut sum = 0.0f64;
                     let mut count = 0usize;
+                    let mut any_double = false;
                     for v in &values {
                         if let Some(n) = v.as_f64() {
                             sum += n;
                             count += 1;
+                            any_double |= v.datatype() == Some(crate::namespace::XSD_DOUBLE);
                         }
                     }
                     if count == 0 {
-                        Value::Int(0)
+                        None
                     } else {
-                        Value::Float(sum / count as f64)
+                        Some(typed_number(
+                            sum / count as f64,
+                            if any_double {
+                                crate::namespace::XSD_DOUBLE
+                            } else {
+                                crate::namespace::XSD_DECIMAL
+                            },
+                        ))
                     }
                 }
-                AggregateFunction::Min => values
-                    .into_iter()
-                    .reduce(|a, b| {
-                        if compare_option_values(&Some(a.clone()), &Some(b.clone()))
-                            == std::cmp::Ordering::Less
-                        {
-                            a
-                        } else {
-                            b
-                        }
-                    })
-                    .unwrap_or(Value::Int(0)),
-                AggregateFunction::Max => values
-                    .into_iter()
-                    .reduce(|a, b| {
-                        if compare_option_values(&Some(a.clone()), &Some(b.clone()))
-                            == std::cmp::Ordering::Greater
-                        {
-                            a
-                        } else {
-                            b
-                        }
-                    })
-                    .unwrap_or(Value::Int(0)),
-                AggregateFunction::Sample => values.into_iter().next().unwrap_or(Value::Int(0)),
+                AggregateFunction::Min => comparable_values(&values).then(|| {
+                    values
+                        .into_iter()
+                        .reduce(|a, b| {
+                            if compare_option_values(&Some(a.clone()), &Some(b.clone()))
+                                == std::cmp::Ordering::Less
+                            {
+                                a
+                            } else {
+                                b
+                            }
+                        })
+                        .unwrap_or(Value::Int(0))
+                }),
+                AggregateFunction::Max => comparable_values(&values).then(|| {
+                    values
+                        .into_iter()
+                        .reduce(|a, b| {
+                            if compare_option_values(&Some(a.clone()), &Some(b.clone()))
+                                == std::cmp::Ordering::Greater
+                            {
+                                a
+                            } else {
+                                b
+                            }
+                        })
+                        .unwrap_or(Value::Int(0))
+                }),
+                AggregateFunction::Sample => values.into_iter().next(),
                 AggregateFunction::GroupConcat { separator } => {
                     let sep = separator.as_deref().unwrap_or(" ");
                     let strs: Vec<String> = values
@@ -128,11 +155,40 @@ pub fn eval_aggregate(store: &Store, agg: &AggregateExpression, rows: &[Bindings
                             _ => String::new(),
                         })
                         .collect();
-                    Value::Str(strs.join(sep))
+                    Some(Value::Str(strs.join(sep)))
                 }
-                AggregateFunction::Custom(_) => Value::Int(0),
+                AggregateFunction::Custom(_) => None,
             }
         }
+    }
+}
+
+fn comparable_values(values: &[Value]) -> bool {
+    values.is_empty()
+        || values.iter().all(|value| value.as_f64().is_some())
+        || values.iter().all(|value| value.as_lexical().is_some())
+}
+
+fn typed_number(value: f64, datatype: &str) -> Value {
+    let lexical = if datatype == crate::namespace::XSD_DOUBLE {
+        let rendered = format!("{value:E}");
+        let (mantissa, exponent) = rendered.split_once('E').unwrap_or((&rendered, "0"));
+        let mantissa = if mantissa.contains('.') {
+            mantissa.to_string()
+        } else {
+            format!("{mantissa}.0")
+        };
+        format!("{mantissa}E{}", exponent.parse::<i32>().unwrap_or(0))
+    } else {
+        let mut rendered = format!("{value:.12}");
+        while rendered.ends_with('0') && !rendered.ends_with(".0") {
+            rendered.pop();
+        }
+        rendered
+    };
+    Value::Typed {
+        lexical,
+        datatype: datatype.to_string(),
     }
 }
 

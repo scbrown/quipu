@@ -749,7 +749,13 @@ fn select_sum_and_avg() {
 
     assert_eq!(result.rows().len(), 1);
     assert_eq!(result.rows()[0].get("total"), Some(&Value::Int(90)));
-    assert_eq!(result.rows()[0].get("mean"), Some(&Value::Float(30.0)));
+    assert_eq!(
+        result.rows()[0].get("mean"),
+        Some(&Value::Typed {
+            lexical: "30.0".into(),
+            datatype: crate::namespace::XSD_DECIMAL.into(),
+        })
+    );
 }
 
 #[test]
