@@ -9,14 +9,25 @@ use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use rudof_lib::{
-    RDFFormat, ReaderMode, Rudof, RudofConfig, ShaclFormat, ShaclValidationMode, ShapesGraphSource,
-};
+use rudof_rdf::rdf_core::RDFFormat;
+use rudof_rdf::rdf_core::term::Object;
+use rudof_rdf::rdf_impl::{InMemoryGraph, ReaderMode};
+use shacl_engine::ir::IRSchema;
+use shacl_engine::validator::ShaclValidationMode;
+use shacl_engine::validator::processor::{GraphValidation, ShaclProcessor};
+use shacl_engine::validator::store::{Graph, ShaclDataManager};
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::resolution::EntityCandidate;
+
+fn report_term(term: &Object) -> String {
+    match term {
+        Object::Literal(literal) => literal.lexical_form(),
+        _ => term.to_string(),
+    }
+}
 
 /// Structured feedback from SHACL validation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,31 +75,24 @@ pub struct ValidationIssue {
 /// single write, and it dominated validation cost — see `examples/shacl_cost.rs`.
 pub struct Validator {
     shapes_turtle: String,
-    /// Rudof instance with `shapes_turtle` already read into its SHACL schema.
-    rudof: Mutex<Rudof>,
+    /// Compiled shapes schema, reused across validation calls.
+    schema: Mutex<IRSchema>,
 }
 
 impl Validator {
     /// Create a new validator from SHACL shapes in Turtle format.
     pub fn from_turtle(shapes: &str) -> Result<Self> {
-        let mut rudof = RudofConfig::default_config()
-            .map_err(|e| Error::InvalidValue(format!("rudof config error: {e}")))
-            .and_then(|cfg| {
-                Rudof::new(&cfg).map_err(|e| Error::InvalidValue(format!("rudof init error: {e}")))
-            })?;
-        let mut reader = shapes.as_bytes();
-        rudof
-            .read_shacl(
-                &mut reader,
-                "shapes",
-                Some(&ShaclFormat::Turtle),
-                None,
-                None,
-            )
-            .map_err(|e| Error::InvalidValue(format!("SHACL parse error: {e}")))?;
+        let mut reader = std::io::BufReader::new(shapes.as_bytes());
+        let schema = ShaclDataManager::load(
+            &mut reader,
+            "shapes",
+            &RDFFormat::Turtle,
+            Some("http://quipu.local/shapes"),
+        )
+        .map_err(|e| Error::InvalidValue(format!("SHACL parse error: {e}")))?;
         Ok(Self {
             shapes_turtle: shapes.to_string(),
-            rudof: Mutex::new(rudof),
+            schema: Mutex::new(schema),
         })
     }
 
@@ -114,49 +118,45 @@ impl Validator {
         // Reuse the already-parsed shapes graph. `read_data` below is called
         // with merge=None (=false), which replaces the RDF data outright, so a
         // reused instance carries no data from a previous validation.
-        let mut rudof = self
-            .rudof
+        let schema = self
+            .schema
             .lock()
             .map_err(|e| Error::InvalidValue(format!("shapes lock poisoned: {e}")))?;
 
-        // Load data.
-        let mut data_reader = data;
-        rudof
-            .read_data(
-                &mut data_reader,
-                "data",
-                Some(&RDFFormat::Turtle),
-                None,
-                Some(&ReaderMode::Lax),
-                None,
-            )
-            .map_err(|e| Error::InvalidValue(format!("data load error: {e}")))?;
+        let mut data_reader = std::io::BufReader::new(data);
+        let data = InMemoryGraph::from_reader(
+            &mut data_reader,
+            "data",
+            &RDFFormat::Turtle,
+            Some("http://quipu.local/data"),
+            &ReaderMode::Lax,
+        )
+        .map_err(|e| Error::InvalidValue(format!("data load error: {e}")))?;
 
-        // Validate.
-        let report = rudof
-            .validate_shacl(
-                Some(&ShaclValidationMode::Native),
-                Some(&ShapesGraphSource::CurrentSchema),
-            )
-            .map_err(|e| Error::InvalidValue(format!("SHACL validation error: {e}")))?;
+        let graph = Graph::try_from(data)
+            .map_err(|e| Error::InvalidValue(format!("data graph error: {e}")))?;
+        let mut validator = GraphValidation::new(graph);
+        let report =
+            ShaclProcessor::validate(&mut validator, &schema, &ShaclValidationMode::Native)
+                .map_err(|e| Error::InvalidValue(format!("SHACL validation error: {e}")))?;
 
         let mut issues = Vec::new();
         for result in report.results() {
             issues.push(ValidationIssue {
                 severity: format!("{:?}", result.severity()),
-                focus_node: format!("{}", result.focus_node()),
-                component: format!("{}", result.component()),
+                focus_node: report_term(result.focus_node()),
+                component: report_term(result.constraint_component()),
                 path: result.path().map(|p| format!("{p}")),
-                value: result.value().map(|v| format!("{v}")),
-                source_shape: result.source().map(|s| format!("{s}")),
-                message: result.message().map(std::string::ToString::to_string),
+                value: result.value().map(report_term),
+                source_shape: result.source().map(report_term),
+                message: result.message().get(None).cloned(),
             });
         }
 
         Ok(ValidationFeedback {
             conforms: report.conforms(),
-            violations: report.count_violations(),
-            warnings: report.count_warnings(),
+            violations: report.get_count_of(&shacl_engine::types::Severity::Violation),
+            warnings: report.get_count_of(&shacl_engine::types::Severity::Warning),
             results: issues,
             resolution_candidates: None,
         })
