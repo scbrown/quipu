@@ -57,7 +57,7 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
         Some(p) if !p.starts_with("--") => p.as_str(),
         _ => {
             eprintln!(
-                "usage: quipu knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]"
+                "usage: quipu knot <file.ttl> [--graph <iri>] [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]"
             );
             std::process::exit(1);
         }
@@ -109,21 +109,38 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
         }
     }
 
-    let format = if file_path.ends_with(".nt") || file_path.ends_with(".ntriples") {
-        RdfFormat::NTriples
-    } else {
-        RdfFormat::Turtle
+    let format = match std::path::Path::new(file_path)
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+    {
+        Some("nt" | "ntriples") => RdfFormat::NTriples,
+        Some("rdf" | "xml") => RdfFormat::RdfXml,
+        _ => RdfFormat::Turtle,
     };
 
     let now = resolve_timestamp(args);
-    match quipu::ingest_rdf(
+    let graph = match flag_value(args, "--graph") {
+        Some(iri) => match store.graph_create(iri) {
+            Ok(graph) => graph,
+            Err(e) => {
+                eprintln!("error registering graph: {e}");
+                std::process::exit(1);
+            }
+        },
+        None => 0,
+    };
+    let base_iri = std::fs::canonicalize(file_path)
+        .ok()
+        .map(|path| format!("file://{}", path.display()));
+    match quipu::rdf::ingest_rdf_to_graph(
         &mut store,
         data.as_bytes(),
         format,
-        None,
+        base_iri.as_deref(),
         &now,
         None,
         Some(file_path),
+        graph,
     ) {
         Ok((tx_id, count)) => {
             println!("knotted {count} facts from {file_path} (tx {tx_id})");

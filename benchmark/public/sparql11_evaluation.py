@@ -337,8 +337,6 @@ def unsupported_reason(case: Case) -> str | None:
         return "manifest entailment-regime setup is not implemented"
     if case.kind != "QueryEvaluationTest":
         return f"test kind {case.kind} is not executable by this runner"
-    if case.graph_data:
-        return "named-graph fixture loading is not implemented"
     if not case.query:
         return "manifest action has no qt:query"
     if not case.result:
@@ -369,7 +367,23 @@ def run_case(case: Case, quipu: Path) -> dict[str, object]:
             )
             if loaded.returncode:
                 return {**base, "status": "error", "diagnostic": loaded.stderr.strip()}
-        query = case.query.read_text()
+        for fixture in case.graph_data:
+            loaded = subprocess.run(
+                [
+                    str(quipu),
+                    "knot",
+                    str(fixture),
+                    "--graph",
+                    fixture.resolve().as_uri(),
+                    "--db",
+                    str(database),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            if loaded.returncode:
+                return {**base, "status": "error", "diagnostic": loaded.stderr.strip()}
+        query = f"BASE <{case.query.resolve().as_uri()}>\n{case.query.read_text()}"
         observed = subprocess.run(
             [str(quipu), "read", query, "--db", str(database)],
             text=True,
