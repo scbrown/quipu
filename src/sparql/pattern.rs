@@ -563,7 +563,9 @@ pub fn eval_pattern_seeded(
             Ok((bounded, variables))
         }
 
-        #[cfg(not(feature = "remote"))]
+        // `rudof_lib` enables spargebra's SPARQL 1.2 variants under `full`,
+        // while the smaller builds have an exhaustive SPARQL 1.1 enum.
+        #[allow(unreachable_patterns)]
         _ => Err(Error::InvalidValue(format!(
             "unsupported graph pattern: {pattern}"
         ))),
