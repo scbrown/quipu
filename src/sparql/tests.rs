@@ -611,6 +611,30 @@ fn select_optional() {
 }
 
 #[test]
+fn minus_removes_only_compatible_solutions_with_shared_variables() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"SELECT ?s WHERE {
+          ?s <http://example.org/name> ?name
+          MINUS { ?s <http://example.org/age> 30 }
+        }"#,
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 2);
+
+    let disjoint = query(
+        &store,
+        r#"SELECT ?s WHERE {
+          ?s <http://example.org/name> ?name
+          MINUS { ?other <http://example.org/age> 30 }
+        }"#,
+    )
+    .unwrap();
+    assert_eq!(disjoint.rows().len(), 3);
+}
+
+#[test]
 fn select_order_by_with_limit() {
     let store = test_store_with_data();
     let result = query(
