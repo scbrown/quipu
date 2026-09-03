@@ -1,15 +1,14 @@
-# CLI: sharing, import and packs
+# CLI: sharing, import and legacy packs
 
 Reference for the commands behind [Sharing & Federation](../sharing/README.md).
 Every flag here is checked against `quipu --help` by `tests/cli_doc_drift.rs`, so
 this page cannot quietly fall behind the binary.
 
-A note on vocabulary, because it is about to matter more. **The share is the
-artifact.** `quipu share` writes one as a directory of text files; `quipu pack`
-writes one whose payload is carried in Quipu's own SQLite form. The SQLite form
-is an *encoding* — an internal detail of how bytes are stored — not a second kind
-of thing to learn. Where this page says "pack", read "a share carried in the
-SQLite form".
+A note on vocabulary: **the share is the portable artifact.** `quipu share`
+writes its standard text files directly; releases may carry the same files in a
+deterministic `.qpack.tar.gz` archive. The older `pack` and `unpack` commands
+remain for local SQLite compatibility, but a `.qpack.db` is not the published
+interchange format.
 
 ---
 
@@ -17,12 +16,13 @@ SQLite form".
 
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
-            [--shapes NAME]... [--no-shapes] [--parent-share ID] [--turtle]
+            [--shapes NAME]... [--no-shapes] [--parent-share ID]
+            [--since <parent-share>] [--turtle]
 ```
 
-Writes a deterministic, git-native share into `<dir>`: `export.nt` (the facts),
-`shapes.ttl` (the constraints they were validated against) and `manifest.json`
-(hashes, producer, lineage).
+Writes a deterministic, git-native share into `<dir>`: RDFC-1.0 canonical
+`export.nt` (the facts), `shapes.ttl` (the constraints they were validated
+against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 
 | Flag | Effect |
 |---|---|
@@ -33,6 +33,7 @@ Writes a deterministic, git-native share into `<dir>`: `export.nt` (the facts),
 | `--shapes <NAME>` | include a named shape set; repeatable |
 | `--no-shapes` | omit `shapes.ttl` — the receiver then has no constraints to validate against, so prefer not to |
 | `--parent-share <ID>` | record lineage: the share this one descends from |
+| `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL |
 | `--turtle` | additionally write a Turtle view for humans |
 
 `--parent-share` is what makes `quipu merge` possible later. A share without a
@@ -43,11 +44,15 @@ when you know it, rather than trying to reconstruct it at reconnect time.
 ## `quipu import` — receive a share, into quarantine
 
 ```text
-quipu import <share-dir> [--source <uri>] [--actor <id>] [--db <path>]
+quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--db <path>]
+quipu import delta <parent-share> <delta-share> [--actor <id>]
 ```
 
-Verifies the manifest and payload hashes, then stages the result in a quarantine
-graph. **It does not touch ROOT.** A hash mismatch is refused outright:
+Verifies the manifest and payload hashes, then stages a local directory in its
+selected store. Archives and URLs are fetched under fixed size limits and
+materialized in a fresh in-memory store, so no downloaded artifact or database
+is left behind. **Import never touches ROOT without promotion.** A hash mismatch
+is refused outright:
 
 ```text
 share graph hash mismatch: manifest=… actual=…
@@ -58,6 +63,10 @@ share graph hash mismatch: manifest=… actual=…
 | `--source <uri>` | record where the share came from; defaults to the directory path |
 | `--actor <id>` | attribute the import |
 | `--db <path>` | store file |
+
+`import delta` verifies the full parent and the delta's lineage, hashes and
+restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
+result, then sends that result through the same verified in-memory import path.
 
 ## `quipu import promote` — admit a staged share into ROOT
 
@@ -97,7 +106,7 @@ and records a decision** rather than guessing.
 Exit `2` is a distinct code precisely so a script can tell "needs a decision"
 from "went wrong".
 
-## `quipu pack` / `quipu unpack` — a share in the SQLite form
+## `quipu pack` / `quipu unpack` — legacy SQLite compatibility
 
 ```text
 quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N]
@@ -117,9 +126,9 @@ quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
 | `--format turtle` | carry the payload as Turtle |
 | `--into <graph-iri>` | unpack into a named graph |
 
-`--verify` answers "is this intact?" *before* you load it. Verify a pack you did
-not produce yourself, every time — that is the whole reason the flag is separate
-from `unpack`.
+`--verify` answers whether a legacy SQLite pack is intact before loading it.
+New repository and release workflows use `share` and `import`; they do not
+publish `.qpack.db` files.
 
 ## `quipu knot` — assert facts, including identity across stores
 
