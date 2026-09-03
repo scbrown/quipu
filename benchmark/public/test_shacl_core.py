@@ -28,6 +28,31 @@ class ShaclHarnessTests(unittest.TestCase):
         self.assertEqual(MODULE.category_of(pathlib.Path("core/node/a.ttl")), "core-node")
         self.assertEqual(MODULE.category_of(pathlib.Path("sparql/node/a.ttl")), "shacl-sparql")
 
+    def test_canonical_path_preserves_shacl_operators(self):
+        prefixes = {
+            "ex": "http://example.org/",
+            "sh": "http://www.w3.org/ns/shacl#",
+        }
+        self.assertEqual(
+            MODULE.canonical_path("[ sh:alternativePath ( ex:p ex:q ) ]", prefixes),
+            "(http://example.org/p | http://example.org/q)",
+        )
+        self.assertEqual(
+            MODULE.canonical_path("( ex:p [ sh:zeroOrMorePath ex:q ] )", prefixes),
+            "(http://example.org/p / (http://example.org/q)*)",
+        )
+        self.assertEqual(
+            MODULE.canonical_path("[ sh:inversePath ex:p ]", prefixes),
+            "^(http://example.org/p)",
+        )
+
+    def test_object_after_keeps_a_complete_nested_path(self):
+        block = "sh:resultPath ( ex:p [ sh:zeroOrOnePath ex:q ] ) ; sh:value 1"
+        self.assertEqual(
+            MODULE.object_after(block, "sh:resultPath"),
+            "( ex:p [ sh:zeroOrOnePath ex:q ] )",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

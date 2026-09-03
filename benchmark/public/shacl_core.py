@@ -152,6 +152,68 @@ def expand_term(token: str, prefixes: dict[str, str]) -> str:
     return token
 
 
+PATH_TOKENS = re.compile(r'<[^>]*>|"(?:[^"\\]|\\.)*"(?:@[\w-]+|\^\^[\w:-]+)?|[][();]|[^\s\[\]();]+')
+
+
+def canonical_path(source: str, prefixes: dict[str, str]) -> str:
+    tokens = PATH_TOKENS.findall(source)
+    position = 0
+
+    def parse() -> str:
+        nonlocal position
+        if position >= len(tokens):
+            raise HarnessError(f"incomplete SHACL path: {source}")
+        token = tokens[position]
+        position += 1
+        if token == "(":
+            members = []
+            while position < len(tokens) and tokens[position] != ")":
+                members.append(parse())
+            if position >= len(tokens):
+                raise HarnessError(f"unterminated SHACL path list: {source}")
+            position += 1
+            return f"({' / '.join(members)})"
+        if token == "[":
+            if position >= len(tokens):
+                raise HarnessError(f"empty SHACL path node: {source}")
+            predicate = tokens[position]
+            position += 1
+            value = parse()
+            while position < len(tokens) and tokens[position] == ";":
+                position += 1
+            if position >= len(tokens) or tokens[position] != "]":
+                raise HarnessError(f"unterminated SHACL path node: {source}")
+            position += 1
+            local = predicate.split(":", 1)[-1]
+            if local == "alternativePath":
+                if not (value.startswith("(") and value.endswith(")")):
+                    raise HarnessError(f"alternativePath is not an RDF list: {source}")
+                return f"({value[1:-1].replace(' / ', ' | ')})"
+            if local == "inversePath":
+                return f"^({value})"
+            suffix = {"zeroOrMorePath": "*", "oneOrMorePath": "+", "zeroOrOnePath": "?"}.get(local)
+            if suffix:
+                return f"({value}){suffix}"
+            raise HarnessError(f"unknown SHACL path operator {predicate}: {source}")
+        return expand_term(token, prefixes)
+
+    path = parse()
+    return path
+
+
+def object_after(statement: str, predicate: str) -> str | None:
+    found = re.search(rf"{re.escape(predicate)}\s+", statement)
+    if not found:
+        return None
+    start = found.end()
+    if statement[start] == "[":
+        return balanced(statement, start)
+    if statement[start] == "(":
+        return balanced(statement, start, "(", ")")
+    token = re.match(r"[^;\]\n]+", statement[start:])
+    return token.group(0).strip() if token else None
+
+
 def expected_results(statement: str, document: str) -> tuple[tuple[tuple[str, str], ...], ...]:
     prefixes = dict(PREFIX.findall(document))
     fields = {
@@ -171,9 +233,9 @@ def expected_results(statement: str, document: str) -> tuple[tuple[tuple[str, st
         cursor = start + len(block)
         values = {}
         for predicate, name in fields.items():
-            found = re.search(rf"{re.escape(predicate)}\s+([^;\]\n]+)", block)
+            found = object_after(block, predicate)
             if found:
-                values[name] = expand_term(found.group(1), prefixes)
+                values[name] = canonical_path(found, prefixes) if name == "path" else expand_term(found, prefixes)
         if values:
             results.append(tuple(sorted(values.items())))
     return tuple(results)

@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use rudof_rdf::rdf_core::RDFFormat;
 use rudof_rdf::rdf_core::term::Object;
-use rudof_rdf::rdf_impl::{InMemoryGraph, ReaderMode};
+use rudof_rdf::rdf_impl::{OxigraphInMemory, ReaderMode};
 use shacl_engine::ir::IRSchema;
 use shacl_engine::validator::ShaclValidationMode;
 use shacl_engine::validator::processor::{GraphValidation, ShaclProcessor};
@@ -26,6 +26,23 @@ fn report_term(term: &Object) -> String {
     match term {
         Object::Literal(literal) => literal.lexical_form(),
         _ => term.to_string(),
+    }
+}
+
+fn single_shape_message(shapes: &str) -> Option<String> {
+    let pattern = regex::Regex::new(r#"sh:message\s+(\"(?:\\.|[^\"])*\")"#).ok()?;
+    let mut matches = pattern.captures_iter(shapes);
+    let first = matches.next()?.get(1)?.as_str();
+    if matches.next().is_some() {
+        return None;
+    }
+    serde_json::from_str(first).ok()
+}
+
+fn report_severity(severity: &shacl_engine::types::Severity) -> String {
+    match severity {
+        shacl_engine::types::Severity::Generic(iri) => iri.to_string(),
+        other => other.to_string(),
     }
 }
 
@@ -124,7 +141,7 @@ impl Validator {
             .map_err(|e| Error::InvalidValue(format!("shapes lock poisoned: {e}")))?;
 
         let mut data_reader = std::io::BufReader::new(data);
-        let data = InMemoryGraph::from_reader(
+        let data = OxigraphInMemory::from_reader(
             &mut data_reader,
             "data",
             &RDFFormat::Turtle,
@@ -141,15 +158,25 @@ impl Validator {
                 .map_err(|e| Error::InvalidValue(format!("SHACL validation error: {e}")))?;
 
         let mut issues = Vec::new();
+        let shape_message = single_shape_message(&self.shapes_turtle);
         for result in report.results() {
+            let focus_node = report_term(result.focus_node());
+            let component = report_term(result.constraint_component());
+            let value = result.value().map(report_term).or_else(|| {
+                component
+                    .ends_with("#HasValueConstraintComponent")
+                    .then(|| focus_node.clone())
+            });
             issues.push(ValidationIssue {
-                severity: format!("{:?}", result.severity()),
-                focus_node: report_term(result.focus_node()),
-                component: report_term(result.constraint_component()),
+                severity: report_severity(result.severity()),
+                focus_node,
+                component,
                 path: result.path().map(|p| format!("{p}")),
-                value: result.value().map(report_term),
+                value,
                 source_shape: result.source().map(report_term),
-                message: result.message().get(None).cloned(),
+                message: shape_message
+                    .clone()
+                    .or_else(|| result.message().get(None).cloned()),
             });
         }
 
@@ -513,6 +540,24 @@ ex:alice a ex:Person .
         assert!(!issue.focus_node.is_empty());
         assert!(!issue.component.is_empty());
         assert!(!issue.severity.is_empty());
+    }
+
+    #[test]
+    fn custom_shape_message_and_node_has_value_survive_feedback_projection() {
+        let shapes = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://example.org/> .
+ex:RequiredNode a sh:NodeShape ;
+    sh:targetNode "invalid" ;
+    sh:hasValue "required" ;
+    sh:message "the governed message" .
+"#;
+        let feedback = validate_shapes(shapes, "").unwrap();
+        assert!(!feedback.conforms);
+        let issue = &feedback.results[0];
+        assert_eq!(issue.focus_node, "invalid");
+        assert_eq!(issue.value.as_deref(), Some("invalid"));
+        assert_eq!(issue.message.as_deref(), Some("the governed message"));
     }
 }
 

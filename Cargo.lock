@@ -2212,8 +2212,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2595,6 +2597,25 @@ checksum = "3acae9609540aa318d1bc588455225fb2085b9ed0c4f6bd0d9d5bcd86f1a0344"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "include_dir"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "923d117408f1e49d914f1a379a309cffe4f18c05cf4e3d12e613a15fc81bd0dd"
+dependencies = [
+ "include_dir_macros",
+]
+
+[[package]]
+name = "include_dir_macros"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cab85a7ed0bd5f0e76d93846e0147172bed2e2d3f859bcc33a8d9699cad1a75"
+dependencies = [
+ "proc-macro2",
+ "quote",
 ]
 
 [[package]]
@@ -3441,135 +3462,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "li_iri_s"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a6db078353628cbb9f5243b77ad7bf653edcb5ddcadf0b5326a2c4af1001fc6"
-dependencies = [
- "getrandom 0.3.4",
- "oxiri",
- "oxrdf",
- "proptest",
- "reqwest",
- "serde",
- "thiserror 2.0.18",
- "url",
-]
-
-[[package]]
-name = "li_mie"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e1bd5fafeac6f029b64fbd43a0270dfb965ee2424d5876efc2492966107e1e"
-dependencies = [
- "hashlink 0.10.0",
- "li_iri_s",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tracing",
- "yaml-rust2",
-]
-
-[[package]]
-name = "li_prefixmap"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57156cca8d132375d7d44e7ac9030e523bf7b4b7ef2b7c9db9ba61d63e63448e"
-dependencies = [
- "colored",
- "indexmap 2.13.1",
- "li_iri_s",
- "proptest",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "li_rudof_rdf"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26db3ca228ea7c9cf9d49194c30237faf4fe454429b54897c59b73533af1e01e"
-dependencies = [
- "async-trait",
- "colored",
- "const_format",
- "getrandom 0.3.4",
- "li_iri_s",
- "li_prefixmap",
- "once_cell",
- "oxigraph",
- "oxilangtag",
- "oxiri",
- "oxjsonld",
- "oxrdf",
- "oxrdfio",
- "oxrdfxml",
- "oxsdatatypes",
- "oxttl",
- "paste",
- "regex",
- "reqwest",
- "rust_decimal",
- "serde",
- "serde_json",
- "sparesults",
- "spargebra",
- "tabled",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml 0.9.12+spec-1.1.0",
- "url",
-]
-
-[[package]]
-name = "li_shacl"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac9fbf729149486f3ef73e5ea04a951023e9c5087e6fdffde2346fc2b353d44c"
-dependencies = [
- "anyhow",
- "indoc",
- "itertools 0.14.0",
- "li_iri_s",
- "li_prefixmap",
- "li_rudof_rdf",
- "li_sparql_service",
- "petgraph 0.8.3",
- "serde",
- "thiserror 2.0.18",
- "toml 0.9.12+spec-1.1.0",
- "tracing",
-]
-
-[[package]]
-name = "li_sparql_service"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1538e46e496e37ff8defab1935b0be81fa54fc5878c86c817647d440eff9a92"
-dependencies = [
- "colored",
- "const_format",
- "itertools 0.14.0",
- "li_iri_s",
- "li_mie",
- "li_prefixmap",
- "li_rudof_rdf",
- "oxigraph",
- "oxrdf",
- "oxrdfio",
- "oxsdatatypes",
- "rust_decimal",
- "serde",
- "serde_json",
- "sparesults",
- "thiserror 2.0.18",
- "toml 0.9.12+spec-1.1.0",
- "tracing",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.184"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3782,6 +3674,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "714098028fe011992e1c3962653c96b2d578c4b4bce9036e15ff220319b1e0e3"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "mie"
+version = "0.3.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc6283a352a10f2fc82fa4fb9dd1fc289c0e514424d92360d5c2f287f3da8151"
+dependencies = [
+ "hashlink 0.10.0",
+ "rudof_iri",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
+ "yaml-rust2",
 ]
 
 [[package]]
@@ -4136,7 +4043,7 @@ dependencies = [
  "getrandom 0.3.4",
  "libc",
  "oxhttp",
- "oxiri",
+ "oxiri 0.2.11",
  "oxrdf",
  "oxrdfio",
  "oxsdatatypes",
@@ -4165,13 +4072,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
+name = "oxiri"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b6bd0ef560f078e41ce2ebf370cce217e7fb2c3695ffa87541151c9de94e83a"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "oxjsonld"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6e1380a504a8571763f13b8bcad629ff90d0300d47d8a519f3c6c599625840e"
 dependencies = [
  "json-event-parser",
- "oxiri",
+ "oxiri 0.2.11",
  "oxrdf",
  "ryu-js",
  "thiserror 2.0.18",
@@ -4185,7 +4101,7 @@ checksum = "0afd5c28e4a399c57ee2bc3accd40c7b671fdc7b6537499f14e95b265af7d7e0"
 dependencies = [
  "hex",
  "oxilangtag",
- "oxiri",
+ "oxiri 0.2.11",
  "oxsdatatypes",
  "rand 0.9.2",
  "sha2",
@@ -4212,7 +4128,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd5516ae083d09bc57ec65ed5ee97701481725de6ffaa83d968ab42a96157ba1"
 dependencies = [
  "oxilangtag",
- "oxiri",
+ "oxiri 0.2.11",
  "oxrdf",
  "quick-xml",
  "thiserror 2.0.18",
@@ -4235,7 +4151,7 @@ checksum = "f03fd471bd54c23d76631c0a2677aa4bb308d905f6e491ee35dcb0732b7c5c6c"
 dependencies = [
  "memchr",
  "oxilangtag",
- "oxiri",
+ "oxiri 0.2.11",
  "oxrdf",
  "thiserror 2.0.18",
 ]
@@ -4359,6 +4275,7 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap 2.13.1",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]
@@ -4448,6 +4365,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
+]
+
+[[package]]
+name = "prefixmap"
+version = "0.3.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3b5d65d90d6db7b7f6f69b58719d4f4a5d9954f1be199953341e76891520157"
+dependencies = [
+ "colored",
+ "indexmap 2.13.1",
+ "proptest",
+ "rudof_iri",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4674,8 +4605,6 @@ dependencies = [
  "hex",
  "js-sys",
  "lancedb",
- "li_rudof_rdf",
- "li_shacl",
  "md-5",
  "ndarray 0.16.1",
  "ort",
@@ -4688,11 +4617,13 @@ dependencies = [
  "proptest",
  "regex",
  "ring",
+ "rudof_rdf",
  "rusqlite",
  "serde",
  "serde_json",
  "sha1",
  "sha2",
+ "shacl",
  "sparesults",
  "spargebra",
  "strsim",
@@ -5073,6 +5004,77 @@ checksum = "c51c9ae4df8a7fba42103df5c621fa3c37eccf3a3c650879e90fc48b11cc192c"
 dependencies = [
  "hashbrown 0.16.1",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "rudof_config"
+version = "0.3.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06182074ece9a28169eca164273d26df6fea8a760d4b82a017738cf6dc309549"
+dependencies = [
+ "dirs",
+ "serde",
+ "thiserror 2.0.18",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "rudof_iri"
+version = "0.3.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2141dfb6de03cf3e88b7a8a82940ca23c7d15163bb036aecaee5379613d3353f"
+dependencies = [
+ "getrandom 0.3.4",
+ "getrandom 0.4.3",
+ "indexmap 2.13.1",
+ "oxiri 0.3.1",
+ "oxrdf",
+ "proptest",
+ "reqwest",
+ "serde",
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
+name = "rudof_rdf"
+version = "0.3.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7eb6501ecbca462ce3a0689c96ff5c71e0532cd04f2e42cee7a4ae949bacced"
+dependencies = [
+ "colored",
+ "const_format",
+ "csv",
+ "getrandom 0.3.4",
+ "include_dir",
+ "once_cell",
+ "oxigraph",
+ "oxilangtag",
+ "oxiri 0.3.1",
+ "oxjsonld",
+ "oxrdf",
+ "oxrdfio",
+ "oxrdfxml",
+ "oxsdatatypes",
+ "oxttl",
+ "paste",
+ "prefixmap",
+ "regex",
+ "reqwest",
+ "rudof_config",
+ "rudof_iri",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sparesults",
+ "spargebra",
+ "tabled",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -5507,6 +5509,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "shacl"
+version = "0.3.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0d68cef762124c42e1df1416a7665cff142dcc78b72628bbf5b8dfd55339c28"
+dependencies = [
+ "anyhow",
+ "dashmap",
+ "indoc",
+ "itertools 0.14.0",
+ "petgraph 0.8.3",
+ "prefixmap",
+ "rayon",
+ "rudof_config",
+ "rudof_iri",
+ "rudof_rdf",
+ "rust_decimal",
+ "serde",
+ "sparql_service",
+ "thiserror 2.0.18",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5644,7 +5670,7 @@ dependencies = [
  "hex",
  "json-event-parser",
  "md-5",
- "oxiri",
+ "oxiri 0.2.11",
  "oxrdf",
  "oxsdatatypes",
  "rand 0.9.2",
@@ -5665,7 +5691,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46715eb957d1fe960cbbc0b713da8f78e2cb19df315b48fb09c9467a1c84f656"
 dependencies = [
  "oxilangtag",
- "oxiri",
+ "oxiri 0.2.11",
  "oxrdf",
  "peg",
  "rand 0.9.2",
@@ -5681,6 +5707,33 @@ dependencies = [
  "oxrdf",
  "rand 0.9.2",
  "spargebra",
+]
+
+[[package]]
+name = "sparql_service"
+version = "0.3.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e32fc7dfa97f0c1f06bacb55c8f94ebe5eb02d4c68d42181ef53fce1534d6ec4"
+dependencies = [
+ "colored",
+ "const_format",
+ "itertools 0.14.0",
+ "mie",
+ "oxigraph",
+ "oxrdf",
+ "oxrdfio",
+ "oxsdatatypes",
+ "prefixmap",
+ "rudof_config",
+ "rudof_iri",
+ "rudof_rdf",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sparesults",
+ "thiserror 2.0.18",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
 ]
 
 [[package]]
