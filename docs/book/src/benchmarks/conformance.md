@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu passes **86/86** approved SPARQL 1.1
-> *query-syntax* tests and **134/168** approved
+> *query-syntax* tests and **135/168** approved
 > *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
@@ -21,7 +21,7 @@ You can re-derive every number on this page yourself — the commands are below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `c4c06c4a89c011bec4ed541ece7146db585669b2` |
+| Quipu revision (evaluation) | `d38f77ff4c638a546e12a3231493a9fef54be329` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
 | Quipu version | `quipu 0.3.27` |
 | Store isolation | one temporary SQLite store per executable test |
@@ -36,12 +36,12 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 134 | 11 | 4 | 19 | 168 |
+| query evaluation | 135 | 10 | 4 | 19 | 168 |
 | result format | 2 | 1 | 0 | 4 | 7 |
 | protocol | 0 | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **222** | **12** | **4** | **164** | **402** |
+| **all classes** | **223** | **11** | **4** | **164** | **402** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -62,7 +62,7 @@ moves the most per fix.
 | `negation` | 4 | 7 | 0 | 0 | 11 |
 | `bind` | 10 | 0 | 0 | 0 | 10 |
 | `bindings` | 10 | 0 | 0 | 0 | 10 |
-| `project-expression` | 6 | 1 | 0 | 0 | 7 |
+| `project-expression` | 7 | 0 | 0 | 0 | 7 |
 | `exists` | 4 | 0 | 0 | 1 | 5 |
 | `construct` | 0 | 0 | 0 | 4 | 4 |
 | `grouping` | 4 | 0 | 0 | 0 | 4 |
@@ -129,15 +129,6 @@ claim of progress can be checked against a specific case rather than a count.
 | `:subset-02` | Calculate which sets are subsets of others (exclude A subsetOf A) | failed | `query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#t…` |
 | `:subset-03` | Calculate proper subset | failed | `query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#t…` |
 | `:subset-by-exclusion-minus-1` | Subsets by exclusion (MINUS) | failed | `query error: unsupported graph pattern: ?animal <http://www.w3.org/1999/02/22-rdf-syntax-…` |
-
-</details>
-
-<details>
-<summary><code>project-expression</code> — 1 of 7 not passing</summary>
-
-| Test | Name | Status | Reason |
-|---|---|---|---|
-| `:projexp01` | Expression is equality | failed | `actual result differs from expected multiset` |
 
 </details>
 

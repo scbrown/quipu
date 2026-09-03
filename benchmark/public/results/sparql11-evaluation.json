@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "c4c06c4a89c011bec4ed541ece7146db585669b2",
+  "quipu_revision": "d38f77ff4c638a546e12a3231493a9fef54be329",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 11,
-      "passed": 134,
+      "failed": 10,
+      "passed": 135,
       "unsupported": 19
     },
     "protocol": {
@@ -1284,8 +1284,8 @@
       "manifest": "project-expression/manifest.ttl",
       "query": "project-expression/projexp01.rq",
       "result": "project-expression/projexp01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
