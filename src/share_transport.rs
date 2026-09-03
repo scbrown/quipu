@@ -70,7 +70,7 @@ fn archive_files<R: Read>(reader: R, source: &str) -> Result<BTreeMap<String, St
             .and_then(|v| v.to_str())
             .ok_or_else(|| Error::InvalidValue("share archive path is not UTF-8".into()))?
             .to_string();
-        if !REQUIRED.contains(&name.as_str()) && name != "export.ttl" {
+        if !REQUIRED.contains(&name.as_str()) && name != "export.ttl" && name != "manifest.ttl" {
             return Err(Error::InvalidValue(format!(
                 "share archive contains undeclared file: {}",
                 path.display()

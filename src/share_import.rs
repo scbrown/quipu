@@ -141,7 +141,17 @@ fn verify_request(request: &ShareImportRequest) -> Result<()> {
             "share manifest contains unsupported payload paths".into(),
         ));
     }
-    let graph_hash = sha256(request.export_ntriples.as_bytes());
+    let graph_hash = if request.manifest.canonicalization.as_deref() == Some("RDFC-1.0") {
+        let canonical = crate::share::canonicalize_ntriples(request.export_ntriples.as_bytes())?;
+        if canonical != request.export_ntriples.as_bytes() {
+            return Err(Error::InvalidValue(
+                "share graph is not RDFC-1.0 canonical N-Triples".into(),
+            ));
+        }
+        sha256(&canonical)
+    } else {
+        sha256(request.export_ntriples.as_bytes())
+    };
     if request.manifest.graph_hash != graph_hash {
         return Err(Error::InvalidValue(format!(
             "share graph hash mismatch: manifest={} actual={graph_hash}",

@@ -82,7 +82,16 @@ fn payload_reconstructs_directory_byte_for_byte() {
     for (name, contents) in &payload.files {
         assert_eq!(contents.as_bytes(), std::fs::read(out.join(name)).unwrap());
     }
-    assert_eq!(payload.files.len(), 4);
+    assert_eq!(payload.files.len(), 5);
+    assert_eq!(
+        payload.manifest.canonicalization.as_deref(),
+        Some("RDFC-1.0")
+    );
+    let manifest_quads = oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::Turtle)
+        .for_reader(payload.files["manifest.ttl"].as_bytes())
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(!manifest_quads.is_empty());
     assert_eq!(
         payload.manifest.graph_hash,
         sha256(payload.files["export.nt"].as_bytes())
@@ -185,6 +194,16 @@ fn parent_share_changes_envelope_identity_not_graph_identity() {
         second.parent_share.as_deref(),
         Some(first.share_id.as_str())
     );
+}
+
+#[test]
+fn rdfc_canonicalization_erases_blank_node_labels() {
+    let left = b"_:alice <http://example.test/p> _:bob .\n_:bob <http://example.test/p> \"v\" .\n";
+    let right = b"_:x <http://example.test/p> _:y .\n_:y <http://example.test/p> \"v\" .\n";
+    let left = super::canonicalize_ntriples(left).unwrap();
+    let right = super::canonicalize_ntriples(right).unwrap();
+    assert_eq!(left, right);
+    assert!(String::from_utf8(left).unwrap().contains("_:c14n"));
 }
 
 #[test]

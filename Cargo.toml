@@ -86,7 +86,7 @@ tar = "0.4"
 # format, on native and wasm alike.
 rusqlite = { version = "0.40", features = ["bundled", "hooks", "serialize"] }
 thiserror = "2"
-oxrdf = "0.3"
+oxrdf = { version = "0.3", features = ["rdfc-10"] }
 oxttl = "0.2"
 oxrdfio = "0.2"
 sparesults = "0.3"

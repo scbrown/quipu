@@ -167,6 +167,9 @@ pub struct ShareManifest {
     pub tx_anchor: i64,
     /// Hash of exact `export.nt` bytes.
     pub graph_hash: String,
+    /// Dataset canonicalization applied before hashing (`RDFC-1.0` for new shares).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonicalization: Option<String>,
     /// Hash of exact `shapes.ttl` bytes.
     pub shapes_hash: String,
     /// Export scope.
@@ -184,6 +187,30 @@ pub struct ShareManifest {
 pub(crate) fn sha256(bytes: &[u8]) -> String {
     let digest = ring::digest::digest(&ring::digest::SHA256, bytes);
     format!("sha256:{}", hex::encode(digest.as_ref()))
+}
+
+/// Canonicalize an N-Triples graph with W3C RDFC-1.0 and serialize in code-point order.
+pub fn canonicalize_ntriples(input: &[u8]) -> Result<Vec<u8>> {
+    use oxrdf::dataset::{CanonicalizationAlgorithm, CanonicalizationHashAlgorithm};
+    let mut graph = oxrdf::Graph::new();
+    for quad in oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::NTriples).for_reader(input) {
+        let quad =
+            quad.map_err(|e| Error::InvalidValue(format!("share payload N-Triples parse: {e}")))?;
+        graph.insert(&oxrdf::Triple::from(quad));
+    }
+    graph.canonicalize(CanonicalizationAlgorithm::Rdfc10 {
+        hash_algorithm: CanonicalizationHashAlgorithm::Sha256,
+    });
+    let mut lines = graph
+        .iter()
+        .map(|triple| format!("{triple} ."))
+        .collect::<Vec<_>>();
+    lines.sort_unstable();
+    let mut canonical = lines.join("\n").into_bytes();
+    if !canonical.is_empty() {
+        canonical.push(b'\n');
+    }
+    Ok(canonical)
 }
 
 pub(crate) fn manifest_bytes(manifest: &ShareManifest, include_id: bool) -> Result<Vec<u8>> {
@@ -302,7 +329,11 @@ fn scrub_outward_payload(store: &Store, files: &BTreeMap<String, String>) -> Res
 }
 
 fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
-    let graph = export_scope(store, &opts.scope, oxrdfio::RdfFormat::NTriples)?;
+    let graph = canonicalize_ntriples(&export_scope(
+        store,
+        &opts.scope,
+        oxrdfio::RdfFormat::NTriples,
+    )?)?;
     let shapes = shapes_bytes(store, &opts.shapes, opts.no_shapes)?;
     let turtle = if opts.turtle_view {
         Some(export_scope(
@@ -329,6 +360,7 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
         store_id: store.store_id()?,
         tx_anchor,
         graph_hash: sha256(&graph),
+        canonicalization: Some("RDFC-1.0".into()),
         shapes_hash: sha256(&shapes),
         scope: opts.scope.clone(),
         parent_share: opts.parent_share.clone(),
@@ -351,6 +383,7 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
         String::from_utf8(manifest_bytes(&manifest, true)?)
             .map_err(|e| Error::Serialization(format!("share manifest UTF-8: {e}")))?,
     );
+    files.insert("manifest.ttl".into(), manifest_turtle(&manifest));
     files.insert(
         "export.nt".into(),
         String::from_utf8(graph)
@@ -370,6 +403,64 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
     }
     scrub_outward_payload(store, &files)?;
     Ok(SharePayload { manifest, files })
+}
+
+fn manifest_turtle(manifest: &ShareManifest) -> String {
+    let id = format!(
+        "urn:{}",
+        manifest
+            .share_id
+            .strip_prefix("sha256:")
+            .unwrap_or(&manifest.share_id)
+    );
+    let literal = |value: &str| serde_json::to_string(value).expect("string JSON cannot fail");
+    let parent = manifest
+        .parent_share
+        .as_ref()
+        .map_or_else(String::new, |parent| {
+            let parent = parent.strip_prefix("sha256:").unwrap_or(parent);
+            format!(" ;\n  prov:wasRevisionOf <urn:{parent}>")
+        });
+    format!(
+        r#"@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix spdx: <http://spdx.org/rdf/terms#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix quipu: <https://quipu.dev/ontology/> .
+
+<{id}> a dcat:Dataset, prov:Entity ;
+  dct:identifier {} ;
+  prov:generatedAtTime {}^^xsd:dateTime ;
+  prov:wasAttributedTo [ a prov:SoftwareAgent ;
+    dct:title {} ; quipu:version {} ]{parent} ;
+  dcat:distribution [ a dcat:Distribution ;
+    dcat:mediaType "application/n-triples" ;
+    dcat:downloadURL <payload:export.nt> ;
+    spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;
+      spdx:checksumValue {} ] ],
+  [ a dcat:Distribution ; dcat:mediaType "text/turtle" ;
+    dcat:downloadURL <payload:shapes.ttl> ;
+    spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;
+      spdx:checksumValue {} ] ] .
+"#,
+        literal(&manifest.share_id),
+        literal(&manifest.created_at),
+        literal(&manifest.producer.name),
+        literal(&manifest.producer.version),
+        literal(
+            manifest
+                .graph_hash
+                .strip_prefix("sha256:")
+                .unwrap_or(&manifest.graph_hash)
+        ),
+        literal(
+            manifest
+                .shapes_hash
+                .strip_prefix("sha256:")
+                .unwrap_or(&manifest.shapes_hash)
+        ),
+    )
 }
 
 /// Build a complete share response with the same canonical producer as [`share`].
