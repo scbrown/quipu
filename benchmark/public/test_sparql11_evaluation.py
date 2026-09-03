@@ -38,6 +38,16 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(cases[0].query, manifest.parent / "a.rq")
             self.assertEqual(cases[0].data, (manifest.parent / "data.ttl",))
 
+    def test_parse_manifest_includes_csv_result_format_cases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = pathlib.Path(directory) / "manifest.ttl"
+            manifest.write_text('''
+:csv rdf:type mf:CSVResultFormatTest ; mf:name "CSV" ; dawgt:approval dawgt:Approved ;
+   mf:action [ qt:query <a.rq> ; qt:data <data.ttl> ] ; mf:result <a.csv> .
+''')
+            cases = MODULE.parse_manifest("result-format", manifest)
+            self.assertEqual([(case.identifier, case.kind) for case in cases], [(":csv", "CSVResultFormatTest")])
+
     def test_actual_result_parses_cli_table_and_boolean(self):
         self.assertEqual(MODULE.actual_result("true\n"), True)
         self.assertEqual(
@@ -72,6 +82,18 @@ class EvaluationManifestTests(unittest.TestCase):
             MODULE.rows_equal_with_blank_nodes(
                 [("x", "_:same", "_:same")], [("x", "_:left", "_:right")]
             )
+        )
+
+    def test_delimited_result_preserves_csv_and_tsv_spelling(self):
+        self.assertEqual(
+            MODULE.delimited_result(b"s,o\r\na,\"x,y\"\r\n", ".csv"),
+            (["s", "o"], [("a", "x,y")]),
+        )
+        self.assertEqual(MODULE.normalize_delimited_numeric("1.0E6"), "1.0e6")
+        self.assertEqual(MODULE.normalize_delimited_numeric("notE10"), "notE10")
+        self.assertEqual(
+            MODULE.delimited_result(b"?s\t?o\n<a>\t_:b0\n", ".tsv"),
+            (["s", "o"], [("<a>", "_:b0")]),
         )
 
     def test_class_specific_unsupported_reasons_are_explicit(self):

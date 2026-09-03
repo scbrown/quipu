@@ -28,7 +28,9 @@
 //! legitimate, and guessing would manufacture confident lies. A datatype
 //! round-trip that "passes" via sniffing is evidence of the bug, not of a fix.
 
-use oxrdf::{Literal, NamedNode, Term as OxTerm, Triple as OxTriple, Variable, vocab::xsd};
+use oxrdf::{
+    BlankNode, Literal, NamedNode, Term as OxTerm, Triple as OxTriple, Variable, vocab::xsd,
+};
 use oxrdfio::{RdfFormat, RdfSerializer};
 use sparesults::{QueryResultsFormat, QueryResultsSerializer};
 
@@ -223,7 +225,11 @@ fn value_to_term(store: &Store, val: &Value) -> OxTerm {
     match val {
         Value::Ref(id) => {
             let iri = store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}"));
-            OxTerm::from(NamedNode::new_unchecked(iri))
+            if let Some(identifier) = iri.strip_prefix("_:") {
+                OxTerm::from(BlankNode::new_unchecked(identifier))
+            } else {
+                OxTerm::from(NamedNode::new_unchecked(iri))
+            }
         }
         Value::Str(s) => OxTerm::from(Literal::new_simple_literal(s.clone())),
         Value::Lang { lexical, lang } => Literal::new_language_tagged_literal(lexical, lang)
@@ -348,5 +354,19 @@ mod tests {
             String::from_utf8(tsv).unwrap(),
             "?s\n<http://example.org/alice>\n"
         );
+    }
+
+    #[test]
+    fn stored_blank_node_identifiers_serialize_as_blank_nodes() {
+        let store = Store::open_in_memory().unwrap();
+        let id = store.intern("_:generated").unwrap();
+        let result = QueryResult::Select {
+            variables: vec!["o".into()],
+            rows: vec![[("o".into(), Value::Ref(id))].into_iter().collect()],
+        };
+        let (_, tsv) = serialize(&store, &result, ResultFormat::Tsv)
+            .unwrap()
+            .unwrap();
+        assert_eq!(String::from_utf8(tsv).unwrap(), "?o\n_:generated\n");
     }
 }

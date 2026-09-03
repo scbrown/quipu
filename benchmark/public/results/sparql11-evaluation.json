@@ -1,11 +1,11 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "07173bd8f3bdbfe8af504074521e215126317840",
-  "quipu_version": "quipu 0.3.27",
+  "quipu_revision": "ca3d3e9c28057f91d9b145b3939118caf2f8a3de",
+  "quipu_version": "quipu 0.3.29",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
-    "build": "cargo build --release --bin quipu",
+    "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
     "runner": "python3 benchmark/public/sparql11_evaluation.py",
     "environment": {
       "SUITE": "/tmp/rdf-tests/sparql/sparql11",
@@ -37,9 +37,8 @@
       "unsupported": 70
     },
     "result-format": {
-      "cases": 7,
-      "failed": 3,
-      "passed": 4
+      "cases": 10,
+      "passed": 10
     }
   },
   "results": [
@@ -3135,13 +3134,43 @@
     },
     {
       "class": "result-format",
+      "id": ":csv01",
+      "name": "csv01 - CSV Result Format",
+      "manifest": "csv-tsv-res/manifest.ttl",
+      "query": "csv-tsv-res/csvtsv01.rq",
+      "result": "csv-tsv-res/csvtsv01.csv",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "result-format",
+      "id": ":csv02",
+      "name": "cvs02 - CSV Result Format",
+      "manifest": "csv-tsv-res/manifest.ttl",
+      "query": "csv-tsv-res/csvtsv02.rq",
+      "result": "csv-tsv-res/csvtsv02.csv",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "result-format",
+      "id": ":csv03",
+      "name": "csv03 - CSV Result Format",
+      "manifest": "csv-tsv-res/manifest.ttl",
+      "query": "csv-tsv-res/csvtsv01.rq",
+      "result": "csv-tsv-res/csvtsv03.csv",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "result-format",
       "id": ":tsv01",
       "name": "tsv01 - TSV Result Format",
       "manifest": "csv-tsv-res/manifest.ttl",
       "query": "csv-tsv-res/csvtsv01.rq",
       "result": "csv-tsv-res/csvtsv01.tsv",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "result-format",
@@ -3150,8 +3179,8 @@
       "manifest": "csv-tsv-res/manifest.ttl",
       "query": "csv-tsv-res/csvtsv02.rq",
       "result": "csv-tsv-res/csvtsv02.tsv",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "result-format",
@@ -3160,8 +3189,8 @@
       "manifest": "csv-tsv-res/manifest.ttl",
       "query": "csv-tsv-res/csvtsv01.rq",
       "result": "csv-tsv-res/csvtsv03.tsv",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "result-format",

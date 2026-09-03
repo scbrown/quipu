@@ -8,8 +8,12 @@ import csv
 import json
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
+import time
+import urllib.error
+import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass
@@ -17,7 +21,9 @@ from pathlib import Path
 
 PINNED_SUITE_REVISION = "369a90d1a60c021b746df2e411da0ff36258a758"
 APPROVED = "dawgt:approval dawgt:Approved"
-TYPE = re.compile(r"rdf:type\s+mf:(QueryEvaluationTest|UpdateEvaluationTest|ProtocolTest)")
+TYPE = re.compile(
+    r"rdf:type\s+mf:(QueryEvaluationTest|UpdateEvaluationTest|ProtocolTest|CSVResultFormatTest)"
+)
 NAME = re.compile(r'mf:name\s+"((?:[^"\\]|\\.)*)"', re.S)
 QUERY = re.compile(r"qt:query\s+<([^>]+)>")
 DATA = re.compile(r"qt:data\s+<([^>]+)>")
@@ -246,6 +252,81 @@ def expected_delimited(path: Path) -> tuple[list[str], list[tuple[str, ...]]]:
     return variables, rows
 
 
+def delimited_result(body: bytes, suffix: str) -> tuple[list[str], list[tuple[str, ...]]]:
+    """Parse an observed CSV/TSV representation without erasing term spelling."""
+    delimiter = "\t" if suffix == ".tsv" else ","
+    parsed = list(csv.reader(body.decode("utf-8").splitlines(), delimiter=delimiter))
+    if not parsed:
+        raise ValueError("HTTP result body is empty")
+    variables = [value.lstrip("?") for value in parsed[0]]
+    return variables, [tuple(value if value else "(unbound)" for value in row) for row in parsed[1:]]
+
+
+def reserve_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def run_result_format_case(
+    case: Case, quipu: Path, server: Path, database: Path
+) -> tuple[list[str], list[tuple[str, ...]]] | bool:
+    """Exercise the negotiated HTTP serializer used by real SPARQL clients."""
+    assert case.query and case.result
+    port = reserve_port()
+    process = subprocess.Popen(
+        [str(server), "--db", str(database), "--bind", f"127.0.0.1:{port}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        health = f"http://127.0.0.1:{port}/health"
+        for _ in range(100):
+            try:
+                with urllib.request.urlopen(health, timeout=0.2):
+                    break
+            except (urllib.error.URLError, TimeoutError):
+                if process.poll() is not None:
+                    raise ValueError(f"quipu-server exited before health: {process.stderr.read().strip()}")
+                time.sleep(0.02)
+        else:
+            raise ValueError("quipu-server did not become healthy")
+
+        suffix = case.result.suffix
+        accept = {
+            ".csv": "text/csv",
+            ".tsv": "text/tab-separated-values",
+            ".srj": "application/sparql-results+json",
+            ".srx": "application/sparql-results+xml",
+        }[suffix]
+        query = f"BASE <{case.query.resolve().as_uri()}>\n{case.query.read_text()}".encode()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/query",
+            data=query,
+            headers={"Content-Type": "application/sparql-query", "Accept": accept},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            if response.headers.get_content_type() != accept:
+                raise ValueError(
+                    f"expected Content-Type {accept}, got {response.headers.get('Content-Type')}"
+                )
+            body = response.read()
+        if suffix in {".csv", ".tsv"}:
+            return delimited_result(body, suffix)
+        observed_path = database.with_suffix(suffix)
+        observed_path.write_bytes(body)
+        return expected_json(observed_path) if suffix == ".srj" else expected_xml(observed_path)
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
 def expected_result(path: Path) -> tuple[list[str], list[tuple[str, ...]]] | bool:
     if path.suffix == ".srj":
         return expected_json(path)
@@ -380,6 +461,13 @@ def rows_equal_with_blank_nodes(
     return match(expected, 0, {}, {})
 
 
+def normalize_delimited_numeric(value: str) -> str:
+    """Ignore the case of the exponent marker permitted by SPARQL TSV."""
+    if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+", value):
+        return value.lower()
+    return value
+
+
 def unsupported_reason(case: Case) -> str | None:
     if case.test_class == "protocol":
         return "W3C HTTP request-sequence executor is not implemented"
@@ -387,7 +475,7 @@ def unsupported_reason(case: Case) -> str | None:
         return "Quipu exposes no SPARQL Update execution surface"
     if case.test_class == "entailment":
         return "manifest entailment-regime setup is not implemented"
-    if case.kind != "QueryEvaluationTest":
+    if case.kind not in {"QueryEvaluationTest", "CSVResultFormatTest"}:
         return f"test kind {case.kind} is not executable by this runner"
     if not case.query:
         return "manifest action has no qt:query"
@@ -398,7 +486,7 @@ def unsupported_reason(case: Case) -> str | None:
     return None
 
 
-def run_case(case: Case, quipu: Path) -> dict[str, object]:
+def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
     base = {
         "id": case.identifier,
         "name": case.name,
@@ -436,22 +524,26 @@ def run_case(case: Case, quipu: Path) -> dict[str, object]:
             if loaded.returncode:
                 return {**base, "status": "error", "diagnostic": loaded.stderr.strip()}
         query = f"BASE <{case.query.resolve().as_uri()}>\n{case.query.read_text()}"
-        observed = subprocess.run(
-            [str(quipu), "read", query, "--db", str(database)],
-            text=True,
-            capture_output=True,
-        )
-        if "query error:" in observed.stderr:
-            return {**base, "status": "failed", "diagnostic": observed.stderr.strip()}
         try:
-            if case.result.suffix in {".ttl", ".nt"}:
-                actual = actual_graph(observed.stdout)
-                expected = expected_graph(
-                    case.result, quipu, Path(temporary) / "expected.db"
-                )
-            else:
-                actual = actual_result(observed.stdout)
+            if case.test_class == "result-format":
+                actual = run_result_format_case(case, quipu, server, database)
                 expected = expected_result(case.result)
+            else:
+                observed = subprocess.run(
+                    [str(quipu), "read", query, "--db", str(database)],
+                    text=True,
+                    capture_output=True,
+                )
+                if "query error:" in observed.stderr:
+                    return {**base, "status": "failed", "diagnostic": observed.stderr.strip()}
+                if case.result.suffix in {".ttl", ".nt"}:
+                    actual = actual_graph(observed.stdout)
+                    expected = expected_graph(
+                        case.result, quipu, Path(temporary) / "expected.db"
+                    )
+                else:
+                    actual = actual_result(observed.stdout)
+                    expected = expected_result(case.result)
         except (ET.ParseError, ValueError, KeyError, json.JSONDecodeError) as error:
             return {**base, "status": "error", "diagnostic": str(error)}
         if isinstance(actual, Counter) and isinstance(expected, Counter):
@@ -462,6 +554,15 @@ def run_case(case: Case, quipu: Path) -> dict[str, object]:
             actual_vars, actual_rows = actual
             expected_vars, expected_rows = expected
             aligned_rows = reorder_rows(actual_vars, actual_rows, expected_vars)
+            if aligned_rows is not None and case.test_class == "result-format":
+                aligned_rows = [
+                    tuple(normalize_delimited_numeric(value) for value in row)
+                    for row in aligned_rows
+                ]
+                expected_rows = [
+                    tuple(normalize_delimited_numeric(value) for value in row)
+                    for row in expected_rows
+                ]
             passed = aligned_rows is not None and (
                 rows_equal_with_blank_nodes(aligned_rows, expected_rows)
                 if any(value.startswith("_:") for row in expected_rows for value in row)
@@ -478,6 +579,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--suite", required=True, type=Path)
     parser.add_argument("--quipu", default="quipu", type=Path)
+    parser.add_argument("--server", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--class", dest="classes", action="append", choices=CLASS_MANIFESTS)
     parser.add_argument("--limit", type=int)
@@ -485,6 +587,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         args.quipu = executable_path(args.quipu)
+        args.server = executable_path(args.server or args.quipu.with_name("quipu-server"))
     except ValueError as error:
         parser.error(str(error))
 
@@ -504,7 +607,9 @@ def main() -> int:
         [str(args.quipu), "--version"], check=True, text=True, capture_output=True
     ).stdout.strip()
     quipu_root = Path(__file__).resolve().parents[2]
-    results = [{"class": case.test_class, **run_case(case, args.quipu)} for case in cases]
+    results = [
+        {"class": case.test_class, **run_case(case, args.quipu, args.server)} for case in cases
+    ]
     for item in results:
         for field in ("manifest", "query", "result"):
             if item[field]:
@@ -523,7 +628,7 @@ def main() -> int:
         "quipu_version": version,
         "isolation": "one temporary SQLite store per executable test",
         "reproduce": {
-            "build": "cargo build --release --bin quipu",
+            "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
             "runner": "python3 benchmark/public/sparql11_evaluation.py",
             "environment": {
                 "SUITE": "/tmp/rdf-tests/sparql/sparql11",

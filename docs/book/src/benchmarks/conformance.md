@@ -26,9 +26,9 @@ boundary for `SERVICE`, which is scored by none of the classes below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `07173bd8f3bdbfe8af504074521e215126317840` |
+| Quipu revision (evaluation) | `ca3d3e9c28057f91d9b145b3939118caf2f8a3de` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
-| Quipu version | `quipu 0.3.27` |
+| Quipu version | `quipu 0.3.29` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -42,11 +42,11 @@ carries a named reason further down this page.
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
 | query evaluation | 168 | 0 | 0 | 0 | 168 |
-| result format | 4 | 3 | 0 | 0 | 7 |
+| result format | 10 | 0 | 0 | 0 | 10 |
 | protocol | 0 | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **258** | **3** | **0** | **141** | **402** |
+| **all classes** | **264** | **0** | **0** | **141** | **405** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -92,7 +92,7 @@ Grouped by the reason the runner recorded.
 ```sh
 git clone https://github.com/w3c/rdf-tests /tmp/rdf-tests
 git -C /tmp/rdf-tests checkout 369a90d1a60c021b746df2e411da0ff36258a758
-cargo build --release --bin quipu
+cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server
 QUIPU_BIN="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')/release/quipu"
 SUITE="/tmp/rdf-tests/sparql/sparql11"
 python3 benchmark/public/sparql11_syntax.py --suite "$SUITE/syntax-query" \
