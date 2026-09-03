@@ -366,7 +366,7 @@ jobs:
           "${BIN}" pack "${GRAPH}" --out "${PACK}" \
             --name quipu-repository --version "${TAG}" \
             --repo scbrown/quipu --repo-sha "${GITHUB_SHA}" \
-            --model-id none --model-version none
+            --model-id none --model-version none --db "${TMP}/source.db"
           "${BIN}" pack --verify "${PACK}"
           ( cd dist && sha256sum "$(basename "${PACK}")" > "$(basename "${PACK}").sha256" )
 
