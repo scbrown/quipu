@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "cc61bdf84dc6282bebfa7238ab4008a00988740f",
+  "quipu_revision": "775fe7be9e6931505b2f2d2dc2155318ee42a64b",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 26,
-      "passed": 119,
+      "failed": 20,
+      "passed": 125,
       "unsupported": 19
     },
     "protocol": {
@@ -974,8 +974,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/now01.rq",
       "result": "functions/now01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -984,8 +984,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/rand01.rq",
       "result": "functions/rand01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1114,8 +1114,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/uuid01.rq",
       "result": "functions/uuid01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1124,8 +1124,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/struuid01.rq",
       "result": "functions/struuid01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1324,8 +1324,8 @@
       "manifest": "project-expression/manifest.ttl",
       "query": "project-expression/projexp05.rq",
       "result": "project-expression/projexp05.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1344,8 +1344,8 @@
       "manifest": "project-expression/manifest.ttl",
       "query": "project-expression/projexp07.rq",
       "result": "project-expression/projexp07.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
