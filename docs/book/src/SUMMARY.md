@@ -41,6 +41,10 @@
 - [Reasoner](reference/reasoner.md)
 - [Rust API](reference/api.md)
 
+# Sharing & Federation
+
+- [Sharing & Federation](sharing/README.md)
+
 # Architecture
 
 - [EAVT Fact Log](architecture/eavt.md)

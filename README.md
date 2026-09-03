@@ -21,6 +21,33 @@
 
 A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Incan knotted-string recording system — a pre-Columbian knowledge graph encoded in textile. Trained readers (khipukamayuq) interpreted the structure. Quipu brings this philosophy to modern knowledge graphs: **strict structure, enforced by AI agents**.
 
+## Sharing & Federation
+
+**A Quipu store can hand its knowledge to another store, and compose another store's
+knowledge, without either one having to trust the other by default.** Every step is
+explicit, hash-verified, and labelled with where it came from — so you never absorb
+someone else's knowledge by accident.
+
+```sh
+quipu share --output ./share            # a git-native bundle: facts + shapes + lineage
+quipu import ./their-share              # verifies hashes, lands in QUARANTINE, not ROOT
+quipu import promote <share-id>         # a named operator's explicit act
+quipu status ./share && quipu merge ./share   # diverged? three-way; conflict exits 2
+```
+
+Quipu does not merge on receipt, and it does not take a peer's word for how
+trustworthy that peer is: trust is **declared by the local operator, never read from
+the member itself**. Federated rows carry `_provider`, `_trust` and `_freshness`, and
+a partial answer is reported as partial rather than arriving as a short one.
+
+SPARQL `SERVICE` is supported, **restricted to endpoints the operator has configured** —
+variable endpoints are refused and unconfigured hosts are unreachable. That is narrower
+than SPARQL 1.1's open federation by design, and Quipu makes no `SERVICE` conformance
+claim.
+
+→ **[Sharing & Federation](https://scbrown.github.io/quipu/sharing/)** — the primitive in
+full, every claim citing the command or symbol that proves it.
+
 ## See It In Action
 
 <p align="center">

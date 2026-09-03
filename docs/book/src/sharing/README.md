@@ -1,0 +1,175 @@
+# Sharing & Federation
+
+> **The primitive:** a Quipu store can hand its knowledge to another store, and
+> compose another store's knowledge, **without either one having to trust the
+> other by default**. Every step is explicit, hash-verified, and labelled with
+> where it came from — so you never absorb someone else's knowledge by accident.
+
+That is the whole idea. The rest of this page is how it works, and what proves
+it.
+
+Every claim below names the command, symbol, or verbatim message that backs it,
+so you can check it rather than believe it. Citations are file plus symbol, not
+line numbers, because line numbers rot and a page that cites them stops being
+true without anyone editing it. Quoted messages are exact — grep for them.
+
+Two things most graph databases do, Quipu deliberately does not. It does not
+merge on receipt, and it does not take a peer's word for how trustworthy that
+peer is.
+
+```mermaid
+flowchart LR
+  subgraph A["Store A — producer"]
+    AR[("ROOT")]
+  end
+  subgraph B["Store B — consumer"]
+    BQ[["quarantine graph<br/>urn:quipu:import:quarantine:…"]]
+    BR[("ROOT")]
+  end
+  AR -->|"quipu share --output dir/"| S["share bundle<br/>export.nt · shapes.ttl · manifest.json"]
+  S -->|"quipu import dir/<br/>hashes verified"| BQ
+  BQ -->|"quipu import promote &lt;id&gt;<br/>an operator's explicit act"| BR
+  BR -.->|"quipu status dir/"| D{{"diverged?"}}
+  D -.->|"quipu merge dir/<br/>conflict ⇒ exit 2"| BR
+```
+
+## What a share is
+
+A **share** is a directory you can commit to git, attach to an email, or publish
+as a release asset. `quipu share --output <dir>` writes it deterministically
+(`src/cli_pack.rs`, `cmd_share`), and it holds exactly three files — the same
+three `quipu import` reads back (`cmd_import`):
+
+| File | What it carries |
+|---|---|
+| `export.nt` | the facts, as N-Triples |
+| `shapes.ttl` | the SHACL shapes those facts were validated against |
+| `manifest.json` | hashes, producer name and version, and the lineage link |
+
+The manifest's `parent_share` field (`src/share.rs`, `ShareOptions`) is what
+makes a share a *link in a chain* rather than a loose dump: it names the share
+this one descends from, which is what later lets `quipu merge` find a common
+base.
+
+Shares carry their shapes on purpose. A receiving store is never asked to guess
+what the sender meant by a predicate — it gets the constraints alongside the
+facts.
+
+## Receiving: verify, quarantine, promote
+
+Import is **two verbs**, and the split is the point.
+
+```sh
+quipu import ./their-share --source https://example.org/share --actor alice
+quipu import promote <share-id> --actor alice
+```
+
+`quipu import` verifies before storing anything. It recomputes the payload hash
+and refuses a mismatch (`src/share_import.rs`, `verify_request`):
+
+```text
+share graph hash mismatch: manifest=… actual=…
+```
+
+What survives verification lands in a **quarantine graph** named
+`urn:quipu:import:quarantine:<hash>` (`staging_graph`) — present in the store,
+queryable, and *not* part of ROOT. The result reports an `ImportCounts` split of
+admitted versus quarantined triples.
+
+`quipu import promote` is the separate, actor-attributed step that moves a staged
+share into ROOT (`cmd_import`, the `promote` arm). Nothing reaches your ROOT
+because a file arrived; it reaches ROOT because a named person ran the second
+command.
+
+## Identity across stores
+
+Two stores will call the same thing by different names. Quipu does not paper over
+that with string matching: `quipu knot` writes real `owl:sameAs` edges, so the
+claim "these two IRIs are one entity" is itself a fact in the graph — visible,
+queryable, and retractable like any other fact.
+
+## How history travels
+
+A share carries facts. **Packs** carry graphs, including their history:
+
+```sh
+quipu pack <graph-iri> --out <file>     # export a graph as an attachable pack
+quipu pack --verify <file>              # check one before trusting it
+quipu unpack <file> [--into <graph-iri>]
+```
+
+(`src/cli_pack.rs`: `cmd_pack`, `cmd_unpack`.) `--verify` exists so that "is this
+pack intact?" is answerable *before* you load it rather than after. Repository
+packs ship as release assets — Quipu's own repository graph is published that way
+on the `v0.3.27` release.
+
+For archives, `quipu graph freeze|thaw|list` is the **deep freeze** surface
+(`src/cli_graph.rs`), producing read-only full-history graphs. See
+[Graph Kinds & Deep Freeze](../concepts/graph-kinds.md) and
+[Knowledge Packs](../concepts/knowledge-packs.md).
+
+## Querying across stores
+
+A `FederatedProvider` composes members behind one query (`src/provider/mod.rs`),
+and two properties are what make its answers honest.
+
+**Trust is declared locally.** A member's `DeclaredLabel` carries only `trust`
+and `freshness` — in the source's words, "the axes an operator can honestly
+declare about a peer" — and it is **declared by the local operator, never read
+from the member itself** (`src/provider/label.rs`). A remote that declares
+nothing does not quietly pass a configured floor: an undeclared value **fails** a
+configured trust or freshness floor, which the source describes as "fail-safe at
+enforcement, honest at reporting". And because durability, policy and kind cannot
+be honestly declared *about* a remote, a remote member degrades a dataset's
+coverage on those axes to `partial` — "the conservative reading, not an
+omission".
+
+**A merge is never silent.** `FederatedQuery` returns one `ProviderOutcome` per
+member (`src/provider/mod.rs`), so a partial answer is reported as a partial
+answer instead of arriving as a short one. And when a share has diverged,
+`quipu merge` performs a genuine three-way reconnect against the common base
+located through `parent_share` (`src/share_merge.rs`, `locate_base` — which
+refuses outright with "incoming share has no parent_share; three-way merge has no
+base"). Conflicts are detected against the SHACL cardinalities (`max_counts`); on
+conflict Quipu **keeps the base value**, emits a `DecisionRecord`, and the CLI
+exits **2** (`src/cli_pack.rs`, `cmd_merge`). It would rather stop and tell you
+than pick a winner.
+
+## Federation and SPARQL `SERVICE`
+
+Quipu supports SPARQL `SERVICE`, **restricted to endpoints the operator has
+configured**. Queries are parsed by `spargebra` (`src/sparql/mod.rs`) and the
+`SERVICE` pattern is evaluated in `src/sparql/pattern.rs` under the `remote`
+feature — which `server` implies and the shipped `full` build includes
+(`Cargo.toml`).
+
+It is narrower than SPARQL 1.1's open federation, by design:
+
+- **Variable endpoints are refused** — *"variable SERVICE endpoints are refused;
+  use a configured endpoint IRI"*. A query cannot compute its target at runtime.
+- **Unconfigured hosts are unreachable** — with no configured remotes an endpoint
+  fails with *"SERVICE endpoint '…' is unavailable: no configured remotes"*, or
+  returns the seed row under `SILENT`.
+- **Every returned row is labelled** — `_provider` always, plus `_trust` and
+  `_freshness` where you declared them. A federated answer cannot arrive
+  anonymous.
+
+**Quipu makes no `SERVICE` conformance claim.** The pinned W3C ledger scores
+query evaluation, protocol, update, entailment and result formats; `SERVICE` is
+not among them. See [SPARQL 1.1 conformance](../benchmarks/conformance.md) for
+what is actually measured, and what is not.
+
+## Built vs designed
+
+Everything described above is built and reachable from the CLI today. The gaps
+are stated here rather than left to be inferred from careful wording.
+
+| Capability | Status |
+|---|---|
+| `share` / `import` / `import promote` / `status` / `merge` | ✅ Built (`src/cli_pack.rs`) |
+| `pack` / `unpack` / `pack --verify`, deep freeze | ✅ Built (`src/cli_pack.rs`, `src/cli_graph.rs`) |
+| `knot` — `owl:sameAs` across stores | ✅ Built |
+| Provider model, declared trust/freshness, per-member outcomes | ✅ Built (`src/provider/`) |
+| SPARQL `SERVICE` to operator-configured endpoints | ✅ Built (feature `remote`) |
+| External share **attestation** — proving *who* produced a share | 🔶 **Designed, not built.** Hash verification proves a share is intact; it does not yet prove authorship. |
+| A single re-runnable end-to-end demo transcript | 🔶 **Designed, not built.** Each command above is verified individually; the scripted walkthrough is not yet published. |
