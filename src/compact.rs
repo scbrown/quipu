@@ -1,5 +1,6 @@
 //! Data-driven IRI compaction for human- and agent-facing result surfaces.
 
+use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
@@ -42,7 +43,10 @@ impl PrefixMap {
                     is_safe_local(local).then(|| (namespace.len(), format!("{prefix}:{local}")))
                 })
             })
-            .max_by_key(|(length, _)| *length)
+            .min_by_key(|(length, compact)| {
+                let prefix_len = compact.find(':').unwrap_or(compact.len());
+                (Reverse(*length), prefix_len, compact.clone())
+            })
             .map_or_else(|| iri.to_string(), |(_, compact)| compact)
     }
 
@@ -99,6 +103,18 @@ mod tests {
         assert_eq!(
             prefixes.compact("https://unknown.example/x"),
             "https://unknown.example/x"
+        );
+
+        store
+            .load_shapes(
+                "alias",
+                "@prefix example: <http://example.org/> .",
+                "2026-09-03T00:00:01Z",
+            )
+            .unwrap();
+        assert_eq!(
+            PrefixMap::from_store(&store).unwrap().compact(iri),
+            "ex:alice"
         );
     }
 }
