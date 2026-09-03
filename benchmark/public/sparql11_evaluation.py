@@ -171,7 +171,10 @@ def discover_cases(suite: Path) -> list[Case]:
 
 def term(kind: str, value: str, datatype: str | None = None, lang: str | None = None) -> str:
     if kind == "uri":
-        return f"<{value}>"
+        # `quipu read` renders resolved references as their bare IRI. Keep the
+        # expected side in that same machine-comparison representation; angle
+        # brackets are Turtle syntax, not part of the RDF term's lexical value.
+        return value
     if kind == "bnode":
         return f"_:{value}"
     escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")

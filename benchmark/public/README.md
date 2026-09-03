@@ -55,12 +55,12 @@ Add `--class query-evaluation`, `protocol`, `update`, `entailment`, or
 exit means at least one executable test failed or the harness could not evaluate
 it; the JSON ledger is still written in full.
 
-At Quipu `436b3f9` and W3C RDF Tests `369a90d1`, the independently reported
+At Quipu `1aec2ee` and W3C RDF Tests `369a90d1`, the independently reported
 results are:
 
 | Class | Passed | Failed/error | Unsupported | Total |
 |---|---:|---:|---:|---:|
-| query evaluation | 18 | 131 | 19 | 168 |
+| query evaluation | 62 | 87 | 19 | 168 |
 | protocol | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 70 | 70 |

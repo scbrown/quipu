@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "436b3f9f2535fc46c7166e48fd83d7e3e675ac7f",
+  "quipu_revision": "1aec2ee48cf48750d511c97a57b0a7cc02e5386d",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 127,
-      "passed": 18,
+      "failed": 83,
+      "passed": 62,
       "unsupported": 19
     },
     "protocol": {
@@ -64,8 +64,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg02.rq",
       "result": "aggregates/agg02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -74,8 +74,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg03.rq",
       "result": "aggregates/agg03.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -94,8 +94,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg05.rq",
       "result": "aggregates/agg05.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -114,8 +114,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg07.rq",
       "result": "aggregates/agg07.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -334,8 +334,8 @@
       "manifest": "bind/manifest.ttl",
       "query": "bind/bind07.rq",
       "result": "bind/bind07.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -364,8 +364,8 @@
       "manifest": "bind/manifest.ttl",
       "query": "bind/bind11.rq",
       "result": "bind/bind11.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -374,8 +374,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/values01.rq",
       "result": "bindings/values01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -384,8 +384,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/values02.rq",
       "result": "bindings/values02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -394,8 +394,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/values03.rq",
       "result": "bindings/values03.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -404,8 +404,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/values04.rq",
       "result": "bindings/values04.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -414,8 +414,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/values05.rq",
       "result": "bindings/values05.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -424,8 +424,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/values06.rq",
       "result": "bindings/values06.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -434,8 +434,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/values07.rq",
       "result": "bindings/values07.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -444,8 +444,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/values08.rq",
       "result": "bindings/values08.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -454,8 +454,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/inline01.rq",
       "result": "bindings/inline01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -464,8 +464,8 @@
       "manifest": "bindings/manifest.ttl",
       "query": "bindings/inline02.rq",
       "result": "bindings/inline02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -604,8 +604,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/isnumeric01.rq",
       "result": "functions/isnumeric01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -734,8 +734,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/contains01.rq",
       "result": "functions/contains01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -744,8 +744,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/starts01.rq",
       "result": "functions/starts01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -754,8 +754,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/ends01.rq",
       "result": "functions/ends01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1134,8 +1134,8 @@
       "manifest": "grouping/manifest.ttl",
       "query": "grouping/group01.rq",
       "result": "grouping/group01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1164,8 +1164,8 @@
       "manifest": "grouping/manifest.ttl",
       "query": "grouping/group05.rq",
       "result": "grouping/group05.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1174,8 +1174,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/subsetByExcl01.rq",
       "result": "negation/subsetByExcl01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1194,8 +1194,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/temporalProximity01.rq",
       "result": "negation/temporalProximity01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1244,8 +1244,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/exists-01.rq",
       "result": "negation/exists-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1334,8 +1334,8 @@
       "manifest": "project-expression/manifest.ttl",
       "query": "project-expression/projexp06.rq",
       "result": "project-expression/projexp06.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1354,8 +1354,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp01.rq",
       "result": "property-path/pp01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1364,8 +1364,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp02.rq",
       "result": "property-path/pp02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1374,8 +1374,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp03.rq",
       "result": "property-path/pp03.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1414,8 +1414,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp09.rq",
       "result": "property-path/pp09.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1424,8 +1424,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp10.rq",
       "result": "property-path/pp10.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1434,8 +1434,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp11.rq",
       "result": "property-path/pp11.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1444,8 +1444,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp12.rq",
       "result": "property-path/pp12.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1454,8 +1454,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp14.rq",
       "result": "property-path/pp14.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1474,8 +1474,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-2-2.rq",
       "result": "property-path/diamond-2.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1484,8 +1484,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-2-2.rq",
       "result": "property-path/diamond-tail-2.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1494,8 +1494,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-2-2.rq",
       "result": "property-path/diamond-loop-2.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1504,8 +1504,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-3-3.rq",
       "result": "property-path/diamond-loop-5a.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1514,8 +1514,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-p1.rq",
       "result": "property-path/path-p1.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1524,8 +1524,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-p2.rq",
       "result": "property-path/path-p2.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1534,8 +1534,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-p3.rq",
       "result": "property-path/path-p3.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1544,8 +1544,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/path-p4.rq",
       "result": "property-path/path-p4.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1584,8 +1584,8 @@
       "manifest": "property-path/manifest.ttl",
       "query": "property-path/pp37.rq",
       "result": "property-path/pp37.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1714,8 +1714,8 @@
       "manifest": "subquery/manifest.ttl",
       "query": "subquery/sq13.rq",
       "result": "subquery/sq13.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
