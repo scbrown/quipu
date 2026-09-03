@@ -1,0 +1,2087 @@
+{
+  "benchmark": "W3C SHACL Core conformance",
+  "suite_revision": "9c863967bceaef1a87c24e4dd761eda763823120",
+  "quipu_revision": "af46124341c27ccd3f519930ddb7077180d8facb",
+  "runner_version": 1,
+  "inventory_digest": "4e4893d94f93cb4497bcc9381c4892cbea74a493e60d0c9745bd0c6ae9fdb4ea",
+  "classes": {
+    "core-complex-misc": {
+      "failed": 5,
+      "passed": 2
+    },
+    "core-node": {
+      "failed": 23,
+      "passed": 9
+    },
+    "core-property": {
+      "failed": 30,
+      "passed": 7,
+      "error": 1
+    },
+    "core-path": {
+      "failed": 12,
+      "passed": 1
+    },
+    "core-targets": {
+      "passed": 6,
+      "failed": 1
+    },
+    "core-validation-reports": {
+      "failed": 1
+    },
+    "shacl-sparql": {
+      "unsupported": 22
+    }
+  },
+  "results": [
+    {
+      "id": "core/complex/personexample#personexample",
+      "fixture": "core/complex/personexample.ttl",
+      "manifest": "core/complex/personexample.ttl",
+      "class": "core-complex-misc",
+      "category": "core-complex-misc",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 13.148,
+      "observed": {
+        "conforms": false,
+        "violations": 4,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/complex/shacl-shacl#shacl-shacl",
+      "fixture": "core/complex/shacl-shacl.ttl",
+      "manifest": "core/complex/shacl-shacl.ttl",
+      "class": "core-complex-misc",
+      "category": "core-complex-misc",
+      "w3c_action": "unknown",
+      "expected_outcome": "conforms",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 20.81,
+      "observed": {
+        "conforms": false,
+        "violations": 103,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/misc/deactivated-001#deactivated-001",
+      "fixture": "core/misc/deactivated-001.ttl",
+      "manifest": "core/misc/deactivated-001.ttl",
+      "class": "core-complex-misc",
+      "category": "core-complex-misc",
+      "w3c_action": "Validate",
+      "expected_outcome": "conforms",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 11.886,
+      "observed": {
+        "conforms": true,
+        "violations": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/misc/deactivated-002#deactivated-002",
+      "fixture": "core/misc/deactivated-002.ttl",
+      "manifest": "core/misc/deactivated-002.ttl",
+      "class": "core-complex-misc",
+      "category": "core-complex-misc",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 12.017,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/misc/message-001#message-001",
+      "fixture": "core/misc/message-001.ttl",
+      "manifest": "core/misc/message-001.ttl",
+      "class": "core-complex-misc",
+      "category": "core-complex-misc",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.767,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/misc/severity-001#severity-001",
+      "fixture": "core/misc/severity-001.ttl",
+      "manifest": "core/misc/severity-001.ttl",
+      "class": "core-complex-misc",
+      "category": "core-complex-misc",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 6.899,
+      "observed": {
+        "conforms": false,
+        "violations": 0,
+        "warnings": 1
+      }
+    },
+    {
+      "id": "core/misc/severity-002#severity-002",
+      "fixture": "core/misc/severity-002.ttl",
+      "manifest": "core/misc/severity-002.ttl",
+      "class": "core-complex-misc",
+      "category": "core-complex-misc",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 8.194,
+      "observed": {
+        "conforms": false,
+        "violations": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/and-001#and-001",
+      "fixture": "core/node/and-001.ttl",
+      "manifest": "core/node/and-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.818,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/and-002#and-002",
+      "fixture": "core/node/and-002.ttl",
+      "manifest": "core/node/and-002.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.052,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/class-001#class-001",
+      "fixture": "core/node/class-001.ttl",
+      "manifest": "core/node/class-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 9.687,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/class-002#class-002",
+      "fixture": "core/node/class-002.ttl",
+      "manifest": "core/node/class-002.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.106,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/class-003#class-003",
+      "fixture": "core/node/class-003.ttl",
+      "manifest": "core/node/class-003.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 12.334,
+      "observed": {
+        "conforms": false,
+        "violations": 5,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/closed-001#closed-001",
+      "fixture": "core/node/closed-001.ttl",
+      "manifest": "core/node/closed-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.223,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/closed-002#closed-002",
+      "fixture": "core/node/closed-002.ttl",
+      "manifest": "core/node/closed-002.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.669,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/datatype-001#datatype-001",
+      "fixture": "core/node/datatype-001.ttl",
+      "manifest": "core/node/datatype-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.057,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/datatype-002#datatype-002",
+      "fixture": "core/node/datatype-002.ttl",
+      "manifest": "core/node/datatype-002.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.854,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/disjoint-001#disjoint-001",
+      "fixture": "core/node/disjoint-001.ttl",
+      "manifest": "core/node/disjoint-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 12.065,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/equals-001#equals-001",
+      "fixture": "core/node/equals-001.ttl",
+      "manifest": "core/node/equals-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.373,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/hasValue-001#hasValue-001",
+      "fixture": "core/node/hasValue-001.ttl",
+      "manifest": "core/node/hasValue-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.949,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/in-001#in-001",
+      "fixture": "core/node/in-001.ttl",
+      "manifest": "core/node/in-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 8.011,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/languageIn-001#languageIn-001",
+      "fixture": "core/node/languageIn-001.ttl",
+      "manifest": "core/node/languageIn-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.33,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/maxExclusive-001#maxExclusive-001",
+      "fixture": "core/node/maxExclusive-001.ttl",
+      "manifest": "core/node/maxExclusive-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.108,
+      "observed": {
+        "conforms": false,
+        "violations": 6,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/maxInclusive-001#maxInclusive-001",
+      "fixture": "core/node/maxInclusive-001.ttl",
+      "manifest": "core/node/maxInclusive-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.043,
+      "observed": {
+        "conforms": false,
+        "violations": 4,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/maxLength-001#maxLength-001",
+      "fixture": "core/node/maxLength-001.ttl",
+      "manifest": "core/node/maxLength-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.776,
+      "observed": {
+        "conforms": false,
+        "violations": 5,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/minExclusive-001#minExclusive-001",
+      "fixture": "core/node/minExclusive-001.ttl",
+      "manifest": "core/node/minExclusive-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.948,
+      "observed": {
+        "conforms": false,
+        "violations": 6,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/minInclusive-001#minInclusive-001",
+      "fixture": "core/node/minInclusive-001.ttl",
+      "manifest": "core/node/minInclusive-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 11.789,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/minInclusive-002#minInclusive-002",
+      "fixture": "core/node/minInclusive-002.ttl",
+      "manifest": "core/node/minInclusive-002.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 8.937,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/minInclusive-003#minInclusive-003",
+      "fixture": "core/node/minInclusive-003.ttl",
+      "manifest": "core/node/minInclusive-003.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 6.913,
+      "observed": {
+        "conforms": false,
+        "violations": 4,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/minLength-001#minLength-001",
+      "fixture": "core/node/minLength-001.ttl",
+      "manifest": "core/node/minLength-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 8.7,
+      "observed": {
+        "conforms": false,
+        "violations": 4,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/node-001#node-001",
+      "fixture": "core/node/node-001.ttl",
+      "manifest": "core/node/node-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.902,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/nodeKind-001#nodeKind-001",
+      "fixture": "core/node/nodeKind-001.ttl",
+      "manifest": "core/node/nodeKind-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 12.084,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/not-001#not-001",
+      "fixture": "core/node/not-001.ttl",
+      "manifest": "core/node/not-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 9.204,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/not-002#not-002",
+      "fixture": "core/node/not-002.ttl",
+      "manifest": "core/node/not-002.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.064,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/or-001#or-001",
+      "fixture": "core/node/or-001.ttl",
+      "manifest": "core/node/or-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.571,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/pattern-001#pattern-001",
+      "fixture": "core/node/pattern-001.ttl",
+      "manifest": "core/node/pattern-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.423,
+      "observed": {
+        "conforms": false,
+        "violations": 4,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/pattern-002#pattern-002",
+      "fixture": "core/node/pattern-002.ttl",
+      "manifest": "core/node/pattern-002.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.235,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/xone-001#xone-001",
+      "fixture": "core/node/xone-001.ttl",
+      "manifest": "core/node/xone-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.234,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/xone-duplicate#xone-duplicate",
+      "fixture": "core/node/xone-duplicate.ttl",
+      "manifest": "core/node/xone-duplicate.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "unknown",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 10.428,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/node/qualified-001#qualified-001",
+      "fixture": "core/node/qualified-001.ttl",
+      "manifest": "core/node/qualified-001.ttl",
+      "class": "core-node",
+      "category": "core-node",
+      "w3c_action": "unknown",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 11.833,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-alternative-001#path-alternative-001",
+      "fixture": "core/path/path-alternative-001.ttl",
+      "manifest": "core/path/path-alternative-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.011,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-complex-001#path-complex-001",
+      "fixture": "core/path/path-complex-001.ttl",
+      "manifest": "core/path/path-complex-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.027,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-complex-002#path-complex-002",
+      "fixture": "core/path/path-complex-002.ttl",
+      "manifest": "core/path/path-complex-002.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "unknown",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.918,
+      "observed": {
+        "conforms": false,
+        "violations": 4,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-inverse-001#path-inverse-001",
+      "fixture": "core/path/path-inverse-001.ttl",
+      "manifest": "core/path/path-inverse-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.133,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-oneOrMore-001#path-oneOrMore-001",
+      "fixture": "core/path/path-oneOrMore-001.ttl",
+      "manifest": "core/path/path-oneOrMore-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.904,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-sequence-001#path-sequence-001",
+      "fixture": "core/path/path-sequence-001.ttl",
+      "manifest": "core/path/path-sequence-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 6.932,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-sequence-002#path-sequence-002",
+      "fixture": "core/path/path-sequence-002.ttl",
+      "manifest": "core/path/path-sequence-002.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 8.133,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+      "fixture": "core/path/path-sequence-duplicate-001.ttl",
+      "manifest": "core/path/path-sequence-duplicate-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 8.549,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-strange-001#path-strange-001",
+      "fixture": "core/path/path-strange-001.ttl",
+      "manifest": "core/path/path-strange-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.72,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-strange-002#path-strange-002",
+      "fixture": "core/path/path-strange-002.ttl",
+      "manifest": "core/path/path-strange-002.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 9.697,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-zeroOrMore-001#path-zeroOrMore-001",
+      "fixture": "core/path/path-zeroOrMore-001.ttl",
+      "manifest": "core/path/path-zeroOrMore-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.774,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-zeroOrOne-001#path-zeroOrOne-001",
+      "fixture": "core/path/path-zeroOrOne-001.ttl",
+      "manifest": "core/path/path-zeroOrOne-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.958,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/path/path-unused-001#path-unused-001",
+      "fixture": "core/path/path-unused-001.ttl",
+      "manifest": "core/path/path-unused-001.ttl",
+      "class": "core-path",
+      "category": "core-path",
+      "w3c_action": "unknown",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 11.882,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/and-001#and-001",
+      "fixture": "core/property/and-001.ttl",
+      "manifest": "core/property/and-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 8.128,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/class-001#class-001",
+      "fixture": "core/property/class-001.ttl",
+      "manifest": "core/property/class-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.489,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/datatype-001#datatype-001",
+      "fixture": "core/property/datatype-001.ttl",
+      "manifest": "core/property/datatype-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.516,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/datatype-002#datatype-002",
+      "fixture": "core/property/datatype-002.ttl",
+      "manifest": "core/property/datatype-002.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.359,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/datatype-003#datatype-003",
+      "fixture": "core/property/datatype-003.ttl",
+      "manifest": "core/property/datatype-003.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.3,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/datatype-ill-formed#datatype-ill-formed",
+      "fixture": "core/property/datatype-ill-formed.ttl",
+      "manifest": "core/property/datatype-ill-formed.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.823,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/disjoint-001#disjoint-001",
+      "fixture": "core/property/disjoint-001.ttl",
+      "manifest": "core/property/disjoint-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.618,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/equals-001#equals-001",
+      "fixture": "core/property/equals-001.ttl",
+      "manifest": "core/property/equals-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.291,
+      "observed": {
+        "conforms": false,
+        "violations": 5,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/hasValue-001#hasValue-001",
+      "fixture": "core/property/hasValue-001.ttl",
+      "manifest": "core/property/hasValue-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 7.078,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/in-001#in-001",
+      "fixture": "core/property/in-001.ttl",
+      "manifest": "core/property/in-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.711,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/languageIn-001#languageIn-001",
+      "fixture": "core/property/languageIn-001.ttl",
+      "manifest": "core/property/languageIn-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.41,
+      "observed": {
+        "conforms": false,
+        "violations": 4,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/lessThan-001#lessThan-001",
+      "fixture": "core/property/lessThan-001.ttl",
+      "manifest": "core/property/lessThan-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.989,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/lessThan-002#lessThan-002",
+      "fixture": "core/property/lessThan-002.ttl",
+      "manifest": "core/property/lessThan-002.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "error",
+      "reason": "thread 'main' panicked at $CARGO_REGISTRY/literal.rs:948:32:\nCannot compare literals 2 and \"a\"\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+      "duration_ms": 12.008
+    },
+    {
+      "id": "core/property/lessThanOrEquals-001#lessThanOrEquals-001",
+      "fixture": "core/property/lessThanOrEquals-001.ttl",
+      "manifest": "core/property/lessThanOrEquals-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.854,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/maxCount-001#maxCount-001",
+      "fixture": "core/property/maxCount-001.ttl",
+      "manifest": "core/property/maxCount-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 12.065,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/maxCount-002#maxCount-002",
+      "fixture": "core/property/maxCount-002.ttl",
+      "manifest": "core/property/maxCount-002.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 11.866,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/maxExclusive-001#maxExclusive-001",
+      "fixture": "core/property/maxExclusive-001.ttl",
+      "manifest": "core/property/maxExclusive-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.17,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/maxInclusive-001#maxInclusive-001",
+      "fixture": "core/property/maxInclusive-001.ttl",
+      "manifest": "core/property/maxInclusive-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.118,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/maxLength-001#maxLength-001",
+      "fixture": "core/property/maxLength-001.ttl",
+      "manifest": "core/property/maxLength-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 8.157,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/minCount-001#minCount-001",
+      "fixture": "core/property/minCount-001.ttl",
+      "manifest": "core/property/minCount-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 11.92,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/minCount-002#minCount-002",
+      "fixture": "core/property/minCount-002.ttl",
+      "manifest": "core/property/minCount-002.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "conforms",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 11.829,
+      "observed": {
+        "conforms": true,
+        "violations": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/minExclusive-001#minExclusive-001",
+      "fixture": "core/property/minExclusive-001.ttl",
+      "manifest": "core/property/minExclusive-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 7.638,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/minExclusive-002#minExclusive-002",
+      "fixture": "core/property/minExclusive-002.ttl",
+      "manifest": "core/property/minExclusive-002.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 8.624,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/minLength-001#minLength-001",
+      "fixture": "core/property/minLength-001.ttl",
+      "manifest": "core/property/minLength-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.641,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/node-001#node-001",
+      "fixture": "core/property/node-001.ttl",
+      "manifest": "core/property/node-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.635,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/node-002#node-002",
+      "fixture": "core/property/node-002.ttl",
+      "manifest": "core/property/node-002.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.951,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/nodeKind-001#nodeKind-001",
+      "fixture": "core/property/nodeKind-001.ttl",
+      "manifest": "core/property/nodeKind-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 9.165,
+      "observed": {
+        "conforms": false,
+        "violations": 27,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/not-001#not-001",
+      "fixture": "core/property/not-001.ttl",
+      "manifest": "core/property/not-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.121,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/or-001#or-001",
+      "fixture": "core/property/or-001.ttl",
+      "manifest": "core/property/or-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.959,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/or-datatypes-001#or-datatypes-001",
+      "fixture": "core/property/or-datatypes-001.ttl",
+      "manifest": "core/property/or-datatypes-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 10.79,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/pattern-001#pattern-001",
+      "fixture": "core/property/pattern-001.ttl",
+      "manifest": "core/property/pattern-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.012,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/pattern-002#pattern-002",
+      "fixture": "core/property/pattern-002.ttl",
+      "manifest": "core/property/pattern-002.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.12,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/property-001#property-001",
+      "fixture": "core/property/property-001.ttl",
+      "manifest": "core/property/property-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 9.756,
+      "observed": {
+        "conforms": true,
+        "violations": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/qualifiedMinCountDisjoint-001#qualifiedMinCountDisjoint-001",
+      "fixture": "core/property/qualifiedMinCountDisjoint-001.ttl",
+      "manifest": "core/property/qualifiedMinCountDisjoint-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.045,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/qualifiedValueShape-001#qualifiedValueShape-001",
+      "fixture": "core/property/qualifiedValueShape-001.ttl",
+      "manifest": "core/property/qualifiedValueShape-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 12.212,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/qualifiedValueShapesDisjoint-001#qualifiedValueShapesDisjoint-001",
+      "fixture": "core/property/qualifiedValueShapesDisjoint-001.ttl",
+      "manifest": "core/property/qualifiedValueShapesDisjoint-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 7.574,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/uniqueLang-001#uniqueLang-001",
+      "fixture": "core/property/uniqueLang-001.ttl",
+      "manifest": "core/property/uniqueLang-001.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.95,
+      "observed": {
+        "conforms": false,
+        "violations": 3,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/property/uniqueLang-002#uniqueLang-002",
+      "fixture": "core/property/uniqueLang-002.ttl",
+      "manifest": "core/property/uniqueLang-002.ttl",
+      "class": "core-property",
+      "category": "core-property",
+      "w3c_action": "unknown",
+      "expected_outcome": "conforms",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 8.767,
+      "observed": {
+        "conforms": true,
+        "violations": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/targets/multipleTargets-001#multipleTargets-001",
+      "fixture": "core/targets/multipleTargets-001.ttl",
+      "manifest": "core/targets/multipleTargets-001.ttl",
+      "class": "core-targets",
+      "category": "core-targets",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 11.785,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/targets/targetClass-001#targetClass-001",
+      "fixture": "core/targets/targetClass-001.ttl",
+      "manifest": "core/targets/targetClass-001.ttl",
+      "class": "core-targets",
+      "category": "core-targets",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 12.007,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+      "fixture": "core/targets/targetClassImplicit-001.ttl",
+      "manifest": "core/targets/targetClassImplicit-001.ttl",
+      "class": "core-targets",
+      "category": "core-targets",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 9.283,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/targets/targetNode-001#targetNode-001",
+      "fixture": "core/targets/targetNode-001.ttl",
+      "manifest": "core/targets/targetNode-001.ttl",
+      "class": "core-targets",
+      "category": "core-targets",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 7.809,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/targets/targetObjectsOf-001#targetObjectsOf-001",
+      "fixture": "core/targets/targetObjectsOf-001.ttl",
+      "manifest": "core/targets/targetObjectsOf-001.ttl",
+      "class": "core-targets",
+      "category": "core-targets",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.79,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/targets/targetSubjectsOf-001#targetSubjectsOf-001",
+      "fixture": "core/targets/targetSubjectsOf-001.ttl",
+      "manifest": "core/targets/targetSubjectsOf-001.ttl",
+      "class": "core-targets",
+      "category": "core-targets",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 8.349,
+      "observed": {
+        "conforms": false,
+        "violations": 1,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/targets/targetSubjectsOf-002#targetSubjectsOf-002",
+      "fixture": "core/targets/targetSubjectsOf-002.ttl",
+      "manifest": "core/targets/targetSubjectsOf-002.ttl",
+      "class": "core-targets",
+      "category": "core-targets",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "passed",
+      "reason": "",
+      "duration_ms": 9.956,
+      "observed": {
+        "conforms": false,
+        "violations": 2,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "core/validation-reports/shared#shared",
+      "fixture": "core/validation-reports/shared.ttl",
+      "manifest": "core/validation-reports/shared.ttl",
+      "class": "core-validation-reports",
+      "category": "core-validation-reports",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "failed",
+      "reason": "validation report differs from expected normative terms",
+      "duration_ms": 11.89,
+      "observed": {
+        "conforms": true,
+        "violations": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "sparql/component/optional-001#optional-001",
+      "fixture": "sparql/component/optional-001.ttl",
+      "manifest": "sparql/component/optional-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/component/propertyValidator-select-001#propertyValidator-select-001",
+      "fixture": "sparql/component/propertyValidator-select-001.ttl",
+      "manifest": "sparql/component/propertyValidator-select-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/component/validator-001#validator-001",
+      "fixture": "sparql/component/validator-001.ttl",
+      "manifest": "sparql/component/validator-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/node/prefixes-001#prefixes-001",
+      "fixture": "sparql/node/prefixes-001.ttl",
+      "manifest": "sparql/node/prefixes-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/node/sparql-001#sparql-001",
+      "fixture": "sparql/node/sparql-001.ttl",
+      "manifest": "sparql/node/sparql-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/node/sparql-002#sparql-002",
+      "fixture": "sparql/node/sparql-002.ttl",
+      "manifest": "sparql/node/sparql-002.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/node/sparql-003#sparql-003",
+      "fixture": "sparql/node/sparql-003.ttl",
+      "manifest": "sparql/node/sparql-003.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/property/sparql-001#sparql-001",
+      "fixture": "sparql/property/sparql-001.ttl",
+      "manifest": "sparql/property/sparql-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/pre-binding-001#pre-binding-001",
+      "fixture": "sparql/pre-binding/pre-binding-001.ttl",
+      "manifest": "sparql/pre-binding/pre-binding-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/pre-binding-002#pre-binding-002",
+      "fixture": "sparql/pre-binding/pre-binding-002.ttl",
+      "manifest": "sparql/pre-binding/pre-binding-002.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/pre-binding-003#pre-binding-003",
+      "fixture": "sparql/pre-binding/pre-binding-003.ttl",
+      "manifest": "sparql/pre-binding/pre-binding-003.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/pre-binding-004#pre-binding-004",
+      "fixture": "sparql/pre-binding/pre-binding-004.ttl",
+      "manifest": "sparql/pre-binding/pre-binding-004.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/pre-binding-005#pre-binding-005",
+      "fixture": "sparql/pre-binding/pre-binding-005.ttl",
+      "manifest": "sparql/pre-binding/pre-binding-005.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/pre-binding-006#pre-binding-006",
+      "fixture": "sparql/pre-binding/pre-binding-006.ttl",
+      "manifest": "sparql/pre-binding/pre-binding-006.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "failure",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/pre-binding-007#pre-binding-007",
+      "fixture": "sparql/pre-binding/pre-binding-007.ttl",
+      "manifest": "sparql/pre-binding/pre-binding-007.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/shapesGraph-001#shapesGraph-001",
+      "fixture": "sparql/pre-binding/shapesGraph-001.ttl",
+      "manifest": "sparql/pre-binding/shapesGraph-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "violates",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/unsupported-sparql-001#unsupported-sparql-001",
+      "fixture": "sparql/pre-binding/unsupported-sparql-001.ttl",
+      "manifest": "sparql/pre-binding/unsupported-sparql-001.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "failure",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/unsupported-sparql-002#unsupported-sparql-002",
+      "fixture": "sparql/pre-binding/unsupported-sparql-002.ttl",
+      "manifest": "sparql/pre-binding/unsupported-sparql-002.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "failure",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/unsupported-sparql-003#unsupported-sparql-003",
+      "fixture": "sparql/pre-binding/unsupported-sparql-003.ttl",
+      "manifest": "sparql/pre-binding/unsupported-sparql-003.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "failure",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/unsupported-sparql-004#unsupported-sparql-004",
+      "fixture": "sparql/pre-binding/unsupported-sparql-004.ttl",
+      "manifest": "sparql/pre-binding/unsupported-sparql-004.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "failure",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/unsupported-sparql-005#unsupported-sparql-005",
+      "fixture": "sparql/pre-binding/unsupported-sparql-005.ttl",
+      "manifest": "sparql/pre-binding/unsupported-sparql-005.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "failure",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    },
+    {
+      "id": "sparql/pre-binding/unsupported-sparql-006#unsupported-sparql-006",
+      "fixture": "sparql/pre-binding/unsupported-sparql-006.ttl",
+      "manifest": "sparql/pre-binding/unsupported-sparql-006.ttl",
+      "class": "shacl-sparql",
+      "category": "shacl-sparql",
+      "w3c_action": "Validate",
+      "expected_outcome": "failure",
+      "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
+      "status": "unsupported",
+      "reason": "SHACL-SPARQL constraints are not implemented",
+      "duration_ms": 0
+    }
+  ],
+  "reproduce": {
+    "runner": "python3 benchmark/public/shacl_core.py",
+    "suite": "/tmp/data-shapes/data-shapes-test-suite/tests"
+  }
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import re
 import shutil
@@ -30,6 +31,8 @@ QUERY = re.compile(r"qt:query\s+<([^>]+)>")
 DATA = re.compile(r"qt:data\s+<([^>]+)>")
 GRAPH_DATA = re.compile(r"qt:graphData\s+<([^>]+)>")
 RESULT = re.compile(r"mf:result\s+<([^>]+)>")
+ENTAILMENT_REGIMES = re.compile(r"sd:entailmentRegime\s*\((.*?)\)", re.S)
+ENTAILMENT_PROFILES = re.compile(r"sd:EntailmentProfile\s*\((.*?)\)", re.S)
 
 CLASS_MANIFESTS = {
     "query-evaluation": "manifest-sparql11-query.ttl",
@@ -37,6 +40,24 @@ CLASS_MANIFESTS = {
     "update": "manifest-sparql11-update.ttl",
     "entailment": "entailment/manifest.ttl",
     "result-format": "manifest-sparql11-results.ttl",
+}
+
+ENTAILMENT_BUCKET_IDS = {
+    "RDF": "bind01 bind02 bind03 bind04 bind05 bind06 bind07 bind08 owlds02 paper-sparqldl-Q5 rdf01 rdf02 rdf03 rdf04 sparqldl-01 sparqldl-04".split(),
+    "RDFS": "owlds01 paper-sparqldl-Q1-rdfs parent2 rdfs01 rdfs02 rdfs03 rdfs04 rdfs05 rdfs06 rdfs07 rdfs08 rdfs09 rdfs10 rdfs11 rdfs12 rdfs13 sparqldl-02 sparqldl-03 sparqldl-05".split(),
+    "D": "d-ent-01 sparqldl-06".split(),
+    "OWL-RDF-Based": "lang paper-sparqldl-Q1 paper-sparqldl-Q4 plainLit sparqldl-07 sparqldl-08 sparqldl-09 sparqldl-10 sparqldl-11 sparqldl-12 sparqldl-13".split(),
+    "OWL-Direct": "paper-sparqldl-Q2 paper-sparqldl-Q3 parent10 parent3 parent4 parent5 parent6 parent7 parent8 parent9 simple1 simple2 simple3 simple4 simple5 simple6 simple7 simple8".split(),
+    "RIF": "rif01 rif03 rif04 rif06".split(),
+}
+ENTAILMENT_BUCKET = {
+    f":{identifier}": bucket
+    for bucket, identifiers in ENTAILMENT_BUCKET_IDS.items()
+    for identifier in identifiers
+}
+ENTAILMENT_REASON = {
+    bucket: f"{bucket} entailment regime is not implemented"
+    for bucket in ENTAILMENT_BUCKET_IDS
 }
 
 
@@ -57,6 +78,8 @@ class Case:
     expected_data: tuple[Path, ...] = ()
     expected_graph_data: tuple[tuple[Path, str], ...] = ()
     update_graph_data: tuple[tuple[Path, str], ...] = ()
+    entailment_regimes: tuple[str, ...] = ()
+    entailment_profiles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -270,6 +293,8 @@ def parse_manifest(test_class: str, manifest: Path) -> list[Case]:
         graph_data = tuple(manifest.parent / item for item in GRAPH_DATA.findall(statement))
         protocol_requests, protocol_graph_data = parse_protocol(statement, manifest.parent)
         update_request, update_data, update_graphs, expected_data, expected_graphs = update_manifest_parts(statement, manifest.parent)
+        regimes = ENTAILMENT_REGIMES.search(statement)
+        profiles = ENTAILMENT_PROFILES.search(statement)
         cases.append(
             Case(
                 test_class=test_class,
@@ -287,6 +312,8 @@ def parse_manifest(test_class: str, manifest: Path) -> list[Case]:
                 expected_data=expected_data,
                 expected_graph_data=expected_graphs,
                 update_graph_data=update_graphs,
+                entailment_regimes=tuple(re.findall(r"ent:([A-Za-z0-9-]+)", regimes.group(1))) if regimes else (),
+                entailment_profiles=tuple(re.findall(r"pr:([A-Za-z0-9-]+)", profiles.group(1))) if profiles else (),
             )
         )
     return cases
@@ -733,7 +760,7 @@ def normalize_delimited_numeric(value: str) -> str:
 
 def unsupported_reason(case: Case) -> str | None:
     if case.test_class == "entailment":
-        return "manifest entailment-regime setup is not implemented"
+        return ENTAILMENT_REASON.get(ENTAILMENT_BUCKET.get(case.identifier, ""), "unknown entailment regime is not implemented")
     if case.kind not in {"QueryEvaluationTest", "CSVResultFormatTest", "ProtocolTest", "UpdateEvaluationTest"}:
         return f"test kind {case.kind} is not executable by this runner"
     if case.test_class not in {"protocol", "update"} and not case.query:
@@ -753,6 +780,13 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
         "query": str(case.query) if case.query else None,
         "result": str(case.result) if case.result else None,
     }
+    if case.test_class == "entailment":
+        base.update(
+            entailment_regimes=list(case.entailment_regimes),
+            entailment_profiles=list(case.entailment_profiles),
+            decision_bucket=ENTAILMENT_BUCKET.get(case.identifier),
+            commitment="deliberate-non-goal",
+        )
     if reason := unsupported_reason(case):
         return {**base, "status": "unsupported", "reason": reason}
     with tempfile.TemporaryDirectory(prefix="quipu-w3c-eval-") as temporary:
@@ -898,6 +932,15 @@ def main() -> int:
             continue
         counts = Counter(item["status"] for item in selected)
         classes[test_class] = {"cases": len(selected), **dict(sorted(counts.items()))}
+        if test_class == "entailment":
+            discovered = {item["id"] for item in selected}
+            expected = set(ENTAILMENT_BUCKET)
+            if discovered != expected or len(selected) != 70:
+                missing = sorted(expected - discovered)
+                extra = sorted(discovered - expected)
+                parser.error(f"entailment inventory mismatch: missing={missing}, extra={extra}, cases={len(selected)}")
+            bucket_counts = Counter(item["decision_bucket"] for item in selected)
+            classes[test_class]["decision_buckets"] = dict(sorted(bucket_counts.items()))
     report = {
         "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
         "suite_revision": revision,
@@ -923,6 +966,17 @@ def main() -> int:
         "classes": classes,
         "results": results,
     }
+    if set(classes) == {"entailment"}:
+        inventory = sorted(
+            (
+                item["id"], item["manifest"], sorted(item["entailment_regimes"]),
+                sorted(item["entailment_profiles"]), item["decision_bucket"],
+            )
+            for item in results
+        )
+        report["inventory_digest"] = hashlib.sha256(
+            json.dumps(inventory, separators=(",", ":")).encode()
+        ).hexdigest()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(classes, sort_keys=True))

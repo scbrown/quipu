@@ -80,6 +80,8 @@ jobs:
           set -euo pipefail
           revision="$(python3 -c 'import json;print(json.load(open("benchmark/public/results/sparql11-evaluation.json"))["suite_revision"])')"
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          shacl_revision="$(python3 -c 'import json;print(json.load(open("benchmark/public/results/shacl-core.json"))["suite_revision"])')"
+          echo "shacl_revision=$shacl_revision" >> "$GITHUB_OUTPUT"
           echo "W3C RDF Tests revision: $revision"
 
       - name: Check out the pinned W3C RDF Tests suite
@@ -87,9 +89,12 @@ jobs:
           set -euo pipefail
           git clone --quiet https://github.com/w3c/rdf-tests /tmp/rdf-tests
           git -C /tmp/rdf-tests checkout --quiet "${{ steps.pin.outputs.revision }}"
+          git clone --quiet --filter=blob:none --no-checkout https://github.com/w3c/data-shapes /tmp/data-shapes
+          git -C /tmp/data-shapes sparse-checkout set data-shapes-test-suite
+          git -C /tmp/data-shapes checkout --quiet "${{ steps.pin.outputs.shacl_revision }}"
 
       - name: Build quipu
-        run: cargo build --release --bin quipu
+        run: cargo build --release --bin quipu --bin quipu-shacl-conformance --features shacl
 
       - name: Resolve the quipu binary
         id: bin
@@ -97,6 +102,7 @@ jobs:
           set -euo pipefail
           target="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')"
           echo "path=$target/release/quipu" >> "$GITHUB_OUTPUT"
+          echo "shacl_path=$target/release/quipu-shacl-conformance" >> "$GITHUB_OUTPUT"
 
       # Syntax is at 86/86, so the runner's own exit status IS the regression
       # gate for this class: any regression drops it below full and exits
@@ -127,6 +133,31 @@ jobs:
             --baseline benchmark/public/results/sparql11-evaluation.json \
             --candidate /tmp/sparql11-evaluation.json
 
+      - name: W3C SHACL Core and SPARQL non-goal inventory
+        continue-on-error: true
+        run: |
+          python3 benchmark/public/shacl_core.py \
+            --suite /tmp/data-shapes/data-shapes-test-suite/tests \
+            --quipu "${{ steps.bin.outputs.shacl_path }}" \
+            --output /tmp/shacl-core.json
+
+      - name: Fail only on SHACL regression
+        run: |
+          test -s /tmp/shacl-core.json || { echo "the SHACL runner produced no ledger" >&2; exit 2; }
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/shacl-core.json \
+            --candidate /tmp/shacl-core.json
+
+      - name: Re-derive entailment decision ledger
+        run: |
+          python3 benchmark/public/sparql11_evaluation.py \
+            --suite /tmp/rdf-tests/sparql/sparql11 \
+            --quipu "${{ steps.bin.outputs.path }}" \
+            --class entailment --output /tmp/sparql11-entailment.json
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/sparql11-entailment.json \
+            --candidate /tmp/sparql11-entailment.json
+
       - name: Publish the re-derived ledgers
         if: always()
         uses: actions/upload-artifact@v4
@@ -135,5 +166,7 @@ jobs:
           path: |
             /tmp/sparql11-syntax.json
             /tmp/sparql11-evaluation.json
+            /tmp/sparql11-entailment.json
+            /tmp/shacl-core.json
           if-no-files-found: warn
           retention-days: 90

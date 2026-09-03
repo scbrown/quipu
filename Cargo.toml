@@ -53,6 +53,11 @@ name = "seed-fixtures"
 path = "src/bin/seed_fixtures.rs"
 required-features = ["shacl"]
 
+[[bin]]
+name = "quipu-shacl-conformance"
+path = "src/bin/quipu_shacl_conformance.rs"
+required-features = ["shacl"]
+
 # The example calls `quipu::validate_shapes`, which is gated behind `shacl`.
 # `cargo test` builds examples, so without this the `--no-default-features` CI
 # job failed to compile an example that can never work in that configuration.

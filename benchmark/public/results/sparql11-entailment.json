@@ -1,0 +1,1428 @@
+{
+  "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
+  "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
+  "quipu_revision": "78eb8a1e3013f1e0f6de13c4d76b6c6cee9478b4",
+  "quipu_version": "quipu 0.3.29",
+  "isolation": "one temporary SQLite store per executable test",
+  "reproduce": {
+    "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
+    "runner": "python3 benchmark/public/sparql11_evaluation.py",
+    "environment": {
+      "SUITE": "/tmp/rdf-tests/sparql/sparql11",
+      "QUIPU_BIN": "$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"target_directory\"])')/release/quipu"
+    },
+    "per_class": {
+      "query-evaluation": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class query-evaluation --output /tmp/sparql11-query-evaluation.json",
+      "protocol": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class protocol --output /tmp/sparql11-protocol.json",
+      "update": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class update --output /tmp/sparql11-update.json",
+      "entailment": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class entailment --output /tmp/sparql11-entailment.json",
+      "result-format": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class result-format --output /tmp/sparql11-result-format.json"
+    }
+  },
+  "classes": {
+    "entailment": {
+      "cases": 70,
+      "unsupported": 70,
+      "decision_buckets": {
+        "D": 2,
+        "OWL-Direct": 18,
+        "OWL-RDF-Based": 11,
+        "RDF": 16,
+        "RDFS": 19,
+        "RIF": 4
+      }
+    }
+  },
+  "results": [
+    {
+      "class": "entailment",
+      "id": ":bind01",
+      "name": "bind01 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind01.rq",
+      "result": "entailment/bind01.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind02",
+      "name": "bind02 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind02.rq",
+      "result": "entailment/bind02.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind03",
+      "name": "bind03 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind03.rq",
+      "result": "entailment/bind03.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind04",
+      "name": "bind04 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind04.rq",
+      "result": "entailment/bind04.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind05",
+      "name": "bind05 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind05.rq",
+      "result": "entailment/bind05.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind06",
+      "name": "bind06 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind06.rq",
+      "result": "entailment/bind06.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind07",
+      "name": "bind07 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind07.rq",
+      "result": "entailment/bind07.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind08",
+      "name": "bind08 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind08.rq",
+      "result": "entailment/bind08.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":d-ent-01",
+      "name": "D-Entailment test to show that  neither literals in subject position nor newly introduced surrogate blank nodes are to be returned in query answers",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/d-ent-01.rq",
+      "result": "entailment/d-ent-01.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "D",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "D entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":lang",
+      "name": "Literal with language tag test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/lang.rq",
+      "result": "entailment/lang.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":owlds01",
+      "name": "bnodes are not existentials",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/owlds01.rq",
+      "result": "entailment/owlds01.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":owlds02",
+      "name": "bnodes are not existentials with answer",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/owlds02.rq",
+      "result": "entailment/owlds02.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q1",
+      "name": "paper-sparqldl-Q1",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q1.rq",
+      "result": "entailment/paper-sparqldl-Q1.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q1-rdfs",
+      "name": "paper-sparqldl-Q1-rdfs",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q1.rq",
+      "result": "entailment/paper-sparqldl-Q1-rdfs.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q2",
+      "name": "paper-sparqldl-Q2",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q2.rq",
+      "result": "entailment/paper-sparqldl-Q2.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q3",
+      "name": "paper-sparqldl-Q3",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q3.rq",
+      "result": "entailment/paper-sparqldl-Q3.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q4",
+      "name": "paper-sparqldl-Q4",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q4.rq",
+      "result": "entailment/paper-sparqldl-Q4.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q5",
+      "name": "paper-sparqldl-Q5",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q5.rq",
+      "result": "entailment/paper-sparqldl-Q5.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent10",
+      "name": "filtered subclass query with (hasChild some Thing) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent10.rq",
+      "result": "entailment/parent10.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent2",
+      "name": "parent query with distinguished variable",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent2.rq",
+      "result": "entailment/parent2.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent3",
+      "name": "parent query with (hasChild some Thing) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent3.rq",
+      "result": "entailment/parent3.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent4",
+      "name": "parent query with (hasChild min 1) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent4.rq",
+      "result": "entailment/parent4.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent5",
+      "name": "parent query with (hasChild some Female) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent5.rq",
+      "result": "entailment/parent5.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent6",
+      "name": "parent query with (hasChild min 1 Female) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent6.rq",
+      "result": "entailment/parent6.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent7",
+      "name": "parent query with (hasChild max 1 Female) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent7.rq",
+      "result": "entailment/parent7.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent8",
+      "name": "parent query with (hasChild exactly 1 Female) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent8.rq",
+      "result": "entailment/parent8.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent9",
+      "name": "subclass query with (hasChild some Thing) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent9.rq",
+      "result": "entailment/parent9.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":plainLit",
+      "name": "Plain literals with language tag are not the same as the same literal without",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/plainLit.rq",
+      "result": "entailment/plainLit.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdf01",
+      "name": "RDF inference test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdf01.rq",
+      "result": "entailment/rdf01.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdf02",
+      "name": "RDF inference test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdf02.rq",
+      "result": "entailment/rdf02.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdf03",
+      "name": "RDF test for blank node cardinalities",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdf03.rq",
+      "result": "entailment/rdf03.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdf04",
+      "name": "simple triple pattern match",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdf04.rq",
+      "result": "entailment/rdf04.srx",
+      "entailment_regimes": [
+        "RDF",
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs01",
+      "name": "RDFS inference test rdfs:subPropertyOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs01.rq",
+      "result": "entailment/rdfs01.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs02",
+      "name": "RDFS inference test rdfs:subPropertyOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs02.rq",
+      "result": "entailment/rdfs02.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs03",
+      "name": "RDFS inference test combining subPropertyOf and domain",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs03.rq",
+      "result": "entailment/rdfs03.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs04",
+      "name": "RDFS inference test subClassOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs04.rq",
+      "result": "entailment/rdfs04.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs05",
+      "name": "RDFS inference test subClassOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs05.rq",
+      "result": "entailment/rdfs05.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs06",
+      "name": "RDFS inference test domain",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs06.rq",
+      "result": "entailment/rdfs06.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs07",
+      "name": "RDFS inference test range",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs07.rq",
+      "result": "entailment/rdfs07.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs08",
+      "name": "RDFS inference test rdf:XMLLiteral subclass of rdfs:Literal",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs08.rq",
+      "result": "entailment/rdfs08.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs09",
+      "name": "RDFS inference test transitivity of subClassOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs09.rq",
+      "result": "entailment/rdfs09.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs10",
+      "name": "RDFS inference test transitivity of subPropertyOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs10.rq",
+      "result": "entailment/rdfs10.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs11",
+      "name": "RDFS inference test subProperty and instances",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs11.rq",
+      "result": "entailment/rdfs11.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs12",
+      "name": "RDFS inference test containers",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs12.rq",
+      "result": "entailment/rdfs12.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs13",
+      "name": "RDFS inference test to show that neither literals in subject position nor newly introduced surrogate blank nodes are to be returned in query answers",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs13.rq",
+      "result": "entailment/rdfs13.srx",
+      "entailment_regimes": [
+        "RDFS",
+        "D",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "QL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rif01",
+      "name": "RIF Logical Entailment (referencing RIF XML)",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rif01.rq",
+      "result": "entailment/rif01.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "RIF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RIF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rif03",
+      "name": "RIF Core WG tests: Frames",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rif03.rq",
+      "result": "entailment/rif03.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "RIF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RIF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rif04",
+      "name": "RIF Core WG tests: Modeling Brain Anatomy",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rif04.rq",
+      "result": "entailment/rif04.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "RIF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RIF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rif06",
+      "name": "RIF Core WG tests: RDF Combination Blank Node",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rif06.rq",
+      "result": "entailment/rif06.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "RIF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RIF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple1",
+      "name": "simple 1",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple1.rq",
+      "result": "entailment/simple1.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [
+        "DL",
+        "RL"
+      ],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple2",
+      "name": "simple 2",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple2.rq",
+      "result": "entailment/simple2.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple3",
+      "name": "simple 3",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple3.rq",
+      "result": "entailment/simple3.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple4",
+      "name": "simple 4",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple4.rq",
+      "result": "entailment/simple4.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple5",
+      "name": "simple 5",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple5.rq",
+      "result": "entailment/simple5.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple6",
+      "name": "simple 6",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple6.rq",
+      "result": "entailment/simple6.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple7",
+      "name": "simple 7",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple7.rq",
+      "result": "entailment/simple7.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple8",
+      "name": "simple 8",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple8.rq",
+      "result": "entailment/simple8.srx",
+      "entailment_regimes": [],
+      "entailment_profiles": [],
+      "decision_bucket": "OWL-Direct",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-Direct entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-01",
+      "name": "sparqldl-01.rq: triple pattern",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-01.rq",
+      "result": "entailment/sparqldl-01.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "RL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-02",
+      "name": "sparqldl-02.rq: simple combined query",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-02.rq",
+      "result": "entailment/sparqldl-02.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "RL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-03",
+      "name": "sparqldl-03.rq: combined query with complex class description",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-03.rq",
+      "result": "entailment/sparqldl-03.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-04",
+      "name": "sparqldl-04.rq: bug fixing test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-04.rq",
+      "result": "entailment/sparqldl-04.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDF",
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "RL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "RDF",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDF entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-05",
+      "name": "sparqldl-05.rq: simple undistinguished variable test.",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-05.rq",
+      "result": "entailment/sparqldl-05.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDF",
+        "RDFS",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "RL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "RDFS",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "RDFS entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-06",
+      "name": "sparqldl-06.rq: cycle of undistinguished variables",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-06.rq",
+      "result": "entailment/sparqldl-06.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "RL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "D",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "D entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-07",
+      "name": "sparqldl-07.rq: two distinguished variables + undist.",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-07.rq",
+      "result": "entailment/sparqldl-07.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "RL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-08",
+      "name": "sparqldl-08.rq: two distinguished variables + undist.",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-08.rq",
+      "result": "entailment/sparqldl-08.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "RL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-09",
+      "name": "sparqldl-09.rq: undist vars test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-09.rq",
+      "result": "entailment/sparqldl-09.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based",
+        "RDFS",
+        "RDF",
+        "D"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "QL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-10",
+      "name": "sparqldl-10.rq: undist vars test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-10.rq",
+      "result": "entailment/sparqldl-10.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-11",
+      "name": "sparqldl-11.rq: domain test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-11.rq",
+      "result": "entailment/sparqldl-11.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-12",
+      "name": "sparqldl-12.rq: range test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-12.rq",
+      "result": "entailment/sparqldl-12.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-13",
+      "name": "sparqldl-13.rq: sameAs",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-13.rq",
+      "result": "entailment/sparqldl-13.srx",
+      "entailment_regimes": [
+        "OWL-Direct",
+        "OWL-RDF-Based"
+      ],
+      "entailment_profiles": [
+        "DL",
+        "EL",
+        "RL",
+        "Full"
+      ],
+      "decision_bucket": "OWL-RDF-Based",
+      "commitment": "deliberate-non-goal",
+      "status": "unsupported",
+      "reason": "OWL-RDF-Based entailment regime is not implemented"
+    }
+  ],
+  "inventory_digest": "6de8774f671a8ebde8f610a40f8648cf1dfb61abb08a1a095734cb561b2fd06c"
+}

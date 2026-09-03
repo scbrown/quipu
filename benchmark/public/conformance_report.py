@@ -25,6 +25,8 @@ from pathlib import Path
 # shape ("totals", not "classes"); it is normalised into the same view below.
 SYNTAX_LEDGER = "sparql11-syntax.json"
 EVALUATION_LEDGER = "sparql11-evaluation.json"
+ENTAILMENT_LEDGER = "sparql11-entailment.json"
+SHACL_LEDGER = "shacl-core.json"
 
 CLASS_LABELS = {
     "syntax": "query syntax",
@@ -96,12 +98,16 @@ def load(results_dir: Path) -> dict:
     """Normalise both ledger shapes into one per-class view."""
     syntax_path = results_dir / SYNTAX_LEDGER
     evaluation_path = results_dir / EVALUATION_LEDGER
-    for path in (syntax_path, evaluation_path):
+    entailment_path = results_dir / ENTAILMENT_LEDGER
+    shacl_path = results_dir / SHACL_LEDGER
+    for path in (syntax_path, evaluation_path, entailment_path, shacl_path):
         if not path.is_file():
             raise LedgerError(f"missing ledger: {path}")
 
     syntax = json.loads(syntax_path.read_text())
     evaluation = json.loads(evaluation_path.read_text())
+    entailment = json.loads(entailment_path.read_text())
+    shacl = json.loads(shacl_path.read_text())
 
     classes: dict[str, dict] = {}
 
@@ -127,6 +133,10 @@ def load(results_dir: Path) -> dict:
     for name in evaluation.get("classes", {}):
         rows = [row for row in evaluation_rows if row.get("class") == name]
         classes[name] = {"rows": rows, "counts": tally(rows)}
+    entailment_rows = entailment.get("results", [])
+    if len(entailment_rows) != 70:
+        raise LedgerError(f"{entailment_path} must carry exactly 70 result rows")
+    classes["entailment"] = {"rows": entailment_rows, "counts": tally(entailment_rows)}
 
     unknown = set(classes) - set(CLASS_ORDER)
     if unknown:
@@ -144,6 +154,8 @@ def load(results_dir: Path) -> dict:
         "syntax_quipu_revision": syntax["quipu_revision"],
         "isolation": evaluation.get("isolation", ""),
         "reproduce": evaluation.get("reproduce", {}),
+        "entailment": entailment,
+        "shacl": shacl,
     }
 
 
@@ -394,6 +406,33 @@ def render_markdown(data: dict) -> str:
         "status, and diagnostic or unsupported reason.",
         "",
     ]
+    shacl_rows = data["shacl"].get("results", [])
+    core_rows = [row for row in shacl_rows if row.get("category") != "shacl-sparql"]
+    sparql_rows = [row for row in shacl_rows if row.get("category") == "shacl-sparql"]
+    core_counts, sparql_counts = tally(core_rows), tally(sparql_rows)
+    out += [
+        "## W3C SHACL conformance", "",
+        f"Quipu passes **{core_counts['passed']}/{core_counts['cases']}** manifest-reachable SHACL Core cases.",
+        f"SHACL-SPARQL is separate: **{sparql_counts['passed']}/{sparql_counts['cases']}** pass and {sparql_counts['unsupported']} are unsupported.",
+        "This score uses the context-free native validator; write-gate transaction behavior is tested separately.", "",
+        f"Pinned W3C Data Shapes revision: `{data['shacl']['suite_revision']}`.",
+        "The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).",
+        "`nodeValidator-001.ttl` exists in the checkout but is not manifest-reachable and is not scored.", "",
+        "| SHACL class | Passed | Failed | Error | Unsupported | Cases |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for category in data["shacl"].get("classes", {}):
+        counts = tally([row for row in shacl_rows if row.get("category") == category])
+        out.append(f"| `{category}` | {counts['passed']} | {counts['failed']} | {counts['error']} | {counts['unsupported']} | {counts['cases']} |")
+    entailment = classes["entailment"]["counts"]
+    out += ["", "## Entailment-regime commitments", "",
+        f"All six regimes remain deliberate non-goals: **{entailment['passed']}/{entailment['cases']}** pass and {entailment['unsupported']} are unsupported.",
+        "Local RDFS and OWL extensions are not standards-regime claims.", "",
+        "| Regime | Cases | Commitment |", "|---|---:|---|",
+    ]
+    for regime, count in data["entailment"]["classes"]["entailment"]["decision_buckets"].items():
+        out.append(f"| {regime} | {count} | deliberate non-goal |")
+    out += ["", "Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).", ""]
     return "\n".join(out)
 
 
@@ -425,6 +464,12 @@ def artifacts(data: dict, docs_dir: Path) -> dict[Path, str]:
         files[docs_dir / "badges" / f"sparql11-{name}.json"] = (
             json.dumps(payload, indent=2, sort_keys=True) + "\n"
         )
+    shacl_counts = tally([row for row in data["shacl"]["results"] if row["category"] != "shacl-sparql"])
+    files[docs_dir / "badges" / "shacl-core.json"] = json.dumps({
+        "schemaVersion": 1, "label": "W3C SHACL Core",
+        "message": f"{shacl_counts['passed']}/{shacl_counts['cases']}",
+        "color": badge_color(shacl_counts),
+    }, indent=2, sort_keys=True) + "\n"
     return files
 
 

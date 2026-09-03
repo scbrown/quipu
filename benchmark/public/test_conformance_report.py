@@ -101,6 +101,10 @@ class LedgerShapeTests(unittest.TestCase):
             (results / REPORT.EVALUATION_LEDGER).write_text(
                 json.dumps(ledger([evaluation_row(":n", "passed", "brand-new-class")]))
             )
+            (results / REPORT.ENTAILMENT_LEDGER).write_text(json.dumps(ledger([
+                evaluation_row(f":e{index}", "unsupported", "entailment") for index in range(70)
+            ])))
+            (results / REPORT.SHACL_LEDGER).write_text(json.dumps({"results": []}))
             with self.assertRaises(REPORT.LedgerError) as caught:
                 REPORT.load(results)
             self.assertIn("brand-new-class", str(caught.exception))

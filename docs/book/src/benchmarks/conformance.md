@@ -83,7 +83,12 @@ Grouped by the reason the runner recorded.
 
 | Missing capability | Cases | Classes |
 |---|---:|---|
-| manifest entailment-regime setup is not implemented | 70 | entailment |
+| RDFS entailment regime is not implemented | 19 | entailment |
+| OWL-Direct entailment regime is not implemented | 18 | entailment |
+| RDF entailment regime is not implemented | 16 | entailment |
+| OWL-RDF-Based entailment regime is not implemented | 11 | entailment |
+| RIF entailment regime is not implemented | 4 | entailment |
+| D entailment regime is not implemented | 2 | entailment |
 
 ## Re-derive these numbers
 
@@ -128,3 +133,39 @@ get worse.
 
 Each row records its class, test identifier, manifest, query and result paths,
 status, and diagnostic or unsupported reason.
+
+## W3C SHACL conformance
+
+Quipu passes **25/98** manifest-reachable SHACL Core cases.
+SHACL-SPARQL is separate: **0/22** pass and 22 are unsupported.
+This score uses the context-free native validator; write-gate transaction behavior is tested separately.
+
+Pinned W3C Data Shapes revision: `9c863967bceaef1a87c24e4dd761eda763823120`.
+The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
+`nodeValidator-001.ttl` exists in the checkout but is not manifest-reachable and is not scored.
+
+| SHACL class | Passed | Failed | Error | Unsupported | Cases |
+|---|---:|---:|---:|---:|---:|
+| `core-complex-misc` | 2 | 5 | 0 | 0 | 7 |
+| `core-node` | 9 | 23 | 0 | 0 | 32 |
+| `core-property` | 7 | 30 | 1 | 0 | 38 |
+| `core-path` | 1 | 12 | 0 | 0 | 13 |
+| `core-targets` | 6 | 1 | 0 | 0 | 7 |
+| `core-validation-reports` | 0 | 1 | 0 | 0 | 1 |
+| `shacl-sparql` | 0 | 0 | 0 | 22 | 22 |
+
+## Entailment-regime commitments
+
+All six regimes remain deliberate non-goals: **0/70** pass and 70 are unsupported.
+Local RDFS and OWL extensions are not standards-regime claims.
+
+| Regime | Cases | Commitment |
+|---|---:|---|
+| D | 2 | deliberate non-goal |
+| OWL-Direct | 18 | deliberate non-goal |
+| OWL-RDF-Based | 11 | deliberate non-goal |
+| RDF | 16 | deliberate non-goal |
+| RDFS | 19 | deliberate non-goal |
+| RIF | 4 | deliberate non-goal |
+
+Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).
