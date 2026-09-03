@@ -85,9 +85,10 @@ reported as separate classes and must remain separate.
 
 ## Baseline result
 
-At Quipu `3254199f` and W3C RDF Tests `369a90d1`, **84/86 approved
-query-syntax cases pass (97.7%)**. The two accepted-by-W3C forms Quipu rejects
-are `IN(1,<x>)` (`syntax-oneof-03.rq`) and a relative graph IRI in a
-`CONSTRUCT FROM` query (`syntax-construct-where-02.rq`). The JSON report carries
-the complete 86-case ledger. This number says nothing about query-result
-correctness; evaluation manifests are deliberately excluded.
+At Quipu `857bc77f` plus the default-base parser fix and W3C RDF Tests
+`369a90d1`, **86/86 approved query-syntax cases pass**. The final two cases both
+depended on relative IRI resolution: `IN(1,<x>)` (`syntax-oneof-03.rq`) and a
+relative graph IRI in a `CONSTRUCT FROM` query
+(`syntax-construct-where-02.rq`). The JSON report carries the complete 86-case
+ledger. This number says nothing about query-result correctness; evaluation
+manifests are deliberately excluded.

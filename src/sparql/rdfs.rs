@@ -180,12 +180,10 @@ pub struct WithheldType {
 /// flip does not change its answer.
 ///
 pub fn withheld_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<WithheldType> {
-    use spargebra::SparqlParser;
-
     if !ctx.graph.is_root_default() {
         return Vec::new();
     }
-    let Ok(parsed) = SparqlParser::new().parse_query(query) else {
+    let Ok(parsed) = super::sparql_parser().parse_query(query) else {
         return Vec::new();
     };
 

@@ -23,13 +23,22 @@ pub mod values;
 
 use std::collections::HashMap;
 
-use spargebra::{Query, SparqlParser};
+use spargebra::Query;
 
 use crate::error::{Error, Result};
 use crate::store::Store;
 // The query-budget progress guard lives in `progress` (size ratchet split).
 use crate::types::Value;
 use progress::ProgressGuard;
+
+const DEFAULT_QUERY_BASE: &str = "http://example.invalid/";
+
+/// Build the parser with a deterministic RFC-reserved base for relative IRIs.
+pub(crate) fn sparql_parser() -> spargebra::SparqlParser {
+    spargebra::SparqlParser::new()
+        .with_base_iri(DEFAULT_QUERY_BASE)
+        .expect("the static SPARQL base IRI is valid")
+}
 
 /// A single row of variable bindings from a query result.
 pub type Bindings = HashMap<String, Value>;
@@ -302,7 +311,7 @@ pub fn query_row_labeled(
     sparql: &str,
     ctx: &TemporalContext,
 ) -> Result<QueryResult> {
-    let parsed = SparqlParser::new()
+    let parsed = sparql_parser()
         .parse_query(sparql)
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
     let g_var = match &parsed {
@@ -403,7 +412,7 @@ pub fn dataset_member_ids(store: &Store, sparql: &str, ctx: &TemporalContext) ->
     // implementation of the resolution would be free to drift from the one that
     // decides what the query actually reads — labelling a dataset the query
     // does not read is precisely the failure this is meant to prevent.
-    let parsed = SparqlParser::new()
+    let parsed = sparql_parser()
         .parse_query(sparql)
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
     let dataset = match &parsed {
@@ -449,7 +458,7 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         ));
     }
 
-    let parsed = SparqlParser::new()
+    let parsed = sparql_parser()
         .parse_query(sparql)
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 

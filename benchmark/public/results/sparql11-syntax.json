@@ -1,12 +1,12 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 approved query syntax",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "3254199f2554a77baca349bfb34b09109f79e6b3",
+  "quipu_revision": "16b81ae51d44f69b85e7f298c70798e356f7872c",
   "quipu_version": "quipu 0.3.27",
   "scope": "parser syntax only; evaluation and protocol excluded",
   "totals": {
-    "passed": 84,
-    "failed": 2,
+    "passed": 86,
+    "failed": 0,
     "cases": 86
   },
   "results": [
@@ -237,9 +237,9 @@
     {
       "test": "syntax-oneof-03.rq",
       "expect": "accept",
-      "observed": "reject",
-      "passed": false,
-      "diagnostic": "query error: SPARQL parse error: error at 2:1: expected one of COALESCE, CONTAINS, DATATYPE, STRAFTER, TIMEZONE, [_], isTriple, sameTerm"
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "test": "syntax-bindings-01.rq",
@@ -286,9 +286,9 @@
     {
       "test": "syntax-construct-where-02.rq",
       "expect": "accept",
-      "observed": "reject",
-      "passed": false,
-      "diagnostic": "query error: SPARQL parse error: error at 2:12: expected IRI parsing failed"
+      "observed": "accept",
+      "passed": true,
+      "diagnostic": ""
     },
     {
       "test": "syn-bad-01.rq",

@@ -1,6 +1,22 @@
 //! Tests for the SPARQL query engine.
 
 use super::*;
+
+#[test]
+fn relative_iris_parse_against_the_default_query_base() {
+    let one_of = sparql_parser()
+        .parse_query("SELECT * { ?s ?p ?o FILTER(?o IN(1,<x>)) }")
+        .unwrap();
+    let construct = sparql_parser()
+        .parse_query("CONSTRUCT FROM <file> WHERE { ?s ?p 1816 }")
+        .unwrap();
+    assert!(one_of.to_string().contains("http://example.invalid/x"));
+    assert!(
+        construct
+            .to_string()
+            .contains("http://example.invalid/file")
+    );
+}
 use crate::rdf::ingest_rdf;
 use oxrdfio::RdfFormat;
 

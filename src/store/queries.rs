@@ -171,7 +171,7 @@ impl StoredQuery {
         for p in &self.params {
             probe = probe.replace(&format!("{{{}}}", p.name), probe_value(&p.kind));
         }
-        spargebra::SparqlParser::new()
+        crate::sparql::sparql_parser()
             .parse_query(&probe)
             .map_err(|e| {
                 Error::InvalidValue(format!(
