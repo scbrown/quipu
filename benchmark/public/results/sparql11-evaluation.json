@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "f910f24fc72d91e99def68267a232533a5e3864b",
+  "quipu_revision": "7c5c029f1aa3a8595ba98aeeab1dbba7e0d5617f",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 41,
-      "passed": 104,
+      "failed": 37,
+      "passed": 108,
       "unsupported": 19
     },
     "protocol": {
@@ -564,8 +564,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/strdt01.rq",
       "result": "functions/strdt01.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported FILTER function: LangMatches"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -574,8 +574,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/strdt02.rq",
       "result": "functions/strdt02.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported FILTER function: LangMatches"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -584,8 +584,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/strlang01.rq",
       "result": "functions/strlang01.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported FILTER function: LangMatches"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -594,8 +594,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/strlang02.rq",
       "result": "functions/strlang02.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported FILTER function: LangMatches"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
