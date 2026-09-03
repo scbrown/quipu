@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu passes **86/86** approved SPARQL 1.1
-> *query-syntax* tests and **77/168** approved
+> *query-syntax* tests and **81/168** approved
 > *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
@@ -21,7 +21,7 @@ You can re-derive every number on this page yourself — the commands are below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `a0fc8fca0b89919d0fd11d567ffb178bdf819069` |
+| Quipu revision (evaluation) | `2a66d735a884faaf8157609d1c85ad0855ec2987` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
 | Quipu version | `quipu 0.3.27` |
 | Store isolation | one temporary SQLite store per executable test |
@@ -36,12 +36,12 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 77 | 68 | 4 | 19 | 168 |
+| query evaluation | 81 | 64 | 4 | 19 | 168 |
 | result format | 2 | 1 | 0 | 4 | 7 |
 | protocol | 0 | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **165** | **69** | **4** | **164** | **402** |
+| **all classes** | **169** | **65** | **4** | **164** | **402** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -55,7 +55,7 @@ moves the most per fix.
 
 | Family | Passed | Failed | Error | Unsupported | Cases |
 |---|---:|---:|---:|---:|---:|
-| `functions` | 9 | 46 | 0 | 2 | 57 |
+| `functions` | 13 | 42 | 0 | 2 | 57 |
 | `property-path` | 18 | 2 | 0 | 4 | 24 |
 | `aggregates` | 13 | 9 | 0 | 0 | 22 |
 | `subquery` | 2 | 0 | 4 | 8 | 14 |
@@ -73,20 +73,17 @@ Every test that does not pass is listed here with its W3C identifier, so a
 claim of progress can be checked against a specific case rather than a count.
 
 <details>
-<summary><code>functions</code> — 48 of 57 not passing</summary>
+<summary><code>functions</code> — 44 of 57 not passing</summary>
 
 | Test | Name | Status | Reason |
 |---|---|---|---|
-| `:abs01` | ABS() | failed | `actual result differs from expected multiset` |
 | `:bnode01` | BNODE(str) | unsupported | `blank-node isomorphism is not implemented` |
 | `:bnode02` | BNODE() | unsupported | `blank-node isomorphism is not implemented` |
-| `:ceil01` | CEIL() | failed | `actual result differs from expected multiset` |
 | `:coalesce01` | COALESCE() | failed | `actual result differs from expected multiset` |
 | `:concat01` | CONCAT() | failed | `actual result differs from expected multiset` |
 | `:concat02` | CONCAT() 2 | failed | `actual result differs from expected multiset` |
 | `:day` | DAY() | failed | `actual result differs from expected multiset` |
 | `:encode01` | ENCODE_FOR_URI() | failed | `actual result differs from expected multiset` |
-| `:floor01` | FLOOR() | failed | `actual result differs from expected multiset` |
 | `:hours` | HOURS() | failed | `actual result differs from expected multiset` |
 | `:if01` | IF() | failed | `actual result differs from expected multiset` |
 | `:iri01` | IRI()/URI() | failed | `actual result differs from expected multiset` |
@@ -101,7 +98,6 @@ claim of progress can be checked against a specific case rather than a count.
 | `:replace01` | REPLACE() | failed | `actual result differs from expected multiset` |
 | `:replace02` | REPLACE() with overlapping pattern | failed | `actual result differs from expected multiset` |
 | `:replace03` | REPLACE() with captured substring | failed | `actual result differs from expected multiset` |
-| `:round01` | ROUND() | failed | `actual result differs from expected multiset` |
 | `:seconds` | SECONDS() | failed | `actual result differs from expected multiset` |
 | `:sha1-01` | SHA1() | failed | `actual result differs from expected multiset` |
 | `:sha1-02` | SHA1() on Unicode data | failed | `actual result differs from expected multiset` |
