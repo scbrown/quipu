@@ -563,6 +563,7 @@ pub fn eval_pattern_seeded(
             Ok((bounded, variables))
         }
 
+        #[cfg(not(feature = "remote"))]
         _ => Err(Error::InvalidValue(format!(
             "unsupported graph pattern: {pattern}"
         ))),

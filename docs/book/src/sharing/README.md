@@ -88,9 +88,37 @@ that with string matching: `quipu knot` writes real `owl:sameAs` edges, so the
 claim "these two IRIs are one entity" is itself a fact in the graph — visible,
 queryable, and retractable like any other fact.
 
-## How history travels
+## What travels: facts, graphs, whole repositories
 
-A share carries facts. **Packs** carry graphs, including their history:
+A share is the portable graph artifact. Its scope may be a slice of facts, a
+whole graph, or a repository graph; a release `.qpack.tar.gz` is a deterministic
+archive of the same text bundle, not a SQLite database. The bundle contains a
+canonical RDF payload, SHACL shapes, and JSON plus PROV-O/DCAT/SPDX RDF
+manifests (`src/share.rs`: `share_payload`, `manifest_turtle`).
+
+Import accepts a directory, archive, or HTTP(S) release artifact. URL and archive
+inputs are bounded, verified, and loaded into a fresh in-memory store without a
+user-visible download (`src/share_transport.rs`: `read_reference`,
+`import_in_memory`). Verification is unchanged because bytes arrived over the
+network: graph, shapes, and envelope hashes must agree before the store is
+opened.
+
+For a modified copy, `--since` writes a parent-bound delta using the deliberately
+restricted, interoperable part of SPARQL 1.1 Update:
+
+```sh
+quipu share --out child --since <parent-share>
+quipu import delta <parent-share> child
+```
+
+The delta contains only ground `DELETE DATA` and `INSERT DATA`. Its manifest
+names and hashes the immediate parent and the materialized result; the importer
+rejects a wrong parent, a changed update, any other Update operation, or a result
+digest mismatch (`src/share_delta.rs`: `write_delta`, `materialize`). These are
+local artifact writes and reads: they do not send a delta to a remote store or
+grant ROOT admission.
+
+The older SQLite pack commands remain an internal/archive compatibility surface:
 
 ```sh
 quipu pack <graph-iri> --out <file>     # export a graph as an attachable pack
@@ -99,9 +127,8 @@ quipu unpack <file> [--into <graph-iri>]
 ```
 
 (`src/cli_pack.rs`: `cmd_pack`, `cmd_unpack`.) `--verify` exists so that "is this
-pack intact?" is answerable *before* you load it rather than after. Repository
-packs ship as release assets — Quipu's own repository graph is published that way
-on the `v0.3.27` release.
+pack intact?" is answerable *before* you load it rather than after. SQLite packs
+are no longer the published repository interchange artifact.
 
 For archives, `quipu graph freeze|thaw|list` is the **deep freeze** surface
 (`src/cli_graph.rs`), producing read-only full-history graphs. See
@@ -189,8 +216,9 @@ are stated here rather than left to be inferred from careful wording.
 
 | Capability | Status |
 |---|---|
-| `share` / `import` / `import promote` / `status` / `merge` | ✅ Built (`src/cli_pack.rs`) |
-| `pack` / `unpack` / `pack --verify`, deep freeze | ✅ Built (`src/cli_pack.rs`, `src/cli_graph.rs`) |
+| `share` / URL `import` / `import promote` / `status` / `merge` | ✅ Built (`src/cli_pack.rs`, `src/share_transport.rs`) |
+| Parent-bound SPARQL Update delta write/materialize | ✅ Built (`src/share_delta.rs`) |
+| SQLite `pack` / `unpack` / `pack --verify`, deep freeze | ✅ Internal compatibility/archive surface (`src/cli_pack.rs`, `src/cli_graph.rs`) |
 | `knot` — `owl:sameAs` across stores | ✅ Built |
 | Provider model, declared trust/freshness, per-member outcomes | ✅ Built (`src/provider/`) |
 | SPARQL `SERVICE` to operator-configured endpoints | ✅ Built (feature `remote`) |
