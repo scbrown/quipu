@@ -352,7 +352,7 @@ jobs:
           "${BIN}/quipu" knot "${TMP}/t.ttl" --db "${TMP}/smoke.db"
           "${BIN}/quipu" stats --db "${TMP}/smoke.db"
 
-      - name: Build the repository knowledge pack
+      - name: Build the repository share artifact
         env:
           TAG: ${{ steps.tag.outputs.tag }}
           TARGET: ${{ matrix.target }}
@@ -361,7 +361,8 @@ jobs:
           BIN="target/${TARGET}/release/quipu"
           TMP="$(mktemp -d)"
           GRAPH="https://quipu.dev/ontology/repository/quipu"
-          PACK="dist/quipu-${TAG}-repository.qpack.db"
+          SHARE="${TMP}/repository-share"
+          PACK="dist/quipu-${TAG}-repository.qpack.tar.gz"
           cat > "${TMP}/repo.ttl" <<EOF
           <${GRAPH}> a <https://quipu.dev/ontology/Repository> ;
             <http://www.w3.org/2000/01/rdf-schema#label> "Quipu repository" ;
@@ -369,11 +370,11 @@ jobs:
           EOF
           "${BIN}" knot "${TMP}/repo.ttl" --db "${TMP}/root.db"
           "${BIN}" graph import "${TMP}/root.db" --as "${GRAPH}" --db "${TMP}/source.db"
-          "${BIN}" pack "${GRAPH}" --out "${PACK}" \
-            --name quipu-repository --version "${TAG}" \
-            --repo scbrown/quipu --repo-sha "${GITHUB_SHA}" \
-            --model-id none --model-version none --db "${TMP}/source.db"
-          "${BIN}" pack --verify "${PACK}"
+          "${BIN}" share --graph "${GRAPH}" --no-shapes \
+            --output "${SHARE}" --db "${TMP}/source.db"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
+            --numeric-owner -C "${SHARE}" -czf "${PACK}" .
+          "${BIN}" import "${PACK}"
           ( cd dist && sha256sum "$(basename "${PACK}")" > "$(basename "${PACK}").sha256" )
 
       - name: Upload to the GitHub release
@@ -392,6 +393,6 @@ jobs:
           gh release upload "$TAG" \
             "dist/${NAME}.tar.gz" \
             "dist/${NAME}.tar.gz.sha256" \
-            "dist/quipu-${TAG}-repository.qpack.db" \
-            "dist/quipu-${TAG}-repository.qpack.db.sha256" \
+            "dist/quipu-${TAG}-repository.qpack.tar.gz" \
+            "dist/quipu-${TAG}-repository.qpack.tar.gz.sha256" \
             --clobber

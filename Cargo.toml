@@ -79,6 +79,8 @@ required-features = ["shacl"]
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
 parking_lot = "0.12"
 ureq = { version = "2", default-features = false, optional = true }
+flate2 = "1"
+tar = "0.4"
 # `serialize` carries the wasm export/import story (quipu-2l5,
 # docs/design/wasm-support.md §6): sqlite3_serialize IS the .db interchange
 # format, on native and wasm alike.
