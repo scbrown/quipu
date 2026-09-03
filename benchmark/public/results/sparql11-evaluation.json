@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "d38f77ff4c638a546e12a3231493a9fef54be329",
+  "quipu_revision": "69b889b81f86bbb44aa243f071015c86e9b66b8d",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 10,
-      "passed": 135,
+      "failed": 3,
+      "passed": 142,
       "unsupported": 19
     },
     "protocol": {
@@ -1184,8 +1184,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/subsetByExcl02.rq",
       "result": "negation/subsetByExcl02.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported graph pattern: ?animal <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Animal> . MINUS { ?animal <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type . FILTER(((?type = <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Reptile>) || (?type = <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Insect>))) }"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1204,8 +1204,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/subset-01.rq",
       "result": "negation/subset-01.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER((!(?s1 = ?s2) && NOT EXISTS { ?s2 <http://example/member> ?x . })) }"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1214,8 +1214,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/subset-02.rq",
       "result": "negation/subset-02.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER(((?s1 = ?s2) || NOT EXISTS { ?s2 <http://example/member> ?x . })) } MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . FILTER((NOT EXISTS { ?s1 <http://example/member> ?y . } && NOT EXISTS { ?s2 <http://example/member> ?y . })) }"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1224,8 +1224,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/set-equals-1.rq",
       "result": "negation/set-equals-1.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER(NOT EXISTS { ?s2 <http://example/member> ?x . }) } MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://example/member> ?x . FILTER(NOT EXISTS { ?s1 <http://example/member> ?x . }) }"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1234,8 +1234,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/subset-03.rq",
       "result": "negation/subset-03.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER(NOT EXISTS { ?s2 <http://example/member> ?x . }) } MINUS { ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER(NOT EXISTS { ?s2 <http://example/member> ?x . }) } MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://example/member> ?x . FILTER(NOT EXISTS { ?s1 <http://example/member> ?x . }) } }"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1264,8 +1264,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/full-minuend.rq",
       "result": "negation/full-minuend.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported graph pattern: ?a <http://example/p1> ?b .?a <http://example/p2> ?c . MINUS { ?d <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Sub> . OPTIONAL { ?d <http://example/q1> ?b . } OPTIONAL { ?d <http://example/q2> ?c . } }"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1274,8 +1274,8 @@
       "manifest": "negation/manifest.ttl",
       "query": "negation/part-minuend.rq",
       "result": "negation/part-minuend.srx",
-      "status": "failed",
-      "diagnostic": "query error: unsupported graph pattern: ?a <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Min> . OPTIONAL { ?a <http://example/p1> ?b . } OPTIONAL { ?a <http://example/p2> ?c . } MINUS { ?d <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Sub> . OPTIONAL { ?d <http://example/q1> ?b . } OPTIONAL { ?d <http://example/q2> ?c . } }"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
