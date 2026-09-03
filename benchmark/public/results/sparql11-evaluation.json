@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "775fe7be9e6931505b2f2d2dc2155318ee42a64b",
+  "quipu_revision": "c4c06c4a89c011bec4ed541ece7146db585669b2",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 20,
-      "passed": 125,
+      "failed": 11,
+      "passed": 134,
       "unsupported": 19
     },
     "protocol": {
@@ -164,8 +164,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-avg-01.rq",
       "result": "aggregates/agg-avg-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -174,8 +174,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-avg-02.rq",
       "result": "aggregates/agg-avg-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -194,8 +194,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-min-02.rq",
       "result": "aggregates/agg-min-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -204,8 +204,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-max-01.rq",
       "result": "aggregates/agg-max-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -214,8 +214,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-max-02.rq",
       "result": "aggregates/agg-max-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -224,8 +224,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-sum-01.rq",
       "result": "aggregates/agg-sum-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -234,8 +234,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-sum-02.rq",
       "result": "aggregates/agg-sum-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -254,8 +254,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-err-01.rq",
       "result": "aggregates/agg-err-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -264,8 +264,8 @@
       "manifest": "aggregates/manifest.ttl",
       "query": "aggregates/agg-err-02.rq",
       "result": "aggregates/agg-err-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",

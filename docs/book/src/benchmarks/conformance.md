@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu passes **86/86** approved SPARQL 1.1
-> *query-syntax* tests and **125/168** approved
+> *query-syntax* tests and **134/168** approved
 > *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
@@ -21,7 +21,7 @@ You can re-derive every number on this page yourself — the commands are below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `775fe7be9e6931505b2f2d2dc2155318ee42a64b` |
+| Quipu revision (evaluation) | `c4c06c4a89c011bec4ed541ece7146db585669b2` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
 | Quipu version | `quipu 0.3.27` |
 | Store isolation | one temporary SQLite store per executable test |
@@ -36,12 +36,12 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 125 | 20 | 4 | 19 | 168 |
+| query evaluation | 134 | 11 | 4 | 19 | 168 |
 | result format | 2 | 1 | 0 | 4 | 7 |
 | protocol | 0 | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **213** | **21** | **4** | **164** | **402** |
+| **all classes** | **222** | **12** | **4** | **164** | **402** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -57,7 +57,7 @@ moves the most per fix.
 |---|---:|---:|---:|---:|---:|
 | `functions` | 54 | 1 | 0 | 2 | 57 |
 | `property-path` | 18 | 2 | 0 | 4 | 24 |
-| `aggregates` | 13 | 9 | 0 | 0 | 22 |
+| `aggregates` | 22 | 0 | 0 | 0 | 22 |
 | `subquery` | 2 | 0 | 4 | 8 | 14 |
 | `negation` | 4 | 7 | 0 | 0 | 11 |
 | `bind` | 10 | 0 | 0 | 0 | 10 |
@@ -94,23 +94,6 @@ claim of progress can be checked against a specific case rather than a count.
 | `:pp34` | (pp34) Named Graph 1 | unsupported | `named-graph fixture loading is not implemented` |
 | `:pp35` | (pp35) Named Graph 2 | unsupported | `named-graph fixture loading is not implemented` |
 | `:pp36` | (pp36) Arbitrary path with bound endpoints | failed | `actual result differs from expected multiset` |
-
-</details>
-
-<details>
-<summary><code>aggregates</code> — 9 of 22 not passing</summary>
-
-| Test | Name | Status | Reason |
-|---|---|---|---|
-| `:agg-avg-01` | AVG | failed | `actual result differs from expected multiset` |
-| `:agg-avg-02` | AVG with GROUP BY | failed | `actual result differs from expected multiset` |
-| `:agg-err-01` | Error in AVG | failed | `actual result differs from expected multiset` |
-| `:agg-err-02` | Protect from error in AVG | failed | `actual result differs from expected multiset` |
-| `:agg-max-01` | MAX | failed | `actual result differs from expected multiset` |
-| `:agg-max-02` | MAX with GROUP BY | failed | `actual result differs from expected multiset` |
-| `:agg-min-02` | MIN with GROUP BY | failed | `actual result differs from expected multiset` |
-| `:agg-sum-01` | SUM | failed | `actual result differs from expected multiset` |
-| `:agg-sum-02` | SUM with GROUP BY | failed | `actual result differs from expected multiset` |
 
 </details>
 
