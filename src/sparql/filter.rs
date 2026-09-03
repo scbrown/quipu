@@ -2,6 +2,7 @@
 
 use oxrdf::Literal;
 use spargebra::algebra::{Expression, Function};
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use super::TemporalContext;
 
@@ -314,6 +315,33 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
                 _ => None,
             }
         }
+        Expression::FunctionCall(Function::Datatype, args) => {
+            let datatype = match eval_expr(store, args.first()?, row)? {
+                Value::Lang { .. } => namespace::RDF_LANG_STRING,
+                Value::Str(_) => namespace::XSD_STRING,
+                Value::Int(_) => namespace::XSD_INTEGER,
+                Value::Float(_) => namespace::XSD_DOUBLE,
+                Value::Bool(_) => namespace::XSD_BOOLEAN,
+                Value::Typed { datatype, .. } => {
+                    return store.intern(&datatype).ok().map(Value::Ref);
+                }
+                Value::Ref(_) | Value::Bytes(_) => return None,
+            };
+            store.intern(datatype).ok().map(Value::Ref)
+        }
+        Expression::FunctionCall(Function::Now, _) => Some(Value::Typed {
+            lexical: crate::time::now_iso(),
+            datatype: namespace::XSD_DATE_TIME.to_string(),
+        }),
+        Expression::FunctionCall(Function::Rand, _) => {
+            let sample = next_nonce() & ((1_u64 << 53) - 1);
+            Some(Value::Float(sample as f64 / (1_u64 << 53) as f64))
+        }
+        Expression::FunctionCall(Function::Uuid, _) => {
+            let iri = format!("urn:uuid:{}", generated_uuid());
+            store.intern(&iri).ok().map(Value::Ref)
+        }
+        Expression::FunctionCall(Function::StrUuid, _) => Some(Value::Str(generated_uuid())),
         Expression::FunctionCall(Function::StrLang, args) => {
             let lexical = simple_string_literal(eval_expr(store, args.first()?, row)?)?;
             let (lang, _) = string_literal(eval_expr(store, args.get(1)?, row)?)?;
@@ -442,6 +470,28 @@ fn eval_expression_boolean(store: &Store, expr: &Expression, row: &Bindings) -> 
         }
         _ => effective_boolean_value(&eval_expr(store, expr, row)?),
     }
+}
+
+static NONCE: AtomicU64 = AtomicU64::new(0);
+
+fn next_nonce() -> u64 {
+    let counter = NONCE.fetch_add(1, AtomicOrdering::Relaxed);
+    crate::time::epoch_secs()
+        .wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        .wrapping_add(counter.wrapping_mul(0xbf58_476d_1ce4_e5b9))
+}
+
+fn generated_uuid() -> String {
+    let first = next_nonce();
+    let second = next_nonce().rotate_left(29);
+    format!(
+        "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
+        first >> 32,
+        (first >> 16) & 0xffff,
+        first & 0x0fff,
+        0x8000 | ((second >> 48) & 0x3fff),
+        second & 0xffff_ffff_ffff
+    )
 }
 
 fn string_literal(value: Value) -> Option<(String, Option<String>)> {
