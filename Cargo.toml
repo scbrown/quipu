@@ -78,7 +78,9 @@ required-features = ["shacl"]
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
 parking_lot = "0.12"
-ureq = { version = "2", default-features = false, optional = true }
+# URL-based share imports are an HTTPS-first interface (release assets live on
+# GitHub), so the remote feature must carry ureq's TLS backend.
+ureq = { version = "2", features = ["tls"], optional = true }
 flate2 = "1"
 tar = "0.4"
 # `serialize` carries the wasm export/import story (quipu-2l5,
