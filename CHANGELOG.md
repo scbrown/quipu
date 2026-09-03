@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.29] - 2026-09-03
+
+### Fixed
+
+- *(share)* Enable TLS for URL imports (.5)([11d9b50](https://github.com/scbrown/quipu/commit/11d9b50b887d7370ee1266908402f0a067537c08))
+
 ## [0.3.28] - 2026-09-03
 
 ### .1
