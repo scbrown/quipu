@@ -2,6 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.28] - 2026-09-03
+
+### .1
+
+- Implement language and datatype constructors([7c5c029](https://github.com/scbrown/quipu/commit/7c5c029f1aa3a8595ba98aeeab1dbba7e0d5617f))
+- Publish 108 query evaluation passes([d2c258a](https://github.com/scbrown/quipu/commit/d2c258a108475af94466013d86fd70c8cac0b155))
+- Evaluate date-time accessor functions([9b8ce87](https://github.com/scbrown/quipu/commit/9b8ce87636743c608c0eb6f070223897a862776d))
+- Publish 116 query evaluation passes([4c2b430](https://github.com/scbrown/quipu/commit/4c2b430df08cce45479666bfcbc5a6953918c214))
+- Evaluate conditional expressions([cc61bdf](https://github.com/scbrown/quipu/commit/cc61bdf84dc6282bebfa7238ab4008a00988740f))
+- Publish 119 query evaluation passes([0d7355d](https://github.com/scbrown/quipu/commit/0d7355d1228e4ec2e9830ee2b56fa8c5ea8e015b))
+- Evaluate runtime and datatype builtins([775fe7b](https://github.com/scbrown/quipu/commit/775fe7be9e6931505b2f2d2dc2155318ee42a64b))
+- Publish 125 query evaluation passes([b33da15](https://github.com/scbrown/quipu/commit/b33da15c00823bd4272c6d1191fd9f772314f3c7))
+- Preserve aggregate numeric semantics([c4c06c4](https://github.com/scbrown/quipu/commit/c4c06c4a89c011bec4ed541ece7146db585669b2))
+- Publish 134 query evaluation passes([e2cb5a6](https://github.com/scbrown/quipu/commit/e2cb5a65fbe686e7ca389e47d725ea11d501ed76))
+- Project boolean expressions([d38f77f](https://github.com/scbrown/quipu/commit/d38f77ff4c638a546e12a3231493a9fef54be329))
+- Publish 135 query evaluation passes([13bdfb7](https://github.com/scbrown/quipu/commit/13bdfb7518039750a046aa9ce46b30848977fc8e))
+- Evaluate MINUS graph patterns([69b889b](https://github.com/scbrown/quipu/commit/69b889b81f86bbb44aa243f071015c86e9b66b8d))
+- Publish 142 query evaluation passes([4844044](https://github.com/scbrown/quipu/commit/4844044d7c4eecf3393df412a35dc10420dd538c))
+- Complete zero-length path evaluation([6e31220](https://github.com/scbrown/quipu/commit/6e312207bcf00350d872cab7719e2c2b720f7dbb))
+- Publish 144 query evaluation passes([b744ba3](https://github.com/scbrown/quipu/commit/b744ba3a28058e7fe282184c315160cee6c557a2))
+- Resolve IRI builtins against query base([5a59e82](https://github.com/scbrown/quipu/commit/5a59e829fa43dd4d47c9945712b12cf981494543))
+- Publish 145 query evaluation passes([eabee33](https://github.com/scbrown/quipu/commit/eabee339f83b1920d661d7a14d7a60600bf94769))
+- Publish 150 query evaluation passes([5206b91](https://github.com/scbrown/quipu/commit/5206b9197109ba5bb8e75274e8b2f64ee0a35ba4))
+- Publish 168 query evaluation passes([bff33d5](https://github.com/scbrown/quipu/commit/bff33d56e339078ebee461678818daa924d881f7))
+
+### Added
+
+- *(sparql)* Evaluate numeric arithmetic expressions([a0fc8fc](https://github.com/scbrown/quipu/commit/a0fc8fca0b89919d0fd11d567ffb178bdf819069))
+- *(pack)* Verify and incrementally load repo artifacts([2c7675f](https://github.com/scbrown/quipu/commit/2c7675fa232378217d73d7fab03014e3887fd17e))
+- *(sparql)* Evaluate numeric builtins [.1]([d3f9a19](https://github.com/scbrown/quipu/commit/d3f9a1926d02fa9f0ed00b86fc1114e8ac29d044))
+- *(sparql)* Evaluate string builtins [.1]([88aed04](https://github.com/scbrown/quipu/commit/88aed0460791ffa99ae8f90bf21f1b2b7a8f783a))
+- *(sparql)* Evaluate hash builtins [.1]([f910f24](https://github.com/scbrown/quipu/commit/f910f24fc72d91e99def68267a232533a5e3864b))
+- *(cli)* Load W3C named graph fixtures (.1)([7895151](https://github.com/scbrown/quipu/commit/78951512a99cbf491fb06095bf71a55686f43c13))
+- *(sparql)* Complete query evaluation conformance (.1)([07173bd](https://github.com/scbrown/quipu/commit/07173bd8f3bdbfe8af504074521e215126317840))
+- *(share)* Load text qpacks by reference (.5)([d664328](https://github.com/scbrown/quipu/commit/d664328c565021b12d479cbb6a29cb8bc18ddf1d))
+- *(share)* Canonicalize and describe share payloads (.5)([ef9e406](https://github.com/scbrown/quipu/commit/ef9e4068d851d1597bb572458f512c2488f3583e))
+- *(share)* Add parent-bound delta artifacts (.5)([5179018](https://github.com/scbrown/quipu/commit/5179018fbbc6c8812eae004fe6be1e690609f80c))
+
+
+
+### Changed
+
+- *(pack)* Isolate verified load path([a349689](https://github.com/scbrown/quipu/commit/a3496898af390c95adc01c642469b8e4f26dcd65))
+
+### Documentation
+
+- *(conformance)* Publish 81 query evaluation passes [.1]([1a6e4d7](https://github.com/scbrown/quipu/commit/1a6e4d7989ee4b7e2f3440d5cee2bffcf6ac95dd))
+- *(conformance)* Publish 96 query evaluation passes [.1]([2d52b45](https://github.com/scbrown/quipu/commit/2d52b45d5c429f2028910b370c76c26a1bdfb734))
+- *(conformance)* Publish 104 query evaluation passes [.1]([5331256](https://github.com/scbrown/quipu/commit/53312569f1d437412b4d3fc055b399fae2e4e348))
+- Tell sharing and federation as one primitive [.1]([312f48a](https://github.com/scbrown/quipu/commit/312f48aa3576b1c63286a6c5ecd1740e4e270023))
+- *(share)* Publish unified artifact contract (.5,.1)([a5a8444](https://github.com/scbrown/quipu/commit/a5a8444fd29fad8205ecfdd42a9223cfe737ec5c))
+
+### Fixed
+
+- *(sparql)* Support feature-unified pattern enums (.1)([c558b8e](https://github.com/scbrown/quipu/commit/c558b8ecddd13d00649a24698b6f7660b4c7d116))
+
+
+
+### Testing
+
+- *(conformance)* Compare CONSTRUCT RDF graphs (.1)([093d107](https://github.com/scbrown/quipu/commit/093d107622bea57b78109a579e500b5ce193db02))
+
+### Bench
+
+- Compare W3C IRIs by lexical value([dcd9a12](https://github.com/scbrown/quipu/commit/dcd9a12c2760e763c3ef4ee10add2d039df66c7e))
+- Publish 77-case SPARQL evaluation baseline([6c2f33f](https://github.com/scbrown/quipu/commit/6c2f33f7dc9713a341d3094b503fb03f35136846))
+- Publish conformance results, with gates that keep them honest([c76d5a1](https://github.com/scbrown/quipu/commit/c76d5a1316971e8635d784cbd739e82e49feeec9))
+
 ## [0.3.27] - 2026-08-25
 
 ### Fixed
