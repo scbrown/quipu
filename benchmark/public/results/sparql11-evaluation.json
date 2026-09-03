@@ -1,0 +1,3211 @@
+{
+  "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
+  "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
+  "quipu_revision": "436b3f9f2535fc46c7166e48fd83d7e3e675ac7f",
+  "quipu_version": "quipu 0.3.27",
+  "isolation": "one temporary SQLite store per executable test",
+  "reproduce": {
+    "build": "cargo build --release --bin quipu",
+    "runner": "python3 benchmark/public/sparql11_evaluation.py",
+    "environment": {
+      "SUITE": "/tmp/rdf-tests/sparql/sparql11",
+      "QUIPU_BIN": "$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"target_directory\"])')/release/quipu"
+    },
+    "per_class": {
+      "query-evaluation": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class query-evaluation --output /tmp/sparql11-query-evaluation.json",
+      "protocol": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class protocol --output /tmp/sparql11-protocol.json",
+      "update": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class update --output /tmp/sparql11-update.json",
+      "entailment": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class entailment --output /tmp/sparql11-entailment.json",
+      "result-format": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class result-format --output /tmp/sparql11-result-format.json"
+    }
+  },
+  "classes": {
+    "query-evaluation": {
+      "cases": 168,
+      "error": 4,
+      "failed": 127,
+      "passed": 18,
+      "unsupported": 19
+    },
+    "protocol": {
+      "cases": 34,
+      "unsupported": 34
+    },
+    "update": {
+      "cases": 37,
+      "unsupported": 37
+    },
+    "entailment": {
+      "cases": 70,
+      "unsupported": 70
+    },
+    "result-format": {
+      "cases": 7,
+      "failed": 1,
+      "passed": 2,
+      "unsupported": 4
+    }
+  },
+  "results": [
+    {
+      "class": "query-evaluation",
+      "id": ":agg01",
+      "name": "COUNT 1",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg01.rq",
+      "result": "aggregates/agg01.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg02",
+      "name": "COUNT 2",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg02.rq",
+      "result": "aggregates/agg02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg03",
+      "name": "COUNT 3",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg03.rq",
+      "result": "aggregates/agg03.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg04",
+      "name": "COUNT 4",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg04.rq",
+      "result": "aggregates/agg04.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg05",
+      "name": "COUNT 5",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg05.rq",
+      "result": "aggregates/agg05.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg06",
+      "name": "COUNT 6",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg06.rq",
+      "result": "aggregates/agg06.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg07",
+      "name": "COUNT 7",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg07.rq",
+      "result": "aggregates/agg07.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg08b",
+      "name": "COUNT 8b",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg08b.rq",
+      "result": "aggregates/agg08b.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-groupconcat-01",
+      "name": "GROUP_CONCAT 1",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-groupconcat-1.rq",
+      "result": "aggregates/agg-groupconcat-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-groupconcat-02",
+      "name": "GROUP_CONCAT 2",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-groupconcat-2.rq",
+      "result": "aggregates/agg-groupconcat-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-groupconcat-03",
+      "name": "GROUP_CONCAT with SEPARATOR",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-groupconcat-3.rq",
+      "result": "aggregates/agg-groupconcat-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-avg-01",
+      "name": "AVG",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-avg-01.rq",
+      "result": "aggregates/agg-avg-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-avg-02",
+      "name": "AVG with GROUP BY",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-avg-02.rq",
+      "result": "aggregates/agg-avg-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-min-01",
+      "name": "MIN",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-min-01.rq",
+      "result": "aggregates/agg-min-01.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-min-02",
+      "name": "MIN with GROUP BY",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-min-02.rq",
+      "result": "aggregates/agg-min-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-max-01",
+      "name": "MAX",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-max-01.rq",
+      "result": "aggregates/agg-max-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-max-02",
+      "name": "MAX with GROUP BY",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-max-02.rq",
+      "result": "aggregates/agg-max-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-sum-01",
+      "name": "SUM",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-sum-01.rq",
+      "result": "aggregates/agg-sum-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-sum-02",
+      "name": "SUM with GROUP BY",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-sum-02.rq",
+      "result": "aggregates/agg-sum-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-sample-01",
+      "name": "SAMPLE",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-sample-01.rq",
+      "result": "aggregates/agg-sample-01.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-err-01",
+      "name": "Error in AVG",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-err-01.rq",
+      "result": "aggregates/agg-err-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":agg-err-02",
+      "name": "Protect from error in AVG",
+      "manifest": "aggregates/manifest.ttl",
+      "query": "aggregates/agg-err-02.rq",
+      "result": "aggregates/agg-err-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind01",
+      "name": "bind01 - BIND",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind01.rq",
+      "result": "bind/bind01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind02",
+      "name": "bind02 - BIND",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind02.rq",
+      "result": "bind/bind02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind03",
+      "name": "bind03 - BIND",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind03.rq",
+      "result": "bind/bind03.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind04",
+      "name": "bind04 - BIND",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind04.rq",
+      "result": "bind/bind04.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind05",
+      "name": "bind05 - BIND",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind05.rq",
+      "result": "bind/bind05.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind06",
+      "name": "bind06 - BIND",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind06.rq",
+      "result": "bind/bind06.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind07",
+      "name": "bind07 - BIND",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind07.rq",
+      "result": "bind/bind07.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind08",
+      "name": "bind08 - BIND",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind08.rq",
+      "result": "bind/bind08.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind10",
+      "name": "bind10 - BIND scoping - Variable in filter not in scope",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind10.rq",
+      "result": "bind/bind10.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bind11",
+      "name": "bind11 - BIND scoping - Variable in filter in scope",
+      "manifest": "bind/manifest.ttl",
+      "query": "bind/bind11.rq",
+      "result": "bind/bind11.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":values1",
+      "name": "Post-query VALUES with subj-var, 1 row",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/values01.rq",
+      "result": "bindings/values01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":values2",
+      "name": "Post-query VALUES with obj-var, 1 row",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/values02.rq",
+      "result": "bindings/values02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":values3",
+      "name": "Post-query VALUES with 2 obj-vars, 1 row",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/values03.rq",
+      "result": "bindings/values03.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":values4",
+      "name": "Post-query VALUES with 2 obj-vars, 1 row with UNDEF",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/values04.rq",
+      "result": "bindings/values04.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":values5",
+      "name": "Post-query VALUES with 2 obj-vars, 2 rows with UNDEF",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/values05.rq",
+      "result": "bindings/values05.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":values6",
+      "name": "Post-query VALUES with pred-var, 1 row",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/values06.rq",
+      "result": "bindings/values06.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":values7",
+      "name": "Post-query VALUES with (OPTIONAL) obj-var, 1 row",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/values07.rq",
+      "result": "bindings/values07.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":values8",
+      "name": "Post-query VALUES with subj/obj-vars, 2 rows with UNDEF",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/values08.rq",
+      "result": "bindings/values08.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":inline1",
+      "name": "Inline VALUES graph pattern",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/inline01.rq",
+      "result": "bindings/inline01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":inline2",
+      "name": "Post-subquery VALUES",
+      "manifest": "bindings/manifest.ttl",
+      "query": "bindings/inline02.rq",
+      "result": "bindings/inline02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":constructwhere01",
+      "name": "constructwhere01 - CONSTRUCT WHERE",
+      "manifest": "construct/manifest.ttl",
+      "query": "construct/constructwhere01.rq",
+      "result": "construct/constructwhere01result.ttl",
+      "status": "unsupported",
+      "reason": "expected result format .ttl is not comparable"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":constructwhere02",
+      "name": "constructwhere02 - CONSTRUCT WHERE",
+      "manifest": "construct/manifest.ttl",
+      "query": "construct/constructwhere02.rq",
+      "result": "construct/constructwhere02result.ttl",
+      "status": "unsupported",
+      "reason": "expected result format .ttl is not comparable"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":constructwhere03",
+      "name": "constructwhere03 - CONSTRUCT WHERE",
+      "manifest": "construct/manifest.ttl",
+      "query": "construct/constructwhere03.rq",
+      "result": "construct/constructwhere03result.ttl",
+      "status": "unsupported",
+      "reason": "expected result format .ttl is not comparable"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":constructwhere04",
+      "name": "constructwhere04 - CONSTRUCT WHERE",
+      "manifest": "construct/manifest.ttl",
+      "query": "construct/constructwhere04.rq",
+      "result": "construct/constructwhere04result.ttl",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":exists01",
+      "name": "Exists with one constant",
+      "manifest": "exists/manifest.ttl",
+      "query": "exists/exists01.rq",
+      "result": "exists/exists01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":exists02",
+      "name": "Exists with ground triple",
+      "manifest": "exists/manifest.ttl",
+      "query": "exists/exists02.rq",
+      "result": "exists/exists02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":exists03",
+      "name": "Exists within graph pattern",
+      "manifest": "exists/manifest.ttl",
+      "query": "exists/exists03.rq",
+      "result": "exists/exists03.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":exists04",
+      "name": "Nested positive exists",
+      "manifest": "exists/manifest.ttl",
+      "query": "exists/exists04.rq",
+      "result": "exists/exists04.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":exists05",
+      "name": "Nested negative exists in positive exists",
+      "manifest": "exists/manifest.ttl",
+      "query": "exists/exists05.rq",
+      "result": "exists/exists05.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":strdt01",
+      "name": "STRDT()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/strdt01.rq",
+      "result": "functions/strdt01.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported FILTER function: LangMatches"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":strdt02",
+      "name": "STRDT(STR())",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/strdt02.rq",
+      "result": "functions/strdt02.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported FILTER function: LangMatches"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":strlang01",
+      "name": "STRLANG()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/strlang01.rq",
+      "result": "functions/strlang01.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported FILTER function: LangMatches"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":strlang02",
+      "name": "STRLANG(STR())",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/strlang02.rq",
+      "result": "functions/strlang02.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported FILTER function: LangMatches"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":isnumeric01",
+      "name": "isNumeric()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/isnumeric01.rq",
+      "result": "functions/isnumeric01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":abs01",
+      "name": "ABS()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/abs01.rq",
+      "result": "functions/abs01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":ceil01",
+      "name": "CEIL()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/ceil01.rq",
+      "result": "functions/ceil01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":floor01",
+      "name": "FLOOR()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/floor01.rq",
+      "result": "functions/floor01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":round01",
+      "name": "ROUND()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/round01.rq",
+      "result": "functions/round01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":concat01",
+      "name": "CONCAT()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/concat01.rq",
+      "result": "functions/concat01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":concat02",
+      "name": "CONCAT() 2",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/concat02.rq",
+      "result": "functions/concat02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":substring01",
+      "name": "SUBSTR() (3-argument)",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/substring01.rq",
+      "result": "functions/substring01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":substring02",
+      "name": "SUBSTR() (2-argument)",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/substring02.rq",
+      "result": "functions/substring02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":length01",
+      "name": "STRLEN()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/length01.rq",
+      "result": "functions/length01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":ucase01",
+      "name": "UCASE()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/ucase01.rq",
+      "result": "functions/ucase01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":lcase01",
+      "name": "LCASE()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/lcase01.rq",
+      "result": "functions/lcase01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":encode01",
+      "name": "ENCODE_FOR_URI()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/encode01.rq",
+      "result": "functions/encode01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":contains01",
+      "name": "CONTAINS()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/contains01.rq",
+      "result": "functions/contains01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":starts01",
+      "name": "STRSTARTS()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/starts01.rq",
+      "result": "functions/starts01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":ends01",
+      "name": "STRENDS()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/ends01.rq",
+      "result": "functions/ends01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":md5-01",
+      "name": "MD5()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/md5-01.rq",
+      "result": "functions/md5-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":md5-02",
+      "name": "MD5() over Unicode data",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/md5-02.rq",
+      "result": "functions/md5-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":sha1-01",
+      "name": "SHA1()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/sha1-01.rq",
+      "result": "functions/sha1-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":sha1-02",
+      "name": "SHA1() on Unicode data",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/sha1-02.rq",
+      "result": "functions/sha1-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":sha256-01",
+      "name": "SHA256()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/sha256-01.rq",
+      "result": "functions/sha256-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":sha256-02",
+      "name": "SHA256() on Unicode data",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/sha256-02.rq",
+      "result": "functions/sha256-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":sha512-01",
+      "name": "SHA512()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/sha512-01.rq",
+      "result": "functions/sha512-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":sha512-02",
+      "name": "SHA512() on Unicode data",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/sha512-02.rq",
+      "result": "functions/sha512-02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":hours",
+      "name": "HOURS()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/hours-01.rq",
+      "result": "functions/hours-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":minutes",
+      "name": "MINUTES()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/minutes-01.rq",
+      "result": "functions/minutes-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":seconds",
+      "name": "SECONDS()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/seconds-01.rq",
+      "result": "functions/seconds-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":year",
+      "name": "YEAR()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/year-01.rq",
+      "result": "functions/year-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":month",
+      "name": "MONTH()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/month-01.rq",
+      "result": "functions/month-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":day",
+      "name": "DAY()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/day-01.rq",
+      "result": "functions/day-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":timezone",
+      "name": "TIMEZONE()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/timezone-01.rq",
+      "result": "functions/timezone-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":tz",
+      "name": "TZ()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/tz-01.rq",
+      "result": "functions/tz-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bnode01",
+      "name": "BNODE(str)",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/bnode01.rq",
+      "result": "functions/bnode01.srx",
+      "status": "unsupported",
+      "reason": "blank-node isomorphism is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":in01",
+      "name": "IN 1",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/in01.rq",
+      "result": "functions/in01.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":in02",
+      "name": "IN 2",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/in02.rq",
+      "result": "functions/in02.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":notin01",
+      "name": "NOT IN 1",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/notin01.rq",
+      "result": "functions/notin01.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":notin02",
+      "name": "NOT IN 2",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/notin02.rq",
+      "result": "functions/notin02.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":now01",
+      "name": "NOW()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/now01.rq",
+      "result": "functions/now01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":rand01",
+      "name": "RAND()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/rand01.rq",
+      "result": "functions/rand01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":bnode02",
+      "name": "BNODE()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/bnode02.rq",
+      "result": "functions/bnode02.srx",
+      "status": "unsupported",
+      "reason": "blank-node isomorphism is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":iri01",
+      "name": "IRI()/URI()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/iri01.rq",
+      "result": "functions/iri01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":if01",
+      "name": "IF()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/if01.rq",
+      "result": "functions/if01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":if02",
+      "name": "IF() error propogation",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/if02.rq",
+      "result": "functions/if02.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":coalesce01",
+      "name": "COALESCE()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/coalesce01.rq",
+      "result": "functions/coalesce01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":strbefore01a",
+      "name": "STRBEFORE()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/strbefore01.rq",
+      "result": "functions/strbefore01a.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":strbefore02",
+      "name": "STRBEFORE() datatyping",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/strbefore02.rq",
+      "result": "functions/strbefore02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":strafter01a",
+      "name": "STRAFTER()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/strafter01.rq",
+      "result": "functions/strafter01a.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":strafter02",
+      "name": "STRAFTER() datatyping",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/strafter02.rq",
+      "result": "functions/strafter02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":replace01",
+      "name": "REPLACE()",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/replace01.rq",
+      "result": "functions/replace01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":replace02",
+      "name": "REPLACE() with overlapping pattern",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/replace02.rq",
+      "result": "functions/replace02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":replace03",
+      "name": "REPLACE() with captured substring",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/replace03.rq",
+      "result": "functions/replace03.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":uuid01",
+      "name": "UUID() pattern match",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/uuid01.rq",
+      "result": "functions/uuid01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":struuid01",
+      "name": "STRUUID() pattern match",
+      "manifest": "functions/manifest.ttl",
+      "query": "functions/struuid01.rq",
+      "result": "functions/struuid01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":group01",
+      "name": "Group-1",
+      "manifest": "grouping/manifest.ttl",
+      "query": "grouping/group01.rq",
+      "result": "grouping/group01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":group03",
+      "name": "Group-3",
+      "manifest": "grouping/manifest.ttl",
+      "query": "grouping/group03.rq",
+      "result": "grouping/group03.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":group04",
+      "name": "Group-4",
+      "manifest": "grouping/manifest.ttl",
+      "query": "grouping/group04.rq",
+      "result": "grouping/group04.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":group05",
+      "name": "Group-5",
+      "manifest": "grouping/manifest.ttl",
+      "query": "grouping/group05.rq",
+      "result": "grouping/group05.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subset-by-exclusion-nex-1",
+      "name": "Subsets by exclusion (NOT EXISTS)",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/subsetByExcl01.rq",
+      "result": "negation/subsetByExcl01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subset-by-exclusion-minus-1",
+      "name": "Subsets by exclusion (MINUS)",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/subsetByExcl02.rq",
+      "result": "negation/subsetByExcl02.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported graph pattern: ?animal <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Animal> . MINUS { ?animal <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type . FILTER(((?type = <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Reptile>) || (?type = <http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation#Insect>))) }"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":temporal-proximity-by-exclusion-nex-1",
+      "name": "Medical, temporal proximity by exclusion (NOT EXISTS)",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/temporalProximity01.rq",
+      "result": "negation/temporalProximity01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subset-01",
+      "name": "Calculate which sets are subsets of others (include A subsetOf A)",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/subset-01.rq",
+      "result": "negation/subset-01.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER((!(?s1 = ?s2) && NOT EXISTS { ?s2 <http://example/member> ?x . })) }"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subset-02",
+      "name": "Calculate which sets are subsets of others (exclude A subsetOf A)",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/subset-02.rq",
+      "result": "negation/subset-02.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER(((?s1 = ?s2) || NOT EXISTS { ?s2 <http://example/member> ?x . })) } MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . FILTER((NOT EXISTS { ?s1 <http://example/member> ?y . } && NOT EXISTS { ?s2 <http://example/member> ?y . })) }"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":set-equals-1",
+      "name": "Calculate which sets have the same elements",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/set-equals-1.rq",
+      "result": "negation/set-equals-1.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER(NOT EXISTS { ?s2 <http://example/member> ?x . }) } MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://example/member> ?x . FILTER(NOT EXISTS { ?s1 <http://example/member> ?x . }) }"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subset-03",
+      "name": "Calculate proper subset",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/subset-03.rq",
+      "result": "negation/subset-03.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported graph pattern: ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER(NOT EXISTS { ?s2 <http://example/member> ?x . }) } MINUS { ?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> . MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s1 <http://example/member> ?x . FILTER(NOT EXISTS { ?s2 <http://example/member> ?x . }) } MINUS { ?s1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Set> .?s2 <http://example/member> ?x . FILTER(NOT EXISTS { ?s1 <http://example/member> ?x . }) } }"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":exists-01",
+      "name": "Positive EXISTS 1",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/exists-01.rq",
+      "result": "negation/exists-01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":exists-02",
+      "name": "Positive EXISTS 2",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/exists-02.rq",
+      "result": "negation/exists-02.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":full-minuend",
+      "name": "Subtraction with MINUS from a fully bound minuend",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/full-minuend.rq",
+      "result": "negation/full-minuend.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported graph pattern: ?a <http://example/p1> ?b .?a <http://example/p2> ?c . MINUS { ?d <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Sub> . OPTIONAL { ?d <http://example/q1> ?b . } OPTIONAL { ?d <http://example/q2> ?c . } }"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":partial-minuend",
+      "name": "Subtraction with MINUS from a partially bound minuend",
+      "manifest": "negation/manifest.ttl",
+      "query": "negation/part-minuend.rq",
+      "result": "negation/part-minuend.srx",
+      "status": "failed",
+      "diagnostic": "query error: unsupported graph pattern: ?a <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Min> . OPTIONAL { ?a <http://example/p1> ?b . } OPTIONAL { ?a <http://example/p2> ?c . } MINUS { ?d <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example/Sub> . OPTIONAL { ?d <http://example/q1> ?b . } OPTIONAL { ?d <http://example/q2> ?c . } }"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":projexp01",
+      "name": "Expression is equality",
+      "manifest": "project-expression/manifest.ttl",
+      "query": "project-expression/projexp01.rq",
+      "result": "project-expression/projexp01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":projexp02",
+      "name": "Expression raise an error",
+      "manifest": "project-expression/manifest.ttl",
+      "query": "project-expression/projexp02.rq",
+      "result": "project-expression/projexp02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":projexp03",
+      "name": "Reuse a project expression variable in select",
+      "manifest": "project-expression/manifest.ttl",
+      "query": "project-expression/projexp03.rq",
+      "result": "project-expression/projexp03.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":projexp04",
+      "name": "Reuse a project expression variable in order by",
+      "manifest": "project-expression/manifest.ttl",
+      "query": "project-expression/projexp04.rq",
+      "result": "project-expression/projexp04.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":projexp05",
+      "name": "Expression may return no value",
+      "manifest": "project-expression/manifest.ttl",
+      "query": "project-expression/projexp05.rq",
+      "result": "project-expression/projexp05.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":projexp06",
+      "name": "Expression has undefined variable",
+      "manifest": "project-expression/manifest.ttl",
+      "query": "project-expression/projexp06.rq",
+      "result": "project-expression/projexp06.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":projexp07",
+      "name": "Expression has variable that may be unbound",
+      "manifest": "project-expression/manifest.ttl",
+      "query": "project-expression/projexp07.rq",
+      "result": "project-expression/projexp07.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp01",
+      "name": "(pp01) Simple path",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp01.rq",
+      "result": "property-path/pp01.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp02",
+      "name": "(pp02) Star path",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp02.rq",
+      "result": "property-path/pp02.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp03",
+      "name": "(pp03) Simple path with loop",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp03.rq",
+      "result": "property-path/pp03.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp06",
+      "name": "(pp06) Path with two graphs",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp06.rq",
+      "result": "property-path/pp06.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp07",
+      "name": "(pp07) Path with one graph",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp06.rq",
+      "result": "property-path/pp07.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp08",
+      "name": "(pp08) Reverse path",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp08.rq",
+      "result": "property-path/pp08.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp09",
+      "name": "(pp09) Reverse sequence path",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp09.rq",
+      "result": "property-path/pp09.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp10",
+      "name": "(pp10) Path with negation",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp10.rq",
+      "result": "property-path/pp10.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp11",
+      "name": "(pp11) Simple path and two paths to same target node",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp11.rq",
+      "result": "property-path/pp11.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp12",
+      "name": "(pp12) Variable length path and two paths to same target node",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp12.rq",
+      "result": "property-path/pp12.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp14",
+      "name": "(pp14) Star path over foaf:knows",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp14.rq",
+      "result": "property-path/pp14.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp16",
+      "name": "(pp16) Duplicate paths and cycles through foaf:knows*",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp14.rq",
+      "result": "property-path/pp16.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp21",
+      "name": "(pp21) Diamond -- :p+",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-2-2.rq",
+      "result": "property-path/diamond-2.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp23",
+      "name": "(pp23) Diamond, with tail -- :p+",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-2-2.rq",
+      "result": "property-path/diamond-tail-2.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp25",
+      "name": "(pp25) Diamond, with loop -- :p+",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-2-2.rq",
+      "result": "property-path/diamond-loop-2.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp28a",
+      "name": "(pp28a) Diamond, with loop -- (:p/:p)?",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-3-3.rq",
+      "result": "property-path/diamond-loop-5a.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp30",
+      "name": "(pp30) Operator precedence 1",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-p1.rq",
+      "result": "property-path/path-p1.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp31",
+      "name": "(pp31) Operator precedence 2",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-p2.rq",
+      "result": "property-path/path-p2.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp32",
+      "name": "(pp32) Operator precedence 3",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-p3.rq",
+      "result": "property-path/path-p3.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp33",
+      "name": "(pp33) Operator precedence 4",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-p4.rq",
+      "result": "property-path/path-p4.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp34",
+      "name": "(pp34) Named Graph 1",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-ng-01.rq",
+      "result": "property-path/path-ng-01.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp35",
+      "name": "(pp35) Named Graph 2",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/path-ng-02.rq",
+      "result": "property-path/path-ng-01.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp36",
+      "name": "(pp36) Arbitrary path with bound endpoints",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp36.rq",
+      "result": "property-path/pp36.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":pp37",
+      "name": "(pp37) Nested (*)*",
+      "manifest": "property-path/manifest.ttl",
+      "query": "property-path/pp37.rq",
+      "result": "property-path/pp37.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery01",
+      "name": "sq01 - Subquery within graph pattern",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq01.rq",
+      "result": "subquery/sq01.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery02",
+      "name": "sq02 - Subquery within graph pattern, graph variable is bound",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq02.rq",
+      "result": "subquery/sq02.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery03",
+      "name": "sq03 - Subquery within graph pattern, graph variable is not bound",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq03.rq",
+      "result": "subquery/sq03.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery04",
+      "name": "sq04 - Subquery within graph pattern, default graph does not apply",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq04.rq",
+      "result": "subquery/sq04.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery05",
+      "name": "sq05 - Subquery within graph pattern, from named applies",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq05.rq",
+      "result": "subquery/sq05.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery06",
+      "name": "sq06 - Subquery with graph pattern, from named applies",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq06.rq",
+      "result": "subquery/sq06.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column 57: Invalid IRI code point '\n'"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery07",
+      "name": "sq07 - Subquery with from ",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq07.rq",
+      "result": "subquery/sq07.srx",
+      "status": "unsupported",
+      "reason": "named-graph fixture loading is not implemented"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery08",
+      "name": "sq08 - Subquery with aggregate",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq08.rq",
+      "result": "subquery/sq08.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column 57: Invalid IRI code point '\n'"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery09",
+      "name": "sq09 - Nested Subqueries",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq09.rq",
+      "result": "subquery/sq09.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column 57: Invalid IRI code point '\n'"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery10",
+      "name": "sq10 - Subquery with exists",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq10.rq",
+      "result": "subquery/sq10.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 1 and line 5 column 57: Invalid IRI code point '\n'"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery11",
+      "name": "sq11 - Subquery limit per resource",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq11.rq",
+      "result": "subquery/sq11.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery12",
+      "name": "sq12 - Subquery in CONSTRUCT with built-ins",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq12.rq",
+      "result": "subquery/sq12_out.ttl",
+      "status": "unsupported",
+      "reason": "expected result format .ttl is not comparable"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery13",
+      "name": "sq13 - Subqueries don't inject bindings",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq13.rq",
+      "result": "subquery/sq13.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "query-evaluation",
+      "id": ":subquery14",
+      "name": "sq14 - limit by resource",
+      "manifest": "subquery/manifest.ttl",
+      "query": "subquery/sq14.rq",
+      "result": "subquery/sq14-out.ttl",
+      "status": "unsupported",
+      "reason": "expected result format .ttl is not comparable"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_post_form",
+      "name": "query via URL-encoded POST",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_dataset_default_graphs_get",
+      "name": "GET query with protocol-specified default graph",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_dataset_default_graphs_post",
+      "name": "POST query with protocol-specified default graphs",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_dataset_named_graphs_post",
+      "name": "POST query with protocol-specified named graphs",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_dataset_named_graphs_get",
+      "name": "GET query with protocol-specified named graphs",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_dataset_full",
+      "name": "query with protocol-specified dataset (both named and default graphs)",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_multiple_dataset",
+      "name": "query specifying dataset in both query string and protocol; test for use of protocol-specified dataset",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_get",
+      "name": "query via GET",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_content_type_select",
+      "name": "query appropriate content type (expect one of: XML, JSON, CSV, TSV)",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_content_type_ask",
+      "name": "query appropriate content type (expect one of: XML, JSON)",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_content_type_describe",
+      "name": "query appropriate content type (expect one of: RDF/XML, Turtle, N-Triples, RDFa)",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_content_type_construct",
+      "name": "query appropriate content type (expect one of: RDF/XML, Turtle, N-Triples, RDFa)",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":update_dataset_default_graph",
+      "name": "update with protocol-specified default graph",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":update_dataset_default_graphs",
+      "name": "update with protocol-specified default graphs",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":update_dataset_named_graphs",
+      "name": "update with protocol-specified named graphs",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":update_dataset_full",
+      "name": "update with protocol-specified dataset (both named and default graphs)",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":update_post_form",
+      "name": "update via URL-encoded POST",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":update_post_direct",
+      "name": "update via POST directly",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":update_base_uri",
+      "name": "test for service-defined BASE URI (\"which MAY be the service endpoint\")",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":query_post_direct",
+      "name": "query via POST directly",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_query_method",
+      "name": "invoke query operation with a method other than GET or POST",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_multiple_queries",
+      "name": "invoke query operation with more than one query string",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_query_wrong_media_type",
+      "name": "invoke query operation with a POST with media type that's not url-encoded or application/sparql-query",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_query_missing_form_type",
+      "name": "invoke query operation with url-encoded body, but without application/x-www-form-urlencoded media type",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_query_missing_direct_type",
+      "name": "invoke query operation with SPARQL body, but without application/sparql-query media type",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_query_non_utf8",
+      "name": "invoke query operation with direct POST, but with a non-UTF8 encoding (UTF-16)",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_query_syntax",
+      "name": "invoke query operation with invalid query syntax (4XX result)",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_update_get",
+      "name": "invoke update operation with GET",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_multiple_updates",
+      "name": "invoke update operation with more than one update string",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_update_wrong_media_type",
+      "name": "invoke update operation with a POST with media type that's not url-encoded or application/sparql-update",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_update_missing_form_type",
+      "name": "invoke update operation with url-encoded body, but without application/x-www-form-urlencoded media type",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_update_non_utf8",
+      "name": "invoke update operation with direct POST, but with a non-UTF8 encoding",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_update_syntax",
+      "name": "invoke update operation with invalid update syntax",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "protocol",
+      "id": ":bad_update_dataset_conflict",
+      "name": "invoke update with both using-graph-uri/using-named-graph-uri parameter and USING/WITH clause",
+      "manifest": "protocol/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "W3C HTTP request-sequence executor is not implemented"
+    },
+    {
+      "class": "update",
+      "id": ":add01",
+      "name": "ADD 1",
+      "manifest": "add/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add02",
+      "name": "ADD 2",
+      "manifest": "add/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add03",
+      "name": "ADD 3",
+      "manifest": "add/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add04",
+      "name": "ADD 4",
+      "manifest": "add/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add05",
+      "name": "ADD 5",
+      "manifest": "add/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add06",
+      "name": "ADD 6",
+      "manifest": "add/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add07",
+      "name": "ADD 7",
+      "manifest": "add/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add08",
+      "name": "ADD 8",
+      "manifest": "add/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":insert-data-spo1",
+      "name": "Simple insert data 1",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":insert-data-spo-named1",
+      "name": "Simple insert data named 1",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":insert-data-spo-named2",
+      "name": "Simple insert data named 2",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":insert-data-spo-named3",
+      "name": "Simple insert data named 3",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":copy01",
+      "name": "COPY 1",
+      "manifest": "copy/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":copy02",
+      "name": "COPY 2",
+      "manifest": "copy/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":copy03",
+      "name": "COPY 3",
+      "manifest": "copy/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":copy04",
+      "name": "COPY 4",
+      "manifest": "copy/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":copy06",
+      "name": "COPY 6",
+      "manifest": "copy/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":copy07",
+      "name": "COPY 7",
+      "manifest": "copy/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":move01",
+      "name": "MOVE 1",
+      "manifest": "move/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":move02",
+      "name": "MOVE 2",
+      "manifest": "move/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":move03",
+      "name": "MOVE 3",
+      "manifest": "move/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":move04",
+      "name": "MOVE 4",
+      "manifest": "move/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":move06",
+      "name": "MOVE 6",
+      "manifest": "move/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":move07",
+      "name": "MOVE 7",
+      "manifest": "move/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":load-silent",
+      "name": "LOAD SILENT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":load-into-silent",
+      "name": "LOAD SILENT INTO",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":clear-silent",
+      "name": "CLEAR SILENT GRAPH iri",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":clear-default-silent",
+      "name": "CLEAR SILENT DEFAULT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":create-silent",
+      "name": "CREATE SILENT iri",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":drop-silent",
+      "name": "DROP SILENT GRAPH iri",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":drop-default-silent",
+      "name": "DROP SILENT DEFAULT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":copy-silent",
+      "name": "COPY SILENT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":copy-to-default-silent",
+      "name": "COPY SILENT TO DEFAULT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":move-silent",
+      "name": "MOVE SILENT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":move-to-default-silent",
+      "name": "MOVE SILENT TO DEFAULT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add-silent",
+      "name": "ADD SILENT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "update",
+      "id": ":add-to-default-silent",
+      "name": "ADD SILENT TO DEFAULT",
+      "manifest": "update-silent/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "unsupported",
+      "reason": "Quipu exposes no SPARQL Update execution surface"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind01",
+      "name": "bind01 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind01.rq",
+      "result": "entailment/bind01.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind02",
+      "name": "bind02 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind02.rq",
+      "result": "entailment/bind02.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind03",
+      "name": "bind03 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind03.rq",
+      "result": "entailment/bind03.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind04",
+      "name": "bind04 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind04.rq",
+      "result": "entailment/bind04.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind05",
+      "name": "bind05 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind05.rq",
+      "result": "entailment/bind05.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind06",
+      "name": "bind06 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind06.rq",
+      "result": "entailment/bind06.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind07",
+      "name": "bind07 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind07.rq",
+      "result": "entailment/bind07.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":bind08",
+      "name": "bind08 - BIND fixed data for OWL DL",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/bind08.rq",
+      "result": "entailment/bind08.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":d-ent-01",
+      "name": "D-Entailment test to show that  neither literals in subject position nor newly introduced surrogate blank nodes are to be returned in query answers",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/d-ent-01.rq",
+      "result": "entailment/d-ent-01.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":lang",
+      "name": "Literal with language tag test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/lang.rq",
+      "result": "entailment/lang.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":owlds01",
+      "name": "bnodes are not existentials",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/owlds01.rq",
+      "result": "entailment/owlds01.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":owlds02",
+      "name": "bnodes are not existentials with answer",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/owlds02.rq",
+      "result": "entailment/owlds02.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q1",
+      "name": "paper-sparqldl-Q1",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q1.rq",
+      "result": "entailment/paper-sparqldl-Q1.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q1-rdfs",
+      "name": "paper-sparqldl-Q1-rdfs",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q1.rq",
+      "result": "entailment/paper-sparqldl-Q1-rdfs.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q2",
+      "name": "paper-sparqldl-Q2",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q2.rq",
+      "result": "entailment/paper-sparqldl-Q2.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q3",
+      "name": "paper-sparqldl-Q3",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q3.rq",
+      "result": "entailment/paper-sparqldl-Q3.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q4",
+      "name": "paper-sparqldl-Q4",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q4.rq",
+      "result": "entailment/paper-sparqldl-Q4.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":paper-sparqldl-Q5",
+      "name": "paper-sparqldl-Q5",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/paper-sparqldl-Q5.rq",
+      "result": "entailment/paper-sparqldl-Q5.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent10",
+      "name": "filtered subclass query with (hasChild some Thing) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent10.rq",
+      "result": "entailment/parent10.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent2",
+      "name": "parent query with distinguished variable",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent2.rq",
+      "result": "entailment/parent2.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent3",
+      "name": "parent query with (hasChild some Thing) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent3.rq",
+      "result": "entailment/parent3.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent4",
+      "name": "parent query with (hasChild min 1) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent4.rq",
+      "result": "entailment/parent4.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent5",
+      "name": "parent query with (hasChild some Female) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent5.rq",
+      "result": "entailment/parent5.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent6",
+      "name": "parent query with (hasChild min 1 Female) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent6.rq",
+      "result": "entailment/parent6.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent7",
+      "name": "parent query with (hasChild max 1 Female) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent7.rq",
+      "result": "entailment/parent7.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent8",
+      "name": "parent query with (hasChild exactly 1 Female) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent8.rq",
+      "result": "entailment/parent8.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":parent9",
+      "name": "subclass query with (hasChild some Thing) restriction",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/parent9.rq",
+      "result": "entailment/parent9.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":plainLit",
+      "name": "Plain literals with language tag are not the same as the same literal without",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/plainLit.rq",
+      "result": "entailment/plainLit.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdf01",
+      "name": "RDF inference test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdf01.rq",
+      "result": "entailment/rdf01.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdf02",
+      "name": "RDF inference test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdf02.rq",
+      "result": "entailment/rdf02.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdf03",
+      "name": "RDF test for blank node cardinalities",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdf03.rq",
+      "result": "entailment/rdf03.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdf04",
+      "name": "simple triple pattern match",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdf04.rq",
+      "result": "entailment/rdf04.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs01",
+      "name": "RDFS inference test rdfs:subPropertyOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs01.rq",
+      "result": "entailment/rdfs01.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs02",
+      "name": "RDFS inference test rdfs:subPropertyOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs02.rq",
+      "result": "entailment/rdfs02.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs03",
+      "name": "RDFS inference test combining subPropertyOf and domain",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs03.rq",
+      "result": "entailment/rdfs03.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs04",
+      "name": "RDFS inference test subClassOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs04.rq",
+      "result": "entailment/rdfs04.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs05",
+      "name": "RDFS inference test subClassOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs05.rq",
+      "result": "entailment/rdfs05.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs06",
+      "name": "RDFS inference test domain",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs06.rq",
+      "result": "entailment/rdfs06.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs07",
+      "name": "RDFS inference test range",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs07.rq",
+      "result": "entailment/rdfs07.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs08",
+      "name": "RDFS inference test rdf:XMLLiteral subclass of rdfs:Literal",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs08.rq",
+      "result": "entailment/rdfs08.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs09",
+      "name": "RDFS inference test transitivity of subClassOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs09.rq",
+      "result": "entailment/rdfs09.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs10",
+      "name": "RDFS inference test transitivity of subPropertyOf",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs10.rq",
+      "result": "entailment/rdfs10.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs11",
+      "name": "RDFS inference test subProperty and instances",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs11.rq",
+      "result": "entailment/rdfs11.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs12",
+      "name": "RDFS inference test containers",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs12.rq",
+      "result": "entailment/rdfs12.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rdfs13",
+      "name": "RDFS inference test to show that neither literals in subject position nor newly introduced surrogate blank nodes are to be returned in query answers",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rdfs13.rq",
+      "result": "entailment/rdfs13.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rif01",
+      "name": "RIF Logical Entailment (referencing RIF XML)",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rif01.rq",
+      "result": "entailment/rif01.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rif03",
+      "name": "RIF Core WG tests: Frames",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rif03.rq",
+      "result": "entailment/rif03.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rif04",
+      "name": "RIF Core WG tests: Modeling Brain Anatomy",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rif04.rq",
+      "result": "entailment/rif04.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":rif06",
+      "name": "RIF Core WG tests: RDF Combination Blank Node",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/rif06.rq",
+      "result": "entailment/rif06.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple1",
+      "name": "simple 1",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple1.rq",
+      "result": "entailment/simple1.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple2",
+      "name": "simple 2",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple2.rq",
+      "result": "entailment/simple2.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple3",
+      "name": "simple 3",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple3.rq",
+      "result": "entailment/simple3.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple4",
+      "name": "simple 4",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple4.rq",
+      "result": "entailment/simple4.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple5",
+      "name": "simple 5",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple5.rq",
+      "result": "entailment/simple5.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple6",
+      "name": "simple 6",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple6.rq",
+      "result": "entailment/simple6.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple7",
+      "name": "simple 7",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple7.rq",
+      "result": "entailment/simple7.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":simple8",
+      "name": "simple 8",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/simple8.rq",
+      "result": "entailment/simple8.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-01",
+      "name": "sparqldl-01.rq: triple pattern",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-01.rq",
+      "result": "entailment/sparqldl-01.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-02",
+      "name": "sparqldl-02.rq: simple combined query",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-02.rq",
+      "result": "entailment/sparqldl-02.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-03",
+      "name": "sparqldl-03.rq: combined query with complex class description",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-03.rq",
+      "result": "entailment/sparqldl-03.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-04",
+      "name": "sparqldl-04.rq: bug fixing test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-04.rq",
+      "result": "entailment/sparqldl-04.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-05",
+      "name": "sparqldl-05.rq: simple undistinguished variable test.",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-05.rq",
+      "result": "entailment/sparqldl-05.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-06",
+      "name": "sparqldl-06.rq: cycle of undistinguished variables",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-06.rq",
+      "result": "entailment/sparqldl-06.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-07",
+      "name": "sparqldl-07.rq: two distinguished variables + undist.",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-07.rq",
+      "result": "entailment/sparqldl-07.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-08",
+      "name": "sparqldl-08.rq: two distinguished variables + undist.",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-08.rq",
+      "result": "entailment/sparqldl-08.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-09",
+      "name": "sparqldl-09.rq: undist vars test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-09.rq",
+      "result": "entailment/sparqldl-09.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-10",
+      "name": "sparqldl-10.rq: undist vars test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-10.rq",
+      "result": "entailment/sparqldl-10.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-11",
+      "name": "sparqldl-11.rq: domain test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-11.rq",
+      "result": "entailment/sparqldl-11.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-12",
+      "name": "sparqldl-12.rq: range test",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-12.rq",
+      "result": "entailment/sparqldl-12.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "entailment",
+      "id": ":sparqldl-13",
+      "name": "sparqldl-13.rq: sameAs",
+      "manifest": "entailment/manifest.ttl",
+      "query": "entailment/sparqldl-13.rq",
+      "result": "entailment/sparqldl-13.srx",
+      "status": "unsupported",
+      "reason": "manifest entailment-regime setup is not implemented"
+    },
+    {
+      "class": "result-format",
+      "id": ":tsv01",
+      "name": "tsv01 - TSV Result Format",
+      "manifest": "csv-tsv-res/manifest.ttl",
+      "query": "csv-tsv-res/csvtsv01.rq",
+      "result": "csv-tsv-res/csvtsv01.tsv",
+      "status": "unsupported",
+      "reason": "blank-node isomorphism is not implemented"
+    },
+    {
+      "class": "result-format",
+      "id": ":tsv02",
+      "name": "tsv02 - TSV Result Format",
+      "manifest": "csv-tsv-res/manifest.ttl",
+      "query": "csv-tsv-res/csvtsv02.rq",
+      "result": "csv-tsv-res/csvtsv02.tsv",
+      "status": "unsupported",
+      "reason": "blank-node isomorphism is not implemented"
+    },
+    {
+      "class": "result-format",
+      "id": ":tsv03",
+      "name": "tsv03 - TSV Result Format",
+      "manifest": "csv-tsv-res/manifest.ttl",
+      "query": "csv-tsv-res/csvtsv01.rq",
+      "result": "csv-tsv-res/csvtsv03.tsv",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "result-format",
+      "id": ":jsonres01",
+      "name": "jsonres01 - JSON Result Format",
+      "manifest": "json-res/manifest.ttl",
+      "query": "json-res/jsonres01.rq",
+      "result": "json-res/jsonres01.srj",
+      "status": "unsupported",
+      "reason": "blank-node isomorphism is not implemented"
+    },
+    {
+      "class": "result-format",
+      "id": ":jsonres02",
+      "name": "jsonres02 - JSON Result Format",
+      "manifest": "json-res/manifest.ttl",
+      "query": "json-res/jsonres02.rq",
+      "result": "json-res/jsonres02.srj",
+      "status": "unsupported",
+      "reason": "blank-node isomorphism is not implemented"
+    },
+    {
+      "class": "result-format",
+      "id": ":jsonres03",
+      "name": "jsonres03 - JSON Result Format",
+      "manifest": "json-res/manifest.ttl",
+      "query": "json-res/jsonres03.rq",
+      "result": "json-res/jsonres03.srj",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "result-format",
+      "id": ":jsonres04",
+      "name": "jsonres04 - JSON Result Format",
+      "manifest": "json-res/manifest.ttl",
+      "query": "json-res/jsonres04.rq",
+      "result": "json-res/jsonres04.srj",
+      "status": "passed",
+      "diagnostic": ""
+    }
+  ]
+}

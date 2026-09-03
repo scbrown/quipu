@@ -33,6 +33,44 @@ and totals. The script refuses a dirty or differently pinned suite unless
 | performance | WatDiv 0.6 | Selected over LUBM because its query-shape diversity directly tests pathological join shapes; its publisher supplies 10M, 100M, and 1B datasets. |
 | extraction | Text2KGBench | Feasible in principle, but not store-only: it requires a frozen model/prompt configuration and ontology-guided triple scorer. Keep it in the Caboodle end-to-end phase. |
 
+## SPARQL 1.1 evaluation classes
+
+The evaluation runner discovers the approved tests from the pinned W3C aggregate
+manifests and publishes a separate ledger for query evaluation, protocol,
+update, entailment, and result formats. Every executable case gets a fresh
+temporary SQLite database; no production or developer store is reused.
+
+```sh
+cargo build --release --bin quipu
+QUIPU_BIN="$(cargo metadata --no-deps --format-version 1 | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')/release/quipu"
+python3 benchmark/public/sparql11_evaluation.py \
+  --suite /tmp/rdf-tests/sparql/sparql11 \
+  --quipu "$QUIPU_BIN" \
+  --output benchmark/public/results/sparql11-evaluation.json
+```
+
+Add `--class query-evaluation`, `protocol`, `update`, `entailment`, or
+`result-format` to reproduce one independently scored class. A nonzero runner
+exit means at least one executable test failed or the harness could not evaluate
+it; the JSON ledger is still written in full.
+
+At Quipu `436b3f9` and W3C RDF Tests `369a90d1`, the independently reported
+results are:
+
+| Class | Passed | Failed/error | Unsupported | Total |
+|---|---:|---:|---:|---:|
+| query evaluation | 18 | 131 | 19 | 168 |
+| protocol | 0 | 0 | 34 | 34 |
+| update | 0 | 0 | 37 | 37 |
+| entailment | 0 | 0 | 70 | 70 |
+| result format | 2 | 1 | 4 | 7 |
+
+Unsupported rows are explicit per test. Current class-level gaps are the HTTP
+request-sequence executor (protocol), a SPARQL Update surface, entailment-regime
+setup, named-graph fixture loading, RDF graph-result comparison, and blank-node
+isomorphism. These results are never combined into a single compliance score.
+
 WatDiv ingest is currently blocked on a general RDF bulk-loader. Quipu's `/import`
 accepts Quipu share bundles, not arbitrary benchmark N-Triples, while `knot` is a
 governed transactional assertion path rather than a billion-triple loader. Do not
@@ -42,8 +80,8 @@ loaded into both Quipu and the comparator with measured counts.
 ## Claim boundary
 
 This is a parser-conformance score, not a claim of full SPARQL 1.1 compliance.
-Protocol, query evaluation, update, entailment, and result-format manifests remain
-separate test classes and must be reported separately.
+Protocol, query evaluation, update, entailment, and result-format manifests are
+reported as separate classes and must remain separate.
 
 ## Baseline result
 
