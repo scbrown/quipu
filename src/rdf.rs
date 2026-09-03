@@ -18,7 +18,7 @@ use crate::types::{Op, Value};
 pub(crate) const BLANK_PREFIX: &str = "_:";
 
 /// Convert an oxrdf subject to a term dictionary id.
-fn intern_subject(store: &Store, subject: &NamedOrBlankNode) -> Result<i64> {
+pub fn intern_subject(store: &Store, subject: &NamedOrBlankNode) -> Result<i64> {
     match subject {
         NamedOrBlankNode::NamedNode(n) => store.intern(n.as_str()),
         NamedOrBlankNode::BlankNode(b) => store.intern(&format!("{BLANK_PREFIX}{}", b.as_str())),
@@ -30,7 +30,7 @@ fn intern_subject(store: &Store, subject: &NamedOrBlankNode) -> Result<i64> {
 /// - Named nodes and blank nodes → `Value::Ref(term_id)`
 /// - Literals → `Value::Str`, `Value::Int`, `Value::Float`, `Value::Bool`
 ///   depending on the XSD datatype.
-fn term_to_value(store: &Store, term: &OxTerm) -> Result<Value> {
+pub fn term_to_value(store: &Store, term: &OxTerm) -> Result<Value> {
     match term {
         OxTerm::NamedNode(n) => {
             let id = store.intern(n.as_str())?;
@@ -110,7 +110,7 @@ fn canonical_double(value: f64) -> String {
 }
 
 /// Convert a `Value` back to an oxrdf `Term` for serialization.
-pub(crate) fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
+pub fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
     match value {
         Value::Ref(id) => {
             let iri = store.resolve(*id)?;

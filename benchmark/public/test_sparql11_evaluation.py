@@ -111,9 +111,9 @@ class EvaluationManifestTests(unittest.TestCase):
             (["s", "o"], [("<a>", "_:b0")]),
         )
 
-    def test_class_specific_unsupported_reasons_are_explicit(self):
+    def test_update_cases_are_executable(self):
         case = MODULE.Case("update", pathlib.Path("m"), ":u", "u", "UpdateEvaluationTest", None, (), (), None)
-        self.assertIn("SPARQL Update", MODULE.unsupported_reason(case))
+        self.assertIsNone(MODULE.unsupported_reason(case))
 
     def test_executable_path_supports_path_lookup(self):
         with mock.patch.object(MODULE.shutil, "which", return_value="/opt/bin/quipu"):

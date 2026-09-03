@@ -98,7 +98,7 @@ async fn post_share_returns_reconstructable_canonical_files() {
         format!("sha256:{}", hex::encode(digest.as_ref()))
     };
 
-    assert_eq!(response.files.len(), 3);
+    assert_eq!(response.files.len(), 4);
     assert_eq!(
         response.manifest.graph_hash,
         hash(response.files["export.nt"].as_bytes())

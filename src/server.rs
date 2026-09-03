@@ -45,6 +45,8 @@ mod snapshot_upload;
 mod tests;
 #[path = "server/tools.rs"]
 mod tools;
+#[path = "server/update.rs"]
+mod update;
 
 use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 #[cfg(test)]
@@ -418,6 +420,7 @@ async fn main() {
         .route("/.well-known/void", get(service_description::service_description))
         .route("/metrics", get(metrics_handler))
         .route("/query", get(query_get).post(query_post_http))
+        .route("/update", post(update::update_post))
         .route("/export", post(export))
         .merge(graph_store::routes())
         .route("/share", post(share_payload))

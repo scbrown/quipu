@@ -177,6 +177,23 @@ formats, including term spelling and escaping. For `CONSTRUCT` and `DESCRIBE`, r
 `text/turtle` or `application/n-triples`. All transports share the configured
 query deadline and return HTTP 408 when evaluation exceeds it.
 
+### `POST /update`
+
+Execute SPARQL 1.1 Update using either `application/sparql-update` or an
+`application/x-www-form-urlencoded` body containing exactly one `update`
+parameter. The endpoint requires write authentication when a bearer is
+configured. Protocol `using-graph-uri` and `using-named-graph-uri` parameters
+scope a `DELETE`/`INSERT WHERE`; mixing them with an in-body `USING` clause is
+rejected. Every affected graph passes through Quipu's normal authority and
+governance gates, and the request commits atomically across graphs.
+
+```bash
+curl localhost:3030/update -X POST \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/sparql-update' \
+  --data 'INSERT DATA { <http://example/s> <http://example/p> "value" }'
+```
+
 Quipu's JSON extension compacts result IRIs to CURIEs by default using prefixes
 declared by the currently loaded shape sets; unknown namespaces remain full
 IRIs. Pass `"verbose": true` in a JSON request, or `?verbose=1` on GET, to

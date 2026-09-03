@@ -5192,6 +5192,7 @@ dependencies = [
  "md-5",
  "ndarray 0.16.1",
  "ort",
+ "oxigraph",
  "oxrdf",
  "oxrdfio",
  "oxttl",

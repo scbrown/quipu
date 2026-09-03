@@ -37,6 +37,31 @@ struct Staged {
 impl Store {
     // -- Write path --
 
+    /// Atomically apply already-planned changes to multiple RDF graphs.
+    ///
+    /// Each graph still passes through the normal authority, SHACL, OWL, and
+    /// governed-policy gates. The outer savepoint makes a multi-operation
+    /// SPARQL Update all-or-nothing across those graph-scoped transactions.
+    pub fn transact_graph_batches(
+        &mut self,
+        batches: &[(i64, Vec<Datum>)],
+        timestamp: &str,
+        actor: Option<&str>,
+        source: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute_batch("SAVEPOINT quipu_multi_graph")?;
+        for (graph, datums) in batches {
+            if let Err(error) = self.transact_to_graph(datums, timestamp, actor, source, *graph) {
+                self.conn
+                    .execute_batch("ROLLBACK TO quipu_multi_graph; RELEASE quipu_multi_graph")?;
+                self.read_model.borrow_mut().clear();
+                return Err(error);
+            }
+        }
+        self.conn.execute_batch("RELEASE quipu_multi_graph")?;
+        Ok(())
+    }
+
     /// Atomically write a batch of datums in a single transaction.
     /// Returns the transaction id.
     pub fn transact(

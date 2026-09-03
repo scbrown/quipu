@@ -53,6 +53,10 @@ class Case:
     result: Path | None
     protocol_requests: tuple["ProtocolRequest", ...] = ()
     protocol_graph_data: tuple[tuple[Path, str], ...] = ()
+    update_request: Path | None = None
+    expected_data: tuple[Path, ...] = ()
+    expected_graph_data: tuple[tuple[Path, str], ...] = ()
+    update_graph_data: tuple[tuple[Path, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -238,6 +242,23 @@ def parse_protocol(statement: str, base: Path) -> tuple[tuple[ProtocolRequest, .
     return tuple(requests), graph_data
 
 
+def property_block(statement: str, predicate: str) -> str:
+    match = re.search(rf"{re.escape(predicate)}\s*\[", statement)
+    return balanced_region(statement, match.end() - 1, "[", "]") if match else ""
+
+
+def update_manifest_parts(statement: str, base: Path) -> tuple[Path | None, tuple[Path, ...], tuple[tuple[Path, str], ...], tuple[Path, ...], tuple[tuple[Path, str], ...]]:
+    action = property_block(statement, "mf:action")
+    result = property_block(statement, "mf:result")
+    request = re.search(r"ut:request\s*<([^>]+)>", action)
+    def data(block: str) -> tuple[Path, ...]:
+        return tuple(base / item for item in re.findall(r"ut:data\s*<([^>]+)>", block))
+    def graphs(block: str) -> tuple[tuple[Path, str], ...]:
+        return tuple((base / path, label) for path, label in re.findall(
+            r"ut:graphData\s*\[\s*ut:graph\s*<([^>]+)>\s*;\s*rdfs:label\s*\"([^\"]+)\"", block, re.S))
+    return (base / request.group(1) if request else None, data(action), graphs(action), data(result), graphs(result))
+
+
 def parse_manifest(test_class: str, manifest: Path) -> list[Case]:
     cases: list[Case] = []
     for statement in turtle_statements(manifest.read_text()):
@@ -248,6 +269,7 @@ def parse_manifest(test_class: str, manifest: Path) -> list[Case]:
         name = NAME.search(statement)
         graph_data = tuple(manifest.parent / item for item in GRAPH_DATA.findall(statement))
         protocol_requests, protocol_graph_data = parse_protocol(statement, manifest.parent)
+        update_request, update_data, update_graphs, expected_data, expected_graphs = update_manifest_parts(statement, manifest.parent)
         cases.append(
             Case(
                 test_class=test_class,
@@ -256,11 +278,15 @@ def parse_manifest(test_class: str, manifest: Path) -> list[Case]:
                 name=bytes(name.group(1), "utf-8").decode("unicode_escape") if name else subject,
                 kind=kind.group(1),
                 query=resolve(manifest.parent, QUERY.search(statement)),
-                data=tuple(manifest.parent / item for item in DATA.findall(statement)),
-                graph_data=graph_data,
+                data=update_data if kind.group(1) == "UpdateEvaluationTest" else tuple(manifest.parent / item for item in DATA.findall(statement)),
+                graph_data=() if kind.group(1) == "UpdateEvaluationTest" else graph_data,
                 result=resolve(manifest.parent, RESULT.search(statement)),
                 protocol_requests=protocol_requests,
                 protocol_graph_data=protocol_graph_data,
+                update_request=update_request,
+                expected_data=expected_data,
+                expected_graph_data=expected_graphs,
+                update_graph_data=update_graphs,
             )
         )
     return cases
@@ -520,6 +546,50 @@ def run_protocol_case(case: Case, server: Path, database: Path) -> None:
             process.wait()
 
 
+def read_graph(quipu: Path, database: Path, graph: str | None) -> Counter[tuple[str, str, str]]:
+    query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"
+    if graph:
+        query = f"SELECT ?s ?p ?o FROM <{graph}> WHERE {{ ?s ?p ?o }}"
+    selected = subprocess.run([str(quipu), "read", query, "--db", str(database)], text=True, capture_output=True)
+    if selected.returncode or "query error:" in selected.stderr:
+        raise ValueError(selected.stderr.strip())
+    variables, rows = actual_result(selected.stdout)
+    aligned = reorder_rows(variables, rows, ["s", "p", "o"])
+    if aligned is None:
+        raise ValueError("dataset comparison emitted unexpected bindings")
+    return Counter(aligned)
+
+
+def run_update_case(case: Case, quipu: Path, server: Path, database: Path, temporary: Path) -> None:
+    assert case.update_request
+    port = reserve_port()
+    process = subprocess.Popen([str(server), "--db", str(database), "--bind", f"127.0.0.1:{port}"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    try:
+        for _ in range(100):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=0.2): break
+            except (urllib.error.URLError, TimeoutError): time.sleep(0.02)
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/update", data=case.update_request.read_bytes(), headers={"Content-Type": "application/sparql-update"}, method="POST")
+        with urllib.request.urlopen(request, timeout=20) as response:
+            response.read()
+        expected_db = temporary / "expected-update.db"
+        for fixture in case.expected_data:
+            loaded = subprocess.run([str(quipu), "knot", str(fixture), "--db", str(expected_db)], text=True, capture_output=True)
+            if loaded.returncode: raise ValueError(loaded.stderr.strip())
+        for fixture, graph in case.expected_graph_data:
+            loaded = subprocess.run([str(quipu), "knot", str(fixture), "--graph", graph, "--db", str(expected_db)], text=True, capture_output=True)
+            if loaded.returncode: raise ValueError(loaded.stderr.strip())
+        graphs = {None, *(graph for _, graph in case.update_graph_data), *(graph for _, graph in case.expected_graph_data)}
+        for graph in graphs:
+            if read_graph(quipu, database, graph) != read_graph(quipu, expected_db, graph):
+                raise ValueError(f"post-update graph differs from expected dataset: {graph or 'default'}")
+    finally:
+        process.terminate()
+        try: process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill(); process.wait()
+
+
 def expected_result(path: Path) -> tuple[list[str], list[tuple[str, ...]]] | bool:
     if path.suffix == ".srj":
         return expected_json(path)
@@ -662,22 +732,13 @@ def normalize_delimited_numeric(value: str) -> str:
 
 
 def unsupported_reason(case: Case) -> str | None:
-    if case.test_class == "protocol" and any(
-        request.content_type is not None
-        and ("sparql-update" in request.content_type or b"update=" in (request.body or b""))
-        or "update=" in request.path
-        for request in case.protocol_requests
-    ):
-        return "Quipu exposes no SPARQL Update execution surface"
-    if case.test_class == "update":
-        return "Quipu exposes no SPARQL Update execution surface"
     if case.test_class == "entailment":
         return "manifest entailment-regime setup is not implemented"
-    if case.kind not in {"QueryEvaluationTest", "CSVResultFormatTest", "ProtocolTest"}:
+    if case.kind not in {"QueryEvaluationTest", "CSVResultFormatTest", "ProtocolTest", "UpdateEvaluationTest"}:
         return f"test kind {case.kind} is not executable by this runner"
-    if case.test_class != "protocol" and not case.query:
+    if case.test_class not in {"protocol", "update"} and not case.query:
         return "manifest action has no qt:query"
-    if case.test_class != "protocol" and not case.result:
+    if case.test_class not in {"protocol", "update"} and not case.result:
         return "manifest case has no expected mf:result"
     if case.result and case.result.suffix not in {".srj", ".srx", ".csv", ".tsv", ".ttl", ".nt"}:
         return f"expected result format {case.result.suffix or '<none>'} is not comparable"
@@ -728,9 +789,16 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
             )
             if loaded.returncode:
                 return {**base, "status": "error", "diagnostic": loaded.stderr.strip()}
+        for fixture, graph in case.update_graph_data:
+            loaded = subprocess.run([str(quipu), "knot", str(fixture), "--graph", graph, "--db", str(database)], text=True, capture_output=True)
+            if loaded.returncode:
+                return {**base, "status": "error", "diagnostic": loaded.stderr.strip()}
         try:
             if case.test_class == "protocol":
                 run_protocol_case(case, server, database)
+                return {**base, "status": "passed"}
+            if case.test_class == "update":
+                run_update_case(case, quipu, server, database, Path(temporary))
                 return {**base, "status": "passed"}
             assert case.query and case.result
             query = f"BASE <{case.query.resolve().as_uri()}>\n{case.query.read_text()}"

@@ -26,7 +26,7 @@ boundary for `SERVICE`, which is scored by none of the classes below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `7ef18ea0dbdbc54fb4a9e452213ce1fb23e6c945` |
+| Quipu revision (evaluation) | `5b5e11fe025af69c7c47633e1c2cd7aae148736c` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
 | Quipu version | `quipu 0.3.29` |
 | Store isolation | one temporary SQLite store per executable test |
@@ -43,10 +43,10 @@ carries a named reason further down this page.
 | query syntax | 86 | 0 | 0 | 0 | 86 |
 | query evaluation | 168 | 0 | 0 | 0 | 168 |
 | result format | 10 | 0 | 0 | 0 | 10 |
-| protocol | 22 | 0 | 0 | 12 | 34 |
-| update | 0 | 0 | 0 | 37 | 37 |
+| protocol | 34 | 0 | 0 | 0 | 34 |
+| update | 37 | 0 | 0 | 0 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **286** | **0** | **0** | **119** | **405** |
+| **all classes** | **335** | **0** | **0** | **70** | **405** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -84,7 +84,6 @@ Grouped by the reason the runner recorded.
 | Missing capability | Cases | Classes |
 |---|---:|---|
 | manifest entailment-regime setup is not implemented | 70 | entailment |
-| Quipu exposes no SPARQL Update execution surface | 49 | protocol, update |
 
 ## Re-derive these numbers
 

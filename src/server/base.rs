@@ -588,7 +588,7 @@ async fn query_core(
                     .get("_sparql_protocol")
                     .and_then(JsonValue::as_bool)
                     .filter(|enabled| *enabled)
-                    .and_then(|_| match query_shape {
+                    .and(match query_shape {
                         quipu::request_usage::QueryShape::Select
                         | quipu::request_usage::QueryShape::Ask => {
                             Some(quipu::w3c::ResultFormat::SparqlJson)

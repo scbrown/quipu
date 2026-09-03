@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "7ef18ea0dbdbc54fb4a9e452213ce1fb23e6c945",
+  "quipu_revision": "5b5e11fe025af69c7c47633e1c2cd7aae148736c",
   "quipu_version": "quipu 0.3.29",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -26,12 +26,11 @@
     },
     "protocol": {
       "cases": 34,
-      "passed": 22,
-      "unsupported": 12
+      "passed": 34
     },
     "update": {
       "cases": 37,
-      "unsupported": 37
+      "passed": 37
     },
     "entailment": {
       "cases": 70,
@@ -1838,8 +1837,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1848,8 +1846,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1858,8 +1855,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1868,8 +1864,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1878,8 +1873,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1888,8 +1882,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1898,8 +1891,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1980,8 +1972,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1990,8 +1981,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -2018,8 +2008,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -2028,8 +2017,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -2038,8 +2026,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2048,8 +2035,7 @@
       "manifest": "add/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2058,8 +2044,7 @@
       "manifest": "add/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2068,8 +2053,7 @@
       "manifest": "add/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2078,8 +2062,7 @@
       "manifest": "add/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2088,8 +2071,7 @@
       "manifest": "add/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2098,8 +2080,7 @@
       "manifest": "add/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2108,8 +2089,7 @@
       "manifest": "add/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2118,8 +2098,7 @@
       "manifest": "add/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2128,8 +2107,7 @@
       "manifest": "basic-update/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2138,8 +2116,7 @@
       "manifest": "basic-update/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2148,8 +2125,7 @@
       "manifest": "basic-update/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2158,8 +2134,7 @@
       "manifest": "basic-update/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2168,8 +2143,7 @@
       "manifest": "copy/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2178,8 +2152,7 @@
       "manifest": "copy/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2188,8 +2161,7 @@
       "manifest": "copy/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2198,8 +2170,7 @@
       "manifest": "copy/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2208,8 +2179,7 @@
       "manifest": "copy/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2218,8 +2188,7 @@
       "manifest": "copy/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2228,8 +2197,7 @@
       "manifest": "move/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2238,8 +2206,7 @@
       "manifest": "move/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2248,8 +2215,7 @@
       "manifest": "move/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2258,8 +2224,7 @@
       "manifest": "move/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2268,8 +2233,7 @@
       "manifest": "move/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2278,8 +2242,7 @@
       "manifest": "move/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2288,8 +2251,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2298,8 +2260,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2308,8 +2269,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2318,8 +2278,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2328,8 +2287,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2338,8 +2296,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2348,8 +2305,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2358,8 +2314,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2368,8 +2323,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2378,8 +2332,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2388,8 +2341,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2398,8 +2350,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "update",
@@ -2408,8 +2359,7 @@
       "manifest": "update-silent/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "Quipu exposes no SPARQL Update execution surface"
+      "status": "passed"
     },
     {
       "class": "entailment",

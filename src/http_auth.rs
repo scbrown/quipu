@@ -66,6 +66,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/events/commit", // durable consumer cursor upsert (event-log P1)
     "/subscriptions", // push-subscription registry create/list/delete (event-log P2)
     "/datasets",      // named-dataset registry create/remove (quipu #69) + meta-graph mirror
+    "/update",        // SPARQL 1.1 Update mutates default and named graphs
     "/queries",       // stored named-query registry load/remove (quipu #79)
     // aegis-06q1r: OWL ontology load/list/remove. `load` both PERSISTS the
     // ontology and MATERIALIZES entailments (new rdf:type / inverse facts), so it
