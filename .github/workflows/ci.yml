@@ -5,13 +5,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
 
-# One run per ref may consume runners at a time. Superseded PR heads are safe
-# to cancel; main commits remain CD candidates, and cancelling them during a
-# high-frequency push window can prevent any commit from ever going green.
+# CD consumes only the newest main commit. Cancel superseded runs on every ref
+# so an old 22-job matrix cannot starve the six checks gating the current head.
+# Pushes run only those six; release-only surfaces run on PRs and nightly.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -40,23 +43,18 @@ jobs:
           # The `full` bundle (Cargo.toml) is what releases ship, and it is a
           # superset of shacl+onnx. Before it existed NOTHING linted quipu-server
           # (required-features shacl+onnx) nor the owl / reactive-reasoner code —
-          # adding it turned up 11 findings on first run. It now runs as a
-          # serial step on the default runner below.
+          # adding it turned up 11 findings on first run. It now runs in the
+          # serial extended-features job on PRs/nightly.
           # `remote` WITHOUT `server`: the federation HTTP client on its own.
-          # `full` implies both, so without the serial step below the standalone-client
+          # `full` implies both, so without the extended job the standalone-client
           # cfg combination — the one a wasm-adjacent build would select — is
           # never compiled. See docs/design/wasm-support.md §4.3.
           # quipu-lv7 made `vector.backend = "lancedb"` selectable from config,
           # so this backend and its install path are shipped code — but they are
           # NOT in `full` (protoc + the datafusion tree is a real cost), so
-          # nothing else in this matrix compiles them. Without this entry the
-          # feature ships dark.
-          - name: lancedb
-            flags: "--features shacl,lancedb"
+          # the push matrix does not compile it. The extended job preserves it.
     steps:
       - uses: actions/checkout@v4
-      - if: matrix.name == 'lancedb'
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -75,13 +73,6 @@ jobs:
       # `test` job, which is exactly how examples/shacl_cost.rs broke the
       # --no-default-features build.
       - run: cargo clippy ${{ matrix.flags }} --all-targets -- -D warnings -A missing-docs
-      # Keep the unique full and standalone-client cfg surfaces, but compile
-      # them serially on the already-provisioned default runner instead of
-      # occupying two more account runners for every push.
-      - if: matrix.name == 'default'
-        run: cargo clippy --features full --all-targets -- -D warnings -A missing-docs
-      - if: matrix.name == 'default'
-        run: cargo clippy --no-default-features --features remote --all-targets -- -D warnings -A missing-docs
 
   test:
     name: Test (${{ matrix.name }})
@@ -94,16 +85,12 @@ jobs:
           - name: shacl
             flags: "--features shacl"
           # The gated RemoteProvider tests, which `--no-default-features`
-          # compiles out entirely, run as a serial default-runner step below.
+          # compiles out entirely, run in extended-features on PRs/nightly.
           # Runs the LanceDB backend's own tests AND the config-selection test
           # that proves a write through the store lands there and not in the
-          # SQLite table (quipu-lv7). Clippy compiles them; only this runs them.
-          - name: lancedb
-            flags: "--features shacl,lancedb"
+          # SQLite table (quipu-lv7). Extended-features compiles and runs them.
     steps:
       - uses: actions/checkout@v4
-      - if: matrix.name == 'lancedb'
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:
@@ -116,10 +103,35 @@ jobs:
             ${{ runner.os }}-cargo-test-${{ matrix.name }}-
             ${{ runner.os }}-cargo-
       - run: cargo test ${{ matrix.flags }}
-      # The standalone remote-client cfg stays tested, but reuses the default
-      # runner and build cache instead of adding another concurrent job.
-      - if: matrix.name == 'default'
-        run: cargo test --no-default-features --features remote
+
+  # Unique but non-CD-gating cfg surfaces. Run them serially on PRs/nightly so
+  # they remain release evidence without competing with a pushed head's six
+  # required checks for account runners.
+  extended-features:
+    name: Extended feature surfaces
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-extended-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-extended-
+            ${{ runner.os }}-cargo-
+      - run: cargo clippy --features full --all-targets -- -D warnings -A missing-docs
+      - run: cargo clippy --no-default-features --features remote --all-targets -- -D warnings -A missing-docs
+      - run: cargo clippy --features shacl,lancedb --all-targets -- -D warnings -A missing-docs
+      - run: cargo test --no-default-features --features remote
+      - run: cargo test --features shacl,lancedb
 
   build:
     name: Build
@@ -143,6 +155,7 @@ jobs:
   # the worst possible place to find it.
   build-full:
     name: Build (full bundle)
+    if: github.event_name != 'push'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -169,6 +182,7 @@ jobs:
   # just dependency, matching the raw-cargo style of the other jobs.
   wasm:
     name: Wasm (browser harness)
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -241,6 +255,7 @@ jobs:
 
   source-size:
     name: Source size ratchet
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -262,6 +277,7 @@ jobs:
 
   load-test:
     name: Mixed load performance ratchet
+    if: github.event_name != 'push'
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
@@ -307,6 +323,7 @@ jobs:
 
   shapes:
     name: Shape invariants
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     # A SEPARATE JOB, so its verdict is its own (aegis-qq7uw). The defect being
     # fixed is that `shapes/verify_shape_invariants.py` was wired into NOTHING —
@@ -362,6 +379,7 @@ jobs:
 
   lint-markdown:
     name: Markdown lint
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -378,8 +396,8 @@ jobs:
   # compiles, executes, or validates production behavior/invariants.
   release-correctness:
     name: Release correctness
-    if: always()
-    needs: [clippy, test, build, build-full, wasm, check, shapes]
+    if: always() && github.event_name != 'push'
+    needs: [clippy, test, extended-features, build, build-full, wasm, check, shapes]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass
