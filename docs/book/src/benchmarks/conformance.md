@@ -16,6 +16,11 @@ These results come from the [W3C RDF Tests](https://github.com/w3c/rdf-tests)
 suite at a pinned revision, run against throwaway stores by a checked-in runner.
 You can re-derive every number on this page yourself — the commands are below.
 
+For what Quipu does with a graph once it is correct — handing it to another
+store, and composing another store's without trusting it — see
+[Sharing & Federation](../sharing/README.md). That page states its own claim
+boundary for `SERVICE`, which is scored by none of the classes below.
+
 ## What was measured
 
 | Field | Value |
