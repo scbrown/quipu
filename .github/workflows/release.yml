@@ -346,6 +346,30 @@ jobs:
           "${BIN}/quipu" knot "${TMP}/t.ttl" --db "${TMP}/smoke.db"
           "${BIN}/quipu" stats --db "${TMP}/smoke.db"
 
+      - name: Build the repository knowledge pack
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          BIN="target/${TARGET}/release/quipu"
+          TMP="$(mktemp -d)"
+          GRAPH="https://quipu.dev/ontology/repository/quipu"
+          PACK="dist/quipu-${TAG}-repository.qpack.db"
+          cat > "${TMP}/repo.ttl" <<EOF
+          <${GRAPH}> a <https://quipu.dev/ontology/Repository> ;
+            <http://www.w3.org/2000/01/rdf-schema#label> "Quipu repository" ;
+            <https://quipu.dev/ontology/repositorySha> "${GITHUB_SHA}" .
+          EOF
+          "${BIN}" knot "${TMP}/repo.ttl" --db "${TMP}/root.db"
+          "${BIN}" graph import "${TMP}/root.db" --as "${GRAPH}" --db "${TMP}/source.db"
+          "${BIN}" pack "${GRAPH}" --out "${PACK}" \
+            --name quipu-repository --version "${TAG}" \
+            --repo scbrown/quipu --repo-sha "${GITHUB_SHA}" \
+            --model-id none --model-version none
+          "${BIN}" pack --verify "${PACK}"
+          ( cd dist && sha256sum "$(basename "${PACK}")" > "$(basename "${PACK}").sha256" )
+
       - name: Upload to the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -362,4 +386,6 @@ jobs:
           gh release upload "$TAG" \
             "dist/${NAME}.tar.gz" \
             "dist/${NAME}.tar.gz.sha256" \
+            "dist/quipu-${TAG}-repository.qpack.db" \
+            "dist/quipu-${TAG}-repository.qpack.db.sha256" \
             --clobber
