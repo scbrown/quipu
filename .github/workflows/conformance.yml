@@ -1,0 +1,139 @@
+name: Conformance
+
+# Two different jobs, because there are two different ways a published
+# conformance number goes wrong:
+#
+#   1. the page drifts away from the ledger it claims to report (cheap to
+#      check, checked on every relevant PR and push);
+#   2. the ledger drifts away from reality (expensive to check -- it needs a
+#      release build and the whole W3C suite -- so it runs on every release,
+#      weekly, and on demand).
+#
+# Neither job gates on "everything passes". Quipu does not pass everything and
+# will not for a while; a job that is red on every commit is a job nobody
+# reads. They gate on "not worse than what we published", which is a condition
+# that is green today and stays meaningful all the way to 168/168.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'benchmark/public/**'
+      - 'docs/book/src/benchmarks/**'
+      - '.github/workflows/conformance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'benchmark/public/**'
+      - 'docs/book/src/benchmarks/**'
+      - '.github/workflows/conformance.yml'
+  release:
+    types: [published]
+  schedule:
+    # Weekly, so a regression introduced by something outside benchmark/ --
+    # a parser change, a dependency bump -- surfaces without waiting for the
+    # next release.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  published-matches-ledger:
+    name: Published results match the ledgers
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No Rust and no suite checkout: this job only compares the committed
+      # page and badges against the committed ledgers, so it finishes in
+      # seconds and can run on every touch of benchmark/.
+      - name: Page and badges agree with the ledgers
+        run: python3 benchmark/public/conformance_report.py --check
+
+      - name: Benchmark unit tests
+        run: python3 -m unittest discover -s benchmark/public -p 'test_*.py'
+
+  re-run-conformance:
+    name: Re-derive conformance from the pinned W3C suite
+    if: >-
+      github.event_name == 'release' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Read the pinned suite revision from the ledger
+        id: pin
+        # One source of truth: the revision that produced the committed
+        # numbers is recorded in the ledger, so the re-run cannot silently
+        # score a different suite than the page describes.
+        run: |
+          set -euo pipefail
+          revision="$(python3 -c 'import json;print(json.load(open("benchmark/public/results/sparql11-evaluation.json"))["suite_revision"])')"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "W3C RDF Tests revision: $revision"
+
+      - name: Check out the pinned W3C RDF Tests suite
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/w3c/rdf-tests /tmp/rdf-tests
+          git -C /tmp/rdf-tests checkout --quiet "${{ steps.pin.outputs.revision }}"
+
+      - name: Build quipu
+        run: cargo build --release --bin quipu
+
+      - name: Resolve the quipu binary
+        id: bin
+        run: |
+          set -euo pipefail
+          target="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')"
+          echo "path=$target/release/quipu" >> "$GITHUB_OUTPUT"
+
+      # Syntax is at 86/86, so the runner's own exit status IS the regression
+      # gate for this class: any regression drops it below full and exits
+      # nonzero. No separate comparison is needed while it is complete.
+      - name: SPARQL 1.1 query syntax
+        run: |
+          python3 benchmark/public/sparql11_syntax.py \
+            --suite /tmp/rdf-tests/sparql/sparql11/syntax-query \
+            --quipu "${{ steps.bin.outputs.path }}" \
+            --output /tmp/sparql11-syntax.json
+
+      # The evaluation runner exits nonzero whenever anything fails, which is
+      # every run today. Its ledger is what matters here, so its exit status is
+      # deliberately ignored and check_regression makes the call.
+      - name: SPARQL 1.1 evaluation classes
+        continue-on-error: true
+        run: |
+          python3 benchmark/public/sparql11_evaluation.py \
+            --suite /tmp/rdf-tests/sparql/sparql11 \
+            --quipu "${{ steps.bin.outputs.path }}" \
+            --output /tmp/sparql11-evaluation.json
+
+      - name: Fail only on regression against the committed ledger
+        run: |
+          test -s /tmp/sparql11-evaluation.json \
+            || { echo "the evaluation runner produced no ledger" >&2; exit 2; }
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/sparql11-evaluation.json \
+            --candidate /tmp/sparql11-evaluation.json
+
+      - name: Publish the re-derived ledgers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-ledgers-${{ github.sha }}
+          path: |
+            /tmp/sparql11-syntax.json
+            /tmp/sparql11-evaluation.json
+          if-no-files-found: warn
+          retention-days: 90

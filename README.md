@@ -13,6 +13,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-1.85+-orange.svg" alt="Rust 1.85+"/></a>
   <a href="https://scbrown.github.io/quipu/"><img src="https://img.shields.io/badge/docs-mdbook-green.svg" alt="Documentation"/></a>
+  <a href="https://scbrown.github.io/quipu/benchmarks/conformance.html"><img src="https://img.shields.io/endpoint?url=https://scbrown.github.io/quipu/benchmarks/badges/sparql11-syntax.json" alt="SPARQL 1.1 query syntax conformance"/></a>
+  <a href="https://scbrown.github.io/quipu/benchmarks/conformance.html"><img src="https://img.shields.io/endpoint?url=https://scbrown.github.io/quipu/benchmarks/badges/sparql11-query-evaluation.json" alt="SPARQL 1.1 query evaluation conformance"/></a>
 </p>
 
 > *Cords are entities. Knots are facts. Colors are types. Agents are the readers.* 🧶

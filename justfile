@@ -178,6 +178,20 @@ docs cmd="build":
         *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check" ;;
     esac
 
+# === Public benchmarks ===
+
+# Regenerate the public conformance page and shields badge endpoints from the
+# committed ledgers under benchmark/public/results/.
+conformance-report:
+    python3 benchmark/public/conformance_report.py
+
+# Fail if the published page/badges disagree with the ledgers, then run the
+# benchmark unit tests. CI runs exactly this: a results page that has drifted
+# from its own evidence is worse than no page.
+conformance-check:
+    python3 benchmark/public/conformance_report.py --check
+    python3 -m unittest discover -s benchmark/public -p 'test_*.py'
+
 # === Release ===
 
 # Verify the newest CHANGELOG.md section matches git-cliff EXACTLY — no commit

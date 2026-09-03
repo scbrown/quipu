@@ -64,6 +64,10 @@
 - [Incident Correlation](recipes/incident-correlation.md)
 - [Knowledge Ingestion](recipes/knowledge-ingestion.md)
 
+# Benchmarks
+
+- [SPARQL 1.1 Conformance](benchmarks/conformance.md)
+
 # Operations
 
 - [CI/CD and Releases](architecture/ci-cd.md)
