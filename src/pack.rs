@@ -81,64 +81,20 @@ pub struct PackOptions {
     /// built file, so [`pack_to_bytes`] (no file) and [`pack_turtle`] (no
     /// term ids at all) refuse a non-zero space rather than ignoring it.
     pub space: Option<i64>,
+    /// Repository identity for a repo-embedded pack. These four provenance
+    /// fields are all-or-none: a pack must never claim a commit without also
+    /// naming the repository and embedding model that produced its graph.
+    pub repository: Option<String>,
+    /// Git commit whose repository graph is carried by the pack.
+    pub repository_sha: Option<String>,
+    /// Embedding model identifier used to produce repository knowledge.
+    pub model_id: Option<String>,
+    /// Version of the embedding model used to produce repository knowledge.
+    pub model_version: Option<String>,
 }
 
-/// What [`unpack`] materialized and installed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UnpackReport {
-    /// Destination graph IRI.
-    pub graph: String,
-    /// Imported fact count.
-    pub facts: usize,
-    /// Versioned shape definitions installed.
-    pub shapes: usize,
-    /// Versioned stored queries installed.
-    pub queries: usize,
-    /// Entity embeddings restored from the pack, re-keyed by IRI (quipu-0v4).
-    /// A pack built without `--with-vectors` carries none and reports 0.
-    pub vectors: usize,
-}
-
-/// Materialize a pack into `destination`, installing registries by their
-/// versioned write paths rather than overwriting consumer state (quipu #82).
-///
-/// # Errors
-/// The pack is invalid, import-with-remap fails, or a carried registry entry
-/// does not validate in the destination.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn unpack(
-    pack_path: &str,
-    destination: &str,
-    into: Option<&str>,
-    timestamp: &str,
-) -> Result<UnpackReport> {
-    let manifest = read_manifest(pack_path)?;
-    let graph = into.unwrap_or(&manifest.source_graph).to_string();
-
-    // Read the carried registries before opening the destination. They remain
-    // ordinary versioned definitions, never raw rows copied between files.
-    let source = Store::open(pack_path)?;
-    let shapes = source.list_shapes()?;
-    let queries = source.query_list()?;
-    drop(source);
-
-    let imported =
-        crate::store::import::import_graph(Path::new(destination), Path::new(pack_path), &graph)?;
-    let dest = Store::open(destination)?;
-    for (name, turtle, _) in &shapes {
-        dest.load_shapes(name, turtle, timestamp)?;
-    }
-    for query in &queries {
-        dest.query_load(query, timestamp)?;
-    }
-    Ok(UnpackReport {
-        graph,
-        facts: imported.facts,
-        shapes: shapes.len(),
-        queries: queries.len(),
-        vectors: imported.vectors,
-    })
-}
+pub use crate::pack_load::{LoadOptions, UnpackReport, unpack, unpack_verified};
 
 /// The canonical content of a pack, as the exact bytes that get hashed.
 ///
@@ -382,6 +338,19 @@ fn pack_into(
     timestamp: &str,
     out: &mut Store,
 ) -> Result<Manifest> {
+    let repo_fields = [
+        opts.repository.as_ref(),
+        opts.repository_sha.as_ref(),
+        opts.model_id.as_ref(),
+        opts.model_version.as_ref(),
+    ];
+    let repo_field_count = repo_fields.iter().filter(|v| v.is_some()).count();
+    if repo_field_count != 0 && repo_field_count != repo_fields.len() {
+        return Err(Error::InvalidValue(
+            "pack: --repo, --repo-sha, --model-id, and --model-version must be supplied together"
+                .into(),
+        ));
+    }
     if store.lookup(graph_iri)?.is_none() {
         return Err(Error::InvalidValue(format!(
             "pack: unknown graph: {graph_iri}"
@@ -517,7 +486,13 @@ fn pack_into(
             source_graph: graph_iri.to_string(),
             producer: serde_json::json!({
                 "version": env!("CARGO_PKG_VERSION"),
+                "git_sha": env!("QUIPU_GIT_SHA"),
                 "tool": "quipu pack",
+                "pack_schema_version": 1,
+                "repository": opts.repository,
+                "repository_sha": opts.repository_sha,
+                "model_id": opts.model_id,
+                "model_version": opts.model_version,
             })
             .to_string(),
             counts: serde_json::json!({
