@@ -46,6 +46,14 @@ class EvaluationManifestTests(unittest.TestCase):
         )
         self.assertEqual(MODULE.actual_result("\n\n\n1 results\n"), ([], [()]))
 
+    def test_actual_graph_parses_cli_triples_and_checks_count(self):
+        self.assertEqual(
+            MODULE.actual_graph("s\tp\to\n\n1 triples\n"),
+            MODULE.Counter({("s", "p", "o"): 1}),
+        )
+        with self.assertRaisesRegex(ValueError, "count"):
+            MODULE.actual_graph("s\tp\to\n\n2 triples\n")
+
     def test_expected_uri_matches_the_cli_reference_rendering(self):
         self.assertEqual(MODULE.term("uri", "http://example.test/resource"), "http://example.test/resource")
 

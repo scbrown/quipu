@@ -278,6 +278,46 @@ def actual_result(stdout: str) -> tuple[list[str], list[tuple[str, ...]]] | bool
     return variables, rows
 
 
+def actual_graph(stdout: str) -> Counter[tuple[str, str, str]]:
+    """Parse the CLI's machine-stable tab-separated CONSTRUCT rendering."""
+    triples: Counter[tuple[str, str, str]] = Counter()
+    reported_count = None
+    for line in stdout.splitlines():
+        if match := re.fullmatch(r"(\d+) triples", line):
+            reported_count = int(match.group(1))
+        elif line:
+            values = line.split("\t")
+            if len(values) != 3:
+                raise ValueError("graph result emitted a malformed triple row")
+            triples[tuple(values)] += 1
+    if reported_count is None or reported_count != sum(triples.values()):
+        raise ValueError("graph result count does not match emitted triples")
+    return triples
+
+
+def expected_graph(path: Path, quipu: Path, database: Path) -> Counter[tuple[str, str, str]]:
+    """Parse an RDF expected result through Quipu's own pinned RDF loader."""
+    loaded = subprocess.run(
+        [str(quipu), "knot", str(path), "--db", str(database)],
+        text=True,
+        capture_output=True,
+    )
+    if loaded.returncode:
+        raise ValueError(loaded.stderr.strip())
+    selected = subprocess.run(
+        [str(quipu), "read", "SELECT ?s ?p ?o WHERE { ?s ?p ?o }", "--db", str(database)],
+        text=True,
+        capture_output=True,
+    )
+    if selected.returncode or "query error:" in selected.stderr:
+        raise ValueError(selected.stderr.strip())
+    variables, rows = actual_result(selected.stdout)
+    aligned = reorder_rows(variables, rows, ["s", "p", "o"])
+    if aligned is None:
+        raise ValueError("expected graph parser emitted unexpected bindings")
+    return Counter(aligned)
+
+
 def reorder_rows(
     variables: list[str], rows: list[tuple[str, ...]], expected_variables: list[str]
 ) -> list[tuple[str, ...]] | None:
@@ -303,7 +343,7 @@ def unsupported_reason(case: Case) -> str | None:
         return "manifest action has no qt:query"
     if not case.result:
         return "manifest case has no expected mf:result"
-    if case.result.suffix not in {".srj", ".srx", ".csv", ".tsv"}:
+    if case.result.suffix not in {".srj", ".srx", ".csv", ".tsv", ".ttl", ".nt"}:
         return f"expected result format {case.result.suffix or '<none>'} is not comparable"
     return None
 
@@ -338,11 +378,19 @@ def run_case(case: Case, quipu: Path) -> dict[str, object]:
         if "query error:" in observed.stderr:
             return {**base, "status": "failed", "diagnostic": observed.stderr.strip()}
         try:
-            actual = actual_result(observed.stdout)
-            expected = expected_result(case.result)
+            if case.result.suffix in {".ttl", ".nt"}:
+                actual = actual_graph(observed.stdout)
+                expected = expected_graph(
+                    case.result, quipu, Path(temporary) / "expected.db"
+                )
+            else:
+                actual = actual_result(observed.stdout)
+                expected = expected_result(case.result)
         except (ET.ParseError, ValueError, KeyError, json.JSONDecodeError) as error:
             return {**base, "status": "error", "diagnostic": str(error)}
-        if isinstance(actual, bool) or isinstance(expected, bool):
+        if isinstance(actual, Counter) and isinstance(expected, Counter):
+            passed = actual == expected
+        elif isinstance(actual, bool) or isinstance(expected, bool):
             passed = actual == expected
         else:
             actual_vars, actual_rows = actual
