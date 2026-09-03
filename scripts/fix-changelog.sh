@@ -177,7 +177,9 @@ PYEOF
 [[ -s "$NEW_FILE" ]] || { echo "ERROR: regenerated changelog is empty; refusing to write" >&2; exit 2; }
 grep -q "^## \[${newest_ver}\]" "$NEW_FILE" \
   || { echo "ERROR: regenerated changelog lost the ${newest_ver} heading; refusing to write" >&2; exit 2; }
-grep -q "^## \[${prev_tag#v}\]" "$NEW_FILE" \
+prev_ver="${prev_tag#quipu-ai-v}"
+prev_ver="${prev_ver#v}"
+grep -q "^## \[${prev_ver}\]" "$NEW_FILE" \
   || { echo "ERROR: regenerated changelog lost the ${prev_tag} section; refusing to write" >&2; exit 2; }
 old_lines="$(wc -l < CHANGELOG.md)"
 new_lines="$(wc -l < "$NEW_FILE")"

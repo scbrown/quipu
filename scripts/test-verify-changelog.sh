@@ -145,6 +145,24 @@ git -C "$d" tag quipu-ai-v1.0.0 HEAD~2
   entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
 check "package-qualified baseline is accepted" 0 "range quipu-ai-v1.0.0..HEAD" "$d"
 
+# The fixer's truncation guard must translate the package-qualified tag back to
+# the plain version heading used by CHANGELOG.md.
+read -r d a b c <<<"$(make_repo)"
+git -C "$d" tag quipu-ai-v1.0.0 HEAD~2
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; echo; echo "## [1.0.0] - 2025-12-01"; echo;
+  entry "$a"; } > "$d/CHANGELOG.md"
+fix_out="$(cd "$d" && ./scripts/fix-changelog.sh --check 2>&1)"; fix_rc=$?
+if [[ "$fix_rc" -eq 1 ]] && grep -qF "WOULD REWRITE" <<<"$fix_out"; then
+  echo "  PASS  fixer accepts package-qualified previous tag (exit $fix_rc)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  fixer rejected package-qualified previous tag:" >&2
+  sed 's/^/          /' <<<"$fix_out" >&2
+  fail=$((fail + 1))
+fi
+rm -rf "$d"
+
 # 9. An excluded-path-only commit does not change the packaged crate. It must not
 #    be required by the guard when release-plz correctly omits it.
 read -r d a b c <<<"$(make_repo)"
