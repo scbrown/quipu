@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to attach binaries to (e.g. v0.3.15)"
+        description: "Existing tag to attach binaries to (e.g. quipu-ai-v0.3.28)"
         required: true
         type: string
 
@@ -269,7 +269,7 @@ jobs:
             --target ${{ matrix.target }} \
             --bin quipu --bin quipu-server
 
-      - name: Resolve tag
+      - name: Resolve package-qualified tag
         id: tag
         run: |
           set -euo pipefail
@@ -277,12 +277,12 @@ jobs:
             TAG="${{ inputs.tag }}"
           else
             # release-plz has already bumped and committed Cargo.toml in the
-            # commit this run is building, and tags it as v<version>. Deriving
+            # commit this run is building, and tags it as quipu-ai-v<version>. Deriving
             # the tag from the manifest avoids depending on the shape of the
             # action's `releases` JSON output, which is undocumented.
             VERSION="$(cargo metadata --no-deps --format-version 1 \
               | jq -r '.packages[] | select(.name == "quipu-ai") | .version')"
-            TAG="v${VERSION}"
+            TAG="quipu-ai-v${VERSION}"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: ${TAG}"

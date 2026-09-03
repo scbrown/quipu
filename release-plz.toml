@@ -25,3 +25,8 @@ git_tag_enable = true
 
 [[package]]
 name = "quipu-ai"
+# The crate was called `quipu` through v0.3.27.  A package-qualified tag gives
+# git_only a post-rename baseline whose worktree contains the package name it is
+# resolving; the matching v0.3.27 bridge tag points at the rename commit.
+git_tag_name = "quipu-ai-v{{ version }}"
+git_release_name = "quipu-ai v{{ version }}"

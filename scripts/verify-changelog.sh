@@ -51,23 +51,32 @@ newest_ver="$(printf '%s\n' "$changelog_content" | grep -m1 -oE '^## \[[0-9]+\.[
 newest_section="$(printf '%s\n' "$changelog_content" | awk '/^## \[/{n++} n==1' )"
 
 # Range = <prev-tag>..<head-of-release>.
-#  - HEAD of range: the tag v<newest_ver> if it already exists (a released section
-#    documents v<prev>..v<newest>, NOT ..HEAD — HEAD may be ahead of the release);
-#    otherwise head_ref itself (a pending release PR whose tag does not exist yet).
-#  - prev tag: the highest v-tag that is an ancestor of the release head and is not
-#    the version being released — exactly the base git-cliff would use at tag time.
+#  - HEAD of range: the historical v<newest_ver> tag when that released section
+#    exists, otherwise the package-qualified quipu-ai-v<newest_ver> tag.
+#  - prev tag: the newest package-qualified ancestor, falling back to historical
+#    v-tags only when there is no such ancestor. This mirrors release-plz's renamed
+#    package boundary without making the historical changelog unverifiable.
 if [[ -n "$RANGE_OVERRIDE" ]]; then
   range="$RANGE_OVERRIDE"
 else
   rel_head="$head_ref"
-  if git rev-parse -q --verify "refs/tags/v${newest_ver}" >/dev/null 2>&1 \
-     && git merge-base --is-ancestor "v${newest_ver}" "$head_ref" 2>/dev/null; then
-    rel_head="v${newest_ver}"
+  for candidate in "v${newest_ver}" "quipu-ai-v${newest_ver}"; do
+    if git rev-parse -q --verify "refs/tags/${candidate}" >/dev/null 2>&1 \
+       && git merge-base --is-ancestor "$candidate" "$head_ref" 2>/dev/null; then
+      rel_head="$candidate"
+      break
+    fi
+  done
+  prev_tag="$(git tag --list 'quipu-ai-v[0-9]*' --sort=-v:refname \
+    | grep -vx "quipu-ai-v${newest_ver}" \
+    | while read -r t; do git merge-base --is-ancestor "$t" "$rel_head" 2>/dev/null && { echo "$t"; break; }; done \
+    || true)"
+  if [[ -z "$prev_tag" ]]; then
+    prev_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname \
+      | grep -vx "v${newest_ver}" \
+      | while read -r t; do git merge-base --is-ancestor "$t" "$rel_head" 2>/dev/null && { echo "$t"; break; }; done)"
   fi
-  prev_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname \
-    | grep -vx "v${newest_ver}" \
-    | while read -r t; do git merge-base --is-ancestor "$t" "$rel_head" 2>/dev/null && { echo "$t"; break; }; done)"
-  [[ -n "$prev_tag" ]] || { echo "ERROR: no previous v-tag found as ancestor of ${rel_head}" >&2; exit 2; }
+  [[ -n "$prev_tag" ]] || { echo "ERROR: no release tag found as ancestor of ${rel_head}" >&2; exit 2; }
   range="${prev_tag}..${rel_head}"
 fi
 

@@ -79,14 +79,23 @@ section_date="${existing_date:-$(date -u +%Y-%m-%d)}"
 
 # Range = <prev-tag>..<head-of-release>, derived exactly as verify-changelog.sh does.
 rel_head="HEAD"
-if git rev-parse -q --verify "refs/tags/v${newest_ver}" >/dev/null 2>&1 \
-   && git merge-base --is-ancestor "v${newest_ver}" HEAD 2>/dev/null; then
-  rel_head="v${newest_ver}"
+for candidate in "v${newest_ver}" "quipu-ai-v${newest_ver}"; do
+  if git rev-parse -q --verify "refs/tags/${candidate}" >/dev/null 2>&1 \
+     && git merge-base --is-ancestor "$candidate" HEAD 2>/dev/null; then
+    rel_head="$candidate"
+    break
+  fi
+done
+prev_tag="$(git tag --list 'quipu-ai-v[0-9]*' --sort=-v:refname \
+  | grep -vx "quipu-ai-v${newest_ver}" \
+  | while read -r t; do git merge-base --is-ancestor "$t" "$rel_head" 2>/dev/null && { echo "$t"; break; }; done \
+  || true)"
+if [[ -z "$prev_tag" ]]; then
+  prev_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname \
+    | grep -vx "v${newest_ver}" \
+    | while read -r t; do git merge-base --is-ancestor "$t" "$rel_head" 2>/dev/null && { echo "$t"; break; }; done)"
 fi
-prev_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname \
-  | grep -vx "v${newest_ver}" \
-  | while read -r t; do git merge-base --is-ancestor "$t" "$rel_head" 2>/dev/null && { echo "$t"; break; }; done)"
-[[ -n "$prev_tag" ]] || { echo "ERROR: no previous v-tag found as ancestor of ${rel_head}" >&2; exit 2; }
+[[ -n "$prev_tag" ]] || { echo "ERROR: no release tag found as ancestor of ${rel_head}" >&2; exit 2; }
 range="${prev_tag}..${rel_head}"
 
 echo "changelog-fix: version ${newest_ver}, range ${range}"

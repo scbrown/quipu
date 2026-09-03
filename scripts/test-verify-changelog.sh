@@ -137,7 +137,15 @@ read -r d a b c <<<"$(make_repo)"
   entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
 check "pure release-mechanics commit stays exempt" 0 "none missing, none extra" "$d"
 
-# 8. An excluded-path-only commit does not change the packaged crate. It must not
+# 8. The post-rename package-qualified tag is the preferred baseline. A newer
+# historical v-tag must not pull the range back across the rename boundary.
+read -r d a b c <<<"$(make_repo)"
+git -C "$d" tag quipu-ai-v1.0.0 HEAD~2
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
+check "package-qualified baseline is accepted" 0 "range quipu-ai-v1.0.0..HEAD" "$d"
+
+# 9. An excluded-path-only commit does not change the packaged crate. It must not
 #    be required by the guard when release-plz correctly omits it.
 read -r d a b c <<<"$(make_repo)"
 (
@@ -149,7 +157,7 @@ read -r d a b c <<<"$(make_repo)"
   entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
 check "excluded-only commit is not required" 0 "none missing, none extra" "$d"
 
-# 9. The inverse is equally important: documenting that excluded-only commit is
+# 10. The inverse is equally important: documenting that excluded-only commit is
 #    over-documentation and must fail, preserving the guard's two-way contract.
 read -r d a b c <<<"$(make_repo)"
 (
@@ -162,7 +170,7 @@ e="$(git -C "$d" rev-parse --short=7 HEAD)"
   entry "$b"; entry "$c"; entry "$e"; } > "$d/CHANGELOG.md"
 check "documented excluded-only commit fails as extra" 1 "do not belong to this release" "$d"
 
-# 10. The generator shares the same boundary: it removes an excluded commit from
+# 11. The generator shares the same boundary: it removes an excluded commit from
 #     a generated section while retaining both packaged commits.
 read -r d a b c <<<"$(make_repo)"
 (
