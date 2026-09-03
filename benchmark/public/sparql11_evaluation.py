@@ -263,12 +263,18 @@ def actual_result(stdout: str) -> tuple[list[str], list[tuple[str, ...]]] | bool
     lines = stdout.splitlines()
     if len(lines) < 3:
         raise ValueError("query emitted no result table")
-    variables = lines[0].split("\t")
+    variables = lines[0].split("\t") if lines[0] else []
     rows = []
+    reported_count = None
     for line in lines[2:]:
-        if not line or re.fullmatch(r"\d+ results", line):
+        if match := re.fullmatch(r"(\d+) results", line):
+            reported_count = int(match.group(1))
+            continue
+        if not line:
             continue
         rows.append(tuple(line.split("\t")))
+    if not variables and reported_count is not None:
+        rows = [()] * reported_count
     return variables, rows
 
 

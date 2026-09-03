@@ -44,6 +44,7 @@ class EvaluationManifestTests(unittest.TestCase):
             MODULE.actual_result("x\ty\n----------------------------------------\n<a>\t1\n\n1 results\n"),
             (["x", "y"], [("<a>", "1")]),
         )
+        self.assertEqual(MODULE.actual_result("\n\n\n1 results\n"), ([], [()]))
 
     def test_expected_uri_matches_the_cli_reference_rendering(self):
         self.assertEqual(MODULE.term("uri", "http://example.test/resource"), "http://example.test/resource")

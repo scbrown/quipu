@@ -48,6 +48,20 @@ pub fn eval_path_pattern(
             results.push(new_bindings);
         }
     }
+    if matches!(path, PropertyPathExpression::ZeroOrMore(_))
+        && resolve_term_to_id(store, subject, bindings)?.is_none()
+        && resolve_term_to_id(store, object, bindings)?.is_none()
+    {
+        for value in literal_node_values(store, ctx)? {
+            let mut identity = bindings.clone();
+            let mut compatible = true;
+            bind_term(&mut identity, subject, value.clone(), &mut compatible);
+            bind_term(&mut identity, object, value, &mut compatible);
+            if compatible && !results.contains(&identity) {
+                results.push(identity);
+            }
+        }
+    }
     Ok(results)
 }
 
@@ -353,6 +367,30 @@ fn all_node_ids(store: &Store, ctx: &TemporalContext) -> Result<Vec<i64>> {
         }
     }
     Ok(ids.into_iter().collect())
+}
+
+fn literal_node_values(store: &Store, ctx: &TemporalContext) -> Result<Vec<Value>> {
+    let mut conds = vec!["op = 1".to_string()];
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    add_graph_condition(&mut conds, &mut params, ctx)?;
+    add_temporal_conditions(&mut conds, &mut params, ctx);
+    let sql = format!(
+        "SELECT DISTINCT v FROM {} WHERE {}",
+        store.facts_source(),
+        conds.join(" AND ")
+    );
+    let mut stmt = store.prepare(&sql)?;
+    let refs: Vec<&dyn rusqlite::types::ToSql> =
+        params.iter().map(std::convert::AsRef::as_ref).collect();
+    let mut rows = stmt.query(refs.as_slice())?;
+    let mut values = Vec::new();
+    while let Some(row) = rows.next()? {
+        let value = Value::from_bytes(&row.get::<_, Vec<u8>>(0)?)?;
+        if !matches!(value, Value::Ref(_)) && !values.contains(&value) {
+            values.push(value);
+        }
+    }
+    Ok(values)
 }
 
 /// Restrict every path step to the enclosing dataset graph scope.
