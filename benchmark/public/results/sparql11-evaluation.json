@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "88aed0460791ffa99ae8f90bf21f1b2b7a8f783a",
+  "quipu_revision": "f910f24fc72d91e99def68267a232533a5e3864b",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 49,
-      "passed": 96,
+      "failed": 41,
+      "passed": 104,
       "unsupported": 19
     },
     "protocol": {
@@ -764,8 +764,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/md5-01.rq",
       "result": "functions/md5-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -774,8 +774,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/md5-02.rq",
       "result": "functions/md5-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -784,8 +784,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/sha1-01.rq",
       "result": "functions/sha1-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -794,8 +794,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/sha1-02.rq",
       "result": "functions/sha1-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -804,8 +804,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/sha256-01.rq",
       "result": "functions/sha256-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -814,8 +814,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/sha256-02.rq",
       "result": "functions/sha256-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -824,8 +824,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/sha512-01.rq",
       "result": "functions/sha512-01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -834,8 +834,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/sha512-02.rq",
       "result": "functions/sha512-02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
