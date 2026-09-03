@@ -21,6 +21,10 @@ WHERE {
       aegis:name aegis:definedIn aegis:symbolKind
       aegis:heading aegis:headingDepth
     }
+    # Bobbin emits weak mention names as strings. Quipu may additionally
+    # resolve those names to IRIs under the same predicate in its local store;
+    # those derived edges do not satisfy the shipped string-valued shape.
+    FILTER(?p != aegis:mentions || isLiteral(?o))
   }
   UNION
   {

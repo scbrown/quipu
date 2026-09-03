@@ -50,7 +50,10 @@ for shape in "$SOURCE"/shapes/*.ttl; do
 done
 
 CONTEXT=$(mktemp)
-trap 'rm -f "$CONTEXT"' EXIT
+FRESH_DB=$(mktemp)
+IMPORT_JSON=$(mktemp)
+QUERY_JSON=$(mktemp)
+trap 'rm -f "$CONTEXT" "$FRESH_DB" "$IMPORT_JSON" "$QUERY_JSON"' EXIT
 python3 - "$CONTEXT" "$REPOSITORY_SHA" <<'PY'
 from pathlib import Path
 import sys
@@ -81,7 +84,26 @@ PY
 test "$(wc -c < "$OUTPUT/shapes.ttl")" -gt 0
 test "$(wc -l < "$OUTPUT/export.nt")" -gt 10000
 grep -q 'src%2Fshare_transport\.rs' "$OUTPUT/export.nt"
-"$QUIPU_BIN" import "$OUTPUT"
+# Bundled shapes are evidence, never authority: the receiver must explicitly
+# adopt them before import can admit their vocabulary into a fresh store.
+"$QUIPU_BIN" shapes load repository-share "$OUTPUT/shapes.ttl" --db "$FRESH_DB"
+"$QUIPU_BIN" import "$OUTPUT" --db "$FRESH_DB" > "$IMPORT_JSON"
+SHARE_ID=$(python3 - "$IMPORT_JSON" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+assert data["outcome"] == "staged", data["outcome"]
+assert data["promotion"]["eligible"] is True, data["promotion"]
+assert data["triples"]["accepted"] > 10_000, data["triples"]
+print(data["share_id"])
+PY
+)
+"$QUIPU_BIN" import promote "$SHARE_ID" --db "$FRESH_DB"
+"$QUIPU_BIN" query \
+  'PREFIX aegis: <http://aegis.gastown.local/ontology/> SELECT ?module WHERE { ?symbol aegis:definedIn ?module . ?symbol aegis:filePath "src/share_transport.rs" } LIMIT 1' \
+  --db "$FRESH_DB" > "$QUERY_JSON"
+grep -q 'src%2Fshare_transport\.rs' "$QUERY_JSON"
 
 wc -c "$OUTPUT"/*
 wc -l "$OUTPUT/export.nt"
