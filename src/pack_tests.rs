@@ -296,6 +296,89 @@ fn unpack_materializes_and_versions_registries_beside_existing_entries() {
 }
 
 #[test]
+fn repo_pack_manifest_is_complete_and_incremental_load_is_idempotent() {
+    let source = producer(0);
+    let artifact = tmp("repo-pack");
+    let opts = PackOptions {
+        repository: Some("scbrown/example".into()),
+        repository_sha: Some("base123".into()),
+        model_id: Some("model".into()),
+        model_version: Some("v1".into()),
+        ..Default::default()
+    };
+    let manifest = pack(&source, "urn:g:pack", &artifact, &opts, TS).unwrap();
+    let producer: serde_json::Value = serde_json::from_str(&manifest.producer).unwrap();
+    assert_eq!(producer["repository"], "scbrown/example");
+    assert_eq!(producer["repository_sha"], "base123");
+    assert_eq!(producer["model_id"], "model");
+    assert_eq!(producer["model_version"], "v1");
+    assert!(producer["version"].is_string());
+    assert!(producer["git_sha"].is_string());
+    assert_eq!(producer["pack_schema_version"], 1);
+
+    let destination = tmp("repo-pack-dest");
+    let load = LoadOptions {
+        into: None,
+        expect_repository: Some("scbrown/example"),
+        head_sha: Some("head456"),
+    };
+    let first = unpack_verified(&artifact, &destination, &load, TS).unwrap();
+    assert_eq!(first.outcome, "loaded");
+    assert!(first.facts > 0);
+    assert_eq!(first.repository_sha.as_deref(), Some("base123"));
+    assert_eq!(first.head_sha.as_deref(), Some("head456"));
+    let second = unpack_verified(&artifact, &destination, &load, TS).unwrap();
+    assert_eq!(second.outcome, "unchanged");
+    assert_eq!(second.facts, 0);
+
+    for path in [artifact, destination] {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+#[test]
+fn repo_pack_refuses_partial_provenance_and_wrong_repository_before_writing() {
+    let source = producer(0);
+    let artifact = tmp("partial-repo-pack");
+    let err = pack(
+        &source,
+        "urn:g:pack",
+        &artifact,
+        &PackOptions {
+            repository: Some("scbrown/example".into()),
+            ..Default::default()
+        },
+        TS,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("must be supplied together"));
+
+    let complete = PackOptions {
+        repository: Some("scbrown/example".into()),
+        repository_sha: Some("base123".into()),
+        model_id: Some("model".into()),
+        model_version: Some("v1".into()),
+        ..Default::default()
+    };
+    pack(&source, "urn:g:pack", &artifact, &complete, TS).unwrap();
+    let destination = tmp("wrong-repo-dest");
+    let err = unpack_verified(
+        &artifact,
+        &destination,
+        &LoadOptions {
+            expect_repository: Some("scbrown/other"),
+            ..Default::default()
+        },
+        TS,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("repository mismatch"));
+    assert!(!std::path::Path::new(&destination).exists());
+
+    let _ = std::fs::remove_file(artifact);
+}
+
+#[test]
 fn a_respaced_pack_attaches_surfaces_its_manifest_and_spans_queries() {
     let mut source = producer(0);
     source.embedding_config_mut().model_path = Some("models/producer.onnx".into());

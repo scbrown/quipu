@@ -39,6 +39,7 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
             eprintln!(
                 "usage: quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] \
              [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]\n       \
+             repo packs: --repo OWNER/NAME --repo-sha SHA --model-id ID --model-version V\n       \
              quipu pack --verify <file>"
             );
             std::process::exit(1);
@@ -72,6 +73,10 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         queries: multi("--queries"),
         with_vectors: args.iter().any(|a| a == "--with-vectors"),
         space,
+        repository: flag_value(args, "--repo").map(String::from),
+        repository_sha: flag_value(args, "--repo-sha").map(String::from),
+        model_id: flag_value(args, "--model-id").map(String::from),
+        model_version: flag_value(args, "--model-version").map(String::from),
     };
 
     // `--format turtle` writes an interop BUNDLE (a directory of plain files)
@@ -105,10 +110,22 @@ pub fn cmd_unpack(args: &[String], db_path: &str) {
         eprintln!("usage: quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]");
         std::process::exit(1);
     };
-    match quipu::pack::unpack(pack, db_path, flag_value(args, "--into"), &chrono_now()) {
+    let opts = quipu::pack::LoadOptions {
+        into: flag_value(args, "--into"),
+        expect_repository: flag_value(args, "--expect-repo"),
+        head_sha: flag_value(args, "--head-sha"),
+    };
+    match quipu::pack::unpack_verified(pack, db_path, &opts, &chrono_now()) {
         Ok(r) => println!(
-            "unpacked {pack} into {}\n  facts: {}\n  shapes: {}\n  queries: {}\n  vectors: {}",
-            r.graph, r.facts, r.shapes, r.queries, r.vectors
+            "{} {pack} into {}\n  facts: {}\n  shapes: {}\n  queries: {}\n  vectors: {}\n  repository_sha: {}\n  head_sha: {}",
+            r.outcome,
+            r.graph,
+            r.facts,
+            r.shapes,
+            r.queries,
+            r.vectors,
+            r.repository_sha.as_deref().unwrap_or("-"),
+            r.head_sha.as_deref().unwrap_or("-")
         ),
         Err(e) => {
             eprintln!("unpack error: {e}");

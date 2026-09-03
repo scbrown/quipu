@@ -81,11 +81,24 @@ pub struct PackOptions {
     /// built file, so [`pack_to_bytes`] (no file) and [`pack_turtle`] (no
     /// term ids at all) refuse a non-zero space rather than ignoring it.
     pub space: Option<i64>,
+    /// Repository identity for a repo-embedded pack. These four provenance
+    /// fields are all-or-none: a pack must never claim a commit without also
+    /// naming the repository and embedding model that produced its graph.
+    pub repository: Option<String>,
+    /// Git commit whose repository graph is carried by the pack.
+    pub repository_sha: Option<String>,
+    /// Embedding model identifier used to produce repository knowledge.
+    pub model_id: Option<String>,
+    /// Version of the embedding model used to produce repository knowledge.
+    pub model_version: Option<String>,
 }
 
 /// What [`unpack`] materialized and installed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnpackReport {
+    /// `loaded` for new content, `unchanged` when this exact content hash was
+    /// already loaded. The latter is a successful incremental no-op.
+    pub outcome: String,
     /// Destination graph IRI.
     pub graph: String,
     /// Imported fact count.
@@ -97,6 +110,22 @@ pub struct UnpackReport {
     /// Entity embeddings restored from the pack, re-keyed by IRI (quipu-0v4).
     /// A pack built without `--with-vectors` carries none and reports 0.
     pub vectors: usize,
+    /// Repository commit represented by this pack, when it is repo-embedded.
+    pub repository_sha: Option<String>,
+    /// Consumer HEAD supplied by the loader. A differing value means normal
+    /// post-load ingestion must cover `repository_sha..head_sha`.
+    pub head_sha: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+/// Expectations and checkout state supplied while loading a repository pack.
+pub struct LoadOptions<'a> {
+    /// Optional destination graph override.
+    pub into: Option<&'a str>,
+    /// Repository identity the caller expects the manifest to carry.
+    pub expect_repository: Option<&'a str>,
+    /// Current checkout commit, used to report the incremental ingest range.
+    pub head_sha: Option<&'a str>,
 }
 
 /// Materialize a pack into `destination`, installing registries by their
@@ -112,8 +141,76 @@ pub fn unpack(
     into: Option<&str>,
     timestamp: &str,
 ) -> Result<UnpackReport> {
+    unpack_verified(
+        pack_path,
+        destination,
+        &LoadOptions {
+            into,
+            ..Default::default()
+        },
+        timestamp,
+    )
+}
+
+/// Verify and incrementally materialize a pack. The destination records the
+/// content hash, making repeated clone/setup runs successful no-ops.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn unpack_verified(
+    pack_path: &str,
+    destination: &str,
+    opts: &LoadOptions<'_>,
+    timestamp: &str,
+) -> Result<UnpackReport> {
     let manifest = read_manifest(pack_path)?;
-    let graph = into.unwrap_or(&manifest.source_graph).to_string();
+    let (stored, recomputed, matches) = verify(pack_path)?;
+    if !matches {
+        return Err(Error::InvalidValue(format!(
+            "pack: HASH MISMATCH: manifest {stored}, recomputed {recomputed}"
+        )));
+    }
+    let provenance: serde_json::Value = serde_json::from_str(&manifest.producer)
+        .map_err(|e| Error::InvalidValue(format!("pack: invalid producer manifest: {e}")))?;
+    let repository = provenance.get("repository").and_then(|v| v.as_str());
+    let repository_sha = provenance
+        .get("repository_sha")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    if let Some(expected) = opts.expect_repository
+        && repository != Some(expected)
+    {
+        return Err(Error::InvalidValue(format!(
+            "pack: repository mismatch: expected {expected:?}, manifest has {repository:?}"
+        )));
+    }
+    let graph = opts.into.unwrap_or(&manifest.source_graph).to_string();
+
+    let dest = Store::open(destination)?;
+    dest.conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS pack_loads (
+             content_hash TEXT PRIMARY KEY,
+             repository TEXT,
+             repository_sha TEXT,
+             loaded_at TEXT NOT NULL
+         );",
+    )?;
+    let loaded: bool = dest.conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pack_loads WHERE content_hash=?1)",
+        rusqlite::params![manifest.content_hash],
+        |r| r.get(0),
+    )?;
+    drop(dest);
+    if loaded {
+        return Ok(UnpackReport {
+            outcome: "unchanged".into(),
+            graph,
+            facts: 0,
+            shapes: 0,
+            queries: 0,
+            vectors: 0,
+            repository_sha,
+            head_sha: opts.head_sha.map(String::from),
+        });
+    }
 
     // Read the carried registries before opening the destination. They remain
     // ordinary versioned definitions, never raw rows copied between files.
@@ -131,12 +228,20 @@ pub fn unpack(
     for query in &queries {
         dest.query_load(query, timestamp)?;
     }
+    dest.conn.execute(
+        "INSERT INTO pack_loads (content_hash, repository, repository_sha, loaded_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![manifest.content_hash, repository, repository_sha, timestamp],
+    )?;
     Ok(UnpackReport {
+        outcome: "loaded".into(),
         graph,
         facts: imported.facts,
         shapes: shapes.len(),
         queries: queries.len(),
         vectors: imported.vectors,
+        repository_sha,
+        head_sha: opts.head_sha.map(String::from),
     })
 }
 
@@ -382,6 +487,19 @@ fn pack_into(
     timestamp: &str,
     out: &mut Store,
 ) -> Result<Manifest> {
+    let repo_fields = [
+        opts.repository.as_ref(),
+        opts.repository_sha.as_ref(),
+        opts.model_id.as_ref(),
+        opts.model_version.as_ref(),
+    ];
+    let repo_field_count = repo_fields.iter().filter(|v| v.is_some()).count();
+    if repo_field_count != 0 && repo_field_count != repo_fields.len() {
+        return Err(Error::InvalidValue(
+            "pack: --repo, --repo-sha, --model-id, and --model-version must be supplied together"
+                .into(),
+        ));
+    }
     if store.lookup(graph_iri)?.is_none() {
         return Err(Error::InvalidValue(format!(
             "pack: unknown graph: {graph_iri}"
@@ -517,7 +635,13 @@ fn pack_into(
             source_graph: graph_iri.to_string(),
             producer: serde_json::json!({
                 "version": env!("CARGO_PKG_VERSION"),
+                "git_sha": env!("QUIPU_GIT_SHA"),
                 "tool": "quipu pack",
+                "pack_schema_version": 1,
+                "repository": opts.repository,
+                "repository_sha": opts.repository_sha,
+                "model_id": opts.model_id,
+                "model_version": opts.model_version,
             })
             .to_string(),
             counts: serde_json::json!({

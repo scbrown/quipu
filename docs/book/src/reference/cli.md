@@ -698,7 +698,8 @@ quipu pack urn:example:graph --out domain.qpack.db --name "domain" --version 1.0
 quipu pack urn:example:graph --out domain.qpack.db --shapes s.ttl --queries q.json --with-vectors
 quipu pack urn:example:graph --out domain.qpack.db --space 7
 quipu pack --verify domain.qpack.db
-quipu unpack domain.qpack.db --into urn:local:domain --db my.db
+quipu pack urn:example:repo --out repo.qpack.db --repo scbrown/example --repo-sha "$BASE_SHA" --model-id all-MiniLM-L6-v2 --model-version 1
+quipu unpack repo.qpack.db --expect-repo scbrown/example --head-sha "$(git rev-parse HEAD)" --into urn:local:domain --db my.db
 ```
 
 | Flag | Description |
@@ -711,6 +712,16 @@ quipu unpack domain.qpack.db --into urn:local:domain --db my.db
 | `--format turtle` | Also embed a Turtle serialization |
 | `--verify <file>` | Recompute and check the pack's content hash |
 | `--into <graph-iri>` | Unpack target graph (default: the pack's own graph IRI) |
+| `--repo` / `--repo-sha` / `--model-id` / `--model-version` | All-or-none provenance for a repository pack. The manifest also carries the Quipu version, build SHA, and pack schema version. |
+| `--expect-repo` / `--head-sha` | Verify repository identity while loading and report the incremental ingestion range from the pack SHA to checkout HEAD. Exact pack content already loaded returns `unchanged` without duplicate facts. |
+
+Repository packs should be attached to a GitHub release, not committed to the
+repository, once they exceed 10 MiB. A loader must download to a temporary
+path, run `quipu pack --verify`, and delete a failed download before opening the
+destination. `quipu unpack` repeats verification before every load. After a
+successful load, ingest repository changes over `repository_sha..head_sha`;
+future setup runs are incremental because the destination records the verified
+content hash and returns `unchanged` for the same asset.
 
 ### `quipu graph`
 
