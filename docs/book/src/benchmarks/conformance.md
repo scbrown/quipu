@@ -136,8 +136,9 @@ status, and diagnostic or unsupported reason.
 
 ## W3C SHACL conformance
 
-Quipu passes **25/98** manifest-reachable SHACL Core cases.
-SHACL-SPARQL is separate: **0/22** pass and 22 are unsupported.
+Quipu passes **98/98** manifest-reachable SHACL Core cases.
+SHACL-SPARQL remains a deliberate non-goal: **0/22** pass and 22 are unsupported.
+Quipu does not advertise SHACL-SPARQL support; the upstream SPARQL validator is incomplete, and support requires the full 22-case manifest gate rather than a partial claim.
 This score uses the context-free native validator; write-gate transaction behavior is tested separately.
 
 Pinned W3C Data Shapes revision: `9c863967bceaef1a87c24e4dd761eda763823120`.
@@ -146,12 +147,12 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 
 | SHACL class | Passed | Failed | Error | Unsupported | Cases |
 |---|---:|---:|---:|---:|---:|
-| `core-complex-misc` | 2 | 5 | 0 | 0 | 7 |
-| `core-node` | 9 | 23 | 0 | 0 | 32 |
-| `core-property` | 7 | 30 | 1 | 0 | 38 |
-| `core-path` | 1 | 12 | 0 | 0 | 13 |
-| `core-targets` | 6 | 1 | 0 | 0 | 7 |
-| `core-validation-reports` | 0 | 1 | 0 | 0 | 1 |
+| `core-complex-misc` | 7 | 0 | 0 | 0 | 7 |
+| `core-node` | 32 | 0 | 0 | 0 | 32 |
+| `core-property` | 38 | 0 | 0 | 0 | 38 |
+| `core-path` | 13 | 0 | 0 | 0 | 13 |
+| `core-targets` | 7 | 0 | 0 | 0 | 7 |
+| `core-validation-reports` | 1 | 0 | 0 | 0 | 1 |
 | `shacl-sparql` | 0 | 0 | 0 | 22 | 22 |
 
 ## Entailment-regime commitments

@@ -413,7 +413,8 @@ def render_markdown(data: dict) -> str:
     out += [
         "## W3C SHACL conformance", "",
         f"Quipu passes **{core_counts['passed']}/{core_counts['cases']}** manifest-reachable SHACL Core cases.",
-        f"SHACL-SPARQL is separate: **{sparql_counts['passed']}/{sparql_counts['cases']}** pass and {sparql_counts['unsupported']} are unsupported.",
+        f"SHACL-SPARQL remains a deliberate non-goal: **{sparql_counts['passed']}/{sparql_counts['cases']}** pass and {sparql_counts['unsupported']} are unsupported.",
+        "Quipu does not advertise SHACL-SPARQL support; the upstream SPARQL validator is incomplete, and support requires the full 22-case manifest gate rather than a partial claim.",
         "This score uses the context-free native validator; write-gate transaction behavior is tested separately.", "",
         f"Pinned W3C Data Shapes revision: `{data['shacl']['suite_revision']}`.",
         "The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).",
