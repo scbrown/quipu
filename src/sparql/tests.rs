@@ -44,6 +44,41 @@ fn numeric_builtins_preserve_types_and_xpath_rounding() {
         );
     }
 }
+
+#[test]
+fn string_builtins_preserve_language_and_use_character_indices() {
+    let store = Store::open_in_memory().unwrap();
+    let result = query(
+        &store,
+        r#"SELECT ?concat ?sub ?len ?upper ?encoded ?before ?after ?replaced WHERE {
+          BIND(CONCAT("Bon"@fr, "jour"@fr) AS ?concat)
+          BIND(SUBSTR("aéb"@fr, 2, 1) AS ?sub)
+          BIND(STRLEN("aéb") AS ?len)
+          BIND(UCASE("été"@fr) AS ?upper)
+          BIND(ENCODE_FOR_URI("a b/é") AS ?encoded)
+          BIND(STRBEFORE("abc"@en, "b") AS ?before)
+          BIND(STRAFTER("abc"@en, "b") AS ?after)
+          BIND(REPLACE("abab", "(a)", "$1-") AS ?replaced)
+        }"#,
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    let lang = |lexical: &str, tag: &str| Value::Lang {
+        lexical: lexical.into(),
+        lang: tag.into(),
+    };
+    assert_eq!(row.get("concat"), Some(&lang("Bonjour", "fr")));
+    assert_eq!(row.get("sub"), Some(&lang("é", "fr")));
+    assert_eq!(row.get("len"), Some(&Value::Int(3)));
+    assert_eq!(row.get("upper"), Some(&lang("ÉTÉ", "fr")));
+    assert_eq!(
+        row.get("encoded"),
+        Some(&Value::Str("a%20b%2F%C3%A9".into()))
+    );
+    assert_eq!(row.get("before"), Some(&lang("a", "en")));
+    assert_eq!(row.get("after"), Some(&lang("c", "en")));
+    assert_eq!(row.get("replaced"), Some(&Value::Str("a-ba-b".into())));
+}
 use crate::rdf::ingest_rdf;
 use oxrdfio::RdfFormat;
 

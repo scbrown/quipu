@@ -290,11 +290,30 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::FunctionCall(Function::LCase, args) => args
             .first()
             .and_then(|e| eval_expr(store, e, row))
-            .map(|v| Value::Str(value_to_string(store, &v).to_lowercase())),
+            .and_then(|v| map_string_literal(v, |s| s.to_lowercase())),
         Expression::FunctionCall(Function::UCase, args) => args
             .first()
             .and_then(|e| eval_expr(store, e, row))
-            .map(|v| Value::Str(value_to_string(store, &v).to_uppercase())),
+            .and_then(|v| map_string_literal(v, |s| s.to_uppercase())),
+        Expression::FunctionCall(Function::Concat, args) => concat(store, args, row),
+        Expression::FunctionCall(Function::SubStr, args) => substring(store, args, row),
+        Expression::FunctionCall(Function::StrLen, args) => {
+            let value = eval_expr(store, args.first()?, row)?;
+            let (lexical, _) = string_literal(value)?;
+            i64::try_from(lexical.chars().count()).ok().map(Value::Int)
+        }
+        Expression::FunctionCall(Function::EncodeForUri, args) => {
+            let value = eval_expr(store, args.first()?, row)?;
+            let (lexical, _) = string_literal(value)?;
+            Some(Value::Str(encode_for_uri(&lexical)))
+        }
+        Expression::FunctionCall(Function::StrBefore, args) => {
+            string_partition(store, args, row, false)
+        }
+        Expression::FunctionCall(Function::StrAfter, args) => {
+            string_partition(store, args, row, true)
+        }
+        Expression::FunctionCall(Function::Replace, args) => replace(store, args, row),
         Expression::FunctionCall(Function::Abs, args) => {
             numeric_unary(store, args, row, i64::checked_abs, f64::abs)
         }
@@ -311,6 +330,117 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         }
         _ => None,
     }
+}
+
+fn string_literal(value: Value) -> Option<(String, Option<String>)> {
+    match value {
+        Value::Str(lexical) => Some((lexical, None)),
+        Value::Lang { lexical, lang } => Some((lexical, Some(lang))),
+        Value::Typed { lexical, datatype } if datatype == namespace::XSD_STRING => {
+            Some((lexical, None))
+        }
+        _ => None,
+    }
+}
+
+fn build_string_literal(lexical: String, lang: Option<String>) -> Value {
+    lang.map_or(Value::Str(lexical.clone()), |lang| Value::Lang {
+        lexical,
+        lang,
+    })
+}
+
+fn map_string_literal(value: Value, f: impl FnOnce(String) -> String) -> Option<Value> {
+    let (lexical, lang) = string_literal(value)?;
+    Some(build_string_literal(f(lexical), lang))
+}
+
+fn concat(store: &Store, args: &[Expression], row: &Bindings) -> Option<Value> {
+    let mut result = String::new();
+    let mut common_lang: Option<Option<String>> = None;
+    for arg in args {
+        let (lexical, lang) = string_literal(eval_expr(store, arg, row)?)?;
+        result.push_str(&lexical);
+        common_lang = Some(match common_lang {
+            None => lang,
+            Some(current) if current == lang => current,
+            Some(_) => None,
+        });
+    }
+    Some(build_string_literal(result, common_lang.flatten()))
+}
+
+fn substring(store: &Store, args: &[Expression], row: &Bindings) -> Option<Value> {
+    let (source, lang) = string_literal(eval_expr(store, args.first()?, row)?)?;
+    let start = eval_expr(store, args.get(1)?, row)?.as_f64()?.round() as i64;
+    let length = if let Some(arg) = args.get(2) {
+        Some(eval_expr(store, arg, row)?.as_f64()?.round() as i64)
+    } else {
+        None
+    };
+    let skip = usize::try_from(start.saturating_sub(1).max(0)).ok()?;
+    let take = length.map_or(usize::MAX, |value| {
+        usize::try_from(value.max(0)).unwrap_or(0)
+    });
+    let lexical = source.chars().skip(skip).take(take).collect();
+    Some(build_string_literal(lexical, lang))
+}
+
+fn string_partition(
+    store: &Store,
+    args: &[Expression],
+    row: &Bindings,
+    after: bool,
+) -> Option<Value> {
+    let (source, lang) = string_literal(eval_expr(store, args.first()?, row)?)?;
+    let (needle, needle_lang) = string_literal(eval_expr(store, args.get(1)?, row)?)?;
+    if needle_lang.is_some() && needle_lang != lang {
+        return None;
+    }
+    let Some(position) = source.find(&needle) else {
+        return Some(Value::Str(String::new()));
+    };
+    let lexical = if after {
+        source[position + needle.len()..].to_string()
+    } else {
+        source[..position].to_string()
+    };
+    Some(build_string_literal(lexical, lang))
+}
+
+fn replace(store: &Store, args: &[Expression], row: &Bindings) -> Option<Value> {
+    let value = eval_expr(store, args.first()?, row)?;
+    let (source, lang) = string_literal(value)?;
+    let (pattern, _) = string_literal(eval_expr(store, args.get(1)?, row)?)?;
+    let (replacement, _) = string_literal(eval_expr(store, args.get(2)?, row)?)?;
+    let flags = if let Some(arg) = args.get(3) {
+        string_literal(eval_expr(store, arg, row)?)?.0
+    } else {
+        String::new()
+    };
+    let regex = build_regex(&pattern, &flags).ok()?;
+    Some(build_string_literal(
+        regex
+            .replace_all(&source, replacement.as_str())
+            .into_owned(),
+        lang,
+    ))
+}
+
+fn encode_for_uri(value: &str) -> String {
+    let mut result = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(char::from(byte));
+            }
+            _ => {
+                use std::fmt::Write;
+                let _ = write!(result, "%{byte:02X}");
+            }
+        }
+    }
+    result
 }
 
 fn numeric_unary(
