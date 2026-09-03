@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "45b88b101abcc1c1cc3aa379c6dcb21b0109c693",
+  "quipu_revision": "88aed0460791ffa99ae8f90bf21f1b2b7a8f783a",
   "quipu_version": "quipu 0.3.27",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -23,8 +23,8 @@
     "query-evaluation": {
       "cases": 168,
       "error": 4,
-      "failed": 64,
-      "passed": 81,
+      "failed": 49,
+      "passed": 96,
       "unsupported": 19
     },
     "protocol": {
@@ -654,8 +654,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/concat01.rq",
       "result": "functions/concat01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -664,8 +664,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/concat02.rq",
       "result": "functions/concat02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -674,8 +674,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/substring01.rq",
       "result": "functions/substring01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -684,8 +684,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/substring02.rq",
       "result": "functions/substring02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -694,8 +694,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/length01.rq",
       "result": "functions/length01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -704,8 +704,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/ucase01.rq",
       "result": "functions/ucase01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -714,8 +714,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/lcase01.rq",
       "result": "functions/lcase01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -724,8 +724,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/encode01.rq",
       "result": "functions/encode01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1044,8 +1044,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/strbefore01.rq",
       "result": "functions/strbefore01a.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1054,8 +1054,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/strbefore02.rq",
       "result": "functions/strbefore02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1064,8 +1064,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/strafter01.rq",
       "result": "functions/strafter01a.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1074,8 +1074,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/strafter02.rq",
       "result": "functions/strafter02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1084,8 +1084,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/replace01.rq",
       "result": "functions/replace01.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1094,8 +1094,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/replace02.rq",
       "result": "functions/replace02.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",
@@ -1104,8 +1104,8 @@
       "manifest": "functions/manifest.ttl",
       "query": "functions/replace03.rq",
       "result": "functions/replace03.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "query-evaluation",

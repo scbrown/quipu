@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu passes **86/86** approved SPARQL 1.1
-> *query-syntax* tests and **81/168** approved
+> *query-syntax* tests and **96/168** approved
 > *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
@@ -21,7 +21,7 @@ You can re-derive every number on this page yourself — the commands are below.
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `45b88b101abcc1c1cc3aa379c6dcb21b0109c693` |
+| Quipu revision (evaluation) | `88aed0460791ffa99ae8f90bf21f1b2b7a8f783a` |
 | Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
 | Quipu version | `quipu 0.3.27` |
 | Store isolation | one temporary SQLite store per executable test |
@@ -36,12 +36,12 @@ carries a named reason further down this page.
 | Class | Passed | Failed | Error | Unsupported | Approved cases |
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
-| query evaluation | 81 | 64 | 4 | 19 | 168 |
+| query evaluation | 96 | 49 | 4 | 19 | 168 |
 | result format | 2 | 1 | 0 | 4 | 7 |
 | protocol | 0 | 0 | 0 | 34 | 34 |
 | update | 0 | 0 | 0 | 37 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **169** | **65** | **4** | **164** | **402** |
+| **all classes** | **184** | **50** | **4** | **164** | **402** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -55,7 +55,7 @@ moves the most per fix.
 
 | Family | Passed | Failed | Error | Unsupported | Cases |
 |---|---:|---:|---:|---:|---:|
-| `functions` | 13 | 42 | 0 | 2 | 57 |
+| `functions` | 28 | 27 | 0 | 2 | 57 |
 | `property-path` | 18 | 2 | 0 | 4 | 24 |
 | `aggregates` | 13 | 9 | 0 | 0 | 22 |
 | `subquery` | 2 | 0 | 4 | 8 | 14 |
@@ -73,31 +73,23 @@ Every test that does not pass is listed here with its W3C identifier, so a
 claim of progress can be checked against a specific case rather than a count.
 
 <details>
-<summary><code>functions</code> — 44 of 57 not passing</summary>
+<summary><code>functions</code> — 29 of 57 not passing</summary>
 
 | Test | Name | Status | Reason |
 |---|---|---|---|
 | `:bnode01` | BNODE(str) | unsupported | `blank-node isomorphism is not implemented` |
 | `:bnode02` | BNODE() | unsupported | `blank-node isomorphism is not implemented` |
 | `:coalesce01` | COALESCE() | failed | `actual result differs from expected multiset` |
-| `:concat01` | CONCAT() | failed | `actual result differs from expected multiset` |
-| `:concat02` | CONCAT() 2 | failed | `actual result differs from expected multiset` |
 | `:day` | DAY() | failed | `actual result differs from expected multiset` |
-| `:encode01` | ENCODE_FOR_URI() | failed | `actual result differs from expected multiset` |
 | `:hours` | HOURS() | failed | `actual result differs from expected multiset` |
 | `:if01` | IF() | failed | `actual result differs from expected multiset` |
 | `:iri01` | IRI()/URI() | failed | `actual result differs from expected multiset` |
-| `:lcase01` | LCASE() | failed | `actual result differs from expected multiset` |
-| `:length01` | STRLEN() | failed | `actual result differs from expected multiset` |
 | `:md5-01` | MD5() | failed | `actual result differs from expected multiset` |
 | `:md5-02` | MD5() over Unicode data | failed | `actual result differs from expected multiset` |
 | `:minutes` | MINUTES() | failed | `actual result differs from expected multiset` |
 | `:month` | MONTH() | failed | `actual result differs from expected multiset` |
 | `:now01` | NOW() | failed | `actual result differs from expected multiset` |
 | `:rand01` | RAND() | failed | `actual result differs from expected multiset` |
-| `:replace01` | REPLACE() | failed | `actual result differs from expected multiset` |
-| `:replace02` | REPLACE() with overlapping pattern | failed | `actual result differs from expected multiset` |
-| `:replace03` | REPLACE() with captured substring | failed | `actual result differs from expected multiset` |
 | `:seconds` | SECONDS() | failed | `actual result differs from expected multiset` |
 | `:sha1-01` | SHA1() | failed | `actual result differs from expected multiset` |
 | `:sha1-02` | SHA1() on Unicode data | failed | `actual result differs from expected multiset` |
@@ -105,20 +97,13 @@ claim of progress can be checked against a specific case rather than a count.
 | `:sha256-02` | SHA256() on Unicode data | failed | `actual result differs from expected multiset` |
 | `:sha512-01` | SHA512() | failed | `actual result differs from expected multiset` |
 | `:sha512-02` | SHA512() on Unicode data | failed | `actual result differs from expected multiset` |
-| `:strafter01a` | STRAFTER() | failed | `actual result differs from expected multiset` |
-| `:strafter02` | STRAFTER() datatyping | failed | `actual result differs from expected multiset` |
-| `:strbefore01a` | STRBEFORE() | failed | `actual result differs from expected multiset` |
-| `:strbefore02` | STRBEFORE() datatyping | failed | `actual result differs from expected multiset` |
 | `:strdt01` | STRDT() | failed | `query error: unsupported FILTER function: LangMatches` |
 | `:strdt02` | STRDT(STR()) | failed | `query error: unsupported FILTER function: LangMatches` |
 | `:strlang01` | STRLANG() | failed | `query error: unsupported FILTER function: LangMatches` |
 | `:strlang02` | STRLANG(STR()) | failed | `query error: unsupported FILTER function: LangMatches` |
 | `:struuid01` | STRUUID() pattern match | failed | `actual result differs from expected multiset` |
-| `:substring01` | SUBSTR() (3-argument) | failed | `actual result differs from expected multiset` |
-| `:substring02` | SUBSTR() (2-argument) | failed | `actual result differs from expected multiset` |
 | `:timezone` | TIMEZONE() | failed | `actual result differs from expected multiset` |
 | `:tz` | TZ() | failed | `actual result differs from expected multiset` |
-| `:ucase01` | UCASE() | failed | `actual result differs from expected multiset` |
 | `:uuid01` | UUID() pattern match | failed | `actual result differs from expected multiset` |
 | `:year` | YEAR() | failed | `actual result differs from expected multiset` |
 
