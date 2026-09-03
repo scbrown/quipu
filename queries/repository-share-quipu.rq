@@ -1,0 +1,34 @@
+PREFIX aegis: <http://aegis.gastown.local/ontology/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+# Public repository knowledge only. Bobbin publishes its replaceable snapshot
+# into ROOT, so graph/group selectors cannot see it. Keep this predicate list
+# aligned with Bobbin's generate_chunk_turtle output: selecting every outgoing
+# edge also pulls private operational literals into a public release artifact.
+CONSTRUCT { ?s ?p ?o }
+WHERE {
+  {
+    ?s ?p ?o .
+    FILTER(
+      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/code/quipu/") ||
+      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/doc/quipu/")
+    )
+    VALUES ?p {
+      rdf:type rdfs:label
+      aegis:filePath aegis:repo aegis:language
+      aegis:inDocument aegis:chunkOrder aegis:nextChunk aegis:mentions
+      aegis:name aegis:definedIn aegis:symbolKind
+      aegis:heading aegis:headingDepth
+    }
+  }
+  UNION
+  {
+    VALUES ?s {
+      aegis:repo_quipu
+      aegis:repo-embedded-knowledge-databases-directive-2026-09-03
+      aegis:aegis-otg3xz.4
+    }
+    ?s ?p ?o .
+  }
+}

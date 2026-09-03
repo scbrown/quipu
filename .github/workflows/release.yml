@@ -354,24 +354,25 @@ jobs:
 
       - name: Build the repository share artifact
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
           BIN="target/${TARGET}/release/quipu"
           TMP="$(mktemp -d)"
-          GRAPH="https://quipu.dev/ontology/repository/quipu"
           SHARE="${TMP}/repository-share"
           PACK="dist/quipu-${TAG}-repository.qpack.tar.gz"
-          cat > "${TMP}/repo.ttl" <<EOF
-          <${GRAPH}> a <https://quipu.dev/ontology/Repository> ;
-            <http://www.w3.org/2000/01/rdf-schema#label> "Quipu repository" ;
-            <https://quipu.dev/ontology/repositorySha> "${GITHUB_SHA}" .
-          EOF
-          "${BIN}" knot "${TMP}/repo.ttl" --db "${TMP}/root.db"
-          "${BIN}" graph import "${TMP}/root.db" --as "${GRAPH}" --db "${TMP}/source.db"
-          "${BIN}" share --graph "${GRAPH}" --no-shapes \
-            --output "${SHARE}" --db "${TMP}/source.db"
+          BOBBIN_TAG="v0.13.0"
+          BOBBIN_ARCHIVE="bobbin-${BOBBIN_TAG}-x86_64-unknown-linux-gnu.tar.gz"
+          gh release download "${BOBBIN_TAG}" --repo scbrown/bobbin \
+            --pattern "${BOBBIN_ARCHIVE}" --dir "${TMP}"
+          tar -C "${TMP}" -xzf "${TMP}/${BOBBIN_ARCHIVE}"
+          BOBBIN_DIR="${TMP}/bobbin-${BOBBIN_TAG}-x86_64-unknown-linux-gnu"
+          export LD_LIBRARY_PATH="${BOBBIN_DIR}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+          scripts/build-repository-share.sh \
+            "${BIN}" "${BOBBIN_DIR}/bobbin" "$GITHUB_WORKSPACE" \
+            "${SHARE}" "$GITHUB_SHA"
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
             --numeric-owner -C "${SHARE}" -czf "${PACK}" .
           "${BIN}" import "${PACK}"

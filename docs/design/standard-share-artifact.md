@@ -7,6 +7,25 @@ share packaged for release, not a SQLite database. SQLite may be constructed as
 an internal cache after verification, but it is never a published interchange
 format. Bobbin indexes remain separate binary artifacts.
 
+## Repository content selection
+
+Repository shares are built from the repository checkout, not from a live
+homelab database. The release job runs Bobbin's normal knowledge-enabled index
+path with `quipu_push_chunks = true` and no remote endpoint, producing the same
+replaceable `bobbin-chunks:{repo}` snapshot in an embedded Quipu store. It then
+loads the repository's shipped shapes and adds the repository, governing
+Directive, and release WorkItem context before sharing.
+
+Bobbin publishes that snapshot into ROOT: its snapshot key is provenance and
+replacement identity, not a named graph or `group_id`. Therefore the Quipu
+release uses the checked-in
+[`queries/repository-share-quipu.rq`](../../queries/repository-share-quipu.rq)
+CONSTRUCT selector. The query explicitly permits Bobbin's structural predicates
+for Quipu code/document IRIs and unions the repository context nodes. It must
+not select every outgoing ROOT fact: other producers enrich the same subjects
+with private operational references, and a public share must neither leak those
+facts nor depend on the homelab store.
+
 ## Wire form and identity
 
 A full share contains `manifest.ttl`, `payload.nq`, and `shapes.ttl`. A release
