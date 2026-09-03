@@ -147,9 +147,17 @@ pub fn eval_pattern_seeded(
         }
 
         GraphPattern::Project { inner, variables } => {
-            let (rows, _) = eval_pattern_seeded(store, inner, ctx, seed)?;
             let mut var_names: Vec<String> =
                 variables.iter().map(|v| v.as_str().to_string()).collect();
+            // A subquery is a projection boundary: outer bindings for variables
+            // it does not project are not visible inside it. Retaining them here
+            // incorrectly correlated a local `?g` with an enclosing GRAPH ?g.
+            let projected_seed = seed
+                .iter()
+                .filter(|(name, _)| var_names.contains(name))
+                .map(|(name, value)| (name.clone(), value.clone()))
+                .collect();
+            let (rows, _) = eval_pattern_seeded(store, inner, ctx, &projected_seed)?;
             // SERVICE provenance is response metadata, not a query variable the
             // remote graph pattern must explicitly project. Preserve it through
             // the outer SELECT projection exactly as native federation does.
@@ -414,6 +422,42 @@ pub fn eval_pattern_seeded(
         // restored when this block returns; nested Join/Union/Filter propagate
         // the scope by threading the cloned ctx.
         GraphPattern::Graph { name, inner } => {
+            if let NamedNodePattern::Variable(variable) = name {
+                let graph_var = variable.as_str().to_string();
+                let bound_graph = seed.get(&graph_var).and_then(|value| match value {
+                    Value::Ref(id) => Some(*id),
+                    _ => None,
+                });
+                let mut rows = Vec::new();
+                let mut vars = Vec::new();
+                for graph in store.list_graphs(None, None)? {
+                    if graph.g == 0
+                        || bound_graph.is_some_and(|bound| bound != graph.g)
+                        || ctx
+                            .named_dataset
+                            .as_ref()
+                            .is_some_and(|visible| !visible.contains(&graph.g))
+                    {
+                        continue;
+                    }
+                    let mut graph_seed = seed.clone();
+                    graph_seed.insert(graph_var.clone(), Value::Ref(graph.g));
+                    let mut graph_ctx = ctx.clone();
+                    graph_ctx.graph = GraphScope::Named(vec![graph.g]);
+                    let (mut graph_rows, graph_vars) =
+                        eval_pattern_seeded(store, inner, &graph_ctx, &graph_seed)?;
+                    rows.append(&mut graph_rows);
+                    for var in graph_vars {
+                        if !vars.contains(&var) {
+                            vars.push(var);
+                        }
+                    }
+                }
+                if !vars.contains(&graph_var) {
+                    vars.push(graph_var);
+                }
+                return Ok((rows, vars));
+            }
             let mut scoped = ctx.clone();
             scoped.graph = match name {
                 // Unknown graph IRI -> an id that matches nothing, never a

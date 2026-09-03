@@ -328,6 +328,58 @@ def reorder_rows(
     return [tuple(row[positions[variable]] for variable in expected_variables) for row in rows]
 
 
+def rows_equal_with_blank_nodes(
+    actual: list[tuple[str, ...]], expected: list[tuple[str, ...]]
+) -> bool:
+    """Compare unordered result rows modulo one global blank-node renaming."""
+    if len(actual) != len(expected):
+        return False
+
+    def match(
+        remaining: list[tuple[str, ...]],
+        index: int,
+        forward: dict[str, str],
+        reverse: dict[str, str],
+    ) -> bool:
+        if index == len(actual):
+            return True
+        row = actual[index]
+        for candidate_index, candidate in enumerate(remaining):
+            if len(row) != len(candidate):
+                continue
+            next_forward = forward.copy()
+            next_reverse = reverse.copy()
+            compatible = True
+            for observed, wanted in zip(row, candidate, strict=True):
+                observed_blank = observed.startswith("_:")
+                wanted_blank = wanted.startswith("_:")
+                if observed_blank != wanted_blank:
+                    compatible = False
+                    break
+                if not observed_blank:
+                    if observed != wanted:
+                        compatible = False
+                        break
+                    continue
+                if next_forward.get(observed, wanted) != wanted or next_reverse.get(
+                    wanted, observed
+                ) != observed:
+                    compatible = False
+                    break
+                next_forward[observed] = wanted
+                next_reverse[wanted] = observed
+            if compatible and match(
+                remaining[:candidate_index] + remaining[candidate_index + 1 :],
+                index + 1,
+                next_forward,
+                next_reverse,
+            ):
+                return True
+        return False
+
+    return match(expected, 0, {}, {})
+
+
 def unsupported_reason(case: Case) -> str | None:
     if case.test_class == "protocol":
         return "W3C HTTP request-sequence executor is not implemented"
@@ -409,10 +461,12 @@ def run_case(case: Case, quipu: Path) -> dict[str, object]:
         else:
             actual_vars, actual_rows = actual
             expected_vars, expected_rows = expected
-            if any(value.startswith("_:") for row in expected_rows for value in row):
-                return {**base, "status": "unsupported", "reason": "blank-node isomorphism is not implemented"}
             aligned_rows = reorder_rows(actual_vars, actual_rows, expected_vars)
-            passed = aligned_rows is not None and Counter(aligned_rows) == Counter(expected_rows)
+            passed = aligned_rows is not None and (
+                rows_equal_with_blank_nodes(aligned_rows, expected_rows)
+                if any(value.startswith("_:") for row in expected_rows for value in row)
+                else Counter(aligned_rows) == Counter(expected_rows)
+            )
         return {
             **base,
             "status": "passed" if passed else "failed",

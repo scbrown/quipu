@@ -19,6 +19,30 @@ fn relative_iris_parse_against_the_default_query_base() {
 }
 
 #[test]
+fn bnode_builtin_is_stable_per_solution_and_fresh_without_an_argument() {
+    let store = Store::open_in_memory().unwrap();
+    let result = query(
+        &store,
+        r#"SELECT ?same1 ?same2 ?fresh1 ?fresh2 WHERE {
+            BIND(BNODE("key") AS ?same1)
+            BIND(BNODE("key") AS ?same2)
+            BIND(BNODE() AS ?fresh1)
+            BIND(BNODE() AS ?fresh2)
+        }"#,
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    assert_eq!(row.get("same1"), row.get("same2"));
+    assert_ne!(row.get("fresh1"), row.get("fresh2"));
+    for name in ["same1", "fresh1", "fresh2"] {
+        assert!(matches!(
+            row.get(name),
+            Some(Value::Str(value)) if value.starts_with("_:quipu-query-")
+        ));
+    }
+}
+
+#[test]
 fn numeric_builtins_preserve_types_and_xpath_rounding() {
     let store = Store::open_in_memory().unwrap();
     let result = query(
@@ -1929,15 +1953,20 @@ fn property_path_in_named_graph_stays_inside_that_graph() {
 }
 
 #[test]
-fn property_path_under_graph_var_still_fails_loud() {
-    let (store, _) = test_store_named_graph();
-    let err = query(
+fn property_path_under_graph_var_preserves_graph_binding() {
+    let (store, g_iri) = test_store_named_graph();
+    let result = query(
         &store,
         "SELECT ?g ?o WHERE { GRAPH ?g { <http://example.org/x> <http://example.org/p>+ ?o } }",
     )
-    .unwrap_err()
-    .to_string();
-    assert!(err.contains("named-graphs.md §6.2"), "{err}");
+    .unwrap();
+    assert!(!result.rows().is_empty());
+    let graphs: Vec<_> = result
+        .rows()
+        .iter()
+        .map(|row| value_to_iri(&store, row.get("g").unwrap()))
+        .collect();
+    assert!(graphs.iter().all(|graph| graph == &g_iri), "{graphs:?}");
 }
 
 #[test]

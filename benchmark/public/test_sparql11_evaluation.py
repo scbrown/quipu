@@ -64,6 +64,16 @@ class EvaluationManifestTests(unittest.TestCase):
         )
         self.assertIsNone(MODULE.reorder_rows(["s"], [("subject",)], ["s", "o"]))
 
+    def test_blank_node_results_compare_by_global_bijection(self):
+        actual = [("x", "_:generated-a", "_:generated-a"), ("y", "_:generated-b", "_:generated-c")]
+        expected = [("y", "_:e2", "_:e3"), ("x", "_:e1", "_:e1")]
+        self.assertTrue(MODULE.rows_equal_with_blank_nodes(actual, expected))
+        self.assertFalse(
+            MODULE.rows_equal_with_blank_nodes(
+                [("x", "_:same", "_:same")], [("x", "_:left", "_:right")]
+            )
+        )
+
     def test_class_specific_unsupported_reasons_are_explicit(self):
         case = MODULE.Case("update", pathlib.Path("m"), ":u", "u", "UpdateEvaluationTest", None, (), (), None)
         self.assertIn("SPARQL Update", MODULE.unsupported_reason(case))

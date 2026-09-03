@@ -3,6 +3,7 @@
 use oxrdf::{Literal, NamedNode};
 use spargebra::algebra::{Expression, Function};
 use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use super::TemporalContext;
@@ -181,14 +182,10 @@ fn eval_bool_function(
                 Some(Value::Ref(_))
             )
         }
-        // A `Value` has no blank-node variant: blank nodes are interned as
-        // `Ref`s to an IRI carrying a "_:" prefix, which this cannot see from
-        // here. So this is false for every possible value rather than merely
-        // unimplemented. It was previously aliased to IsIri through a shared
-        // match arm, which made FILTER(isBlank(?s)) match every IRI in the store
-        // (aegis-t2jh — still open; aegis-fmyi's Lang/Typed work does not
-        // resolve it).
-        Function::IsBlank => false,
+        Function::IsBlank => matches!(
+            args.first().and_then(|e| eval_expr(store, e, row)),
+            Some(Value::Str(value)) if value.starts_with("_:quipu-query-")
+        ),
         // Lang and Typed are literals too. Listing the non-literal variants and
         // negating keeps this correct the next time a variant is added, instead
         // of silently answering "false" for it.
@@ -392,6 +389,28 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             store.intern(&iri).ok().map(Value::Ref)
         }
         Expression::FunctionCall(Function::StrUuid, _) => Some(Value::Str(generated_uuid())),
+        Expression::FunctionCall(Function::BNode, args) => {
+            let suffix = if let Some(argument) = args.first() {
+                let lexical = value_to_string(store, &eval_expr(store, argument, row)?);
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                lexical.hash(&mut hasher);
+                let mut solution: Vec<_> = row
+                    .iter()
+                    .filter(|(_, value)| {
+                        !matches!(value, Value::Str(text) if text.starts_with("_:quipu-query-"))
+                    })
+                    .collect();
+                solution.sort_by_key(|(name, _)| *name);
+                for (name, value) in solution {
+                    name.hash(&mut hasher);
+                    format!("{value:?}").hash(&mut hasher);
+                }
+                format!("named-{:016x}", hasher.finish())
+            } else {
+                format!("fresh-{:016x}", next_nonce())
+            };
+            Some(Value::Str(format!("_:quipu-query-{suffix}")))
+        }
         Expression::FunctionCall(Function::Iri, args) => {
             let lexical = value_to_string(store, &eval_expr(store, args.first()?, row)?);
             let iri = resolve_query_iri(&lexical)?;

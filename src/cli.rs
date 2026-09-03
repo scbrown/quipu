@@ -557,6 +557,7 @@ pub fn cmd_reason(args: &[String], db_path: &str) {
 pub fn format_value(store: &quipu::Store, val: &quipu::Value) -> String {
     match val {
         quipu::Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
+        quipu::Value::Str(s) if s.starts_with("_:quipu-query-") => s.clone(),
         quipu::Value::Str(s) => format!("\"{s}\""),
         // Turtle-ish notation, so the tag/datatype is visible as a term
         // qualifier rather than pretending to be part of the string.
