@@ -261,6 +261,28 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
         Expression::NamedNode(n) => store.lookup(n.as_str()).ok().flatten().map(Value::Ref),
         Expression::Literal(lit) => Some(literal_to_value(lit)),
+        Expression::Equal(_, _)
+        | Expression::SameTerm(_, _)
+        | Expression::Greater(_, _)
+        | Expression::GreaterOrEqual(_, _)
+        | Expression::Less(_, _)
+        | Expression::LessOrEqual(_, _)
+        | Expression::And(_, _)
+        | Expression::Or(_, _)
+        | Expression::Not(_)
+        | Expression::Bound(_)
+        | Expression::FunctionCall(
+            Function::LangMatches
+            | Function::Contains
+            | Function::StrStarts
+            | Function::StrEnds
+            | Function::IsIri
+            | Function::IsBlank
+            | Function::IsLiteral
+            | Function::IsNumeric
+            | Function::Regex,
+            _,
+        ) => eval_expression_boolean(store, expr, row).map(Value::Bool),
         Expression::Add(left, right) => {
             numeric_binary(store, left, right, row, i64::checked_add, |a, b| a + b)
         }
