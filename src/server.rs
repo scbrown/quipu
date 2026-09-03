@@ -49,7 +49,7 @@ mod tools;
 use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 #[cfg(test)]
 use base::query;
-use base::{health, metrics_handler, print_usage, query_get, query_post, stats, version};
+use base::{health, metrics_handler, print_usage, query_get, query_post_http, stats, version};
 use entity::{
     changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
     entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
@@ -417,7 +417,7 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/.well-known/void", get(service_description::service_description))
         .route("/metrics", get(metrics_handler))
-        .route("/query", get(query_get).post(query_post))
+        .route("/query", get(query_get).post(query_post_http))
         .route("/export", post(export))
         .merge(graph_store::routes())
         .route("/share", post(share_payload))

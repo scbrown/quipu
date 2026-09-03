@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "ca3d3e9c28057f91d9b145b3939118caf2f8a3de",
+  "quipu_revision": "7ef18ea0dbdbc54fb4a9e452213ce1fb23e6c945",
   "quipu_version": "quipu 0.3.29",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
@@ -26,7 +26,8 @@
     },
     "protocol": {
       "cases": 34,
-      "unsupported": 34
+      "passed": 22,
+      "unsupported": 12
     },
     "update": {
       "cases": 37,
@@ -1729,8 +1730,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1739,8 +1739,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1749,8 +1748,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1759,8 +1757,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1769,8 +1766,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1779,8 +1775,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1789,8 +1784,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1799,8 +1793,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1809,8 +1802,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1819,8 +1811,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1829,8 +1820,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1839,8 +1829,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1850,7 +1839,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -1860,7 +1849,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -1870,7 +1859,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -1880,7 +1869,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -1890,7 +1879,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -1900,7 +1889,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -1910,7 +1899,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -1919,8 +1908,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1929,8 +1917,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1939,8 +1926,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1949,8 +1935,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1959,8 +1944,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1969,8 +1953,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1979,8 +1962,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -1989,8 +1971,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -2000,7 +1981,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -2010,7 +1991,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -2019,8 +2000,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -2029,8 +2009,7 @@
       "manifest": "protocol/manifest.ttl",
       "query": null,
       "result": null,
-      "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "status": "passed"
     },
     {
       "class": "protocol",
@@ -2040,7 +2019,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -2050,7 +2029,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "protocol",
@@ -2060,7 +2039,7 @@
       "query": null,
       "result": null,
       "status": "unsupported",
-      "reason": "W3C HTTP request-sequence executor is not implemented"
+      "reason": "Quipu exposes no SPARQL Update execution surface"
     },
     {
       "class": "update",

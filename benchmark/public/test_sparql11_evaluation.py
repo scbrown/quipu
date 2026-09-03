@@ -48,6 +48,21 @@ class EvaluationManifestTests(unittest.TestCase):
             cases = MODULE.parse_manifest("result-format", manifest)
             self.assertEqual([(case.identifier, case.kind) for case in cases], [(":csv", "CSVResultFormatTest")])
 
+    def test_parse_protocol_preserves_request_order_and_expectations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = pathlib.Path(directory) / "manifest.ttl"
+            manifest.write_text('''
+:p rdf:type mf:ProtocolTest ; mf:name "Protocol" ; dawgt:approval dawgt:Approved ;
+ mf:action [ ht:requests ([ a ht:Request ; ht:absolutePath "/sparql/?query=ASK%20%7B%7D" ;
+  ht:methodName "GET" ; ht:resp [ mf:expectedBoolean true ; mf:expectedFormat "boolean" ;
+  mf:expectedStatus hts:StatusCode2xx ] ] [ a ht:Request ; ht:absolutePath "/sparql/" ;
+  ht:methodName "PUT" ; ht:resp [ mf:expectedStatus hts:StatusCode4xx ] ]) ] .
+''')
+            case = MODULE.parse_manifest("protocol", manifest)[0]
+            self.assertEqual([request.method for request in case.protocol_requests], ["GET", "PUT"])
+            self.assertTrue(case.protocol_requests[0].expected_boolean)
+            self.assertEqual(case.protocol_requests[1].status_family, 4)
+
     def test_actual_result_parses_cli_table_and_boolean(self):
         self.assertEqual(MODULE.actual_result("true\n"), True)
         self.assertEqual(

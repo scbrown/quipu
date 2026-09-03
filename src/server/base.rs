@@ -276,10 +276,11 @@ pub(crate) async fn query_get(
     if uri.to_string().len() > MAX_QUERY_URI_BYTES {
         return Ok((StatusCode::URI_TOO_LONG, "query URI exceeds 8192 bytes").into_response());
     }
+    let query = protocol_dataset_query(&params.query, &uri)?;
     query_core(
         store,
         headers,
-        json!({"query": params.query, "verbose": query_flag(params.verbose.as_deref()), "_sparql_protocol": true}),
+        json!({"query": query, "verbose": query_flag(params.verbose.as_deref()), "_sparql_protocol": true}),
     )
     .await
 }
@@ -289,9 +290,28 @@ fn query_flag(value: Option<&str>) -> bool {
 }
 
 /// SPARQL 1.1 Query Protocol POST plus the legacy JSON request form.
+pub(crate) async fn query_post_http(
+    State(store): State<SharedStore>,
+    headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
+    body: Bytes,
+) -> Result<axum::response::Response, AppError> {
+    query_post_at(store, headers, uri, body).await
+}
+
+#[cfg(test)]
 pub(crate) async fn query_post(
     State(store): State<SharedStore>,
     headers: HeaderMap,
+    body: Bytes,
+) -> Result<axum::response::Response, AppError> {
+    query_post_at(store, headers, "/query".parse().unwrap(), body).await
+}
+
+async fn query_post_at(
+    store: SharedStore,
+    headers: HeaderMap,
+    uri: axum::http::Uri,
     body: Bytes,
 ) -> Result<axum::response::Response, AppError> {
     if body.len() > MAX_SPARQL_QUERY_BYTES {
@@ -307,7 +327,7 @@ pub(crate) async fn query_post(
         .and_then(|value| value.split(';').next())
         .map_or("", str::trim)
         .to_ascii_lowercase();
-    let input = match content_type.as_str() {
+    let mut input = match content_type.as_str() {
         "application/json" => serde_json::from_slice(&body).map_err(|e| {
             AppError::from(quipu::Error::InvalidValue(format!(
                 "invalid JSON query request: {e}"
@@ -344,7 +364,59 @@ pub(crate) async fn query_post(
                 .into_response());
         }
     };
+    if input
+        .get("_sparql_protocol")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false)
+    {
+        let query = input.get("query").and_then(JsonValue::as_str).unwrap_or("");
+        input["query"] = json!(protocol_dataset_query(query, &uri)?);
+    }
     query_core(store, headers, input).await
+}
+
+fn protocol_dataset_query(query: &str, uri: &axum::http::Uri) -> Result<String, AppError> {
+    let pairs = uri
+        .query()
+        .map(|query| url::form_urlencoded::parse(query.as_bytes()))
+        .into_iter()
+        .flatten();
+    let mut clauses = String::new();
+    for (name, value) in pairs {
+        match name.as_ref() {
+            "default-graph-uri" => clauses.push_str(&format!(" FROM <{value}>")),
+            "named-graph-uri" => clauses.push_str(&format!(" FROM NAMED <{value}>")),
+            _ => {}
+        }
+    }
+    if clauses.is_empty() {
+        return Ok(query.to_string());
+    }
+    let upper = query.to_ascii_uppercase();
+    let position = if upper.trim_start().starts_with("CONSTRUCT") {
+        upper.find("WHERE").ok_or_else(|| {
+            AppError::from(quipu::Error::InvalidValue(
+                "SPARQL CONSTRUCT dataset requires WHERE".into(),
+            ))
+        })?
+    } else if upper.trim_start().starts_with("DESCRIBE") {
+        upper.find("WHERE").unwrap_or(query.len())
+    } else {
+        upper
+            .find("WHERE")
+            .or_else(|| query.find('{'))
+            .ok_or_else(|| {
+                AppError::from(quipu::Error::InvalidValue(
+                    "SPARQL protocol dataset requires a query graph pattern".into(),
+                ))
+            })?
+    };
+    Ok(format!(
+        "{}{} {}",
+        &query[..position],
+        clauses,
+        &query[position..]
+    ))
 }
 
 /// Direct legacy JSON entry point retained for unit callers.
