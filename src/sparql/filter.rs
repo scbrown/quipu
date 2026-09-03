@@ -157,6 +157,10 @@ fn eval_bool_function(
             _ => false,
         },
         Function::Regex => return eval_regex(store, args, row),
+        Function::LangMatches => match (str_arg(0), str_arg(1)) {
+            (Some(tag), Some(range)) => lang_matches(&tag, &range),
+            _ => false,
+        },
         Function::IsIri => {
             matches!(
                 args.first().and_then(|e| eval_expr(store, e, row)),
@@ -287,6 +291,35 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             .first()
             .and_then(|e| eval_expr(store, e, row))
             .map(|v| Value::Str(value_to_string(store, &v))),
+        Expression::FunctionCall(Function::Lang, args) => {
+            match eval_expr(store, args.first()?, row)? {
+                Value::Lang { lang, .. } => Some(Value::Str(lang)),
+                Value::Str(_) | Value::Typed { .. } => Some(Value::Str(String::new())),
+                _ => None,
+            }
+        }
+        Expression::FunctionCall(Function::StrLang, args) => {
+            let lexical = simple_string_literal(eval_expr(store, args.first()?, row)?)?;
+            let (lang, _) = string_literal(eval_expr(store, args.get(1)?, row)?)?;
+            Some(Value::Lang { lexical, lang })
+        }
+        Expression::FunctionCall(Function::StrDt, args) => {
+            let lexical = simple_string_literal(eval_expr(store, args.first()?, row)?)?;
+            let datatype = match args.get(1)? {
+                Expression::NamedNode(datatype) => datatype.as_str().to_string(),
+                other => {
+                    let Value::Ref(datatype) = eval_expr(store, other, row)? else {
+                        return None;
+                    };
+                    store.resolve(datatype).ok()?
+                }
+            };
+            if datatype == namespace::XSD_STRING {
+                Some(Value::Str(lexical))
+            } else {
+                Some(Value::Typed { lexical, datatype })
+            }
+        }
         Expression::FunctionCall(Function::LCase, args) => args
             .first()
             .and_then(|e| eval_expr(store, e, row))
@@ -345,6 +378,26 @@ fn string_literal(value: Value) -> Option<(String, Option<String>)> {
         }
         _ => None,
     }
+}
+
+fn simple_string_literal(value: Value) -> Option<String> {
+    match value {
+        Value::Str(lexical) => Some(lexical),
+        Value::Typed { lexical, datatype } if datatype == namespace::XSD_STRING => Some(lexical),
+        _ => None,
+    }
+}
+
+fn lang_matches(tag: &str, range: &str) -> bool {
+    if range == "*" {
+        return !tag.is_empty();
+    }
+    let tag = tag.to_ascii_lowercase();
+    let range = range.to_ascii_lowercase();
+    tag == range
+        || tag
+            .strip_prefix(&range)
+            .is_some_and(|rest| rest.starts_with('-'))
 }
 
 fn build_string_literal(lexical: String, lang: Option<String>) -> Value {

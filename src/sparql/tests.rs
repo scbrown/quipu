@@ -112,6 +112,54 @@ fn hash_builtins_digest_utf8_lexical_bytes() {
     );
     assert_eq!(row.get("sha512"), Some(&Value::Str("9e2ad28633f24451bd4f3c1cb20586a21a44c3aeedbdc01b9cc8fa72917ea7bd689c82b8bf1fef89b911cf8cc46fa2c1ccc10087b2094fd4d3350ecd88526a2c".into())));
 }
+
+#[test]
+fn language_and_datatype_constructors_round_trip() {
+    let store = Store::open_in_memory().unwrap();
+    let result = query(
+        &store,
+        r#"PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        SELECT ?tagged ?typed WHERE {
+          BIND(STRLANG("hello", "en-US") AS ?tagged)
+          BIND(STRDT("42", xsd:integer) AS ?typed)
+          FILTER(LANGMATCHES(LANG(?tagged), "en"))
+        }"#,
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    assert_eq!(
+        row.get("tagged"),
+        Some(&Value::Lang {
+            lexical: "hello".into(),
+            lang: "en-US".into(),
+        })
+    );
+    assert_eq!(
+        row.get("typed"),
+        Some(&Value::Typed {
+            lexical: "42".into(),
+            datatype: crate::namespace::XSD_INTEGER.into(),
+        })
+    );
+
+    let result = query(
+        &store,
+        r#"PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+        SELECT ?bad_lang ?bad_dt ?good_lang ?good_dt WHERE {
+          BIND("hello"@en AS ?source)
+          BIND(STRLANG(?source, "en-US") AS ?bad_lang)
+          BIND(STRDT(?source, xsd:string) AS ?bad_dt)
+          BIND(STRLANG(STR(?source), "en-US") AS ?good_lang)
+          BIND(STRDT(STR(?source), xsd:string) AS ?good_dt)
+        }"#,
+    )
+    .unwrap();
+    let row = &result.rows()[0];
+    assert!(!row.contains_key("bad_lang"));
+    assert!(!row.contains_key("bad_dt"));
+    assert!(row.contains_key("good_lang"));
+    assert_eq!(row.get("good_dt"), Some(&Value::Str("hello".into())));
+}
 use crate::rdf::ingest_rdf;
 use oxrdfio::RdfFormat;
 
