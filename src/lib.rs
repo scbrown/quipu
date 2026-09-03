@@ -37,6 +37,8 @@ pub mod owl;
 #[cfg(all(feature = "owl", feature = "reactive-reasoner"))]
 mod owl_reactive;
 pub mod pack;
+#[cfg(not(target_arch = "wasm32"))]
+mod pack_load;
 mod pack_turtle;
 pub mod path;
 pub mod proposal;
