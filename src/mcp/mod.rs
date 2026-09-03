@@ -419,6 +419,24 @@ pub fn tool_query_with_federation(
     // failure (see `add_labels`).
     let labeled =
         query_context(store, input).and_then(|(q, ctx)| sparql::dataset_labels_for(store, q, &ctx));
+    let verbose = input
+        .get("verbose")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    let prefixes = (!verbose)
+        .then(|| crate::compact::PrefixMap::from_store(store))
+        .transpose()?;
+    let render_value = |value: &crate::types::Value| {
+        prefixes.as_ref().map_or_else(
+            || value_to_json(store, value),
+            |map| value_to_json_with_prefixes(store, value, map),
+        )
+    };
+    let compact_iri = |iri: &str| {
+        prefixes
+            .as_ref()
+            .map_or_else(|| iri.to_string(), |map| map.compact(iri))
+    };
 
     match result {
         QueryResult::Select { variables, rows } => {
@@ -427,7 +445,7 @@ pub fn tool_query_with_federation(
                 .map(|row| {
                     let obj: serde_json::Map<String, JsonValue> = row
                         .iter()
-                        .map(|(k, v)| (k.clone(), value_to_json(store, v)))
+                        .map(|(k, v)| (k.clone(), render_value(v)))
                         .collect();
                     JsonValue::Object(obj)
                 })
@@ -460,9 +478,9 @@ pub fn tool_query_with_federation(
                 .iter()
                 .map(|t| {
                     serde_json::json!({
-                        "subject": t.subject,
-                        "predicate": t.predicate,
-                        "object": value_to_json(store, &t.object)
+                        "subject": compact_iri(&t.subject),
+                        "predicate": compact_iri(&t.predicate),
+                        "object": render_value(&t.object)
                     })
                 })
                 .collect();
@@ -541,4 +559,4 @@ mod definitions;
 // The Value <-> JSON converters live in `value` (size ratchet split); the
 // public path stays `mcp::value_to_json`.
 use value::json_to_value;
-pub use value::value_to_json;
+pub use value::{value_to_json, value_to_json_compact, value_to_json_with_prefixes};

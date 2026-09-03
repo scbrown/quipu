@@ -44,6 +44,10 @@ pub enum ResultFormat {
     SparqlJson,
     /// `application/sparql-results+xml` — SELECT / ASK.
     SparqlXml,
+    /// `text/csv` — SELECT / ASK.
+    Csv,
+    /// `text/tab-separated-values` — SELECT / ASK.
+    Tsv,
     /// `text/turtle` — CONSTRUCT / DESCRIBE.
     Turtle,
     /// `application/n-triples` — CONSTRUCT / DESCRIBE.
@@ -54,7 +58,7 @@ pub enum ResultFormat {
 ///
 /// This registry sits beside [`negotiate`], so metadata and executable
 /// content negotiation share one source of truth.
-pub const SUPPORTED_RESULT_FORMATS: [(&str, &str); 4] = [
+pub const SUPPORTED_RESULT_FORMATS: [(&str, &str); 6] = [
     (
         "application/sparql-results+json",
         "http://www.w3.org/ns/formats/SPARQL_Results_JSON",
@@ -62,6 +66,14 @@ pub const SUPPORTED_RESULT_FORMATS: [(&str, &str); 4] = [
     (
         "application/sparql-results+xml",
         "http://www.w3.org/ns/formats/SPARQL_Results_XML",
+    ),
+    (
+        "text/csv",
+        "http://www.w3.org/ns/formats/SPARQL_Results_CSV",
+    ),
+    (
+        "text/tab-separated-values",
+        "http://www.w3.org/ns/formats/SPARQL_Results_TSV",
     ),
     ("text/turtle", "http://www.w3.org/ns/formats/Turtle"),
     (
@@ -88,6 +100,10 @@ pub fn negotiate(accept: &str) -> Option<ResultFormat> {
         Some(ResultFormat::SparqlJson)
     } else if a.contains("application/sparql-results+xml") {
         Some(ResultFormat::SparqlXml)
+    } else if a.contains("text/tab-separated-values") {
+        Some(ResultFormat::Tsv)
+    } else if a.contains("text/csv") {
+        Some(ResultFormat::Csv)
     } else if a.contains("text/turtle") {
         Some(ResultFormat::Turtle)
     } else if a.contains("application/n-triples") {
@@ -116,7 +132,10 @@ pub fn serialize(
     match (result, fmt) {
         (
             QueryResult::Select { variables, rows },
-            ResultFormat::SparqlJson | ResultFormat::SparqlXml,
+            ResultFormat::SparqlJson
+            | ResultFormat::SparqlXml
+            | ResultFormat::Csv
+            | ResultFormat::Tsv,
         ) => {
             let vars: Vec<Variable> = variables
                 .iter()
@@ -143,7 +162,13 @@ pub fn serialize(
                 .map_err(|e| Error::Serialization(format!("W3C results finish: {e}")))?;
             Ok(Some((content_type(fmt), body)))
         }
-        (QueryResult::Ask(value), ResultFormat::SparqlJson | ResultFormat::SparqlXml) => {
+        (
+            QueryResult::Ask(value),
+            ResultFormat::SparqlJson
+            | ResultFormat::SparqlXml
+            | ResultFormat::Csv
+            | ResultFormat::Tsv,
+        ) => {
             let body = QueryResultsSerializer::from_format(sparql_format(fmt))
                 .serialize_boolean_to_writer(Vec::new(), *value)
                 .map_err(|e| Error::Serialization(format!("W3C ASK: {e}")))?;
@@ -173,6 +198,8 @@ pub fn serialize(
 fn sparql_format(fmt: ResultFormat) -> QueryResultsFormat {
     match fmt {
         ResultFormat::SparqlXml => QueryResultsFormat::Xml,
+        ResultFormat::Csv => QueryResultsFormat::Csv,
+        ResultFormat::Tsv => QueryResultsFormat::Tsv,
         _ => QueryResultsFormat::Json,
     }
 }
@@ -181,6 +208,8 @@ fn content_type(fmt: ResultFormat) -> &'static str {
     match fmt {
         ResultFormat::SparqlJson => "application/sparql-results+json",
         ResultFormat::SparqlXml => "application/sparql-results+xml",
+        ResultFormat::Csv => "text/csv; charset=utf-8",
+        ResultFormat::Tsv => "text/tab-separated-values; charset=utf-8",
         ResultFormat::Turtle => "text/turtle",
         ResultFormat::NTriples => "application/n-triples",
     }
@@ -265,6 +294,11 @@ mod tests {
             Some(ResultFormat::SparqlXml)
         );
         assert_eq!(negotiate("text/turtle"), Some(ResultFormat::Turtle));
+        assert_eq!(negotiate("text/csv"), Some(ResultFormat::Csv));
+        assert_eq!(
+            negotiate("text/tab-separated-values"),
+            Some(ResultFormat::Tsv)
+        );
         assert_eq!(
             negotiate("application/n-triples"),
             Some(ResultFormat::NTriples)
@@ -288,5 +322,31 @@ mod tests {
         assert_eq!(fmt_double(f64::INFINITY), "INF");
         assert_eq!(fmt_double(f64::NEG_INFINITY), "-INF");
         assert_eq!(fmt_double(f64::NAN), "NaN");
+    }
+
+    #[test]
+    fn csv_and_tsv_match_standard_headers_and_term_spelling() {
+        let store = Store::open_in_memory().unwrap();
+        let id = store.intern("http://example.org/alice").unwrap();
+        let result = QueryResult::Select {
+            variables: vec!["s".into()],
+            rows: vec![[("s".into(), Value::Ref(id))].into_iter().collect()],
+        };
+        let (csv_type, csv) = serialize(&store, &result, ResultFormat::Csv)
+            .unwrap()
+            .unwrap();
+        let (tsv_type, tsv) = serialize(&store, &result, ResultFormat::Tsv)
+            .unwrap()
+            .unwrap();
+        assert_eq!(csv_type, "text/csv; charset=utf-8");
+        assert_eq!(
+            String::from_utf8(csv).unwrap(),
+            "s\r\nhttp://example.org/alice\r\n"
+        );
+        assert_eq!(tsv_type, "text/tab-separated-values; charset=utf-8");
+        assert_eq!(
+            String::from_utf8(tsv).unwrap(),
+            "?s\n<http://example.org/alice>\n"
+        );
     }
 }

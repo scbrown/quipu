@@ -57,10 +57,34 @@ pub(super) fn json_to_value(store: &Store, v: &JsonValue) -> Result<Value> {
 }
 
 pub fn value_to_json(store: &Store, val: &Value) -> JsonValue {
+    value_to_json_mode(store, val, None)
+}
+
+/// Render an MCP value, compacting referenced IRIs and datatype IRIs by default.
+pub fn value_to_json_compact(store: &Store, val: &Value) -> JsonValue {
+    let prefixes = crate::compact::PrefixMap::from_store(store).ok();
+    value_to_json_mode(store, val, prefixes.as_ref())
+}
+
+/// Render a value using a prefix table already loaded for the whole response.
+pub fn value_to_json_with_prefixes(
+    store: &Store,
+    val: &Value,
+    prefixes: &crate::compact::PrefixMap,
+) -> JsonValue {
+    value_to_json_mode(store, val, Some(prefixes))
+}
+
+fn value_to_json_mode(
+    store: &Store,
+    val: &Value,
+    prefixes: Option<&crate::compact::PrefixMap>,
+) -> JsonValue {
+    let compact = |iri: &str| prefixes.map_or_else(|| iri.to_string(), |map| map.compact(iri));
     match val {
         Value::Ref(id) => {
             let iri = store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}"));
-            JsonValue::String(iri)
+            JsonValue::String(compact(&iri))
         }
         Value::Str(s) => JsonValue::String(s.clone()),
         // Lang/Typed serialize as objects so the caller gets the CORRECT lexical
@@ -69,7 +93,7 @@ pub fn value_to_json(store: &Store, val: &Value) -> JsonValue {
         // silently drops the tag is the same loss one step later.
         Value::Lang { lexical, lang } => serde_json::json!({"value": lexical, "lang": lang}),
         Value::Typed { lexical, datatype } => {
-            serde_json::json!({"value": lexical, "datatype": datatype})
+            serde_json::json!({"value": lexical, "datatype": compact(datatype)})
         }
         Value::Int(n) => serde_json::json!(n),
         Value::Float(f) => serde_json::json!(f),

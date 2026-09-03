@@ -33,7 +33,10 @@ async fn query_form_entity_dereferences_json_ld_and_html() {
     );
     let json_response = entity_query_conneg(
         State(shared.clone()),
-        axum::extract::Query(EntityParams { iri: iri.into() }),
+        axum::extract::Query(EntityParams {
+            iri: iri.into(),
+            expanded: None,
+        }),
         json_headers,
     )
     .await
@@ -51,7 +54,10 @@ async fn query_form_entity_dereferences_json_ld_and_html() {
 
     let html_response = entity_query_conneg(
         State(shared),
-        axum::extract::Query(EntityParams { iri: iri.into() }),
+        axum::extract::Query(EntityParams {
+            iri: iri.into(),
+            expanded: None,
+        }),
         axum::http::HeaderMap::new(),
     )
     .await
@@ -182,6 +188,7 @@ async fn sparql_protocol_get_negotiates_select_results() {
         ),
         Query(QueryParams {
             query: "SELECT ?s WHERE { ?s ?p ?o }".into(),
+            verbose: None,
         }),
     )
     .await
@@ -229,6 +236,33 @@ async fn sparql_protocol_post_supports_ask_and_graph_negotiation() {
 }
 
 #[tokio::test]
+async fn sparql_protocol_negotiates_csv_and_tsv() {
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    for (accept, expected) in [
+        ("text/csv", "text/csv; charset=utf-8"),
+        (
+            "text/tab-separated-values",
+            "text/tab-separated-values; charset=utf-8",
+        ),
+    ] {
+        let response = query_post(
+            State(shared.clone()),
+            query_headers("application/sparql-query", accept),
+            Bytes::from_static(b"SELECT ?s WHERE { ?s ?p ?o }"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            response.headers()[axum::http::header::CONTENT_TYPE],
+            expected
+        );
+    }
+}
+
+#[tokio::test]
 async fn legacy_json_post_and_protocol_rejections_are_preserved() {
     let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(
         Store::open_in_memory().unwrap(),
@@ -261,6 +295,7 @@ async fn legacy_json_post_and_protocol_rejections_are_preserved() {
         OriginalUri(long_uri.parse().unwrap()),
         Query(QueryParams {
             query: "ASK {}".into(),
+            verbose: None,
         }),
     )
     .await

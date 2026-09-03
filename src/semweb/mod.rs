@@ -5,7 +5,7 @@
 
 mod conneg;
 
-pub use conneg::{entity_json_ld, entity_turtle, preview_card};
+pub use conneg::{entity_json_ld, entity_json_ld_mode, entity_turtle, preview_card};
 
 use serde_json::{Value as JsonValue, json};
 use std::collections::HashMap;

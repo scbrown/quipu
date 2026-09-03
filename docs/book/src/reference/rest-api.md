@@ -171,9 +171,17 @@ curl -s localhost:3030/query -X POST \
 ```
 
 For `SELECT` and `ASK`, request `application/sparql-results+json` or
-`application/sparql-results+xml`. For `CONSTRUCT` and `DESCRIBE`, request
+`application/sparql-results+xml`, `text/csv`, or
+`text/tab-separated-values`. CSV and TSV follow the SPARQL 1.1 Results
+formats, including term spelling and escaping. For `CONSTRUCT` and `DESCRIBE`, request
 `text/turtle` or `application/n-triples`. All transports share the configured
 query deadline and return HTTP 408 when evaluation exceeds it.
+
+Quipu's JSON extension compacts result IRIs to CURIEs by default using prefixes
+declared by the currently loaded shape sets; unknown namespaces remain full
+IRIs. Pass `"verbose": true` in a JSON request, or `?verbose=true` on GET, to
+return full IRIs. Standards result formats always retain their prescribed RDF
+term representation.
 
 Optional fields: `valid_at` (ISO-8601), `tx` (integer), `graph` (a
 named-graph IRI or dataset name that scopes the query's *default* graph
@@ -1222,6 +1230,9 @@ entity. `GET /entity/{iri}/json`, `GET /entity/{iri}/ttl` and
 `GET /entity/{iri}/html` pin the format in the path instead of the header.
 For a full IRI containing path separators or a fragment, use the equivalent
 query form: `GET /entity?iri=https%3A%2F%2Fexample.org%2Fresource%231`.
+JSON-LD is compacted by default with a generated `@context` derived from the
+loaded shape prefixes. Add `?expanded=true` for full IRIs and no compact
+context.
 
 ### `POST /spotlight`
 

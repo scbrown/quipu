@@ -20,6 +20,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" },
                     "group_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: best-effort filter to entities from these provenance groups (episode-scoped label, NOT an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope)" },
                     "entity_type": { "type": "string", "description": "Optional: restrict to entities of this rdf:type IRI" }
+                    ,"verbose": { "type": "boolean", "description": "Return expanded full IRIs instead of default CURIE-compacted values." }
                 }
             }
         }),
@@ -47,6 +48,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "group_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: filter to entities from these knowledge graph groups" },
                     "max_results": { "type": "integer", "description": "Maximum results (default: 10)" },
                     "entity_type_filter": { "type": "string", "description": "Optional: filter by rdf:type IRI" }
+                    ,"verbose": { "type": "boolean", "description": "Return expanded full IRIs instead of default CURIE-compacted values." }
                 },
                 "required": ["query"]
             }
@@ -60,6 +62,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "query": { "type": "string", "description": "Natural language search query" },
                     "group_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: filter to facts from these knowledge graph groups" },
                     "max_results": { "type": "integer", "description": "Maximum results (default: 10)" }
+                    ,"verbose": { "type": "boolean", "description": "Return expanded full IRIs instead of default CURIE-compacted values." }
                 },
                 "required": ["query"]
             }

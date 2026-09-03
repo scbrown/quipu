@@ -16,7 +16,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "properties": {
                     "query": { "type": "string", "description": "SPARQL SELECT query" },
                     "valid_at": { "type": "string", "description": "Point-in-time for valid-time filtering (ISO-8601). Omit for current state." },
-                    "tx": { "type": "integer", "description": "Maximum transaction ID to consider. Omit for all transactions." }
+                    "tx": { "type": "integer", "description": "Maximum transaction ID to consider. Omit for all transactions." },
+                    "verbose": { "type": "boolean", "description": "Return expanded full IRIs instead of default CURIE-compacted values." }
                 },
                 "required": ["query"]
             }

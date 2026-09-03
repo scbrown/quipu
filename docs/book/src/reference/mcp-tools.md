@@ -23,6 +23,10 @@ Execute a SPARQL SELECT query.
 | `graph` | No | Named-graph IRI or dataset name scoping the default graph (unknown IRI → empty default graph, never ROOT) |
 | `fork` | No | Fork name to read (see `quipu fork`); unknown/dropped forks are refused; mutually exclusive with `graph` |
 | `include_kinds` | No | `dataKind` tokens (e.g. `["archive"]`) that widen the default graph set with every graph declaring one of them. Absent/empty = unchanged scope; malformed tokens are refused; mutually exclusive with `fork`; a `FROM` in the query text still overrides |
+| `verbose` | No | Return full IRIs instead of the default CURIE-compacted values |
+
+Query results use prefixes declared by the loaded shape sets for compact CURIE
+values by default. IRIs in unknown namespaces remain full IRIs.
 
 ### `quipu_export`
 
@@ -175,6 +179,7 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
 | `valid_at` | No | Temporal filter |
+| `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
 Requires an embedding provider when called with `query` and no `embedding`;
 without one it errors naming the missing `[quipu.embedding]` configuration.
@@ -393,6 +398,7 @@ and values). Replaces Graphiti's `search_nodes`.
 | `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label; `/knot` facts are ungrouped) |
 | `max_results` | No | Max results (default: 10) |
 | `entity_type_filter` | No | Filter by rdf:type IRI |
+| `verbose` | No | Return full IRIs instead of the default CURIE-compacted values |
 
 ### `quipu_search_facts`
 
@@ -404,6 +410,7 @@ value). Replaces Graphiti's `search_memory_facts`.
 | `query` | Yes | Natural-language search query |
 | `group_ids` | No | Best-effort filter to facts from these provenance groups (episode-scoped label; `/knot` facts are ungrouped) |
 | `max_results` | No | Max results (default: 10) |
+| `verbose` | No | Return full IRIs instead of the default CURIE-compacted values |
 
 ### `quipu_episodes_complete`
 

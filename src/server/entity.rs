@@ -228,14 +228,27 @@ pub(crate) async fn transactions(
 pub(crate) async fn entity_conneg(
     State(store): State<SharedStore>,
     Path(iri): Path<String>,
+    Query(params): Query<OutputParams>,
     headers: HeaderMap,
 ) -> Result<axum::response::Response, AppError> {
-    entity_response(store, semweb::decode_iri(&iri), headers).await
+    entity_response(
+        store,
+        semweb::decode_iri(&iri),
+        headers,
+        params.expanded.unwrap_or(false),
+    )
+    .await
 }
 
 #[derive(serde::Deserialize)]
 pub(crate) struct EntityParams {
     pub(crate) iri: String,
+    pub(crate) expanded: Option<bool>,
+}
+
+#[derive(Default, serde::Deserialize)]
+pub(crate) struct OutputParams {
+    pub(crate) expanded: Option<bool>,
 }
 
 /// Query-form dereference endpoint for IRIs containing `/` and `#`.
@@ -244,13 +257,14 @@ pub(crate) async fn entity_query_conneg(
     Query(params): Query<EntityParams>,
     headers: HeaderMap,
 ) -> Result<axum::response::Response, AppError> {
-    entity_response(store, params.iri, headers).await
+    entity_response(store, params.iri, headers, params.expanded.unwrap_or(false)).await
 }
 
 async fn entity_response(
     store: SharedStore,
     iri: String,
     headers: HeaderMap,
+    expanded: bool,
 ) -> Result<axum::response::Response, AppError> {
     let accept = headers
         .get("accept")
@@ -267,7 +281,9 @@ async fn entity_response(
     blocking(move || {
         let store = store.lock();
         if json_ld {
-            Ok(json_ld_response(semweb::entity_json_ld(&store, &iri)?))
+            Ok(json_ld_response(semweb::entity_json_ld_mode(
+                &store, &iri, expanded,
+            )?))
         } else {
             Ok(turtle_response(semweb::entity_turtle(&store, &iri)?))
         }
@@ -278,9 +294,14 @@ async fn entity_response(
 pub(crate) async fn entity_json(
     State(store): State<SharedStore>,
     Path(iri): Path<String>,
+    Query(params): Query<OutputParams>,
 ) -> Result<axum::response::Response, AppError> {
     blocking(move || {
-        let j = semweb::entity_json_ld(&store.lock(), &semweb::decode_iri(&iri))?;
+        let j = semweb::entity_json_ld_mode(
+            &store.lock(),
+            &semweb::decode_iri(&iri),
+            params.expanded.unwrap_or(false),
+        )?;
         Ok(json_ld_response(j))
     })
     .await

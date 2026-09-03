@@ -10,42 +10,57 @@ use super::short_name;
 
 /// Build a JSON-LD object for an entity.
 pub fn entity_json_ld(store: &Store, iri: &str) -> Result<JsonValue> {
+    entity_json_ld_mode(store, iri, false)
+}
+
+/// Build JSON-LD with data-driven CURIEs, or full IRIs when `expanded`.
+pub fn entity_json_ld_mode(store: &Store, iri: &str, expanded: bool) -> Result<JsonValue> {
     let sparql = format!("SELECT ?p ?o WHERE {{ <{iri}> ?p ?o }}");
     let result = crate::sparql_query(store, &sparql)?;
+    let prefixes = crate::compact::PrefixMap::from_store(store)?;
+    let compact = |value: &str| {
+        if expanded {
+            value.to_string()
+        } else {
+            prefixes.compact(value)
+        }
+    };
 
     let mut props = serde_json::Map::new();
-    props.insert("@context".to_string(), json!("https://schema.org"));
-    props.insert("@id".to_string(), json!(iri));
+    if !expanded {
+        props.insert("@context".to_string(), prefixes.json_ld_context());
+    }
+    props.insert("@id".to_string(), json!(compact(iri)));
 
     for row in result.rows() {
         if let (Some(Value::Ref(p_id)), Some(val)) = (row.get("p"), row.get("o")) {
             let p_name = store.resolve(*p_id).unwrap_or_else(|_| format!("{p_id}"));
-            let short_p = short_name(&p_name);
+            let property = compact(&p_name);
             let json_val = match val {
                 Value::Ref(id) => {
                     let n = store.resolve(*id).unwrap_or_else(|_| format!("{id}"));
-                    json!({"@id": n})
+                    json!({"@id": compact(&n)})
                 }
                 Value::Str(s) => json!(s),
                 // JSON-LD value objects: the tag/datatype rides alongside the
                 // lexical form rather than being smuggled into it.
                 Value::Lang { lexical, lang } => json!({"@value": lexical, "@language": lang}),
                 Value::Typed { lexical, datatype } => {
-                    json!({"@value": lexical, "@type": datatype})
+                    json!({"@value": lexical, "@type": compact(datatype)})
                 }
                 Value::Int(i) => json!(i),
                 Value::Float(f) => json!(f),
                 Value::Bool(b) => json!(b),
                 Value::Bytes(_) => json!("[binary]"),
             };
-            match props.get_mut(&short_p) {
+            match props.get_mut(&property) {
                 Some(serde_json::Value::Array(arr)) => arr.push(json_val),
                 Some(existing) => {
                     let prev = existing.clone();
                     *existing = json!(vec![prev, json_val]);
                 }
                 None => {
-                    props.insert(short_p, json_val);
+                    props.insert(property, json_val);
                 }
             }
         }
@@ -230,5 +245,39 @@ mod tests {
         let result = preview_card(&store, "http://example.org/nonexistent");
         assert!(result.is_ok());
         assert!(result.unwrap().contains("<!DOCTYPE html>"));
+    }
+
+    #[test]
+    fn json_ld_compacts_from_loaded_context_and_expands_on_request() {
+        let mut store = Store::open_in_memory().unwrap();
+        store
+            .load_shapes(
+                "prefixes",
+                "@prefix ex: <http://example.org/> .",
+                "2026-09-03T00:00:00Z",
+            )
+            .unwrap();
+        crate::rdf::ingest_rdf(
+            &mut store,
+            &b"<http://example.org/alice> <http://example.org/knows> <http://example.org/bob> ."[..],
+            oxrdfio::RdfFormat::NTriples,
+            None,
+            "2026-09-03T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let compact = entity_json_ld(&store, "http://example.org/alice").unwrap();
+        assert_eq!(compact["@id"], "ex:alice");
+        assert_eq!(compact["ex:knows"]["@id"], "ex:bob");
+        assert_eq!(compact["@context"]["ex"], "http://example.org/");
+
+        let expanded = entity_json_ld_mode(&store, "http://example.org/alice", true).unwrap();
+        assert_eq!(expanded["@id"], "http://example.org/alice");
+        assert_eq!(
+            expanded["http://example.org/knows"]["@id"],
+            "http://example.org/bob"
+        );
+        assert!(expanded.get("@context").is_none());
     }
 }

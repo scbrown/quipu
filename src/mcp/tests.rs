@@ -43,6 +43,57 @@ fn test_tool_query() {
 }
 
 #[test]
+fn query_iris_are_compact_by_default_and_verbose_round_trips() {
+    let store = test_store_with_data();
+    store
+        .load_shapes(
+            "prefixes",
+            "@prefix ex: <http://example.org/> .",
+            "2026-09-03T00:00:00Z",
+        )
+        .unwrap();
+    let query = "SELECT ?s WHERE { ?s <http://example.org/name> ?name } LIMIT 1";
+    let compact = tool_query(&store, &serde_json::json!({"query": query})).unwrap();
+    let expanded = tool_query(
+        &store,
+        &serde_json::json!({"query": query, "verbose": true}),
+    )
+    .unwrap();
+    assert_eq!(compact["rows"][0]["s"], "ex:alice");
+    assert_eq!(expanded["rows"][0]["s"], "http://example.org/alice");
+}
+
+#[test]
+fn search_iris_are_compact_by_default_and_verbose_round_trips() {
+    let store = test_store_with_data();
+    store
+        .load_shapes(
+            "prefixes",
+            "@prefix ex: <http://example.org/> .",
+            "2026-09-03T00:00:00Z",
+        )
+        .unwrap();
+    let entity = store.intern("http://example.org/alice").unwrap();
+    let embedding: Vec<f32> = (0..8).map(|i| (1.0 + i as f32 * 0.1).sin()).collect();
+    store
+        .embed_entity(entity, "Alice", &embedding, "2026-09-03")
+        .unwrap();
+
+    let compact = tool_search(
+        &store,
+        &serde_json::json!({"embedding": embedding, "limit": 1}),
+    )
+    .unwrap();
+    let expanded = tool_search(
+        &store,
+        &serde_json::json!({"embedding": embedding, "limit": 1, "verbose": true}),
+    )
+    .unwrap();
+    assert_eq!(compact["results"][0]["entity"], "ex:alice");
+    assert_eq!(expanded["results"][0]["entity"], "http://example.org/alice");
+}
+
+#[test]
 fn test_tool_knot() {
     let mut store = Store::open_in_memory().unwrap();
     let input = serde_json::json!({

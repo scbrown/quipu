@@ -263,6 +263,7 @@ pub(crate) const MAX_SPARQL_QUERY_BYTES: usize = 1024 * 1024;
 #[derive(Deserialize)]
 pub(crate) struct QueryParams {
     pub(crate) query: String,
+    pub(crate) verbose: Option<bool>,
 }
 
 /// SPARQL 1.1 Query Protocol GET: `/query?query=...`.
@@ -275,7 +276,12 @@ pub(crate) async fn query_get(
     if uri.to_string().len() > MAX_QUERY_URI_BYTES {
         return Ok((StatusCode::URI_TOO_LONG, "query URI exceeds 8192 bytes").into_response());
     }
-    query_core(store, headers, json!({"query": params.query})).await
+    query_core(
+        store,
+        headers,
+        json!({"query": params.query, "verbose": params.verbose.unwrap_or(false)}),
+    )
+    .await
 }
 
 /// SPARQL 1.1 Query Protocol POST plus the legacy JSON request form.
@@ -428,12 +434,25 @@ async fn query_core(
                 if truncated {
                     rows.truncate(max_rows);
                 }
+                let verbose = input
+                    .get("verbose")
+                    .and_then(JsonValue::as_bool)
+                    .unwrap_or(false);
+                let prefixes = (!verbose)
+                    .then(|| quipu::compact::PrefixMap::from_store(store))
+                    .transpose()?;
                 let json_rows: Vec<JsonValue> = rows
                     .iter()
                     .map(|row| {
                         JsonValue::Object(
                             row.iter()
-                                .map(|(k, v)| (k.clone(), quipu::value_to_json(store, v)))
+                                .map(|(k, v)| {
+                                    let value = prefixes.as_ref().map_or_else(
+                                        || quipu::value_to_json(store, v),
+                                        |map| quipu::value_to_json_with_prefixes(store, v, map),
+                                    );
+                                    (k.clone(), value)
+                                })
                                 .collect(),
                         )
                     })

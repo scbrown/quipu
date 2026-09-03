@@ -3,6 +3,7 @@
 //! This crate implements an immutable bitemporal EAVT fact log backed by `SQLite`,
 //! designed as a foundation for agent-enforced knowledge graphs.
 
+pub mod compact;
 pub mod config;
 mod config_load;
 pub mod context;
@@ -129,7 +130,7 @@ pub use mcp::{
     tool_cooccurrence, tool_definitions, tool_export, tool_graph_create, tool_graph_label,
     tool_knot, tool_overlay_compose, tool_overlay_create, tool_overlay_write, tool_policy_check,
     tool_query, tool_query_with_federation, tool_verdict_verify, tool_verifier_authorized,
-    value_to_json,
+    value_to_json, value_to_json_compact, value_to_json_with_prefixes,
 };
 #[cfg(feature = "lancedb")]
 pub use migration::{MigrateResult, migrate_sqlite_to_lancedb};

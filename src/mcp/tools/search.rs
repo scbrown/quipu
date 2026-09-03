@@ -47,6 +47,13 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         .clamp_limit(input.get("limit").and_then(serde_json::Value::as_u64));
 
     let valid_at = input.get("valid_at").and_then(|v| v.as_str());
+    let verbose = input
+        .get("verbose")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    let prefixes = (!verbose)
+        .then(|| crate::compact::PrefixMap::from_store(store))
+        .transpose()?;
 
     // Provenance scoping, NOT isolation (hq-93d; design: docs/design/group-isolation.md).
     // A plain vector search returns matches from every group/type. When the caller
@@ -102,6 +109,9 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             let iri = store
                 .resolve(m.entity_id)
                 .unwrap_or_else(|_| format!("ref:{}", m.entity_id));
+            let iri = prefixes
+                .as_ref()
+                .map_or(iri.clone(), |map| map.compact(&iri));
             serde_json::json!({
                 "entity": iri,
                 "text": m.text,

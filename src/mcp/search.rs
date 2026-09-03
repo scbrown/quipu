@@ -31,6 +31,13 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         .clamp_limit(input.get("max_results").and_then(serde_json::Value::as_u64));
 
     let entity_type_filter = input.get("entity_type_filter").and_then(|v| v.as_str());
+    let verbose = input
+        .get("verbose")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    let prefixes = (!verbose)
+        .then(|| crate::compact::PrefixMap::from_store(store))
+        .transpose()?;
 
     let group_ids: Option<Vec<&str>> = input
         .get("group_ids")
@@ -74,7 +81,7 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         if let Some(Value::Ref(id)) = row.get("s") {
             let iri = store.resolve(*id)?;
             if entity_matches_query(store, *id, &iri, &query_lower)? {
-                let entity = build_node_result(store, &iri, max_results)?;
+                let entity = build_node_result(store, &iri, max_results, prefixes.as_ref())?;
                 nodes.push(entity);
             }
         }
@@ -103,6 +110,13 @@ pub fn tool_search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> 
     let max_results = store
         .search_config()
         .clamp_limit(input.get("max_results").and_then(serde_json::Value::as_u64));
+    let verbose = input
+        .get("verbose")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    let prefixes = (!verbose)
+        .then(|| crate::compact::PrefixMap::from_store(store))
+        .transpose()?;
 
     let group_ids: Option<Vec<&str>> = input
         .get("group_ids")
@@ -144,6 +158,7 @@ pub fn tool_search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> 
             Some(Value::Ref(id)) => store.resolve(*id)?,
             _ => continue,
         };
+        let target_is_iri = matches!(row.get("o"), Some(Value::Ref(_)));
         let target = match row.get("o") {
             Some(Value::Ref(id)) => store.resolve(*id)?,
             Some(Value::Str(s)) => s.clone(),
@@ -162,10 +177,15 @@ pub fn tool_search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> 
 
         let provenance = resolve_provenance(store, &source);
 
+        let compact = |value: &str| {
+            prefixes
+                .as_ref()
+                .map_or_else(|| value.to_string(), |map| map.compact(value))
+        };
         facts.push(serde_json::json!({
-            "source": source,
-            "predicate": predicate,
-            "target": target,
+            "source": compact(&source),
+            "predicate": compact(&predicate),
+            "target": if target_is_iri { compact(&target) } else { target },
             "provenance": provenance
         }));
     }
@@ -205,7 +225,12 @@ fn entity_matches_query(
 }
 
 /// Build a node result object for an entity IRI, including label, types, and summary.
-fn build_node_result(store: &Store, iri: &str, max_facts: usize) -> Result<JsonValue> {
+fn build_node_result(
+    store: &Store,
+    iri: &str,
+    max_facts: usize,
+    prefixes: Option<&crate::compact::PrefixMap>,
+) -> Result<JsonValue> {
     let safe_iri = iri
         .replace('\\', "\\\\")
         .replace('\'', "\\'")
@@ -243,10 +268,12 @@ fn build_node_result(store: &Store, iri: &str, max_facts: usize) -> Result<JsonV
         }
     }
 
+    let compact =
+        |value: &str| prefixes.map_or_else(|| value.to_string(), |map| map.compact(value));
     Ok(serde_json::json!({
-        "iri": iri,
+        "iri": compact(iri),
         "label": label,
-        "types": types,
+        "types": types.iter().map(|value| compact(value)).collect::<Vec<_>>(),
         "summary": summary,
         "score": 1.0
     }))
