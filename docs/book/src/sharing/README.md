@@ -159,6 +159,29 @@ query evaluation, protocol, update, entailment and result formats; `SERVICE` is
 not among them. See [SPARQL 1.1 conformance](../benchmarks/conformance.md) for
 what is actually measured, and what is not.
 
+## The whole stack speaks it
+
+A primitive is only first-class if the tools around it use it, rather than reaching
+past it. The same share format and the same verify → quarantine → promote discipline
+appear at every layer:
+
+| Layer | What speaks the format |
+|---|---|
+| **CLI** | `quipu share` / `import` / `import promote` / `status` / `merge` |
+| **MCP** | `quipu_export`, `quipu_import`, `quipu_import_promote` |
+| **Bobbin** | `src/knowledge/share_contract.rs` plus `tests/fixtures/quipu-share-v1/` |
+
+The MCP layer is worth a second look, because the discipline is in the **tool
+contract**, not merely in the documentation. `quipu_import`'s own description reads
+*"Stage a v1 share bundle into a per-source named graph. **Never promotes.**"*, and
+promotion is a separate tool. An agent working through MCP therefore gets the same
+two-step admission an operator gets at the CLI — without having to know to ask for
+it, and without a way to skip it by accident.
+
+Bobbin carries the canonical fixture set — `export.nt`, `manifest.json`, `shapes.ttl`
+and the import request/response pair — so "does this bundle conform?" is a test in
+another repository rather than a claim made in this one.
+
 ## Built vs designed
 
 Everything described above is built and reachable from the CLI today. The gaps
@@ -171,5 +194,8 @@ are stated here rather than left to be inferred from careful wording.
 | `knot` — `owl:sameAs` across stores | ✅ Built |
 | Provider model, declared trust/freshness, per-member outcomes | ✅ Built (`src/provider/`) |
 | SPARQL `SERVICE` to operator-configured endpoints | ✅ Built (feature `remote`) |
+| MCP share tools — `quipu_export` / `quipu_import` / `quipu_import_promote` | ✅ Built and provisioned |
+| Bobbin share **contract** + `quipu-share-v1` fixtures | ✅ Built (`src/knowledge/share_contract.rs`) |
+| Bobbin **runtime adapter** — producing and consuming bundles live | 🔶 **Designed, not built.** The contract and fixtures exist; the adapter does not yet. |
 | External share **attestation** — proving *who* produced a share | 🔶 **Designed, not built.** Hash verification proves a share is intact; it does not yet prove authorship. |
 | A single re-runnable end-to-end demo transcript | 🔶 **Designed, not built.** Each command above is verified individually; the scripted walkthrough is not yet published. |
