@@ -255,7 +255,6 @@ jobs:
 
   source-size:
     name: Source size ratchet
-    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -323,7 +322,6 @@ jobs:
 
   shapes:
     name: Shape invariants
-    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     # A SEPARATE JOB, so its verdict is its own (aegis-qq7uw). The defect being
     # fixed is that `shapes/verify_shape_invariants.py` was wired into NOTHING —
@@ -391,13 +389,15 @@ jobs:
       - run: npx markdownlint-cli2@0.17.2
 
   # One check for the release workflow to consume across the workflow boundary.
-  # Keep housekeeping outside this list: source-size, fmt, and markdown lint can
-  # be red without saying that the shipped binary is unsafe. Every item below
-  # compiles, executes, or validates production behavior/invariants.
+  # Keep housekeeping outside this list: fmt and markdown lint can be red
+  # without saying that the shipped binary is unsafe. Every item below compiles,
+  # executes, or validates production behavior/invariants. Source size belongs
+  # here because a violation blocks the release PR; leaving it out made push CI
+  # report success for a main revision that could not be released.
   release-correctness:
     name: Release correctness
     if: always()
-    needs: [clippy, test, build, check]
+    needs: [clippy, test, build, check, source-size, shapes]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass

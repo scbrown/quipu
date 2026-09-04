@@ -22,9 +22,9 @@ Every push to `main` and every pull request triggers the CI workflow
 | **test** | Test suite across feature matrix |
 | **build** | Full compilation check |
 | **check** | Pre-commit hooks on all files |
-| **source-size** | Non-release-gating source-size policy ratchet |
+| **source-size** | Source-size policy ratchet |
 | **shapes** | Static ontology-shape invariants |
-| **release-correctness** | Aggregate release gate over tests, clippy, builds, pre-commit, wasm, and shapes |
+| **release-correctness** | Aggregate release gate over tests, clippy, builds, pre-commit, source size, and shapes |
 | **lint-markdown** | markdownlint-cli2 on documentation |
 
 All jobs use cargo caching for fast iteration.
@@ -33,8 +33,8 @@ All jobs use cargo caching for fast iteration.
 
 Pushes to `main` trigger the release workflow (`.github/workflows/release.yml`).
 Before release-plz runs, it waits for CI's `Release correctness` check on the
-exact pushed SHA. Formatting, Markdown lint, and the source-size policy remain
-visible CI checks but do not block release. The workflow then uses
+exact pushed SHA. Formatting and Markdown lint remain visible CI checks but do
+not block release. The workflow then uses
 [release-plz](https://release-plz.ieni.dev/) to:
 
 1. Analyze conventional commits since the last release
