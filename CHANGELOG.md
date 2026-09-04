@@ -34,6 +34,7 @@ All notable changes to this project will be documented in this file.
 
 - *(release)* Require conforming fresh-store share proof (.4)([78eb8a1](https://github.com/scbrown/quipu/commit/78eb8a1e3013f1e0f6de13c4d76b6c6cee9478b4))
 - *(service)* Preserve RDF result term identity([304ebe2](https://github.com/scbrown/quipu/commit/304ebe21c13444baa053892d80b232a48d8a6e4f))
+- *(ci)* Split source-size ratchet violations([7877c74](https://github.com/scbrown/quipu/commit/7877c74bcb5e9e0947428d6e3292c1f3401a669d))
 
 ## [0.3.29] - 2026-09-03
 
