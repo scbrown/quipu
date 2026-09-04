@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.30] - 2026-09-04
+
+### .2
+
+- Publish 10/10 SPARQL result formats([ab46b57](https://github.com/scbrown/quipu/commit/ab46b5730e5390e257213474a1bf731b7cf9b5b8))
+- Add SPARQL query form transport defaults([3749cfc](https://github.com/scbrown/quipu/commit/3749cfcdea4f821b672c618eab9d3f06f7c13563))
+- Satisfy full-bundle clippy([7ef18ea](https://github.com/scbrown/quipu/commit/7ef18ea0dbdbc54fb4a9e452213ce1fb23e6c945))
+- Reach full SPARQL query protocol conformance([5b5e11f](https://github.com/scbrown/quipu/commit/5b5e11fe025af69c7c47633e1c2cd7aae148736c))
+- Complete SPARQL protocol and update conformance([6f01994](https://github.com/scbrown/quipu/commit/6f019948eea02b25f4c4e311eae5e8410eb17c58))
+
+### .3
+
+- Add pinned SHACL and entailment ledgers([f34a712](https://github.com/scbrown/quipu/commit/f34a7120690bc75bdcbe90c06889b14ce168472d))
+
+### .7
+
+- Score W3C federated query suite([7f77b9b](https://github.com/scbrown/quipu/commit/7f77b9b350772ef33469cc4e496e60a3243ac2df))
+
+### Added
+
+- *(release)* Embed repository knowledge share (.4)([5459846](https://github.com/scbrown/quipu/commit/5459846ed8c4b965090940d41ad890a626b8be29))
+
+### Documentation
+
+- Sharing reference, and tests against two kinds of doc rot [.2]([148780a](https://github.com/scbrown/quipu/commit/148780aeb74de779be62820dc2cfa5cd452b993a))
+- *(benchmarks)* Link conformance back to Sharing & Federation []([48b31e4](https://github.com/scbrown/quipu/commit/48b31e4f9aaff7b5e9f64db4cfbc6420d74d8cf8))
+- *(share)* Align CLI reference with text artifacts (.2)([ca3d3e9](https://github.com/scbrown/quipu/commit/ca3d3e9c28057f91d9b145b3939118caf2f8a3de))
+
+### Fixed
+
+- *(release)* Require conforming fresh-store share proof (.4)([78eb8a1](https://github.com/scbrown/quipu/commit/78eb8a1e3013f1e0f6de13c4d76b6c6cee9478b4))
+- *(service)* Preserve RDF result term identity([304ebe2](https://github.com/scbrown/quipu/commit/304ebe21c13444baa053892d80b232a48d8a6e4f))
+
 ## [0.3.29] - 2026-09-03
 
 ## [0.3.28] - 2026-09-03
