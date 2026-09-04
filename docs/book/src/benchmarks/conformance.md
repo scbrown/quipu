@@ -42,12 +42,12 @@ carries a named reason further down this page.
 |---|---:|---:|---:|---:|---:|
 | query syntax | 86 | 0 | 0 | 0 | 86 |
 | query evaluation | 168 | 0 | 0 | 0 | 168 |
-| federated query (`SERVICE`) | 1 | 5 | 0 | 1 | 7 |
+| federated query (`SERVICE`) | 6 | 0 | 0 | 1 | 7 |
 | result format | 10 | 0 | 0 | 0 | 10 |
 | protocol | 34 | 0 | 0 | 0 | 34 |
 | update | 37 | 0 | 0 | 0 | 37 |
 | entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **336** | **5** | **0** | **71** | **412** |
+| **all classes** | **341** | **0** | **0** | **71** | **412** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -80,18 +80,18 @@ claim of progress can be checked against a specific case rather than a count.
 
 ## Federated query (`SERVICE`)
 
-Quipu passes **1/7** approved W3C Basic Federated Query cases.
+Quipu passes **6/7** approved W3C Basic Federated Query cases.
 `SERVICE` is a query-planned subquery path using the same declarations and labels as `RemoteProvider`; it is separate from `GraphProvider` whole-query fanout and is not open federation.
 The variable-endpoint case is a deliberate policy deviation because query data cannot widen the configured remote allowlist.
 
 | Test | Name | Status | Reason |
 |---|---|---|---|
-| `:service1` | SERVICE test 1 | failed | `actual vars/rows ['s', 'o1', 'o2'] []; expected ['s', 'o1', 'o2'] [('http://example.org/a…` |
-| `:service2` | SERVICE test 2 | failed | `actual vars/rows ['s', 'o1', 'o2', '_provider'] [('"http://example.org/a"', '"Alan"', '(u…` |
-| `:service3` | SERVICE test 3 | failed | `actual vars/rows ['s', 'o1', 'o2', '_provider'] [('"http://example.org/a"', '"Alan"', '(u…` |
-| `:service4a` | SERVICE test 4a with VALUES clause | failed | `actual vars/rows ['s', 'o1', 'o2'] [('http://example.org/a', '"Alan"', 'http://example.or…` |
+| `:service1` | SERVICE test 1 | passed |  |
+| `:service2` | SERVICE test 2 | passed |  |
+| `:service3` | SERVICE test 3 | passed |  |
+| `:service4a` | SERVICE test 4a with VALUES clause | passed |  |
 | `:service5` | SERVICE test 5 | unsupported | `variable SERVICE endpoints are deliberately refused; endpoints must be operator-configured` |
-| `:service6` | SERVICE test 6 | failed | `actual vars/rows ['s', 'o1', 'o2', '_provider'] [('"http://example.org/a"', '"Alan"', '(u…` |
+| `:service6` | SERVICE test 6 | passed |  |
 | `:service7` | SERVICE test 7 | passed |  |
 
 ## Why a class is unsupported

@@ -55,6 +55,12 @@ use crate::error::{Error, Result};
 pub(crate) struct TermCache {
     id_to_iri: HashMap<i64, String>,
     iri_to_id: HashMap<String, i64>,
+    #[cfg(feature = "remote")]
+    transient_id_to_iri: HashMap<i64, String>,
+    #[cfg(feature = "remote")]
+    transient_iri_to_id: HashMap<String, i64>,
+    #[cfg(feature = "remote")]
+    next_transient_id: i64,
     /// Maximum entries admitted. `0` disables caching entirely.
     limit: usize,
 }
@@ -72,6 +78,12 @@ impl Default for TermCache {
         Self {
             id_to_iri: HashMap::new(),
             iri_to_id: HashMap::new(),
+            #[cfg(feature = "remote")]
+            transient_id_to_iri: HashMap::new(),
+            #[cfg(feature = "remote")]
+            transient_iri_to_id: HashMap::new(),
+            #[cfg(feature = "remote")]
+            next_transient_id: -1,
             limit: DEFAULT_TERM_CACHE_LIMIT,
         }
     }
@@ -172,6 +184,10 @@ impl Store {
         // Scoped borrow: the SQL fetch below must not run while the cache is
         // borrowed, or a re-entrant resolve would panic.
         if let Some(iri) = self.term_cache.borrow().id_to_iri.get(&id) {
+            return Ok(iri.clone());
+        }
+        #[cfg(feature = "remote")]
+        if let Some(iri) = self.term_cache.borrow().transient_id_to_iri.get(&id) {
             return Ok(iri.clone());
         }
         let iri: String = self
@@ -305,5 +321,29 @@ impl Store {
             self.term_cache.borrow_mut().insert(id, iri);
         }
         Ok(found)
+    }
+
+    /// Represent an IRI in a read-only query result without mutating the term dictionary.
+    ///
+    /// Existing terms retain their persisted id so remote bindings join with local data.
+    /// Remote-only terms receive a store-local negative id held solely in the result cache;
+    /// it resolves for serialization but can never be mistaken for a persisted fact id.
+    #[cfg(feature = "remote")]
+    pub(crate) fn query_ref(&self, iri: &str) -> Result<i64> {
+        if let Some(id) = self.lookup(iri)? {
+            return Ok(id);
+        }
+        let mut cache = self.term_cache.borrow_mut();
+        if let Some(id) = cache.transient_iri_to_id.get(iri) {
+            return Ok(*id);
+        }
+        let id = cache.next_transient_id;
+        cache.next_transient_id = cache
+            .next_transient_id
+            .checked_sub(1)
+            .ok_or_else(|| Error::Store("transient query term id space exhausted".into()))?;
+        cache.transient_id_to_iri.insert(id, iri.to_string());
+        cache.transient_iri_to_id.insert(iri.to_string(), id);
+        Ok(id)
     }
 }

@@ -102,6 +102,12 @@ def run_case(case: object, service_data: tuple[tuple[str, Path], ...], quipu: Pa
                 observed_path.write_bytes(response.read())
             actual_vars, actual_rows = EVAL.expected_json(observed_path)
             expected_vars, expected_rows = EVAL.expected_result(case.result)
+            # Quipu exposes provider/trust/freshness as extension metadata. They
+            # are deliberately outside the W3C query's projected variables and
+            # therefore outside standards-result comparison.
+            keep = [index for index, name in enumerate(actual_vars) if name not in {"_provider", "_trust", "_freshness"}]
+            actual_vars = [actual_vars[index] for index in keep]
+            actual_rows = [tuple(row[index] for index in keep) for row in actual_rows]
             aligned = EVAL.reorder_rows(actual_vars, actual_rows, expected_vars)
             passed = aligned is not None and Counter(aligned) == Counter(expected_rows)
             diagnostic = "" if passed else f"actual vars/rows {actual_vars!r} {actual_rows!r}; expected {expected_vars!r} {expected_rows!r}"

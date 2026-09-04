@@ -176,6 +176,14 @@ pub fn join_rows(
 pub fn merge_bindings(a: &Bindings, b: &Bindings) -> Option<Bindings> {
     let mut merged = a.clone();
     for (k, v) in b {
+        // Federation labels are response metadata, not SPARQL variables. Two
+        // SERVICE operands may legitimately name different providers; their
+        // labels must never turn otherwise-compatible RDF bindings into a
+        // failed join. The later operand's metadata describes the merged row.
+        if matches!(k.as_str(), "_provider" | "_trust" | "_freshness") {
+            merged.insert(k.clone(), v.clone());
+            continue;
+        }
         if let Some(existing) = merged.get(k) {
             if existing != v {
                 return None;

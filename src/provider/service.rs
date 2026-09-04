@@ -4,7 +4,54 @@ use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
 use crate::sparql::QueryResult;
+use crate::store::Store;
 use crate::types::Value;
+
+fn decode_binding(store: &Store, term: &JsonValue) -> Result<Value> {
+    let kind = term
+        .get("type")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::Serialization("SPARQL result binding has no string type".into()))?;
+    let lexical = term
+        .get("value")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::Serialization("SPARQL result binding has no string value".into()))?;
+    match kind {
+        "uri" => {
+            let node = oxrdf::NamedNode::new(lexical)
+                .map_err(|e| Error::Serialization(format!("invalid SERVICE result IRI: {e}")))?;
+            Ok(Value::Ref(store.query_ref(node.as_str())?))
+        }
+        "bnode" => {
+            let node = oxrdf::BlankNode::new(lexical).map_err(|e| {
+                Error::Serialization(format!("invalid SERVICE result blank node: {e}"))
+            })?;
+            Ok(Value::Ref(store.query_ref(&format!(
+                "{}{}",
+                crate::rdf::BLANK_PREFIX,
+                node.as_str()
+            ))?))
+        }
+        "literal" | "typed-literal" => {
+            let literal = if let Some(lang) = term.get("xml:lang").and_then(JsonValue::as_str) {
+                oxrdf::Literal::new_language_tagged_literal(lexical, lang).map_err(|e| {
+                    Error::Serialization(format!("invalid SERVICE result language tag: {e}"))
+                })?
+            } else if let Some(datatype) = term.get("datatype").and_then(JsonValue::as_str) {
+                let datatype = oxrdf::NamedNode::new(datatype).map_err(|e| {
+                    Error::Serialization(format!("invalid SERVICE result datatype IRI: {e}"))
+                })?;
+                oxrdf::Literal::new_typed_literal(lexical, datatype)
+            } else {
+                oxrdf::Literal::new_simple_literal(lexical)
+            };
+            crate::rdf::term_to_value(store, &oxrdf::Term::Literal(literal))
+        }
+        other => Err(Error::Serialization(format!(
+            "unsupported SPARQL result binding type '{other}'"
+        ))),
+    }
+}
 
 /// Evaluate a standards SPARQL `SERVICE` pattern through one configured remote.
 ///
@@ -13,6 +60,7 @@ use crate::types::Value;
 /// turn Quipu into an SSRF proxy. Configuration also supplies authentication,
 /// timeout and the provenance label stamped onto returned rows.
 pub fn query_configured_service(
+    store: &Store,
     federation: &crate::config::FederationConfig,
     endpoint: &str,
     sparql: &str,
@@ -86,28 +134,10 @@ pub fn query_configured_service(
         .filter_map(JsonValue::as_object)
         .map(|row| {
             row.iter()
-                .filter_map(|(name, term)| {
-                    let lexical = term.get("value")?.as_str()?;
-                    let value = if let Some(lang) = term.get("xml:lang").and_then(JsonValue::as_str)
-                    {
-                        Value::Lang {
-                            lexical: lexical.into(),
-                            lang: lang.into(),
-                        }
-                    } else if let Some(datatype) = term.get("datatype").and_then(JsonValue::as_str)
-                    {
-                        Value::Typed {
-                            lexical: lexical.into(),
-                            datatype: datatype.into(),
-                        }
-                    } else {
-                        Value::Str(lexical.into())
-                    };
-                    Some((name.clone(), value))
-                })
-                .collect::<crate::sparql::Bindings>()
+                .map(|(name, term)| decode_binding(store, term).map(|value| (name.clone(), value)))
+                .collect::<Result<crate::sparql::Bindings>>()
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     Ok((
         QueryResult::Select { variables, rows },
         remote.name.clone(),
@@ -200,6 +230,10 @@ mod tests {
         assert_eq!(rows[0]["_provider"], Value::Str("partner".into()));
         assert_eq!(rows[0]["_freshness"], Value::Str("fresh".into()));
         assert!(variables.contains(&"_provider".into()));
+        let Value::Ref(subject) = rows[0]["s"] else {
+            panic!("SERVICE URI binding must remain an RDF reference")
+        };
+        assert_eq!(store.resolve(subject).unwrap(), "http://example.org/a");
         let request = server.join().unwrap();
         assert!(request.starts_with("POST /query "), "{request}");
         assert!(
@@ -211,6 +245,66 @@ mod tests {
             "{request}"
         );
         assert!(request.contains("SELECT * WHERE"), "{request}");
+    }
+
+    #[test]
+    fn service_decoder_preserves_rdf_term_kinds() {
+        let store = Store::open_in_memory().unwrap();
+        let row = serde_json::json!({
+            "iri": {"type": "uri", "value": "http://example.org/resource"},
+            "blank": {"type": "bnode", "value": "result-node"},
+            "plain": {"type": "literal", "value": "plain"},
+            "language": {"type": "literal", "xml:lang": "en-GB", "value": "colour"},
+            "typed": {"type": "literal", "datatype": "http://www.w3.org/2001/XMLSchema#date", "value": "2026-09-03"}
+        });
+        let decoded = row
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(name, term)| decode_binding(&store, term).map(|value| (name.clone(), value)))
+            .collect::<Result<crate::sparql::Bindings>>()
+            .unwrap();
+
+        let Value::Ref(iri) = decoded["iri"] else {
+            panic!("URI must decode to Ref")
+        };
+        assert_eq!(store.resolve(iri).unwrap(), "http://example.org/resource");
+        let Value::Ref(blank) = decoded["blank"] else {
+            panic!("blank node must decode to Ref")
+        };
+        assert_eq!(store.resolve(blank).unwrap(), "_:result-node");
+        assert_eq!(decoded["plain"], Value::Str("plain".into()));
+        assert_eq!(
+            decoded["language"],
+            Value::Lang {
+                lexical: "colour".into(),
+                lang: "en-gb".into()
+            }
+        );
+        assert_eq!(
+            decoded["typed"],
+            Value::Typed {
+                lexical: "2026-09-03".into(),
+                datatype: "http://www.w3.org/2001/XMLSchema#date".into()
+            }
+        );
+    }
+
+    #[test]
+    fn service_uri_decoder_is_read_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("service.db");
+        drop(Store::open(path.to_str().unwrap()).unwrap());
+        let store = Store::open_read_only(path.to_str().unwrap()).unwrap();
+        let value = decode_binding(
+            &store,
+            &serde_json::json!({"type": "uri", "value": "http://example.org/remote-only"}),
+        )
+        .unwrap();
+        let Value::Ref(id) = value else {
+            panic!("URI must decode to Ref")
+        };
+        assert_eq!(store.resolve(id).unwrap(), "http://example.org/remote-only");
     }
 
     #[test]

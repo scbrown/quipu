@@ -1,15 +1,14 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 federated query",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "68234c1d155c84c875148b8b7b647fd288f2f3c5",
+  "quipu_revision": "7f77b9b350772ef33469cc4e496e60a3243ac2df",
   "quipu_version": "quipu 0.3.29",
   "scope": "all seven Working Group-approved BasicFederatedQuery SERVICE cases",
   "policy": "SERVICE IRIs must match operator-configured remotes; variable endpoints are a deliberate policy deviation",
   "classes": {
     "federated-query": {
       "cases": 7,
-      "failed": 5,
-      "passed": 1,
+      "passed": 6,
       "unsupported": 1
     }
   },
@@ -21,8 +20,8 @@
       "manifest": "service/manifest.ttl",
       "query": "service/service01.rq",
       "result": "service/service01.srx",
-      "status": "failed",
-      "diagnostic": "actual vars/rows ['s', 'o1', 'o2'] []; expected ['s', 'o1', 'o2'] [('http://example.org/a', '\"Alan\"', '\"SPARQL 1.1 Basic Federated Query\"'), ('http://example.org/b', '\"Bob\"', '\"SPARQL 1.1 Query\"')]"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "federated-query",
@@ -31,8 +30,8 @@
       "manifest": "service/manifest.ttl",
       "query": "service/service02.rq",
       "result": "service/service02.srx",
-      "status": "failed",
-      "diagnostic": "actual vars/rows ['s', 'o1', 'o2', '_provider'] [('\"http://example.org/a\"', '\"Alan\"', '(unbound)', '\"w3c-0\"'), ('\"http://example.org/b\"', '\"Bob\"', '(unbound)', '\"w3c-0\"')]; expected ['s', 'o1', 'o2'] [('http://example.org/b', '\"Bob\"', '(unbound)'), ('http://example.org/a', '\"Alan\"', '\"SPARQL 1.1 Basic Federated Query\"')]"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "federated-query",
@@ -41,8 +40,8 @@
       "manifest": "service/manifest.ttl",
       "query": "service/service03.rq",
       "result": "service/service03.srx",
-      "status": "failed",
-      "diagnostic": "actual vars/rows ['s', 'o1', 'o2', '_provider'] [('\"http://example.org/a\"', '\"Alan\"', '(unbound)', '\"w3c-0\"'), ('\"http://example.org/b\"', '\"Bob\"', '(unbound)', '\"w3c-0\"')]; expected ['s', 'o1', 'o2'] [('http://example.org/b', '\"Bob\"', '(unbound)'), ('http://example.org/a', '\"Alan\"', '\"SPARQL 1.1 Basic Federated Query\"')]"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "federated-query",
@@ -51,8 +50,8 @@
       "manifest": "service/manifest.ttl",
       "query": "service/service04a.rq",
       "result": "service/service04.srx",
-      "status": "failed",
-      "diagnostic": "actual vars/rows ['s', 'o1', 'o2'] [('http://example.org/a', '\"Alan\"', 'http://example.org/b'), ('http://example.org/a', '\"alan@example.org\"', 'http://example.org/b'), ('http://example.org/b', '\"Bob\"', 'http://example.org/b'), ('http://example.org/b', '\"bob@example.org\"', 'http://example.org/b'), ('http://example.org/c', '\"Alice\"', 'http://example.org/b'), ('http://example.org/c', '\"alice@example.org\"', 'http://example.org/b')]; expected ['s', 'o1', 'o2'] [('http://example.org/a', '\"alan@example.org\"', 'http://example.org/b'), ('http://example.org/a', '\"Alan\"', 'http://example.org/b'), ('http://example.org/c', '\"alice@example.org\"', 'http://example.org/b'), ('http://example.org/c', '\"Alice\"', 'http://example.org/b')]"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "federated-query",
@@ -72,8 +71,8 @@
       "manifest": "service/manifest.ttl",
       "query": "service/service06.rq",
       "result": "service/service06.srx",
-      "status": "failed",
-      "diagnostic": "actual vars/rows ['s', 'o1', 'o2', '_provider'] [('\"http://example.org/a\"', '\"Alan\"', '(unbound)', '\"w3c-0\"'), ('\"http://example.org/b\"', '\"Bob\"', '(unbound)', '\"w3c-0\"')]; expected ['s', 'o1', 'o2'] [('http://example.org/b', '\"Bob\"', '(unbound)'), ('http://example.org/a', '\"Alan\"', '(unbound)')]"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "federated-query",

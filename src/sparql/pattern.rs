@@ -516,6 +516,7 @@ pub fn eval_pattern_seeded(
             };
             let remote_query = format!("SELECT * WHERE {{ {inner} }}");
             let outcome = crate::provider::query_configured_service(
+                store,
                 remotes,
                 endpoint,
                 &remote_query,
@@ -547,16 +548,19 @@ pub fn eval_pattern_seeded(
                 }
             }
             let mut bounded = Vec::new();
-            for (i, mut row) in rows.into_iter().enumerate() {
+            for (i, row) in rows.into_iter().enumerate() {
                 super::pattern_util::check_eval_budget(ctx, i, bounded.len())?;
-                row.insert("_provider".into(), Value::Str(provider.clone()));
-                if let Some(trust) = &label.trust {
-                    row.insert("_trust".into(), Value::Str(trust.to_string()));
-                }
-                if let Some(freshness) = &label.freshness {
-                    row.insert("_freshness".into(), Value::Str(freshness.to_string()));
-                }
-                if let Some(merged) = merge_bindings(seed, &row) {
+                // Provider labels describe the response; they are not remote
+                // query variables and must not constrain a later SERVICE join.
+                // Merge the RDF bindings first, then stamp this response's label.
+                if let Some(mut merged) = merge_bindings(seed, &row) {
+                    merged.insert("_provider".into(), Value::Str(provider.clone()));
+                    if let Some(trust) = &label.trust {
+                        merged.insert("_trust".into(), Value::Str(trust.to_string()));
+                    }
+                    if let Some(freshness) = &label.freshness {
+                        merged.insert("_freshness".into(), Value::Str(freshness.to_string()));
+                    }
                     bounded.push(merged);
                 }
             }
