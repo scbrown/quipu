@@ -28,6 +28,7 @@ pub mod respace;
 mod respace_map;
 mod retraction;
 mod serialize;
+mod set;
 mod settings;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod snapshot_upload;
