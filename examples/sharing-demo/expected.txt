@@ -1,0 +1,10 @@
+1. SHARE A             scope=root facts=2 shapes=1
+2. IMPORT B            outcome=quarantined admitted=0 quarantined=2 blocker=off_vocabulary
+3. ADOPT + REIMPORT    outcome=staged admitted=2 quarantined=0 promotion_eligible=true
+4. PROMOTE B           outcome=promoted triples=2
+5. COMPOSE B           root_names=shared
+6. DIVERGE             A_adds=a-only B_adds=b-only
+7. STATUS              diverged=true ours_added=1 theirs_added=1 conflicts=0
+8. RECONNECT           outcome=merged asserted=1 retracted=0 provenance_parents=2
+9. CONVERGED B         root_names=a-only,b-only,shared
+10. BOUNDARY           provider federation unions labelled query results; it does not merge store histories

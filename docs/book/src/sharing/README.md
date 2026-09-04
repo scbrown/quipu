@@ -8,6 +8,28 @@
 That is the whole idea. The rest of this page is how it works, and what proves
 it.
 
+## One run, end to end
+
+This transcript is not illustrative output. It is
+[`examples/sharing-demo/expected.txt`](https://github.com/scbrown/quipu/blob/main/examples/sharing-demo/expected.txt),
+included here verbatim. `just sharing-demo` creates two fresh stores and checks
+that a new run still matches it; the required CI `Build` job runs the same
+check.
+
+```text
+{{#include ../../../../examples/sharing-demo/expected.txt}}
+```
+
+The receiver first quarantines the intact bundle because the type is not in
+its local vocabulary. It then adopts the bundled shape deliberately, re-imports,
+and promotes with a named actor. After A and B make independent additions,
+`status` proves both histories moved and `merge` records two provenance parents.
+The demo intentionally stops at the current boundary: provider federation
+unions labelled query results but does not merge store histories. The broader
+evaluation and claims belong to the
+[arXiv submission source for the shape-aware merge paper](https://github.com/scbrown/quipu/tree/main/docs/paper-merge),
+not to this ten-line walkthrough.
+
 Every claim below names the command, symbol, or verbatim message that backs it,
 so you can check it rather than believe it. Citations are file plus symbol, not
 line numbers, because line numbers rot and a page that cites them stops being
@@ -230,4 +252,4 @@ are stated here rather than left to be inferred from careful wording.
 | Bobbin share **contract** + `quipu-share-v1` fixtures | ✅ Built (`bobbin:src/knowledge/share_contract.rs`) |
 | Bobbin **runtime adapter** — producing and consuming bundles live | 🔶 **Designed, not built.** The contract and fixtures exist; the adapter does not yet. |
 | External share **attestation** — proving *who* produced a share | 🔶 **Designed, not built.** Hash verification proves a share is intact; it does not yet prove authorship. |
-| A single re-runnable end-to-end demo transcript | 🔶 **Designed, not built.** Each command above is verified individually; the scripted walkthrough is not yet published. |
+| Re-runnable two-store transcript | ✅ Built (`examples/sharing-demo/run.sh`), checked in CI, and embedded above from `expected.txt` |

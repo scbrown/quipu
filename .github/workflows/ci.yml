@@ -149,6 +149,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
       - run: cargo build
+      # This is executable documentation, not a second hand-written example:
+      # the checked transcript embedded by the sharing chapter must equal a
+      # fresh two-store run of the binary built immediately above.
+      - name: Sharing and federation story demo
+        run: examples/sharing-demo/run.sh --check
 
   # The release workflow ships binaries built with the `full` bundle. Without
   # this job an onnx-gated break would first appear during a release, which is

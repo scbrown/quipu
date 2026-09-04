@@ -127,6 +127,11 @@ demo:
     cargo run --bin quipu --features shacl -- knot examples/demo-graph/demo.ttl --db /tmp/quipu-demo.db
     cargo run --bin quipu-server --features full -- --db /tmp/quipu-demo.db
 
+# Re-run the two-store transcript embedded in the Sharing & Federation chapter.
+sharing-demo:
+    cargo build --bin quipu
+    examples/sharing-demo/run.sh --check
+
 # Load the SMAC datalinks tech tree and serve the 3D Datalinks view.
 # The graph lives in NeuralAmplifier (scbrown/NeuralAmplifier), which owns and
 # regenerates it — point `datalinks` at a checkout rather than vendoring a copy.

@@ -1,0 +1,3 @@
+@prefix ex: <https://demo.example/> .
+
+ex:a-only ex:name "from A" .

@@ -1,0 +1,4 @@
+@prefix ex: <https://demo.example/> .
+
+ex:shared a ex:Thing ;
+    ex:name "shared" .
