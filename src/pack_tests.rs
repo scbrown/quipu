@@ -7,10 +7,54 @@ use crate::types::{Op, Value};
 
 const TS: &str = "2026-08-06T00:00:00Z";
 
-fn tmp(name: &str) -> String {
-    let dir = std::env::temp_dir().join(format!("quipu-pack-{name}-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
-    dir.join("out.qpack.db").to_string_lossy().into_owned()
+/// A temp path whose directory is removed when the guard is dropped — which a
+/// `remove_file` at the end of a test cannot do, because a panicking test never
+/// reaches it. Both helpers below used to hand back a bare `String` and leave
+/// the directory behind: 28 per run of this module, which reached 5,442
+/// directories / 7.8G on the crew host before anyone looked, since cargo's
+/// TMPDIR there is a disk cache nothing sweeps (aegis-t4oyjy).
+struct Tmp {
+    _dir: tempfile::TempDir,
+    path: String,
+}
+
+impl std::ops::Deref for Tmp {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.path
+    }
+}
+
+impl std::fmt::Display for Tmp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.path)
+    }
+}
+
+impl AsRef<std::path::Path> for Tmp {
+    fn as_ref(&self) -> &std::path::Path {
+        std::path::Path::new(&self.path)
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for Tmp {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        std::ffi::OsStr::new(&self.path)
+    }
+}
+
+/// A pack FILE inside a temp directory that dies with the test.
+fn tmp(name: &str) -> Tmp {
+    let dir = tempfile::Builder::new()
+        .prefix(&format!("quipu-pack-{name}-"))
+        .tempdir()
+        .unwrap();
+    let path = dir
+        .path()
+        .join("out.qpack.db")
+        .to_string_lossy()
+        .into_owned();
+    Tmp { _dir: dir, path }
 }
 
 /// A store with one labelled graph holding two triples, one of them an
@@ -140,7 +184,6 @@ fn a_pack_round_trips_and_verifies_and_leaves_no_wal_siblings() {
         Some(Freshness::Fresh),
         "the label travelled"
     );
-    let _ = std::fs::remove_file(&out);
 }
 
 #[test]
@@ -168,7 +211,6 @@ fn an_object_position_reference_survives_re_interning() {
         vec!["http://example.org/o".to_string()],
         "the reference resolves to the SAME IRI in the packed store"
     );
-    let _ = std::fs::remove_file(&out);
 }
 
 #[test]
@@ -203,7 +245,6 @@ fn shapes_and_queries_named_on_the_command_travel_with_the_pack() {
         verify(&out).unwrap().2,
         "hash covers shapes and queries too"
     );
-    let _ = std::fs::remove_file(&out);
 }
 
 #[test]
@@ -290,9 +331,6 @@ fn unpack_materializes_and_versions_registries_beside_existing_entries() {
         opened.list_shapes_as_of(&as_of).unwrap()[0].1,
         "# consumer shape"
     );
-    for path in [artifact, destination] {
-        let _ = std::fs::remove_file(path);
-    }
 }
 
 #[test]
@@ -330,10 +368,6 @@ fn repo_pack_manifest_is_complete_and_incremental_load_is_idempotent() {
     let second = unpack_verified(&artifact, &destination, &load, TS).unwrap();
     assert_eq!(second.outcome, "unchanged");
     assert_eq!(second.facts, 0);
-
-    for path in [artifact, destination] {
-        let _ = std::fs::remove_file(path);
-    }
 }
 
 #[test]
@@ -374,8 +408,6 @@ fn repo_pack_refuses_partial_provenance_and_wrong_repository_before_writing() {
     .unwrap_err();
     assert!(err.to_string().contains("repository mismatch"));
     assert!(!std::path::Path::new(&destination).exists());
-
-    let _ = std::fs::remove_file(artifact);
 }
 
 #[test]
@@ -417,9 +449,6 @@ fn a_respaced_pack_attaches_surfaces_its_manifest_and_spans_queries() {
         1,
         "acceptance requires the attached pack to be queryable"
     );
-    for path in [pack0, pack7, local] {
-        let _ = std::fs::remove_file(path);
-    }
 }
 
 #[test]
@@ -441,10 +470,6 @@ fn pack_to_bytes_agrees_with_pack_and_the_bytes_are_a_pack_file() {
     std::fs::write(&from_bytes, &bytes).unwrap();
     let (stored, recomputed, ok) = verify(&from_bytes).unwrap();
     assert!(ok, "stored {stored} != recomputed {recomputed}");
-
-    for path in [out, from_bytes] {
-        let _ = std::fs::remove_file(path);
-    }
 }
 
 #[test]
@@ -487,10 +512,6 @@ fn a_pack_built_as_bytes_attaches_to_a_native_store() {
         panic!("expected SELECT")
     };
     assert_eq!(rows.len(), 1, "the byte-built pack must be queryable");
-
-    for path in [pack0, pack9, local] {
-        let _ = std::fs::remove_file(path);
-    }
 }
 
 #[test]
@@ -621,8 +642,6 @@ fn with_vectors_actually_carries_the_embeddings() {
         "http://example.org/s",
         "the vector points at the right IRI in the packed store"
     );
-
-    let _ = std::fs::remove_file(&out);
 }
 
 #[test]
@@ -647,7 +666,6 @@ fn without_the_flag_no_vectors_travel() {
         .query_row("SELECT COUNT(*) FROM vectors", [], |r| r.get(0))
         .unwrap();
     assert_eq!(n, 0, "no flag, no vectors");
-    let _ = std::fs::remove_file(&out);
 }
 
 // --- --space: ship the pack in a designated term space (quipu #74) ---
@@ -720,10 +738,6 @@ fn a_space_pack_owns_the_space_and_still_verifies() {
         m.content_hash, m0.content_hash,
         "a space moves ids, not content"
     );
-
-    for path in [out, out0] {
-        let _ = std::fs::remove_file(path);
-    }
 }
 
 #[test]
@@ -759,9 +773,6 @@ fn a_space_pack_attaches_directly_without_a_separate_respace() {
         panic!("expected SELECT")
     };
     assert_eq!(rows.len(), 1, "the directly-shipped pack is queryable");
-    for path in [pack7, local] {
-        let _ = std::fs::remove_file(path);
-    }
 }
 
 #[test]
@@ -804,10 +815,16 @@ fn pack_to_bytes_refuses_a_nonzero_space_naming_the_restriction() {
 
 // --- --format turtle: the interop bundle ---
 
-fn tmpdir(name: &str) -> String {
-    let dir = std::env::temp_dir().join(format!("quipu-ttl-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    dir.to_string_lossy().into_owned()
+/// A temp DIRECTORY that dies with the test — the turtle bundle's output dir.
+/// `pack_turtle` runs `create_dir_all`, so handing it one that already exists is
+/// the same input as the empty path this used to return.
+fn tmpdir(name: &str) -> Tmp {
+    let dir = tempfile::Builder::new()
+        .prefix(&format!("quipu-ttl-{name}-"))
+        .tempdir()
+        .unwrap();
+    let path = dir.path().to_string_lossy().into_owned();
+    Tmp { _dir: dir, path }
 }
 
 #[test]
@@ -865,8 +882,6 @@ fn the_turtle_bundle_writes_all_four_files() {
             .as_str()
             .is_some_and(|t| t.contains("SELECT"))
     );
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -886,9 +901,6 @@ fn both_formats_agree_on_the_content_hash() {
         a.content_hash, b.content_hash,
         "one graph, one identity, two renderings"
     );
-
-    let _ = std::fs::remove_file(&db);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -908,7 +920,6 @@ fn the_turtle_bundle_refuses_a_nonzero_space_naming_the_restriction() {
         !std::path::Path::new(&dir).join("graph.ttl").exists(),
         "a refused export must not leave a partial bundle"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -920,5 +931,4 @@ fn the_turtle_bundle_refuses_an_unknown_graph_and_writes_nothing() {
         !std::path::Path::new(&dir).join("graph.ttl").exists(),
         "a refused export must not leave a partial bundle"
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }

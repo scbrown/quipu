@@ -300,11 +300,11 @@ fn consumer_commit_and_resume() {
 /// its facts, and starts emitting from offset 1 without migration.
 #[test]
 fn additive_schema_reopen() {
-    let dir = std::env::temp_dir().join(format!("quipu-ev-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("additive.db");
+    // Held for the whole test: dropping it removes the store, including on
+    // panic, which the `remove_file` this replaced could not do (aegis-t4oyjy).
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("additive.db");
     let path_s = path.to_str().unwrap();
-    let _ = std::fs::remove_file(&path);
 
     {
         let mut store = Store::open(path_s).unwrap();

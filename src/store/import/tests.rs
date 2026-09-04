@@ -6,16 +6,22 @@ use crate::{Datum, Value};
 
 use super::import_graph;
 
-fn paths(name: &str) -> (PathBuf, PathBuf) {
-    let dir = std::env::temp_dir().join(format!("quipu-import-{name}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    (dir.join("local.db"), dir.join("foreign.db"))
+/// The `TempDir` is returned so the caller HOLDS it: dropping it removes the
+/// two stores, including when the test panics. Returning bare paths leaked a
+/// directory per process, per name (aegis-t4oyjy).
+fn paths(name: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
+    let dir = tempfile::Builder::new()
+        .prefix(&format!("quipu-import-{name}-"))
+        .tempdir()
+        .unwrap();
+    let local = dir.path().join("local.db");
+    let foreign = dir.path().join("foreign.db");
+    (dir, local, foreign)
 }
 
 #[test]
 fn imports_with_eager_alias_remap_and_ref_reachability() {
-    let (local, foreign) = paths("aliases");
+    let (_tmp, local, foreign) = paths("aliases");
     let dst = Store::open(local.to_str().unwrap()).unwrap();
     let shared_local = dst.intern("urn:shared").unwrap();
     let collision_local = dst.intern("urn:local-only").unwrap();
@@ -81,7 +87,7 @@ fn imports_with_eager_alias_remap_and_ref_reachability() {
 
 #[test]
 fn unclassified_source_column_refuses_before_destination_write() {
-    let (local, foreign) = paths("unknown-column");
+    let (_tmp, local, foreign) = paths("unknown-column");
     drop(Store::open(local.to_str().unwrap()).unwrap());
     drop(Store::open(foreign.to_str().unwrap()).unwrap());
     rusqlite::Connection::open(&foreign)
@@ -106,7 +112,7 @@ fn import_carries_embeddings_re_keyed_by_iri() {
     // path silently dropped every `vectors` row before, which made
     // `pack --with-vectors` produce a file nothing could restore from.
     use crate::vector::KnowledgeVectorStore;
-    let (local, foreign) = paths("vectors");
+    let (_tmp, local, foreign) = paths("vectors");
     // A destination that already interns an unrelated IRI, so the id spaces
     // differ and the join has to be by IRI rather than by raw id.
     let dst = Store::open(local.to_str().unwrap()).unwrap();
