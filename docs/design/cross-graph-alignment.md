@@ -25,12 +25,14 @@ Measured at `9cc4348`, 2026-09-04. Each claim carries its file.
   (`mod.rs:158`). `/episode` surfaces these as `resolution_hints`
   (`src/mcp/mod.rs:43`) and same-episode collisions as `resolution_contentions`
   (`mod.rs:70`).
-- **Import already aligns — and does it destructively, unrecorded, on score
-  alone.** `resolve_and_rewrite` (`src/share_import.rs:207`) takes every
-  `rdfs:label` in the incoming graph, resolves it against the local store, and
-  where the top candidate is `score == 1.0 && matched_on == "canonical_name:exact"`
-  it **rewrites the foreign IRI to the local one in subject and object position**
-  (`share_import.rs:217`, rewrite loop `234-251`). Everything else lands in
+- **Import already aligns — destructively, unrecorded, without asking.**
+  `resolve_and_rewrite` (`src/share_import.rs:207`) takes every `rdfs:label` in
+  the incoming graph and resolves it against the local store. The auto-merge
+  gate is `score == 1.0 && matched_on == "canonical_name:exact"`
+  (`share_import.rs:217`) — an **exact canonical-name match**, not a score
+  threshold; the fuzzy band above the 0.85 cut-off is report-only. On an exact
+  match it **rewrites the foreign IRI to the local one in subject and object
+  position** (rewrite loop `234-251`). Everything else lands in
   `ImportResolution.candidates` — a field on the HTTP response, and nowhere else.
 - **There is no `same_as` primitive.** `quipu knot <file.ttl> [--graph <iri>]`
   (`src/cli.rs:55`, `src/mcp/knot.rs`) is bulk Turtle assertion into ROOT or a
@@ -68,7 +70,13 @@ Not "nothing asks the operator" — something does, badly:
 
 Point 5 contradicts the principle the bead states as an assumption —
 *"'similar' = candidates the operator confirms, never applied on score alone."*
-That principle is right, and current `/import` violates it. See
+Be precise about which half is violated. The gate is an exact canonical-name
+match, so quipu is *not* merging on a fuzzy score — the narrow reading of that
+principle holds. What it does without asking is **rewrite an IRI out of
+existence** on the strength of two nodes sharing a label, and an exact name
+match is not proof of identity: two graphs can each hold a `Repository` called
+`bobbin` and mean different things by it. The defect is the destructiveness and
+the silence, not the threshold. See
 [Migrating the existing auto-merge](#migrating-the-existing-auto-merge).
 
 ## Decision 1 — the artifact is SSSOM
