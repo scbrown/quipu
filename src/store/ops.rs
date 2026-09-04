@@ -653,65 +653,15 @@ impl Store {
         actor: Option<&str>,
         explicit_str: bool,
     ) -> Result<(i64, usize, usize)> {
-        let current: Vec<Fact> = self
-            .entity_facts(entity)?
-            .into_iter()
-            .filter(|f| f.attribute == predicate)
-            .collect();
-
-        // The vqy9 footgun, write-side: a bare string for an IRI-valued
-        // predicate would ASSERT a `Str` literal where every neighbour is a
-        // `Ref` — a mis-shaped edge that answers no traversal. Refuse the two
-        // unambiguous cases, the SAME two as retract_triples: the predicate
-        // currently holds only Refs; or it holds NOTHING and the string is
-        // IRI-shaped. A predicate that already stores string literals is left
-        // alone even when the new string looks like a URL — URL-valued
-        // literals (backend, externalUrl) are legitimate Strs, and refusing
-        // them blocked the first real supersede batch this route was built
-        // for. `explicit_str` is the caller saying {"str": "..."} — a tagged
-        // literal is a stated intent, so the heuristic stands aside entirely
-        // (json_to_value collapses both spellings to Value::Str, so the tag
-        // must ride in as a flag or it is not an escape hatch at all).
-        if let Value::Str(s) = &value {
-            let holds_ref = current.iter().any(|f| matches!(f.value, Value::Ref(_)));
-            let holds_str = current.iter().any(|f| matches!(f.value, Value::Str(_)));
-            let looks_like_iri = s.contains("://") && !s.chars().any(char::is_whitespace);
-            if !explicit_str
-                && ((holds_ref && !holds_str) || (current.is_empty() && looks_like_iri))
-            {
-                let pred_iri = self.resolve(predicate)?;
-                return Err(Error::InvalidValue(format!(
-                    "set refused: object \"{s}\" is a string literal, but <{pred_iri}> \
-                     takes an IRI reference. Pass the object as {{\"iri\": \"{s}\"}} to \
-                     set an edge, or as {{\"str\": \"{s}\"}} to state that a literal is \
-                     intended — a bare IRI-shaped string here is almost always a mis-shaped \
-                     edge that no graph traversal can follow."
-                )));
-            }
-        }
-
-        let already_present = current.iter().any(|f| f.value == value);
-        let to_retract: Vec<Fact> = current.into_iter().filter(|f| f.value != value).collect();
-
-        if to_retract.is_empty() && already_present {
-            return Ok((0, 0, 0));
-        }
-
-        let mut datums = retraction_datums(&to_retract);
-        let retracted = datums.len();
-        let asserted = usize::from(!already_present);
-        if !already_present {
-            datums.push(Datum {
-                entity,
-                attribute: predicate,
-                value,
-                valid_from: timestamp.to_string(),
-                valid_to: None,
-                op: crate::types::Op::Assert,
-            });
-        }
-        let tx_id = self.transact(&datums, timestamp, actor, Some("set"))?;
-        Ok((tx_id, retracted, asserted))
+        super::set::set_triple(
+            self,
+            entity,
+            predicate,
+            value,
+            timestamp,
+            actor,
+            explicit_str,
+        )
     }
 
     /// Episode-scoped logical retraction (aegis-hxb).
@@ -1017,7 +967,7 @@ impl Store {
 /// are one statement, not N — so this both fixes the crash and states the
 /// intent. Dedupe is linear because `Value` is only `PartialEq`; per-entity
 /// fact counts are small.
-fn retraction_datums(facts: &[Fact]) -> Vec<Datum> {
+pub(super) fn retraction_datums(facts: &[Fact]) -> Vec<Datum> {
     let mut datums: Vec<Datum> = Vec::with_capacity(facts.len());
     for f in facts {
         let already = datums

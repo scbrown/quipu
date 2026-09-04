@@ -8,4 +8,4 @@ src/episode/mod.rs 645
 src/graph.rs 514
 src/mcp/named_query.rs 537
 src/store/labels.rs 762
-src/store/ops.rs 580
+src/store/ops.rs 570

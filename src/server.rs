@@ -30,6 +30,7 @@ mod graph_store;
 mod handle;
 #[path = "server/publication.rs"]
 mod publication;
+mod query_endpoint;
 #[path = "server/query_usage.rs"]
 mod query_usage;
 #[path = "server/reason.rs"]
@@ -49,9 +50,7 @@ mod tools;
 mod update;
 
 use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
-#[cfg(test)]
-use base::query;
-use base::{health, metrics_handler, print_usage, query_get, query_post_http, stats, version};
+use base::{health, metrics_handler, print_usage, stats, version};
 use entity::{
     changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
     entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
@@ -59,6 +58,9 @@ use entity::{
 };
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use publication::{export, share_payload};
+#[cfg(test)]
+use query_endpoint::query;
+use query_endpoint::{query_get, query_post_http};
 use reason::{explain, reason, shapes};
 use tools::*;
 
