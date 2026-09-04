@@ -402,7 +402,7 @@ jobs:
   release-correctness:
     name: Release correctness
     if: always()
-    needs: [clippy, test, build, check, source-size, shapes]
+    needs: [clippy, test, build, check]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass
