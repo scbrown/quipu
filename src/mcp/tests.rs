@@ -1664,13 +1664,13 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_graph_thaw"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 44);
+        assert_eq!(defs.len(), 47);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 42);
+        assert_eq!(defs.len(), 45);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }

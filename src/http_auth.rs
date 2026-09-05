@@ -52,6 +52,10 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/proposal/accept",
     "/proposal/reject",
     "/embed_backfill",
+    // aegis-5qmg3r: alignment. `apply` takes &mut Store, materialises
+    // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
+    // (a graphs-registry write, the same reason /overlay/create is here).
+    "/align/apply",
     // aegis-2f4n: registered write routes that WRITE_ENDPOINTS had silently
     // omitted, so read-only mode and bearer auth did not cover them.
     "/project", // rw_handler; louvain persists quipu:memberOfCommunity when persist:true
@@ -86,6 +90,11 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    // aegis-5qmg3r: alignment reads. `propose` takes &Store and only queries
+    // (lookup + a prepared SELECT); `decide` touches no store at all. The
+    // writer of the three is /align/apply, above.
+    "/align/propose",
+    "/align/decide",
     // Method-sensitive: GET/HEAD are reads; PUT/POST/DELETE are writes.
     "/rdf-graph-store",
     "/graphs",        // registry listing + kind capability probe (pooled read)

@@ -193,6 +193,14 @@ fn cmd_apply(args: &[String], db_path: &str) {
     };
     let graph_iri = apply::derived_graph_iri(graph_a, graph_b);
     let mut store = crate::cli_open::open_store(db_path);
+    // Create the derived alignment graph if absent — same reasoning as the MCP
+    // tool, and done here too so the two surfaces cannot diverge. The IRI is a
+    // hash of the source pair, so the operator was never given a name they
+    // could `graph_create` in advance.
+    if let Err(e) = store.graph_create(&graph_iri) {
+        eprintln!("align apply: creating alignment graph {graph_iri}: {e}");
+        std::process::exit(1);
+    }
     let timestamp = chrono_now();
     match apply::apply(
         &mut store,

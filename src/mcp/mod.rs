@@ -9,6 +9,7 @@ pub mod explain;
 pub mod governance;
 pub mod graphiti;
 pub mod impact;
+pub mod align;
 pub mod knot;
 pub mod named_query;
 #[cfg(feature = "owl")]
@@ -29,6 +30,7 @@ pub use governance::{
     tool_overlay_create, tool_overlay_write, tool_policy_check, tool_verdict_verify,
     tool_verifier_authorized,
 };
+pub use align::{tool_align_apply, tool_align_decide, tool_align_propose};
 pub use knot::tool_knot;
 
 use crate::error::{Error, Result};
