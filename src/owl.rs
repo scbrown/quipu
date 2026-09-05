@@ -104,6 +104,14 @@ pub struct MaterializeReport {
     pub total: usize,
     /// Derivation passes actually run (aegis-2dp8e2).
     pub passes: usize,
+    /// Premise facts READ across all passes (aegis-2dp8e2).
+    ///
+    /// This is the quantity the semi-naive change exists to bound, and it is
+    /// asserted on directly rather than timed: a wall-clock benchmark is flaky
+    /// under CI load and would measure the machine as much as the algorithm.
+    /// Facts-read is deterministic, and it is what actually scaled with store
+    /// size — the naive path read every current fact on every pass.
+    pub premise_facts_read: usize,
     /// The pass budget was hit with work still pending, so the closure is
     /// PARTIAL. Reported rather than left silent: a fixpoint that stopped early
     /// is indistinguishable from one that finished, and the difference is a

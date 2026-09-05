@@ -147,6 +147,40 @@ impl Store {
         Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
+    /// Current facts whose SUBJECT is one of `entities`, across `graphs`.
+    ///
+    /// The de-duplication read semi-naive materialization needs (aegis-2dp8e2).
+    /// Scoping that read by ATTRIBUTE is not enough: `rdf:type` is on nearly
+    /// every entity, so an attribute-scoped dedup set still grows with the
+    /// store and the per-write cost keeps tracking store size — measured, 307
+    /// facts read at 1x and 3007 at 10x, which is the naive shape with a
+    /// smaller constant. Entities touched by one delta are bounded by the
+    /// delta, so this read is too.
+    pub fn current_facts_for_entities_in_graphs(
+        &self,
+        entities: &[i64],
+        graphs: &[i64],
+    ) -> Result<Vec<Fact>> {
+        if entities.is_empty() || graphs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ent_placeholders = std::iter::repeat_n("?", entities.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let graph_placeholders = std::iter::repeat_n("?", graphs.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
+             WHERE op = 1 AND valid_to IS NULL AND e IN ({ent_placeholders}) \
+             AND g IN ({graph_placeholders}) ORDER BY e, a"
+        );
+        let mut values = entities.to_vec();
+        values.extend_from_slice(graphs);
+        let mut stmt = self.conn.prepare(&sql)?;
+        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+    }
+
     /// Like [`Store::current_facts_for_attributes_in_graph`], but excluding
     /// facts whose transaction source is in `excluded_sources`.
     ///

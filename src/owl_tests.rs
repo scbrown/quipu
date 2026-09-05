@@ -896,3 +896,92 @@ fn the_pass_budget_is_reported_not_silent() {
     );
     assert!(r.passes > 0, "passes must be counted, not left at zero");
 }
+
+/// The two-size assertion sattler asked for: per-write cost must NOT track
+/// store size (aegis-2dp8e2).
+///
+/// Deliberately NOT a wall-clock benchmark. Timing under CI load measures the
+/// machine as much as the algorithm and goes flaky, and a flaky performance
+/// gate gets muted — which is how the naive path survived. `premise_facts_read`
+/// is the quantity that actually scaled, it is deterministic, and asserting on
+/// it is a real regression guard rather than a weather report.
+///
+/// ONE SIZE WOULD NOT DISTINGUISH THE TWO STRATEGIES. Naive and semi-naive both
+/// pass any single-size threshold you pick; only the RATIO between two sizes
+/// separates them. That is the whole design of this test.
+#[test]
+fn per_write_cost_does_not_scale_with_store_size() {
+    fn cost_at(entities: usize) -> (usize, usize) {
+        let mut store = Store::open_in_memory().unwrap();
+        store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+        let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+
+        // Bulk background: many typed entities the incoming write does not touch.
+        let mut ttl = String::from("@prefix ex: <http://example.org/> .\n");
+        for i in 0..entities {
+            ttl.push_str(&format!("ex:bg{i} a ex:Dog .\n"));
+        }
+        sn_ingest(&mut store, &ttl);
+        // Materialize the background the naive way, so both sizes start closed.
+        ont.materialize(&mut store, SN_TS).unwrap();
+
+        // ONE new write, the same at both sizes.
+        let before = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap();
+        sn_ingest(
+            &mut store,
+            "@prefix ex: <http://example.org/> .\nex:newcomer a ex:Dog .\n",
+        );
+        let after = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap();
+        let seed: Vec<_> = after
+            .iter()
+            .filter(|f| {
+                !before.iter().any(|b| {
+                    b.entity == f.entity && b.attribute == f.attribute && b.value == f.value
+                })
+            })
+            .cloned()
+            .collect();
+
+        let semi = ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+
+        // The naive cost of the SAME write, for the contrast.
+        let mut naive_store = Store::open_in_memory().unwrap();
+        naive_store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+        sn_ingest(&mut naive_store, &ttl);
+        ont.materialize(&mut naive_store, SN_TS).unwrap();
+        sn_ingest(
+            &mut naive_store,
+            "@prefix ex: <http://example.org/> .\nex:newcomer a ex:Dog .\n",
+        );
+        let naive = ont.materialize(&mut naive_store, SN_TS).unwrap();
+
+        (semi.premise_facts_read, naive.premise_facts_read)
+    }
+
+    let (semi_small, naive_small) = cost_at(50);
+    let (semi_big, naive_big) = cost_at(500); // 10x
+
+    // ANTI-VACUITY: the naive path MUST visibly scale, or "semi does not scale"
+    // is being asserted against a store too small to tell — the test would pass
+    // on a broken implementation and on a trivial fixture alike.
+    assert!(
+        naive_big > naive_small * 5,
+        "fixture too small to discriminate: naive read {naive_small} at 1x and \
+         {naive_big} at 10x, so this test cannot tell the strategies apart"
+    );
+
+    // THE ASSERTION. Semi-naive reads the delta plus an attribute-scoped dedup
+    // set. Both grow far slower than the store; the bound is deliberately loose
+    // (3x for a 10x store) so it guards the SHAPE without pinning an exact
+    // constant that ordinary changes would churn.
+    assert!(
+        semi_big < semi_small * 3,
+        "semi-naive per-write cost is tracking store size: read {semi_small} at \
+         1x and {semi_big} at 10x (naive: {naive_small} -> {naive_big}). The \
+         point of aegis-2dp8e2 is that this ratio stays flat."
+    );
+}

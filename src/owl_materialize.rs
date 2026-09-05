@@ -185,50 +185,6 @@ impl Ontology {
     /// place. So it is built ATTRIBUTE-SCOPED instead: every fact these rules can
     /// possibly derive has `rdf:type` or an axiom-named property as its
     /// attribute, and nothing else needs to be in the set.
-    /// Every attribute these rules can put on the LEFT of a derived fact.
-    ///
-    /// Used to scope the de-duplication read. `rdf:type` covers subclass,
-    /// equivalent-class and domain/range; the rest are the property IRIs the
-    /// axioms name as derivation TARGETS. Over-inclusion is harmless (a larger
-    /// dedup set, still bounded); UNDER-inclusion is not — a missing attribute
-    /// means a fact that already exists is staged again, which is precisely the
-    /// no-op re-writing this change exists to remove. So when in doubt this adds
-    /// both sides of a pair rather than reasoning about direction.
-    fn derivable_attribute_ids(&self, store: &Store, rdf_type_id: i64) -> Result<Vec<i64>> {
-        let mut ids = vec![rdf_type_id];
-        // `lookup`, not `intern`: an axiom naming a predicate no fact uses has
-        // nothing to de-duplicate against, and interning here would mint a
-        // dangling id as a side effect of reasoning about it — the same rule
-        // family 1b already follows.
-        let add = |iri: &str, ids: &mut Vec<i64>| -> Result<()> {
-            if let Some(id) = store.lookup(iri)?
-                && !ids.contains(&id)
-            {
-                ids.push(id);
-            }
-            Ok(())
-        };
-        for (a, b) in &self.axioms.subproperty_of {
-            add(a, &mut ids)?;
-            add(b, &mut ids)?;
-        }
-        for (a, b) in &self.axioms.inverse_of {
-            add(a, &mut ids)?;
-            add(b, &mut ids)?;
-        }
-        for (a, b) in &self.axioms.equivalent_properties {
-            add(a, &mut ids)?;
-            add(b, &mut ids)?;
-        }
-        for prop in &self.axioms.symmetric_properties {
-            add(prop, &mut ids)?;
-        }
-        for prop in &self.axioms.transitive_properties {
-            add(prop, &mut ids)?;
-        }
-        Ok(ids)
-    }
-
     fn derive_pass(
         &self,
         store: &Store,
@@ -246,15 +202,42 @@ impl Ontology {
                 (all.clone(), all)
             }
             Some(delta) => {
-                let attrs = self.derivable_attribute_ids(store, rdf_type_id)?;
-                let existing = store.current_facts_for_attributes_in_graphs_excluding_sources(
-                    &attrs,
-                    &graphs,
-                    &[],
-                )?;
+                // Dedup scoped by ENTITY, not by attribute. Attribute scoping
+                // looked right and was not: `rdf:type` sits on nearly every
+                // entity, so the dedup set still grew with the store and the
+                // per-write cost kept tracking it — measured 307 facts read at
+                // 1x and 3007 at 10x, the naive shape with a smaller constant.
+                // Caught by `per_write_cost_does_not_scale_with_store_size`,
+                // which is the only reason it is not still in here.
+                //
+                // Every fact these rules derive is ABOUT an entity the delta
+                // mentions — as a subject, or as a Ref object for the inverse
+                // and symmetric families, which put the object on the left. So
+                // the dedup set is exactly those entities' current facts, and
+                // that is bounded by the delta.
+                let mut ents: Vec<i64> = Vec::new();
+                for f in delta {
+                    if !ents.contains(&f.entity) {
+                        ents.push(f.entity);
+                    }
+                    if let Value::Ref(o) = &f.value
+                        && !ents.contains(o)
+                    {
+                        ents.push(*o);
+                    }
+                }
+                let existing = store.current_facts_for_entities_in_graphs(&ents, &graphs)?;
                 (delta.to_vec(), existing)
+                // NOTE: this preload is a cheap FIRST CUT only. Correctness does
+                // not rest on it — see the post-filter at the end of this
+                // function, which re-checks every staged datum against the store
+                // for exactly the entities it names. An earlier version relied on
+                // the preload being complete and it was not: it re-derived
+                // asserted ROOT facts into the companion (`paw partOf leg`),
+                // caught by `semi_naive_reaches_the_same_fixpoint_as_naive`.
             }
         };
+        report.premise_facts_read += premises.len() + dedup.len();
         let mut pass = Pass::from_facts(&dedup, timestamp);
         let type_facts = collect_type_facts(&premises, rdf_type_id);
 
@@ -456,6 +439,36 @@ impl Ontology {
                     );
                 }
             }
+        }
+
+        // THE CORRECTNESS GUARANTEE for the semi-naive path (aegis-2dp8e2).
+        //
+        // The naive path's `seen` was built from EVERY current fact, so nothing
+        // already in the store could be staged. Semi-naive cannot afford that
+        // read, and an entity-scoped approximation of it was WRONG — it missed
+        // facts and re-derived asserted ROOT triples into the companion, which
+        // is a silent divergence from the naive fixpoint.
+        //
+        // So the staged set is re-checked against the store for exactly the
+        // entities it names. That read is bounded by the CANDIDATES, not by the
+        // store, which is the property this whole change is about, and it is
+        // correct by construction rather than by an argument about which
+        // entities a rule can touch.
+        if seed.is_some() && !pass.datums.is_empty() {
+            let mut ents: Vec<i64> = Vec::new();
+            for d in &pass.datums {
+                if !ents.contains(&d.entity) {
+                    ents.push(d.entity);
+                }
+            }
+            let present: HashSet<(i64, i64, Vec<u8>)> = store
+                .current_facts_for_entities_in_graphs(&ents, &graphs)?
+                .into_iter()
+                .map(|f| (f.entity, f.attribute, f.value.to_bytes()))
+                .collect();
+            report.premise_facts_read += present.len();
+            pass.datums
+                .retain(|d| !present.contains(&(d.entity, d.attribute, d.value.to_bytes())));
         }
 
         Ok(pass.datums)
