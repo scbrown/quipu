@@ -228,7 +228,7 @@ jobs:
   # and coupling them would mean a wasm toolchain problem holds up the binary
   # release, which is the artifact people actually install.
   wasm:
-    name: Wasm (browser bundle)
+    name: Wasm (release asset)
     needs: release-plz
     # `always()` so the manual path (which skips release-plz entirely) still
     # runs; the rest of the condition is the real gate.

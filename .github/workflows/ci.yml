@@ -245,6 +245,81 @@ jobs:
         working-directory: wasm/harness
         run: node roundtrip.mjs
 
+  # The SHIPPED browser bundle (aegis-tpqccc), exercised here rather than only
+  # at release time.
+  #
+  # The release workflow's `wasm` job builds this bundle, runs this same smoke
+  # script and attaches the artifact. Left to itself, that job's FIRST EVER
+  # execution would be during a real release — and a failure there means a
+  # release with a red job and no wasm asset, discovered by the book page going
+  # dark. Running the identical build + smoke on PRs means the release job is
+  # never the thing being tested for the first time.
+  #
+  # Deliberately NOT the same job as `wasm` above: that one is the qd2/2l5
+  # acceptance harness for the library on wasm32, this one is the product
+  # bundle the book page loads. They share a target triple and nothing else,
+  # and merging them would hide which of the two went red.
+  wasm-explorer:
+    name: Wasm (browser bundle)
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/wasm-bindgen
+            target
+            wasm/explorer/target
+          key: ${{ runner.os }}-cargo-wasm-explorer-${{ hashFiles('wasm/explorer/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-wasm-explorer-
+            ${{ runner.os }}-cargo-wasm-
+
+      # The CLI matching wasm/explorer/Cargo.lock — the generated JS glue must
+      # come from the exact wasm-bindgen the crate compiled against, or the
+      # bundle fails at init with a version-mismatch message.
+      - name: Install wasm-bindgen-cli
+        run: |
+          set -euo pipefail
+          V=$(grep -A1 '^name = "wasm-bindgen"$' wasm/explorer/Cargo.lock | grep '^version' | cut -d'"' -f2)
+          if ! command -v wasm-bindgen >/dev/null || ! wasm-bindgen --version | grep -qF "$V"; then
+            cargo install wasm-bindgen-cli --version "$V" --locked --force
+          fi
+
+      - name: Install Playwright Chromium
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save playwright@1.56
+          npx playwright install --with-deps chromium
+
+      # The smoke script mints a pack with the NATIVE binary in the same run, so
+      # both halves of the round trip are the same commit by construction.
+      - name: Build the native binary
+        run: cargo build --release --locked --bin quipu
+
+      - name: Build the explorer bundle
+        working-directory: wasm/explorer
+        run: |
+          set -euo pipefail
+          cargo build --release --locked
+          wasm-bindgen --target web --out-dir pkg \
+            target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm
+
+      # native mints a pack -> browser imports, edits, exports it -> native
+      # imports THAT and finds the edit.
+      - name: Browser acceptance (smoke-wasm-explorer.mjs)
+        run: node scripts/smoke-wasm-explorer.mjs wasm/explorer/pkg
+
   check:
     name: Pre-commit checks
     runs-on: ubuntu-latest
