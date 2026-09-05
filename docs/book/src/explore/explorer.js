@@ -7,6 +7,35 @@
 // cannot reproduce is a screenshot with extra steps.
 
 const AEGIS = "http://aegis.gastown.local/ontology/";
+
+// The repository this page's graph belongs to. One definition, used by the
+// release-freshness check and by the PR flow below, so the two cannot drift
+// onto different repos (aegis-8fdp8d).
+const REPO = "scbrown/quipu";
+
+// Where the one-click flow stops being safe. wu measured `/new` unauthenticated
+// and found FOUR regimes, not the one everybody quotes:
+//
+//     2063 … 6563  302  accepted, the editor renders
+//     7063 … 7863  500  accepted by the edge, REJECTED by the app
+//     8063 … 8163  000  connection dropped mid-request
+//     8255 +       414  URI Too Long
+//
+// So the famous 8.2 KB number is the wrong one to design against: the 1.5 KB
+// band beneath it fails as a 500 or a dropped connection, which a reader reads
+// as "GitHub is broken" or "my network glitched" — never as "my delta is too
+// big". That is the worst available failure signal, because it points at
+// someone else and invites a retry that fails identically.
+//
+// 4 KB, not 6, so the margin absorbs a long IRI. Those numbers were measured
+// UNAUTHENTICATED; whether a session cookie shares the same buffer is unknown,
+// which is another reason to take the margin rather than the ceiling.
+const ONE_CLICK_URL_LIMIT = 4096;
+
+// The delta the reader is currently looking at, or null. Declared with the
+// other module state rather than beside its own functions: `refreshExport`
+// clears it after any write, and that reader sits earlier in the file.
+let lastDelta = null;
 const PREFIXES = `PREFIX aegis: <${AEGIS}>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -117,7 +146,7 @@ function renderProvenance(report, source, timings) {
 // because it is a nicety, not the page.
 async function reportReleaseFreshness(packVersion) {
   try {
-    const r = await fetch("https://api.github.com/repos/scbrown/quipu/releases/latest");
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
     if (!r.ok) return;
     const latest = (await r.json()).tag_name?.replace(/^quipu-ai-v/, "");
     if (!latest) return;
@@ -405,6 +434,15 @@ function editNote(text, bad = false) {
 }
 
 async function refreshExport() {
+  // Any write invalidates a delta computed before it. Clearing rather than
+  // silently recomputing, because the reader reviewed the OLD one and must not
+  // be able to open GitHub with something they never saw.
+  if (lastDelta) {
+    lastDelta = null;
+    $("#pr-go").disabled = true;
+    $("#pr-preview").replaceChildren(el("p", { class: "muted", text:
+      "Edited since the last delta was computed — press \u201cCompute the delta\u201d again." }));
+  }
   const log = await ask({ cmd: "editLog" }).catch(() => []);
   $("#edit-count").textContent = log.length
     ? `${fmt(log.length)} write${log.length === 1 ? "" : "s"} in this tab`
@@ -439,6 +477,112 @@ async function refreshExport() {
   } catch (err) {
     dl.replaceChildren(el("p", { class: "bad", text: err.message }));
   }
+}
+
+// --- Propose the edits as a PR, with no API and no token (aegis-8fdp8d) -----
+//
+// GitHub's own web pages do the work. The page computes the delta, SHOWS it,
+// says which of the two flows it is about to use, and only then opens anything.
+// Nothing is sent anywhere: `/new` and `/upload` are ordinary links, and the
+// reader is the one who clicks "Propose changes" on GitHub's page.
+
+// The lineage rides the URL, because `delta.ru` cannot carry it.
+//
+// `delta_hash` is computed over the update document exactly as `build_delta`
+// emits it, so prepending a `#` provenance header here would make the file stop
+// matching its own manifest. The parent therefore travels as PR metadata, which
+// is also where a reviewer looks first.
+//
+// KNOWN GAP, raised rather than papered over: this puts `parent_share` in a PR
+// body, and a PR body is not under version control and is not visible to a CI
+// check on the file. §3.4 wants CI to verify lineage. Carrying it INSIDE the
+// document needs a versioned extension to `share-delta/v1` proposed to malcolm
+// — which is the ruling's own answer for anything the format lacks — not a
+// header invented in this page.
+function newFileUrl(path, content, delta) {
+  const q = new URLSearchParams({
+    filename: path,
+    value: content,
+    quick_pull: "main",
+    title: `quipu delta ${delta.manifest.delta_id.slice(7, 19)}`,
+    message: `Delta against parent share ${delta.manifest.parent_share}\n`
+      + `parent_graph_hash: ${delta.manifest.parent_graph_hash}\n`
+      + `delta_hash: ${delta.manifest.delta_hash}\n`
+      + `Produced in the browser by the quipu wasm explorer (aegis-8fdp8d).`,
+  });
+  return `https://github.com/${REPO}/new/main?${q}`;
+}
+
+function uploadUrl(dir) {
+  return `https://github.com/${REPO}/upload/main/${dir}`;
+}
+
+async function prepareDelta() {
+  editNote("Computing the delta…");
+  const box = $("#pr-preview");
+  try {
+    const d = await ask({ cmd: "delta" });
+    lastDelta = d;
+    box.replaceChildren();
+
+    if (d.empty) {
+      // An unedited store has nothing to propose, and opening GitHub with a
+      // blank file would be a worse answer than saying so.
+      box.append(el("p", { class: "muted", text:
+        "No changes yet — the store still matches the pack it loaded, so there "
+        + "is no delta to propose. Make an edit above first." }));
+      editNote("Nothing to propose.");
+      $("#pr-go").disabled = true;
+      return;
+    }
+
+    const url = newFileUrl(d.path, d.update, d);
+    const oneClick = url.length <= ONE_CLICK_URL_LIMIT;
+
+    // The FILE size, not the URL size: the file is the thing a reader can
+    // reason about. Percent-encoding inflates the delta roughly 3x, so a URL
+    // number would look alarming for a small edit and explain nothing.
+    const facts = [
+      ["Delta id", d.manifest.delta_id],
+      ["Parent share", d.manifest.parent_share],
+      ["Goes to", d.path],
+      ["Size", `${fmt(d.update_bytes)} bytes of SPARQL Update`],
+      ["Flow", oneClick
+        ? "one click — GitHub prefills the editor"
+        : "download, then GitHub's upload page (too large to carry in a URL)"],
+    ];
+    const dl = el("dl");
+    for (const [k, v] of facts) {
+      dl.append(el("dt", { text: k }), el("dd", { class: "mono", text: v }));
+    }
+    box.append(dl, el("pre", { class: "mono", text: d.update }));
+    $("#pr-go").disabled = false;
+    $("#pr-go").textContent = oneClick
+      ? "Open GitHub with this file prefilled"
+      : "Download the delta and open GitHub's upload page";
+    editNote(`Delta ready: ${fmt(d.update_bytes)} bytes. Review it above before opening GitHub.`);
+  } catch (err) {
+    box.replaceChildren(el("p", { class: "bad", text: err.message }));
+    editNote(err.message, true);
+  }
+}
+
+function proposeAsPr() {
+  const d = lastDelta;
+  if (!d || d.empty) return;
+  const url = newFileUrl(d.path, d.update, d);
+  if (url.length <= ONE_CLICK_URL_LIMIT) {
+    window.open(url, "_blank", "noopener");
+    editNote("Opened GitHub's new-file page with the delta prefilled. "
+      + "Click \u201cPropose new file\u201d there and GitHub makes the branch and the PR.");
+    return;
+  }
+  // Two steps, and the download goes FIRST: the upload page is useless without
+  // the file, and a reader who lands there empty-handed has to come back.
+  download(d.path.split("/").pop(), new Blob([d.update], { type: "application/sparql-update" }));
+  window.open(uploadUrl(`${d.pack_dir}/deltas`), "_blank", "noopener");
+  editNote(`Downloaded ${d.path.split("/").pop()} and opened GitHub's upload page for `
+    + `${d.pack_dir}/deltas — drag the file in and click \u201cPropose changes\u201d.`);
 }
 
 function download(name, blob) {
@@ -698,6 +842,8 @@ async function boot() {
       onclick: () => { $("#sparql").value = c.sparql; runSparql(); },
     }));
   }
+  $("#pr-prepare").addEventListener("click", prepareDelta);
+  $("#pr-go").addEventListener("click", proposeAsPr);
   $("#download-pack").addEventListener("click", downloadPack);
   $("#download-nt").addEventListener("click", downloadNtriples);
   $("#file-input").addEventListener("change", async (e) => {
