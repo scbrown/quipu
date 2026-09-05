@@ -15,6 +15,9 @@ get adopted, and the graph get staged and promoted, and then you query it — an
 edit it and export a pack that declares this one as its parent, which is the lineage
 half of the same story. It is the transcript below, with you as the receiver.
 
+Follow the [contributor constellation walkthrough](../concepts/contributor-constellation.md)
+to explore the vision, a design decision, and the code it governs on a phone.
+
 ## One run, end to end
 
 This transcript is not illustrative output. It is

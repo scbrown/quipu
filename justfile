@@ -252,3 +252,15 @@ changelog-verify *args:
 # fail in only one, and passed a section holding 221 commits against 1 expected.
 changelog-verify-test:
     ./scripts/test-verify-changelog.sh
+
+# Repository contributor graph: generate, prove the receiver, or build the release share.
+contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+        test) node --test scripts/build-contributor-knowledge.test.mjs && scripts/check-explorer-published.test.sh ;;
+        generate) node scripts/build-contributor-knowledge.mjs . "{{output}}" ;;
+        verify) node scripts/verify-contributor-knowledge.mjs "${QUIPU_BIN:?}" "{{output}}" ;;
+        pack) scripts/build-repository-share.sh "${QUIPU_BIN:?}" "$(command -v bobbin)" "$PWD" "{{output}}" "$(git rev-parse HEAD)" ;;
+        *) echo "unknown contributor command" >&2; exit 2 ;;
+    esac

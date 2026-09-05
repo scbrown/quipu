@@ -104,3 +104,10 @@ repos:
         language: script
         files: ^docs/book/
         pass_filenames: false
+
+      - id: contributor-knowledge
+        name: contributor projection and publication checks
+        entry: just contributor test
+        language: system
+        pass_filenames: false
+        files: ^(docs/knowledge/|scripts/(build-contributor|check-explorer)|shapes/contributor|queries/repository-share|\.github/workflows/docs\.yml)

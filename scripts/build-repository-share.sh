@@ -78,6 +78,9 @@ aegis:aegis-otg3xz.4 a aegis:WorkItem ;
 PY
 "$QUIPU_BIN" knot "$CONTEXT" --db "$DB"
 
+node "$SOURCE/scripts/build-contributor-knowledge.mjs" "$SOURCE" "$CONTEXT"
+"$QUIPU_BIN" knot "$CONTEXT" --db "$DB"
+
 "$QUIPU_BIN" share --construct "$(cat "$QUERY")" --turtle \
   --output "$OUTPUT" --db "$DB"
 
@@ -104,6 +107,8 @@ PY
   'PREFIX aegis: <http://aegis.gastown.local/ontology/> SELECT ?module WHERE { ?symbol aegis:definedIn ?module . ?symbol aegis:filePath "src/share_transport.rs" } LIMIT 1' \
   --db "$FRESH_DB" > "$QUERY_JSON"
 grep -q 'src%2Fshare_transport\.rs' "$QUERY_JSON"
+
+node "$SOURCE/scripts/verify-contributor-knowledge.mjs" "$QUIPU_BIN" "$FRESH_DB"
 
 wc -c "$OUTPUT"/*
 wc -l "$OUTPUT/export.nt"
