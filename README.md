@@ -56,7 +56,7 @@ itself compiled to WebAssembly**. GitHub cannot run scripts in a README, so here
 picture; the page is one click away.
 
 <p align="center">
-  <a href="https://scbrown.github.io/quipu/explore/"><img src="assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, 61,069 triples accepted, 0 quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
+  <a href="https://scbrown.github.io/quipu/explore/"><img src="assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, the triple count accepted with none quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
 </p>
 
 <p align="center">
