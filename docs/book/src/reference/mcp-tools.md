@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **42 tools** in a default build, or
-**43** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **45 tools** in a default build, or
+**46** when built with the `owl` feature (which adds `quipu_load_ontology`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -39,6 +39,38 @@ or a SPARQL graph query. Scope parameters are mutually exclusive.
 | `group_id` | No | Export ROOT entities attributed to this episode group |
 | `construct` | No | SPARQL CONSTRUCT or DESCRIBE query whose graph is exported |
 | `format` | No | `turtle` (default) or `ntriples` |
+
+### `quipu_align_propose`
+
+**READ.** Proposes candidate cross-graph alignments between two named graphs as a
+scored SSSOM mapping set, and returns the `expected_version` that
+`quipu_align_apply` requires.
+
+Refuses an unknown graph IRI rather than returning zero candidates: `align::enumerate`
+returns an empty enumeration for an IRI it cannot look up, so a typo would otherwise
+come back as `0 candidates` — indistinguishable from two graphs that genuinely share
+nothing.
+
+### `quipu_align_decide`
+
+**READ.** Applies operator `accept` / `negate` verdicts to a proposed mapping set.
+Touches no store. Returns the decided set and the `expected_version` to carry into
+`quipu_align_apply`.
+
+### `quipu_align_apply`
+
+**WRITE.** Materialises decided alignments as `owl:sameAs` / `quipu:distinctFrom` in an
+alignment graph derived from the two source graphs, creating that graph if needed.
+
+`expected_version` is **required** and must be carried from the decision being applied.
+It is not computed here: `set_version` hashes the mapping set itself, so deriving the
+version at apply time would hash the set about to be written, always match, and silently
+discard a concurrent operator's decision.
+
+These are three separate tools rather than one with a `mode` because an MCP client judges
+a tool by its annotation. A moded tool would carry a single, necessarily destructive
+annotation, and every read-only call — including `propose`, the entry point — would be
+refused under a no-approval policy.
 
 ### `quipu_knot`
 

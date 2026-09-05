@@ -35,6 +35,64 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 }
             }
         }),
+        // Alignment (aegis-5qmg3r). THREE tools, not one with a `mode`: codex
+        // judges a tool by its annotation, a moded tool would need the
+        // destructive one because it CAN write, and `propose` — the entry point
+        // — would then hit the approval-never refusal. The operator's agent
+        // could not start the operator's feature.
+        serde_json::json!({
+            "name": "quipu_align_propose",
+            "description": "READ. Propose candidate cross-graph alignments between two named graphs, scored, as an SSSOM mapping set. Returns expected_version, which align_apply requires. Refuses an unknown graph IRI rather than returning 0 candidates.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "graph_a": { "type": "string", "description": "First named-graph IRI. Must exist; an unknown IRI is refused, not treated as empty." },
+                    "graph_b": { "type": "string", "description": "Second named-graph IRI." },
+                    "mapping_set_id": { "type": "string", "description": "Identifier for the produced mapping set." }
+                },
+                "required": ["graph_a", "graph_b"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_align_decide",
+            "description": "READ. Apply operator accept/negate decisions to a proposed mapping set. Touches no store. Returns the decided set and the expected_version to carry into align_apply.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "set_tsv": { "type": "string", "description": "SSSOM TSV from align_propose." },
+                    "reviewer": { "type": "string", "description": "Who is deciding." },
+                    "decisions": {
+                        "type": "array",
+                        "description": "Per-pair verdicts.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "subject_id": { "type": "string" },
+                                "object_id": { "type": "string" },
+                                "decision": { "type": "string", "enum": ["accept", "negate"] }
+                            },
+                            "required": ["subject_id", "object_id", "decision"]
+                        }
+                    }
+                },
+                "required": ["set_tsv", "reviewer", "decisions"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_align_apply",
+            "description": "WRITE. Materialise decided alignments as owl:sameAs / quipu:distinctFrom in a derived alignment graph. expected_version is REQUIRED and must be carried from the decision: computing it here would hash the set being written, always match, and silently discard a concurrent operator's decision.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "set_tsv": { "type": "string", "description": "Decided SSSOM TSV from align_decide." },
+                    "graph_a": { "type": "string", "description": "First source graph IRI (the pair given to align_propose)." },
+                    "graph_b": { "type": "string", "description": "Second source graph IRI." },
+                    "expected_version": { "type": "string", "description": "REQUIRED. From align_propose or align_decide. Never recomputed locally." },
+                    "actor": { "type": "string", "description": "Who is applying." }
+                },
+                "required": ["set_tsv", "graph_a", "graph_b", "expected_version"]
+            }
+        }),
         serde_json::json!({
             "name": "quipu_knot",
             "description": "Assert facts into the knowledge graph (with optional SHACL validation)",
