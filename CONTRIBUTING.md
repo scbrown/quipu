@@ -53,6 +53,27 @@ just lint            # cargo clippy -- -D warnings
 
 **Debug builds only** — never pass `--release`. Debug is fast enough for validation.
 
+### `cargo build` does not compile your tests
+
+Test modules are `#[cfg(test)]`, so `cargo build` never compiles them. A clean build is
+therefore **no evidence at all** about a file you just edited if that file is a test module —
+it can contain an unclosed delimiter and `cargo build` will have nothing to say.
+
+This matters because "I ran `cargo build`, it's fine" is the natural habit, and it is a check
+that passes *because it did not look at the thing*. Measured on 2026-09-05 while resolving a
+conflict in `src/align/tests.rs`: `cargo build --no-default-features` was clean over a file with
+a brace-balance error that `cargo test` caught immediately.
+
+Use `cargo test` (or `cargo clippy --all-targets`, which does compile test targets) whenever the
+edit touched a test module. `--all-targets` is also why the lint gate catches things the build
+does not — e.g. a non-snake-case test name.
+
+### After resolving a merge conflict, verify BOTH sides by NAME
+
+Check that specific tests from each side of the conflict are present and passing, by name. **Do
+not verify by count.** If a resolution drops one side's hunk and keeps another's, the total can
+match while the content is wrong — a matching count is precisely what a lost hunk looks like.
+
 ## Adding New Dependencies
 
 Heavy or optional dependencies MUST be feature-gated:
