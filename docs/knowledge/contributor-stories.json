@@ -1,0 +1,46 @@
+{
+  "vision": {
+    "title": "Quipu vision",
+    "source": "docs/design/vision.md",
+    "quote": "Start strict. Use agents to bear the cost of strictness.",
+    "summary": "An embeddable knowledge graph combining ontology, temporal facts and vector search. This is the project's north-star vision; individual feature status belongs to the implementation docs."
+  },
+  "stories": [
+    {
+      "id": "federation",
+      "title": "Federation has explicit boundaries",
+      "source": "docs/design/federation-remote-provider.md",
+      "quote": "It is deliberately separate from `GraphProvider`'s whole-query fanout.",
+      "summary": "Provider federation sends the whole query to each declared member and unions labelled results. SERVICE plans a remote subquery separately. Variable endpoints cannot widen the operator's allowlist; neither path distributes writes.",
+      "code": ["src/provider/mod.rs", "src/config/federation.rs"],
+      "episode": "The remote-provider design distinguishes whole-query fanout from the subsequently implemented SERVICE path. Keeping that boundary visible prevents callers from treating unioned provider results as a distributed join."
+    },
+    {
+      "id": "single-writer",
+      "title": "One writer, concurrent readers",
+      "source": "docs/book/src/reference/rest-api.md",
+      "quote": "FIFO-fair writer connection.",
+      "summary": "Writes keep one FIFO-fair connection while a read-only pool uses SQLite WAL concurrency. Single-writer does not mean serializing every read behind the writer.",
+      "code": ["src/server/handle.rs"],
+      "episode": "The REST API's Read Concurrency record describes a capability that existed but was unused: every read took the writer mutex before the read pool. It records a measured comparison with the pool as the only variable."
+    },
+    {
+      "id": "asserted-types",
+      "title": "Asserted types preserve graph boundaries",
+      "source": "docs/design/semantic-reasoning-gaps.md",
+      "quote": "matches asserted triples only; implicit RDFS subclass widening was removed",
+      "summary": "A plain type query reads asserted facts. Explicit property paths request wider reachability. An overlay must not forge reachability in its parent; the inference marker explains withheld types.",
+      "code": ["src/sparql/rdfs.rs", "src/sparql/property_path.rs"],
+      "episode": "The semantic-reasoning review records the deliberate removal of implicit subclass widening and points to the named-graph boundary ruling. The remaining advisory marker makes the withheld inference visible to clients."
+    },
+    {
+      "id": "verify-before-trust",
+      "title": "Receiving knowledge is a deliberate act",
+      "source": "docs/book/src/sharing/README.md",
+      "quote": "It does not merge on receipt, and it does not take a peer's word for how trustworthy that peer is.",
+      "summary": "Verify the bytes, inspect and adopt the shapes, stage the graph, then deliberately promote it. A share transports knowledge without silently granting it local authority.",
+      "code": ["src/share_transport.rs", "src/share_import.rs"],
+      "episode": "The sharing walkthrough records two fresh stores exchanging a bundle: quarantine for an unknown vocabulary, deliberate shape adoption and promotion, then a merge with two provenance parents. The checked transcript is the repeatable evidence."
+    }
+  ]
+}

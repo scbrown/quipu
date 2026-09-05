@@ -327,7 +327,7 @@ impl Explorer {
     /// The result share cannot be built, or the generated update is not valid
     /// SPARQL.
     pub fn delta(&self) -> Result<String, JsValue> {
-        let built = quipu::share_delta::build_delta(
+        let built = quipu::share_delta::build_delta_with_limit(
             &self.store,
             &self.parent_share,
             &self.parent_graph_hash,
@@ -336,6 +336,7 @@ impl Explorer {
                 scope: ShareScope::Root,
                 ..ShareOptions::default()
             },
+            MAX_EXPORT_BYTES,
         )
         .map_err(err_js)?;
         let pack_dir = self.pack_dir();
