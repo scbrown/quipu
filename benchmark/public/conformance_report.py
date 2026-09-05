@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -589,7 +590,7 @@ def _git(*args: str) -> tuple[int, str]:
     return proc.returncode, proc.stdout.strip()
 
 
-def ledger_provenance(data: dict) -> tuple[int, list[str]]:
+def ledger_provenance(data: dict, pr_base: str | None = None) -> tuple[int, list[str]]:
     """Is each ledger derived from the code it ships beside?
 
     Returns ``(exit_code, messages)`` with THREE outcomes, because two cannot
@@ -611,6 +612,34 @@ def ledger_provenance(data: dict) -> tuple[int, list[str]]:
     rc, head = _git("rev-parse", "HEAD")
     if rc != 0:
         return 2, ["cannot resolve HEAD (not a git checkout?) — provenance UNVERIFIED"]
+
+    # PR MODE (aegis-1gp76j, approved by wu 2026-09-05).
+    #
+    # On `main` the question is "was this published ledger derived from the code
+    # it ships beside?" — a strict HEAD comparison, and the invariant now rests
+    # entirely there.
+    #
+    # On a PR the strict form asks something else by accident. Merging main in
+    # moves HEAD, so a ledger goes "stale" because SOMEBODY ELSE changed src —
+    # which measures branch freshness, not provenance. Measured on #156: two
+    # full re-derives in one hour, both returning entailment 29/6. Zero
+    # information, ~10 minutes of CI each, once per unrelated merge.
+    #
+    # So in PR mode only the files THIS PR CHANGED can put its ledger out of
+    # date. A PR that touches src still re-derives, always (wu's condition 3):
+    # its own changed files are exactly what the ledger must cover.
+    own: set[str] | None = None
+    if pr_base:
+        base_rc, base = _git("merge-base", pr_base, head)
+        if base_rc != 0:
+            return 2, [
+                f"cannot resolve merge-base with {pr_base} — provenance UNVERIFIED "
+                f"(fetch-depth: 0?)"
+            ]
+        rc_own, changed = _git("diff", "--name-only", base, head, "--", *CODE_PATHS)
+        if rc_own != 0:
+            return 2, ["cannot diff this PR against its base — provenance UNVERIFIED"]
+        own = set(changed.splitlines())
 
     revisions = {
         key: value
@@ -634,8 +663,11 @@ def ledger_provenance(data: dict) -> tuple[int, list[str]]:
         rc, changed = _git("diff", "--name-only", revision, head, "--", *CODE_PATHS)
         if rc != 0:
             unknown.append(f"{key}={revision[:8]}: git diff failed — provenance UNVERIFIED")
-        elif changed:
-            files = changed.splitlines()
+            continue
+        files = changed.splitlines()
+        if own is not None:
+            files = [f for f in files if f in own]
+        if files:
             drifted.append(
                 f"{key}={revision[:8]} but HEAD={head[:8]}, and "
                 f"{len(files)} code file(s) differ between them: "
@@ -653,6 +685,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, default=Path("benchmark/public/results"))
     parser.add_argument("--docs-dir", type=Path, default=Path("docs/book/src/benchmarks"))
+    parser.add_argument(
+        "--pr-base",
+        default=os.environ.get("GITHUB_BASE_REF") or None,
+        help="base ref of the PR under test; enables PR mode, where only THIS "
+             "PR's own conformance-relevant changes can stale its ledger. "
+             "Defaults to $GITHUB_BASE_REF, which GitHub sets on pull_request "
+             "events and leaves unset on push — so main gets the strict arm "
+             "with no configuration.",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -687,7 +728,16 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        code, messages = ledger_provenance(data)
+        # Which arm ran is PRINTED, always. wu's condition on the PR-mode
+        # refinement: the two arms answer different questions, so a bare
+        # "provenance ok" would mean two things and a reader could not tell
+        # which guarantee they were given.
+        base = None
+        if args.pr_base:
+            base = args.pr_base if "/" in args.pr_base else f"origin/{args.pr_base}"
+        arm = f"PR mode (base {base})" if base else "STRICT mode (ledger revision must be HEAD)"
+        print(f"conformance_report: provenance arm = {arm}")
+        code, messages = ledger_provenance(data, base)
         if code:
             label = (
                 "ledger provenance CANNOT BE VERIFIED"
@@ -704,7 +754,13 @@ def main(argv: list[str] | None = None) -> int:
                 )
             return code
         print(f"conformance_report: {len(files)} published artifact(s) match the ledgers")
-        print("conformance_report: every ledger is derived from the code it ships with")
+        if base:
+            print(
+                "conformance_report: every ledger covers THIS PR's own "
+                "conformance-relevant changes (main's are checked on push)"
+            )
+        else:
+            print("conformance_report: every ledger is derived from the code it ships with")
         return 0
 
     for path, content in sorted(files.items()):
