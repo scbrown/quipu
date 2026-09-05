@@ -185,10 +185,13 @@ explorer mode="release":
     DEST=docs/book/src/explore
     mkdir -p "$DEST/pkg"
     if [ "{{mode}}" = "local" ]; then
-        cd wasm/explorer && cargo build --release --locked
-        wasm-bindgen --target web --out-dir "$OLDPWD/$DEST/pkg" \
-            target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm
-        cd "$OLDPWD"
+        REPO=$PWD
+        cd wasm/explorer
+        cargo build --release --locked
+        TARGET=$(cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
+        wasm-bindgen --target web --out-dir "$REPO/$DEST/pkg" \
+            "$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
+        cd "$REPO"
         echo "Built the bundle from this tree. Provide a pack yourself, or run"
         echo "  just explorer release   # to fetch the released one"
     else
