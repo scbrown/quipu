@@ -41,6 +41,7 @@ mod cli_graph;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
+mod cli_align;
 mod cli_policy;
 mod cli_propose;
 
@@ -97,6 +98,7 @@ fn main() {
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
         "policy" => cli_policy::cmd_policy(&args, db_path),
+        "align" => cli_align::cmd_align(&args, db_path),
         "path" => cli_path::cmd_path(&args, db_path, &config.base_ns),
         "propose" => cli_propose::cmd_propose(&args, db_path),
         "audit" => cli_audit::cmd_audit(&args, db_path, &config.base_ns),
