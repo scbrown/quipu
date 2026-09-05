@@ -14,6 +14,7 @@ globs:
   - "docs/book/src/**/*.md"
   - "README.md"
   - "CONTRIBUTING.md"
+  - "docs/RELEASING.md"
 
 # Tool-generated markdown. `bd init` writes these and rewrites them on upgrade,
 # so hand-fixing their MD029/MD032 violations would be reverted by the next bd
