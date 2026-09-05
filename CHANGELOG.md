@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.37] - 2026-09-05
+
+### Added
+
+- *(align)* A `quipu align` CLI verb — make src/align reachable([8212da0](https://github.com/scbrown/quipu/commit/8212da052ee65fec1e37e099bd6b7cda4722c69f))
+- *(align)* REST routes and three MCP tools — the surface is now reachable([ea67440](https://github.com/scbrown/quipu/commit/ea674409daa98efad4a7ad27c6b90bcfb1540a8d))
+- Add contributor knowledge and a mobile constellation explorer([d2807e2](https://github.com/scbrown/quipu/commit/d2807e2756e7bd388b6ce75e8b4b3dac6ccbfca7))
+- *(mcp)* Entailment regime on tool_query, and a marker that says so([8233447](https://github.com/scbrown/quipu/commit/8233447ca788fd0438b804d92e693fe72863977d))
+- *(align)* Count entities examined but unlabelled, so a zero says WHICH zero([84c4fab](https://github.com/scbrown/quipu/commit/84c4fabbe0edc989bd6d03be5986dcf6aeffec98))
+
+### Changed
+
+- *(server)* Assets owns its routes, so server.rs is back under the ratchet([db83628](https://github.com/scbrown/quipu/commit/db83628d9c743d567b4a84fff419bb8172ec1d5a))
+
+### Fixed
+
+- *(conformance)* PR mode for the ledger check, and the push trigger that never fired([0f63470](https://github.com/scbrown/quipu/commit/0f63470c29b119c643cb42e1b6eba299d581310d))
+- *(cli)* Document `align` in --help; cargo fmt([8cea89d](https://github.com/scbrown/quipu/commit/8cea89db010ffd8aa0b25e09b2926cb13e1e1c89))
+- *(server)* Re-export align tools at the crate root; own route module([0c54147](https://github.com/scbrown/quipu/commit/0c5414786ee021cc783c92c729f1765fd39f0d56))
+- *(align)* Who owns the graph NAME decides what an absent graph means([735866f](https://github.com/scbrown/quipu/commit/735866f432f9bfc502c7e3374abdbe999e89bf94))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers on 0f63470c([e3f3a10](https://github.com/scbrown/quipu/commit/e3f3a10893021173882b45690fec4ae51ee620a1))
+- *(conformance)* Re-derive ledgers on the marker head([5908c90](https://github.com/scbrown/quipu/commit/5908c90c69bcd6a9adb1dc479dd8c78e2b45435a))
+- *(conformance)* Re-derive ledgers on 326428c0([37263ec](https://github.com/scbrown/quipu/commit/37263ec2d2a8dff7419b477921a15a2ae9d9d91c))
+- *(conformance)* Re-derive ledgers on 25336d1b([95544cc](https://github.com/scbrown/quipu/commit/95544cca8659621ebbbd838c984f101c456a21c9))
+- *(conformance)* Ledgers for the constellation work([e295944](https://github.com/scbrown/quipu/commit/e2959449250c34cdf53aa225f509375319667628))
+- *(conformance)* Re-derive ledgers on 84c4fabb([2a30071](https://github.com/scbrown/quipu/commit/2a30071587d5d44df3271a1f36a53fe4bbfb30ca))
+- *(conformance)* Keep this branch's own ledgers through the merge([c3aa818](https://github.com/scbrown/quipu/commit/c3aa818443b789ba1e8ef70009fb3cb57e336205))
+
 ## [0.3.36] - 2026-09-05
 
 ### Added
