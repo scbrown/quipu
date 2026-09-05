@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.37] - 2026-09-05
+
+### Added
+
+- Add contributor knowledge and a mobile constellation explorer([d2807e2](https://github.com/scbrown/quipu/commit/d2807e2756e7bd388b6ce75e8b4b3dac6ccbfca7))
+
+### Fixed
+
+- *(conformance)* PR mode for the ledger check, and the push trigger that never fired([0f63470](https://github.com/scbrown/quipu/commit/0f63470c29b119c643cb42e1b6eba299d581310d))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers on 0f63470c([e3f3a10](https://github.com/scbrown/quipu/commit/e3f3a10893021173882b45690fec4ae51ee620a1))
+- *(conformance)* Ledgers for the constellation work([e295944](https://github.com/scbrown/quipu/commit/e2959449250c34cdf53aa225f509375319667628))
+
 ## [0.3.36] - 2026-09-05
 
 ### Added
