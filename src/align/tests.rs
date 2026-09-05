@@ -874,3 +874,186 @@ fn the_nothing_verified_output_warns_the_shell_caller_about_its_exit_code() {
     assert!(text.contains("Exit status 2, not 1"), "{text}");
     assert!(text.contains("-eq 1"), "{text}");
 }
+
+// ---------------------------------------------------------------------------
+// decide — the operator's judgement (aegis-sosiaa)
+// ---------------------------------------------------------------------------
+
+use super::decide::{Decision, DecisionRow, decide};
+
+const A: &str = "http://a.example/x";
+const B: &str = "http://b.example/y";
+
+fn proposed() -> MappingSet {
+    let mut set = MappingSet::new("urn:quipu:align:a:b");
+    set.mappings.push(mapping(A, B));
+    set
+}
+
+fn row(s: &str, o: &str, decision: Decision) -> DecisionRow {
+    DecisionRow {
+        subject_id: s.into(),
+        object_id: o.into(),
+        decision,
+    }
+}
+
+#[test]
+fn accept_authors_the_row_so_it_derives_a_knot() {
+    let out = decide(&proposed(), &[row(A, B, Decision::Accept)], "malcolm").unwrap();
+    assert_eq!(out.applied, 1);
+    let m = &out.set.mappings[0];
+    assert!(m.derives_knot());
+    assert!(!m.derives_distinct_from());
+    assert_eq!(m.author_id.as_deref(), Some("malcolm"));
+}
+
+#[test]
+fn negate_asserts_difference_rather_than_merely_suppressing() {
+    let out = decide(&proposed(), &[row(A, B, Decision::Negate)], "malcolm").unwrap();
+    let m = &out.set.mappings[0];
+    assert!(m.derives_distinct_from());
+    assert!(!m.derives_knot());
+    assert_eq!(m.author_id.as_deref(), Some("malcolm"));
+}
+
+#[test]
+fn decline_suppresses_but_is_never_authored() {
+    let out = decide(&proposed(), &[row(A, B, Decision::Decline)], "malcolm").unwrap();
+    let m = &out.set.mappings[0];
+
+    // Derives NOTHING. "Not enough evidence" is not "definitely different", and
+    // a derived distinctFrom would suppress the pair everywhere, forever, while
+    // nobody is ever shown the mistake.
+    assert!(!m.derives_knot());
+    assert!(!m.derives_distinct_from());
+
+    // And is NOT authored: an authored row is one an SSSOM consumer may read as
+    // curated truth, and declining asserts nothing at all. This is the
+    // assertion that stops a decline leaking out of quipu as a claim.
+    assert_eq!(m.author_id, None, "a declined row must never be authored");
+
+    // ...but it IS reviewed, which is what stops propose re-offering it.
+    assert!(m.is_reviewed());
+}
+
+#[test]
+fn a_declined_pair_is_not_proposed_again() {
+    use super::propose::{Concept, LinkSpec, propose};
+    let decided = decide(&proposed(), &[row(A, B, Decision::Decline)], "malcolm")
+        .unwrap()
+        .set;
+    let left = vec![Concept {
+        iri: A.into(),
+        label: "same-name".into(),
+        types: vec![],
+    }];
+    let right = vec![Concept {
+        iri: B.into(),
+        label: "same-name".into(),
+        types: vec![],
+    }];
+    let spec = LinkSpec {
+        require_shared_type: false,
+        ..LinkSpec::default()
+    };
+    let again = propose(&left, &right, &spec, &decided, "urn:quipu:align:a:b");
+    assert!(
+        again.mappings.is_empty(),
+        "a decline that does not suppress re-proposal has not decided anything"
+    );
+}
+
+#[test]
+fn a_decision_matches_the_pair_in_either_direction() {
+    // The operator wrote the pair the other way round; it is one judgement.
+    let out = decide(&proposed(), &[row(B, A, Decision::Accept)], "malcolm").unwrap();
+    assert_eq!(out.applied, 1);
+    assert!(out.set.mappings[0].derives_knot());
+    assert!(out.unmatched.is_empty());
+}
+
+#[test]
+fn a_decision_naming_no_pair_in_the_set_is_reported_not_dropped() {
+    let out = decide(
+        &proposed(),
+        &[
+            row(A, B, Decision::Accept),
+            row(
+                "http://a.example/ghost",
+                "http://b.example/ghost",
+                Decision::Accept,
+            ),
+        ],
+        "malcolm",
+    )
+    .unwrap();
+
+    assert_eq!(out.applied, 1);
+    // A decision that silently does nothing is indistinguishable from one that
+    // was applied — which is the whole reason this is counted.
+    assert_eq!(out.unmatched.len(), 1);
+    assert_eq!(
+        out.unmatched[0],
+        (
+            "http://a.example/ghost".to_string(),
+            "http://b.example/ghost".to_string()
+        )
+    );
+    let s = out.summary();
+    assert!(s.contains("applied") && s.contains("named no pair"), "{s}");
+}
+
+#[test]
+fn contradicting_yourself_in_one_batch_is_refused_not_resolved() {
+    let err = decide(
+        &proposed(),
+        &[row(A, B, Decision::Accept), row(B, A, Decision::Decline)],
+        "malcolm",
+    )
+    .unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("conflicting"), "{msg}");
+    // Refused, not silently last-wins: picking one records a judgement the
+    // operator did not make.
+}
+
+#[test]
+fn repeating_the_same_decision_is_not_a_contradiction() {
+    // Repetition has an innocent cause; contradiction does not.
+    let out = decide(
+        &proposed(),
+        &[row(A, B, Decision::Accept), row(A, B, Decision::Accept)],
+        "malcolm",
+    )
+    .unwrap();
+    assert_eq!(out.applied, 1);
+    assert!(out.unmatched.is_empty());
+}
+
+#[test]
+fn re_deciding_a_decided_row_is_refused_because_it_would_erase_the_first() {
+    let once = decide(&proposed(), &[row(A, B, Decision::Accept)], "malcolm")
+        .unwrap()
+        .set;
+    let err = decide(&once, &[row(A, B, Decision::Decline)], "malcolm").unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("retraction"), "{msg}");
+}
+
+#[test]
+fn an_unattributed_decision_is_refused() {
+    let err = decide(&proposed(), &[row(A, B, Decision::Accept)], "   ").unwrap_err();
+    assert!(err.to_string().contains("reviewer"), "{err}");
+}
+
+#[test]
+fn an_unknown_decision_word_is_refused_rather_than_defaulted() {
+    let err = Decision::parse("maybe").unwrap_err();
+    assert!(err.to_string().contains("unknown decision"), "{err}");
+    // Defaulting to "decline" would silently suppress a pair the operator may
+    // have meant to accept.
+    assert_eq!(Decision::parse("accept").unwrap(), Decision::Accept);
+    assert_eq!(Decision::parse("negate").unwrap(), Decision::Negate);
+    assert_eq!(Decision::parse("decline").unwrap(), Decision::Decline);
+}

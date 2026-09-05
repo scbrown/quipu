@@ -8,6 +8,7 @@
 //!
 //! Design: `docs/design/cross-graph-alignment.md`.
 
+pub mod decide;
 pub mod propose;
 pub mod sssom;
 pub mod verify;
