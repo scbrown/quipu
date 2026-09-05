@@ -2,6 +2,10 @@
 
 pub mod alias;
 pub mod attach;
+/// Durable session bindings + replay state for the common attestation
+/// verifier. Native only: `session_attestation` is itself `cfg(not(wasm32))`.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod attestation;
 pub mod changes;
 pub mod datasets;
 pub mod events;
@@ -34,6 +38,8 @@ mod settings;
 pub mod snapshot_upload;
 pub mod terms;
 pub(crate) use terms::TermCache;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod attestation_tests;
 #[cfg(test)]
 mod term_space_tests;
 #[cfg(test)]
