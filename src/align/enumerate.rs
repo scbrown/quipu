@@ -39,10 +39,13 @@ use crate::store::Store;
 use crate::types::Value;
 
 use super::propose::Concept;
+use super::sssom::MappingSet;
 
 /// One entity that could not be enumerated because its name is ambiguous.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ambiguous {
+    /// The named graph this entity was enumerated from.
+    pub graph: String,
     /// The entity's IRI.
     pub iri: String,
     /// Every `rdfs:label` it carries in this graph, sorted.
@@ -143,6 +146,7 @@ pub fn enumerate(store: &Store, graph_iri: &str) -> Result<Enumeration> {
         let iri = store.resolve(entity)?;
         if entity_labels.len() > 1 {
             out.ambiguous.push(Ambiguous {
+                graph: graph_iri.to_string(),
                 iri,
                 labels: entity_labels,
             });
@@ -164,4 +168,65 @@ pub fn enumerate(store: &Store, graph_iri: &str) -> Result<Enumeration> {
     out.concepts.sort_by(|a, b| a.iri.cmp(&b.iri));
     out.ambiguous.sort_by(|a, b| a.iri.cmp(&b.iri));
     Ok(out)
+}
+
+/// Candidates over two graphs, together with what could not be considered.
+///
+/// ## Why this type exists rather than two calls and a `propose`
+///
+/// [`enumerate`] already returns the ambiguous entities, but nothing stops a
+/// caller writing `enumerate(..)?.concepts` and dropping them. That is the
+/// `is_failure()` defect from slice 1 one layer on: a shape that lets the
+/// caller collapse a state the model tracks, in code that reads correctly and
+/// passes every test.
+///
+/// So the joined operation returns BOTH, and [`Proposal::summary`] states both
+/// numbers in one sentence. An entity set aside as ambiguous and an entity with
+/// no candidate are **opposite** findings — the first means alignment could not
+/// read it, the second means alignment read it and found nothing — and an
+/// invisible skip renders them identically.
+#[derive(Debug, Clone, PartialEq)]
+#[must_use]
+pub struct Proposal {
+    /// The candidate mappings.
+    pub set: MappingSet,
+    /// Entities excluded from candidate generation, from either graph.
+    pub set_aside: Vec<Ambiguous>,
+}
+
+impl Proposal {
+    /// Both counts, in one sentence, so neither can be reported without the
+    /// other.
+    #[must_use]
+    pub fn summary(&self) -> String {
+        format!(
+            "{} candidate(s); {} entity(ies) set aside as ambiguous",
+            self.set.mappings.len(),
+            self.set_aside.len()
+        )
+    }
+}
+
+/// Enumerate two graphs and propose candidates between them.
+///
+/// # Errors
+///
+/// Propagates store errors.
+pub fn propose_from_graphs(
+    store: &Store,
+    graph_a: &str,
+    graph_b: &str,
+    spec: &super::propose::LinkSpec,
+    prior: &MappingSet,
+    mapping_set_id: &str,
+) -> Result<Proposal> {
+    let a = enumerate(store, graph_a)?;
+    let b = enumerate(store, graph_b)?;
+    let mut set_aside = a.ambiguous;
+    set_aside.extend(b.ambiguous);
+    set_aside.sort_by(|x, y| (&x.graph, &x.iri).cmp(&(&y.graph, &y.iri)));
+    Ok(Proposal {
+        set: super::propose::propose(&a.concepts, &b.concepts, spec, prior, mapping_set_id),
+        set_aside,
+    })
 }

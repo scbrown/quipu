@@ -1018,6 +1018,10 @@ fn an_entity_with_two_labels_is_reported_and_never_guessed() {
     assert_eq!(out.ambiguous.len(), 1);
     assert_eq!(out.ambiguous[0].iri, "http://a.example/two");
     assert_eq!(
+        out.ambiguous[0].graph, g,
+        "a set-aside entity names its graph"
+    );
+    assert_eq!(
         out.ambiguous[0].labels,
         vec![
             "Bobbin_release-artifact".to_string(),
@@ -1132,4 +1136,90 @@ fn enumeration_order_does_not_depend_on_write_order() {
     // property `propose` is tested for, one layer down.
     assert_eq!(forward, reverse);
     assert_eq!(forward.len(), 3);
+}
+
+#[test]
+fn a_proposal_reports_candidates_and_set_aside_together() {
+    use super::enumerate::propose_from_graphs;
+    use super::propose::LinkSpec;
+
+    let mut store = Store::open_in_memory().unwrap();
+    let (a, b) = ("http://example.org/graph/a", "http://example.org/graph/b");
+
+    // One pair that WILL match...
+    label(&mut store, a, "http://a.example/bobbin", "bobbin-release");
+    label(&mut store, b, "http://b.example/bobbin", "bobbin-release");
+    // ...and one entity alignment cannot read, in the other graph.
+    label(&mut store, b, "http://b.example/two", "one-name");
+    label(&mut store, b, "http://b.example/two", "another-name");
+
+    let spec = LinkSpec {
+        require_shared_type: false,
+        ..LinkSpec::default()
+    };
+    let prior = MappingSet::new("urn:quipu:align:prior");
+    let out = propose_from_graphs(&store, a, b, &spec, &prior, "urn:quipu:align:a:b").unwrap();
+
+    assert_eq!(out.set.mappings.len(), 1, "the matchable pair is proposed");
+    // wu's requirement: N and M surface TOGETHER. An entity silently absent is
+    // indistinguishable from one that was read and had no candidate, and those
+    // mean opposite things.
+    assert_eq!(
+        out.set_aside.len(),
+        1,
+        "the ambiguous entity is COUNTED, not dropped"
+    );
+    assert_eq!(out.set_aside[0].iri, "http://b.example/two");
+    assert_eq!(
+        out.set_aside[0].graph, b,
+        "and it names which graph it came from"
+    );
+
+    let summary = out.summary();
+    assert!(summary.contains('1'), "summary: {summary}");
+    assert!(
+        summary.contains("candidate") && summary.contains("set aside"),
+        "one sentence must carry BOTH numbers, so neither can be reported alone: {summary}"
+    );
+}
+
+#[test]
+fn an_unmatchable_entity_and_an_ambiguous_one_are_not_the_same_finding() {
+    use super::enumerate::propose_from_graphs;
+    use super::propose::LinkSpec;
+
+    let spec = LinkSpec {
+        require_shared_type: false,
+        ..LinkSpec::default()
+    };
+    let prior = MappingSet::new("urn:quipu:align:prior");
+    let (a, b) = ("http://example.org/graph/a", "http://example.org/graph/b");
+
+    // CASE 1: read fine, simply nothing to match against.
+    let mut s1 = Store::open_in_memory().unwrap();
+    label(&mut s1, a, "http://a.example/lonely", "nothing-like-this");
+    label(&mut s1, b, "http://b.example/other", "utterly-different");
+    let read_but_no_candidate =
+        propose_from_graphs(&s1, a, b, &spec, &prior, "urn:quipu:align:a:b").unwrap();
+
+    // CASE 2: could not be read at all.
+    let mut s2 = Store::open_in_memory().unwrap();
+    label(&mut s2, a, "http://a.example/two", "one-name");
+    label(&mut s2, a, "http://a.example/two", "another-name");
+    label(&mut s2, b, "http://b.example/other", "utterly-different");
+    let could_not_read =
+        propose_from_graphs(&s2, a, b, &spec, &prior, "urn:quipu:align:a:b").unwrap();
+
+    // Both produce zero candidates — and that is exactly why the count matters.
+    assert_eq!(read_but_no_candidate.set.mappings.len(), 0);
+    assert_eq!(could_not_read.set.mappings.len(), 0);
+
+    // The set-aside count is the ONLY thing separating them.
+    assert_eq!(read_but_no_candidate.set_aside.len(), 0);
+    assert_eq!(could_not_read.set_aside.len(), 1);
+    assert_ne!(
+        read_but_no_candidate.summary(),
+        could_not_read.summary(),
+        "two opposite findings must not render identically"
+    );
 }
