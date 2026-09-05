@@ -1001,8 +1001,11 @@ fn per_write_cost_does_not_scale_with_store_size() {
 /// generator, and not a CI job).
 ///
 /// Point it at a pre-ingested store:
-///   QUIPU_SCALE_DB=/path/to.db cargo test --release --features owl \
-///     scale_db_semi_naive -- --ignored --nocapture
+///
+/// ```text
+/// QUIPU_SCALE_DB=/path/to.db cargo test --release --features owl \
+///   scale_db_semi_naive -- --ignored --nocapture
+/// ```
 #[test]
 #[ignore = "needs QUIPU_SCALE_DB; the one-time confirmation"]
 fn scale_db_semi_naive_cost() {
