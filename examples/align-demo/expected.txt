@@ -1,0 +1,9 @@
+1. TWO NODES ONE THING  b_holds=bobbin-release,bobbin-release
+2. TYPO REFUSED         exit=1 refused=true  (an absent graph is not an empty one)
+3. PROPOSE              candidates=1 set_aside=0
+4. DECIDE               accepted=1 reviewer=demo-operator
+5. VERSION CHANGED      propose!=decide=true  (carrying propose's would fail the check)
+6. APPLY                same_as=1 written=4 derived_graph_created=true
+7. QUERY ACROSS BOTH    sameAs=bobbin-release
+8. BOUNDARY             the alignment is a fact in its own graph, not an edit to either source
+9. DERIVED GRAPH        quipu computed and created it; nobody had to name it in advance
