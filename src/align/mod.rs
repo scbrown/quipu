@@ -9,6 +9,7 @@
 //! Design: `docs/design/cross-graph-alignment.md`.
 
 pub mod apply;
+pub mod enumerate;
 pub mod propose;
 pub mod sssom;
 pub mod verify;
