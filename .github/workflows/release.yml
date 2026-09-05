@@ -238,6 +238,11 @@ jobs:
        needs.release-plz.outputs.releases_created == 'true')
     permissions:
       contents: write
+      # `gh workflow run` needs actions:write. Without it the final restage step
+      # dies with HTTP 403 "Resource not accessible by integration" — AFTER the
+      # asset has already uploaded, so the release is fine and the job is red,
+      # which is the confusing shape. Measured on the v0.3.33 artifact re-run.
+      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
