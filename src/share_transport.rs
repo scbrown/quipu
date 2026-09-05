@@ -35,6 +35,7 @@ fn request_from_files(
         shapes_turtle: get("shapes.ttl")?,
         source: source.to_string(),
         actor: None,
+        accept_exact: false,
     })
 }
 
