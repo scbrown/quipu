@@ -46,6 +46,7 @@
 # Sharing & Federation
 
 - [Sharing & Federation](sharing/README.md)
+  - [Aligning concepts across graphs](sharing/align.md)
 
 # Architecture
 
