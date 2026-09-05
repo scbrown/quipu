@@ -679,23 +679,30 @@ jobs:
       # is independent of the manifest; deriving it with `cargo metadata` would
       # compare a number to itself.
       #
-      # On this path release-plz tags the very commit being built, so the two
-      # agree by construction and this reads as a consistency assertion rather
-      # than an independent one. It costs nothing, and it is the check that
-      # catches the case where they DON'T.
+      # ⚠ THIS USED TO BE `git tag --points-at HEAD`, AND IT REFUSED EVERY REAL
+      # RELEASE (aegis-fxpkt2). The old comment here stated the assumption in as
+      # many words -- "release-plz tags the very commit being built, so the two
+      # agree by construction" -- and that is true only when the release PR is
+      # SQUASHED. Merged with a MERGE COMMIT, the tag sits on the PR's own commit
+      # and HEAD is the merge commit one above it, so nothing points at HEAD.
+      # v0.3.36 and v0.3.37 were both refused this way.
+      #
+      # The replacement tests ANCESTRY **and** TREE, in a script with a selftest so
+      # the logic is exercised on every suite run rather than only at release time
+      # -- this job is skipped on ordinary pushes, which is exactly why the defect
+      # survived two releases while looking like the benign asset-upload race.
       - name: Resolve the released version from the tag
         id: want
         run: |
           set -euo pipefail
           git fetch --tags --quiet
-          TAG="$(git tag --points-at HEAD | grep '^quipu-ai-v' | head -1 || true)"
-          if [ -z "$TAG" ]; then
-            echo "::error::release-plz reported a release but no quipu-ai-v* tag" \
-                 "points at HEAD. Refusing to publish a version this run cannot name."
+          if ! OUT="$(.github/scripts/resolve-release-tag.sh .)"; then
+            echo "::error::release-plz reported a release but the tag could not be resolved. See above."
             exit 1
           fi
-          echo "want=${TAG##*-v}" >> "$GITHUB_OUTPUT"
-          echo "tag ${TAG} -> version ${TAG##*-v}"
+          TAG="${OUT%%	*}"; WANT="${OUT##*	}"
+          echo "want=${WANT}" >> "$GITHUB_OUTPUT"
+          echo "tag ${TAG} -> version ${WANT}"
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
