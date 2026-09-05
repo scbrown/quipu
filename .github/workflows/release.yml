@@ -341,6 +341,26 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: ${TAG}"
 
+      # Refuse to write assets onto a tag that is not the commit we built.
+      # The dispatch path checks out the dispatch BRANCH and uses the tag only
+      # to name the artifact and pick the upload target, and every upload below
+      # passes --clobber — so without this, dispatching on an older tag replaces
+      # that release's assets with main builds AND regenerates their checksums to
+      # match, which a downloader's verification then passes. See aegis-dsbt2g.
+      #
+      # DISPATCH ONLY, DELIBERATELY. The push path cannot exhibit this: release-plz
+      # tags the very commit this run is building, so tag and HEAD agree by
+      # construction. Asserting it there as well would be strictly stronger IF that
+      # is exactly true — and I could not verify it without cutting a real release,
+      # while getting it wrong would refuse EVERY release. A guard that might break
+      # the lane it protects is not a safety improvement. The hazard lives entirely
+      # in the manual path; that is where the guard goes.
+      - uses: ./.github/actions/assert-tag-is-head
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Package
         id: package
         env:
@@ -500,6 +520,26 @@ jobs:
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: ${TAG}"
+
+      # Refuse to write assets onto a tag that is not the commit we built.
+      # The dispatch path checks out the dispatch BRANCH and uses the tag only
+      # to name the artifact and pick the upload target, and every upload below
+      # passes --clobber — so without this, dispatching on an older tag replaces
+      # that release's assets with main builds AND regenerates their checksums to
+      # match, which a downloader's verification then passes. See aegis-dsbt2g.
+      #
+      # DISPATCH ONLY, DELIBERATELY. The push path cannot exhibit this: release-plz
+      # tags the very commit this run is building, so tag and HEAD agree by
+      # construction. Asserting it there as well would be strictly stronger IF that
+      # is exactly true — and I could not verify it without cutting a real release,
+      # while getting it wrong would refuse EVERY release. A guard that might break
+      # the lane it protects is not a safety improvement. The hazard lives entirely
+      # in the manual path; that is where the guard goes.
+      - uses: ./.github/actions/assert-tag-is-head
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package
         id: package
