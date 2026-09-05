@@ -83,9 +83,24 @@ runs:
             echo "failed, run against its OWN commit. It is not a way to rebuild an"
             echo "older release."
             echo
-            echo "To exercise the release workflow safely, create a throwaway tag and"
-            echo "a PRERELEASE for it, dispatch against that, and delete it after."
-            echo "See aegis-dsbt2g."
+            echo "TO REPAIR ${TAG}'s ASSETS -- dispatch ON THE TAG, not on main:"
+            echo
+            echo "    gh workflow run release.yml --ref ${TAG} -f tag=${TAG}"
+            echo
+            echo "The asset jobs check out with no explicit ref, so they build"
+            echo "whatever ref you dispatched on. Dispatched on the tag, this run"
+            echo "would have built ${tag_sha} -- the release's own commit -- and"
+            echo "this check would have passed."
+            echo
+            echo "YOU ARE PROBABLY HERE BECAUSE gh DEFAULTED TO THE DEFAULT BRANCH."
+            echo "\`gh workflow run\` uses it unless you pass --ref, so the obvious"
+            echo "command is the one that diverges the tag from the build. That is"
+            echo "the mistake this check exists to catch; do not work around it by"
+            echo "removing the check."
+            echo
+            echo "To REHEARSE the release workflow without touching a real release,"
+            echo "create a throwaway tag and a PRERELEASE for it, dispatch against"
+            echo "that, and delete both after. See aegis-dsbt2g."
           } >&2
           exit 1
         fi
