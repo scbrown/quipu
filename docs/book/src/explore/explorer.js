@@ -469,6 +469,61 @@ async function refreshExport() {
   }
 }
 
+// --- window.quipu: this page IS the server (aegis-onew9p) -------------------
+//
+// Stiwi's ask: "is there a way for an agent to interact with just the html page.
+// loke treat embedded wasm quipu like a server".
+//
+// It very nearly already was. `Explorer::query`, `::set`, `::episode` and
+// `::retract` call `quipu::tool_query`, `tool_set`, `tool_episode` and
+// `tool_retract` — THE SAME functions the HTTP server's handlers call. So the
+// response shapes are identical by construction, not by a second
+// implementation kept in step: the `inference` marker, the `labels` key and the
+// `outcome`/`count` fields all travel because the same code emits them.
+//
+// That means this object is a NAMED SURFACE over work that already existed,
+// which is why it is small. Client code written against a quipu HTTP server
+// runs here unchanged.
+
+const UNSUPPORTED_SEARCH = {
+  error: "unsupported",
+  verb: "search",
+  // Named, not vague: a reader has to be able to tell "this build cannot" from
+  // "this query found nothing", and from "the feature is broken".
+  reason: "semantic search needs embeddings, which need quipu's `onnx` feature. "
+    + "This bundle is built with default-features = false, so `onnx` is not linked "
+    + "and there is no model to run. It is unavailable in the page, not failing.",
+  available: ["query", "episode", "set", "retract", "stats", "delta", "share", "version"],
+  server: "A quipu HTTP server answers POST /search; this page cannot.",
+};
+
+window.quipu = {
+  query: (sparql) => ask({ cmd: "query", sparql }),
+  stats: () => ask({ cmd: "stats" }),
+  episode: (body) =>
+    ask({ cmd: "episode", episode: typeof body === "string" ? body : JSON.stringify(body) }),
+  set: (entity, predicate, value) =>
+    ask({ cmd: "set", entity, predicate,
+          value: typeof value === "string" ? value : JSON.stringify(value) }),
+  retract: (entity, predicate = "", value = "") =>
+    ask({ cmd: "retract", entity, predicate,
+          value: value === "" ? "" : (typeof value === "string" ? value : JSON.stringify(value)) }),
+  delta: () => ask({ cmd: "delta" }),
+  share: () => ask({ cmd: "exportPack" }),
+  version: () => ask({ cmd: "version" }),
+
+  // REJECTS, and never resolves to an empty result.
+  //
+  // An empty array is indistinguishable from "nothing matched", which is the
+  // exact failure this codebase keeps paying for — a check that cannot see its
+  // target reporting the same value as a check that looked and found nothing.
+  // A 404-shaped absence would be just as bad: it reads as "wrong URL".
+  //
+  // Same discipline the load report already applies to SHACL, where the page
+  // says "not compiled" rather than claiming a conformance it never checked.
+  search: () => Promise.reject(Object.assign(new Error(UNSUPPORTED_SEARCH.reason), UNSUPPORTED_SEARCH)),
+};
+
 // --- Propose the edits as a PR, with no API and no token (aegis-8fdp8d) -----
 //
 // GitHub's own web pages do the work. The page computes the delta, SHOWS it,

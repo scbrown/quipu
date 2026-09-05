@@ -158,6 +158,10 @@ dl#export-manifest dd { word-break: break-all; }
 #pr-preview dd { word-break: break-all; }
 /* The delta is the thing to review before anything opens, so it gets room —
    but bounded, because a large one belongs in the upload flow anyway. */
+pre.recipe {
+  font-size: 12px; background: var(--bg); border: 1px solid var(--bg-elevated);
+  border-radius: 4px; padding: 8px 10px; overflow-x: auto; margin: 10px 0;
+}
 #pr-preview pre {
   max-height: 320px; overflow: auto; font-size: 12px;
   background: var(--bg); border: 1px solid var(--bg-elevated);
@@ -310,6 +314,29 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
           <button class="go" id="pr-go" disabled>Download the files and open GitHub</button>
         </div>
         <div id="pr-preview"></div>
+
+        <h3>Drive this page from an agent</h3>
+        <p class="note">
+          This page <em>is</em> the server. <code class="mono">window.quipu</code> exposes the
+          same verbs as a quipu HTTP server and returns the same JSON, because
+          the page and the server call the same functions &mdash; the
+          <code class="mono">inference</code> marker and the <code class="mono">labels</code>
+          key travel unchanged, so client code written against the HTTP API runs here as-is.
+          Same-origin, no CORS, no port, no credential: an agent that wants this store loads
+          the page.
+        </p>
+<pre class="mono recipe">browser_navigate  https://scbrown.github.io/quipu/explore/
+browser_evaluate  await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 5")
+browser_evaluate  await window.quipu.set("urn:x", "rdfs:comment", JSON.stringify("hi"))
+browser_evaluate  await window.quipu.delta()</pre>
+        <p class="note">
+          <strong><code class="mono">search</code> is unavailable here and says so.</strong>
+          Semantic search needs embeddings, which need quipu&rsquo;s <code class="mono">onnx</code>
+          feature; this bundle is built without it. <code class="mono">window.quipu.search()</code>
+          <em>rejects</em> with a typed error naming the missing feature &mdash; it never resolves
+          to an empty list, because an empty list is indistinguishable from &ldquo;nothing
+          matched&rdquo;.
+        </p>
       </div>
     </section>
 
