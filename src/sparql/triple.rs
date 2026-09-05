@@ -128,7 +128,18 @@ fn eval_triple_pattern_limited(
     // Formal default: a constant rdf:type query uses the loaded RDFS class
     // hierarchy. Named graphs remain literal because the hierarchy is rooted
     // in the default graph and must not leak across graph boundaries.
-    if ctx.graph.is_root_default()
+    //
+    // `includes_root_default` is the entailment-regime case (aegis-g6bu6d).
+    // Requesting `entailment: "rdfs"` composes the scope into `[0, companion]`,
+    // which is no longer `[0]` — so gating on `is_root_default` alone made the
+    // REGIME drop the expansion and return a SUBSET of the unentailed answer
+    // while labelling it entailed. The regime must be a SUPERSET of the default,
+    // so it keeps the live expansion AND gains the companion graph. Expanding is
+    // sound here precisely because graph 0 is still in scope: the hierarchy is
+    // read from `g = 0` and applied to an answer that already contains it, not
+    // across a boundary. A `FROM` that redefines the default away from ROOT
+    // still fails both predicates and stays literal.
+    if (ctx.graph.is_root_default() || (ctx.entails_rdfs && ctx.graph.includes_root_default()))
         && is_rdf_type_pattern(tp)
         && let TermPattern::NamedNode(class_node) = &tp.object
     {
