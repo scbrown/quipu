@@ -177,6 +177,7 @@ pre.recipe {
 #url-input { flex: 1; min-width: 260px; }
 footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width: 78ch; }
 </style>
+<link rel="stylesheet" href="./constellation.css">
 </head>
 <body>
 
@@ -193,7 +194,7 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
 
   <p class="lede">
     Every Quipu release ships a knowledge pack of <strong>this repository</strong> — its modules,
-    symbols, documents and sections, as RDF. This page downloads that pack and opens it with the
+    symbols, documents and sections, plus source-backed contributor stories, decisions and vision, as RDF. This page downloads that pack and opens it with the
     Quipu engine compiled to WebAssembly. <strong>There is no server.</strong> The store is built
     in this tab, the SPARQL below runs in this tab, and closing it throws the whole thing away.
   </p>
@@ -216,6 +217,33 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
   </section>
 
   <main hidden>
+    <section id="constellation">
+      <h2>Knowledge constellation <span class="note" id="graph-count"></span>
+        <a href="#" id="graph-showq">show the query</a></h2>
+      <div class="body">
+        <p class="muted">Start with the vision. Follow a decision to the code it governs.</p>
+        <label for="graph-search">Find a story, decision or file</label>
+        <input id="graph-search" type="search" placeholder="Try vision or federation" autocomplete="off">
+        <div id="graph-results" aria-live="polite"></div>
+        <div class="graph-tools">
+          <button id="graph-home">Vision</button><button id="graph-fit">All clusters</button>
+          <button id="graph-zoom-out" aria-label="Zoom out">−</button>
+          <span id="graph-zoom-level"></span>
+          <button id="graph-zoom-in" aria-label="Zoom in">+</button>
+        </div>
+        <div class="constellation-panes">
+          <div>
+            <div id="graph-viewport" tabindex="0" aria-label="Knowledge graph. Drag or use arrow keys to pan; pinch or use zoom buttons.">
+              <svg id="graph" aria-hidden="true"></svg>
+              <div id="graph-targets"></div>
+            </div>
+            <p class="muted graph-hint">Drag to explore · pinch to zoom · tap a star or cluster</p>
+            <div id="graph-legend" aria-label="Graph legend"></div>
+          </div>
+          <article id="node-card" aria-live="polite" aria-label="Selected node"></article>
+        </div>
+      </div>
+    </section>
 
     <section>
       <h2>Type distribution <span class="note" id="types-total"></span>
@@ -238,19 +266,6 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
             style="font-size:11px">show the query for this pane</a></p>
           <div id="detail-body" class="scroll"></div>
         </div>
-      </div>
-    </section>
-
-    <section>
-      <h2>Neighbourhood <span class="note" id="graph-count"></span>
-        <a href="#" id="graph-showq">show the query</a></h2>
-      <div class="body">
-        <canvas id="graph"></canvas>
-        <p class="muted" style="font-size:12px;margin-top:8px">
-          The selected file in red, everything the pack links to or from it in blue. Laid out by a
-          small force simulation in this file — no rendering library, because a few dozen nodes do
-          not need one.
-        </p>
       </div>
     </section>
 
