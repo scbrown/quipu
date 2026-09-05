@@ -334,8 +334,64 @@ jobs:
           EOF
           tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
           ( cd dist && sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256" )
+
+          # THE HEADLESS BUNDLE, AS A SIBLING ASSET (aegis-onew9p §4.4).
+          #
+          # A separate tarball rather than a subdirectory of the one above,
+          # because docs.yml consumes that layout to stage the book page: adding
+          # a directory to it changes what the docs workflow unpacks, and a
+          # release asset's shape is consumed by things outside this file. A new
+          # asset breaks nothing that does not ask for it.
+          #
+          # Same .wasm, different generated glue — so the two are always the same
+          # engine, and a consumer choosing between them is choosing a loader,
+          # not a version.
+          NODE_NAME="quipu-${TAG}-wasm-node"
+          mkdir -p "dist/${NODE_NAME}"
+          cp wasm/explorer/pkg-node/quipu_wasm_explorer.js \
+             wasm/explorer/pkg-node/quipu_wasm_explorer_bg.wasm \
+             wasm/explorer/pkg-node/quipu_wasm_explorer.d.ts \
+             wasm/explorer/pkg-node/quipu_wasm_explorer_bg.wasm.d.ts \
+             "dist/${NODE_NAME}/"
+          cp LICENSE "dist/${NODE_NAME}/"
+          cat > "dist/${NODE_NAME}/README.txt" <<'EOF'
+          quipu, compiled to wasm and loadable from node with no browser.
+
+          This is the SAME compiled .wasm as the quipu-<tag>-wasm asset, with the
+          glue `wasm-bindgen --target nodejs` generates instead of the browser's.
+          It is therefore the same engine, and the same store, reached by a
+          different loader -- choosing between the two assets is choosing how the
+          module is loaded, not which quipu you get.
+
+          The nodejs target is CommonJS and reads its own .wasm off disk, so there
+          is no init() to await and no server to run:
+
+            const { Explorer, explorerVersion } = require("./quipu_wasm_explorer.js");
+            const ex = Explorer.loadQpack(bytes, "source-label", timestampIso);
+            JSON.parse(ex.loadReport());   // manifest + import + promotion
+            JSON.parse(ex.query(sparql));  // SELECT/ASK/CONSTRUCT/DESCRIBE
+            JSON.parse(ex.delta());        // a share-delta/v1 proposal of your edits
+
+          From an ES module, reach it with createRequire:
+
+            import { createRequire } from "node:module";
+            const require = createRequire(import.meta.url);
+
+          Built WITHOUT the `shacl` feature, exactly as the browser asset is, so
+          `import.validation.conforms` is a default and not a validation result.
+          The off-vocabulary check does run. Use the native `quipu import` for
+          full validation.
+
+          Worked example, including minting a pack and handing the resulting
+          delta back to the native CLI: scripts/smoke-wasm-node.mjs in the quipu
+          repository.
+          EOF
+          tar -C dist -czf "dist/${NODE_NAME}.tar.gz" "${NODE_NAME}"
+          ( cd dist && sha256sum "${NODE_NAME}.tar.gz" > "${NODE_NAME}.tar.gz.sha256" )
+
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
-          ls -la dist "dist/${NAME}"
+          echo "node_name=${NODE_NAME}" >> "$GITHUB_OUTPUT"
+          ls -la dist "dist/${NAME}" "dist/${NODE_NAME}"
 
       # Same acceptance as ci.yml, from the SAME definition — but pointed at the
       # PACKAGED layout rather than wasm-bindgen's output directory. That is the
@@ -345,12 +401,14 @@ jobs:
       - uses: ./.github/actions/wasm-explorer-smoke
         with:
           bundle-dir: dist/${{ steps.package.outputs.name }}
+          node-bundle-dir: dist/${{ steps.package.outputs.node_name }}
 
       - name: Upload to the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
           NAME: ${{ steps.package.outputs.name }}
+          NODE_NAME: ${{ steps.package.outputs.node_name }}
         run: |
           set -euo pipefail
           if ! gh release view "$TAG" >/dev/null 2>&1; then
@@ -360,6 +418,8 @@ jobs:
           gh release upload "$TAG" \
             "dist/${NAME}.tar.gz" \
             "dist/${NAME}.tar.gz.sha256" \
+            "dist/${NODE_NAME}.tar.gz" \
+            "dist/${NODE_NAME}.tar.gz.sha256" \
             --clobber
 
       # The book page serves the bundle and the pack from THIS site, because
