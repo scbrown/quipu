@@ -14,16 +14,27 @@ name: Conformance
 # reads. They gate on "not worse than what we published", which is a condition
 # that is green today and stays meaningful all the way to 168/168.
 
+# ⚠️ `src/**` IS IN THESE FILTERS DELIBERATELY, AND WAS MISSING (aegis-1gp76j).
+# The ledger check asks whether a published ledger was derived from the code it
+# ships beside — so the push that can INVALIDATE a ledger is a push to `src/`,
+# and that was the one push this workflow did not run on. Measured 2026-09-05:
+# main sat at f7150dc3 with a ledger derived at 4aa67ad5, differing in
+# src/rdf.rs, and every main run was GREEN because the job never fired.
+#
+# Only the fast `published-matches-ledger` job is affected; the re-derive job is
+# `schedule || workflow_dispatch` and stays skipped, so this costs seconds.
 on:
   pull_request:
     branches: [main]
     paths:
+      - 'src/**'
       - 'benchmark/public/**'
       - 'docs/book/src/benchmarks/**'
       - '.github/workflows/conformance.yml'
   push:
     branches: [main]
     paths:
+      - 'src/**'
       - 'benchmark/public/**'
       - 'docs/book/src/benchmarks/**'
       - '.github/workflows/conformance.yml'
