@@ -1,0 +1,5 @@
+# This crate only targets the browser. The getrandom cfg is the documented
+# opt-in for its wasm_js backend — see docs/design/wasm-support.md §4.4.
+[build]
+target = "wasm32-unknown-unknown"
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

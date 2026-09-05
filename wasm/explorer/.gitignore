@@ -1,0 +1,3 @@
+target/
+# wasm-bindgen output: generated, shipped as a release asset, never committed.
+pkg/

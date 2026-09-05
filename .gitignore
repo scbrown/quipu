@@ -86,6 +86,14 @@ docs/book/src/datalinks/datalinks.js
 docs/book/src/datalinks/graph-canvas.js
 docs/book/src/datalinks/vendor/
 
+# Release artifacts staged into the book by the docs workflow (or
+# `just explorer`): the wasm bundle and the repository knowledge pack the
+# "Explore this repository's graph" page loads. Downloaded from the newest
+# GitHub release at build time — never committed, so the Pages build needs no
+# Rust and the repo carries no binaries.
+docs/book/src/explore/pkg/
+docs/book/src/explore/repository.qpack.tar.gz
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

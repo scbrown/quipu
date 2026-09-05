@@ -15,6 +15,13 @@ Height is longest-path depth, so position is derived and stable rather than
 emergent. Select a node and the lattice re-lights by personalized PageRank
 seeded on it. No server — the graph is a baked Quipu export.
 
+**[Explore this repository's graph](explore/)** — Quipu's own code and docs as a
+knowledge graph, 61k triples shipped with every release, imported and queried
+**by Quipu itself compiled to WebAssembly**. The pack is verified against its
+manifest, its shapes are adopted, and it is staged and promoted in your tab
+before you can query it: the receiving half of the sharing story below, running
+rather than described. Still no server.
+
 ## What is Quipu?
 
 An embeddable Rust library and server for building knowledge graphs with:

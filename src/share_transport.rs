@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 use std::path::Component;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 use crate::error::{Error, Result};
@@ -100,7 +101,32 @@ fn archive_files<R: Read>(reader: R, source: &str) -> Result<BTreeMap<String, St
     Ok(files)
 }
 
+/// Reads a `.qpack` archive already held in memory.
+///
+/// The same bounded expansion and undeclared-path rejection [`read_local`]
+/// applies, on bytes the caller obtained however it liked — a browser `fetch`,
+/// a file picker, an embedded asset. `gzip` selects whether the bytes are
+/// gzip-compressed (`.tar.gz`) or a bare tar.
+///
+/// # Errors
+/// The archive is malformed, exceeds [`MAX_SHARE_EXPANDED_BYTES`] expanded,
+/// carries an undeclared or unsafe path, or is missing a required payload.
+pub fn read_archive_bytes(bytes: &[u8], source: &str, gzip: bool) -> Result<ShareImportRequest> {
+    if bytes.len() > MAX_SHARE_DOWNLOAD_BYTES {
+        return Err(Error::InvalidValue(format!(
+            "share archive exceeds {MAX_SHARE_DOWNLOAD_BYTES} bytes"
+        )));
+    }
+    let files = if gzip {
+        archive_files(flate2::read::GzDecoder::new(Cursor::new(bytes)), source)?
+    } else {
+        archive_files(Cursor::new(bytes), source)?
+    };
+    request_from_files(&files, source)
+}
+
 /// Reads a portable share directory or `.qpack[.tar.gz]` without opening a store.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn read_local(reference: &str) -> Result<ShareImportRequest> {
     let path = Path::new(reference);
     if path.is_dir() {
@@ -127,6 +153,7 @@ pub fn read_local(reference: &str) -> Result<ShareImportRequest> {
 }
 
 /// Reads a share from a local directory/archive or an HTTP(S) reference.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn read_reference(reference: &str) -> Result<ShareImportRequest> {
     if reference.starts_with("https://") || reference.starts_with("http://") {
         #[cfg(feature = "remote")]
@@ -193,6 +220,7 @@ pub fn read_url(url: &str) -> Result<ShareImportRequest> {
 }
 
 /// Loads a directory, archive, or URL into a fresh in-memory store after verification.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn import_in_memory(
     reference: &str,
     timestamp: &str,
@@ -256,5 +284,86 @@ mod tests {
         let (_store, result) =
             import_in_memory(archive_path.to_str().unwrap(), "2026-09-03", None).unwrap();
         assert_eq!(result.share_id, manifest.share_id);
+
+        // The browser holds the archive already — it fetched it — so it takes
+        // the same bytes through `read_archive_bytes` instead of a path. Same
+        // share, same id, no filesystem in the middle.
+        let bytes = std::fs::read(&archive_path).unwrap();
+        let from_bytes = read_archive_bytes(&bytes, "in-memory", true).unwrap();
+        assert_eq!(from_bytes.manifest.share_id, manifest.share_id);
+        assert_eq!(
+            from_bytes.export_ntriples,
+            std::fs::read_to_string(out.join("export.nt")).unwrap()
+        );
+    }
+
+    // The bounds are what make it safe to hand this a network download, so they
+    // are worth a test that FAILS if someone relaxes them. A truncated archive
+    // is the cheap way to prove the reader is actually parsing rather than
+    // accepting anything with a manifest-shaped name in it.
+    #[test]
+    fn read_archive_bytes_refuses_a_truncated_archive() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = crate::Store::open_in_memory().unwrap();
+        let out = temp.path().join("share");
+        share(
+            &source,
+            out.to_str().unwrap(),
+            &ShareOptions {
+                no_shapes: true,
+                ..ShareOptions::default()
+            },
+        )
+        .unwrap();
+        let archive_path = temp.path().join("t.tar.gz");
+        let encoder = flate2::write::GzEncoder::new(
+            std::fs::File::create(&archive_path).unwrap(),
+            flate2::Compression::default(),
+        );
+        let mut archive = tar::Builder::new(encoder);
+        for name in REQUIRED {
+            archive.append_path_with_name(out.join(name), name).unwrap();
+        }
+        archive.into_inner().unwrap().finish().unwrap();
+
+        let bytes = std::fs::read(&archive_path).unwrap();
+        // Control: the whole thing reads, so a failure below is the truncation
+        // and not a broken fixture.
+        assert!(read_archive_bytes(&bytes, "control", true).is_ok());
+        assert!(read_archive_bytes(&bytes[..bytes.len() / 2], "truncated", true).is_err());
+    }
+
+    #[test]
+    fn read_archive_bytes_refuses_an_undeclared_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = crate::Store::open_in_memory().unwrap();
+        let out = temp.path().join("share");
+        share(
+            &source,
+            out.to_str().unwrap(),
+            &ShareOptions {
+                no_shapes: true,
+                ..ShareOptions::default()
+            },
+        )
+        .unwrap();
+        std::fs::write(out.join("payload.sh"), "#!/bin/sh\necho no\n").unwrap();
+        let archive_path = temp.path().join("t.tar.gz");
+        let encoder = flate2::write::GzEncoder::new(
+            std::fs::File::create(&archive_path).unwrap(),
+            flate2::Compression::default(),
+        );
+        let mut archive = tar::Builder::new(encoder);
+        for name in REQUIRED.iter().chain(["payload.sh"].iter()) {
+            archive.append_path_with_name(out.join(name), name).unwrap();
+        }
+        archive.into_inner().unwrap().finish().unwrap();
+
+        let bytes = std::fs::read(&archive_path).unwrap();
+        let err = read_archive_bytes(&bytes, "hostile", true).unwrap_err();
+        assert!(
+            err.to_string().contains("undeclared file"),
+            "expected an undeclared-file refusal, got: {err}"
+        );
     }
 }

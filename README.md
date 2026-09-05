@@ -48,6 +48,32 @@ claim.
 → **[Sharing & Federation](https://scbrown.github.io/quipu/sharing/)** — the primitive in
 full, every claim citing the command or symbol that proves it.
 
+### Explore this repository's graph, in your browser
+
+Every release ships a knowledge pack of **this repository** — its modules, symbols,
+documents and sections as RDF — and the book has a page that opens it with **Quipu
+itself compiled to WebAssembly**. GitHub cannot run scripts in a README, so here is a
+picture; the page is one click away.
+
+<p align="center">
+  <a href="https://scbrown.github.io/quipu/explore/"><img src="assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, 61,069 triples accepted, 0 quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
+</p>
+
+<p align="center">
+  <em><strong><a href="https://scbrown.github.io/quipu/explore/">scbrown.github.io/quipu/explore</a></strong> — 61k triples imported and queried in a tab. No server.</em>
+</p>
+
+It is the **receiving half of the sharing story above, running rather than described**:
+the manifest is verified against the exact payload bytes, the bundled shapes are
+*adopted* as a deliberate act, and the graph is staged and then promoted — the same
+`share_transport` → `share_import` → `promote` path `quipu import` takes, because it is
+that code, compiled for a different target. Then you get a SPARQL box, a module and
+document browser, a type distribution and a neighbourhood graph, all of it derived from
+queries the page will show you. It takes any Quipu pack, not just this one.
+
+The bundle is a release asset (`quipu-<tag>-wasm.tar.gz`), so nothing here is committed
+and the Pages build needs no Rust.
+
 ## See It In Action
 
 <p align="center">
