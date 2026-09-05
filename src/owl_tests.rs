@@ -701,3 +701,198 @@ ex:contentHash a owl:DatatypeProperty, owl:FunctionalProperty .
         "an ambiguous batch must still be refused, got: {msg}"
     );
 }
+
+// --- semi-naive derive: same fixpoint, bounded cost (aegis-2dp8e2) -----------
+//
+// The naive path re-read EVERY current fact on every pass. Measured on the live
+// store: 641,803 facts, >= 2 scans per relevant write, ~67 s of work per 60 s of
+// wall clock at a 29 writes/min offered load — it could not keep up, and it
+// ratcheted, because its own output lands in the companion graph which is a
+// premise for the next run.
+//
+// Semi-naive is an EVALUATION-STRATEGY change, NOT a semantics change. The
+// fixpoint must be identical, and the test for that is a DIFF of the derived
+// sets — not a spot-check of a few ASKs, which passes while missing whole rule
+// families.
+
+const SN_TS: &str = "2026-01-01T00:00:00Z";
+
+/// An ontology exercising SEVEN single-premise families plus the one that is not.
+const SN_ONT: &str = r#"
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex:   <http://example.org/> .
+ex:Dog     rdfs:subClassOf ex:Mammal .
+ex:Mammal  rdfs:subClassOf ex:Animal .
+ex:Pet     owl:equivalentClass ex:Companion .
+ex:owns    owl:inverseOf ex:ownedBy .
+ex:knows   a owl:SymmetricProperty .
+ex:partOf  a owl:TransitiveProperty .
+ex:likes   rdfs:subPropertyOf ex:regards .
+ex:cares   owl:equivalentProperty ex:tends .
+ex:feeds   rdfs:domain ex:Keeper ; rdfs:range ex:Animal .
+"#;
+
+fn sn_ingest(store: &mut Store, ttl: &str) {
+    crate::rdf::ingest_rdf(
+        store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        SN_TS,
+        None,
+        None,
+    )
+    .unwrap();
+}
+
+/// Every fact in the companion inferred graph, as a comparable set.
+fn sn_derived(store: &Store) -> std::collections::BTreeSet<(i64, i64, Vec<u8>)> {
+    let companion = store
+        .lookup("urn:quipu:graph:root#inferred")
+        .unwrap()
+        .expect("companion graph");
+    store
+        .current_facts_in_graph(companion)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.entity, f.attribute, f.value.to_bytes()))
+        .collect()
+}
+
+#[test]
+fn semi_naive_reaches_the_same_fixpoint_as_naive() {
+    // THE correctness test. Two stores, identical input; one materialised the
+    // naive way, one from the delta. The DERIVED SETS must be equal — every
+    // rule family, not a sampled few.
+    let data = r#"
+@prefix ex: <http://example.org/> .
+ex:fido   a ex:Dog .
+ex:rex    a ex:Pet .
+ex:ann    ex:owns    ex:fido .
+ex:ann    ex:knows   ex:bob .
+ex:paw    ex:partOf  ex:leg .
+ex:leg    ex:partOf  ex:fido .
+ex:ann    ex:likes   ex:rex .
+ex:ann    ex:cares   ex:rex .
+ex:ann    ex:feeds   ex:fido .
+"#;
+
+    let mut naive = Store::open_in_memory().unwrap();
+    naive.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    sn_ingest(&mut naive, data);
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+    let rn = ont.materialize(&mut naive, SN_TS).unwrap();
+
+    let mut semi = Store::open_in_memory().unwrap();
+    semi.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    sn_ingest(&mut semi, data);
+    // The seed is every asserted fact — what a delta carrying this ingest holds.
+    let seed = semi
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let rs = ont.materialize_delta(&mut semi, SN_TS, &seed).unwrap();
+
+    // ANTI-VACUITY: if nothing was derived, set equality is trivially true and
+    // this test would pass against a materialiser that does nothing at all.
+    assert!(
+        rn.total > 0,
+        "fixture derives nothing — the comparison below would be vacuous"
+    );
+
+    assert_eq!(
+        sn_derived(&naive),
+        sn_derived(&semi),
+        "semi-naive must reach the SAME fixpoint as naive — it is an evaluation \
+         strategy, not a semantics change (naive total {}, semi total {})",
+        rn.total,
+        rs.total
+    );
+}
+
+#[test]
+fn transitive_closure_joins_the_delta_against_history() {
+    // THE ARM THAT DELTA-ONLY WOULD FAIL, and the reason the (delta x existing)
+    // path exists at all. `a→b` and `b→c` arrive in DIFFERENT transactions, so a
+    // delta-only adjacency sees one edge and cannot derive `a→c`.
+    //
+    // This deployment has ZERO transitive properties loaded, so nothing here
+    // exercises this path in production — which is exactly how it would rot
+    // unnoticed. Hence a test that loads one.
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+
+    // Transaction 1: a→b, materialised.
+    sn_ingest(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:a ex:partOf ex:b .\n",
+    );
+    let first = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    ont.materialize_delta(&mut store, SN_TS, &first).unwrap();
+
+    // Transaction 2: b→c ONLY. The delta does not contain a→b.
+    let before = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    sn_ingest(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:b ex:partOf ex:c .\n",
+    );
+    let after = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let seed: Vec<_> = after
+        .iter()
+        .filter(|f| {
+            !before
+                .iter()
+                .any(|b| b.entity == f.entity && b.attribute == f.attribute && b.value == f.value)
+        })
+        .cloned()
+        .collect();
+    assert_eq!(
+        seed.len(),
+        1,
+        "the seed must be the ONE new edge, not the store"
+    );
+
+    ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+
+    let result = crate::sparql::query(
+        &store,
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+         { <http://example.org/a> <http://example.org/partOf> <http://example.org/c> }",
+    )
+    .unwrap();
+    assert!(
+        matches!(result, crate::sparql::QueryResult::Ask(true)),
+        "a→c must be derived from a delta containing ONLY b→c, by joining it \
+         against the EXISTING a→b edge (aegis-2dp8e2)"
+    );
+}
+
+#[test]
+fn the_pass_budget_is_reported_not_silent() {
+    // A fixpoint that stopped early is indistinguishable from one that finished
+    // unless it says so. Normal runs must report the flag CLEAR — the assertion
+    // that stops the field being decorative.
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+    sn_ingest(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:fido a ex:Dog .\n",
+    );
+    let seed = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let r = ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+    assert!(
+        !r.pass_budget_exhausted,
+        "an ordinary run must not hit the budget"
+    );
+    assert!(r.passes > 0, "passes must be counted, not left at zero");
+}

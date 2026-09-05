@@ -102,6 +102,13 @@ pub struct MaterializeReport {
     pub domain_range_inferences: usize,
     /// Total new facts materialized.
     pub total: usize,
+    /// Derivation passes actually run (aegis-2dp8e2).
+    pub passes: usize,
+    /// The pass budget was hit with work still pending, so the closure is
+    /// PARTIAL. Reported rather than left silent: a fixpoint that stopped early
+    /// is indistinguishable from one that finished, and the difference is a
+    /// wrong answer that looks complete.
+    pub pass_budget_exhausted: bool,
 }
 
 /// A constraint violation from OWL validation.
