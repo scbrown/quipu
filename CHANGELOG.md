@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.36] - 2026-09-05
+
+### Fixed
+
+- *(import)* An exact name match is a PROPOSAL, not a silent IRI rewrite([baa9d98](https://github.com/scbrown/quipu/commit/baa9d9818b4754828e2a6ab30de76a7b508fc447))
+
 ## [0.3.35] - 2026-09-05
 
 ### Added
