@@ -204,3 +204,50 @@ fn justification_curies_round_trip() {
         assert_eq!(Justification::parse(j.curie()).unwrap(), j);
     }
 }
+
+// ---------------------------------------------------------------------------
+// The assumption `apply` rests on for NEGATIVE mappings.
+//
+// The design says a rejected row "derives nothing — it exists to suppress a
+// future proposal". That is true but narrower than it needs to be: quipu
+// ALREADY has a durable "these two are not the same" in
+// `quipu:distinctFrom`, which `recorded_distinct_from` reads and `resolve_one`
+// uses to exclude candidates. So a rejection can derive a distinctFrom exactly
+// as an acceptance derives an owl:sameAs, and one operator judgement then
+// suppresses the pair EVERYWHERE — the next `align propose`, `/episode` ingest
+// hints, and import's own resolve path — instead of only inside alignment.
+//
+// That only works if a fact written into the alignment's own committed named
+// graph is visible to `recorded_distinct_from`. Its SQL does not filter on `g`,
+// so it should be — but "should be" is how a derivation goes inert while every
+// write reports success, so this pins it. If someone adds a graph filter to
+// that query, alignment rejections stop suppressing anything and nothing else
+// would say so.
+
+#[test]
+fn a_distinct_from_in_a_committed_named_graph_suppresses_resolution() {
+    let mut store = crate::Store::open_in_memory().unwrap();
+    let g = store.graph_create("urn:quipu:align:test").unwrap();
+    let triple = format!(
+        "<http://a.example/x> <{}> <http://b.example/y> .\n",
+        crate::namespace::QUIPU_DISTINCT_FROM
+    );
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        triple.as_bytes(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-09-05T00:00:00Z",
+        None,
+        Some("align-test"),
+        g,
+    )
+    .unwrap();
+
+    let seen = crate::resolution::recorded_distinct_from(&store, "http://a.example/x").unwrap();
+    assert!(
+        seen.iter().any(|s| s == "http://b.example/y"),
+        "a distinctFrom in the alignment graph must reach resolution, or a rejection \
+         suppresses nothing outside alignment: {seen:?}"
+    );
+}
