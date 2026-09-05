@@ -28,6 +28,10 @@ crate-type = ["cdylib"]
 quipu = { package = "quipu-ai", path = "../..", default-features = false }
 wasm-bindgen = "0.2"
 serde_json = "1"
+# Writing the export archive in the tab, with the same crates the reader uses,
+# so what comes out is the same .qpack.tar.gz shape that goes in.
+tar = "0.4"
+flate2 = "1"
 
 [features]
 # A passthrough, not a copy: it forwards to quipu's own `shacl` so the

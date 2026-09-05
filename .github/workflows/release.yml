@@ -228,7 +228,7 @@ jobs:
   # and coupling them would mean a wasm toolchain problem holds up the binary
   # release, which is the artifact people actually install.
   wasm:
-    name: Wasm (browser bundle)
+    name: Wasm (release asset)
     needs: release-plz
     # `always()` so the manual path (which skips release-plz entirely) still
     # runs; the rest of the condition is the real gate.
@@ -276,8 +276,18 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --release --locked
+          # Resolve the target dir rather than assuming `target/`. It is unset
+          # in Actions so `target/` would be correct HERE, but that same
+          # assumption is what wedged aegis CD (2026-09-05): the fleet cargo
+          # wrapper points CARGO_TARGET_DIR at ~/.cache/aegis-cargo-targets/,
+          # while the deploy inspected and shipped a stale in-tree target/ — so
+          # a build that 'succeeded' produced a binary stamped with the PREVIOUS
+          # commit and the sha gate rightly refused it. Asking cargo costs one
+          # line and cannot be wrong.
+          TARGET=$(cargo metadata --format-version 1 --no-deps \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
           wasm-bindgen --target web --out-dir pkg \
-            target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm
+            "$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
 
       - name: Resolve package-qualified tag
         id: tag

@@ -56,7 +56,7 @@ itself compiled to WebAssembly**. GitHub cannot run scripts in a README, so here
 picture; the page is one click away.
 
 <p align="center">
-  <a href="https://scbrown.github.io/quipu/explore/"><img src="assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, 61,069 triples accepted, 0 quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
+  <a href="https://scbrown.github.io/quipu/explore/"><img src="assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, the triple count accepted with none quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
 </p>
 
 <p align="center">
@@ -70,6 +70,17 @@ the manifest is verified against the exact payload bytes, the bundled shapes are
 that code, compiled for a different target. Then you get a SPARQL box, a module and
 document browser, a type distribution and a neighbourhood graph, all of it derived from
 queries the page will show you. It takes any Quipu pack, not just this one.
+
+**And it is not read-only.** Add, change or retract facts on any node — through the real
+`tool_set` / `tool_retract` / `tool_episode`, the same functions the REST API exposes,
+with the closed-vocabulary gate still enforcing what the sender's shapes allow. The views
+update as you go, and you can take the result with you: the edited store exports as a
+genuine `.qpack.tar.gz`, built by the same `share_payload` the CLI uses and declaring the
+pack it came from as its parent, so `quipu import` will take it back — extract it first
+and import the *directory*, since `quipu import <archive>` verifies into a throwaway
+in-memory store and ignores `--db`. Or download
+`export.nt` and `diff` it — it is line-oriented and canonically ordered, so a change is a
+reviewable diff.
 
 The bundle is a release asset (`quipu-<tag>-wasm.tar.gz`), so nothing here is committed
 and the Pages build needs no Rust.

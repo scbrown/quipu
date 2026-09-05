@@ -13,6 +13,7 @@
 //! typed itself, so there is no privileged view here that a reader cannot
 //! reproduce in the query box.
 
+use quipu::share::{ShareOptions, ShareScope};
 use quipu::share_import::{PromoteImportRequest, promote_import};
 use quipu::share_transport::read_archive_bytes;
 use wasm_bindgen::prelude::*;
@@ -27,6 +28,15 @@ fn err_js(e: impl std::fmt::Display) -> JsValue {
 pub struct Explorer {
     store: quipu::Store,
     load_report: String,
+    /// The share this store was built from. Carried so an exported pack can
+    /// declare it as `parent_share` — an edited pack that does not say what it
+    /// descends from is a fork pretending to be an original.
+    parent_share: String,
+    /// Every write made in this tab, newest last. Kept in Rust rather than in
+    /// the page so the count cannot drift from what the store actually did:
+    /// each entry records the tx the store reported, not the request the UI
+    /// sent.
+    edits: Vec<serde_json::Value>,
 }
 
 #[wasm_bindgen]
@@ -97,7 +107,12 @@ impl Explorer {
         }))
         .map_err(err_js)?;
 
-        Ok(Explorer { store, load_report })
+        Ok(Explorer {
+            store,
+            load_report,
+            parent_share: request.manifest.share_id.clone(),
+            edits: Vec::new(),
+        })
     }
 
     /// Manifest, import decision and promotion for the loaded pack, as JSON.
@@ -126,7 +141,182 @@ impl Explorer {
             .map_err(err_js)?;
         serde_json::to_string(&out).map_err(err_js)
     }
+
+    /// Replace every current value of one predicate on one entity
+    /// (`quipu::tool_set`, the `/set` semantics).
+    ///
+    /// `value` is the JSON the REST tool takes, so `{"str": "..."}` states a
+    /// literal and a bare string goes through the same IRI-shape heuristic it
+    /// does. Single-valued by definition: this RETRACTS what was there. To add
+    /// without removing, use [`Explorer::episode`].
+    ///
+    /// # Errors
+    /// The entity does not exist (a `/set` on a typo'd IRI must not mint an
+    /// orphan), the value JSON is invalid, or the write is refused.
+    pub fn set(&mut self, entity: &str, predicate: &str, value: &str) -> Result<String, JsValue> {
+        let value: serde_json::Value = serde_json::from_str(value).map_err(err_js)?;
+        let out = quipu::tool_set(
+            &mut self.store,
+            &serde_json::json!({
+                "entity": entity, "predicate": predicate, "value": value, "actor": ACTOR,
+            }),
+        )
+        .map_err(err_js)?;
+        self.record("set", &out);
+        serde_json::to_string(&out).map_err(err_js)
+    }
+
+    /// Retract facts on one entity (`quipu::tool_retract`).
+    ///
+    /// Pass `predicate` empty to retract everything on the entity; pass both
+    /// `predicate` and `value` to retract exactly one statement. Retraction is
+    /// LOGICAL — the fact is closed, not deleted, so a time-travel query still
+    /// finds it. That is why the export below is a new share rather than an
+    /// edited copy of the old one.
+    ///
+    /// # Errors
+    /// The entity or predicate does not exist, or the write is refused.
+    pub fn retract(
+        &mut self,
+        entity: &str,
+        predicate: &str,
+        value: &str,
+    ) -> Result<String, JsValue> {
+        let mut input = serde_json::json!({ "entity": entity, "actor": ACTOR });
+        if !predicate.is_empty() {
+            input["predicate"] = serde_json::Value::String(predicate.to_string());
+        }
+        if !value.is_empty() {
+            input["value"] = serde_json::from_str(value).map_err(err_js)?;
+        }
+        let out = quipu::tool_retract(&mut self.store, &input).map_err(err_js)?;
+        self.record("retract", &out);
+        serde_json::to_string(&out).map_err(err_js)
+    }
+
+    /// Ingest an episode (`quipu::tool_episode`) — the add-a-node path.
+    ///
+    /// The closed-vocabulary gate applies, and that is worth seeing rather than
+    /// working around: a node whose `type` no shape in this store sanctions is
+    /// REFUSED and nothing is written. The store's vocabulary here is exactly
+    /// the one the pack's own shapes brought with it, so what you may add is
+    /// bounded by what the sender declared.
+    ///
+    /// # Errors
+    /// The episode JSON is invalid, a node's type is ungoverned, or the write
+    /// is refused.
+    pub fn episode(&mut self, episode_json: &str) -> Result<String, JsValue> {
+        let input: serde_json::Value = serde_json::from_str(episode_json).map_err(err_js)?;
+        let out = quipu::tool_episode(&mut self.store, &input).map_err(err_js)?;
+        self.record("episode", &out);
+        serde_json::to_string(&out).map_err(err_js)
+    }
+
+    /// Every write made in this tab, as JSON — `[{op, tx_id, detail}, ...]`.
+    #[wasm_bindgen(js_name = editLog)]
+    #[must_use]
+    pub fn edit_log(&self) -> String {
+        serde_json::to_string(&self.edits).unwrap_or_else(|_| "[]".into())
+    }
+
+    /// The current ROOT graph as N-Triples — `export.nt` on its own.
+    ///
+    /// Line-oriented and canonically ordered, so `diff` against the pack you
+    /// started from shows exactly what this tab changed. That is the reviewable
+    /// artifact; the pack below is the shippable one.
+    ///
+    /// # Errors
+    /// The store cannot be read or the payload exceeds the bound.
+    #[wasm_bindgen(js_name = exportNtriples)]
+    pub fn export_ntriples(&self) -> Result<String, JsValue> {
+        let payload = self.payload()?;
+        payload
+            .files
+            .get("export.nt")
+            .cloned()
+            .ok_or_else(|| JsValue::from_str("share payload has no export.nt"))
+    }
+
+    /// The edited store as `.qpack.tar.gz` bytes — a real, importable share.
+    ///
+    /// Built with the same `share_payload` the CLI and the REST endpoint use,
+    /// then tarred and gzipped exactly as the release artifact is, so what
+    /// comes out of the tab is not a browser-specific format: `quipu import` it,
+    /// or drop it back into this page.
+    ///
+    /// It declares the pack it was derived from as `parent_share`, so the
+    /// lineage survives the round trip.
+    ///
+    /// # Errors
+    /// The store cannot be read, the payload exceeds the bound, or the archive
+    /// cannot be written.
+    #[wasm_bindgen(js_name = exportPack)]
+    pub fn export_pack(&self) -> Result<Vec<u8>, JsValue> {
+        use std::io::Write;
+        let payload = self.payload()?;
+        let mut archive = tar::Builder::new(flate2::write::GzEncoder::new(
+            Vec::new(),
+            flate2::Compression::default(),
+        ));
+        // Sorted, because `payload.files` is a BTreeMap and a share archive
+        // should be byte-stable for the same store state — the producer side of
+        // the determinism `share()` gives on disk.
+        for (name, contents) in &payload.files {
+            let bytes = contents.as_bytes();
+            let mut header = tar::Header::new_gnu();
+            header.set_path(name).map_err(err_js)?;
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_mtime(0);
+            header.set_cksum();
+            archive.append(&header, bytes).map_err(err_js)?;
+        }
+        let mut encoder = archive.into_inner().map_err(err_js)?;
+        encoder.flush().map_err(err_js)?;
+        encoder.finish().map_err(err_js)
+    }
+
+    /// The manifest the next [`Explorer::export_pack`] would carry, as JSON —
+    /// so the page can show the new share id and graph hash BEFORE downloading
+    /// several megabytes.
+    ///
+    /// # Errors
+    /// The store cannot be read or the payload exceeds the bound.
+    #[wasm_bindgen(js_name = exportManifest)]
+    pub fn export_manifest(&self) -> Result<String, JsValue> {
+        serde_json::to_string(&self.payload()?.manifest).map_err(err_js)
+    }
+
+    fn payload(&self) -> Result<quipu::share::SharePayload, JsValue> {
+        quipu::share::share_payload(
+            &self.store,
+            &ShareOptions {
+                scope: ShareScope::Root,
+                parent_share: Some(self.parent_share.clone()),
+                ..ShareOptions::default()
+            },
+            // The repository pack alone is ~12 MB of N-Triples, well past the
+            // 8 MB default the HTTP endpoint uses — that bound exists to keep a
+            // server from serialising an unbounded response into a socket, and
+            // neither half of that applies to a local export in a tab.
+            MAX_EXPORT_BYTES,
+        )
+        .map_err(err_js)
+    }
+
+    fn record(&mut self, op: &str, outcome: &serde_json::Value) {
+        self.edits
+            .push(serde_json::json!({ "op": op, "outcome": outcome }));
+    }
 }
+
+/// Attributed to the page rather than left blank: a fact written here is not
+/// the producer's, and provenance should say so before anyone exports it.
+const ACTOR: &str = "browser-explorer";
+
+/// Upper bound for an in-tab export. Generous on purpose — see
+/// `Explorer::payload`.
+const MAX_EXPORT_BYTES: usize = 128 * 1024 * 1024;
 
 /// The `quipu` version and commit this bundle was built from, as JSON.
 ///

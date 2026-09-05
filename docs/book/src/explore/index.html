@@ -120,6 +120,36 @@ button.canned:hover, #url-load:hover { border-color: var(--blue); }
 #sparql-out { margin-top: 10px; max-height: 400px; overflow: auto; }
 #sparql-out pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12px; }
 
+input.mono, input.val {
+  width: 100%; padding: 4px 7px; font-family: var(--mono); font-size: 12px;
+  color: var(--text); background: var(--bg); border: 1px solid var(--bg-elevated);
+  border-radius: 3px;
+}
+input.val:disabled { color: var(--text-muted); background: transparent; border-color: transparent; }
+td.acts { white-space: nowrap; width: 1%; }
+button.mini {
+  font: inherit; font-size: 11.5px; padding: 3px 9px; margin-left: 6px; cursor: pointer;
+  color: var(--text); background: var(--bg-elevated); border: 1px solid transparent;
+  border-radius: 3px;
+}
+button.mini:hover { border-color: var(--blue); }
+button.mini.danger:hover { border-color: var(--accent); color: var(--accent); }
+button.mini.go { background: var(--accent); color: #fff; font-weight: 600; margin-left: 0; }
+.addrow {
+  display: grid; grid-template-columns: minmax(180px, 2fr) minmax(140px, 2fr) max-content;
+  gap: 8px; align-items: center; margin-top: 12px;
+}
+@media (max-width: 700px) { .addrow { grid-template-columns: 1fr; } }
+p.note { font-size: 11.5px; margin-top: 10px; }
+#edit-note { font-size: 12px; margin-top: 10px; min-height: 1.5em; color: var(--text-muted); }
+#edit-note.bad { color: var(--accent); }
+dl#export-manifest {
+  display: grid; grid-template-columns: minmax(110px, max-content) 1fr;
+  gap: 4px 16px; font-size: 12.5px; margin-bottom: 12px;
+}
+dl#export-manifest dt { color: var(--text-muted); }
+dl#export-manifest dd { word-break: break-all; }
+
 #url-input, #file-input {
   font-family: var(--mono); font-size: 12px; color: var(--text);
   background: var(--bg); border: 1px solid var(--bg-elevated);
@@ -214,6 +244,41 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
           <span class="muted" style="font-size:12px">
             Reads only. Nothing you type here leaves your browser.</span></div>
         <div id="sparql-out"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Edit the facts <span class="note" id="facts-subject"></span>
+        <a href="#" id="facts-showq">show the query</a></h2>
+      <div class="body">
+        <p class="muted" style="font-size:12.5px;margin-bottom:12px">
+          The store is in your tab, so this is safe and it is also <em>real</em>: each button
+          calls a genuine Quipu write — <code class="mono">tool_set</code>,
+          <code class="mono">tool_retract</code> — the same functions the REST API exposes. The
+          closed-vocabulary gate applies, which is worth seeing rather than working around: what
+          you may add is bounded by the shapes the sender shipped with the pack.
+        </p>
+        <div id="facts"></div>
+        <p id="edit-note"></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Take it with you <span class="note" id="edit-count"></span></h2>
+      <div class="body">
+        <p class="muted" style="font-size:12.5px;margin-bottom:12px">
+          Your edited store exports as a <strong>real share</strong>, built by the same
+          <code class="mono">share_payload</code> the CLI and the REST endpoint use, and declaring
+          the pack it came from as its parent — so the lineage survives the round trip.
+          <code class="mono">quipu import</code> will take it back — extract it first and import
+          the <em>directory</em>, because <code class="mono">quipu import &lt;archive&gt;</code>
+          verifies into a throwaway in-memory store and ignores <code class="mono">--db</code>.
+        </p>
+        <dl id="export-manifest"></dl>
+        <div class="row">
+          <button class="go" id="download-pack">Download .qpack.tar.gz</button>
+          <button id="download-nt">Download export.nt</button>
+        </div>
       </div>
     </section>
 

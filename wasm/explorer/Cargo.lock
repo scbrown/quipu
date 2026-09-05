@@ -1609,7 +1609,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.3.31"
+version = "0.3.32"
 dependencies = [
  "datafrog",
  "flate2",
@@ -1643,8 +1643,10 @@ dependencies = [
 name = "quipu-wasm-explorer"
 version = "0.0.0"
 dependencies = [
+ "flate2",
  "quipu-ai",
  "serde_json",
+ "tar",
  "wasm-bindgen",
 ]
 

@@ -11,8 +11,9 @@ it.
 **[Try the receiving half in your browser](../explore/.)** — every Quipu release
 ships a knowledge pack of this repository, and that page imports it with Quipu
 compiled to WebAssembly. You watch the manifest get verified, the bundled shapes
-get adopted, and the graph get staged and promoted, and then you query it. It is
-the transcript below, with you as the receiver.
+get adopted, and the graph get staged and promoted, and then you query it — and then
+edit it and export a pack that declares this one as its parent, which is the lineage
+half of the same story. It is the transcript below, with you as the receiver.
 
 ## One run, end to end
 
