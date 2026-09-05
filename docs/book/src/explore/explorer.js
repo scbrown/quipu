@@ -18,11 +18,11 @@ const worker = new Worker("./worker.js", { type: "module" });
 let nextId = 1;
 const pending = new Map();
 worker.onmessage = (e) => {
-  const { id, ok, value, error } = e.data;
+  const { id, ok, result, error } = e.data;
   const p = pending.get(id);
   pending.delete(id);
   if (!p) return;
-  ok ? p.resolve(value) : p.reject(new Error(error));
+  ok ? p.resolve(result) : p.reject(new Error(error));
 };
 worker.onerror = (e) => {
   for (const p of pending.values()) p.reject(new Error(e.message || "worker failed"));
@@ -294,6 +294,187 @@ async function selectFile(item) {
     body.append(table);
   }
   drawNeighbourhood(item);
+  renderFacts(item);
+}
+
+// ------------------------------------------------------------- editing
+
+// The page is not read-only, and this is where that becomes true. Every button
+// here calls a real quipu write tool in the wasm store — `tool_set`,
+// `tool_retract`, `tool_episode` — the same functions the REST API exposes. The
+// store is in your tab, so nothing you do reaches anyone; the point is that the
+// edits are REAL, and come out as a pack the native binary will take back.
+
+const factsQuery = (iri) => `${PREFIXES}
+SELECT ?p ?pIri ?o ?oIri
+WHERE {
+  <${iri}> ?p ?o .
+  BIND(STR(?p) AS ?pIri)
+  BIND(IF(isIRI(?o), STR(?o), "") AS ?oIri)
+}
+ORDER BY ?p`;
+
+let factsFor = null;
+
+async function renderFacts(item) {
+  factsFor = item;
+  const box = $("#facts");
+  box.replaceChildren(el("p", { class: "muted", text: "querying…" }));
+  wireShowQuery("#facts-showq", factsQuery(item.iri));
+  $("#facts-subject").textContent = item.path;
+  const result = await query(factsQuery(item.iri)).catch(() => null);
+  const facts = rows(result);
+  box.replaceChildren();
+
+  const table = el("table");
+  table.append(el("thead", {}, el("tr", {},
+    el("th", { text: "predicate" }), el("th", { text: "value" }), el("th", { text: "" }))));
+  const tbody = el("tbody");
+  for (const f of facts) {
+    // The FULL IRI, not the compacted `?p` beside it — see factsQuery.
+    const predicate = String(f.pIri ?? f.p);
+    // An IRI object is a link between entities; retyping one as a literal would
+    // silently change what the fact MEANS, so those are retract-only here.
+    const isIri = Boolean(f.oIri);
+    const input = el("input", { class: "mono val", value: cell(f.o) });
+    input.disabled = isIri;
+    const row = el("tr", {},
+      el("td", { class: "mono", text: short(String(f.p)) }),
+      el("td", {}, input),
+      el("td", { class: "acts" },
+        isIri
+          ? el("span", { class: "muted", text: "IRI" })
+          : el("button", { class: "mini", text: "Save",
+              onclick: () => writeSet(item, predicate, input.value) }),
+        el("button", { class: "mini danger", text: "Retract",
+          onclick: () => writeRetract(item, predicate, isIri ? null : cell(f.o)) })),
+    );
+    tbody.append(row);
+  }
+  table.append(tbody);
+  box.append(table);
+
+  // Add a fact. Defaulted to rdfs:comment because it is the one predicate every
+  // shape in this pack tolerates on anything — an "add a fact" box whose default
+  // is refused teaches the wrong lesson on the first click.
+  const pred = el("input", { class: "mono",
+    value: "http://www.w3.org/2000/01/rdf-schema#comment", placeholder: "predicate IRI" });
+  const val = el("input", { class: "mono", placeholder: "value" });
+  box.append(el("div", { class: "addrow" },
+    pred, val,
+    el("button", { class: "mini go", text: "Add / replace",
+      onclick: () => writeSet(item, pred.value.trim(), val.value) })));
+  box.append(el("p", { class: "muted note", text:
+    "`set` is single-valued: it replaces every current value of that predicate on "
+    + "this subject. Retraction is logical — the fact is closed, not deleted, so a "
+    + "time-travel query still finds it." }));
+}
+
+async function afterWrite(item, outcome, description) {
+  editNote(`${description} — tx ${outcome.tx_id}`);
+  await renderFacts(item);
+  await renderTypes();
+  drawNeighbourhood(item);
+  await refreshExport();
+}
+
+async function writeSet(item, predicate, value) {
+  if (!predicate) return editNote("Give a predicate IRI first.", true);
+  try {
+    // `{"str": ...}` states a literal explicitly, so a value that happens to
+    // look like an IRI is not silently promoted into one.
+    const outcome = await ask({ cmd: "set", entity: item.iri, predicate,
+      value: JSON.stringify({ str: value }) });
+    await afterWrite(item, outcome,
+      `set ${short(predicate)} (${outcome.retracted} retracted, ${outcome.asserted} asserted)`);
+  } catch (err) { editNote(err.message, true); }
+}
+
+async function writeRetract(item, predicate, value) {
+  try {
+    const outcome = await ask({ cmd: "retract", entity: item.iri, predicate,
+      value: value === null ? "" : JSON.stringify({ str: value }) });
+    await afterWrite(item, outcome, `retracted ${outcome.retracted} × ${short(predicate)}`);
+  } catch (err) { editNote(err.message, true); }
+}
+
+function editNote(text, bad = false) {
+  const note = $("#edit-note");
+  note.textContent = text;
+  note.classList.toggle("bad", bad);
+}
+
+async function refreshExport() {
+  const log = await ask({ cmd: "editLog" }).catch(() => []);
+  $("#edit-count").textContent = log.length
+    ? `${fmt(log.length)} write${log.length === 1 ? "" : "s"} in this tab`
+    : "no edits yet";
+  const dl = $("#export-manifest");
+  if (!log.length) {
+    dl.replaceChildren(el("p", { class: "muted", text:
+      "Export is live from the start — an unedited store exports the pack it came from. "
+      + "Make an edit above and the share id and graph hash below will change." }));
+  }
+  try {
+    // Worth timing and showing: the graph hash is RDFC-1.0 over the whole
+    // export, so this number is the cost of canonicalizing the graph you are
+    // looking at — the thing that makes two shares of the same state
+    // byte-identical. A reader deciding whether that guarantee is affordable
+    // should be able to see what it costs rather than take a claim about it.
+    const t0 = performance.now();
+    const m = await ask({ cmd: "exportManifest" });
+    const ms = performance.now() - t0;
+    const facts = [
+      ["Share id", m.share_id],
+      ["Graph hash", m.graph_hash],
+      ["Parent share", m.parent_share ?? "(none)"],
+      ["Tx anchor", String(m.tx_anchor)],
+      ["Producer", `${m.producer.name} ${m.producer.version}`],
+      ["Canonicalized in", `${(ms / 1000).toFixed(1)} s (RDFC-1.0, in this tab)`],
+    ];
+    dl.replaceChildren();
+    for (const [k, v] of facts) {
+      dl.append(el("dt", { text: k }), el("dd", { class: "mono", text: v }));
+    }
+  } catch (err) {
+    dl.replaceChildren(el("p", { class: "bad", text: err.message }));
+  }
+}
+
+function download(name, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  // Revoke on a turn boundary: revoking synchronously can beat the navigation
+  // the click just started, and the download then silently produces nothing.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+async function downloadPack() {
+  editNote("Building the pack…");
+  try {
+    const bytes = await ask({ cmd: "exportPack" });
+    const m = await ask({ cmd: "exportManifest" });
+    download(`quipu-edited-${m.share_id.slice(7, 19)}.qpack.tar.gz`,
+      new Blob([bytes], { type: "application/gzip" }));
+    editNote(`Downloaded ${fmt(bytes.byteLength)} bytes. `
+      + "Verify it locally: `tar -xzf <file> -C dir && quipu import dir --db your.db` "
+      + "(a DIRECTORY — `quipu import <archive>` verifies into a throwaway in-memory "
+      + "store and ignores --db).");
+  } catch (err) { editNote(err.message, true); }
+}
+
+async function downloadNtriples() {
+  editNote("Serialising…");
+  try {
+    const nt = await ask({ cmd: "exportNtriples" });
+    download("export.nt", new Blob([nt], { type: "application/n-triples" }));
+    editNote(`Downloaded ${fmt(nt.length)} bytes of N-Triples. It is line-oriented and `
+      + "canonically ordered, so `diff` against the pack you started from shows exactly "
+      + "what this tab changed.");
+  } catch (err) { editNote(err.message, true); }
 }
 
 // ------------------------------------------------------------ graph panel
@@ -480,14 +661,18 @@ async function loadPack(bytes, source) {
   $("main").hidden = false;
   await renderTypes();
   await renderBrowser();
+  await refreshExport();
   reportReleaseFreshness(report.manifest.producer.version);
 }
 
 async function boot() {
   try {
-    window.__quipuBuild = JSON.parse(await ask({ cmd: "version" }));
-  } catch {
-    fail("This page needs WebAssembly and module workers. Try a current Chrome, Firefox or Safari.");
+    window.__quipuBuild = await ask({ cmd: "version" });
+  } catch (err) {
+    const unsupported = typeof WebAssembly === "undefined" || typeof Worker === "undefined";
+    fail(unsupported
+      ? "This page needs WebAssembly and module workers. Try a current Chrome, Firefox or Safari."
+      : `The WebAssembly worker did not start: ${err.message}`);
     return;
   }
   $("#sparql").value = CANNED[0].sparql;
@@ -499,6 +684,8 @@ async function boot() {
       onclick: () => { $("#sparql").value = c.sparql; runSparql(); },
     }));
   }
+  $("#download-pack").addEventListener("click", downloadPack);
+  $("#download-nt").addEventListener("click", downloadNtriples);
   $("#file-input").addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
