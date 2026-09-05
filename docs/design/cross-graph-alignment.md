@@ -305,6 +305,26 @@ So:
   check does not ask, and its passing output says so — a green check whose
   meaning is overread is how a review step becomes a rubber stamp.
 
+`verify` has **three** verdicts, not two, and the middle one is the point:
+
+| verdict | when | meaning |
+| --- | --- | --- |
+| `Ok` | assertions found, all traced | the graph and the set agree |
+| `NothingVerified` | the set authorises rows and the graph holds **none** of them | **this run checked nothing** |
+| `Failed` | an assertion traces to no mapping | see above |
+
+A two-state verdict is forced to render "nothing was checked" as "nothing
+failed". Every assertion traced — because there were none — and that is a green
+verdict over an empty check. It is not an error (the likely cause is that
+`apply` has not run), but it must not be silent, because *verified* and *had
+nothing to verify* lead to opposite next actions.
+
+The boundaries matter and are tested: one traced assertion is a real pass with
+an `unapplied` note beside it, not a vacuous one; an empty set over an empty
+graph is `Ok`, because "authorised nothing" is an honest state and flagging it
+would cry wolf on every fresh alignment; and a real failure outranks the
+vacuous-pass guard, so the guard can never downgrade a fault.
+
 If another feature does need that predicate, that is a decision to take
 deliberately and to record here, not to discover from a `verify` run that has
 quietly stopped meaning what it says.

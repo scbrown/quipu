@@ -39,6 +39,22 @@ pub const QUIPU_DISTINCT_FROM: &str = "https://quipu.dev/ontology/distinctFrom";
 /// One asserted triple found in the alignment graph.
 pub type Assertion = (String, String);
 
+/// What `verify` concluded — three states, not two.
+///
+/// The middle state exists because "nothing failed" and "nothing was checked"
+/// are not the same answer, and a two-state verdict is forced to render the
+/// second as the first (wu, aegis-sosiaa, from a runner that printed "All
+/// suites passed" over one UNAVAILABLE suite and zero passes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// Assertions were found, and every one of them traced.
+    Ok,
+    /// NOTHING WAS VERIFIED. Vacuously clean, which is not clean.
+    NothingVerified,
+    /// At least one assertion traced to no mapping.
+    Failed,
+}
+
 /// What `verify` found.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct VerifyReport {
@@ -72,6 +88,31 @@ impl VerifyReport {
         !self.untraceable.is_empty()
     }
 
+    /// How many assertions this run actually checked.
+    #[must_use]
+    pub fn traced(&self) -> usize {
+        self.traced_same_as + self.traced_distinct_from
+    }
+
+    /// The three-state verdict.
+    ///
+    /// `NothingVerified` when the set authorised rows and NONE of them were
+    /// found in the graph. Every assertion traced, because there were none —
+    /// and reporting that as OK is the vacuous pass: a green verdict over an
+    /// empty check. It is not an error (the likely cause is simply that
+    /// `apply` has not run), but it must not be silent, because "verified" and
+    /// "had nothing to verify" lead to opposite next actions.
+    #[must_use]
+    pub fn verdict(&self) -> Verdict {
+        if self.is_failure() {
+            Verdict::Failed
+        } else if self.traced() == 0 && !self.unapplied.is_empty() {
+            Verdict::NothingVerified
+        } else {
+            Verdict::Ok
+        }
+    }
+
     /// A human-readable report that states what it does and does not prove.
     #[must_use]
     pub fn render(&self) -> String {
@@ -91,7 +132,19 @@ impl VerifyReport {
                 let _ = writeln!(out, "  pending  {row}");
             }
         }
-        if self.untraceable.is_empty() {
+        if self.verdict() == Verdict::NothingVerified {
+            let _ = writeln!(
+                out,
+                "NOTHING VERIFIED — the mapping set authorises {} assertion(s) and the alignment \n\
+                 graph contains none of them, so this run checked nothing.\n\
+                 \n\
+                 Every assertion traced, because there were no assertions. That is a vacuous pass\n\
+                 and it is reported separately for that reason: \"verified\" and \"had nothing to\n\
+                 verify\" lead to opposite next actions. The likely cause is that `align apply` has\n\
+                 not run yet.",
+                self.unapplied.len()
+            );
+        } else if self.untraceable.is_empty() {
             out.push_str(
                 "OK — every assertion in the alignment graph traces to a row that authorised it.\n\
                  \n\

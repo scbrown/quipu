@@ -588,7 +588,7 @@ fn a_pair_below_the_floor_is_not_proposed() {
 // ---------------------------------------------------------------------------
 // verify — wu's four requirements on the total invariant.
 
-use super::verify::{VerifyReport, verify};
+use super::verify::{Verdict, VerifyReport, verify};
 
 fn authored_same(subject: &str, object: &str) -> Mapping {
     let mut m = mapping(subject, object);
@@ -685,6 +685,9 @@ fn an_authored_but_unapplied_row_is_reported_and_is_not_a_failure() {
     assert!(!report.is_failure());
     assert_eq!(report.unapplied.len(), 1);
     assert!(report.render().contains("not yet applied"));
+    // And, because nothing was applied, this run verified nothing — see
+    // `a_run_that_checked_nothing_does_not_report_ok`.
+    assert_eq!(report.verdict(), Verdict::NothingVerified);
 }
 
 #[test]
@@ -713,4 +716,87 @@ fn the_failure_message_states_the_exclusive_ownership_precondition() {
     assert!(text.contains("sole writer"), "{text}");
     assert!(text.contains("degrades to partial permanently"), "{text}");
     assert!(text.contains(super::verify::QUIPU_DISTINCT_FROM), "{text}");
+}
+
+// ---------------------------------------------------------------------------
+// wu's guard, from a runner that printed "All suites passed" over one
+// UNAVAILABLE suite and zero passes: a check that examined nothing must not
+// report success. Every assertion traced — because there were none.
+
+#[test]
+fn a_run_that_checked_nothing_does_not_report_ok() {
+    let mut set = MappingSet::new("urn:t");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    set.mappings.push(authored_different(
+        "http://a.example/2",
+        "http://b.example/2",
+    ));
+
+    // Nothing applied yet: the graph holds none of them.
+    let report = verify(&set, &[], &[]);
+
+    assert_eq!(report.traced(), 0);
+    assert!(
+        !report.is_failure(),
+        "nothing is wrong — but nothing was checked either"
+    );
+    assert_eq!(report.verdict(), Verdict::NothingVerified);
+
+    let text = report.render();
+    assert!(text.contains("NOTHING VERIFIED"), "{text}");
+    assert!(text.contains("vacuous pass"), "{text}");
+    assert!(
+        !text.contains("OK —"),
+        "a vacuous run must not render as OK: {text}"
+    );
+}
+
+#[test]
+fn one_traced_assertion_is_enough_to_be_a_real_pass() {
+    // The boundary: NothingVerified is about having checked NOTHING, not about
+    // having checked less than everything. A set half-applied is a real pass
+    // over the half that is there, plus an `unapplied` note.
+    let mut set = MappingSet::new("urn:t");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    set.mappings
+        .push(authored_same("http://a.example/2", "http://b.example/2"));
+
+    let report = verify(
+        &set,
+        &[("http://a.example/1".into(), "http://b.example/1".into())],
+        &[],
+    );
+    assert_eq!(report.traced(), 1);
+    assert_eq!(report.unapplied.len(), 1);
+    assert_eq!(report.verdict(), Verdict::Ok);
+    assert!(report.render().contains("OK —"));
+}
+
+#[test]
+fn an_empty_set_over_an_empty_graph_is_ok_not_nothing_verified() {
+    // There is a difference between "authorised things and applied none" and
+    // "authorised nothing". Only the first is the vacuous pass wu's guard is
+    // about; the second is an honest empty state and flagging it would cry
+    // wolf on every fresh alignment.
+    let report = verify(&MappingSet::new("urn:t"), &[], &[]);
+    assert_eq!(report.verdict(), Verdict::Ok);
+    assert!(report.unapplied.is_empty());
+}
+
+#[test]
+fn a_failure_outranks_nothing_verified() {
+    // An untraceable assertion with nothing applied is still a FAILURE — the
+    // vacuous-pass guard must not downgrade a real fault.
+    let mut set = MappingSet::new("urn:t");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    let report = verify(
+        &set,
+        &[("http://x.example/9".into(), "http://y.example/9".into())],
+        &[],
+    );
+    assert_eq!(report.verdict(), Verdict::Failed);
+    assert!(report.render().contains("FAILED"));
 }
