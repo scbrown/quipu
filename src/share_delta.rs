@@ -91,7 +91,15 @@ fn manifest_bytes(manifest: &DeltaManifest, include_id: bool) -> Result<Vec<u8>>
     Ok(bytes)
 }
 
-fn manifest_turtle(manifest: &DeltaManifest) -> String {
+/// The delta manifest as RDF — the derived view `write_delta` writes alongside
+/// `manifest.json`.
+///
+/// Public so the wasm page can emit the SAME four files the CLI does
+/// (aegis-8fdp8d). `materialize` does not read it; it exists for humans and for
+/// graph tooling, and omitting it would make a browser-produced delta share a
+/// near-miss of the CLI's rather than the same artifact.
+#[must_use]
+pub fn manifest_turtle(manifest: &DeltaManifest) -> String {
     let literal = |value: &str| serde_json::to_string(value).expect("string JSON cannot fail");
     format!(
         r#"@prefix dcat: <http://www.w3.org/ns/dcat#> .
@@ -140,6 +148,29 @@ pub struct DeltaPayload {
     pub update: String,
     /// `shapes.ttl` contents for the resulting share.
     pub shapes: String,
+}
+
+impl DeltaPayload {
+    /// The four files a delta share directory contains, as (name, contents).
+    ///
+    /// The same set, with the same names, that [`write_delta`] puts on disk —
+    /// so a consumer cannot tell whether a delta came from the CLI or from a
+    /// browser tab, which is the point.
+    ///
+    /// # Errors
+    /// The manifest cannot be serialized.
+    pub fn files(&self) -> Result<Vec<(String, String)>> {
+        Ok(vec![
+            (
+                "manifest.json".to_string(),
+                String::from_utf8(manifest_bytes(&self.manifest, true)?)
+                    .map_err(|e| Error::Serialization(format!("delta manifest utf8: {e}")))?,
+            ),
+            ("manifest.ttl".to_string(), manifest_turtle(&self.manifest)),
+            (self.manifest.files.update.clone(), self.update.clone()),
+            (self.manifest.files.shapes.clone(), self.shapes.clone()),
+        ])
+    }
 }
 
 /// Build a delta from an in-memory parent, without touching the filesystem.
@@ -510,5 +541,46 @@ mod tests {
             "delta_hash must change when a header is added, or the header would \
              sit outside the integrity envelope"
         );
+    }
+
+    #[test]
+    fn files_matches_what_write_delta_puts_on_disk() {
+        // The claim that makes a browser-produced delta the SAME artifact as a
+        // CLI-produced one: same names, same bytes. If these drift, a reviewer
+        // gets a near-miss that materialize may still accept, which is worse
+        // than a mismatch it rejects.
+        let root = tempfile::tempdir().unwrap();
+        let parent_dir = root.path().join("parent");
+        crate::share::share(&store("before"), parent_dir.to_str().unwrap(), &opts()).unwrap();
+        let out = root.path().join("delta");
+        let child = store("after");
+        write_delta(&child, parent_dir.to_str().unwrap(), out.to_str().unwrap(), &opts()).unwrap();
+
+        let parent = crate::share_transport::read_reference(parent_dir.to_str().unwrap()).unwrap();
+        let built = build_delta(
+            &child,
+            &parent.manifest.share_id,
+            &parent.manifest.graph_hash,
+            &parent.export_ntriples,
+            &opts(),
+        )
+        .unwrap();
+
+        let mut names: Vec<String> = std::fs::read_dir(&out)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+            .collect();
+        names.sort();
+        let mut got: Vec<String> = built.files().unwrap().into_iter().map(|(n, _)| n).collect();
+        got.sort();
+        assert_eq!(got, names, "the page must emit exactly the CLI's file set");
+
+        for (name, contents) in built.files().unwrap() {
+            assert_eq!(
+                contents,
+                std::fs::read_to_string(out.join(&name)).unwrap(),
+                "{name} differs between build_delta and write_delta"
+            );
+        }
     }
 }

@@ -339,12 +339,35 @@ impl Explorer {
         )
         .map_err(err_js)?;
         let pack_dir = self.pack_dir();
-        let path = format!("{pack_dir}/deltas/{}.ru", built.manifest.delta_id);
+        let dir = format!("{pack_dir}/deltas/{}", built.manifest.delta_id);
+        // THE WHOLE ARTIFACT, not delta.ru alone. `materialize` verifies the
+        // manifest, then the update against `delta_hash`, then reads the shapes
+        // — so a lone delta.ru is a quarter of a delta share and nothing can
+        // check its lineage. `files()` is the CLI's exact set, names and bytes.
+        let files: Vec<serde_json::Value> = built
+            .files()
+            .map_err(err_js)?
+            .into_iter()
+            .map(|(name, contents)| {
+                serde_json::json!({
+                    "name": name,
+                    "path": format!("{dir}/{name}"),
+                    "bytes": contents.len(),
+                    "contents": contents,
+                })
+            })
+            .collect();
+        let total: usize = files
+            .iter()
+            .map(|f| f["bytes"].as_u64().unwrap_or(0) as usize)
+            .sum();
         serde_json::to_string(&serde_json::json!({
             "manifest": built.manifest,
             "update": built.update,
             "pack_dir": pack_dir,
-            "path": path,
+            "dir": dir,
+            "files": files,
+            "total_bytes": total,
             // An empty update is the honest answer to "propose a PR" when
             // nothing was edited, and the page must say so rather than opening
             // GitHub with a blank file.
