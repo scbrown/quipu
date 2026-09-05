@@ -46,6 +46,36 @@
 //!
 //! Iterated to a fixed point, because rdfs2/rdfs3 produce types that rdfs9 then
 //! closes, and rdfs7 produces triples that rdfs2/rdfs3 then read.
+//!
+//! # KNOWN INCOMPLETENESS: literal-valued triples are not premises
+//!
+//! `load()` keeps only `Value::Ref` objects, so **a triple whose object is a
+//! literal never enters the working set at all**. For the CONCLUSIONS of rdfs3
+//! and rdfs9 that is correct — a literal cannot be typed and cannot be a class.
+//! But rdfs2 and rdfs7 take such triples as PREMISES, and both hold there:
+//!
+//! ```text
+//! ex:a ex:name "n" .  + ex:name rdfs:domain ex:Person  |= ex:a rdf:type ex:Person   (rdfs2)
+//! ex:a ex:b1   "n" .  + ex:b1 rdfs:subPropertyOf ex:b2 |= ex:a ex:b2 "n"            (rdfs7)
+//! ```
+//!
+//! **Neither fires today.** Measured by wu in review of #150, each with a
+//! passing IRI-object control in the same test.
+//!
+//! The W3C entailment suite does not exercise it, so the 29/35 score is
+//! unaffected — but rdfs2 over a literal object is one of the commonest
+//! inferences in real data (`rdfs:domain` on a datatype property), so a user
+//! WILL hit this before the suite does. Tracked on **aegis-x9bmhf**.
+//!
+//! The two halves differ in cost, which is why neither is fixed here rather
+//! than one being quietly done: rdfs2's conclusion is all-IRI, so it needs only
+//! the `(s, p)` pairs of literal-valued triples. rdfs7's conclusion CARRIES the
+//! literal, so it needs `Triple` to stop being `(i64, i64, i64)` — a change to
+//! the core representation that deserves its own measurement.
+//!
+//! Note for anyone testing this: the `closure_of()` helper in the tests is
+//! IRI-only too, so an rdfs7 derivation over a literal would be invisible to it
+//! even once it fires. Count `report.asserted` instead.
 
 use std::collections::BTreeSet;
 

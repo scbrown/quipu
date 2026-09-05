@@ -157,7 +157,8 @@ pub fn cmd_query(args: &[String], db_path: &str) {
         Some(q) if !q.starts_with("--") => q,
         _ => {
             eprintln!(
-                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--fork <name>] [--entailment rdfs] [--db <path>]"
+                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--fork <name>] [--entailment rdfs] [--db <path>]\n\
+                 note: --entailment rdfs MATERIALISES the closure, so it WRITES to the store (idempotent) and needs a writable database"
             );
             std::process::exit(1);
         }

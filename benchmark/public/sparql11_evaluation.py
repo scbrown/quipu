@@ -83,6 +83,22 @@ ENTAILMENT_REASON = {
 }
 
 
+# Buckets quipu can answer with a MATERIALISED closure, and the `--entailment`
+# regime name that selects it.
+#
+# Separate from ENTAILMENT_COMMITMENT on purpose: a bucket can be a `goal` and
+# still belong here only when a closure exists for it. RDF is a goal and is
+# deliberately ABSENT — applying the RDFS closure to RDF-regime cases broke
+# `owlds02` (15/16 -> 14/16) while fixing six RDFS ones, measured. A stronger
+# regime is not a safer default.
+#
+# Adding a regime is a change to this dict. It used to be a bare `== "RDFS"`
+# literal beside a `== "goal"` lookup, which meant a third goal regime would
+# have been silently answered under simple entailment — a wrong number, not an
+# error (wu, review of #150).
+CLOSURE_REGIME = {"RDFS": "rdfs"}
+
+
 @dataclass(frozen=True)
 class Case:
     test_class: str
@@ -906,12 +922,14 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
                 # (RDF bucket, 15/16 -> 14/16) while fixing six RDFS cases. The
                 # regime names which closure is licensed, and a stronger one is
                 # not a safer default.
+                bucket = ENTAILMENT_BUCKET.get(case.identifier, "")
+                regime = CLOSURE_REGIME.get(bucket)
                 if (
                     case.test_class == "entailment"
-                    and ENTAILMENT_BUCKET.get(case.identifier) == "RDFS"
-                    and ENTAILMENT_COMMITMENT.get("RDFS") == "goal"
+                    and regime is not None
+                    and ENTAILMENT_COMMITMENT.get(bucket) == "goal"
                 ):
-                    read_argv += ["--entailment", "rdfs"]
+                    read_argv += ["--entailment", regime]
                 observed = subprocess.run(
                     read_argv,
                     text=True,
@@ -1055,7 +1073,24 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(classes, sort_keys=True))
-    return 1 if any(item["status"] in {"failed", "error"} for item in results) else 0
+    # A failing CASE is a RESULT, not a broken run. Exit nonzero only when the
+    # harness itself could not answer (`error`).
+    #
+    # This mattered the moment RDF/RDFS became goals (aegis-1gp76j). Before
+    # that every entailment case was `unsupported`, never `failed`, so this
+    # line returned 0 and the workflow step ran on. Turning the regimes into
+    # goals produced 6 genuine `failed` cases — and because the workflow step
+    # is `bash -e`, a nonzero exit here KILLS THE STEP BEFORE
+    # `check_regression.py` runs. The ledger would still upload, the job would
+    # be red forever, and the entailment regression gate — the whole point of
+    # the ledger — would never execute again.
+    #
+    # So the exit code stopped meaning "the run broke" and started meaning
+    # "quipu is not yet fully conformant", which is true, permanent, and
+    # already recorded in the ledger. Regressions are `check_regression.py`'s
+    # job: it compares against the baseline and names the class that moved.
+    # This exit code cannot do that and should not try.
+    return 1 if any(item["status"] == "error" for item in results) else 0
 
 
 if __name__ == "__main__":
