@@ -506,12 +506,13 @@ def render_markdown(data: dict) -> str:
             "> **Do not read the goal-regime fraction as \"nearly done\".** The two numbers have "
             "different characters. Most RDF-regime cases are `bind*` tests answerable under simple "
             "entailment, so they pass without any additional inference — a high RDF score is not "
-            "evidence of an entailment engine. The RDFS failures are the cases that genuinely need "
-            "closure (`rdfs:subPropertyOf`, `rdfs:domain`, `rdfs:range`, `rdfs:subClassOf` over the "
-            "query's default graph), and they need forward-chaining **materialisation**, not more "
-            "of the existing pattern rewriting: a query like `SELECT ?x WHERE { ex:a ?x ex:c }` has "
-            "a variable predicate, so an entailed triple has to exist to be matched and cannot be "
-            "produced by expanding the pattern.",
+            "evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure "
+            "(rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and "
+            "composed into the default graph when the regime is in force, which is what a query "
+            "like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the "
+            "entailed triple has to EXIST and cannot be produced by rewriting the pattern. What "
+            "remains failing is not more of the same closure: it is container and axiomatic shapes "
+            "beyond those six rules, and OWL-flavoured cases filed under RDFS.",
             "",
         ]
     out += ["| Regime | Cases | Passed | Commitment |", "|---|---:|---:|---|"]
