@@ -13,24 +13,14 @@ const AEGIS = "http://aegis.gastown.local/ontology/";
 // onto different repos (aegis-8fdp8d).
 const REPO = "scbrown/quipu";
 
-// Where the one-click flow stops being safe. wu measured `/new` unauthenticated
-// and found FOUR regimes, not the one everybody quotes:
-//
-//     2063 … 6563  302  accepted, the editor renders
-//     7063 … 7863  500  accepted by the edge, REJECTED by the app
-//     8063 … 8163  000  connection dropped mid-request
-//     8255 +       414  URI Too Long
-//
-// So the famous 8.2 KB number is the wrong one to design against: the 1.5 KB
-// band beneath it fails as a 500 or a dropped connection, which a reader reads
-// as "GitHub is broken" or "my network glitched" — never as "my delta is too
-// big". That is the worst available failure signal, because it points at
-// someone else and invites a retry that fails identically.
-//
-// 4 KB, not 6, so the margin absorbs a long IRI. Those numbers were measured
-// UNAUTHENTICATED; whether a session cookie shares the same buffer is unknown,
-// which is another reason to take the margin rather than the ceiling.
-const ONE_CLICK_URL_LIMIT = 4096;
+// No URL-size limit constant here any more, and the reason is worth keeping.
+// An earlier draft carried the delta in a `/new?value=` URL and switched to the
+// upload page above a measured 4 KB — below wu's four regimes, where the band
+// under the famous 414 fails as a 500 and reads as "GitHub is broken". That
+// budget is moot now: a delta share is four files, and no number of files
+// beyond one fits in a URL at any size. The measurement is what showed the
+// one-click path was never available for a VERIFIABLE delta, only for a quarter
+// of one.
 
 // The delta the reader is currently looking at, or null. Declared with the
 // other module state rather than beside its own functions: `refreshExport`
@@ -482,36 +472,18 @@ async function refreshExport() {
 // --- Propose the edits as a PR, with no API and no token (aegis-8fdp8d) -----
 //
 // GitHub's own web pages do the work. The page computes the delta, SHOWS it,
-// says which of the two flows it is about to use, and only then opens anything.
-// Nothing is sent anywhere: `/new` and `/upload` are ordinary links, and the
-// reader is the one who clicks "Propose changes" on GitHub's page.
-
-// The lineage rides the URL, because `delta.ru` cannot carry it.
+// and only then downloads the files and opens the upload page. Nothing is
+// transmitted by this page: `/upload` is an ordinary link and the reader is the
+// one who clicks "Propose changes".
 //
-// `delta_hash` is computed over the update document exactly as `build_delta`
-// emits it, so prepending a `#` provenance header here would make the file stop
-// matching its own manifest. The parent therefore travels as PR metadata, which
-// is also where a reviewer looks first.
+// THE WHOLE ARTIFACT, not delta.ru alone. `quipu import`'s `materialize`
+// verifies the manifest, then the update against `delta_hash`, then reads the
+// shapes — so a lone delta.ru is a quarter of a delta share and nothing can
+// check its lineage. An earlier draft here sent one file to keep GitHub's
+// one-click `/new` flow, and a one-click that produces an unverifiable artifact
+// is a worse deal than a drag-and-drop that produces a real one.
 //
-// KNOWN GAP, raised rather than papered over: this puts `parent_share` in a PR
-// body, and a PR body is not under version control and is not visible to a CI
-// check on the file. §3.4 wants CI to verify lineage. Carrying it INSIDE the
-// document needs a versioned extension to `share-delta/v1` proposed to malcolm
-// — which is the ruling's own answer for anything the format lacks — not a
-// header invented in this page.
-function newFileUrl(path, content, delta) {
-  const q = new URLSearchParams({
-    filename: path,
-    value: content,
-    quick_pull: "main",
-    title: `quipu delta ${delta.manifest.delta_id.slice(7, 19)}`,
-    message: `Delta against parent share ${delta.manifest.parent_share}\n`
-      + `parent_graph_hash: ${delta.manifest.parent_graph_hash}\n`
-      + `delta_hash: ${delta.manifest.delta_hash}\n`
-      + `Produced in the browser by the quipu wasm explorer (aegis-8fdp8d).`,
-  });
-  return `https://github.com/${REPO}/new/main?${q}`;
-}
+// It is also what was asked for: "attaches the FILES at a common dir", plural.
 
 function uploadUrl(dir) {
   return `https://github.com/${REPO}/upload/main/${dir}`;
@@ -526,8 +498,8 @@ async function prepareDelta() {
     box.replaceChildren();
 
     if (d.empty) {
-      // An unedited store has nothing to propose, and opening GitHub with a
-      // blank file would be a worse answer than saying so.
+      // An unedited store has nothing to propose, and opening GitHub with an
+      // empty delta would be a worse answer than saying so.
       box.append(el("p", { class: "muted", text:
         "No changes yet — the store still matches the pack it loaded, so there "
         + "is no delta to propose. Make an edit above first." }));
@@ -536,31 +508,23 @@ async function prepareDelta() {
       return;
     }
 
-    const url = newFileUrl(d.path, d.update, d);
-    const oneClick = url.length <= ONE_CLICK_URL_LIMIT;
-
-    // The FILE size, not the URL size: the file is the thing a reader can
-    // reason about. Percent-encoding inflates the delta roughly 3x, so a URL
-    // number would look alarming for a small edit and explain nothing.
     const facts = [
       ["Delta id", d.manifest.delta_id],
       ["Parent share", d.manifest.parent_share],
-      ["Goes to", d.path],
-      ["Size", `${fmt(d.update_bytes)} bytes of SPARQL Update`],
-      ["Flow", oneClick
-        ? "one click — GitHub prefills the editor"
-        : "download, then GitHub's upload page (too large to carry in a URL)"],
+      ["Goes to", `${d.dir}/`],
+      ["Files", d.files.map((f) => `${f.name} (${fmt(f.bytes)} B)`).join(", ")],
+      ["Total", `${fmt(d.total_bytes)} bytes`],
     ];
     const dl = el("dl");
     for (const [k, v] of facts) {
       dl.append(el("dt", { text: k }), el("dd", { class: "mono", text: v }));
     }
+    // The update is the reviewable half — the manifest is hashes and the shapes
+    // are the parent's, so this is the part a human can actually judge.
     box.append(dl, el("pre", { class: "mono", text: d.update }));
     $("#pr-go").disabled = false;
-    $("#pr-go").textContent = oneClick
-      ? "Open GitHub with this file prefilled"
-      : "Download the delta and open GitHub's upload page";
-    editNote(`Delta ready: ${fmt(d.update_bytes)} bytes. Review it above before opening GitHub.`);
+    editNote(`Delta ready: ${d.files.length} files, ${fmt(d.total_bytes)} bytes. `
+      + "Review the update above before opening GitHub.");
   } catch (err) {
     box.replaceChildren(el("p", { class: "bad", text: err.message }));
     editNote(err.message, true);
@@ -570,19 +534,16 @@ async function prepareDelta() {
 function proposeAsPr() {
   const d = lastDelta;
   if (!d || d.empty) return;
-  const url = newFileUrl(d.path, d.update, d);
-  if (url.length <= ONE_CLICK_URL_LIMIT) {
-    window.open(url, "_blank", "noopener");
-    editNote("Opened GitHub's new-file page with the delta prefilled. "
-      + "Click \u201cPropose new file\u201d there and GitHub makes the branch and the PR.");
-    return;
+  // Files FIRST, then the page: a reader who lands on the upload page
+  // empty-handed has to come back for them.
+  for (const f of d.files) {
+    download(f.name, new Blob([f.contents], { type: "text/plain" }));
   }
-  // Two steps, and the download goes FIRST: the upload page is useless without
-  // the file, and a reader who lands there empty-handed has to come back.
-  download(d.path.split("/").pop(), new Blob([d.update], { type: "application/sparql-update" }));
-  window.open(uploadUrl(`${d.pack_dir}/deltas`), "_blank", "noopener");
-  editNote(`Downloaded ${d.path.split("/").pop()} and opened GitHub's upload page for `
-    + `${d.pack_dir}/deltas — drag the file in and click \u201cPropose changes\u201d.`);
+  window.open(uploadUrl(d.dir), "_blank", "noopener");
+  editNote(`Downloaded ${d.files.length} files and opened GitHub's upload page for `
+    + `${d.dir}/ — drag all ${d.files.length} in, then click \u201cPropose changes\u201d. `
+    + "They must land in that directory together: quipu verifies the manifest, "
+    + "the update against its hash, and the shapes as one artifact.");
 }
 
 function download(name, blob) {

@@ -297,16 +297,17 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
         <h3>Propose these edits as a pull request</h3>
         <p class="note">
           No API and no token. The page turns your edits into a
-          <code class="mono">share-delta/v1</code> document &mdash; the same
-          <code class="mono">delta.ru</code> that <code class="mono">quipu pack --since</code>
-          writes and <code class="mono">quipu import</code> applies &mdash; and hands it to
-          GitHub&rsquo;s own new-file or upload page. <strong>Nothing is sent anywhere by this
-          page.</strong> You review the delta here, then GitHub opens the PR when you click
-          its button.
+          <code class="mono">share-delta/v1</code> delta share &mdash; byte-for-byte the same
+          four files <code class="mono">quipu pack --since</code> writes and
+          <code class="mono">quipu import</code> applies &mdash; and hands them to
+          GitHub&rsquo;s own upload page. <strong>Nothing is sent anywhere by this page.</strong>
+          You review the change here, then GitHub opens the PR when you click its button.
+          All four files must land in the same directory: quipu verifies the manifest, the
+          update against its hash, and the shapes as one artifact.
         </p>
         <div class="row">
           <button id="pr-prepare">Compute the delta</button>
-          <button class="go" id="pr-go" disabled>Open GitHub</button>
+          <button class="go" id="pr-go" disabled>Download the files and open GitHub</button>
         </div>
         <div id="pr-preview"></div>
       </div>
