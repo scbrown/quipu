@@ -666,9 +666,23 @@ async function loadPack(bytes, source) {
 }
 
 async function boot() {
+  const bundle = await fetch("./pkg/quipu_wasm_explorer_bg.wasm", { method: "HEAD" })
+    .then((r) => r.ok, () => false);
+
   try {
     window.__quipuBuild = await ask({ cmd: "version" });
   } catch (err) {
+    if (!bundle) {
+      fail("The WebAssembly bundle is not on this site yet. It is attached to a GitHub release "
+        + "and staged here by the docs build, so this page goes live with the first release that "
+        + "carries it — nothing is broken, and your browser is fine. Meanwhile the pack itself is "
+        + "here: see the repository for how to explore it with the quipu CLI.");
+      const link = el("p", { style: "margin-top:10px" },
+        el("a", { href: "https://github.com/scbrown/quipu/releases/latest",
+          text: "Latest release →" }));
+      $("#status").append(link);
+      return;
+    }
     const unsupported = typeof WebAssembly === "undefined" || typeof Worker === "undefined";
     fail(unsupported
       ? "This page needs WebAssembly and module workers. Try a current Chrome, Firefox or Safari."
