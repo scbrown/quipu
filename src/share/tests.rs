@@ -319,3 +319,85 @@ fn store_identity_survives_reopen() {
     assert_eq!(first, second);
     assert!(first.starts_with("urn:uuid:"));
 }
+
+// --- pack_dir: the one setting the page cannot see (aegis-8fdp8d) ------------
+//
+// Built from a REAL share rather than a hand-written struct literal, so these
+// exercise the manifest the producer actually emits — a literal would keep
+// passing if the field were dropped from the serialized form.
+
+fn sample_manifest() -> ShareManifest {
+    share_payload(
+        &fixture(),
+        &ShareOptions::default(),
+        SHARE_PAYLOAD_MAX_BYTES,
+    )
+    .expect("share payload")
+    .manifest
+}
+
+//
+// The default lives in exactly one place, and the accessor is the only reader,
+// because a caller that unwraps the Option would silently pick its own default
+// and the page would then target a directory the producer never named.
+
+#[test]
+fn pack_dir_defaults_when_unset() {
+    let mut m = sample_manifest();
+    m.pack_dir = None;
+    assert_eq!(m.pack_dir_or_default(), super::DEFAULT_PACK_DIR);
+    assert_eq!(m.pack_dir_or_default(), "qpack");
+}
+
+#[test]
+fn pack_dir_is_used_when_set() {
+    let mut m = sample_manifest();
+    m.pack_dir = Some("knowledge".into());
+    assert_eq!(m.pack_dir_or_default(), "knowledge");
+}
+
+#[test]
+fn pack_dir_trims_a_trailing_slash_so_callers_can_always_join_with_one() {
+    let mut m = sample_manifest();
+    m.pack_dir = Some("qpack/".into());
+    assert_eq!(m.pack_dir_or_default(), "qpack");
+}
+
+#[test]
+fn an_empty_pack_dir_falls_back_rather_than_targeting_the_repository_root() {
+    // A share asserting its packs live at "" is malformed. Reading that as the
+    // repo root would put a delta at `/deltas/<id>.ru` — silently the wrong
+    // place, and the damaging reading of a malformed value.
+    for empty in ["", "   ", "/"] {
+        let mut m = sample_manifest();
+        m.pack_dir = Some(empty.into());
+        assert_eq!(
+            m.pack_dir_or_default(),
+            "qpack",
+            "empty pack_dir {empty:?} must fall back"
+        );
+    }
+}
+
+#[test]
+fn pack_dir_is_omitted_from_json_when_unset_so_existing_shares_stay_byte_identical() {
+    let mut m = sample_manifest();
+    m.pack_dir = None;
+    let json = serde_json::to_string(&m).expect("serialize");
+    assert!(
+        !json.contains("pack_dir"),
+        "an unset pack_dir must not appear in the manifest, or every existing \
+         share's bytes — and therefore its share_id — would change: {json}"
+    );
+}
+
+#[test]
+fn a_manifest_without_pack_dir_still_deserializes() {
+    // The compatibility claim, exercised rather than asserted: every share
+    // produced before this field existed must still load.
+    let mut value = serde_json::to_value(sample_manifest()).expect("to value");
+    value.as_object_mut().expect("object").remove("pack_dir");
+    let back: super::ShareManifest = serde_json::from_value(value).expect("deserialize");
+    assert_eq!(back.pack_dir, None);
+    assert_eq!(back.pack_dir_or_default(), "qpack");
+}
