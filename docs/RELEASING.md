@@ -51,6 +51,13 @@ To exercise it for real:
 4. Confirm the jobs are green and the assets are the ones you expected.
 5. Delete the release and the tag.
 
+**Creating that prerelease fires `crates.yml`.** `release: [published]` fires for prereleases as
+well as real ones, so step 2 triggers the crates.io publish lane. The publish job now refuses a
+prerelease outright, which is what makes this procedure safe — without that guard, `cargo publish`
+would try to publish whatever version `Cargo.toml` currently holds, under a tag nobody intends to
+ship. Measured on 2026-09-05: the rehearsal at `rehearsal-wasm-20260905-0951` fired run
+`33959092337`, which failed only because crates.io Trusted Publishing is unconfigured.
+
 That tag's commit *is* the commit being built, so `assert-tag-is-head` passes — the guard is
 designed to permit exactly this.
 
@@ -70,9 +77,16 @@ v0.3.33.
 
 ## What a release does NOT do
 
-`crates.yml` fires on `release: published` and publishes `quipu-ai` to crates.io using
-crates.io Trusted Publishing. It is a separate lane: if it fails, the GitHub release and its
-assets are unaffected. Verify a crates.io publish by the version appearing on crates.io, and
+`crates.yml` publishes `quipu-ai` to crates.io using crates.io Trusted Publishing. It is a
+separate lane: if it fails, the GitHub release and its assets are unaffected.
+
+**It does not fire on a release-plz release.** Its trigger is `release: [published]`, but a release
+created by a workflow using `GITHUB_TOKEN` does not trigger further workflows, and release-plz
+creates the release that way. Measured 2026-09-05 as a controlled pair: v0.3.34's release produced
+**no** `crates.yml` run at all, while a prerelease created by hand on the same day **did**. So in
+practice this lane runs only when dispatched, or when a human creates a release — which means a
+release reaching GitHub is not evidence that it reached crates.io, and nothing reports the
+difference. Verify a crates.io publish by the version appearing on crates.io, and
 **not** by dispatching that workflow with `dry_run=true` — the dry-run branch skips both the
 authentication and the publish steps, so it goes green without exercising either.
 
