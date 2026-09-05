@@ -248,84 +248,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin/wasm-bindgen
-            wasm/explorer/target
-          key: ${{ runner.os }}-cargo-wasm-explorer-${{ hashFiles('wasm/explorer/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-wasm-explorer-
-            ${{ runner.os }}-cargo-wasm-
-
-      # The generated JS glue must come from the EXACT wasm-bindgen the crate
-      # compiled against, or the bundle fails at init with a version-mismatch
-      # message. Read it from the lockfile rather than pinning a second copy
-      # here, so the two cannot drift.
-      - name: Install wasm-bindgen-cli
-        run: |
-          set -euo pipefail
-          V=$(grep -A1 '^name = "wasm-bindgen"$' wasm/explorer/Cargo.lock | grep '^version' | cut -d'"' -f2)
-          if ! command -v wasm-bindgen >/dev/null || ! wasm-bindgen --version | grep -qF "$V"; then
-            cargo install wasm-bindgen-cli --version "$V" --locked --force
-          fi
-
-      # The smoke below mints a share with the NATIVE binary and imports the
-      # result back with it, so this job needs it too. Its absence was invisible
-      # until a real release: `ci.yml`'s copy of this acceptance HAS this step,
-      # so the PR job went green while the release job — the one it exists to
-      # de-risk — died at `spawnSync target/release/quipu ENOENT`.
-      #
-      # KEEP THE TWO JOBS IN STEP. Running "the same" acceptance in two places
-      # protects nothing if the setup around it differs; the script was
-      # identical and the environment was not.
-      - name: Build the native binary
-        run: cargo build --release --locked --bin quipu
-
-      - name: Build the explorer bundle
-        working-directory: wasm/explorer
-        run: |
-          set -euo pipefail
-          # NO `--locked`, matching the wasm/harness job above, and for the
-          # reason that job already had: this crate is outside the workspace, so
-          # it carries its OWN Cargo.lock, and that lockfile records the PARENT
-          # crate's version through the path dependency. release-plz bumps the
-          # root Cargo.toml and updates the root lockfile; it knows nothing about
-          # this second one. So on every release PR the explorer lockfile is
-          # stale by exactly one version bump and `--locked` refuses:
-          #
-          #   error: cannot update the lock file wasm/explorer/Cargo.lock
-          #   because --locked was passed to prevent this
-          #
-          # Measured on PR #118 (v0.3.33) and reproduced locally, exit 101. That
-          # would have failed the RELEASE job identically — no wasm asset, and
-          # the book page dark — which is exactly what running this job on PRs
-          # exists to catch. `--locked` was my addition and the inconsistency
-          # was mine.
-          #
-          # The lockfile stays COMMITTED and still does its real job here: both
-          # workflows grep it for the wasm-bindgen version, which must match the
-          # crate exactly or the bundle fails at init. Third-party pins move only
-          # when this lockfile is regenerated and reviewed.
-          cargo build --release
-          # Resolve the target dir rather than assuming `target/`. It is unset
-          # in Actions so `target/` would be correct HERE, but that same
-          # assumption is what wedged aegis CD (2026-09-05): the fleet cargo
-          # wrapper points CARGO_TARGET_DIR at ~/.cache/aegis-cargo-targets/,
-          # while the deploy inspected and shipped a stale in-tree target/ — so
-          # a build that 'succeeded' produced a binary stamped with the PREVIOUS
-          # commit and the sha gate rightly refused it. Asking cargo costs one
-          # line and cannot be wrong.
-          TARGET=$(cargo metadata --format-version 1 --no-deps \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
-          wasm-bindgen --target web --out-dir pkg \
-            "$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
+      # ONE definition, shared with ci.yml's `Wasm (browser bundle)`. Until
+      # aegis-dsbt2g these were two hand-maintained job lists running the same
+      # acceptance, and they diverged the moment they were written: this copy was
+      # missing `cargo build --bin quipu`, the smoke mints a share with the native
+      # binary, and this job died at `spawnSync .../quipu ENOENT` AFTER v0.3.33 was
+      # tagged — while the PR job was green on the same commit. Change the steps in
+      # the action, not here.
+      - uses: ./.github/actions/wasm-explorer-build
 
       - name: Resolve package-qualified tag
         id: tag
@@ -387,18 +317,14 @@ jobs:
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           ls -la dist "dist/${NAME}"
 
-      # A bundle that ships but cannot instantiate is the failure this catches,
-      # and nothing upstream would: `cargo build` proves it compiles and
-      # wasm-bindgen proves the glue generated. Neither loads the module.
-      - name: Smoke-test the packaged bundle in a browser
-        env:
-          NAME: ${{ steps.package.outputs.name }}
-        run: |
-          set -euo pipefail
-          npm init -y >/dev/null
-          npm install --no-save playwright@1.56
-          npx playwright install --with-deps chromium
-          node scripts/smoke-wasm-explorer.mjs "dist/${NAME}"
+      # Same acceptance as ci.yml, from the SAME definition — but pointed at the
+      # PACKAGED layout rather than wasm-bindgen's output directory. That is the
+      # one deliberate difference between the two callers, and it is the stronger
+      # check: a file missed by the `cp` list above produces a tarball that cannot
+      # instantiate, and only smoking what actually ships can see it.
+      - uses: ./.github/actions/wasm-explorer-smoke
+        with:
+          bundle-dir: dist/${{ steps.package.outputs.name }}
 
       - name: Upload to the GitHub release
         env:

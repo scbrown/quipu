@@ -266,90 +266,18 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      # ONE definition, shared with release.yml's `Wasm (release asset)`. These
+      # two ran the same acceptance from two hand-maintained job lists and had
+      # diverged the moment they were written (aegis-dsbt2g); the divergence was
+      # invisible until a real release. Change the steps in the action, not here.
+      - uses: ./.github/actions/wasm-explorer-build
+
+      # The bundle as wasm-bindgen emitted it. release.yml smokes the PACKAGED
+      # layout instead — the one deliberate difference between the two callers.
+      - uses: ./.github/actions/wasm-explorer-smoke
         with:
-          targets: wasm32-unknown-unknown
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin/wasm-bindgen
-            target
-            wasm/explorer/target
-          key: ${{ runner.os }}-cargo-wasm-explorer-${{ hashFiles('wasm/explorer/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-wasm-explorer-
-            ${{ runner.os }}-cargo-wasm-
-
-      # The CLI matching wasm/explorer/Cargo.lock — the generated JS glue must
-      # come from the exact wasm-bindgen the crate compiled against, or the
-      # bundle fails at init with a version-mismatch message.
-      - name: Install wasm-bindgen-cli
-        run: |
-          set -euo pipefail
-          V=$(grep -A1 '^name = "wasm-bindgen"$' wasm/explorer/Cargo.lock | grep '^version' | cut -d'"' -f2)
-          if ! command -v wasm-bindgen >/dev/null || ! wasm-bindgen --version | grep -qF "$V"; then
-            cargo install wasm-bindgen-cli --version "$V" --locked --force
-          fi
-
-      - name: Install Playwright Chromium
-        run: |
-          npm init -y >/dev/null
-          npm install --no-save playwright@1.56
-          npx playwright install --with-deps chromium
-
-      # The smoke script mints a pack with the NATIVE binary in the same run, so
-      # both halves of the round trip are the same commit by construction.
-      - name: Build the native binary
-        run: cargo build --release --locked --bin quipu
-
-      - name: Build the explorer bundle
-        working-directory: wasm/explorer
-        run: |
-          set -euo pipefail
-          # NO `--locked`, matching the wasm/harness job above, and for the
-          # reason that job already had: this crate is outside the workspace, so
-          # it carries its OWN Cargo.lock, and that lockfile records the PARENT
-          # crate's version through the path dependency. release-plz bumps the
-          # root Cargo.toml and updates the root lockfile; it knows nothing about
-          # this second one. So on every release PR the explorer lockfile is
-          # stale by exactly one version bump and `--locked` refuses:
-          #
-          #   error: cannot update the lock file wasm/explorer/Cargo.lock
-          #   because --locked was passed to prevent this
-          #
-          # Measured on PR #118 (v0.3.33) and reproduced locally, exit 101. That
-          # would have failed the RELEASE job identically — no wasm asset, and
-          # the book page dark — which is exactly what running this job on PRs
-          # exists to catch. `--locked` was my addition and the inconsistency
-          # was mine.
-          #
-          # The lockfile stays COMMITTED and still does its real job here: both
-          # workflows grep it for the wasm-bindgen version, which must match the
-          # crate exactly or the bundle fails at init. Third-party pins move only
-          # when this lockfile is regenerated and reviewed.
-          cargo build --release
-          # Resolve the target dir rather than assuming `target/`. It is unset
-          # in Actions so `target/` would be correct HERE, but that same
-          # assumption is what wedged aegis CD (2026-09-05): the fleet cargo
-          # wrapper points CARGO_TARGET_DIR at ~/.cache/aegis-cargo-targets/,
-          # while the deploy inspected and shipped a stale in-tree target/ — so
-          # a build that 'succeeded' produced a binary stamped with the PREVIOUS
-          # commit and the sha gate rightly refused it. Asking cargo costs one
-          # line and cannot be wrong.
-          TARGET=$(cargo metadata --format-version 1 --no-deps \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
-          wasm-bindgen --target web --out-dir pkg \
-            "$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
-
-      # native mints a pack -> browser imports, edits, exports it -> native
-      # imports THAT and finds the edit.
-      - name: Browser acceptance (smoke-wasm-explorer.mjs)
-        run: node scripts/smoke-wasm-explorer.mjs wasm/explorer/pkg
+          bundle-dir: wasm/explorer/pkg
 
   check:
     name: Pre-commit checks
