@@ -180,7 +180,11 @@ pub struct WithheldType {
 /// flip does not change its answer.
 ///
 pub fn withheld_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<WithheldType> {
-    if !ctx.graph.is_root_default() {
+    // Gated on exactly the evaluator's condition in `triple.rs`, INCLUDING the
+    // entailment-regime case (aegis-g6bu6d). These two gates must agree: if the
+    // evaluator expands and this does not, the answer is inferred and carries no
+    // marker saying so — the silent direction this marker exists to end.
+    if !(ctx.graph.is_root_default() || (ctx.entails_rdfs && ctx.graph.includes_root_default())) {
         return Vec::new();
     }
     let Ok(parsed) = super::sparql_parser().parse_query(query) else {
