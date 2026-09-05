@@ -57,7 +57,7 @@ pub fn verify_attestation(
             tier: "transport".into(),
             agent: None,
             session: None,
-            note: "no attestation envelope was supplied: the payload hashes verify, so the bytes                    are intact, but nothing here proves WHO produced them"
+            note: "no attestation envelope was supplied: the payload hashes verify, so the bytes are intact, but nothing here proves WHO produced them"
                 .into(),
         });
     };
@@ -89,7 +89,7 @@ pub fn verify_attestation(
         tier: "attested".into(),
         agent: Some(principal.agent),
         session: Some(principal.session),
-        note: "envelope verified against a registered session binding over this manifest's                identity; the nonce is spent"
+        note: "envelope verified against a registered session binding over this manifest's identity; the nonce is spent"
             .into(),
     })
 }
