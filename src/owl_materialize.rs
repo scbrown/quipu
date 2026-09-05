@@ -456,13 +456,21 @@ impl Ontology {
         // entities a rule can touch.
         if seed.is_some() && !pass.datums.is_empty() {
             let mut ents: Vec<i64> = Vec::new();
+            let mut attrs: Vec<i64> = Vec::new();
             for d in &pass.datums {
                 if !ents.contains(&d.entity) {
                     ents.push(d.entity);
                 }
+                if !attrs.contains(&d.attribute) {
+                    attrs.push(d.attribute);
+                }
             }
+            // Scoped on BOTH axes so `idx_aevt` can serve it. Entity-only
+            // returned the right rows and FULL-SCANNED to find them — 8 rows in
+            // 1400 ms at 1,000,002 facts — which `premise_facts_read` cannot
+            // see, because it counts rows RETURNED, not rows scanned.
             let present: HashSet<(i64, i64, Vec<u8>)> = store
-                .current_facts_for_entities_in_graphs(&ents, &graphs)?
+                .current_facts_for_attributes_and_entities_in_graphs(&attrs, &ents, &graphs)?
                 .into_iter()
                 .map(|f| (f.entity, f.attribute, f.value.to_bytes()))
                 .collect();

@@ -985,3 +985,96 @@ fn per_write_cost_does_not_scale_with_store_size() {
          point of aegis-2dp8e2 is that this ratio stays flat."
     );
 }
+
+/// Production-scale cost probe (aegis-2dp8e2). `#[ignore]`d: it builds a store
+/// the size of the live one, which is minutes of setup, and CI does not need to
+/// pay that on every push — `per_write_cost_does_not_scale_with_store_size`
+/// already guards the SHAPE at unit-test speed.
+///
+/// This one answers the question that shape test cannot: does the constant hold
+/// at the size where the defect actually bit? The live store was 641,803 facts
+/// when the naive path was burning ~67 s of work per 60 s of wall clock.
+///
+/// Run: `cargo test --features owl at_production_scale -- --ignored --nocapture`
+#[test]
+#[ignore = "builds a ~640k-fact store; run explicitly"]
+fn per_write_cost_is_flat_at_production_scale() {
+    fn probe(entities: usize) -> (usize, usize) {
+        let mut store = Store::open_in_memory().unwrap();
+        store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+        let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+
+        // Two facts per entity: a type (feeds subclass/equivalent) and an edge
+        // (feeds inverse/subproperty/domain-range), so the background exercises
+        // the families a real store does rather than one cheap rule.
+        let mut ttl = String::from("@prefix ex: <http://example.org/> .\n");
+        for i in 0..entities {
+            ttl.push_str(&format!("ex:bg{i} a ex:Dog ;\n  ex:owns ex:t{i} .\n"));
+        }
+        sn_ingest(&mut store, &ttl);
+        ont.materialize(&mut store, SN_TS).unwrap();
+
+        let facts = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap()
+            .len()
+            + store
+                .current_facts_in_graph(
+                    store
+                        .lookup("urn:quipu:graph:root#inferred")
+                        .unwrap()
+                        .unwrap(),
+                )
+                .unwrap()
+                .len();
+
+        let before = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap();
+        sn_ingest(
+            &mut store,
+            "@prefix ex: <http://example.org/> .\nex:newcomer a ex:Dog .\n",
+        );
+        let after = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap();
+        let seed: Vec<_> = after
+            .iter()
+            .filter(|f| {
+                !before.iter().any(|b| {
+                    b.entity == f.entity && b.attribute == f.attribute && b.value == f.value
+                })
+            })
+            .cloned()
+            .collect();
+
+        let t = std::time::Instant::now();
+        let r = ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+        eprintln!(
+            "  store {facts:>7} facts | ONE write: {:>4} premise facts read, {:>6.1} ms",
+            r.premise_facts_read,
+            t.elapsed().as_secs_f64() * 1000.0
+        );
+        (facts, r.premise_facts_read)
+    }
+
+    let (small_facts, small_read) = probe(1_000);
+    let (big_facts, big_read) = probe(200_000);
+
+    // ANTI-VACUITY: the sizes must actually differ by the order of magnitude
+    // this test claims to cover, or "flat" is being asserted across nothing.
+    assert!(
+        big_facts > small_facts * 50,
+        "sizes too close to be a scale test: {small_facts} vs {big_facts} facts"
+    );
+
+    // THE CLAIM. Per-write premise reads must not track store size. The naive
+    // path reads every fact — at this size that is the ~641k that could not keep
+    // up with 29 writes/min.
+    assert!(
+        big_read < small_read * 2,
+        "per-write cost is tracking store size at production scale: read \
+         {small_read} at {small_facts} facts and {big_read} at {big_facts}. \
+         Turning reactive OWL back on depends on this staying flat."
+    );
+}

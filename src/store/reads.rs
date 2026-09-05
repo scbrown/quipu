@@ -147,6 +147,49 @@ impl Store {
         Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
+    /// Current facts matching BOTH an attribute in `attributes` and a subject in
+    /// `entities`, across `graphs`.
+    ///
+    /// The de-duplication read semi-naive materialization needs (aegis-2dp8e2),
+    /// and it is scoped on BOTH axes for a reason neither alone satisfies:
+    ///
+    /// * ATTRIBUTE alone is too broad — `rdf:type` sits on nearly every entity,
+    ///   so the result still grew with the store (measured: 307 rows at 1x,
+    ///   3007 at 10x).
+    /// * ENTITY alone returns the right rows but has NO INDEX to do it with:
+    ///   `idx_aevt` leads on `a` and `idx_vaet` on `v`, so `WHERE e IN (...)`
+    ///   full-scans. Measured at 1,000,002 facts: 8 rows returned, 1400 ms to
+    ///   return them. The row count was flat and the SCAN was not — which the
+    ///   `premise_facts_read` counter cannot see, because it counts rows
+    ///   RETURNED.
+    ///
+    /// Both together let `idx_aevt` do the work while keeping the result bounded
+    /// by the candidates.
+    pub fn current_facts_for_attributes_and_entities_in_graphs(
+        &self,
+        attributes: &[i64],
+        entities: &[i64],
+        graphs: &[i64],
+    ) -> Result<Vec<Fact>> {
+        if attributes.is_empty() || entities.is_empty() || graphs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ph = |n: usize| std::iter::repeat_n("?", n).collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts INDEXED BY idx_aevt \
+             WHERE op = 1 AND valid_to IS NULL AND a IN ({}) AND e IN ({}) AND g IN ({}) \
+             ORDER BY e, a",
+            ph(attributes.len()),
+            ph(entities.len()),
+            ph(graphs.len())
+        );
+        let mut values = attributes.to_vec();
+        values.extend_from_slice(entities);
+        values.extend_from_slice(graphs);
+        let mut stmt = self.conn.prepare(&sql)?;
+        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+    }
+
     /// Current facts whose SUBJECT is one of `entities`, across `graphs`.
     ///
     /// The de-duplication read semi-naive materialization needs (aegis-2dp8e2).
