@@ -901,7 +901,7 @@ fn the_nothing_verified_output_warns_the_shell_caller_about_its_exit_code() {
 use super::apply::{apply, derive_ntriples, derived_graph_iri, set_version};
 
 fn store_with_graph(iri: &str) -> (crate::Store, String) {
-    let mut store = crate::Store::open_in_memory().unwrap();
+    let store = crate::Store::open_in_memory().unwrap();
     store.graph_create(iri).unwrap();
     (store, iri.to_string())
 }

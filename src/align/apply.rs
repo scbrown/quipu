@@ -112,7 +112,7 @@ pub fn derive_ntriples(set: &MappingSet, timestamp: &str) -> Result<String> {
         .collect();
     // Deterministic output for the same set, for the same reason `propose`
     // sorts: a re-render that reshuffles cannot be diffed or compared.
-    rows.sort_by(|a, b| a.pair_key().cmp(&b.pair_key()));
+    rows.sort_by_key(|m| m.pair_key());
 
     for m in rows {
         let predicate = if m.derives_knot() {
@@ -179,7 +179,7 @@ fn plan(store: &mut Store, set: &MappingSet, graph: i64, timestamp: &str) -> Res
         .iter()
         .filter(|m| m.derives_knot() || m.derives_distinct_from())
         .collect();
-    rows.sort_by(|a, b| a.pair_key().cmp(&b.pair_key()));
+    rows.sort_by_key(|m| m.pair_key());
 
     let mut datums = Vec::new();
     for m in rows {
