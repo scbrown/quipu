@@ -186,7 +186,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 - **Graph projection** — materialize subgraphs into petgraph for centrality, connected components, shortest path algorithms.
 - **Federation** — a `GraphProvider` trait for multi-source queries, with a `RemoteProvider` (behind the `remote` feature) built from `federation.remotes` config. The server health-checks every configured remote at startup, and `POST /query` with `"federated": true` fans out through the federated provider, reporting which members answered. Remotes carry declared trust labels at the federation edge, so a federated answer composes the labels of every member that contributed rather than silently inheriting the caller's. Federation config is read-side only: adding a remote never turns it into an outbound replication target or bypasses the share scrub/import boundary.
 - **Graph explorer** — the web UI draws the whole node-link view from a single `POST /graph` payload (nodes plus index-addressed edges), laid out with a Barnes-Hut force simulation on canvas. No CDN, so it renders on an air-gapped deploy.
-- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 42 MCP tools for agent integration (44 with the `owl` feature).
+- **Four interfaces** — Rust crate (embed), CLI (`quipu`), REST API (`quipu-server`), and built-in web UI with embeddable web components. Plus 45 MCP tools for agent integration (47 with the `owl` feature).
 - **"SQLite energy"** — single process, no server required, inspect with `sqlite3`, back up with `cp`.
 - **Automated releases** — release-plz bumps versions from conventional commits, generates changelogs via git-cliff, and creates GitHub releases. Version discovery is `git_only = true`: the baseline comes from this repository's tags, never the unrelated `quipu` crate on crates.io. CI runs fmt, clippy, tests, and markdown lint on every push. The current published release is v0.3.27; `/version` also reports the deployed git SHA, which matters because a deployment can legitimately sit AHEAD of the newest tag — the SHA, not the version string, identifies what is actually running.
 
@@ -309,7 +309,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
               │                │                │
         ┌─────┴─────┐   ┌─────┴─────┐   ┌──────┴──────┐
         │ MCP Tools  │   │ REST API  │   │  Rust API   │
-        │ (42 tools) │   │ + Web UI  │   │  (crate)    │
+        │ (45 tools) │   │ + Web UI  │   │  (crate)    │
         └─────┬─────┘   └─────┬─────┘   └──────┬──────┘
               └────────────────┼────────────────┘
                                │
@@ -337,7 +337,7 @@ The reasoner adds forward-chaining inference over the EAVT fact log:
 Quipu is designed as a [Bobbin](https://github.com/scbrown/bobbin) subsystem.
 Bobbin holds the thread (code context); Quipu ties knots of structured meaning into it.
 
-When running as a Bobbin subsystem, agents get 42 MCP tools (44 with the
+When running as a Bobbin subsystem, agents get 45 MCP tools (47 with the
 `owl` feature). The two most
 commonly used for knowledge-aware context:
 
@@ -481,7 +481,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Graph explorer | ✅ | Canvas + Barnes-Hut layout, one `POST /graph` payload, no CDN |
 | Web components | ✅ | Embeddable `<quipu-*>` elements |
 | Semantic Web APIs | ✅ | Spotlight, TPF, OpenRefine reconciliation |
-| MCP tools (42; 44 with `owl`) | ✅ | Agent integration |
+| MCP tools (45; 47 with `owl`) | ✅ | Agent integration |
 | Python bindings | ✅ | `quipu-client` under `python/` — REST client, stdlib-only |
 | **Infrastructure** | | |
 | Graph projection (petgraph) | ✅ | Centrality, shortest path, etc. |

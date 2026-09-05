@@ -52,6 +52,10 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/proposal/accept",
     "/proposal/reject",
     "/embed_backfill",
+    // aegis-5qmg3r: alignment. `apply` takes &mut Store, materialises
+    // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
+    // (a graphs-registry write, the same reason /overlay/create is here).
+    "/align/apply",
     // aegis-2f4n: registered write routes that WRITE_ENDPOINTS had silently
     // omitted, so read-only mode and bearer auth did not cover them.
     "/project", // rw_handler; louvain persists quipu:memberOfCommunity when persist:true
@@ -86,6 +90,11 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    // aegis-5qmg3r: alignment reads. `propose` takes &Store and only queries
+    // (lookup + a prepared SELECT); `decide` touches no store at all. The
+    // writer of the three is /align/apply, above.
+    "/align/propose",
+    "/align/decide",
     // Method-sensitive: GET/HEAD are reads; PUT/POST/DELETE are writes.
     "/rdf-graph-store",
     "/graphs",        // registry listing + kind capability probe (pooled read)
@@ -374,12 +383,63 @@ mod tests {
         // matrix, but include router fragments that `server.rs` merges. A
         // route moved into one of those fragments is still a registered route.
         let sources = [
-            include_str!("server.rs"),
-            include_str!("server/graph_store.rs"),
-            include_str!("server/snapshot_upload.rs"),
+            ("server.rs", include_str!("server.rs")),
+            ("server/align.rs", include_str!("server/align.rs")),
+            ("server/assets.rs", include_str!("server/assets.rs")),
+            (
+                "server/graph_store.rs",
+                include_str!("server/graph_store.rs"),
+            ),
+            (
+                "server/snapshot_upload.rs",
+                include_str!("server/snapshot_upload.rs"),
+            ),
         ];
+        // The list above is hand-maintained, and a fragment MISSING from it is
+        // invisible to both tests here: its routes are never seen, so they are
+        // never reported unclassified either. That is the failure this guard
+        // must not have, so make the drift loud — every `#[path = "server/..."]`
+        // module that server.rs declares must either be scanned above or be
+        // listed as route-free.
+        const NO_ROUTES: &[&str] = &[
+            "server/admission.rs",
+            "server/base.rs",
+            "server/entity.rs",
+            "server/handle.rs",
+            "server/publication.rs",
+            "server/query_usage.rs",
+            "server/reason.rs",
+            "server/request_middleware.rs",
+            "server/service_description.rs",
+            "server/tests.rs",
+            "server/tools.rs",
+            "server/update.rs",
+        ];
+        let server_rs = include_str!("server.rs");
+        let mut declared = Vec::new();
+        let mut rest = server_rs;
+        while let Some(i) = rest.find("#[path = \"") {
+            rest = &rest[i + "#[path = \"".len()..];
+            if let Some(end) = rest.find('"') {
+                declared.push(&rest[..end]);
+                rest = &rest[end..];
+            }
+        }
+        let scanned: std::collections::HashSet<&str> = sources.iter().map(|(n, _)| *n).collect();
+        let unscanned: Vec<&str> = declared
+            .iter()
+            .copied()
+            .filter(|m| !scanned.contains(m) && !NO_ROUTES.contains(m))
+            .collect();
+        assert!(
+            unscanned.is_empty(),
+            "server.rs declares router fragment(s) {unscanned:?} that this test does \
+             not scan. Add each to `sources` (if it registers routes) or to NO_ROUTES \
+             (if it does not). A fragment absent from both is UNCHECKED: its routes are \
+             neither classified nor reported as unclassified."
+        );
         let mut paths = Vec::new();
-        for src in sources {
+        for (_, src) in sources {
             let mut remaining = src;
             while let Some(idx) = remaining.find(".route(") {
                 remaining = &remaining[idx + ".route(".len()..];

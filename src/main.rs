@@ -30,6 +30,7 @@
 //! Aliases: load=knot, query=read
 
 mod cli;
+mod cli_align;
 mod cli_audit;
 mod cli_changes;
 mod cli_commands;
@@ -98,6 +99,7 @@ fn main() {
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
         "policy" => cli_policy::cmd_policy(&args, db_path),
+        "align" => cli_align::cmd_align(&args, db_path),
         "path" => cli_path::cmd_path(&args, db_path, &config.base_ns),
         "propose" => cli_propose::cmd_propose(&args, db_path),
         "audit" => cli_audit::cmd_audit(&args, db_path, &config.base_ns),
@@ -306,6 +308,9 @@ COMMANDS:
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--db <path>]
     quipu import delta <parent-share> <delta-share> [--actor <id>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
+    quipu align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
+    quipu align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
+    quipu align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
     quipu status <share-dir> [--db <path>]
     quipu merge <share-dir> [--actor <id>] [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
