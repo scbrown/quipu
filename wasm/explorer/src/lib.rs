@@ -32,6 +32,16 @@ pub struct Explorer {
     /// declare it as `parent_share` — an edited pack that does not say what it
     /// descends from is a fork pretending to be an original.
     parent_share: String,
+    /// The parent's `graph_hash`, kept so a delta can name the payload it was
+    /// computed against without re-deriving it.
+    parent_graph_hash: String,
+    /// The parent pack's `export.nt`, retained at load (aegis-8fdp8d).
+    ///
+    /// A delta is a diff against THIS, not against whatever the store would
+    /// export today, so it has to be the bytes that arrived. Holding it costs
+    /// the pack's graph size a second time and that is the honest price of
+    /// being able to say what changed.
+    parent_export_ntriples: String,
     /// Every write made in this tab, newest last. Kept in Rust rather than in
     /// the page so the count cannot drift from what the store actually did:
     /// each entry records the tx the store reported, not the request the UI
@@ -111,6 +121,8 @@ impl Explorer {
             store,
             load_report,
             parent_share: request.manifest.share_id.clone(),
+            parent_graph_hash: request.manifest.graph_hash.clone(),
+            parent_export_ntriples: request.export_ntriples.clone(),
             edits: Vec::new(),
         })
     }
@@ -285,6 +297,76 @@ impl Explorer {
     #[wasm_bindgen(js_name = exportManifest)]
     pub fn export_manifest(&self) -> Result<String, JsValue> {
         serde_json::to_string(&self.payload()?.manifest).map_err(err_js)
+    }
+
+    /// The `share-delta/v1` delta from the loaded pack to this tab's state.
+    ///
+    /// Returns JSON carrying the delta manifest, the `delta.ru` document, the
+    /// repository directory it belongs in, and the sizes the page needs in
+    /// order to choose a PR flow:
+    ///
+    /// ```json
+    /// { "manifest": {...}, "update": "DELETE DATA {...}; INSERT DATA {...};",
+    ///   "pack_dir": "qpack", "path": "qpack/deltas/<delta_id>.ru",
+    ///   "empty": false, "update_bytes": 812 }
+    /// ```
+    ///
+    /// REUSES `quipu::share_delta::build_delta` rather than diffing here
+    /// (aegis-8fdp8d, ruled by sattler). quipu already had exactly one delta
+    /// format — `share-delta/v1`, one file, `DELETE DATA` before `INSERT DATA`,
+    /// with `delta_hash` over the whole document so the destructive half is
+    /// inside the integrity envelope. A second format authored in the page
+    /// would have been a fork of an artifact the CLI already reads and writes.
+    ///
+    /// `pack_dir` comes from the LOADED manifest, never from a constant in this
+    /// bundle: the page receives its graph as a release asset and has no view of
+    /// the repository, so a directory compiled in here would send a renamed
+    /// repo's readers to a path that does not exist.
+    ///
+    /// # Errors
+    /// The result share cannot be built, or the generated update is not valid
+    /// SPARQL.
+    pub fn delta(&self) -> Result<String, JsValue> {
+        let built = quipu::share_delta::build_delta(
+            &self.store,
+            &self.parent_share,
+            &self.parent_graph_hash,
+            &self.parent_export_ntriples,
+            &ShareOptions {
+                scope: ShareScope::Root,
+                ..ShareOptions::default()
+            },
+        )
+        .map_err(err_js)?;
+        let pack_dir = self.pack_dir();
+        let path = format!("{pack_dir}/deltas/{}.ru", built.manifest.delta_id);
+        serde_json::to_string(&serde_json::json!({
+            "manifest": built.manifest,
+            "update": built.update,
+            "pack_dir": pack_dir,
+            "path": path,
+            // An empty update is the honest answer to "propose a PR" when
+            // nothing was edited, and the page must say so rather than opening
+            // GitHub with a blank file.
+            "empty": built.update.is_empty(),
+            "update_bytes": built.update.len(),
+        }))
+        .map_err(err_js)
+    }
+
+    /// The repository directory the loaded pack declares, or the default.
+    fn pack_dir(&self) -> String {
+        serde_json::from_str::<serde_json::Value>(&self.load_report)
+            .ok()
+            .and_then(|r| {
+                r.get("manifest")?
+                    .get("pack_dir")?
+                    .as_str()
+                    .map(str::to_string)
+            })
+            .map(|d| d.trim().trim_end_matches('/').to_string())
+            .filter(|d| !d.is_empty())
+            .unwrap_or_else(|| quipu::share::DEFAULT_PACK_DIR.to_string())
     }
 
     fn payload(&self) -> Result<quipu::share::SharePayload, JsValue> {

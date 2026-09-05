@@ -1,6 +1,7 @@
 //! Parent-bound SPARQL Update deltas for portable shares.
 
 use std::collections::BTreeSet;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -123,18 +124,47 @@ fn manifest_turtle(manifest: &DeltaManifest) -> String {
 }
 
 /// Write a delta share against a verified local parent directory.
-pub fn write_delta(
+/// A delta computed in memory: the manifest, the update document and the shapes.
+///
+/// The filesystem-free half of [`write_delta`], extracted (aegis-8fdp8d) so the
+/// wasm explorer can produce the SAME `share-delta/v1` artifact the CLI does.
+/// The page has no filesystem and no parent directory to read, but it does hold
+/// the parent's `export.nt` and manifest from the pack it loaded, which is all
+/// this needs. Sharing the function rather than reimplementing the diff is the
+/// point: two producers of one format is how the format acquires two meanings.
+#[derive(Debug, Clone)]
+pub struct DeltaPayload {
+    /// Verified delta manifest, `delta_id` already computed.
+    pub manifest: DeltaManifest,
+    /// `delta.ru` contents — empty when parent and result agree.
+    pub update: String,
+    /// `shapes.ttl` contents for the resulting share.
+    pub shapes: String,
+}
+
+/// Build a delta from an in-memory parent, without touching the filesystem.
+///
+/// The caller supplies the parent's identity and normative graph; verification
+/// of the parent against its own manifest is the caller's job, because the two
+/// callers verify at different moments — the CLI reads and verifies a directory,
+/// while the page verified the pack when it loaded it and has been editing the
+/// resulting store ever since.
+///
+/// # Errors
+/// The result share cannot be built, or the generated update is not valid
+/// SPARQL — the latter is a guard against emitting a document no receiver could
+/// apply, not a formality.
+pub fn build_delta(
     store: &crate::Store,
-    parent_dir: &str,
-    out_dir: &str,
+    parent_share_id: &str,
+    parent_graph_hash: &str,
+    parent_export_ntriples: &str,
     opts: &ShareOptions,
-) -> Result<DeltaManifest> {
-    let parent = crate::share_transport::read_reference(parent_dir)?;
-    crate::share_import::verify_share(&parent)?;
+) -> Result<DeltaPayload> {
     let mut opts = opts.clone();
-    opts.parent_share = Some(parent.manifest.share_id.clone());
+    opts.parent_share = Some(parent_share_id.to_string());
     let result = share_payload(store, &opts, crate::share::SHARE_PAYLOAD_MAX_BYTES)?;
-    let update = update_text(&parent.export_ntriples, &result.files["export.nt"]);
+    let update = update_text(parent_export_ntriples, &result.files["export.nt"]);
     if !update.is_empty() {
         spargebra::SparqlParser::new()
             .parse_update(&update)
@@ -142,11 +172,12 @@ pub fn write_delta(
                 Error::InvalidValue(format!("generated delta is not SPARQL Update: {e}"))
             })?;
     }
+    let shapes = result.files["shapes.ttl"].clone();
     let mut manifest = DeltaManifest {
         schema: SCHEMA.into(),
         delta_id: String::new(),
-        parent_share: parent.manifest.share_id,
-        parent_graph_hash: parent.manifest.graph_hash,
+        parent_share: parent_share_id.to_string(),
+        parent_graph_hash: parent_graph_hash.to_string(),
         result: result.manifest,
         delta_hash: sha256(update.as_bytes()),
         files: DeltaFiles {
@@ -155,6 +186,38 @@ pub fn write_delta(
         },
     };
     manifest.delta_id = sha256(&manifest_bytes(&manifest, false)?);
+    Ok(DeltaPayload {
+        manifest,
+        update,
+        shapes,
+    })
+}
+
+/// Write a delta share against a verified local parent directory.
+///
+/// Filesystem entry point, so not built for wasm — the page uses
+/// [`build_delta`] and hands the bytes to the reader instead.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn write_delta(
+    store: &crate::Store,
+    parent_dir: &str,
+    out_dir: &str,
+    opts: &ShareOptions,
+) -> Result<DeltaManifest> {
+    let parent = crate::share_transport::read_reference(parent_dir)?;
+    crate::share_import::verify_share(&parent)?;
+    let built = build_delta(
+        store,
+        &parent.manifest.share_id,
+        &parent.manifest.graph_hash,
+        &parent.export_ntriples,
+        opts,
+    )?;
+    let DeltaPayload {
+        manifest,
+        update,
+        shapes,
+    } = built;
     let out = Path::new(out_dir);
     if out.exists() {
         return Err(Error::InvalidValue(format!(
@@ -173,7 +236,7 @@ pub fn write_delta(
             .map_err(|e| Error::Store(format!("delta RDF manifest write: {e}")))?;
         std::fs::write(build.join("delta.ru"), update)
             .map_err(|e| Error::Store(format!("delta update write: {e}")))?;
-        std::fs::write(build.join("shapes.ttl"), &result.files["shapes.ttl"])
+        std::fs::write(build.join("shapes.ttl"), &shapes)
             .map_err(|e| Error::Store(format!("delta shapes write: {e}")))?;
         Ok(())
     })();
@@ -186,6 +249,9 @@ pub fn write_delta(
 }
 
 /// Verify and materialize a local delta against its full parent without mutating either input.
+///
+/// Filesystem entry point, so not built for wasm.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportRequest> {
     let parent = crate::share_transport::read_local(parent_dir)?;
     crate::share_import::verify_share(&parent)?;
@@ -276,6 +342,16 @@ mod tests {
         store
     }
 
+    /// Shapes-free, matching the existing round-trip test: the fixture store
+    /// has no shapes registry, and a share that demands one would fail for a
+    /// reason unrelated to what these tests assert.
+    fn opts() -> ShareOptions {
+        ShareOptions {
+            no_shapes: true,
+            ..ShareOptions::default()
+        }
+    }
+
     #[test]
     fn delta_round_trip_is_parent_bound_and_hash_checked() {
         let temp = tempfile::tempdir().unwrap();
@@ -309,5 +385,91 @@ mod tests {
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap();
         assert!(!triples.is_empty());
+    }
+
+    // --- build_delta is the SAME producer write_delta uses (aegis-8fdp8d) ----
+    //
+    // The wasm page calls build_delta directly because it has no filesystem.
+    // These pin that it is genuinely the same artifact: if the two ever diverge,
+    // the repo would have two producers of one format, which is the duplication
+    // this extraction exists to prevent.
+
+    #[test]
+    fn build_delta_and_write_delta_produce_the_same_artifact() {
+        let parent_store = store("before");
+        let root = tempfile::tempdir().unwrap();
+        let parent_dir = root.path().join("parent");
+        crate::share::share(&parent_store, parent_dir.to_str().unwrap(), &opts()).unwrap();
+
+        let child = store("after");
+        let out = root.path().join("delta");
+        let written =
+            write_delta(&child, parent_dir.to_str().unwrap(), out.to_str().unwrap(), &opts()).unwrap();
+
+        let parent = crate::share_transport::read_reference(parent_dir.to_str().unwrap()).unwrap();
+        let built = build_delta(
+            &child,
+            &parent.manifest.share_id,
+            &parent.manifest.graph_hash,
+            &parent.export_ntriples,
+            &opts(),
+        )
+        .unwrap();
+
+        assert_eq!(built.manifest.delta_id, written.delta_id);
+        assert_eq!(built.manifest.delta_hash, written.delta_hash);
+        assert_eq!(built.manifest.parent_share, written.parent_share);
+        assert_eq!(
+            built.update,
+            std::fs::read_to_string(out.join("delta.ru")).unwrap(),
+            "the in-memory update must be byte-identical to the written delta.ru"
+        );
+    }
+
+    #[test]
+    fn a_delta_retracts_before_it_asserts() {
+        // The order is the contract, not an implementation detail: a delta that
+        // removes and re-adds the same triple means different things under the
+        // two orders, so whichever the applier happened to do would otherwise
+        // become the de facto spec.
+        let parent_store = store("before");
+        let root = tempfile::tempdir().unwrap();
+        let parent_dir = root.path().join("parent");
+        crate::share::share(&parent_store, parent_dir.to_str().unwrap(), &opts()).unwrap();
+        let parent = crate::share_transport::read_reference(parent_dir.to_str().unwrap()).unwrap();
+
+        let built = build_delta(
+            &store("after"),
+            &parent.manifest.share_id,
+            &parent.manifest.graph_hash,
+            &parent.export_ntriples,
+            &opts(),
+        )
+        .unwrap();
+
+        let del = built.update.find("DELETE DATA").expect("a retraction");
+        let ins = built.update.find("INSERT DATA").expect("an assertion");
+        assert!(del < ins, "DELETE DATA must precede INSERT DATA:\n{}", built.update);
+    }
+
+    #[test]
+    fn an_unchanged_store_yields_an_empty_update_not_a_spurious_delta() {
+        // The page branches on this: "propose a PR" with nothing edited must say
+        // so rather than open GitHub with a blank file.
+        let s = store("same");
+        let root = tempfile::tempdir().unwrap();
+        let parent_dir = root.path().join("parent");
+        crate::share::share(&s, parent_dir.to_str().unwrap(), &opts()).unwrap();
+        let parent = crate::share_transport::read_reference(parent_dir.to_str().unwrap()).unwrap();
+
+        let built = build_delta(
+            &s,
+            &parent.manifest.share_id,
+            &parent.manifest.graph_hash,
+            &parent.export_ntriples,
+            &opts(),
+        )
+        .unwrap();
+        assert!(built.update.is_empty(), "got: {}", built.update);
     }
 }
