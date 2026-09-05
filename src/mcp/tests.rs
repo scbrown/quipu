@@ -3703,3 +3703,142 @@ fn episode_graph_field_registers_the_graph_so_it_can_be_labelled() {
         )
         .expect("an episode-created graph must be labelable");
 }
+
+// --- `entailment` on tool_query (aegis-1gp76j) ---------------------------------
+//
+// The regime is READ here and materialised out of band; `tool_query` takes
+// `&Store` because it runs on the WAL read pool. So the case that matters most
+// is the REFUSAL: answering a caller who asked for RDFS with asserted-only rows
+// is indistinguishable from a correct answer, and it is the silent-wrong
+// direction.
+
+const ENT_TS: &str = "2026-09-05T00:00:00Z";
+const ENT_G: &str = "http://example.org/graph/ent";
+
+/// `ex:a ex:b1 ex:c` plus `ex:b1 rdfs:subPropertyOf ex:b2`.
+///
+/// Asked as `SELECT ?x WHERE { ex:a ?x ex:c }` the predicate is a VARIABLE, so
+/// no pattern rewrite can produce `b2` — the triple has to exist. That makes the
+/// row count a direct measure of whether the closure was in the dataset.
+fn entailment_fixture() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    for (s, p, o) in [
+        ("http://ex/a", "http://ex/b1", "http://ex/c"),
+        (
+            "http://ex/b1",
+            crate::namespace::RDFS_SUBPROPERTY_OF,
+            "http://ex/b2",
+        ),
+    ] {
+        let (e, a) = (store.intern(s).unwrap(), store.intern(p).unwrap());
+        let v = store.intern(o).unwrap();
+        let g = store.intern(ENT_G).unwrap();
+        store
+            .transact_to_graph(
+                &[crate::store::Datum {
+                    entity: e,
+                    attribute: a,
+                    value: crate::types::Value::Ref(v),
+                    valid_from: ENT_TS.into(),
+                    valid_to: None,
+                    op: crate::types::Op::Assert,
+                }],
+                ENT_TS,
+                None,
+                None,
+                g,
+            )
+            .unwrap();
+    }
+    store
+}
+
+const ENT_QUERY: &str = "SELECT ?x WHERE { <http://ex/a> ?x <http://ex/c> }";
+
+#[test]
+fn entailment_rdfs_answers_over_the_materialised_closure() {
+    let mut store = entailment_fixture();
+    let g = store.lookup(ENT_G).unwrap().unwrap();
+    crate::sparql::rdfs_closure::materialise(&mut store, g, ENT_TS).unwrap();
+
+    let out = tool_query(
+        &store,
+        &serde_json::json!({"query": ENT_QUERY, "graph": ENT_G, "entailment": "rdfs"}),
+    )
+    .unwrap();
+
+    assert_eq!(
+        out["count"], 2,
+        "rdfs7 should put ex:b2 in the answer alongside the asserted ex:b1"
+    );
+    assert_eq!(out["entailment"]["regime"], "rdfs");
+    assert_eq!(
+        out["entailment"]["composedGraphs"], 2,
+        "the graph and its companion"
+    );
+}
+
+#[test]
+fn entailment_absent_is_asserted_only_and_emits_no_marker() {
+    // The CONTROL for the test above, on a store where the closure EXISTS.
+    // Without it, a passing `count == 2` could just as well mean the fixture
+    // asserted both rows. Here the same materialised store answers 1, so the
+    // extra row is attributable to the flag and to nothing else.
+    let mut store = entailment_fixture();
+    let g = store.lookup(ENT_G).unwrap().unwrap();
+    crate::sparql::rdfs_closure::materialise(&mut store, g, ENT_TS).unwrap();
+
+    let out = tool_query(
+        &store,
+        &serde_json::json!({"query": ENT_QUERY, "graph": ENT_G}),
+    )
+    .unwrap();
+
+    assert_eq!(out["count"], 1, "asserted-only without the flag");
+    assert!(
+        out.get("entailment").is_none(),
+        "the marker's PRESENCE is the signal; it must be absent when no regime was asked for"
+    );
+}
+
+#[test]
+fn entailment_refuses_a_graph_with_no_materialised_closure() {
+    // The silent-wrong direction: this store has NO companion graph, so the
+    // honest answer to "under RDFS" is unavailable. Answering 1 row would look
+    // exactly like a correct answer.
+    let store = entailment_fixture();
+
+    let err = tool_query(
+        &store,
+        &serde_json::json!({"query": ENT_QUERY, "graph": ENT_G, "entailment": "rdfs"}),
+    )
+    .expect_err("must refuse rather than answer under simple entailment");
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("no materialised") && msg.contains("--entailment rdfs"),
+        "the refusal must name the repair, not just decline: {msg}"
+    );
+}
+
+#[test]
+fn entailment_refuses_an_unknown_regime() {
+    let store = entailment_fixture();
+    let err = tool_query(
+        &store,
+        &serde_json::json!({"query": ENT_QUERY, "graph": ENT_G, "entailment": "owl"}),
+    )
+    .expect_err("an unimplemented regime must not be silently ignored");
+    assert!(err.to_string().contains("unknown entailment regime"));
+}
+
+#[test]
+fn entailment_refuses_a_non_string() {
+    let store = entailment_fixture();
+    let err = tool_query(
+        &store,
+        &serde_json::json!({"query": ENT_QUERY, "graph": ENT_G, "entailment": true}),
+    )
+    .expect_err("a non-string regime is a caller error, not a default");
+    assert!(err.to_string().contains("must be a string"));
+}

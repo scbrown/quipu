@@ -226,6 +226,53 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
         }
     };
 
+    // `entailment` (aegis-1gp76j): answer under a named entailment regime by
+    // composing each graph in scope with its companion inferred graph.
+    //
+    // The regime is a claim about what the default graph ENTAILS, so the
+    // closure belongs IN the default graph for the duration of the answer —
+    // `GraphScope::Default` is already an RDF merge of a set, so this needs no
+    // evaluator change.
+    //
+    // This surface READS a closure; it never materialises one. `tool_query`
+    // takes `&Store` because it runs on the WAL read pool, and taking `&mut`
+    // here to materialise on demand would put every SPARQL read behind the
+    // single writer lock. So an absent companion graph is REFUSED rather than
+    // quietly answered under simple entailment: returning asserted-only rows to
+    // a caller who asked for RDFS is the silent-wrong direction, and it is
+    // indistinguishable from a correct empty answer. Materialise with
+    // `quipu query --entailment rdfs` (or the reasoner) first.
+    let graph = match entailment_regime(input)? {
+        None => graph,
+        Some(regime) => {
+            let sparql::GraphScope::Default(ids) = &graph else {
+                return Err(Error::InvalidValue(format!(
+                    "entailment {regime:?} applies to the default graph; this request \
+                     scopes to named graphs"
+                )));
+            };
+            let mut composed: Vec<i64> = Vec::with_capacity(ids.len() * 2);
+            for &g in ids {
+                if !composed.contains(&g) {
+                    composed.push(g);
+                }
+                let iri = store.companion_inferred_iri(g)?;
+                let Some(companion) = store.lookup(&iri)? else {
+                    return Err(Error::InvalidValue(format!(
+                        "entailment {regime:?} requested but graph {g} has no materialised \
+                         closure at <{iri}>; run `quipu query --entailment rdfs` against it \
+                         first. Answering without the closure would silently return \
+                         asserted-only rows."
+                    )));
+                };
+                if !composed.contains(&companion) {
+                    composed.push(companion);
+                }
+            }
+            sparql::GraphScope::Default(composed)
+        }
+    };
+
     Ok((
         query_str,
         TemporalContext {
@@ -326,6 +373,55 @@ pub fn labels_json(labels: &Result<Option<labels::DatasetLabels>>) -> JsonValue 
     }
 }
 
+/// The requested entailment regime, validated (aegis-1gp76j).
+///
+/// `None` when the caller did not ask — silence never widens the dataset, so
+/// the simple-entailment path is unchanged and pays nothing. An unrecognised
+/// regime is an error, never a silently-ignored parameter: a caller who asks
+/// for a regime this build does not implement must not be handed an answer that
+/// looks like it honoured them.
+fn entailment_regime(input: &JsonValue) -> Result<Option<&str>> {
+    let Some(v) = input.get("entailment") else {
+        return Ok(None);
+    };
+    let s = v.as_str().ok_or_else(|| {
+        Error::InvalidValue("'entailment' must be a string, e.g. \"rdfs\"".into())
+    })?;
+    if s.eq_ignore_ascii_case("rdfs") {
+        Ok(Some("rdfs"))
+    } else {
+        Err(Error::InvalidValue(format!(
+            "unknown entailment regime {s:?}; this build implements \"rdfs\""
+        )))
+    }
+}
+
+/// Announce the entailment regime the answer was computed under.
+///
+/// A SEPARATE key from `inference`, not an extra field on it: `inference`
+/// reports that a constant `rdf:type` pattern was expanded over subclasses,
+/// which is a different mechanism with a different remedy. Folding both into
+/// one `applied: true` would leave a reader unable to tell which one widened
+/// their answer.
+///
+/// Present only when a regime was requested, so — as with `inference` — the
+/// field's PRESENCE is the signal.
+fn add_entailment(out: &mut JsonValue, regime: Option<&str>, graphs: usize) {
+    let Some(regime) = regime else {
+        return;
+    };
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert(
+            "entailment".to_string(),
+            serde_json::json!({
+                "regime": regime,
+                "composedGraphs": graphs,
+                "note": "answered over the RDF merge of the requested graph(s) and their companion inferred graph(s); the closure is materialised out of band, so these rows are as fresh as the last materialisation",
+            }),
+        );
+    }
+}
+
 fn add_inference(out: &mut JsonValue, withheld: &[rdfs::WithheldType]) {
     if withheld.is_empty() {
         return;
@@ -413,6 +509,16 @@ pub fn tool_query_with_federation(
     // when it did not, so the field's PRESENCE is the signal — a marker that
     // appears on every response is one readers stop seeing.
     let inferred = query_inference(store, input).unwrap_or_default();
+    // Same input the dataset composition read, so the marker cannot claim a
+    // regime the answer was not computed under.
+    let regime = entailment_regime(input).unwrap_or(None);
+    let composed_graphs = match query_context(store, input) {
+        Ok((_, ctx)) => match &ctx.graph {
+            sparql::GraphScope::Default(ids) => ids.len(),
+            _ => 0,
+        },
+        Err(_) => 0,
+    };
     // Computed from the SAME `query_context` the executor used, so the label
     // describes the dataset the query actually read. Held as a Result: a
     // cross-chain refusal is reported in the field, never raised as a query
@@ -458,6 +564,7 @@ pub fn tool_query_with_federation(
                 "truncated": truncated
             });
             add_inference(&mut out, &inferred);
+            add_entailment(&mut out, regime, composed_graphs);
             add_labels(&mut out, &labeled);
             Ok(out)
         }
@@ -470,6 +577,7 @@ pub fn tool_query_with_federation(
             // the marker is the only thing that can distinguish the two worlds.
             let mut out = serde_json::json!({ "result": result });
             add_inference(&mut out, &inferred);
+            add_entailment(&mut out, regime, composed_graphs);
             add_labels(&mut out, &labeled);
             Ok(out)
         }
@@ -494,6 +602,7 @@ pub fn tool_query_with_federation(
                 "truncated": truncated
             });
             add_inference(&mut out, &inferred);
+            add_entailment(&mut out, regime, composed_graphs);
             add_labels(&mut out, &labeled);
             Ok(out)
         }
