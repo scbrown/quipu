@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.36] - 2026-09-05
+
+### Added
+
+- *(rdf)* Streaming chunked ingest, and a declaration that refuses a short load([c0058f4](https://github.com/scbrown/quipu/commit/c0058f4b26452f77947032412d3173d603bc7f06))
+- *(align)* R2 — reach an alignment assertion without knowing it exists([5020433](https://github.com/scbrown/quipu/commit/502043357ba2c771d40164e16fb4b63489155510))
+- *(conformance)* Let goal regimes EXECUTE, and derive the commitment([cd2672f](https://github.com/scbrown/quipu/commit/cd2672f7a89a0f1af7f1bf88258c39de81358caa))
+- *(sparql)* Materialise the RDFS closure into the companion graph([328bfc5](https://github.com/scbrown/quipu/commit/328bfc58f6d9f93b14491e122e5a016eb96a5dda))
+- *(cli)* --entailment rdfs answers over the materialised closure([c97b7cc](https://github.com/scbrown/quipu/commit/c97b7cccc5824f2a66207a5bda7db83870ec074f))
+- *(conformance)* Ledgers record WHO produced them, and the page prints it([f2a174b](https://github.com/scbrown/quipu/commit/f2a174bc6e8a483d00aff499fffd82aa377748dc))
+- *(conformance)* Answer RDFS-regime cases under the closure([9a3fbd5](https://github.com/scbrown/quipu/commit/9a3fbd576fbfc797a1e4ab4ccfc2dc9a8810b2a9))
+- *(conformance)* --check now asks whether a ledger matches the code it ships with([4aa67ad](https://github.com/scbrown/quipu/commit/4aa67ad54dd76fc83dd4e8967d1596ba4d6004c3))
+
+
+
+### Fixed
+
+- *(import)* An exact name match is a PROPOSAL, not a silent IRI rewrite([baa9d98](https://github.com/scbrown/quipu/commit/baa9d9818b4754828e2a6ab30de76a7b508fc447))
+- *(align)* R2 offers a VERDICT, not a command that does not work([6f4cfe9](https://github.com/scbrown/quipu/commit/6f4cfe9f60719f80ce68c3f0e76f785673219060))
+- *(cli)* Extract --entailment into its own module; refresh the badge([3314294](https://github.com/scbrown/quipu/commit/33142943df02befca40fdeabdb9e94d13b0a8c45))
+- *(conformance)* A failing CASE must not kill the step before the gate runs([c13e154](https://github.com/scbrown/quipu/commit/c13e1545938233a46f361a5d6d72df12a92b131d))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive all five ledgers on the code they ship with([76591ae](https://github.com/scbrown/quipu/commit/76591aebad3ac2eeaeb0c4b5cfd1751728306dc6))
+
+### Bench
+
+- *(entailment)* Publish 23/35, from a CI-produced ledger([cccf2bd](https://github.com/scbrown/quipu/commit/cccf2bdc295eda3ae0b54da8b866ccf530479ad9))
+- *(entailment)* 29/35 from a ledger that matches the code it ships with([cc181e9](https://github.com/scbrown/quipu/commit/cc181e9560b8dbe09837fd7f32ae2748739a1c8b))
+
+### Style
+
+- Order mod cli_entailment alphabetically([444028e](https://github.com/scbrown/quipu/commit/444028e6005d518c2247d85d3f60087a8e651753))
+
 ## [0.3.35] - 2026-09-05
 
 ### Added
