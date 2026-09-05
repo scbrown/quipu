@@ -122,3 +122,13 @@ just docs check      # Full docs quality gate (lint + build)
 ```
 
 When making user-facing changes, update the relevant documentation under `docs/book/src/`.
+
+## Releasing
+
+See [docs/RELEASING.md](docs/RELEASING.md).
+
+Merging the `release-plz` PR is the whole normal procedure. The one thing worth knowing
+before you need it: if you ever repair a release's assets by dispatching `release.yml`, you
+must pass `--ref <tag>`. `gh workflow run` defaults to the default branch, which builds
+`main` and publishes it under the tag's filenames with regenerated checksums that match the
+wrong build. `assert-tag-is-head` refuses that and prints the correct command.

@@ -874,3 +874,822 @@ fn the_nothing_verified_output_warns_the_shell_caller_about_its_exit_code() {
     assert!(text.contains("Exit status 2, not 1"), "{text}");
     assert!(text.contains("-eq 1"), "{text}");
 }
+
+// ---------------------------------------------------------------------------
+// Store-backed enumeration (aegis-sosiaa slice 3)
+// ---------------------------------------------------------------------------
+
+use super::enumerate::enumerate;
+use crate::namespace::{RDF_TYPE, RDFS_LABEL};
+use crate::store::{Datum, Store};
+use crate::types::{Op, Value};
+
+const T: &str = "2026-09-05T00:00:00Z";
+
+/// Write `(entity, attribute, value)` into `graph_iri`.
+fn write(store: &mut Store, graph_iri: &str, entity: &str, attribute: &str, value: Value) {
+    let e = store.intern(entity).unwrap();
+    let a = store.intern(attribute).unwrap();
+    let g = store.intern(graph_iri).unwrap();
+    store
+        .transact_to_graph(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value,
+                valid_from: T.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            T,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+}
+
+fn label(store: &mut Store, graph: &str, entity: &str, text: &str) {
+    write(store, graph, entity, RDFS_LABEL, Value::Str(text.into()));
+}
+
+fn typed(store: &mut Store, graph: &str, entity: &str, type_iri: &str) {
+    let t = store.intern(type_iri).unwrap();
+    write(store, graph, entity, RDF_TYPE, Value::Ref(t));
+}
+
+#[test]
+fn enumerate_reads_labels_and_types_from_one_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    label(&mut store, g, "http://a.example/bobbin", "bobbin-release");
+    typed(
+        &mut store,
+        g,
+        "http://a.example/bobbin",
+        "http://x/Repository",
+    );
+
+    let out = enumerate(&store, g).unwrap();
+
+    assert_eq!(out.concepts.len(), 1);
+    assert_eq!(out.concepts[0].iri, "http://a.example/bobbin");
+    assert_eq!(out.concepts[0].label, "bobbin-release");
+    // The load-bearing assertion: rdf:type is stored as `Value::Ref`, so a
+    // reader that decodes it as `Value::Str` returns an EMPTY type list. That
+    // failure is silent — a LinkSpec with `require_shared_type` would then
+    // propose nothing and look correct doing it.
+    assert_eq!(
+        out.concepts[0].types,
+        vec!["http://x/Repository".to_string()]
+    );
+    assert!(out.ambiguous.is_empty());
+}
+
+#[test]
+fn enumeration_is_scoped_to_its_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let a = "http://example.org/graph/a";
+    let b = "http://example.org/graph/b";
+    label(&mut store, a, "http://a.example/x", "in-a");
+    label(&mut store, b, "http://b.example/y", "in-b");
+
+    let from_a = enumerate(&store, a).unwrap();
+    let from_b = enumerate(&store, b).unwrap();
+
+    assert_eq!(from_a.concepts.len(), 1, "graph a must not see graph b");
+    assert_eq!(from_a.concepts[0].label, "in-a");
+    assert_eq!(from_b.concepts.len(), 1, "graph b must not see graph a");
+    assert_eq!(from_b.concepts[0].label, "in-b");
+}
+
+#[test]
+fn a_root_fact_is_not_enumerated_into_a_named_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    // Same shape, written to ROOT rather than the graph.
+    let e = store.intern("http://a.example/root-only").unwrap();
+    let attr = store.intern(RDFS_LABEL).unwrap();
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: attr,
+                value: Value::Str("root-only".into()),
+                valid_from: T.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            T,
+            None,
+            None,
+        )
+        .unwrap();
+    label(&mut store, g, "http://a.example/in-graph", "in-graph");
+
+    let out = enumerate(&store, g).unwrap();
+
+    assert_eq!(out.concepts.len(), 1);
+    assert_eq!(out.concepts[0].label, "in-graph");
+}
+
+#[test]
+fn an_entity_with_two_labels_is_reported_and_never_guessed() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    label(&mut store, g, "http://a.example/two", "bobbin-release");
+    label(
+        &mut store,
+        g,
+        "http://a.example/two",
+        "Bobbin_release-artifact",
+    );
+    label(&mut store, g, "http://a.example/one", "unambiguous");
+
+    let out = enumerate(&store, g).unwrap();
+
+    // The ambiguous one is EXCLUDED from concepts — matching on a label the
+    // operator cannot predict is the failure this avoids.
+    assert_eq!(out.concepts.len(), 1);
+    assert_eq!(out.concepts[0].iri, "http://a.example/one");
+
+    // ...and REPORTED, with every label, so it is a finding rather than a
+    // silent omission. "Could not decide" is not "was not there".
+    assert_eq!(out.ambiguous.len(), 1);
+    assert_eq!(out.ambiguous[0].iri, "http://a.example/two");
+    assert_eq!(
+        out.ambiguous[0].graph, g,
+        "a set-aside entity names its graph"
+    );
+    assert_eq!(
+        out.ambiguous[0].labels,
+        vec![
+            "Bobbin_release-artifact".to_string(),
+            "bobbin-release".to_string()
+        ]
+    );
+}
+
+#[test]
+fn an_unlabelled_entity_is_not_a_concept() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    typed(
+        &mut store,
+        g,
+        "http://a.example/typed-only",
+        "http://x/Repository",
+    );
+
+    let out = enumerate(&store, g).unwrap();
+
+    assert!(
+        out.concepts.is_empty(),
+        "no label means nothing to match on"
+    );
+    assert!(out.ambiguous.is_empty());
+}
+
+#[test]
+fn an_absent_graph_enumerates_to_nothing_rather_than_erroring() {
+    let store = Store::open_in_memory().unwrap();
+    let out = enumerate(&store, "http://example.org/graph/never-registered").unwrap();
+    assert!(out.is_empty());
+}
+
+#[test]
+fn an_empty_graph_and_an_all_ambiguous_graph_are_different_findings() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    label(&mut store, g, "http://a.example/two", "one-name");
+    label(&mut store, g, "http://a.example/two", "another-name");
+
+    let out = enumerate(&store, g).unwrap();
+
+    // Both have zero concepts. Only one of them examined nothing, and a caller
+    // that reports "0 concepts" for both hides a graph it could not read.
+    assert!(out.concepts.is_empty());
+    assert!(!out.is_empty(), "an ambiguous entity IS something examined");
+}
+
+#[test]
+fn a_retracted_label_is_not_enumerated() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    label(&mut store, g, "http://a.example/gone", "gone");
+    let e = store.intern("http://a.example/gone").unwrap();
+    let a = store.intern(RDFS_LABEL).unwrap();
+    let gid = store.intern(g).unwrap();
+    store
+        .transact_to_graph(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("gone".into()),
+                valid_from: "2026-09-06T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            "2026-09-06T00:00:00Z",
+            None,
+            None,
+            gid,
+        )
+        .unwrap();
+
+    let out = enumerate(&store, g).unwrap();
+    assert!(
+        out.concepts.is_empty(),
+        "op=1 AND valid_to IS NULL must exclude it"
+    );
+}
+
+#[test]
+fn enumeration_order_does_not_depend_on_write_order() {
+    let build = |order: &[&str]| {
+        let mut store = Store::open_in_memory().unwrap();
+        let g = "http://example.org/graph/a";
+        for iri in order {
+            label(&mut store, g, iri, "same-label");
+        }
+        enumerate(&store, g)
+            .unwrap()
+            .concepts
+            .into_iter()
+            .map(|c| c.iri)
+            .collect::<Vec<_>>()
+    };
+
+    let forward = build(&[
+        "http://a.example/a",
+        "http://a.example/b",
+        "http://a.example/c",
+    ]);
+    let reverse = build(&[
+        "http://a.example/c",
+        "http://a.example/b",
+        "http://a.example/a",
+    ]);
+
+    // Interned ids follow write order, so a BTreeMap over them is write order
+    // in disguise. Sorting by IRI is what makes the bytes stable — the same
+    // property `propose` is tested for, one layer down.
+    assert_eq!(forward, reverse);
+    assert_eq!(forward.len(), 3);
+}
+
+#[test]
+fn a_proposal_reports_candidates_and_set_aside_together() {
+    use super::enumerate::propose_from_graphs;
+    use super::propose::LinkSpec;
+
+    let mut store = Store::open_in_memory().unwrap();
+    let (a, b) = ("http://example.org/graph/a", "http://example.org/graph/b");
+
+    // One pair that WILL match...
+    label(&mut store, a, "http://a.example/bobbin", "bobbin-release");
+    label(&mut store, b, "http://b.example/bobbin", "bobbin-release");
+    // ...and one entity alignment cannot read, in the other graph.
+    label(&mut store, b, "http://b.example/two", "one-name");
+    label(&mut store, b, "http://b.example/two", "another-name");
+
+    let spec = LinkSpec {
+        require_shared_type: false,
+        ..LinkSpec::default()
+    };
+    let prior = MappingSet::new("urn:quipu:align:prior");
+    let out = propose_from_graphs(&store, a, b, &spec, &prior, "urn:quipu:align:a:b").unwrap();
+
+    assert_eq!(out.set.mappings.len(), 1, "the matchable pair is proposed");
+    // wu's requirement: N and M surface TOGETHER. An entity silently absent is
+    // indistinguishable from one that was read and had no candidate, and those
+    // mean opposite things.
+    assert_eq!(
+        out.set_aside.len(),
+        1,
+        "the ambiguous entity is COUNTED, not dropped"
+    );
+    assert_eq!(out.set_aside[0].iri, "http://b.example/two");
+    assert_eq!(
+        out.set_aside[0].graph, b,
+        "and it names which graph it came from"
+    );
+
+    let summary = out.summary();
+    assert!(summary.contains('1'), "summary: {summary}");
+    assert!(
+        summary.contains("candidate") && summary.contains("set aside"),
+        "one sentence must carry BOTH numbers, so neither can be reported alone: {summary}"
+    );
+}
+
+#[test]
+fn an_unmatchable_entity_and_an_ambiguous_one_are_not_the_same_finding() {
+    use super::enumerate::propose_from_graphs;
+    use super::propose::LinkSpec;
+
+    let spec = LinkSpec {
+        require_shared_type: false,
+        ..LinkSpec::default()
+    };
+    let prior = MappingSet::new("urn:quipu:align:prior");
+    let (a, b) = ("http://example.org/graph/a", "http://example.org/graph/b");
+
+    // CASE 1: read fine, simply nothing to match against.
+    let mut s1 = Store::open_in_memory().unwrap();
+    label(&mut s1, a, "http://a.example/lonely", "nothing-like-this");
+    label(&mut s1, b, "http://b.example/other", "utterly-different");
+    let read_but_no_candidate =
+        propose_from_graphs(&s1, a, b, &spec, &prior, "urn:quipu:align:a:b").unwrap();
+
+    // CASE 2: could not be read at all.
+    let mut s2 = Store::open_in_memory().unwrap();
+    label(&mut s2, a, "http://a.example/two", "one-name");
+    label(&mut s2, a, "http://a.example/two", "another-name");
+    label(&mut s2, b, "http://b.example/other", "utterly-different");
+    let could_not_read =
+        propose_from_graphs(&s2, a, b, &spec, &prior, "urn:quipu:align:a:b").unwrap();
+
+    // Both produce zero candidates — and that is exactly why the count matters.
+    assert_eq!(read_but_no_candidate.set.mappings.len(), 0);
+    assert_eq!(could_not_read.set.mappings.len(), 0);
+
+    // The set-aside count is the ONLY thing separating them.
+    assert_eq!(read_but_no_candidate.set_aside.len(), 0);
+    assert_eq!(could_not_read.set_aside.len(), 1);
+    assert_ne!(
+        read_but_no_candidate.summary(),
+        could_not_read.summary(),
+        "two opposite findings must not render identically"
+    );
+}
+
+// R3/R5 rest on a STORE contract, and it is pinned in the STORE's tests.
+//
+// `transact_to_graph` skips an assertion whose (e, a, v) is already active in
+// that graph. Re-applying an unchanged mapping set is therefore idempotent
+// because of the STORE, not because of `apply` — and `apply`'s permissive
+// concurrency arm (two identical invocations are not refused) rests on the same
+// property.
+//
+// The test lives in `store::tests::duplicate_assert_into_a_named_graph_is_idempotent`,
+// not here, because it is a contract a change to `transact_to_graph` must meet.
+// An align-side test would fail on that change too, but it would point the
+// reader at align — and whoever edits the store looks at the store's tests to
+// see what they must preserve (wu, aegis-sosiaa).
+//
+// What remains for align to prove is the aegis-x1175 case: the same pair with
+// CHANGED derived content, where the triples genuinely differ and nothing
+// dedupes them. That test belongs with `apply`.
+
+// ---------------------------------------------------------------------------
+// apply — R1 (provenance on the triple), R3 (idempotence by COUNT), R4 (one
+// transaction), R5 (the set version is checked at commit).
+
+use super::apply::{apply, derive_ntriples, derived_graph_iri, set_version};
+
+fn store_with_graph(iri: &str) -> (crate::Store, String) {
+    let store = crate::Store::open_in_memory().unwrap();
+    store.graph_create(iri).unwrap();
+    (store, iri.to_string())
+}
+
+fn decided_set() -> MappingSet {
+    let mut set = MappingSet::new("urn:quipu:align:test");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    set
+}
+
+fn live_count(store: &crate::Store, graph_iri: &str) -> i64 {
+    let g = store.lookup(graph_iri).unwrap().unwrap();
+    store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE g = ?1 AND op = 1 AND valid_to IS NULL",
+            [g],
+            |r| r.get(0),
+        )
+        .unwrap()
+}
+
+#[test]
+fn apply_writes_the_knot_and_is_idempotent_by_count() {
+    // R3, first half. The COUNT is the assertion, not apply's own report —
+    // aegis-x1175 is precisely a response that looks identical while the store
+    // grew.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t1");
+    let set = decided_set();
+    let v = set_version(&set).unwrap();
+
+    let first = apply(
+        &mut store,
+        &set,
+        &g,
+        &v,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+    assert!(first.changed_the_graph());
+    let after_first = live_count(&store, &g);
+
+    let second = apply(
+        &mut store,
+        &set,
+        &g,
+        &v,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+    assert_eq!(
+        second.written, 0,
+        "an unchanged re-apply must write nothing"
+    );
+    assert_eq!(
+        live_count(&store, &g),
+        after_first,
+        "the COUNT is what proves idempotence; the report is what x1175 makes untrustworthy"
+    );
+}
+
+#[test]
+fn re_applying_after_editing_a_row_does_not_accumulate() {
+    // R3's load-bearing half, and the aegis-x1175 case exactly: same pair, the
+    // derived content CHANGED. The store's dedupe does not help here, because
+    // the triples genuinely differ — so this is apply's problem, not the
+    // store's, and a naive idempotence test that only re-runs an unchanged set
+    // would pass while this fails.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t2");
+
+    let mut set = decided_set();
+    let v1 = set_version(&set).unwrap();
+    apply(
+        &mut store,
+        &set,
+        &g,
+        &v1,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+
+    // The operator revises the justification and re-applies.
+    set.mappings[0].mapping_justification = Justification::CompositeMatching;
+    let v2 = set_version(&set).unwrap();
+    assert_ne!(v1, v2, "editing a row must change the set version");
+    apply(
+        &mut store,
+        &set,
+        &g,
+        &v2,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+
+    // One justification fact for this subject, not two.
+    let subject = store.lookup("http://a.example/1").unwrap().unwrap();
+    let predicate = store
+        .lookup("https://quipu.dev/ontology/align/justification")
+        .unwrap()
+        .unwrap();
+    let live: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e = ?1 AND a = ?2 AND op = 1 AND valid_to IS NULL",
+            [subject, predicate],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        live, 1,
+        "an edited row appended a second provenance fact — the aegis-x1175 shape"
+    );
+}
+
+#[test]
+fn apply_refuses_to_commit_a_set_that_changed_under_it() {
+    // R5. Two individually valid transactions with a mutation between them are
+    // not something atomicity can see, so the version is checked explicitly.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t3");
+    let set = decided_set();
+    let stale = set_version(&set).unwrap();
+
+    let mut edited = set.clone();
+    edited.mappings[0].author_id = Some("someone-else".into());
+
+    let err = apply(
+        &mut store,
+        &edited,
+        &g,
+        &stale,
+        "2026-09-05T00:00:00Z",
+        None,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("changed under this apply"), "{err}");
+    assert!(err.contains("Nothing was written"), "{err}");
+    assert_eq!(
+        live_count(&store, &g),
+        0,
+        "a refused apply must write nothing"
+    );
+}
+
+#[test]
+fn two_identical_applies_are_not_refused() {
+    // R5's permissive arm, which rests on the store dedupe pinned in
+    // store::tests::duplicate_assert_into_a_named_graph_is_idempotent. A guard
+    // that refused harmless concurrency would be turned off within a week.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t4");
+    let set = decided_set();
+    let v = set_version(&set).unwrap();
+
+    apply(&mut store, &set, &g, &v, "2026-09-05T00:00:00Z", Some("a")).unwrap();
+    let second = apply(&mut store, &set, &g, &v, "2026-09-05T00:00:00Z", Some("b"));
+    assert!(
+        second.is_ok(),
+        "identical concurrent applies must not be refused"
+    );
+    assert_eq!(second.unwrap().written, 0);
+}
+
+#[test]
+fn the_derived_triple_carries_its_own_provenance() {
+    // R1. Reachable from the assertion, without the mapping set.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t5");
+    let set = decided_set();
+    let v = set_version(&set).unwrap();
+    apply(
+        &mut store,
+        &set,
+        &g,
+        &v,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+
+    let subject = store.lookup("http://a.example/1").unwrap().unwrap();
+    for predicate in [
+        "https://quipu.dev/ontology/align/assertedBy",
+        "https://quipu.dev/ontology/align/assertedOn",
+        "https://quipu.dev/ontology/align/justification",
+    ] {
+        let p = store
+            .lookup(predicate)
+            .unwrap_or_else(|_| panic!("{predicate} not interned"))
+            .unwrap_or_else(|| panic!("{predicate} not interned"));
+        let n: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM facts WHERE e = ?1 AND a = ?2 AND op = 1 AND valid_to IS NULL",
+                [subject, p],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1, "{predicate} missing from the derived assertion");
+    }
+}
+
+#[test]
+fn a_declined_row_writes_nothing_at_all() {
+    let (mut store, g) = store_with_graph("urn:quipu:align:t6");
+    let mut set = MappingSet::new("urn:quipu:align:test");
+    let mut declined = mapping("http://a.example/1", "http://b.example/1");
+    declined.quipu_review = Some(Review::Declined);
+    set.mappings.push(declined);
+    let v = set_version(&set).unwrap();
+
+    let report = apply(&mut store, &set, &g, &v, "2026-09-05T00:00:00Z", None).unwrap();
+    assert_eq!(report.written, 0);
+    assert_eq!(report.distinct_from, 0);
+    assert_eq!(live_count(&store, &g), 0);
+}
+
+#[test]
+fn derive_is_deterministic_regardless_of_row_order() {
+    let mut a = MappingSet::new("urn:t");
+    a.mappings
+        .push(authored_same("http://a.example/2", "http://b.example/2"));
+    a.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    let mut b = MappingSet::new("urn:t");
+    b.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    b.mappings
+        .push(authored_same("http://a.example/2", "http://b.example/2"));
+
+    assert_eq!(
+        derive_ntriples(&a, "2026-09-05T00:00:00Z").unwrap(),
+        derive_ntriples(&b, "2026-09-05T00:00:00Z").unwrap()
+    );
+}
+
+#[test]
+fn the_alignment_graph_iri_is_derived_and_order_independent() {
+    assert_eq!(
+        derived_graph_iri("urn:g:a", "urn:g:b"),
+        derived_graph_iri("urn:g:b", "urn:g:a"),
+        "criteria 5 and 6 need the IRI to be a function of the inputs"
+    );
+    assert!(derived_graph_iri("urn:g:a", "urn:g:b").starts_with("urn:quipu:align:"));
+}
+
+// ---------------------------------------------------------------------------
+// decide — the operator's judgement (aegis-sosiaa)
+// ---------------------------------------------------------------------------
+
+use super::decide::{Decision, DecisionRow, decide};
+
+const A: &str = "http://a.example/x";
+const B: &str = "http://b.example/y";
+
+fn proposed() -> MappingSet {
+    let mut set = MappingSet::new("urn:quipu:align:a:b");
+    set.mappings.push(mapping(A, B));
+    set
+}
+
+fn row(s: &str, o: &str, decision: Decision) -> DecisionRow {
+    DecisionRow {
+        subject_id: s.into(),
+        object_id: o.into(),
+        decision,
+    }
+}
+
+#[test]
+fn accept_authors_the_row_so_it_derives_a_knot() {
+    let out = decide(&proposed(), &[row(A, B, Decision::Accept)], "malcolm").unwrap();
+    assert_eq!(out.applied, 1);
+    let m = &out.set.mappings[0];
+    assert!(m.derives_knot());
+    assert!(!m.derives_distinct_from());
+    assert_eq!(m.author_id.as_deref(), Some("malcolm"));
+}
+
+#[test]
+fn negate_asserts_difference_rather_than_merely_suppressing() {
+    let out = decide(&proposed(), &[row(A, B, Decision::Negate)], "malcolm").unwrap();
+    let m = &out.set.mappings[0];
+    assert!(m.derives_distinct_from());
+    assert!(!m.derives_knot());
+    assert_eq!(m.author_id.as_deref(), Some("malcolm"));
+}
+
+/// ⚠️ COVERAGE CHECK, generalisable: when a new behaviour has an obvious
+/// existing test nearby, ask whether that test would pass in BOTH worlds
+/// before counting it as coverage.
+///
+/// Here it does. `a_declined_pair_is_not_proposed_again` sits directly below,
+/// is obviously about declining, and passes whether or not `Decline` authors
+/// the row — because suppression works either way. So the adjacent, relevant,
+/// GREEN test is precisely the camouflage for the bug, and only the
+/// `author_id == None` assertion below distinguishes the two worlds.
+///
+/// Measured by sabotage: making `Decline` set `author_id` fails this test and
+/// leaves that one green.
+#[test]
+fn decline_suppresses_but_is_never_authored() {
+    let out = decide(&proposed(), &[row(A, B, Decision::Decline)], "malcolm").unwrap();
+    let m = &out.set.mappings[0];
+
+    // Derives NOTHING. "Not enough evidence" is not "definitely different", and
+    // a derived distinctFrom would suppress the pair everywhere, forever, while
+    // nobody is ever shown the mistake.
+    assert!(!m.derives_knot());
+    assert!(!m.derives_distinct_from());
+
+    // And is NOT authored: an authored row is one an SSSOM consumer may read as
+    // curated truth, and declining asserts nothing at all. This is the
+    // assertion that stops a decline leaking out of quipu as a claim.
+    assert_eq!(m.author_id, None, "a declined row must never be authored");
+
+    // ...but it IS reviewed, which is what stops propose re-offering it.
+    assert!(m.is_reviewed());
+}
+
+#[test]
+fn a_declined_pair_is_not_proposed_again() {
+    use super::propose::{Concept, LinkSpec, propose};
+    let decided = decide(&proposed(), &[row(A, B, Decision::Decline)], "malcolm")
+        .unwrap()
+        .set;
+    let left = vec![Concept {
+        iri: A.into(),
+        label: "same-name".into(),
+        types: vec![],
+    }];
+    let right = vec![Concept {
+        iri: B.into(),
+        label: "same-name".into(),
+        types: vec![],
+    }];
+    let spec = LinkSpec {
+        require_shared_type: false,
+        ..LinkSpec::default()
+    };
+    let again = propose(&left, &right, &spec, &decided, "urn:quipu:align:a:b");
+    assert!(
+        again.mappings.is_empty(),
+        "a decline that does not suppress re-proposal has not decided anything"
+    );
+}
+
+#[test]
+fn a_decision_matches_the_pair_in_either_direction() {
+    // The operator wrote the pair the other way round; it is one judgement.
+    let out = decide(&proposed(), &[row(B, A, Decision::Accept)], "malcolm").unwrap();
+    assert_eq!(out.applied, 1);
+    assert!(out.set.mappings[0].derives_knot());
+    assert!(out.unmatched.is_empty());
+}
+
+#[test]
+fn a_decision_naming_no_pair_in_the_set_is_reported_not_dropped() {
+    let out = decide(
+        &proposed(),
+        &[
+            row(A, B, Decision::Accept),
+            row(
+                "http://a.example/ghost",
+                "http://b.example/ghost",
+                Decision::Accept,
+            ),
+        ],
+        "malcolm",
+    )
+    .unwrap();
+
+    assert_eq!(out.applied, 1);
+    // A decision that silently does nothing is indistinguishable from one that
+    // was applied — which is the whole reason this is counted.
+    assert_eq!(out.unmatched.len(), 1);
+    assert_eq!(
+        out.unmatched[0],
+        (
+            "http://a.example/ghost".to_string(),
+            "http://b.example/ghost".to_string()
+        )
+    );
+    let s = out.summary();
+    assert!(s.contains("applied") && s.contains("named no pair"), "{s}");
+}
+
+#[test]
+fn contradicting_yourself_in_one_batch_is_refused_not_resolved() {
+    let err = decide(
+        &proposed(),
+        &[row(A, B, Decision::Accept), row(B, A, Decision::Decline)],
+        "malcolm",
+    )
+    .unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("conflicting"), "{msg}");
+    // Refused, not silently last-wins: picking one records a judgement the
+    // operator did not make.
+}
+
+#[test]
+fn repeating_the_same_decision_is_not_a_contradiction() {
+    // Repetition has an innocent cause; contradiction does not.
+    let out = decide(
+        &proposed(),
+        &[row(A, B, Decision::Accept), row(A, B, Decision::Accept)],
+        "malcolm",
+    )
+    .unwrap();
+    assert_eq!(out.applied, 1);
+    assert!(out.unmatched.is_empty());
+}
+
+#[test]
+fn re_deciding_a_decided_row_is_refused_because_it_would_erase_the_first() {
+    let once = decide(&proposed(), &[row(A, B, Decision::Accept)], "malcolm")
+        .unwrap()
+        .set;
+    let err = decide(&once, &[row(A, B, Decision::Decline)], "malcolm").unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("retraction"), "{msg}");
+}
+
+#[test]
+fn an_unattributed_decision_is_refused() {
+    let err = decide(&proposed(), &[row(A, B, Decision::Accept)], "   ").unwrap_err();
+    assert!(err.to_string().contains("reviewer"), "{err}");
+}
+
+#[test]
+fn an_unknown_decision_word_is_refused_rather_than_defaulted() {
+    let err = Decision::parse("maybe").unwrap_err();
+    assert!(err.to_string().contains("unknown decision"), "{err}");
+    // Defaulting to "decline" would silently suppress a pair the operator may
+    // have meant to accept.
+    assert_eq!(Decision::parse("accept").unwrap(), Decision::Accept);
+    assert_eq!(Decision::parse("negate").unwrap(), Decision::Negate);
+    assert_eq!(Decision::parse("decline").unwrap(), Decision::Decline);
+}

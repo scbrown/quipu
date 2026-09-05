@@ -533,6 +533,66 @@ fn retract_hides_from_current() {
     assert_eq!(after_retract.len(), 0);
 }
 
+/// The same, INTO A NAMED GRAPH — the case `transact_to_graph` scopes separately.
+///
+/// `ops.rs` skips an assertion when an active fact with the same `(e, a, v)`
+/// already exists **in this graph**, and that scoping is deliberate: an overlay
+/// write must not be skipped because ROOT happens to hold the triple. The ROOT
+/// case is covered by [`duplicate_assert_across_transactions_is_idempotent`]
+/// above; this covers the graph case, which nothing did.
+///
+/// # Who depends on this
+///
+/// `align apply` (aegis-sosiaa). Two consequences, both of which stop holding
+/// if this dedupe goes away:
+///
+/// * re-applying an UNCHANGED mapping set is idempotent because of THIS, not
+///   because of anything in `align` — so an `align` test that re-runs an
+///   unchanged set proves the store's behaviour, not `apply`'s;
+/// * `align apply` deliberately does NOT refuse two identical concurrent
+///   invocations, on the grounds that the second write is a no-op. Without this
+///   dedupe that permissive arm double-writes, and the concurrency guard would
+///   have to refuse identical applies too.
+///
+/// So this is a STORE contract with a downstream caller, not an `align` detail,
+/// and it is pinned here where a change to `transact_to_graph` will meet it
+/// rather than in `align`'s tests where that change would never look.
+#[test]
+fn duplicate_assert_into_a_named_graph_is_idempotent() {
+    let mut store = test_store();
+    let g = store.graph_create("urn:quipu:test:dedupe").unwrap();
+    let triple =
+        "<http://a.example/x> <http://www.w3.org/2002/07/owl#sameAs> <http://b.example/y> .\n";
+
+    for _ in 0..2 {
+        crate::rdf::ingest_rdf_to_graph(
+            &mut store,
+            triple.as_bytes(),
+            oxrdfio::RdfFormat::NTriples,
+            None,
+            "2026-09-05T00:00:00Z",
+            None,
+            Some("dedupe-test"),
+            g,
+        )
+        .unwrap();
+    }
+
+    let live: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE g = ?1 AND op = 1 AND valid_to IS NULL",
+            [g],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        live, 1,
+        "transact_to_graph stopped deduping identical assertions; align apply's \
+         idempotence and its permissive concurrency arm both rest on this"
+    );
+}
+
 #[test]
 fn duplicate_assert_across_transactions_is_idempotent() {
     let mut store = test_store();
