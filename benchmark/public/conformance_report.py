@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -565,6 +566,89 @@ def artifacts(data: dict, docs_dir: Path) -> dict[Path, str]:
     return files
 
 
+# Paths whose change can move a conformance number. A ledger derived from a
+# revision that differs from HEAD only in docs or CI config still describes the
+# code it ships beside; one that differs HERE does not.
+#
+# A git PATHSPEC, deliberately narrow. `benchmark/public` wholesale was wrong
+# and self-defeating: it contains `results/*.json`, the ledgers themselves, so
+# committing a freshly re-derived ledger would itself count as a code change
+# and the check could never be satisfied. Measured while writing it — a guard
+# that can never go green is not a guard.
+CODE_PATHS = ("src", "benchmark/public/*.py")
+
+
+def _git(*args: str) -> tuple[int, str]:
+    proc = subprocess.run(
+        ["git", *args],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parents[2]),
+        check=False,
+    )
+    return proc.returncode, proc.stdout.strip()
+
+
+def ledger_provenance(data: dict) -> tuple[int, list[str]]:
+    """Is each ledger derived from the code it ships beside?
+
+    Returns ``(exit_code, messages)`` with THREE outcomes, because two cannot
+    express the one that matters:
+
+    * ``0`` — the ledger's revision is HEAD, or differs from it only outside
+      ``CODE_PATHS``. A docs-only or ledger-only commit does not invalidate a
+      measurement.
+    * ``1`` — DRIFT. The ledger was produced by CI, from a genuinely different
+      build of the code it ships with. This is the case `--check` could not see
+      before (wu, review of #150): it compared the PAGE against the LEDGER and
+      never the LEDGER against HEAD.
+    * ``2`` — CANNOT VERIFY, never silently ``0``. Chiefly a SHALLOW CLONE: the
+      ledger's revision is simply absent from a ``--depth=1`` checkout, and
+      `git diff` then fails for a reason that has nothing to do with drift. A
+      pass/fail verdict is FORCED to render "I examined nothing" as "nothing
+      was wrong", which is the direction that lets drift through (aegis-9bgp).
+    """
+    rc, head = _git("rev-parse", "HEAD")
+    if rc != 0:
+        return 2, ["cannot resolve HEAD (not a git checkout?) — provenance UNVERIFIED"]
+
+    revisions = {
+        key: value
+        for key, value in data.items()
+        if key.endswith("quipu_revision") and isinstance(value, str) and value
+    }
+    if not revisions:
+        return 2, ["no quipu_revision in any ledger — provenance UNVERIFIED"]
+
+    drifted: list[str] = []
+    unknown: list[str] = []
+    for key, revision in sorted(revisions.items()):
+        if revision == head:
+            continue
+        if _git("cat-file", "-e", f"{revision}^{{commit}}")[0] != 0:
+            unknown.append(
+                f"{key}={revision[:8]} is not in this clone — SHALLOW? "
+                f"provenance UNVERIFIED (checkout with fetch-depth: 0)"
+            )
+            continue
+        rc, changed = _git("diff", "--name-only", revision, head, "--", *CODE_PATHS)
+        if rc != 0:
+            unknown.append(f"{key}={revision[:8]}: git diff failed — provenance UNVERIFIED")
+        elif changed:
+            files = changed.splitlines()
+            drifted.append(
+                f"{key}={revision[:8]} but HEAD={head[:8]}, and "
+                f"{len(files)} code file(s) differ between them: "
+                + ", ".join(files[:4])
+                + (" ..." if len(files) > 4 else "")
+            )
+    if unknown:
+        return 2, unknown
+    if drifted:
+        return 1, drifted
+    return 0, []
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, default=Path("benchmark/public/results"))
@@ -603,7 +687,24 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        code, messages = ledger_provenance(data)
+        if code:
+            label = (
+                "ledger provenance CANNOT BE VERIFIED"
+                if code == 2
+                else "a ledger was NOT derived from the code it ships with"
+            )
+            print(f"conformance_report: {label}:", file=sys.stderr)
+            for message in messages:
+                print(f"  {message}", file=sys.stderr)
+            if code == 1:
+                print(
+                    "Re-derive on this HEAD: gh workflow run conformance.yml --ref <branch>",
+                    file=sys.stderr,
+                )
+            return code
         print(f"conformance_report: {len(files)} published artifact(s) match the ledgers")
+        print("conformance_report: every ledger is derived from the code it ships with")
         return 0
 
     for path, content in sorted(files.items()):
