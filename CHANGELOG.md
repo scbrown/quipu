@@ -4,8 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [0.3.36] - 2026-09-05
 
+### Added
+
+- *(align)* R2 — reach an alignment assertion without knowing it exists([5020433](https://github.com/scbrown/quipu/commit/502043357ba2c771d40164e16fb4b63489155510))
+
+
+
 ### Fixed
 
+- *(align)* R2 offers a VERDICT, not a command that does not work([6f4cfe9](https://github.com/scbrown/quipu/commit/6f4cfe9f60719f80ce68c3f0e76f785673219060))
 - *(import)* An exact name match is a PROPOSAL, not a silent IRI rewrite([baa9d98](https://github.com/scbrown/quipu/commit/baa9d9818b4754828e2a6ab30de76a7b508fc447))
 
 ## [0.3.35] - 2026-09-05
