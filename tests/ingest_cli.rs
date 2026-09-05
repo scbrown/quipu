@@ -1,6 +1,14 @@
 //! End-to-end contract for `quipu ingest` — the declared, streaming bulk load
 //! (aegis-j0yaxj.2).
 //!
+//! GATED ON `shacl` BECAUSE THE BINARY IS. `[[bin]] quipu` carries
+//! `required-features = ["shacl"]`, so on the `--no-default-features` CI leg the
+//! binary is never built and `CARGO_BIN_EXE_quipu` points at a path that does not
+//! exist. Ungated, all five arms fail identically with `Os { code: 2, NotFound }` —
+//! which reads as "the verb is broken" and is really "the binary was not built on
+//! this leg". Same gate as `tests/aegis_ontology_shapes.rs` and `tests/share_cli.rs`
+//! (malcolm, on quipu #161).
+//!
 //! These drive the BINARY, not the library. The library functions
 //! (`ingest_rdf_chunked`, `ingest_rdf_declared`) already have their own
 //! mutation-checked unit tests; what is untested until here is everything the CLI
@@ -10,6 +18,7 @@
 //! The exit CODE is part of the contract and not decoration. A benchmark harness
 //! reads it, and a refusal that exits 0 would let a truncated load into a published
 //! number — which is the whole thing this verb exists to prevent.
+#![cfg(feature = "shacl")]
 
 use std::process::{Command, Output};
 
