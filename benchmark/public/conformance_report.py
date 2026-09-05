@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -451,13 +452,79 @@ def render_markdown(data: dict) -> str:
         counts = tally([row for row in shacl_rows if row.get("category") == category])
         out.append(f"| `{category}` | {counts['passed']} | {counts['failed']} | {counts['error']} | {counts['unsupported']} | {counts['cases']} |")
     entailment = classes["entailment"]["counts"]
-    out += ["", "## Entailment-regime commitments", "",
-        f"All six regimes remain deliberate non-goals: **{entailment['passed']}/{entailment['cases']}** pass and {entailment['unsupported']} are unsupported.",
-        "Local RDFS and OWL extensions are not standards-regime claims.", "",
-        "| Regime | Cases | Commitment |", "|---|---:|---|",
+    # Read the commitment from the LEDGER rather than printing a literal. The
+    # previous version stated "All six regimes remain deliberate non-goals" and
+    # a hardcoded third column, so flipping a regime changed nothing here and
+    # the page would have kept publishing the old claim over new data
+    # (aegis-1gp76j).
+    entailment_rows = [
+        row for row in data["entailment"].get("results", [])
+        if row.get("decision_bucket")
     ]
+    commitments: dict[str, str] = {}
+    for row in entailment_rows:
+        commitments.setdefault(row["decision_bucket"], row.get("commitment", "deliberate-non-goal"))
+    goals = sorted(r for r, c in commitments.items() if c == "goal")
+    non_goals = sorted(r for r, c in commitments.items() if c != "goal")
+
+    if goals:
+        goal_rows = [r for r in entailment_rows if commitments.get(r["decision_bucket"]) == "goal"]
+        goal_passed = sum(1 for r in goal_rows if r.get("status") == "passed")
+        headline = (
+            f"{len(goals)} of {len(commitments)} regimes are goals ({', '.join(goals)}): "
+            f"**{goal_passed}/{len(goal_rows)}** of their cases pass. "
+            f"The remaining {len(non_goals)} are deliberate non-goals."
+        )
+    else:
+        headline = (
+            f"All {len(commitments)} regimes remain deliberate non-goals: "
+            f"**{entailment['passed']}/{entailment['cases']}** pass and "
+            f"{entailment['unsupported']} are unsupported."
+        )
+    # Ledger PROVENANCE beside the headline: WHEN it was re-derived and BY WHAT.
+    # A page that states only WHAT was measured cannot show that its own
+    # regression gate has been dead for two days — which is exactly what
+    # happened between 09-03 and 09-05 (aegis-1gp76j / aegis-tydvlg).
+    led = data["entailment"]
+    when = led.get("generated_at")
+    by = led.get("generated_by")
+    if when and by:
+        origin = f"[CI run]({by})" if by.startswith("http") else f"**{by}** — NOT CI-produced"
+        prov = f"Ledger re-derived {when} by {origin}, from quipu `{led['quipu_revision'][:12]}`."
+    else:
+        prov = (
+            "Ledger carries no re-derivation provenance — it predates "
+            "`generated_at`/`generated_by`, so WHEN and BY WHAT are unknown."
+        )
+    out += ["", "## Entailment-regime commitments", "", headline, prov,
+        "Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.", "",
+    ]
+    if goals:
+        # The caveat rides WITH the number, in the generator, because a reader
+        # who sees only the fraction will size the remaining work from it and
+        # size the wrong thing (aegis-1gp76j).
+        out += [
+            "> **Do not read the goal-regime fraction as \"nearly done\".** The two numbers have "
+            "different characters. Most RDF-regime cases are `bind*` tests answerable under simple "
+            "entailment, so they pass without any additional inference — a high RDF score is not "
+            "evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure "
+            "(rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and "
+            "composed into the default graph when the regime is in force, which is what a query "
+            "like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the "
+            "entailed triple has to EXIST and cannot be produced by rewriting the pattern. What "
+            "remains failing is not more of the same closure: it is container and axiomatic shapes "
+            "beyond those six rules, and OWL-flavoured cases filed under RDFS.",
+            "",
+        ]
+    out += ["| Regime | Cases | Passed | Commitment |", "|---|---:|---:|---|"]
     for regime, count in data["entailment"]["classes"]["entailment"]["decision_buckets"].items():
-        out.append(f"| {regime} | {count} | deliberate non-goal |")
+        commitment = commitments.get(regime, "deliberate-non-goal")
+        passed = sum(
+            1 for r in entailment_rows
+            if r.get("decision_bucket") == regime and r.get("status") == "passed"
+        )
+        label = "goal" if commitment == "goal" else "deliberate non-goal"
+        out.append(f"| {regime} | {count} | {passed} | {label} |")
     out += ["", "Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).", ""]
     return "\n".join(out)
 
@@ -499,6 +566,89 @@ def artifacts(data: dict, docs_dir: Path) -> dict[Path, str]:
     return files
 
 
+# Paths whose change can move a conformance number. A ledger derived from a
+# revision that differs from HEAD only in docs or CI config still describes the
+# code it ships beside; one that differs HERE does not.
+#
+# A git PATHSPEC, deliberately narrow. `benchmark/public` wholesale was wrong
+# and self-defeating: it contains `results/*.json`, the ledgers themselves, so
+# committing a freshly re-derived ledger would itself count as a code change
+# and the check could never be satisfied. Measured while writing it — a guard
+# that can never go green is not a guard.
+CODE_PATHS = ("src", "benchmark/public/*.py")
+
+
+def _git(*args: str) -> tuple[int, str]:
+    proc = subprocess.run(
+        ["git", *args],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parents[2]),
+        check=False,
+    )
+    return proc.returncode, proc.stdout.strip()
+
+
+def ledger_provenance(data: dict) -> tuple[int, list[str]]:
+    """Is each ledger derived from the code it ships beside?
+
+    Returns ``(exit_code, messages)`` with THREE outcomes, because two cannot
+    express the one that matters:
+
+    * ``0`` — the ledger's revision is HEAD, or differs from it only outside
+      ``CODE_PATHS``. A docs-only or ledger-only commit does not invalidate a
+      measurement.
+    * ``1`` — DRIFT. The ledger was produced by CI, from a genuinely different
+      build of the code it ships with. This is the case `--check` could not see
+      before (wu, review of #150): it compared the PAGE against the LEDGER and
+      never the LEDGER against HEAD.
+    * ``2`` — CANNOT VERIFY, never silently ``0``. Chiefly a SHALLOW CLONE: the
+      ledger's revision is simply absent from a ``--depth=1`` checkout, and
+      `git diff` then fails for a reason that has nothing to do with drift. A
+      pass/fail verdict is FORCED to render "I examined nothing" as "nothing
+      was wrong", which is the direction that lets drift through (aegis-9bgp).
+    """
+    rc, head = _git("rev-parse", "HEAD")
+    if rc != 0:
+        return 2, ["cannot resolve HEAD (not a git checkout?) — provenance UNVERIFIED"]
+
+    revisions = {
+        key: value
+        for key, value in data.items()
+        if key.endswith("quipu_revision") and isinstance(value, str) and value
+    }
+    if not revisions:
+        return 2, ["no quipu_revision in any ledger — provenance UNVERIFIED"]
+
+    drifted: list[str] = []
+    unknown: list[str] = []
+    for key, revision in sorted(revisions.items()):
+        if revision == head:
+            continue
+        if _git("cat-file", "-e", f"{revision}^{{commit}}")[0] != 0:
+            unknown.append(
+                f"{key}={revision[:8]} is not in this clone — SHALLOW? "
+                f"provenance UNVERIFIED (checkout with fetch-depth: 0)"
+            )
+            continue
+        rc, changed = _git("diff", "--name-only", revision, head, "--", *CODE_PATHS)
+        if rc != 0:
+            unknown.append(f"{key}={revision[:8]}: git diff failed — provenance UNVERIFIED")
+        elif changed:
+            files = changed.splitlines()
+            drifted.append(
+                f"{key}={revision[:8]} but HEAD={head[:8]}, and "
+                f"{len(files)} code file(s) differ between them: "
+                + ", ".join(files[:4])
+                + (" ..." if len(files) > 4 else "")
+            )
+    if unknown:
+        return 2, unknown
+    if drifted:
+        return 1, drifted
+    return 0, []
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, default=Path("benchmark/public/results"))
@@ -537,7 +687,24 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        code, messages = ledger_provenance(data)
+        if code:
+            label = (
+                "ledger provenance CANNOT BE VERIFIED"
+                if code == 2
+                else "a ledger was NOT derived from the code it ships with"
+            )
+            print(f"conformance_report: {label}:", file=sys.stderr)
+            for message in messages:
+                print(f"  {message}", file=sys.stderr)
+            if code == 1:
+                print(
+                    "Re-derive on this HEAD: gh workflow run conformance.yml --ref <branch>",
+                    file=sys.stderr,
+                )
+            return code
         print(f"conformance_report: {len(files)} published artifact(s) match the ledgers")
+        print("conformance_report: every ledger is derived from the code it ships with")
         return 0
 
     for path, content in sorted(files.items()):
