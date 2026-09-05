@@ -1,0 +1,93 @@
+name: Refuse to publish assets onto a tag that is not what we built
+description: >-
+  Assert the tag being uploaded to points at the commit this run checked out.
+  Refuses otherwise, before any asset is written.
+
+# WHY (aegis-dsbt2g).
+#
+# release.yml's `workflow_dispatch` path takes a tag as input and is described as
+# "Existing tag to attach binaries to". It was built for a real situation: a
+# release whose asset upload failed, re-run against its own tag minutes later.
+#
+# Used at ANY LATER TIME it silently corrupts a published release, and three
+# properties compound to make it invisible:
+#
+#   1. `actions/checkout` here carries NO `ref`, so a dispatch builds the
+#      DISPATCH BRANCH. The tag input only picks the upload target and the
+#      artifact FILENAME.
+#   2. BOTH asset jobs run on a dispatch, not just the one the operator has in
+#      mind — the binary tarball, its .sha256, and the repository qpack go too.
+#   3. Every upload passes `--clobber`.
+#
+# So dispatching against an older tag replaces that release's assets with
+# current-main builds, published under the old version's filenames and an
+# embedded README announcing that version. THE CHECKSUM FILES ARE REGENERATED IN
+# THE SAME RUN, so they agree with the wrong build and a downloader's
+# verification PASSES. The substitution is self-consistent, which is what makes
+# it worse than a corrupted upload: nothing downstream can detect it.
+#
+# The near-miss that produced this guard is worth recording, because the
+# reasoning was careful and still wrong. The question asked was "does this deploy
+# anywhere" — and the answer is genuinely no: a superseded tag is inert to the
+# deploy lanes, which serve `main` and the latest published release. The question
+# that mattered was who CONSUMES the artifact, not who resolves it. The release
+# page is not inert to anyone installing from it.
+#
+# A guard, rather than a note, because the button is one click and reads as safe.
+#
+# TO EXERCISE THE RELEASE PATH DELIBERATELY: create a throwaway tag and a
+# PRERELEASE for it (prerelease so a latest-published deploy lane cannot select
+# it), dispatch against that, then delete it. The job requires the release to
+# exist already, so it must be created before the dispatch rather than by it.
+# That tag's commit IS head, so this guard passes.
+
+inputs:
+  tag:
+    description: The tag assets are about to be uploaded to.
+    required: true
+  token:
+    description: Token with read access, for resolving the tag to a commit.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Assert the tag points at the commit we built
+      shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+
+        # Resolve through the API rather than git: the callers check out shallow
+        # without tags, and `gh api repos/.../commits/<ref>` dereferences a
+        # lightweight OR an annotated tag to its commit in one call.
+        if ! tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG}" --jq .sha 2>/dev/null)"; then
+          echo "::error::cannot resolve tag ${TAG} to a commit — refusing to upload"
+          exit 1
+        fi
+
+        echo "tag ${TAG} -> ${tag_sha}"
+        echo "this run built -> ${GITHUB_SHA}"
+
+        if [ "$tag_sha" != "$GITHUB_SHA" ]; then
+          echo "::error::REFUSING: ${TAG} points at ${tag_sha}, but this run built ${GITHUB_SHA}."
+          {
+            echo "Uploading here would publish artifacts built from a DIFFERENT commit"
+            echo "under ${TAG}'s filenames, with --clobber, and would regenerate the"
+            echo "checksum files to match the wrong build — so a downloader verifying"
+            echo "the release would PASS. The substitution would be undetectable."
+            echo
+            echo "This path exists to re-upload assets for a release whose upload"
+            echo "failed, run against its OWN commit. It is not a way to rebuild an"
+            echo "older release."
+            echo
+            echo "To exercise the release workflow safely, create a throwaway tag and"
+            echo "a PRERELEASE for it, dispatch against that, and delete it after."
+            echo "See aegis-dsbt2g."
+          } >&2
+          exit 1
+        fi
+
+        echo "OK: ${TAG} is the commit this run built."
