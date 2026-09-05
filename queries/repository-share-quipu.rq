@@ -28,6 +28,11 @@ WHERE {
   }
   UNION
   {
+    ?s ?p ?o .
+    FILTER(STRSTARTS(STR(?s), "https://quipu.dev/knowledge/"))
+  }
+  UNION
+  {
     VALUES ?s {
       aegis:repo_quipu
       aegis:repo-embedded-knowledge-databases-directive-2026-09-03

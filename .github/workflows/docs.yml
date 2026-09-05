@@ -81,6 +81,8 @@ jobs:
             exit 0
           fi
           echo "Staging explorer assets from release ${TAG}"
+          PUBLISHED=$(gh release view "${TAG}" --json publishedAt --jq .publishedAt)
+          echo "EXPLORER_RELEASE_PUBLISHED_AT=${PUBLISHED}" >> "$GITHUB_ENV"
 
           if gh release download "${TAG}" --pattern '*-wasm.tar.gz' --dir "${TMP}"; then
             mkdir -p "${DEST}/pkg"
@@ -114,22 +116,7 @@ jobs:
       # them: a page published without its wasm is a real state, and it tells the
       # reader so rather than pretending.
       - name: Verify the explorer page was published
-        run: |
-          set -euo pipefail
-          for f in index.html explorer.js worker.js; do
-            test -s "docs/book/book/explore/$f" \
-              || { echo "missing from book output: explore/$f"; exit 1; }
-          done
-          if [ -d docs/book/src/explore/pkg ]; then
-            for f in pkg/quipu_wasm_explorer.js pkg/quipu_wasm_explorer_bg.wasm \
-                     repository.qpack.tar.gz; do
-              test -s "docs/book/book/explore/$f" \
-                || { echo "staged but not published: explore/$f"; exit 1; }
-            done
-            echo "explorer published WITH its wasm bundle and repository pack"
-          else
-            echo "::warning::explorer published WITHOUT a wasm bundle (no release carries one yet)"
-          fi
+        run: scripts/check-explorer-published.sh
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'

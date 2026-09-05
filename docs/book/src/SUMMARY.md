@@ -17,6 +17,7 @@
 - [Graph Kinds & Deep Freeze](concepts/graph-kinds.md)
 - [Governance: Policies, Verdicts & the Write Gate](concepts/governance.md)
 - [Knowledge Packs](concepts/knowledge-packs.md)
+- [Contributor Constellation](concepts/contributor-constellation.md)
 - [SHACL Validation](concepts/shacl-validation.md)
 - [Schema Evolution](concepts/schema-evolution.md)
 - [OWL Ontology Layer](concepts/owl.md)
