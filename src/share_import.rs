@@ -22,6 +22,15 @@ pub struct ShareImportRequest {
     pub source: String,
     #[serde(default)]
     pub actor: Option<String>,
+    /// Apply exact canonical-name matches as IRI rewrites at import time, as
+    /// releases before aegis-i48b9w did unconditionally.
+    ///
+    /// Defaults to FALSE, and the default is the point: an exact name match is a
+    /// PROPOSAL. `#[serde(default)]` means every existing caller keeps
+    /// deserialising and silently gets the safe behaviour, so the destructive
+    /// path is one a caller now has to ask for by name.
+    #[serde(default)]
+    pub accept_exact: bool,
 }
 
 /// Count split between admitted and quarantined triples.
@@ -38,6 +47,11 @@ pub struct ImportMatch {
     pub local: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub score: Option<f64>,
+    /// Why the resolver matched, e.g. `canonical_name:exact`. SSSOM's
+    /// `mapping_justification` in all but name: it is what lets a caller
+    /// bulk-accept the exact hits without re-deriving why they are exact.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_on: Option<String>,
 }
 
 /// Entity-resolution report for an imported graph.
@@ -202,7 +216,11 @@ fn labels(triples: &[Triple]) -> BTreeMap<String, String> {
     labels
 }
 
-fn resolve_and_rewrite(store: &Store, triples: &mut [Triple]) -> Result<ImportResolution> {
+fn resolve_and_rewrite(
+    store: &Store,
+    triples: &mut [Triple],
+    accept_exact: bool,
+) -> Result<ImportResolution> {
     let mut report = ImportResolution::default();
     let mut replacements = BTreeMap::new();
     for (foreign, label) in labels(triples) {
@@ -213,11 +231,25 @@ fn resolve_and_rewrite(store: &Store, triples: &mut [Triple]) -> Result<ImportRe
         }
         let top = &result.candidates[0];
         if top.score == 1.0 && top.matched_on == "canonical_name:exact" {
-            replacements.insert(foreign.clone(), top.iri.clone());
+            // aegis-i48b9w: an exact canonical-name match is a PROPOSAL, not a rewrite.
+            //
+            // The rewrite happened BEFORE the triples were stored, so the foreign
+            // identity was gone by the time anything could record it: there was nothing
+            // left to un-knot and no `owl:sameAs` was ever written. And because identity
+            // here is the literal name string (aegis-6pd03), two graphs that each hold a
+            // node named `config` or `main` were silently unified ACROSS A TRUST
+            // BOUNDARY.
+            //
+            // The match is still reported, now carrying its score and justification so a
+            // caller can bulk-accept the exact hits in one action.
+            if accept_exact {
+                replacements.insert(foreign.clone(), top.iri.clone());
+            }
             report.exact_merges.push(ImportMatch {
                 foreign,
                 local: top.iri.clone(),
-                score: None,
+                score: Some(top.score),
+                matched_on: Some(top.matched_on.clone()),
             });
         } else {
             for candidate in result.candidates {
@@ -225,6 +257,7 @@ fn resolve_and_rewrite(store: &Store, triples: &mut [Triple]) -> Result<ImportRe
                     foreign: foreign.clone(),
                     local: candidate.iri,
                     score: Some(candidate.score),
+                    matched_on: Some(candidate.matched_on),
                 });
             }
         }
@@ -307,7 +340,7 @@ pub fn import_share(
 ) -> Result<ShareImportResult> {
     verify_share(request)?;
     let mut triples = parse_triples(&request.export_ntriples)?;
-    let resolution = resolve_and_rewrite(store, &mut triples)?;
+    let resolution = resolve_and_rewrite(store, &mut triples, request.accept_exact)?;
     let resolved = serialize(&triples)?;
     let validation = validate_local(store, &resolved)?;
     let blockers = {
