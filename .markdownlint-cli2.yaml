@@ -14,11 +14,23 @@ globs:
   - "docs/book/src/**/*.md"
   - "README.md"
   - "CONTRIBUTING.md"
+  - "docs/RELEASING.md"
 
 # Tool-generated markdown. `bd init` writes these and rewrites them on upgrade,
 # so hand-fixing their MD029/MD032 violations would be reverted by the next bd
 # release and show up as churn. AGENTS.md is deliberately NOT here: it is the
 # repo's primary agent doc and stays linted, beads block included.
+#
+# CHANGELOG.md is here for the same reason and a sharper one: release-plz
+# GENERATES it, and its git-cliff template emits runs of blank lines that trip
+# MD012. That blocked the v0.3.31 release PR for hours; hand-fixing the lines
+# cut that release and nothing else, because the next generated changelog has
+# the same shape. Note the asymmetry this repairs: the CI "Markdown lint" job
+# passes no arguments and so lints these globs only, while the pre-commit hook
+# passes FILENAMES, which markdownlint-cli2 treats as additional globs -- so CI
+# was green on a file the hook was failing. Fix the template if you want the
+# blank runs gone from the published file (aegis-0zqyoo).
 ignores:
+  - "CHANGELOG.md"
   - ".beads/**/*.md"
   - ".agents/**/*.md"
