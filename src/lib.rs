@@ -124,6 +124,7 @@ pub use graph::{
 };
 pub use graph_view::tool_graph_view;
 pub use impact::{DEFAULT_HOPS, ImpactNode, ImpactOptions, ImpactReport, impact, speculate_remove};
+pub use mcp::align::{tool_align_apply, tool_align_decide, tool_align_propose};
 #[cfg(feature = "owl")]
 pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;

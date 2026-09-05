@@ -383,12 +383,63 @@ mod tests {
         // matrix, but include router fragments that `server.rs` merges. A
         // route moved into one of those fragments is still a registered route.
         let sources = [
-            include_str!("server.rs"),
-            include_str!("server/graph_store.rs"),
-            include_str!("server/snapshot_upload.rs"),
+            ("server.rs", include_str!("server.rs")),
+            ("server/align.rs", include_str!("server/align.rs")),
+            (
+                "server/graph_store.rs",
+                include_str!("server/graph_store.rs"),
+            ),
+            (
+                "server/snapshot_upload.rs",
+                include_str!("server/snapshot_upload.rs"),
+            ),
         ];
+        // The list above is hand-maintained, and a fragment MISSING from it is
+        // invisible to both tests here: its routes are never seen, so they are
+        // never reported unclassified either. That is the failure this guard
+        // must not have, so make the drift loud — every `#[path = "server/..."]`
+        // module that server.rs declares must either be scanned above or be
+        // listed as route-free.
+        const NO_ROUTES: &[&str] = &[
+            "server/admission.rs",
+            "server/assets.rs",
+            "server/base.rs",
+            "server/entity.rs",
+            "server/handle.rs",
+            "server/publication.rs",
+            "server/query_usage.rs",
+            "server/reason.rs",
+            "server/request_middleware.rs",
+            "server/service_description.rs",
+            "server/tests.rs",
+            "server/tools.rs",
+            "server/update.rs",
+        ];
+        let server_rs = include_str!("server.rs");
+        let mut declared = Vec::new();
+        let mut rest = server_rs;
+        while let Some(i) = rest.find("#[path = \"") {
+            rest = &rest[i + "#[path = \"".len()..];
+            if let Some(end) = rest.find('"') {
+                declared.push(&rest[..end]);
+                rest = &rest[end..];
+            }
+        }
+        let scanned: std::collections::HashSet<&str> = sources.iter().map(|(n, _)| *n).collect();
+        let unscanned: Vec<&str> = declared
+            .iter()
+            .copied()
+            .filter(|m| !scanned.contains(m) && !NO_ROUTES.contains(m))
+            .collect();
+        assert!(
+            unscanned.is_empty(),
+            "server.rs declares router fragment(s) {unscanned:?} that this test does \
+             not scan. Add each to `sources` (if it registers routes) or to NO_ROUTES \
+             (if it does not). A fragment absent from both is UNCHECKED: its routes are \
+             neither classified nor reported as unclassified."
+        );
         let mut paths = Vec::new();
-        for src in sources {
+        for (_, src) in sources {
             let mut remaining = src;
             while let Some(idx) = remaining.find(".route(") {
                 remaining = &remaining[idx + ".route(".len()..];

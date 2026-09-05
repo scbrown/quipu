@@ -18,6 +18,8 @@ use quipu::EmbeddingProvider;
 // explicitly.
 #[path = "server/admission.rs"]
 mod admission;
+#[path = "server/align.rs"]
+mod align;
 #[path = "server/assets.rs"]
 mod assets;
 #[path = "server/base.rs"]
@@ -426,6 +428,7 @@ async fn main() {
         .route("/export", post(export))
         .merge(graph_store::routes())
         .route("/share", post(share_payload))
+        .merge(align::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
         .route("/graph", post(graph_view))
