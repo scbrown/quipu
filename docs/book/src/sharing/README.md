@@ -112,10 +112,34 @@ command.
 
 ## Identity across stores
 
-Two stores will call the same thing by different names. Quipu does not paper over
-that with string matching: `quipu knot` writes real `owl:sameAs` edges, so the
-claim "these two IRIs are one entity" is itself a fact in the graph — visible,
-queryable, and retractable like any other fact.
+Two stores will call the same thing by different names. Quipu handles that in two
+places, and today one of them is stronger than the other.
+
+`quipu knot` writes real `owl:sameAs` edges, so the claim "these two IRIs are one
+entity" is itself a fact in the graph — visible, queryable, and retractable like
+any other fact. That is the model the project is built around.
+
+**Import does not yet work that way.** On an *exact canonical-name* match
+(`src/share_import.rs`, `resolve_and_rewrite`: `score == 1.0 && matched_on ==
+"canonical_name:exact"`), the incoming foreign IRI is **rewritten to the local one
+in the triples themselves**. The merge appears in the import response as an
+`exact_merges` entry, but no `owl:sameAs` is written — so once the share is
+promoted, the graph holds no record that two identifiers were ever treated as one.
+That merge is not queryable and not retractable, which is exactly what the `knot`
+model above gives you and this path does not.
+
+Sub-exact matches are *not* applied: they come back as candidates for review. The
+rewrite is confined to the exact-name case.
+
+**This is a known gap, not the design.** The intended behaviour is the one
+`knot` already implements: an exact-name match should be *proposed* as an
+alignment for the operator to accept, and recorded as an `owl:sameAs` fact —
+visible, queryable, retractable — rather than applied as a silent rewrite. That
+work is in progress; when it lands this section describes it instead, and the
+model above becomes true of both verbs.
+
+Until then, treat an import as identity-safe only where you control the naming
+in both stores.
 
 ## What travels: facts, graphs, whole repositories
 

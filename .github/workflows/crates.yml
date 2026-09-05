@@ -17,6 +17,19 @@ env:
 jobs:
   publish:
     name: Publish to crates.io
+    # A PRERELEASE must never reach crates.io. `release: [published]` fires for
+    # prereleases too, and `cargo publish` publishes the version in Cargo.toml
+    # regardless of which tag the release carries -- so a throwaway prerelease
+    # would attempt to publish whatever main is currently at, under a tag nobody
+    # intends to ship.
+    #
+    # This is not hypothetical. docs/RELEASING.md tells you to rehearse the
+    # release workflow by creating a throwaway tag and a PRERELEASE for it, and
+    # doing exactly that on 2026-09-05 fired this workflow (run 33959092337,
+    # ref rehearsal-wasm-20260905-0951). It failed only because crates.io
+    # Trusted Publishing is unconfigured (aegis-spg3zw) -- once that is fixed,
+    # the documented rehearsal would attempt a real publish.
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
     runs-on: ubuntu-latest
     permissions:
       contents: read

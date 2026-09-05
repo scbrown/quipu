@@ -1223,3 +1223,278 @@ fn an_unmatchable_entity_and_an_ambiguous_one_are_not_the_same_finding() {
         "two opposite findings must not render identically"
     );
 }
+
+// R3/R5 rest on a STORE contract, and it is pinned in the STORE's tests.
+//
+// `transact_to_graph` skips an assertion whose (e, a, v) is already active in
+// that graph. Re-applying an unchanged mapping set is therefore idempotent
+// because of the STORE, not because of `apply` — and `apply`'s permissive
+// concurrency arm (two identical invocations are not refused) rests on the same
+// property.
+//
+// The test lives in `store::tests::duplicate_assert_into_a_named_graph_is_idempotent`,
+// not here, because it is a contract a change to `transact_to_graph` must meet.
+// An align-side test would fail on that change too, but it would point the
+// reader at align — and whoever edits the store looks at the store's tests to
+// see what they must preserve (wu, aegis-sosiaa).
+//
+// What remains for align to prove is the aegis-x1175 case: the same pair with
+// CHANGED derived content, where the triples genuinely differ and nothing
+// dedupes them. That test belongs with `apply`.
+
+// ---------------------------------------------------------------------------
+// apply — R1 (provenance on the triple), R3 (idempotence by COUNT), R4 (one
+// transaction), R5 (the set version is checked at commit).
+
+use super::apply::{apply, derive_ntriples, derived_graph_iri, set_version};
+
+fn store_with_graph(iri: &str) -> (crate::Store, String) {
+    let store = crate::Store::open_in_memory().unwrap();
+    store.graph_create(iri).unwrap();
+    (store, iri.to_string())
+}
+
+fn decided_set() -> MappingSet {
+    let mut set = MappingSet::new("urn:quipu:align:test");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    set
+}
+
+fn live_count(store: &crate::Store, graph_iri: &str) -> i64 {
+    let g = store.lookup(graph_iri).unwrap().unwrap();
+    store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE g = ?1 AND op = 1 AND valid_to IS NULL",
+            [g],
+            |r| r.get(0),
+        )
+        .unwrap()
+}
+
+#[test]
+fn apply_writes_the_knot_and_is_idempotent_by_count() {
+    // R3, first half. The COUNT is the assertion, not apply's own report —
+    // aegis-x1175 is precisely a response that looks identical while the store
+    // grew.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t1");
+    let set = decided_set();
+    let v = set_version(&set).unwrap();
+
+    let first = apply(
+        &mut store,
+        &set,
+        &g,
+        &v,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+    assert!(first.changed_the_graph());
+    let after_first = live_count(&store, &g);
+
+    let second = apply(
+        &mut store,
+        &set,
+        &g,
+        &v,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+    assert_eq!(
+        second.written, 0,
+        "an unchanged re-apply must write nothing"
+    );
+    assert_eq!(
+        live_count(&store, &g),
+        after_first,
+        "the COUNT is what proves idempotence; the report is what x1175 makes untrustworthy"
+    );
+}
+
+#[test]
+fn re_applying_after_editing_a_row_does_not_accumulate() {
+    // R3's load-bearing half, and the aegis-x1175 case exactly: same pair, the
+    // derived content CHANGED. The store's dedupe does not help here, because
+    // the triples genuinely differ — so this is apply's problem, not the
+    // store's, and a naive idempotence test that only re-runs an unchanged set
+    // would pass while this fails.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t2");
+
+    let mut set = decided_set();
+    let v1 = set_version(&set).unwrap();
+    apply(
+        &mut store,
+        &set,
+        &g,
+        &v1,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+
+    // The operator revises the justification and re-applies.
+    set.mappings[0].mapping_justification = Justification::CompositeMatching;
+    let v2 = set_version(&set).unwrap();
+    assert_ne!(v1, v2, "editing a row must change the set version");
+    apply(
+        &mut store,
+        &set,
+        &g,
+        &v2,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+
+    // One justification fact for this subject, not two.
+    let subject = store.lookup("http://a.example/1").unwrap().unwrap();
+    let predicate = store
+        .lookup("https://quipu.dev/ontology/align/justification")
+        .unwrap()
+        .unwrap();
+    let live: i64 = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE e = ?1 AND a = ?2 AND op = 1 AND valid_to IS NULL",
+            [subject, predicate],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        live, 1,
+        "an edited row appended a second provenance fact — the aegis-x1175 shape"
+    );
+}
+
+#[test]
+fn apply_refuses_to_commit_a_set_that_changed_under_it() {
+    // R5. Two individually valid transactions with a mutation between them are
+    // not something atomicity can see, so the version is checked explicitly.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t3");
+    let set = decided_set();
+    let stale = set_version(&set).unwrap();
+
+    let mut edited = set.clone();
+    edited.mappings[0].author_id = Some("someone-else".into());
+
+    let err = apply(
+        &mut store,
+        &edited,
+        &g,
+        &stale,
+        "2026-09-05T00:00:00Z",
+        None,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("changed under this apply"), "{err}");
+    assert!(err.contains("Nothing was written"), "{err}");
+    assert_eq!(
+        live_count(&store, &g),
+        0,
+        "a refused apply must write nothing"
+    );
+}
+
+#[test]
+fn two_identical_applies_are_not_refused() {
+    // R5's permissive arm, which rests on the store dedupe pinned in
+    // store::tests::duplicate_assert_into_a_named_graph_is_idempotent. A guard
+    // that refused harmless concurrency would be turned off within a week.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t4");
+    let set = decided_set();
+    let v = set_version(&set).unwrap();
+
+    apply(&mut store, &set, &g, &v, "2026-09-05T00:00:00Z", Some("a")).unwrap();
+    let second = apply(&mut store, &set, &g, &v, "2026-09-05T00:00:00Z", Some("b"));
+    assert!(
+        second.is_ok(),
+        "identical concurrent applies must not be refused"
+    );
+    assert_eq!(second.unwrap().written, 0);
+}
+
+#[test]
+fn the_derived_triple_carries_its_own_provenance() {
+    // R1. Reachable from the assertion, without the mapping set.
+    let (mut store, g) = store_with_graph("urn:quipu:align:t5");
+    let set = decided_set();
+    let v = set_version(&set).unwrap();
+    apply(
+        &mut store,
+        &set,
+        &g,
+        &v,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+
+    let subject = store.lookup("http://a.example/1").unwrap().unwrap();
+    for predicate in [
+        "https://quipu.dev/ontology/align/assertedBy",
+        "https://quipu.dev/ontology/align/assertedOn",
+        "https://quipu.dev/ontology/align/justification",
+    ] {
+        let p = store
+            .lookup(predicate)
+            .unwrap_or_else(|_| panic!("{predicate} not interned"))
+            .unwrap_or_else(|| panic!("{predicate} not interned"));
+        let n: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM facts WHERE e = ?1 AND a = ?2 AND op = 1 AND valid_to IS NULL",
+                [subject, p],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1, "{predicate} missing from the derived assertion");
+    }
+}
+
+#[test]
+fn a_declined_row_writes_nothing_at_all() {
+    let (mut store, g) = store_with_graph("urn:quipu:align:t6");
+    let mut set = MappingSet::new("urn:quipu:align:test");
+    let mut declined = mapping("http://a.example/1", "http://b.example/1");
+    declined.quipu_review = Some(Review::Declined);
+    set.mappings.push(declined);
+    let v = set_version(&set).unwrap();
+
+    let report = apply(&mut store, &set, &g, &v, "2026-09-05T00:00:00Z", None).unwrap();
+    assert_eq!(report.written, 0);
+    assert_eq!(report.distinct_from, 0);
+    assert_eq!(live_count(&store, &g), 0);
+}
+
+#[test]
+fn derive_is_deterministic_regardless_of_row_order() {
+    let mut a = MappingSet::new("urn:t");
+    a.mappings
+        .push(authored_same("http://a.example/2", "http://b.example/2"));
+    a.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    let mut b = MappingSet::new("urn:t");
+    b.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    b.mappings
+        .push(authored_same("http://a.example/2", "http://b.example/2"));
+
+    assert_eq!(
+        derive_ntriples(&a, "2026-09-05T00:00:00Z").unwrap(),
+        derive_ntriples(&b, "2026-09-05T00:00:00Z").unwrap()
+    );
+}
+
+#[test]
+fn the_alignment_graph_iri_is_derived_and_order_independent() {
+    assert_eq!(
+        derived_graph_iri("urn:g:a", "urn:g:b"),
+        derived_graph_iri("urn:g:b", "urn:g:a"),
+        "criteria 5 and 6 need the IRI to be a function of the inputs"
+    );
+    assert!(derived_graph_iri("urn:g:a", "urn:g:b").starts_with("urn:quipu:align:"));
+}
