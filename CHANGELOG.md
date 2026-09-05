@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.36] - 2026-09-05
+
+### Added
+
+- *(rdf)* Streaming chunked ingest, and a declaration that refuses a short load([c0058f4](https://github.com/scbrown/quipu/commit/c0058f4b26452f77947032412d3173d603bc7f06))
+
 ## [0.3.35] - 2026-09-05
 
 ### Added
