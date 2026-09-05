@@ -86,6 +86,18 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      # The wasm acceptance must keep ONE definition (aegis-dsbt2g). Two
+      # hand-maintained copies of it diverged the moment they were written and
+      # the divergence only surfaced on a live release — v0.3.33 shipped with no
+      # wasm asset while the PR job was green on the same commit. Cheap, static,
+      # no network: it only parses two workflow files.
+      - id: wasm-workflow-shared
+        name: wasm acceptance has one definition
+        entry: scripts/check-wasm-workflow-shared.py
+        language: system
+        pass_filenames: false
+        files: ^\.github/(workflows/(ci|release)\.yml|actions/wasm-explorer-.*)$
+
       - id: mdbook-build
         name: mdbook build
         entry: scripts/precommit-mdbook.sh
