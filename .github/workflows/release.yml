@@ -271,6 +271,18 @@ jobs:
             cargo install wasm-bindgen-cli --version "$V" --locked --force
           fi
 
+      # The smoke below mints a share with the NATIVE binary and imports the
+      # result back with it, so this job needs it too. Its absence was invisible
+      # until a real release: `ci.yml`'s copy of this acceptance HAS this step,
+      # so the PR job went green while the release job — the one it exists to
+      # de-risk — died at `spawnSync target/release/quipu ENOENT`.
+      #
+      # KEEP THE TWO JOBS IN STEP. Running "the same" acceptance in two places
+      # protects nothing if the setup around it differs; the script was
+      # identical and the environment was not.
+      - name: Build the native binary
+        run: cargo build --release --locked --bin quipu
+
       - name: Build the explorer bundle
         working-directory: wasm/explorer
         run: |

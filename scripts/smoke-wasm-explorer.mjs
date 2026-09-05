@@ -17,7 +17,7 @@
 import { chromium } from "playwright";
 import { createServer } from "node:http";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync }
+import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync, existsSync }
   from "node:fs";
 import { Buffer } from "node:buffer";
 import { tmpdir } from "node:os";
@@ -47,6 +47,16 @@ process.on("exit", () => rmSync(work, { recursive: true, force: true }));
 // the round trip are the same commit by construction.
 
 const quipu = process.env.QUIPU_BIN ?? join(repo, "target/release/quipu");
+if (!existsSync(quipu)) {
+  console.error(
+    `native quipu binary not found at ${quipu}\n` +
+    "  This script mints a share with the NATIVE binary and imports the result back\n" +
+    "  with it, so the calling job must build it first:\n" +
+    "      cargo build --release --locked --bin quipu\n" +
+    "  or point QUIPU_BIN at an existing one.",
+  );
+  process.exit(2);
+}
 const db = join(work, "smoke.db");
 const shapes = join(work, "shapes.ttl");
 const seed = join(work, "seed.ttl");
