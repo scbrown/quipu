@@ -5,7 +5,7 @@
 //! that is expressible and findable (criterion 3), and a knot derived only from
 //! a decision the operator actually made (criteria 4 and 5).
 
-use super::sssom::{Justification, Mapping, MappingSet, OWL_SAME_AS};
+use super::sssom::{Justification, Mapping, MappingSet, OWL_SAME_AS, Review};
 
 fn mapping(subject: &str, object: &str) -> Mapping {
     Mapping {
@@ -18,6 +18,8 @@ fn mapping(subject: &str, object: &str) -> Mapping {
         predicate_modifier_not: None,
         confidence: Some(0.93),
         author_id: None,
+        quipu_review: None,
+        quipu_reviewed_by: None,
     }
 }
 
@@ -108,7 +110,7 @@ fn pair_key_is_unordered_so_a_rejection_suppresses_either_direction() {
 }
 
 #[test]
-fn decisions_reports_rulings_and_skips_the_undecided() {
+fn reviewed_reports_rulings_and_skips_the_unseen() {
     let mut set = MappingSet::new("urn:quipu:align:aaa:bbb");
     let mut accepted = mapping("http://a.example/1", "http://b.example/1");
     accepted.author_id = Some("malcolm".into());
@@ -119,15 +121,15 @@ fn decisions_reports_rulings_and_skips_the_undecided() {
     set.mappings
         .extend([accepted.clone(), rejected.clone(), skipped.clone()]);
 
-    let decisions = set.decisions();
+    let reviewed = set.reviewed();
     assert_eq!(
-        decisions.len(),
+        reviewed.len(),
         2,
-        "a skipped row is not a decision and must be re-proposed"
+        "a skipped row was never seen and must be re-proposed"
     );
-    assert_eq!(decisions.get(&accepted.pair_key()), Some(&false));
-    assert_eq!(decisions.get(&rejected.pair_key()), Some(&true));
-    assert!(!decisions.contains_key(&skipped.pair_key()));
+    assert!(reviewed.contains_key(&accepted.pair_key()));
+    assert!(reviewed.contains_key(&rejected.pair_key()));
+    assert!(!reviewed.contains_key(&skipped.pair_key()));
 }
 
 #[test]
@@ -250,4 +252,119 @@ fn a_distinct_from_in_a_committed_named_graph_suppresses_resolution() {
         "a distinctFrom in the alignment graph must reach resolution, or a rejection \
          suppresses nothing outside alignment: {seen:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// wu's review finding: a reject is TWO outcomes, and only one of them asserts.
+//
+// `distinctFrom` is a positive claim about the world. Most rejects in a review
+// loop mean "not enough evidence", not "definitely different" — and the
+// consequence is asymmetric in the dangerous direction: a wrong sameAs merges
+// two entities and looks wrong to the next reader, while a wrong distinctFrom
+// suppresses the pair everywhere, forever, and invisibly, because the system's
+// response to it is to stop mentioning the candidate.
+
+#[test]
+fn a_declined_row_suppresses_but_asserts_nothing() {
+    let mut m = mapping("http://a.example/x", "http://b.example/y");
+    m.quipu_review = Some(Review::Declined);
+    m.quipu_reviewed_by = Some("malcolm".into());
+
+    assert!(
+        m.is_reviewed(),
+        "a declined pair must not be proposed again"
+    );
+    assert!(
+        !m.is_decided(),
+        "declining asserts nothing, so it is not an SSSOM assertion"
+    );
+    assert!(!m.derives_knot());
+    assert!(
+        !m.derives_distinct_from(),
+        "absence of evidence must not become an assertion of difference"
+    );
+}
+
+#[test]
+fn only_an_asserted_negative_derives_distinct_from() {
+    let mut asserted = mapping("http://a.example/x", "http://b.example/y");
+    asserted.author_id = Some("malcolm".into());
+    asserted.predicate_modifier_not = Some(true);
+    assert!(asserted.derives_distinct_from());
+
+    let mut declined = mapping("http://a.example/p", "http://b.example/q");
+    declined.quipu_review = Some(Review::Declined);
+    assert!(!declined.derives_distinct_from());
+}
+
+#[test]
+fn a_declined_row_carries_no_author_so_sssom_readers_see_no_assertion() {
+    // The encoding is the safeguard, not just our accessors: an SSSOM consumer
+    // that knows nothing about `quipu_review` must not read a decline as a
+    // curated mapping. `author_id` empty is what guarantees that.
+    let mut set = MappingSet::new("urn:quipu:align:aaa:bbb");
+    let mut declined = mapping("http://a.example/x", "http://b.example/y");
+    declined.quipu_review = Some(Review::Declined);
+    declined.quipu_reviewed_by = Some("malcolm".into());
+    set.mappings.push(declined);
+
+    let tsv = set.to_tsv().unwrap();
+    let header: Vec<&str> = tsv
+        .lines()
+        .find(|l| l.starts_with("subject_id"))
+        .unwrap()
+        .split('\t')
+        .collect();
+    let row: Vec<&str> = tsv.lines().last().unwrap().split('\t').collect();
+    let cell = |name: &str| row[header.iter().position(|h| *h == name).unwrap()];
+
+    assert_eq!(
+        cell("author_id"),
+        "",
+        "a decline must not look authored to an SSSOM reader"
+    );
+    assert_eq!(
+        cell("predicate_modifier"),
+        "",
+        "a decline is not a negative mapping"
+    );
+    assert_eq!(cell("quipu_review"), "declined");
+    assert_eq!(cell("quipu_reviewed_by"), "malcolm");
+}
+
+#[test]
+fn review_state_round_trips_through_tsv() {
+    let mut set = MappingSet::new("urn:quipu:align:aaa:bbb");
+    let mut declined = mapping("http://a.example/x", "http://b.example/y");
+    declined.quipu_review = Some(Review::Declined);
+    declined.quipu_reviewed_by = Some("malcolm".into());
+    set.mappings.push(declined);
+    assert_eq!(MappingSet::from_tsv(&set.to_tsv().unwrap()).unwrap(), set);
+}
+
+#[test]
+fn an_unknown_review_state_is_refused_not_ignored() {
+    // Same reasoning as predicate_modifier: reading an unknown state as "no
+    // review" puts a declined candidate back into the proposal stream.
+    let tsv = "subject_id\tobject_id\tpredicate_id\tmapping_justification\tquipu_review\n\
+               http://a.example/x\thttp://b.example/y\towl:sameAs\tsemapv:LexicalMatching\tmaybe-later\n";
+    let err = MappingSet::from_tsv(tsv).unwrap_err().to_string();
+    assert!(err.contains("quipu_review"), "got: {err}");
+}
+
+#[test]
+fn asserted_different_returns_only_the_asserted_negatives() {
+    let mut set = MappingSet::new("urn:quipu:align:aaa:bbb");
+    let mut asserted = mapping("http://a.example/1", "http://b.example/1");
+    asserted.author_id = Some("malcolm".into());
+    asserted.predicate_modifier_not = Some(true);
+    let mut declined = mapping("http://a.example/2", "http://b.example/2");
+    declined.quipu_review = Some(Review::Declined);
+    let mut accepted = mapping("http://a.example/3", "http://b.example/3");
+    accepted.author_id = Some("malcolm".into());
+    set.mappings.extend([asserted.clone(), declined, accepted]);
+
+    let different = set.asserted_different();
+    assert_eq!(different.len(), 1);
+    assert_eq!(different[0].subject_id, asserted.subject_id);
 }

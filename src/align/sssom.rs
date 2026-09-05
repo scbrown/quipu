@@ -46,7 +46,7 @@ pub const OWL_SAME_AS: &str = "http://www.w3.org/2002/07/owl#sameAs";
 /// Order is fixed rather than derived so that `propose` run twice is
 /// byte-identical (acceptance criterion 2). A column set that reshuffles
 /// between runs cannot be reviewed in a diff.
-const COLUMNS: [&str; 9] = [
+const COLUMNS: [&str; 11] = [
     "subject_id",
     "subject_label",
     "predicate_id",
@@ -56,6 +56,12 @@ const COLUMNS: [&str; 9] = [
     "predicate_modifier",
     "confidence",
     "author_id",
+    // quipu extension slots. SSSOM permits extra columns and `sssom-py` carries
+    // them through, so a declined candidate travels with the set without
+    // pretending to be a mapping. See `Review` for why it cannot be an
+    // ordinary SSSOM row.
+    "quipu_review",
+    "quipu_reviewed_by",
 ];
 
 /// How a mapping came to be proposed, as a `semapv:` term.
@@ -130,6 +136,61 @@ impl Justification {
     }
 }
 
+/// What the operator did with a candidate, where that is NOT an assertion.
+///
+/// ## Why a reject needs splitting in two (wu, aegis-sosiaa review)
+///
+/// `owl:sameAs` asserts identity; `quipu:distinctFrom` asserts NON-identity.
+/// Both are claims about the world. But a reject in a review loop usually means
+/// *"not enough evidence"*, not *"these are definitely different things"* —
+/// and deriving `distinctFrom` from a bare reject converts absence of evidence
+/// into an assertion of difference. That is the exact mirror of the
+/// `skos:closeMatch` error [`Mapping::derives_knot`] avoids: a knot asserts
+/// identity and closeMatch does not.
+///
+/// The consequence is asymmetric in the dangerous direction. A wrong
+/// `owl:sameAs` merges two entities and the merged thing looks wrong to the
+/// next reader. A wrong `distinctFrom` suppresses the pair **everywhere,
+/// forever, and invisibly by construction** — the system's response to it is to
+/// stop mentioning the candidate, so nobody is ever shown the mistake.
+///
+/// So `Declined` is deliberately NOT an SSSOM assertion: `author_id` stays
+/// absent, because an authored row is one an SSSOM consumer may read as curated
+/// truth, and nothing was asserted here. The review state rides in quipu
+/// extension slots instead, where it suppresses re-proposal and derives
+/// nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Review {
+    /// Seen, and set aside without a claim either way. Suppresses re-proposal;
+    /// asserts nothing; derives nothing.
+    Declined,
+}
+
+impl Review {
+    /// The value written into the `quipu_review` column.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Declined => "declined",
+        }
+    }
+
+    /// Parse the `quipu_review` column.
+    ///
+    /// # Errors
+    /// The value is not one quipu writes. Refused rather than ignored: reading
+    /// an unknown review state as "no review" puts a declined candidate back
+    /// into the proposal stream.
+    pub fn parse(value: &str) -> Result<Self> {
+        match value {
+            "declined" => Ok(Self::Declined),
+            other => Err(Error::InvalidValue(format!(
+                "unknown quipu_review {other:?}; expected \"declined\""
+            ))),
+        }
+    }
+}
+
 /// One row of a mapping set.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Mapping {
@@ -160,16 +221,39 @@ pub struct Mapping {
     /// The matcher's score, where one produced this row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f64>,
-    /// Who decided. **Absence is what marks a row undecided.**
+    /// Who ASSERTED. **Absence is what marks a row un-asserted.**
+    ///
+    /// A declined row leaves this absent on purpose — see [`Review`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author_id: Option<String>,
+    /// Reviewed but not asserted. Suppresses re-proposal, derives nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quipu_review: Option<Review>,
+    /// Who reviewed, for a row that carries [`Review`] rather than an author.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quipu_reviewed_by: Option<String>,
 }
 
 impl Mapping {
-    /// Has an operator ruled on this row?
+    /// Did an operator ASSERT something here — an identity or a difference?
+    ///
+    /// This is the SSSOM question. It is deliberately narrower than
+    /// [`Mapping::is_reviewed`]: a declined row was ruled on and asserts
+    /// nothing.
     #[must_use]
     pub fn is_decided(&self) -> bool {
         self.author_id.is_some()
+    }
+
+    /// Has an operator SEEN this pair — asserted or declined?
+    ///
+    /// This is the suppression question, and the one `propose` asks. Splitting
+    /// it from [`Mapping::is_decided`] is the whole point of [`Review`]: a
+    /// candidate can be taken out of the review queue without a claim being
+    /// made about the world.
+    #[must_use]
+    pub fn is_reviewed(&self) -> bool {
+        self.is_decided() || self.quipu_review.is_some()
     }
 
     /// Is this a NOT mapping — an explicit "these are different things"?
@@ -188,6 +272,18 @@ impl Mapping {
         self.is_decided()
             && !self.is_negated()
             && (self.predicate_id == OWL_SAME_AS || self.predicate_id == "owl:sameAs")
+    }
+
+    /// Should this row derive a `quipu:distinctFrom` — an assertion that the
+    /// two concepts are NOT the same?
+    ///
+    /// Only an ASSERTED negative does. A declined row must not, because
+    /// "not enough evidence" is not "definitely different", and the derived
+    /// triple would suppress the pair everywhere while nobody is ever shown it
+    /// again. See [`Review`].
+    #[must_use]
+    pub fn derives_distinct_from(&self) -> bool {
+        self.is_decided() && self.is_negated()
     }
 
     /// The unordered identity of the pair, for de-duplication and for matching
@@ -248,16 +344,28 @@ impl MappingSet {
         });
     }
 
-    /// Every pair an operator has ruled on, and whether the ruling was negative.
+    /// Every pair an operator has SEEN, asserted or declined.
     ///
-    /// This is what `propose` consults so a rejected pair is not offered again
-    /// (acceptance criterion 3).
+    /// This is what `propose` consults so a reviewed pair is not offered again
+    /// (acceptance criterion 3). It is keyed on review rather than assertion
+    /// because a declined candidate must also stop coming back — that is the
+    /// point of declining it.
     #[must_use]
-    pub fn decisions(&self) -> BTreeMap<(String, String), bool> {
+    pub fn reviewed(&self) -> BTreeMap<(String, String), ()> {
         self.mappings
             .iter()
-            .filter(|m| m.is_decided())
-            .map(|m| (m.pair_key(), m.is_negated()))
+            .filter(|m| m.is_reviewed())
+            .map(|m| (m.pair_key(), ()))
+            .collect()
+    }
+
+    /// The pairs an operator asserted to be DIFFERENT, which are the only rows
+    /// that derive a `quipu:distinctFrom`.
+    #[must_use]
+    pub fn asserted_different(&self) -> Vec<&Mapping> {
+        self.mappings
+            .iter()
+            .filter(|m| m.derives_distinct_from())
             .collect()
     }
 }
@@ -300,6 +408,8 @@ impl MappingSet {
                 modifier,
                 confidence.as_str(),
                 m.author_id.as_deref().unwrap_or(""),
+                m.quipu_review.map_or("", Review::as_str),
+                m.quipu_reviewed_by.as_deref().unwrap_or(""),
             ];
             for (column, cell) in COLUMNS.iter().zip(cells.iter()) {
                 if cell.contains('\t') || cell.contains('\n') {
@@ -417,6 +527,13 @@ impl MappingSet {
                 predicate_modifier_not,
                 confidence,
                 author_id: some(get("author_id")),
+                quipu_review: match get("quipu_review") {
+                    "" => None,
+                    raw => Some(Review::parse(raw).map_err(|e| {
+                        Error::InvalidValue(format!("SSSOM/TSV row {}: {e}", row + 1))
+                    })?),
+                },
+                quipu_reviewed_by: some(get("quipu_reviewed_by")),
             });
         }
 
