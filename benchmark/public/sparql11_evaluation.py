@@ -893,8 +893,27 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
                 actual = run_result_format_case(case, quipu, server, database)
                 expected = expected_result(case.result)
             else:
+                # A goal entailment regime is ANSWERED under that regime: the
+                # engine composes the graph with its materialised closure. The
+                # QUERY TEXT is untouched -- rewriting it to add
+                # `FROM <g> FROM <g#inferred>` would be easy, local, and would
+                # make the published number describe a query the suite never
+                # asked (aegis-1gp76j).
+                read_argv = [str(quipu), "read", query, "--db", str(database)]
+                # RDFS closure applies to the RDFS REGIME ONLY. RDF entailment
+                # does not include the rdfs2/3/7/9 rules, so applying them to an
+                # RDF-regime case OVER-entails: measured, it broke `owlds02`
+                # (RDF bucket, 15/16 -> 14/16) while fixing six RDFS cases. The
+                # regime names which closure is licensed, and a stronger one is
+                # not a safer default.
+                if (
+                    case.test_class == "entailment"
+                    and ENTAILMENT_BUCKET.get(case.identifier) == "RDFS"
+                    and ENTAILMENT_COMMITMENT.get("RDFS") == "goal"
+                ):
+                    read_argv += ["--entailment", "rdfs"]
                 observed = subprocess.run(
-                    [str(quipu), "read", query, "--db", str(database)],
+                    read_argv,
                     text=True,
                     capture_output=True,
                 )
