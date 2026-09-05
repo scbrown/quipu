@@ -368,3 +368,219 @@ fn asserted_different_returns_only_the_asserted_negatives() {
     assert_eq!(different.len(), 1);
     assert_eq!(different[0].subject_id, asserted.subject_id);
 }
+
+// ---------------------------------------------------------------------------
+// propose — acceptance criteria 1, 2 and 3 from the design.
+
+use super::propose::{Concept, LinkSpec, propose, score_labels};
+
+fn concept(iri: &str, label: &str) -> Concept {
+    Concept {
+        iri: iri.into(),
+        label: label.into(),
+        types: vec!["http://aegis.gastown.local/ontology/Artifact".into()],
+    }
+}
+
+#[test]
+fn proposes_the_pair_the_design_names_and_writes_nothing() {
+    // Criterion 1: two stores holding `bobbin-release` and
+    // `Bobbin_release-artifact` produce a mapping set containing that pair,
+    // with the matcher's justification and a confidence.
+    let a = [concept("http://a.example/1", "bobbin-release")];
+    let b = [concept("http://b.example/1", "Bobbin_release-artifact")];
+    let set = propose(
+        &a,
+        &b,
+        &LinkSpec::default(),
+        &MappingSet::default(),
+        "urn:t",
+    );
+
+    assert_eq!(set.mappings.len(), 1, "{:?}", set.mappings);
+    let m = &set.mappings[0];
+    assert_eq!(m.subject_id, "http://a.example/1");
+    assert_eq!(m.object_id, "http://b.example/1");
+    assert!(m.confidence.unwrap() >= 0.85);
+    assert_eq!(
+        m.mapping_justification,
+        Justification::LexicalSimilarityThresholdMatching
+    );
+    assert!(!m.is_decided(), "propose decides nothing");
+    assert!(!m.is_reviewed(), "propose reviews nothing");
+}
+
+#[test]
+fn propose_is_deterministic_regardless_of_input_order() {
+    // Criterion 2: byte-identical output over an unchanged pair of graphs. The
+    // weak reading is "run it twice"; the real property is that the ORDER the
+    // concepts arrive in cannot change the bytes, because a store enumeration
+    // promises no order.
+    let a1 = [
+        concept("http://a.example/1", "alpha"),
+        concept("http://a.example/2", "beta"),
+    ];
+    let a2 = [
+        concept("http://a.example/2", "beta"),
+        concept("http://a.example/1", "alpha"),
+    ];
+    let b1 = [
+        concept("http://b.example/1", "alpha"),
+        concept("http://b.example/2", "beta"),
+    ];
+    let b2 = [
+        concept("http://b.example/2", "beta"),
+        concept("http://b.example/1", "alpha"),
+    ];
+
+    let one = propose(
+        &a1,
+        &b1,
+        &LinkSpec::default(),
+        &MappingSet::default(),
+        "urn:t",
+    );
+    let two = propose(
+        &a2,
+        &b2,
+        &LinkSpec::default(),
+        &MappingSet::default(),
+        "urn:t",
+    );
+    assert_eq!(one.to_tsv().unwrap(), two.to_tsv().unwrap());
+}
+
+#[test]
+fn a_reviewed_pair_is_not_proposed_again_in_either_direction() {
+    // Criterion 3, and the reason `pair_key` is unordered: a judgement recorded
+    // as (A,B) must not be undone by the generator emitting (B,A).
+    let a = [concept("http://a.example/1", "alpha")];
+    let b = [concept("http://b.example/1", "alpha")];
+
+    let mut prior = MappingSet::new("urn:t");
+    let mut rejected = mapping("http://b.example/1", "http://a.example/1"); // reversed
+    rejected.author_id = Some("malcolm".into());
+    rejected.predicate_modifier_not = Some(true);
+    prior.mappings.push(rejected);
+
+    let set = propose(&a, &b, &LinkSpec::default(), &prior, "urn:t");
+    assert!(
+        set.mappings.is_empty(),
+        "a rejected pair came back: {:?}",
+        set.mappings
+    );
+}
+
+#[test]
+fn a_declined_pair_is_also_not_proposed_again() {
+    // The decline outcome is only worth having if it actually suppresses.
+    let a = [concept("http://a.example/1", "alpha")];
+    let b = [concept("http://b.example/1", "alpha")];
+
+    let mut prior = MappingSet::new("urn:t");
+    let mut declined = mapping("http://a.example/1", "http://b.example/1");
+    declined.quipu_review = Some(Review::Declined);
+    prior.mappings.push(declined);
+
+    assert!(
+        propose(&a, &b, &LinkSpec::default(), &prior, "urn:t")
+            .mappings
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_skipped_pair_comes_back() {
+    // Skip is not rejection. An unauthored, unreviewed prior row must not
+    // suppress, or the operator loses the ability to defer.
+    let a = [concept("http://a.example/1", "alpha")];
+    let b = [concept("http://b.example/1", "alpha")];
+
+    let mut prior = MappingSet::new("urn:t");
+    prior
+        .mappings
+        .push(mapping("http://a.example/1", "http://b.example/1"));
+
+    assert_eq!(
+        propose(&a, &b, &LinkSpec::default(), &prior, "urn:t")
+            .mappings
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn a_shared_name_across_different_types_is_not_proposed() {
+    // The false positive an exact name match cannot catch, and the one the
+    // design names: two graphs each holding something called `bobbin` and
+    // meaning different kinds of thing.
+    let a = [Concept {
+        iri: "http://a.example/1".into(),
+        label: "bobbin".into(),
+        types: vec!["http://x/Repository".into()],
+    }];
+    let b = [Concept {
+        iri: "http://b.example/1".into(),
+        label: "bobbin".into(),
+        types: vec!["http://x/Host".into()],
+    }];
+
+    assert!(
+        propose(
+            &a,
+            &b,
+            &LinkSpec::default(),
+            &MappingSet::default(),
+            "urn:t"
+        )
+        .mappings
+        .is_empty()
+    );
+
+    let loose = LinkSpec {
+        require_shared_type: false,
+        ..LinkSpec::default()
+    };
+    assert_eq!(
+        propose(&a, &b, &loose, &MappingSet::default(), "urn:t")
+            .mappings
+            .len(),
+        1,
+        "the type gate must be the link spec's choice, not hardcoded"
+    );
+}
+
+#[test]
+fn two_commit_ids_are_refused_not_ranked() {
+    // Shared with resolution deliberately: two different hashes are distinct
+    // even though their `commit/<repo>/` prefix scores high. If alignment did
+    // not share this rule it would propose pairs resolution refuses.
+    assert!(score_labels("commit/quipu/aaaaaaaa1111", "commit/quipu/bbbbbbbb2222").is_none());
+}
+
+#[test]
+fn an_identical_label_scores_one_as_a_lexical_match() {
+    let (score, justification) = score_labels("Bobbin-Release", "bobbin-release").unwrap();
+    assert!(
+        (score - 1.0).abs() < f64::EPSILON,
+        "case-insensitive exact match"
+    );
+    assert_eq!(justification, Justification::LexicalMatching);
+}
+
+#[test]
+fn a_pair_below_the_floor_is_not_proposed() {
+    let a = [concept("http://a.example/1", "alpha")];
+    let b = [concept("http://b.example/1", "completely-unrelated-thing")];
+    assert!(
+        propose(
+            &a,
+            &b,
+            &LinkSpec::default(),
+            &MappingSet::default(),
+            "urn:t"
+        )
+        .mappings
+        .is_empty()
+    );
+}
