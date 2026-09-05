@@ -7,6 +7,8 @@ import argparse
 import csv
 import hashlib
 import json
+import os
+from datetime import datetime, timezone
 import re
 import shutil
 import socket
@@ -55,10 +57,46 @@ ENTAILMENT_BUCKET = {
     for bucket, identifiers in ENTAILMENT_BUCKET_IDS.items()
     for identifier in identifiers
 }
+# The regime commitments, as DATA. Everything downstream derives from this map:
+# the ledger records what it finds here, and the published table reads the ledger.
+# Before aegis-1gp76j the string "deliberate-non-goal" was asserted as a constant
+# in run_case() and printed as a literal by conformance_report.py, so the ledger
+# did not RECORD a commitment -- it restated one, and no reader could tell.
+ENTAILMENT_COMMITMENT = {
+    # Answerable by RDFS closure over the query's default graph.
+    "RDF": "goal",
+    "RDFS": "goal",
+    # Need a real DL/RL reasoner; quipu's owl layer is a write gate with zero
+    # axioms today. Non-goal until the design (aegis-b5moll) is accepted.
+    "OWL-Direct": "deliberate-non-goal",
+    "OWL-RDF-Based": "deliberate-non-goal",
+    # RIF is a rule-interchange format and D is datatype entailment; neither is
+    # asked of quipu. Deliberate, not deferred.
+    "RIF": "deliberate-non-goal",
+    "D": "deliberate-non-goal",
+}
+
 ENTAILMENT_REASON = {
     bucket: f"{bucket} entailment regime is not implemented"
     for bucket in ENTAILMENT_BUCKET_IDS
+    if ENTAILMENT_COMMITMENT.get(bucket) != "goal"
 }
+
+
+# Buckets quipu can answer with a MATERIALISED closure, and the `--entailment`
+# regime name that selects it.
+#
+# Separate from ENTAILMENT_COMMITMENT on purpose: a bucket can be a `goal` and
+# still belong here only when a closure exists for it. RDF is a goal and is
+# deliberately ABSENT — applying the RDFS closure to RDF-regime cases broke
+# `owlds02` (15/16 -> 14/16) while fixing six RDFS ones, measured. A stronger
+# regime is not a safer default.
+#
+# Adding a regime is a change to this dict. It used to be a bare `== "RDFS"`
+# literal beside a `== "goal"` lookup, which meant a third goal regime would
+# have been silently answered under simple entailment — a wrong number, not an
+# error (wu, review of #150).
+CLOSURE_REGIME = {"RDFS": "rdfs"}
 
 
 @dataclass(frozen=True)
@@ -760,7 +798,13 @@ def normalize_delimited_numeric(value: str) -> str:
 
 def unsupported_reason(case: Case) -> str | None:
     if case.test_class == "entailment":
-        return ENTAILMENT_REASON.get(ENTAILMENT_BUCKET.get(case.identifier, ""), "unknown entailment regime is not implemented")
+        bucket = ENTAILMENT_BUCKET.get(case.identifier, "")
+        if ENTAILMENT_COMMITMENT.get(bucket) == "goal":
+            # Falls through and RUNS. A goal regime scored from a short-circuit
+            # is 0/n by construction, which reads as a failing engine rather
+            # than as a runner that never asked it anything.
+            return None
+        return ENTAILMENT_REASON.get(bucket, "unknown entailment regime is not implemented")
     if case.kind not in {"QueryEvaluationTest", "CSVResultFormatTest", "ProtocolTest", "UpdateEvaluationTest"}:
         return f"test kind {case.kind} is not executable by this runner"
     if case.test_class not in {"protocol", "update"} and not case.query:
@@ -770,6 +814,29 @@ def unsupported_reason(case: Case) -> str | None:
     if case.result and case.result.suffix not in {".srj", ".srx", ".csv", ".tsv", ".ttl", ".nt"}:
         return f"expected result format {case.result.suffix or '<none>'} is not comparable"
     return None
+
+
+def provenance() -> tuple[str, str]:
+    """When this ledger was produced, and BY WHAT.
+
+    `generated_at` alone is forgeable by accident: a local re-derive stamps it
+    exactly as CI does, so a reader could not tell a page backed by the pinned
+    runner from one backed by somebody's laptop. `generated_by` carries the CI
+    run URL when GitHub Actions produced it and the literal "local" otherwise,
+    which turns "only CI-produced ledgers go on the page" from a convention
+    nobody can check into a property of the ARTIFACT (aegis-1gp76j).
+
+    This is not hypothetical bookkeeping: a locally-run ledger takes
+    `quipu_revision` from the repo HEAD and `quipu_version` from whatever binary
+    was to hand, so it can credit a commit that never produced it.
+    """
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    server = os.environ.get("GITHUB_SERVER_URL")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    if server and repo and run_id:
+        return at, f"{server}/{repo}/actions/runs/{run_id}"
+    return at, "local"
 
 
 def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
@@ -785,7 +852,9 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
             entailment_regimes=list(case.entailment_regimes),
             entailment_profiles=list(case.entailment_profiles),
             decision_bucket=ENTAILMENT_BUCKET.get(case.identifier),
-            commitment="deliberate-non-goal",
+            commitment=ENTAILMENT_COMMITMENT.get(
+                ENTAILMENT_BUCKET.get(case.identifier, ""), "deliberate-non-goal"
+            ),
         )
     if reason := unsupported_reason(case):
         return {**base, "status": "unsupported", "reason": reason}
@@ -840,8 +909,29 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
                 actual = run_result_format_case(case, quipu, server, database)
                 expected = expected_result(case.result)
             else:
+                # A goal entailment regime is ANSWERED under that regime: the
+                # engine composes the graph with its materialised closure. The
+                # QUERY TEXT is untouched -- rewriting it to add
+                # `FROM <g> FROM <g#inferred>` would be easy, local, and would
+                # make the published number describe a query the suite never
+                # asked (aegis-1gp76j).
+                read_argv = [str(quipu), "read", query, "--db", str(database)]
+                # RDFS closure applies to the RDFS REGIME ONLY. RDF entailment
+                # does not include the rdfs2/3/7/9 rules, so applying them to an
+                # RDF-regime case OVER-entails: measured, it broke `owlds02`
+                # (RDF bucket, 15/16 -> 14/16) while fixing six RDFS cases. The
+                # regime names which closure is licensed, and a stronger one is
+                # not a safer default.
+                bucket = ENTAILMENT_BUCKET.get(case.identifier, "")
+                regime = CLOSURE_REGIME.get(bucket)
+                if (
+                    case.test_class == "entailment"
+                    and regime is not None
+                    and ENTAILMENT_COMMITMENT.get(bucket) == "goal"
+                ):
+                    read_argv += ["--entailment", regime]
                 observed = subprocess.run(
-                    [str(quipu), "read", query, "--db", str(database)],
+                    read_argv,
                     text=True,
                     capture_output=True,
                 )
@@ -941,11 +1031,14 @@ def main() -> int:
                 parser.error(f"entailment inventory mismatch: missing={missing}, extra={extra}, cases={len(selected)}")
             bucket_counts = Counter(item["decision_bucket"] for item in selected)
             classes[test_class]["decision_buckets"] = dict(sorted(bucket_counts.items()))
+    generated_at, generated_by = provenance()
     report = {
         "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
         "suite_revision": revision,
         "quipu_revision": git_output(quipu_root, "rev-parse", "HEAD"),
         "quipu_version": version,
+        "generated_at": generated_at,
+        "generated_by": generated_by,
         "isolation": "one temporary SQLite store per executable test",
         "reproduce": {
             "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -980,7 +1073,24 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(classes, sort_keys=True))
-    return 1 if any(item["status"] in {"failed", "error"} for item in results) else 0
+    # A failing CASE is a RESULT, not a broken run. Exit nonzero only when the
+    # harness itself could not answer (`error`).
+    #
+    # This mattered the moment RDF/RDFS became goals (aegis-1gp76j). Before
+    # that every entailment case was `unsupported`, never `failed`, so this
+    # line returned 0 and the workflow step ran on. Turning the regimes into
+    # goals produced 6 genuine `failed` cases — and because the workflow step
+    # is `bash -e`, a nonzero exit here KILLS THE STEP BEFORE
+    # `check_regression.py` runs. The ledger would still upload, the job would
+    # be red forever, and the entailment regression gate — the whole point of
+    # the ledger — would never execute again.
+    #
+    # So the exit code stopped meaning "the run broke" and started meaning
+    # "quipu is not yet fully conformant", which is true, permanent, and
+    # already recorded in the ledger. Regressions are `check_regression.py`'s
+    # job: it compares against the baseline and names the class that moved.
+    # This exit code cannot do that and should not try.
+    return 1 if any(item["status"] == "error" for item in results) else 0
 
 
 if __name__ == "__main__":

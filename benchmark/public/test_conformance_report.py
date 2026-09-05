@@ -217,3 +217,97 @@ class PublishedArtifactsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LedgerProvenanceTest(unittest.TestCase):
+    """`ledger_provenance` — is a ledger derived from the code it ships with?
+
+    Three outcomes, and the third is the point: a pass/fail verdict is forced to
+    render "I could not look" as "nothing was wrong", which is the direction
+    that lets drift through a shallow clone.
+    """
+
+    def _repo(self, stack):
+        import subprocess
+
+        root = pathlib.Path(stack.enter_context(tempfile.TemporaryDirectory()))
+        run = lambda *a: subprocess.run(  # noqa: E731
+            ["git", *a], cwd=root, check=True, capture_output=True, text=True
+        )
+        run("init", "-q", "-b", "main")
+        run("config", "user.email", "t@example.com")
+        run("config", "user.name", "t")
+        (root / "src").mkdir()
+        (root / "src" / "lib.rs").write_text("// v1\n")
+        run("add", "-A")
+        run("commit", "-qm", "one")
+        first = run("rev-parse", "HEAD").stdout.strip()
+        return root, run, first
+
+    def _provenance(self, root, data):
+        """Run the real function against `root` by pointing its git calls there."""
+        original = REPORT._git
+        import subprocess
+
+        def fake(*args):
+            proc = subprocess.run(
+                ["git", *args], cwd=root, capture_output=True, text=True, check=False
+            )
+            return proc.returncode, proc.stdout.strip()
+
+        REPORT._git = fake
+        try:
+            return REPORT.ledger_provenance(data)
+        finally:
+            REPORT._git = original
+
+    def test_revision_equal_to_head_is_clean(self):
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, _run, first = self._repo(stack)
+            code, messages = self._provenance(root, {"quipu_revision": first})
+            self.assertEqual((code, messages), (0, []))
+
+    def test_docs_only_drift_is_clean(self):
+        # A ledger stays valid across a commit that cannot move a number.
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, run, first = self._repo(stack)
+            (root / "README.md").write_text("docs\n")
+            run("add", "-A")
+            run("commit", "-qm", "docs only")
+            code, messages = self._provenance(root, {"quipu_revision": first})
+            self.assertEqual(code, 0, messages)
+
+    def test_code_drift_is_detected(self):
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, run, first = self._repo(stack)
+            (root / "src" / "lib.rs").write_text("// v2\n")
+            run("add", "-A")
+            run("commit", "-qm", "code change")
+            code, messages = self._provenance(root, {"quipu_revision": first})
+            self.assertEqual(code, 1, messages)
+            self.assertIn("src/lib.rs", " ".join(messages))
+
+    def test_absent_revision_is_UNVERIFIED_not_clean(self):
+        # The shallow-clone case. A revision this checkout has never heard of
+        # must NOT read as "no drift".
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, _run, _first = self._repo(stack)
+            code, messages = self._provenance(root, {"quipu_revision": "0" * 40})
+            self.assertEqual(code, 2, messages)
+            self.assertIn("UNVERIFIED", " ".join(messages))
+
+    def test_no_revision_at_all_is_UNVERIFIED_not_clean(self):
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, _run, _first = self._repo(stack)
+            code, messages = self._provenance(root, {"suite_revision": "abc"})
+            self.assertEqual(code, 2, messages)
