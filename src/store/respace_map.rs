@@ -178,6 +178,23 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("forks", "fork_tx", TermIdKind::None),
     ("forks", "created_at", TermIdKind::None),
     ("forks", "status", TermIdKind::None),
+    // -- session attestation registry (aegis-c9c44) --
+    // Server-protected identity state, deliberately outside the interned term
+    // space: a session id, an agent URN, hex key material, an introducer name
+    // and epoch seconds are all opaque values, and remapping any of them as a
+    // term id would corrupt a credential. Nothing here references `graphs(g)`
+    // or a transaction, so there is no `Id` column to miss.
+    ("attestation_bindings", "session", TermIdKind::None),
+    ("attestation_bindings", "agent", TermIdKind::None),
+    ("attestation_bindings", "public_key", TermIdKind::None),
+    ("attestation_bindings", "key_id", TermIdKind::None),
+    ("attestation_bindings", "introducer", TermIdKind::None),
+    ("attestation_bindings", "issued_at_epoch", TermIdKind::None),
+    ("attestation_bindings", "expires_at_epoch", TermIdKind::None),
+    ("attestation_bindings", "revoked", TermIdKind::None),
+    ("attestation_nonces", "session", TermIdKind::None),
+    ("attestation_nonces", "nonce", TermIdKind::None),
+    ("attestation_nonces", "consumed_at_epoch", TermIdKind::None),
     // -- resumable snapshot upload staging (aegis-tzhyzq) --
     // Content addresses, producer keys, metadata and raw Turtle bytes are all
     // deliberately external to the interned term-id space.

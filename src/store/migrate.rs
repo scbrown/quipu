@@ -311,6 +311,53 @@ impl Store {
         Ok(())
     }
 
+    /// Protected session bindings and spent nonces for the common attestation
+    /// verifier (aegis-c9c44).
+    ///
+    /// Both tables are deliberately OUTSIDE the fact graph. A binding that a
+    /// graph write could edit is not a protected binding, and a replay set an
+    /// importer could append to is not a replay set — the whole point of the
+    /// registry is that it is server state a caller cannot reach.
+    ///
+    /// `key_id` is UNIQUE across sessions on purpose. Two sessions sharing one
+    /// public key would each keep their own nonce ledger, so a nonce spent by
+    /// the first is unspent for the second and the replay window reopens
+    /// through the second door. That is a constraint, not a convention,
+    /// because the in-memory registry enforces the same rule and the two
+    /// implementations have to stay interchangeable.
+    ///
+    /// The migration is unconditional on every target even though the verifier
+    /// is native-only: a schema that differs by build target is a second thing
+    /// to reason about, and an unused table costs nothing.
+    pub(super) fn migrate_session_attestation(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS attestation_bindings (
+                 session          TEXT PRIMARY KEY,
+                 agent            TEXT NOT NULL,
+                 public_key       TEXT NOT NULL,
+                 key_id           TEXT NOT NULL UNIQUE,
+                 introducer       TEXT NOT NULL,
+                 issued_at_epoch  INTEGER NOT NULL,
+                 expires_at_epoch INTEGER NOT NULL,
+                 revoked          INTEGER NOT NULL DEFAULT 0
+                     CHECK (revoked IN (0, 1))
+             );
+             -- Keyed by (session, nonce) rather than nonce alone: a nonce is
+             -- only ever meaningful against the session that minted it, and a
+             -- global unique would let one session exhaust another's namespace.
+             CREATE TABLE IF NOT EXISTS attestation_nonces (
+                 session           TEXT NOT NULL,
+                 nonce             TEXT NOT NULL,
+                 consumed_at_epoch INTEGER NOT NULL,
+                 PRIMARY KEY (session, nonce)
+             );
+             -- Pruning scans by age, never by session.
+             CREATE INDEX IF NOT EXISTS idx_attestation_nonce_age
+                 ON attestation_nonces(consumed_at_epoch);",
+        )?;
+        Ok(())
+    }
+
     pub(super) fn migrate_datasets(conn: &Connection) -> Result<()> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS datasets (

@@ -160,6 +160,11 @@ impl BindingRegistry {
         Ok(())
     }
 
+    /// Verify against this in-memory registry.
+    ///
+    /// Delegates to [`verify_binding`], which is where the checks and their
+    /// ORDER actually live. A store-backed binding source must apply the same
+    /// order, and a second copy of it would be a second thing to keep right.
     pub fn verify(
         &self,
         envelope: &AttestationEnvelope,
@@ -167,54 +172,119 @@ impl BindingRegistry {
         now_epoch: u64,
         allowed_skew_secs: u64,
     ) -> Result<VerifiedPrincipal> {
-        validate_envelope(envelope, payload)?;
-        let binding = self
+        verify_binding(self, envelope, payload, now_epoch, allowed_skew_secs)
+    }
+}
+
+/// A source of protected session bindings and replay state.
+///
+/// Two implementations exist, and they differ in exactly one property that
+/// matters. [`BindingRegistry`] holds both in memory, so a restart forgets
+/// every consumed nonce and reopens every replay window it was closing — which
+/// is why an in-memory replay set is not production enforcement. A store-backed
+/// implementation spends the nonce with a SQL insert, so the consumption
+/// participates in whatever savepoint the caller already has open: rolled back
+/// with a rejected mutation, durable with an accepted one.
+pub trait AttestationBindings {
+    /// The protected binding for `session`, or `None` when the session is
+    /// unbound.
+    fn binding(&self, session: &str) -> Result<Option<SessionBinding>>;
+
+    /// Record `nonce` as spent for `session`.
+    ///
+    /// `Ok(false)` means it was ALREADY spent — a replay — and must not be
+    /// reported as an error, because the caller distinguishes "replayed" from
+    /// "could not tell", and only the first of those is a rejection. An `Err`
+    /// here means the replay state could not be consulted at all, which is a
+    /// different and worse thing than a replay.
+    fn consume_nonce(&self, session: &str, nonce: &str, now_epoch: u64) -> Result<bool>;
+}
+
+impl AttestationBindings for BindingRegistry {
+    fn binding(&self, session: &str) -> Result<Option<SessionBinding>> {
+        Ok(self
             .bindings
             .lock()
             .expect("binding registry poisoned")
-            .get(&envelope.session)
-            .cloned()
-            .ok_or_else(|| Error::InvalidValue("unbound attestation session".into()))?;
-        if binding.revoked {
-            return Err(Error::InvalidValue("revoked attestation session".into()));
-        }
-        if now_epoch > binding.expires_at_epoch || now_epoch < binding.issued_at_epoch {
-            return Err(Error::InvalidValue(
-                "expired or not-yet-valid session binding".into(),
-            ));
-        }
-        if envelope.key_id != binding.key_id || envelope.introducer != binding.introducer {
-            return Err(Error::InvalidValue(
-                "attestation does not match protected session binding".into(),
-            ));
-        }
-        if envelope.issued_at_epoch.abs_diff(now_epoch) > allowed_skew_secs {
-            return Err(Error::InvalidValue(
-                "attestation issuance is outside the accepted clock window".into(),
-            ));
-        }
-        let message = canonical_message(envelope, payload);
-        if !crate::signing::verify_hex(&binding.public_key, &message, &envelope.signature) {
-            return Err(Error::InvalidValue(
-                "attestation signature does not verify".into(),
-            ));
-        }
-        let replay_key = (binding.session.clone(), envelope.nonce.clone());
-        if !self
+            .get(session)
+            .cloned())
+    }
+
+    fn consume_nonce(&self, session: &str, nonce: &str, _now_epoch: u64) -> Result<bool> {
+        Ok(self
             .nonces
             .lock()
             .expect("nonce registry poisoned")
-            .insert(replay_key)
-        {
-            return Err(Error::InvalidValue("attestation nonce replay".into()));
-        }
-        Ok(VerifiedPrincipal {
-            agent: binding.agent,
-            session: binding.session,
-            key_id: binding.key_id,
-            introducer: binding.introducer,
-        })
+            .insert((session.to_string(), nonce.to_string())))
     }
+}
+
+/// How long a spent nonce must be remembered, derived from the clock skew the
+/// verifier already accepts.
+///
+/// The horizon is not a free parameter and must not become one. An attestation
+/// whose `issued_at_epoch` is further than `allowed_skew_secs` from now is
+/// rejected by the skew check BEFORE the nonce is ever consulted, so a nonce
+/// older than that window cannot be replayed successfully whether it is
+/// remembered or not. Doubling gives a margin for the two clocks disagreeing in
+/// opposite directions rather than encoding a second, independent policy —
+/// deriving it in one place is the whole point (the aegis-mhxla ruling: the
+/// nonce horizon comes from the skew constant, in one place).
+#[must_use]
+pub const fn nonce_horizon_secs(allowed_skew_secs: u64) -> u64 {
+    allowed_skew_secs.saturating_mul(2)
+}
+
+/// The verifier. One ordering of checks, shared by every binding source.
+///
+/// The nonce is consumed LAST, after every binding and signature check has
+/// passed. That order is load-bearing rather than tidy: consuming earlier would
+/// let an unsigned or malformed attestation burn a nonce, turning a rejected
+/// forgery into a denial of service against the session it was forging.
+pub fn verify_binding<B: AttestationBindings + ?Sized>(
+    bindings: &B,
+    envelope: &AttestationEnvelope,
+    payload: &SignedBinding<'_>,
+    now_epoch: u64,
+    allowed_skew_secs: u64,
+) -> Result<VerifiedPrincipal> {
+    validate_envelope(envelope, payload)?;
+    let binding = bindings
+        .binding(&envelope.session)?
+        .ok_or_else(|| Error::InvalidValue("unbound attestation session".into()))?;
+    if binding.revoked {
+        return Err(Error::InvalidValue("revoked attestation session".into()));
+    }
+    if now_epoch > binding.expires_at_epoch || now_epoch < binding.issued_at_epoch {
+        return Err(Error::InvalidValue(
+            "expired or not-yet-valid session binding".into(),
+        ));
+    }
+    if envelope.key_id != binding.key_id || envelope.introducer != binding.introducer {
+        return Err(Error::InvalidValue(
+            "attestation does not match protected session binding".into(),
+        ));
+    }
+    if envelope.issued_at_epoch.abs_diff(now_epoch) > allowed_skew_secs {
+        return Err(Error::InvalidValue(
+            "attestation issuance is outside the accepted clock window".into(),
+        ));
+    }
+    let message = canonical_message(envelope, payload);
+    if !crate::signing::verify_hex(&binding.public_key, &message, &envelope.signature) {
+        return Err(Error::InvalidValue(
+            "attestation signature does not verify".into(),
+        ));
+    }
+    if !bindings.consume_nonce(&binding.session, &envelope.nonce, now_epoch)? {
+        return Err(Error::InvalidValue("attestation nonce replay".into()));
+    }
+    Ok(VerifiedPrincipal {
+        agent: binding.agent,
+        session: binding.session,
+        key_id: binding.key_id,
+        introducer: binding.introducer,
+    })
 }
 
 fn validate_envelope(envelope: &AttestationEnvelope, payload: &SignedBinding<'_>) -> Result<()> {
