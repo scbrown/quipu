@@ -33,7 +33,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::namespace::{RDF_TYPE, RDFS_LABEL};
 use crate::store::Store;
 use crate::types::Value;
@@ -59,6 +59,16 @@ pub struct Enumeration {
     pub concepts: Vec<Concept>,
     /// Entities excluded because they carry more than one label. Never guessed.
     pub ambiguous: Vec<Ambiguous>,
+    /// Entities PRESENT in the graph that carry no `rdfs:label` at all.
+    ///
+    /// A zero has more than one cause and they need different actions
+    /// (muldoon, on aegis-19o403). Alignment matches on labels, so a graph of
+    /// 250 typed entities with no labels yields the same `0 concepts` as a
+    /// genuinely bare graph — and the first is a publisher problem while the
+    /// second is simply nothing to do. Counting them is what lets a caller say
+    /// which it is instead of judging by eye; muldoon rejected exactly such a
+    /// fixture by hand, which is judgement the return type should not require.
+    pub unlabelled: usize,
 }
 
 impl Enumeration {
@@ -69,32 +79,62 @@ impl Enumeration {
     /// hides the second.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.concepts.is_empty() && self.ambiguous.is_empty()
+        self.concepts.is_empty() && self.ambiguous.is_empty() && self.unlabelled == 0
     }
 }
 
 /// Enumerate the concepts of one named graph.
 ///
-/// Returns `Ok` with an empty [`Enumeration`] when the graph IRI is not
-/// registered — an absent graph holds no concepts, which is not an error, and
-/// the caller distinguishes it by asking the store whether the graph exists.
+/// REFUSES an absent graph IRI (aegis-19o403). An uninterned IRI is a question
+/// this store cannot answer, and returning an empty [`Enumeration`] reported it
+/// in the vocabulary of an answer — a typo read as "nothing to align here".
+///
+/// A registered graph with no concepts still returns `Ok`, with `unlabelled`
+/// carrying how many entities were present but unmatchable.
 ///
 /// # Errors
 ///
 /// Propagates store errors.
 pub fn enumerate(store: &Store, graph_iri: &str) -> Result<Enumeration> {
+    // An ABSENT graph is a question this store cannot answer; an EMPTY one is a
+    // legitimate answer of zero. Until aegis-19o403 both returned an empty
+    // Enumeration, so a typo in a graph IRI read as "this graph has nothing to
+    // align" — and muldoon hit exactly that, with a namespace prefix, and
+    // believed the zero.
+    //
+    // The distinction is the whole contract. Do NOT "fix" this by erroring on
+    // emptiness: a registered graph with no labelled concepts is an informative
+    // 0 and the operator needs to see it.
+    //
+    // Note the near-precedent that does NOT apply: `query_context` deliberately
+    // scopes an unknown graph IRI to an EMPTY default graph rather than
+    // erroring, which is right for SPARQL — a query over a graph that does not
+    // exist genuinely has no rows. `enumerate` is not a query. It is the
+    // operator's discovery step, and its zero is read as "there is nothing to
+    // align here".
     let Some(graph) = store.lookup(graph_iri)? else {
-        return Ok(Enumeration::default());
+        return Err(Error::InvalidValue(format!(
+            "graph {graph_iri} is not interned in this store, so it has no concepts to \
+             enumerate — this is an absent graph, not an empty one. Check the IRI \
+             (a namespace prefix is the usual cause) or create it first."
+        )));
     };
-    let Some(label_attr) = store.lookup(RDFS_LABEL)? else {
-        // Nothing in this store has ever carried a label.
-        return Ok(Enumeration::default());
-    };
+    // If NOTHING in this store has ever carried a label there is no label
+    // attribute to query, but the graph may still hold entities — so this is a
+    // graph full of unmatchable things, not an empty enumeration.
+    //
+    // This used to `return Ok(Enumeration::default())` here, which is the same
+    // defect as the absent-graph one two blocks up, in miniature: an early
+    // return that reports "I examined nothing" for a graph that has plenty in
+    // it. My own test for muldoon's unlabelled case failed on exactly this
+    // line, which is the argument for writing the test before believing the
+    // fix.
+    let label_attr = store.lookup(RDFS_LABEL)?;
 
     // Labels first: an entity with no label is not a concept alignment can
     // match on, so the label query defines the candidate set.
     let mut labels: BTreeMap<i64, Vec<String>> = BTreeMap::new();
-    {
+    if let Some(label_attr) = label_attr {
         let mut stmt = store.conn.prepare(
             "SELECT e, v FROM facts \
              WHERE a = ?1 AND g = ?2 AND op = 1 AND valid_to IS NULL",
@@ -141,6 +181,19 @@ pub fn enumerate(store: &Store, graph_iri: &str) -> Result<Enumeration> {
     }
 
     let mut out = Enumeration::default();
+    // Entities present in the graph but absent from `labels`. Counted from the
+    // same graph the labels came from, so the two cannot disagree.
+    {
+        let mut stmt = store
+            .conn
+            .prepare("SELECT DISTINCT e FROM facts WHERE g = ?1 AND op = 1 AND valid_to IS NULL")?;
+        let present: usize = stmt
+            .query_map([graph], |row| row.get::<_, i64>(0))?
+            .filter_map(std::result::Result::ok)
+            .filter(|e| !labels.contains_key(e))
+            .count();
+        out.unlabelled = present;
+    }
     for (entity, mut entity_labels) in labels {
         entity_labels.sort();
         let iri = store.resolve(entity)?;
