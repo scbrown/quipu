@@ -327,9 +327,13 @@ fn store_identity_survives_reopen() {
 // passing if the field were dropped from the serialized form.
 
 fn sample_manifest() -> ShareManifest {
-    share_payload(&fixture(), &ShareOptions::default(), SHARE_PAYLOAD_MAX_BYTES)
-        .expect("share payload")
-        .manifest
+    share_payload(
+        &fixture(),
+        &ShareOptions::default(),
+        SHARE_PAYLOAD_MAX_BYTES,
+    )
+    .expect("share payload")
+    .manifest
 }
 
 //

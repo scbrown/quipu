@@ -434,8 +434,13 @@ mod tests {
 
         let child = store("after");
         let out = root.path().join("delta");
-        let written =
-            write_delta(&child, parent_dir.to_str().unwrap(), out.to_str().unwrap(), &opts()).unwrap();
+        let written = write_delta(
+            &child,
+            parent_dir.to_str().unwrap(),
+            out.to_str().unwrap(),
+            &opts(),
+        )
+        .unwrap();
 
         let parent = crate::share_transport::read_reference(parent_dir.to_str().unwrap()).unwrap();
         let built = build_delta(
@@ -480,7 +485,11 @@ mod tests {
 
         let del = built.update.find("DELETE DATA").expect("a retraction");
         let ins = built.update.find("INSERT DATA").expect("an assertion");
-        assert!(del < ins, "DELETE DATA must precede INSERT DATA:\n{}", built.update);
+        assert!(
+            del < ins,
+            "DELETE DATA must precede INSERT DATA:\n{}",
+            built.update
+        );
     }
 
     #[test]
@@ -554,7 +563,13 @@ mod tests {
         crate::share::share(&store("before"), parent_dir.to_str().unwrap(), &opts()).unwrap();
         let out = root.path().join("delta");
         let child = store("after");
-        write_delta(&child, parent_dir.to_str().unwrap(), out.to_str().unwrap(), &opts()).unwrap();
+        write_delta(
+            &child,
+            parent_dir.to_str().unwrap(),
+            out.to_str().unwrap(),
+            &opts(),
+        )
+        .unwrap();
 
         let parent = crate::share_transport::read_reference(parent_dir.to_str().unwrap()).unwrap();
         let built = build_delta(
