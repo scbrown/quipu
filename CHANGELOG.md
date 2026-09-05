@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.34] - 2026-09-05
+
+### Added
+
+- *(align)* SSSOM mapping set, propose and verify [] (#123)([2d048a8](https://github.com/scbrown/quipu/commit/2d048a8df40d85b484d12356c8a7355dea8f3090))
+
 ## [0.3.33] - 2026-09-05
 
 ### Added
