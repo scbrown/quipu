@@ -57,6 +57,14 @@ onmessage = async (e) => {
       case "editLog":
         return postMessage({ id, ok: true, result: JSON.parse(need().editLog()) });
 
+      // The delta from the pack this tab loaded to its current state, as the
+      // `share-delta/v1` document the CLI already reads (aegis-8fdp8d). Not
+      // computed in JS: the diff, the SPARQL validation and the delta_id are
+      // quipu's, and a second implementation here would be a second producer of
+      // one format.
+      case "delta":
+        return postMessage({ id, ok: true, result: JSON.parse(need().delta()) });
+
       case "exportManifest":
         return postMessage({ id, ok: true, result: JSON.parse(need().exportManifest()) });
       case "exportNtriples":

@@ -150,6 +150,20 @@ dl#export-manifest {
 dl#export-manifest dt { color: var(--text-muted); }
 dl#export-manifest dd { word-break: break-all; }
 
+#pr-preview dl {
+  display: grid; grid-template-columns: minmax(110px, max-content) 1fr;
+  gap: 4px 16px; font-size: 12.5px; margin: 12px 0;
+}
+#pr-preview dt { color: var(--text-muted); }
+#pr-preview dd { word-break: break-all; }
+/* The delta is the thing to review before anything opens, so it gets room —
+   but bounded, because a large one belongs in the upload flow anyway. */
+#pr-preview pre {
+  max-height: 320px; overflow: auto; font-size: 12px;
+  background: var(--bg); border: 1px solid var(--bg-elevated);
+  border-radius: 4px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all;
+}
+
 #url-input, #file-input {
   font-family: var(--mono); font-size: 12px; color: var(--text);
   background: var(--bg); border: 1px solid var(--bg-elevated);
@@ -279,6 +293,23 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
           <button class="go" id="download-pack">Download .qpack.tar.gz</button>
           <button id="download-nt">Download export.nt</button>
         </div>
+
+        <h3>Propose these edits as a pull request</h3>
+        <p class="note">
+          No API and no token. The page turns your edits into a
+          <code class="mono">share-delta/v1</code> delta share &mdash; byte-for-byte the same
+          four files <code class="mono">quipu pack --since</code> writes and
+          <code class="mono">quipu import</code> applies &mdash; and hands them to
+          GitHub&rsquo;s own upload page. <strong>Nothing is sent anywhere by this page.</strong>
+          You review the change here, then GitHub opens the PR when you click its button.
+          All four files must land in the same directory: quipu verifies the manifest, the
+          update against its hash, and the shapes as one artifact.
+        </p>
+        <div class="row">
+          <button id="pr-prepare">Compute the delta</button>
+          <button class="go" id="pr-go" disabled>Download the files and open GitHub</button>
+        </div>
+        <div id="pr-preview"></div>
       </div>
     </section>
 
