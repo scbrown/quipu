@@ -26,9 +26,9 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `5b5e11fe025af69c7c47633e1c2cd7aae148736c` |
-| Quipu revision (syntax) | `16b81ae51d44f69b85e7f298c70798e356f7872c` |
-| Quipu version | `quipu 0.3.29` |
+| Quipu revision (evaluation) | `4aa67ad54dd76fc83dd4e8967d1596ba4d6004c3` |
+| Quipu revision (syntax) | `4aa67ad54dd76fc83dd4e8967d1596ba4d6004c3` |
+| Quipu version | `quipu 0.3.35` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -46,8 +46,8 @@ carries a named reason further down this page.
 | result format | 10 | 0 | 0 | 0 | 10 |
 | protocol | 34 | 0 | 0 | 0 | 34 |
 | update | 37 | 0 | 0 | 0 | 37 |
-| entailment | 0 | 0 | 0 | 70 | 70 |
-| **all classes** | **341** | **0** | **0** | **71** | **412** |
+| entailment | 29 | 6 | 0 | 35 | 70 |
+| **all classes** | **370** | **6** | **0** | **36** | **412** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -100,9 +100,7 @@ Grouped by the reason the runner recorded.
 
 | Missing capability | Cases | Classes |
 |---|---:|---|
-| RDFS entailment regime is not implemented | 19 | entailment |
 | OWL-Direct entailment regime is not implemented | 18 | entailment |
-| RDF entailment regime is not implemented | 16 | entailment |
 | OWL-RDF-Based entailment regime is not implemented | 11 | entailment |
 | RIF entailment regime is not implemented | 4 | entailment |
 | D entailment regime is not implemented | 2 | entailment |
@@ -178,16 +176,19 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 
 ## Entailment-regime commitments
 
-All six regimes remain deliberate non-goals: **0/70** pass and 70 are unsupported.
-Local RDFS and OWL extensions are not standards-regime claims.
+2 of 6 regimes are goals (RDF, RDFS): **29/35** of their cases pass. The remaining 4 are deliberate non-goals.
+Ledger re-derived 2026-09-05T15:40:11Z by [CI run](https://github.com/scbrown/quipu/actions/runs/33975416865), from quipu `4aa67ad54dd7`.
+Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
-| Regime | Cases | Commitment |
-|---|---:|---|
-| D | 2 | deliberate non-goal |
-| OWL-Direct | 18 | deliberate non-goal |
-| OWL-RDF-Based | 11 | deliberate non-goal |
-| RDF | 16 | deliberate non-goal |
-| RDFS | 19 | deliberate non-goal |
-| RIF | 4 | deliberate non-goal |
+> **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
+
+| Regime | Cases | Passed | Commitment |
+|---|---:|---:|---|
+| D | 2 | 0 | deliberate non-goal |
+| OWL-Direct | 18 | 0 | deliberate non-goal |
+| OWL-RDF-Based | 11 | 0 | deliberate non-goal |
+| RDF | 16 | 15 | goal |
+| RDFS | 19 | 14 | goal |
+| RIF | 4 | 0 | deliberate non-goal |
 
 Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).

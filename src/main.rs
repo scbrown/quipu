@@ -34,6 +34,7 @@ mod cli_audit;
 mod cli_changes;
 mod cli_commands;
 mod cli_db;
+mod cli_entailment;
 mod cli_explain;
 mod cli_export;
 mod cli_fork;

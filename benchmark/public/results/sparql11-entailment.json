@@ -1,8 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "78eb8a1e3013f1e0f6de13c4d76b6c6cee9478b4",
-  "quipu_version": "quipu 0.3.29",
+  "quipu_revision": "4aa67ad54dd76fc83dd4e8967d1596ba4d6004c3",
+  "quipu_version": "quipu 0.3.35",
+  "generated_at": "2026-09-05T15:40:11Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/33975416865",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -22,7 +24,9 @@
   "classes": {
     "entailment": {
       "cases": 70,
-      "unsupported": 70,
+      "failed": 6,
+      "passed": 29,
+      "unsupported": 35,
       "decision_buckets": {
         "D": 2,
         "OWL-Direct": 18,
@@ -56,9 +60,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -82,9 +86,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -108,9 +112,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -134,9 +138,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -160,9 +164,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -186,9 +190,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -212,9 +216,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -238,9 +242,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -297,9 +301,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -320,9 +324,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -358,9 +362,9 @@
       ],
       "entailment_profiles": [],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "entailment",
@@ -431,9 +435,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -468,9 +472,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -602,9 +606,9 @@
       "entailment_regimes": [],
       "entailment_profiles": [],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "entailment",
@@ -616,9 +620,9 @@
       "entailment_regimes": [],
       "entailment_profiles": [],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -630,9 +634,9 @@
       "entailment_regimes": [],
       "entailment_profiles": [],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -655,9 +659,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -679,9 +683,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -703,9 +707,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -720,9 +724,9 @@
       ],
       "entailment_profiles": [],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -744,9 +748,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -768,9 +772,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "entailment",
@@ -792,9 +796,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -816,9 +820,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -833,9 +837,9 @@
       ],
       "entailment_profiles": [],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -857,9 +861,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -881,9 +885,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -898,9 +902,9 @@
       ],
       "entailment_profiles": [],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "entailment",
@@ -915,9 +919,9 @@
       ],
       "entailment_profiles": [],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -938,9 +942,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -1135,9 +1139,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -1160,9 +1164,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "entailment",
@@ -1183,9 +1187,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "entailment",
@@ -1208,9 +1212,9 @@
         "Full"
       ],
       "decision_bucket": "RDF",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDF entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -1233,9 +1237,9 @@
         "Full"
       ],
       "decision_bucket": "RDFS",
-      "commitment": "deliberate-non-goal",
-      "status": "unsupported",
-      "reason": "RDFS entailment regime is not implemented"
+      "commitment": "goal",
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
