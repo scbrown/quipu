@@ -47,35 +47,51 @@
 //! Iterated to a fixed point, because rdfs2/rdfs3 produce types that rdfs9 then
 //! closes, and rdfs7 produces triples that rdfs2/rdfs3 then read.
 //!
-//! # KNOWN INCOMPLETENESS: literal-valued triples are not premises
+//! # Literal-valued premises: rdfs2 fires, rdfs7 does not yet
 //!
-//! `load()` keeps only `Value::Ref` objects, so **a triple whose object is a
-//! literal never enters the working set at all**. For the CONCLUSIONS of rdfs3
-//! and rdfs9 that is correct — a literal cannot be typed and cannot be a class.
-//! But rdfs2 and rdfs7 take such triples as PREMISES, and both hold there:
+//! `load()` keeps only `Value::Ref` objects, so an IRI-only working set is all
+//! the fixed point sees. For the CONCLUSIONS of rdfs3 and rdfs9 that is correct
+//! — a literal cannot be typed and cannot be a class. But rdfs2 and rdfs7 take
+//! such triples as PREMISES, and both hold there:
 //!
 //! ```text
 //! ex:a ex:name "n" .  + ex:name rdfs:domain ex:Person  |= ex:a rdf:type ex:Person   (rdfs2)
 //! ex:a ex:b1   "n" .  + ex:b1 rdfs:subPropertyOf ex:b2 |= ex:a ex:b2 "n"            (rdfs7)
 //! ```
 //!
-//! **Neither fires today.** Measured by wu in review of #150, each with a
-//! passing IRI-object control in the same test.
+//! **rdfs2 now fires** (aegis-x9bmhf). Its conclusion types the SUBJECT and is
+//! therefore all-IRI, so it needs only the `(s, p)` pairs of literal-valued
+//! triples — see [`load_literal_premises`]. Derivations from them are ordinary
+//! members of the fixed point: a type derived this way closes under rdfs9 like
+//! any other.
 //!
-//! The W3C entailment suite does not exercise it, so the 29/35 score is
-//! unaffected — but rdfs2 over a literal object is one of the commonest
-//! inferences in real data (`rdfs:domain` on a datatype property), so a user
-//! WILL hit this before the suite does. Tracked on **aegis-x9bmhf**.
+//! **rdfs7 still does not**, and the reason is sharper than "widen `Triple`".
+//! `Triple` is module-private and named in four places, so the alias itself is
+//! cheap. The blocker is that `known` and `fresh` are `BTreeSet`s, and
+//! [`crate::types::Value`] derives only `Debug, Clone, PartialEq` — no `Ord`,
+//! no `Eq`, because it carries `Float(f64)`. A set keyed on a literal therefore
+//! does not compile today.
 //!
-//! The two halves differ in cost, which is why neither is fixed here rather
-//! than one being quietly done: rdfs2's conclusion is all-IRI, so it needs only
-//! the `(s, p)` pairs of literal-valued triples. rdfs7's conclusion CARRIES the
-//! literal, so it needs `Triple` to stop being `(i64, i64, i64)` — a change to
-//! the core representation that deserves its own measurement.
+//! Two routes, and they are not equal:
 //!
-//! Note for anyone testing this: the `closure_of()` helper in the tests is
-//! IRI-only too, so an rdfs7 derivation over a literal would be invisible to it
-//! even once it fires. Count `report.asserted` instead.
+//! * key the set on the value's SERIALISED BYTES, which is already how the
+//!   store orders values and needs no change to `Value`;
+//! * implement `Ord` on `Value`, which forces a NaN decision and has blast
+//!   radius far beyond this module.
+//!
+//! The first is the one to take. Tracked on **aegis-x9bmhf**.
+//!
+//! The W3C entailment suite exercises none of this, so the 29/35 score was
+//! unaffected either way — which is why it needed a bead rather than a test:
+//! the suite will never catch it, and a user with real data will. `rdfs:domain`
+//! on a datatype property is one of the commonest inferences in practical RDF.
+//!
+//! Note for anyone extending this: the `closure_of()` helper in the tests is
+//! IRI-only, so an rdfs7 derivation over a literal will be invisible to it even
+//! once it fires. Count `report.asserted` instead.
+//!
+//! And when rdfs7 does start carrying literals, [`load_literal_premises`] must
+//! move INSIDE the fixed point — see the warning on that function.
 
 use std::collections::BTreeSet;
 
@@ -144,6 +160,51 @@ impl Rule {
     }
 }
 
+/// The `(subject, predicate)` pairs of LITERAL-valued triples visible in
+/// `graphs` — premises for rdfs2, which types the SUBJECT and so never needs the
+/// object term at all (aegis-x9bmhf).
+///
+/// Deliberately not `Triple`: carrying the literal would mean widening the core
+/// representation, which is rdfs7's problem and is measured separately. rdfs2
+/// wants only the pair, so this stays cheap.
+///
+/// ## Why loading this ONCE, outside the fixed point, is sound
+///
+/// No implemented rule can create a new literal-valued triple: rdfs2, rdfs3 and
+/// rdfs9 conclude `rdf:type`, rdfs5 and rdfs11 conclude the two hierarchy
+/// predicates, and rdfs7 — the only rule whose conclusion copies the premise's
+/// object — cannot see literal premises yet, which is exactly the half left
+/// open. So this set is fixed for the run.
+///
+/// ⚠️ **That stops being true the moment rdfs7 carries literals.** Whoever lands
+/// that must move this load inside the loop, or a literal derived in round N is
+/// silently invisible to rdfs2 in round N+1.
+fn load_literal_premises(store: &Store, graphs: &[i64]) -> Result<BTreeSet<(i64, i64)>> {
+    let mut out = BTreeSet::new();
+    let placeholders = graphs.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT e, a, v FROM facts \
+         WHERE g IN ({placeholders}) AND op = 1 AND valid_to IS NULL"
+    );
+    let mut stmt = store.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::ToSql> =
+        graphs.iter().map(|g| g as &dyn rusqlite::ToSql).collect();
+    let rows = stmt.query_map(params.as_slice(), |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, Vec<u8>>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (s, p, raw) = row?;
+        if !matches!(Value::from_bytes(&raw), Ok(Value::Ref(_))) {
+            out.insert((s, p));
+        }
+    }
+    Ok(out)
+}
+
 /// Read every IRI-object triple visible in `graphs`.
 fn load(store: &Store, graphs: &[i64]) -> Result<BTreeSet<Triple>> {
     let mut out = BTreeSet::new();
@@ -187,6 +248,7 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
 
     let companion = store.ensure_companion_inferred_graph(graph, timestamp)?;
     let mut known = load(store, &[graph, companion])?;
+    let literal_premises = load_literal_premises(store, &[graph, companion])?;
 
     let mut report = ClosureReport::default();
     let mut pending: std::collections::BTreeMap<Rule, Vec<Datum>> =
@@ -248,6 +310,22 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
                     if o == sub {
                         derive(Rule::Rdfs9, (s, type_id, sup), &mut fresh);
                     }
+                }
+            }
+        }
+        // rdfs2 over LITERAL-valued premises (aegis-x9bmhf). Only rdfs2: its
+        // conclusion types the SUBJECT and is therefore all-IRI. rdfs3 is
+        // deliberately absent here because its conclusion types the OBJECT, and
+        // a literal cannot be the subject of an rdf:type; rdfs7 is absent
+        // because its conclusion would have to carry the literal.
+        //
+        // Inside the loop, and reading the CURRENT `domains` slice, so a
+        // `rdfs:domain` triple that only becomes visible in a later round
+        // applies to these premises too — the same way it does for IRI ones.
+        for &(s, p) in &literal_premises {
+            for &(prop, class) in &domains {
+                if p == prop {
+                    derive(Rule::Rdfs2, (s, type_id, class), &mut fresh);
                 }
             }
         }
