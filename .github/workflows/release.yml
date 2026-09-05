@@ -275,7 +275,28 @@ jobs:
         working-directory: wasm/explorer
         run: |
           set -euo pipefail
-          cargo build --release --locked
+          # NO `--locked`, matching the wasm/harness job above, and for the
+          # reason that job already had: this crate is outside the workspace, so
+          # it carries its OWN Cargo.lock, and that lockfile records the PARENT
+          # crate's version through the path dependency. release-plz bumps the
+          # root Cargo.toml and updates the root lockfile; it knows nothing about
+          # this second one. So on every release PR the explorer lockfile is
+          # stale by exactly one version bump and `--locked` refuses:
+          #
+          #   error: cannot update the lock file wasm/explorer/Cargo.lock
+          #   because --locked was passed to prevent this
+          #
+          # Measured on PR #118 (v0.3.33) and reproduced locally, exit 101. That
+          # would have failed the RELEASE job identically — no wasm asset, and
+          # the book page dark — which is exactly what running this job on PRs
+          # exists to catch. `--locked` was my addition and the inconsistency
+          # was mine.
+          #
+          # The lockfile stays COMMITTED and still does its real job here: both
+          # workflows grep it for the wasm-bindgen version, which must match the
+          # crate exactly or the bundle fails at init. Third-party pins move only
+          # when this lockfile is regenerated and reviewed.
+          cargo build --release
           # Resolve the target dir rather than assuming `target/`. It is unset
           # in Actions so `target/` would be correct HERE, but that same
           # assumption is what wedged aegis CD (2026-09-05): the fleet cargo
