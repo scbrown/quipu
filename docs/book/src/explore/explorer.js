@@ -524,6 +524,63 @@ window.quipu = {
   search: () => Promise.reject(Object.assign(new Error(UNSUPPORTED_SEARCH.reason), UNSUPPORTED_SEARCH)),
 };
 
+// --- The Service Worker half: fetch() into this page's store (§4.2) ---------
+//
+// sw.js intercepts POSTs to ./query and friends, but it CANNOT reach the module
+// worker that holds the store — a Service Worker has no handle on a page's
+// dedicated worker. So it asks a client, and this is the client half: take the
+// verb, run it through the same `ask` relay `window.quipu` uses, and answer on
+// the port the worker sent.
+//
+// One relay, two entrances. `window.quipu.query(...)` and
+// `fetch("./query", …)` reach the same store through the same code, so they
+// cannot answer differently — the property that makes the fetch form worth
+// having rather than a second surface to keep in step.
+
+const SW_VERB_TO_CMD = {
+  query: (b) => ({ cmd: "query", sparql: b.query ?? b.sparql }),
+  episode: (b) => ({ cmd: "episode", episode: JSON.stringify(b) }),
+  set: (b) => ({ cmd: "set", entity: b.entity, predicate: b.predicate,
+                 value: JSON.stringify(b.value) }),
+  retract: (b) => ({ cmd: "retract", entity: b.entity, predicate: b.predicate ?? "",
+                     value: b.value === undefined ? "" : JSON.stringify(b.value) }),
+  stats: () => ({ cmd: "stats" }),
+  delta: () => ({ cmd: "delta" }),
+};
+
+navigator.serviceWorker?.addEventListener("message", async (event) => {
+  const { quipuVerb, body } = event.data ?? {};
+  const port = event.ports?.[0];
+  if (!quipuVerb || !port) return;
+  try {
+    const build = SW_VERB_TO_CMD[quipuVerb];
+    if (!build) throw new Error(`unknown verb: ${quipuVerb}`);
+    port.postMessage({ ok: true, result: await ask(build(body ?? {})) });
+  } catch (err) {
+    // The message goes back as an error, never as an empty success. The service
+    // worker turns it into a 500 with the reason, so a caller can tell "the
+    // store refused this" from "the store answered nothing".
+    port.postMessage({ ok: false, error: String(err?.message ?? err) });
+  }
+});
+
+async function registerServer() {
+  if (!navigator.serviceWorker) return;
+  try {
+    await navigator.serviceWorker.register("./sw.js");
+    // Reported on the page rather than only in the console: "this page is a
+    // server" is a capability a reader cannot otherwise discover, and a silent
+    // registration failure would leave the documented fetch recipe 404ing with
+    // no explanation.
+    $("#sw-state").textContent =
+      "ready — POST to ./query, ./episode, ./set, ./retract, ./stats, ./delta on this path";
+  } catch (err) {
+    $("#sw-state").textContent =
+      `unavailable (${err.message}). window.quipu still works; only the fetch() form needs this.`;
+    $("#sw-state").classList.add("bad");
+  }
+}
+
 // --- Propose the edits as a PR, with no API and no token (aegis-8fdp8d) -----
 //
 // GitHub's own web pages do the work. The page computes the delta, SHOWS it,
@@ -858,6 +915,7 @@ async function boot() {
       onclick: () => { $("#sparql").value = c.sparql; runSparql(); },
     }));
   }
+  registerServer();
   $("#pr-prepare").addEventListener("click", prepareDelta);
   $("#pr-go").addEventListener("click", proposeAsPr);
   $("#download-pack").addEventListener("click", downloadPack);
