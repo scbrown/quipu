@@ -65,6 +65,7 @@ pub mod share;
 // inside the module. The wasm explorer produces the same `share-delta/v1`
 // artifact the CLI does, and it can only do that if the builder compiles there
 // (aegis-8fdp8d).
+pub mod share_attestation;
 pub mod share_delta;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]

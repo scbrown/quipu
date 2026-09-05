@@ -24,6 +24,7 @@ mod tests {
             source: "https://example.org/alice/share".into(),
             actor: Some("alice".into()),
             accept_exact: false,
+            attestation: None,
         };
         (dir, request)
     }

@@ -30,6 +30,10 @@ fn request_from_files(
     let manifest = serde_json::from_str::<ShareManifest>(&get("manifest.json")?)
         .map_err(|e| Error::InvalidValue(format!("share manifest: {e}")))?;
     Ok(ShareImportRequest {
+        // Local construction carries no envelope: these paths build a request from
+        // bytes already in hand, so there is no producer to attest. The result then
+        // reports tier "transport", which is the truth (aegis-c9c44).
+        attestation: None,
         manifest,
         export_ntriples: get("export.nt")?,
         shapes_turtle: get("shapes.ttl")?,
