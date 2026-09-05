@@ -874,3 +874,262 @@ fn the_nothing_verified_output_warns_the_shell_caller_about_its_exit_code() {
     assert!(text.contains("Exit status 2, not 1"), "{text}");
     assert!(text.contains("-eq 1"), "{text}");
 }
+
+// ---------------------------------------------------------------------------
+// Store-backed enumeration (aegis-sosiaa slice 3)
+// ---------------------------------------------------------------------------
+
+use super::enumerate::enumerate;
+use crate::namespace::{RDF_TYPE, RDFS_LABEL};
+use crate::store::{Datum, Store};
+use crate::types::{Op, Value};
+
+const T: &str = "2026-09-05T00:00:00Z";
+
+/// Write `(entity, attribute, value)` into `graph_iri`.
+fn write(store: &mut Store, graph_iri: &str, entity: &str, attribute: &str, value: Value) {
+    let e = store.intern(entity).unwrap();
+    let a = store.intern(attribute).unwrap();
+    let g = store.intern(graph_iri).unwrap();
+    store
+        .transact_to_graph(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value,
+                valid_from: T.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            T,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+}
+
+fn label(store: &mut Store, graph: &str, entity: &str, text: &str) {
+    write(store, graph, entity, RDFS_LABEL, Value::Str(text.into()));
+}
+
+fn typed(store: &mut Store, graph: &str, entity: &str, type_iri: &str) {
+    let t = store.intern(type_iri).unwrap();
+    write(store, graph, entity, RDF_TYPE, Value::Ref(t));
+}
+
+#[test]
+fn enumerate_reads_labels_and_types_from_one_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    label(&mut store, g, "http://a.example/bobbin", "bobbin-release");
+    typed(
+        &mut store,
+        g,
+        "http://a.example/bobbin",
+        "http://x/Repository",
+    );
+
+    let out = enumerate(&store, g).unwrap();
+
+    assert_eq!(out.concepts.len(), 1);
+    assert_eq!(out.concepts[0].iri, "http://a.example/bobbin");
+    assert_eq!(out.concepts[0].label, "bobbin-release");
+    // The load-bearing assertion: rdf:type is stored as `Value::Ref`, so a
+    // reader that decodes it as `Value::Str` returns an EMPTY type list. That
+    // failure is silent — a LinkSpec with `require_shared_type` would then
+    // propose nothing and look correct doing it.
+    assert_eq!(
+        out.concepts[0].types,
+        vec!["http://x/Repository".to_string()]
+    );
+    assert!(out.ambiguous.is_empty());
+}
+
+#[test]
+fn enumeration_is_scoped_to_its_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let a = "http://example.org/graph/a";
+    let b = "http://example.org/graph/b";
+    label(&mut store, a, "http://a.example/x", "in-a");
+    label(&mut store, b, "http://b.example/y", "in-b");
+
+    let from_a = enumerate(&store, a).unwrap();
+    let from_b = enumerate(&store, b).unwrap();
+
+    assert_eq!(from_a.concepts.len(), 1, "graph a must not see graph b");
+    assert_eq!(from_a.concepts[0].label, "in-a");
+    assert_eq!(from_b.concepts.len(), 1, "graph b must not see graph a");
+    assert_eq!(from_b.concepts[0].label, "in-b");
+}
+
+#[test]
+fn a_root_fact_is_not_enumerated_into_a_named_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    // Same shape, written to ROOT rather than the graph.
+    let e = store.intern("http://a.example/root-only").unwrap();
+    let attr = store.intern(RDFS_LABEL).unwrap();
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: attr,
+                value: Value::Str("root-only".into()),
+                valid_from: T.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            T,
+            None,
+            None,
+        )
+        .unwrap();
+    label(&mut store, g, "http://a.example/in-graph", "in-graph");
+
+    let out = enumerate(&store, g).unwrap();
+
+    assert_eq!(out.concepts.len(), 1);
+    assert_eq!(out.concepts[0].label, "in-graph");
+}
+
+#[test]
+fn an_entity_with_two_labels_is_reported_and_never_guessed() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    label(&mut store, g, "http://a.example/two", "bobbin-release");
+    label(
+        &mut store,
+        g,
+        "http://a.example/two",
+        "Bobbin_release-artifact",
+    );
+    label(&mut store, g, "http://a.example/one", "unambiguous");
+
+    let out = enumerate(&store, g).unwrap();
+
+    // The ambiguous one is EXCLUDED from concepts — matching on a label the
+    // operator cannot predict is the failure this avoids.
+    assert_eq!(out.concepts.len(), 1);
+    assert_eq!(out.concepts[0].iri, "http://a.example/one");
+
+    // ...and REPORTED, with every label, so it is a finding rather than a
+    // silent omission. "Could not decide" is not "was not there".
+    assert_eq!(out.ambiguous.len(), 1);
+    assert_eq!(out.ambiguous[0].iri, "http://a.example/two");
+    assert_eq!(
+        out.ambiguous[0].labels,
+        vec![
+            "Bobbin_release-artifact".to_string(),
+            "bobbin-release".to_string()
+        ]
+    );
+}
+
+#[test]
+fn an_unlabelled_entity_is_not_a_concept() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    typed(
+        &mut store,
+        g,
+        "http://a.example/typed-only",
+        "http://x/Repository",
+    );
+
+    let out = enumerate(&store, g).unwrap();
+
+    assert!(
+        out.concepts.is_empty(),
+        "no label means nothing to match on"
+    );
+    assert!(out.ambiguous.is_empty());
+}
+
+#[test]
+fn an_absent_graph_enumerates_to_nothing_rather_than_erroring() {
+    let store = Store::open_in_memory().unwrap();
+    let out = enumerate(&store, "http://example.org/graph/never-registered").unwrap();
+    assert!(out.is_empty());
+}
+
+#[test]
+fn an_empty_graph_and_an_all_ambiguous_graph_are_different_findings() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    label(&mut store, g, "http://a.example/two", "one-name");
+    label(&mut store, g, "http://a.example/two", "another-name");
+
+    let out = enumerate(&store, g).unwrap();
+
+    // Both have zero concepts. Only one of them examined nothing, and a caller
+    // that reports "0 concepts" for both hides a graph it could not read.
+    assert!(out.concepts.is_empty());
+    assert!(!out.is_empty(), "an ambiguous entity IS something examined");
+}
+
+#[test]
+fn a_retracted_label_is_not_enumerated() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/a";
+    label(&mut store, g, "http://a.example/gone", "gone");
+    let e = store.intern("http://a.example/gone").unwrap();
+    let a = store.intern(RDFS_LABEL).unwrap();
+    let gid = store.intern(g).unwrap();
+    store
+        .transact_to_graph(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("gone".into()),
+                valid_from: "2026-09-06T00:00:00Z".into(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            "2026-09-06T00:00:00Z",
+            None,
+            None,
+            gid,
+        )
+        .unwrap();
+
+    let out = enumerate(&store, g).unwrap();
+    assert!(
+        out.concepts.is_empty(),
+        "op=1 AND valid_to IS NULL must exclude it"
+    );
+}
+
+#[test]
+fn enumeration_order_does_not_depend_on_write_order() {
+    let build = |order: &[&str]| {
+        let mut store = Store::open_in_memory().unwrap();
+        let g = "http://example.org/graph/a";
+        for iri in order {
+            label(&mut store, g, iri, "same-label");
+        }
+        enumerate(&store, g)
+            .unwrap()
+            .concepts
+            .into_iter()
+            .map(|c| c.iri)
+            .collect::<Vec<_>>()
+    };
+
+    let forward = build(&[
+        "http://a.example/a",
+        "http://a.example/b",
+        "http://a.example/c",
+    ]);
+    let reverse = build(&[
+        "http://a.example/c",
+        "http://a.example/b",
+        "http://a.example/a",
+    ]);
+
+    // Interned ids follow write order, so a BTreeMap over them is write order
+    // in disguise. Sorting by IRI is what makes the bytes stable — the same
+    // property `propose` is tested for, one layer down.
+    assert_eq!(forward, reverse);
+    assert_eq!(forward.len(), 3);
+}
