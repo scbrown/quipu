@@ -175,6 +175,12 @@ pub const QUIPU_RECOMMENDS_TRUST: &str = "https://quipu.dev/ontology/recommendsT
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 pub const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 pub const RDFS_SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+/// `rdfs:subPropertyOf` — the premise of RDFS rule 7 (and rule 5, its transitive closure).
+pub const RDFS_SUBPROPERTY_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subPropertyOf";
+/// `rdfs:domain` — the premise of RDFS rule 2.
+pub const RDFS_DOMAIN: &str = "http://www.w3.org/2000/01/rdf-schema#domain";
+/// `rdfs:range` — the premise of RDFS rule 3.
+pub const RDFS_RANGE: &str = "http://www.w3.org/2000/01/rdf-schema#range";
 
 // ── Bobbin property IRIs ──────────────────────────────────────
 // Under the aegis base, matching what the live lane emits.

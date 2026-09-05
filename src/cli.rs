@@ -157,7 +157,8 @@ pub fn cmd_query(args: &[String], db_path: &str) {
         Some(q) if !q.starts_with("--") => q,
         _ => {
             eprintln!(
-                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]"
+                "usage: quipu query \"SELECT ...\" [--valid-at <date>] [--tx N] [--fork <name>] [--entailment rdfs] [--db <path>]\n\
+                 note: --entailment rdfs MATERIALISES the closure, so it WRITES to the store (idempotent) and needs a writable database"
             );
             std::process::exit(1);
         }
@@ -166,10 +167,13 @@ pub fn cmd_query(args: &[String], db_path: &str) {
     let valid_at = flag_value(args, "--valid-at").map(String::from);
     let as_of_tx: Option<i64> = flag_value(args, "--tx").and_then(|v| v.parse().ok());
 
-    let store = crate::cli_open::open_store(db_path);
+    let mut store = crate::cli_open::open_store(db_path);
 
     // `--fork <name>` scopes the default graph to a named fork (quipu-gp5).
     let graph = crate::cli_fork::fork_scope(&store, args);
+
+    let graph = crate::cli_entailment::apply(args, &mut store, graph);
+
     let ctx = quipu::TemporalContext {
         valid_at,
         as_of_tx,

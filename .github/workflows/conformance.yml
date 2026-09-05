@@ -45,7 +45,15 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 is REQUIRED, not tidiness. --check now also asks whether
+      # each ledger was derived from the code it ships with, which needs the
+      # ledger's own revision present to diff against HEAD. Under the default
+      # depth=1 that revision is simply absent and the check reports UNVERIFIED
+      # (exit 2) rather than a clean pass — deliberately, because a shallow
+      # clone answering "no drift" is the false negative this guards.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # No Rust and no suite checkout: this job only compares the committed
       # page and badges against the committed ledgers, so it finishes in
