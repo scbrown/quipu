@@ -28,6 +28,24 @@ use super::verify::QUIPU_DISTINCT_FROM;
 
 const ALIGN_NS: &str = "https://quipu.dev/ontology/align/";
 
+/// What can be done about an assertion today.
+///
+/// An enum rather than a `String` so the caller cannot accidentally print a
+/// command that does not exist: the "no safe command" case has to be handled,
+/// not formatted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Retraction {
+    /// No graph-scoped retraction exists in quipu yet, so this assertion cannot
+    /// be undone in isolation.
+    NotGraphScoped {
+        /// The nearest real invocation.
+        closest: String,
+        /// Exactly what that would ALSO destroy. Stated so an operator can
+        /// decide, rather than discovering it afterwards.
+        blast_radius: String,
+    },
+}
+
 /// One alignment assertion, with everything needed to judge and undo it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assertion {
@@ -48,19 +66,37 @@ pub struct Assertion {
 }
 
 impl Assertion {
-    /// The command that retracts this assertion.
+    /// How to retract this assertion — or why you cannot yet.
     ///
-    /// Emitted as part of the ANSWER rather than left to the reader, because
-    /// the operator who needs it is the one who did not know the assertion
-    /// existed a moment ago — expecting them to then construct a `/set` call
-    /// against the right predicate in the right graph is where this requirement
-    /// would quietly fail.
+    /// **There is no graph-scoped retraction in quipu today.** `cmd_retract`
+    /// takes a bare entity IRI plus an optional `--predicate`; `tool_retract`
+    /// adds an optional `value`; and `Store::retract_triples` takes no graph at
+    /// all. So a retraction cannot be confined to the alignment graph, and the
+    /// closest real invocation would retract the predicate on that entity
+    /// EVERYWHERE it appears.
+    ///
+    /// This method therefore returns a [`Retraction::NotGraphScoped`] rather
+    /// than a command string. Rendering a command was the first implementation
+    /// and it was wrong in the way that matters most here: the quoted triple
+    /// begins with `<`, so the CLI accepts it AS the entity IRI and exits 1
+    /// with `entity not found: <the whole triple>` — telling a reader who came
+    /// because this tool said an assertion exists that nothing does.
+    ///
+    /// A discovery feature that hands you an action contradicting its own
+    /// finding is worse than one that says plainly it has no action to offer.
     #[must_use]
-    pub fn retraction_command(&self) -> String {
-        format!(
-            "quipu retract '<{}> <{}> <{}>' --graph {}",
-            self.subject, self.predicate, self.object, self.graph
-        )
+    pub fn retraction(&self) -> Retraction {
+        Retraction::NotGraphScoped {
+            closest: format!(
+                "quipu retract {} --predicate {}",
+                self.subject, self.predicate
+            ),
+            blast_radius: format!(
+                "retracts <{}> <{}> in EVERY graph and for EVERY object, not just \
+                 <{}> in {}",
+                self.subject, self.predicate, self.object, self.graph
+            ),
+        }
     }
 
     /// Is this an assertion that two things are DIFFERENT?

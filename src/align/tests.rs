@@ -1758,14 +1758,36 @@ fn from_two_iris_alone_an_operator_reaches_the_assertion_and_its_retraction() {
     assert!(a.asserted_on.is_some(), "provenance: WHEN");
     assert!(a.justification.is_some(), "provenance: ON WHAT EVIDENCE");
 
-    // The retraction command is part of the ANSWER, not left to the reader:
-    // the person who needs it did not know the assertion existed a moment ago.
-    let cmd = a.retraction_command();
-    assert!(cmd.contains(A) && cmd.contains(B), "{cmd}");
-    assert!(
-        cmd.contains(&graph_iri),
-        "the command must name the graph: {cmd}"
-    );
+    // WHAT CAN BE DONE ABOUT IT — today the honest answer is "not this alone".
+    // wu caught the first version: it rendered
+    // `quipu retract '<s> <p> <o>' --graph <g>`, which is not a valid
+    // invocation. `cmd_retract` takes a bare entity IRI, so the quoted triple
+    // is accepted AS the entity and it exits 1 with `entity not found: <the
+    // whole triple>` — telling a reader who came here because this tool said
+    // an assertion exists that nothing does.
+    //
+    // The old assertions were contains(A), contains(B), contains(graph) — ALL
+    // THREE HOLD on that broken string. The test could not tell a working
+    // command from a non-command, so it now asserts STRUCTURE and blast radius.
+    match a.retraction() {
+        super::discover::Retraction::NotGraphScoped {
+            closest,
+            blast_radius,
+        } => {
+            assert!(
+                closest.starts_with("quipu retract ") && closest.contains(A),
+                "the closest real invocation is offered: {closest}"
+            );
+            assert!(
+                !closest.contains(&graph_iri),
+                "and must NOT claim graph scoping, because nothing can: {closest}"
+            );
+            assert!(
+                blast_radius.contains("EVERY graph"),
+                "the cost must be stated, not discovered: {blast_radius}"
+            );
+        }
+    }
 }
 
 /// The pair is one judgement, so asking the other way round finds it too.
