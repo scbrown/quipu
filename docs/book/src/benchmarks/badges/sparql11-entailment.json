@@ -1,6 +1,6 @@
 {
-  "color": "lightgrey",
+  "color": "red",
   "label": "SPARQL 1.1 entailment",
-  "message": "0/70",
+  "message": "29/70",
   "schemaVersion": 1
 }
