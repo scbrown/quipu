@@ -10,6 +10,7 @@
 
 pub mod apply;
 pub mod decide;
+pub mod discover;
 pub mod enumerate;
 pub mod propose;
 pub mod sssom;
