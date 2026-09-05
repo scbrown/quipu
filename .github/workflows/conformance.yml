@@ -93,8 +93,20 @@ jobs:
           git -C /tmp/data-shapes sparse-checkout set data-shapes-test-suite
           git -C /tmp/data-shapes checkout --quiet "${{ steps.pin.outputs.shacl_revision }}"
 
+      # quipu-server is REQUIRED: the evaluation class runs ProtocolTest cases and
+      # the federated class runs SERVICE cases, both of which spawn a server. Its
+      # absence does not skip those cases -- the runner raises FileNotFoundError,
+      # writes no ledger, and the job dies at the regression gate before SHACL,
+      # federated and entailment are ever reached.
+      #
+      # This is the build line the ledgers themselves publish under
+      # `reproduce.build`; the workflow was not following its own instructions
+      # (aegis-1gp76j).
       - name: Build quipu
-        run: cargo build --release --bin quipu --bin quipu-shacl-conformance --features shacl
+        run: |
+          cargo build --release \
+            --bin quipu --bin quipu-server --bin quipu-shacl-conformance \
+            --features shacl,onnx,server
 
       - name: Resolve the quipu binary
         id: bin

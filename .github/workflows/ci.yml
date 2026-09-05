@@ -292,6 +292,18 @@ jobs:
         env:
           SKIP: mdbook-build
 
+      # The refusals that stand between a rehearsal and crates.io (aegis-pb4rzi).
+      # This job gates `release-correctness`, which is the right place for it:
+      # a guard protecting the release lane should be proven by something that
+      # blocks a release when it breaks.
+      #
+      # It is a selftest rather than a lint because the property is behavioural.
+      # Nothing else can catch a guard that has been quietly loosened — the
+      # workflow would stay green, and the next thing to notice would be a
+      # rehearsal tag on crates.io, which cannot be undone.
+      - name: Prove the crates publish guard still refuses
+        run: scripts/ci/crates-publish-guard.sh --selftest
+
   source-size:
     name: Source size ratchet
     runs-on: ubuntu-latest
