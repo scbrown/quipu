@@ -270,7 +270,9 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
           Your edited store exports as a <strong>real share</strong>, built by the same
           <code class="mono">share_payload</code> the CLI and the REST endpoint use, and declaring
           the pack it came from as its parent — so the lineage survives the round trip.
-          <code class="mono">quipu import</code> will take it back.
+          <code class="mono">quipu import</code> will take it back — extract it first and import
+          the <em>directory</em>, because <code class="mono">quipu import &lt;archive&gt;</code>
+          verifies into a throwaway in-memory store and ignores <code class="mono">--db</code>.
         </p>
         <dl id="export-manifest"></dl>
         <div class="row">

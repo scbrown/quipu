@@ -76,7 +76,9 @@ queries the page will show you. It takes any Quipu pack, not just this one.
 with the closed-vocabulary gate still enforcing what the sender's shapes allow. The views
 update as you go, and you can take the result with you: the edited store exports as a
 genuine `.qpack.tar.gz`, built by the same `share_payload` the CLI uses and declaring the
-pack it came from as its parent, so `quipu import` will take it back. Or download
+pack it came from as its parent, so `quipu import` will take it back — extract it first
+and import the *directory*, since `quipu import <archive>` verifies into a throwaway
+in-memory store and ignores `--db`. Or download
 `export.nt` and `diff` it — it is line-oriented and canonically ordered, so a change is a
 reviewable diff.
 
