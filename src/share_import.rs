@@ -1,7 +1,5 @@
 //! Quarantined import and composition for git-native knowledge shares.
 
-#![cfg(not(target_arch = "wasm32"))]
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use oxrdf::{NamedNode, NamedOrBlankNode, Term, Triple};

@@ -59,15 +59,12 @@ pub mod session_attestation;
 pub mod shacl;
 #[cfg(feature = "shacl")]
 pub mod shacl_context;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod share;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_delta;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod share_transport;
 pub mod signing;
 pub mod sparql;
@@ -80,6 +77,17 @@ pub mod vector_delegate;
 pub mod vector_lance;
 pub mod vocabulary;
 pub mod w3c;
+
+/// The crate version this build was compiled from.
+///
+/// Exported because consumers that are not the CLI or the server still need to
+/// say which quipu produced them — the wasm bundle in `wasm/explorer` reports it
+/// beside a pack's own `producer.version`, so a reader can see whether the
+/// engine reading the artifact is the engine that wrote it.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The git commit this build was compiled from, as stamped by `build.rs`.
+pub const GIT_SHA: &str = env!("QUIPU_GIT_SHA");
 
 pub use rdf_export::{export_rdf_construct, export_rdf_group};
 

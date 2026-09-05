@@ -49,6 +49,54 @@ jobs:
           cp ui/datalinks.js ui/graph-canvas.js docs/book/src/datalinks/
           cp ui/vendor/three.module.min.js docs/book/src/datalinks/vendor/
 
+      # The "Explore this repository's graph" page (aegis-tpqccc) runs quipu
+      # compiled to wasm and imports the release's own knowledge pack. Both are
+      # RELEASE ASSETS, downloaded here rather than committed — so the repo stays
+      # source-only and this build still needs no Rust.
+      #
+      # They are staged INTO the site rather than fetched by the page at runtime
+      # because a browser cannot fetch them: GitHub serves release-asset
+      # downloads with no `Access-Control-Allow-Origin` header, so `fetch()` from
+      # scbrown.github.io is refused before the response is readable. Measured in
+      # a real browser from the real Pages origin, 2026-09-05 — via github.com,
+      # via /releases/latest/download, and via the api.github.com asset endpoint,
+      # which 302s to the same non-CORS host. Do not "simplify" this away by
+      # pointing the page at a release URL; it will fail silently for readers and
+      # work for whoever tests it with curl.
+      #
+      # Deliberately NON-FATAL. Until a release ships carrying the wasm asset
+      # there is nothing to stage, and the docs must keep building; the page says
+      # so itself and still accepts a pack from a file picker. `mdbook build`
+      # copies whatever is in src/, so a missing bundle simply is not published.
+      - name: Stage the explorer bundle and repository pack from the newest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          DEST=docs/book/src/explore
+          TMP="$(mktemp -d)"
+          TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          if [ -z "${TAG}" ]; then
+            echo "::warning::no GitHub release found — the explorer page will ship unstaged"
+            exit 0
+          fi
+          echo "Staging explorer assets from release ${TAG}"
+
+          if gh release download "${TAG}" --pattern '*-wasm.tar.gz' --dir "${TMP}"; then
+            mkdir -p "${DEST}/pkg"
+            tar -C "${TMP}" -xzf "${TMP}"/*-wasm.tar.gz
+            find "${TMP}" -name 'quipu_wasm_explorer*' -exec cp {} "${DEST}/pkg/" \;
+          else
+            echo "::warning::release ${TAG} has no wasm bundle yet (first one lands with the next release)"
+          fi
+
+          if gh release download "${TAG}" --pattern '*-repository.qpack.tar.gz' --dir "${TMP}"; then
+            cp "${TMP}"/*-repository.qpack.tar.gz "${DEST}/repository.qpack.tar.gz"
+          else
+            echo "::warning::release ${TAG} has no repository qpack"
+          fi
+          ls -la "${DEST}" "${DEST}/pkg" 2>/dev/null || true
+
       - name: Build book
         run: mdbook build docs/book
 
@@ -59,6 +107,29 @@ jobs:
             test -s "docs/book/book/datalinks/$f" \
               || { echo "missing from book output: datalinks/$f"; exit 1; }
           done
+
+      # The page's own sources are committed, so they must ALWAYS be published —
+      # that half is a hard failure. The staged release artifacts are conditional
+      # (see the staging step), so they are checked only when staging produced
+      # them: a page published without its wasm is a real state, and it tells the
+      # reader so rather than pretending.
+      - name: Verify the explorer page was published
+        run: |
+          set -euo pipefail
+          for f in index.html explorer.js worker.js; do
+            test -s "docs/book/book/explore/$f" \
+              || { echo "missing from book output: explore/$f"; exit 1; }
+          done
+          if [ -d docs/book/src/explore/pkg ]; then
+            for f in pkg/quipu_wasm_explorer.js pkg/quipu_wasm_explorer_bg.wasm \
+                     repository.qpack.tar.gz; do
+              test -s "docs/book/book/explore/$f" \
+                || { echo "staged but not published: explore/$f"; exit 1; }
+            done
+            echo "explorer published WITH its wasm bundle and repository pack"
+          else
+            echo "::warning::explorer published WITHOUT a wasm bundle (no release carries one yet)"
+          fi
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'

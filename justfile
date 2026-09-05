@@ -165,6 +165,46 @@ docs-assets:
     cp ui/datalinks.js ui/graph-canvas.js docs/book/src/datalinks/
     cp ui/vendor/three.module.min.js docs/book/src/datalinks/vendor/
 
+# Stage the "Explore this repository's graph" page's artifacts (aegis-tpqccc):
+# just explorer [release|local]
+#
+#   release  (default) download the newest release's wasm bundle + repository
+#            pack — what the docs workflow does, and the only mode that needs no
+#            Rust. Requires `gh`.
+#   local    build the wasm from THIS tree and mint a pack from the working
+#            copy, for iterating on the page against uncommitted changes.
+#            Requires a wasm32 toolchain, a wasm-bindgen-cli matching
+#            wasm/explorer/Cargo.lock, and `bobbin` for the pack.
+#
+# Both write into docs/book/src/explore/, which is gitignored. Serve the built
+# book (`just docs build` then a static server over docs/book/book) — the page
+# needs a real origin for module workers, so file:// will not do.
+explorer mode="release":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    DEST=docs/book/src/explore
+    mkdir -p "$DEST/pkg"
+    if [ "{{mode}}" = "local" ]; then
+        cd wasm/explorer && cargo build --release --locked
+        wasm-bindgen --target web --out-dir "$OLDPWD/$DEST/pkg" \
+            target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm
+        cd "$OLDPWD"
+        echo "Built the bundle from this tree. Provide a pack yourself, or run"
+        echo "  just explorer release   # to fetch the released one"
+    else
+        TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+        TAG=$(gh release view --json tagName --jq .tagName)
+        echo "Staging from release $TAG"
+        gh release download "$TAG" --pattern '*-wasm.tar.gz' --dir "$TMP" \
+            && tar -C "$TMP" -xzf "$TMP"/*-wasm.tar.gz \
+            && find "$TMP" -name 'quipu_wasm_explorer*' -exec cp {} "$DEST/pkg/" \; \
+            || echo "warning: $TAG has no wasm bundle yet"
+        gh release download "$TAG" --pattern '*-repository.qpack.tar.gz' --dir "$TMP" \
+            && cp "$TMP"/*-repository.qpack.tar.gz "$DEST/repository.qpack.tar.gz" \
+            || echo "warning: $TAG has no repository qpack"
+    fi
+    ls -la "$DEST" "$DEST/pkg"
+
 # Regenerate the demo's baked graph payload. Needs a NeuralAmplifier checkout.
 docs-data graph="../NeuralAmplifier/datalinks/thinker/alphax.ttl":
     ./scripts/export-datalinks.sh {{graph}}

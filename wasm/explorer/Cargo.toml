@@ -1,0 +1,46 @@
+# The SHIPPED browser bundle: the wasm half of the book's "Explore this
+# repository's graph" page (aegis-tpqccc).
+#
+# Deliberately separate from `wasm/harness`, which is an acceptance/bench
+# harness whose profile optimizes for speed so the wasm-vs-native ratio stays
+# honest. This one is a download, so it optimizes for SIZE, and its exported
+# surface is the page's API rather than a set of test scenarios.
+#
+# Not a member of any workspace: it only ever builds for wasm32
+# (`.cargo/config.toml` pins the target), while the parent crate's tests,
+# benches and binaries only build natively.
+[package]
+name = "quipu-wasm-explorer"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# `default-features = false` drops shacl: rudof/shacl_engine are not part of
+# the wasm32 gate CI runs, and the import path already degrades honestly
+# without them (`validate_local` reports "SHACL feature not compiled" rather
+# than claiming conformance it did not check). The page says so on screen.
+quipu = { package = "quipu-ai", path = "../..", default-features = false }
+wasm-bindgen = "0.2"
+serde_json = "1"
+
+[features]
+# A passthrough, not a copy: it forwards to quipu's own `shacl` so the
+# `cfg!(feature = "shacl")` the page reports cannot drift from what was
+# actually linked. Off by default — see the dependency note above.
+shacl = ["quipu/shacl"]
+
+[profile.release]
+# Size, not speed: every byte here is a byte the book page downloads before it
+# can show anything. The harness crate makes the opposite trade for the
+# opposite reason.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

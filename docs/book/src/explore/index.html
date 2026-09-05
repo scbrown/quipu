@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quipu — Explore this repository's graph</title>
+<meta name="description" content="Quipu's own repository knowledge pack, imported and queried entirely in your browser by the quipu engine compiled to WebAssembly.">
+<!-- Inline: mdbook content-hashes its favicon filenames, so there is no stable
+     path to link, and without this the browser 404s on ./favicon.ico. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2316213e'/%3E%3Ccircle cx='8' cy='4' r='2' fill='%23e94560'/%3E%3Ccircle cx='4.5' cy='11' r='1.6' fill='%233987e5'/%3E%3Ccircle cx='11.5' cy='11' r='1.6' fill='%23199e70'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #1a1a2e; --bg-surface: #16213e; --bg-elevated: #0f3460;
+  --text: #e0e0e0; --text-muted: #8892a4; --accent: #e94560;
+  --blue: #3987e5; --green: #199e70; --amber: #d9a441;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--text-muted); }
+.bad { color: var(--accent); }
+.warn { color: var(--amber); }
+
+header {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 12px 20px; border-bottom: 1px solid var(--bg-elevated);
+  background: var(--bg-surface); position: sticky; top: 0; z-index: 5;
+}
+header h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; }
+header h1 span { color: var(--accent); }
+header .right { margin-left: auto; display: flex; gap: 14px; font-size: 12px; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 22px 20px 60px; }
+.lede { font-size: 15px; max-width: 74ch; margin-bottom: 6px; }
+.lede + .lede { margin-top: 10px; color: var(--text-muted); font-size: 13px; }
+
+#status {
+  margin: 18px 0; padding: 10px 12px; border-left: 3px solid var(--blue);
+  background: var(--bg-surface); font-size: 13px;
+}
+#status.bad { border-left-color: var(--accent); }
+
+section {
+  margin-top: 26px; border: 1px solid var(--bg-elevated);
+  border-radius: 6px; background: var(--bg-surface);
+}
+section > h2 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--text-muted); font-weight: 600;
+  padding: 10px 14px; border-bottom: 1px solid var(--bg-elevated);
+  display: flex; align-items: baseline; gap: 12px;
+}
+section > h2 .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+section > h2 a { margin-left: auto; font-size: 11px; text-transform: none; letter-spacing: 0; }
+.body { padding: 14px; }
+
+dl#provenance {
+  display: grid; grid-template-columns: minmax(140px, max-content) 1fr;
+  gap: 4px 16px; font-size: 12.5px;
+}
+dl#provenance dt { color: var(--text-muted); }
+dl#provenance dd { word-break: break-all; }
+#shacl-note, #freshness { margin-top: 12px; font-size: 12.5px; color: var(--text-muted); }
+
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+.bar-label { width: 190px; flex: none; font-size: 12px; }
+.bar-track { flex: 1; background: var(--bg-elevated); height: 14px; border-radius: 3px; }
+.bar { background: var(--blue); height: 100%; border-radius: 3px; }
+.bar-n { width: 70px; text-align: right; font-size: 12px; color: var(--text-muted); }
+
+.split { display: grid; grid-template-columns: 300px 1fr; gap: 14px; }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+#file-filter {
+  width: 100%; padding: 6px 8px; margin-bottom: 8px; font-family: var(--mono);
+  font-size: 12px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--bg-elevated); border-radius: 4px;
+}
+#file-list { max-height: 340px; overflow: auto; display: flex; flex-direction: column; }
+button.file {
+  display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+  text-align: left; padding: 3px 6px; font: inherit; font-size: 12px;
+  color: var(--text); background: none; border: 0; border-radius: 3px; cursor: pointer;
+}
+button.file:hover { background: var(--bg-elevated); }
+button.file em { font-style: normal; font-size: 10.5px; color: var(--text-muted); flex: none; }
+button.file span { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; }
+#detail-iri { font-size: 11px; color: var(--text-muted); word-break: break-all; margin-bottom: 8px; }
+#detail-title { font-size: 14px; font-family: var(--mono); }
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--text-muted); font-weight: 600; padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--bg-elevated);
+}
+td { padding: 3px 8px 3px 0; border-bottom: 1px solid rgba(15, 52, 96, .45); }
+td.num { color: var(--text-muted); width: 44px; }
+.scroll { max-height: 360px; overflow: auto; }
+
+#graph { width: 100%; height: 360px; display: block; background: var(--bg); border-radius: 4px; }
+
+#sparql {
+  width: 100%; min-height: 190px; padding: 10px; font-family: var(--mono); font-size: 12.5px;
+  color: var(--text); background: var(--bg); border: 1px solid var(--bg-elevated);
+  border-radius: 4px; resize: vertical; line-height: 1.5;
+}
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+button.go, button.canned, #url-load {
+  font: inherit; font-size: 12.5px; padding: 5px 11px; border-radius: 4px; cursor: pointer;
+  color: var(--text); background: var(--bg-elevated); border: 1px solid transparent;
+}
+button.go { background: var(--accent); color: #fff; font-weight: 600; }
+button.canned:hover, #url-load:hover { border-color: var(--blue); }
+#sparql-out { margin-top: 10px; max-height: 400px; overflow: auto; }
+#sparql-out pre { white-space: pre-wrap; font-family: var(--mono); font-size: 12px; }
+
+#url-input, #file-input {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  background: var(--bg); border: 1px solid var(--bg-elevated);
+  border-radius: 4px; padding: 5px 8px;
+}
+#url-input { flex: 1; min-width: 260px; }
+footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width: 78ch; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>Q</span>UIPU — Explore this repository's graph</h1>
+  <span class="right">
+    <a href="../">Documentation</a>
+    <a href="../sharing/">Sharing &amp; Federation</a>
+    <a href="https://github.com/scbrown/quipu">GitHub</a>
+  </span>
+</header>
+
+<div class="wrap">
+
+  <p class="lede">
+    Every Quipu release ships a knowledge pack of <strong>this repository</strong> — its modules,
+    symbols, documents and sections, as RDF. This page downloads that pack and opens it with the
+    Quipu engine compiled to WebAssembly. <strong>There is no server.</strong> The store is built
+    in this tab, the SPARQL below runs in this tab, and closing it throws the whole thing away.
+  </p>
+  <p class="lede">
+    It is also the receiving half of Quipu's sharing story, run in front of you rather than
+    described: the manifest is verified against the exact payload bytes, the pack's bundled shapes
+    are <em>adopted</em> as a deliberate act, the graph is imported into a staging graph, and only
+    then promoted. Every number on this page is from a query you can read and re-run.
+  </p>
+
+  <div id="status">Starting the WebAssembly worker…</div>
+
+  <section>
+    <h2>Provenance <span class="note">— what you are actually looking at</span></h2>
+    <div class="body">
+      <dl id="provenance"></dl>
+      <p id="shacl-note"></p>
+      <p id="freshness"></p>
+    </div>
+  </section>
+
+  <main hidden>
+
+    <section>
+      <h2>Type distribution <span class="note" id="types-total"></span>
+        <a href="#" id="types-showq">show the query</a></h2>
+      <div class="body"><div id="types"></div></div>
+    </section>
+
+    <section>
+      <h2>Browse modules &amp; documents <a href="#" id="browse-showq">show the query</a></h2>
+      <div class="body split">
+        <div>
+          <input id="file-filter" type="search" placeholder="filter by path…" autocomplete="off">
+          <p class="muted mono" id="file-count" style="font-size:11px;margin-bottom:6px"></p>
+          <div id="file-list"></div>
+        </div>
+        <div>
+          <h3 id="detail-title" class="mono"></h3>
+          <p id="detail-iri" class="mono"></p>
+          <p style="margin-bottom:8px"><a href="#" id="detail-showq" class="mono"
+            style="font-size:11px">show the query for this pane</a></p>
+          <div id="detail-body" class="scroll"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Neighbourhood <span class="note" id="graph-count"></span>
+        <a href="#" id="graph-showq">show the query</a></h2>
+      <div class="body">
+        <canvas id="graph"></canvas>
+        <p class="muted" style="font-size:12px;margin-top:8px">
+          The selected file in red, everything the pack links to or from it in blue. Laid out by a
+          small force simulation in this file — no rendering library, because a few dozen nodes do
+          not need one.
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <h2>SPARQL <span class="note">— against the copy in this tab</span></h2>
+      <div class="body">
+        <div class="row" id="canned"></div>
+        <textarea id="sparql" spellcheck="false"></textarea>
+        <div class="row"><button class="go" id="run">Run</button>
+          <span class="muted" style="font-size:12px">
+            Reads only. Nothing you type here leaves your browser.</span></div>
+        <div id="sparql-out"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Load a different pack</h2>
+      <div class="body">
+        <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+          Any Quipu share works here, not just this one — that is the point of a portable pack.
+          Point it at a URL, or open a <code class="mono">.qpack.tar.gz</code> from your disk.
+          <strong>GitHub release assets will not load from a URL:</strong> GitHub serves them with
+          no <code class="mono">Access-Control-Allow-Origin</code> header, so the browser refuses
+          them — which is exactly why this site stages its own copy at build time.
+        </p>
+        <div class="row">
+          <input id="url-input" type="url" placeholder="https://example.org/some.qpack.tar.gz">
+          <button id="url-load">Load URL</button>
+        </div>
+        <div class="row"><input id="file-input" type="file" accept=".gz,.tar.gz,.qpack"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>
+      Built from <a href="https://github.com/scbrown/quipu/tree/main/wasm/explorer">wasm/explorer</a>
+      and shipped as a release asset. The pack is produced at release time by
+      <code class="mono">scripts/build-repository-share.sh</code> under a CONSTRUCT scope that
+      admits public repository knowledge only. See
+      <a href="../sharing/">Sharing &amp; Federation</a> for what a pack is and how the receiving
+      side decides what to trust.
+    </p>
+  </footer>
+
+</div>
+
+<script type="module" src="./explorer.js"></script>
+</body>
+</html>

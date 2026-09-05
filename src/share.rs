@@ -1,8 +1,9 @@
 //! Git-native knowledge shares: canonical RDF plus shapes and a lineage manifest.
 
-#![cfg(not(target_arch = "wasm32"))]
-
 use std::collections::{BTreeMap, BTreeSet};
+// Only `share()` writes a directory, and it is native-only; the rest of this
+// module (manifest, canonicalization, payload) is pure and compiles for wasm32.
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
 use serde::ser::SerializeStruct;
@@ -478,6 +479,7 @@ pub fn share_payload(store: &Store, opts: &ShareOptions, max_bytes: usize) -> Re
 /// # Errors
 /// The scope is invalid, a requested shape does not exist, the destination
 /// exists, or a payload cannot be written.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn share(store: &Store, out_dir: &str, opts: &ShareOptions) -> Result<ShareManifest> {
     let out = Path::new(out_dir);
     if out.exists() {

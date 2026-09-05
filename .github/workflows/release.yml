@@ -219,6 +219,166 @@ jobs:
             echo "::warning::could not fetch ${BR}"; exit 0; }
           ./scripts/verify-changelog.sh --at "refs/remotes/origin/${BR}"
 
+  # The browser bundle the book's "Explore this repository's graph" page runs
+  # (aegis-tpqccc). A release asset rather than a committed artifact for the same
+  # reason the linux binaries are: the repo stays source-only, and the Pages build
+  # needs no Rust — the docs workflow just downloads this.
+  #
+  # A SEPARATE job from `artifacts` on purpose. They share nothing but the tag,
+  # and coupling them would mean a wasm toolchain problem holds up the binary
+  # release, which is the artifact people actually install.
+  wasm:
+    name: Wasm (browser bundle)
+    needs: release-plz
+    # `always()` so the manual path (which skips release-plz entirely) still
+    # runs; the rest of the condition is the real gate.
+    if: >-
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       needs.release-plz.outputs.releases_created == 'true')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/wasm-bindgen
+            wasm/explorer/target
+          key: ${{ runner.os }}-cargo-wasm-explorer-${{ hashFiles('wasm/explorer/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-wasm-explorer-
+            ${{ runner.os }}-cargo-wasm-
+
+      # The generated JS glue must come from the EXACT wasm-bindgen the crate
+      # compiled against, or the bundle fails at init with a version-mismatch
+      # message. Read it from the lockfile rather than pinning a second copy
+      # here, so the two cannot drift.
+      - name: Install wasm-bindgen-cli
+        run: |
+          set -euo pipefail
+          V=$(grep -A1 '^name = "wasm-bindgen"$' wasm/explorer/Cargo.lock | grep '^version' | cut -d'"' -f2)
+          if ! command -v wasm-bindgen >/dev/null || ! wasm-bindgen --version | grep -qF "$V"; then
+            cargo install wasm-bindgen-cli --version "$V" --locked --force
+          fi
+
+      - name: Build the explorer bundle
+        working-directory: wasm/explorer
+        run: |
+          set -euo pipefail
+          cargo build --release --locked
+          wasm-bindgen --target web --out-dir pkg \
+            target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm
+
+      - name: Resolve package-qualified tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            VERSION="$(cargo metadata --no-deps --format-version 1 \
+              | jq -r '.packages[] | select(.name == "quipu-ai") | .version')"
+            TAG="quipu-ai-v${VERSION}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved tag: ${TAG}"
+
+      - name: Package
+        id: package
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          NAME="quipu-${TAG}-wasm"
+          mkdir -p "dist/${NAME}"
+          cp wasm/explorer/pkg/quipu_wasm_explorer.js \
+             wasm/explorer/pkg/quipu_wasm_explorer_bg.wasm \
+             wasm/explorer/pkg/quipu_wasm_explorer.d.ts \
+             wasm/explorer/pkg/quipu_wasm_explorer_bg.wasm.d.ts \
+             "dist/${NAME}/"
+          cp LICENSE "dist/${NAME}/"
+          cat > "dist/${NAME}/README.txt" <<'EOF'
+          quipu, compiled to wasm32-unknown-unknown for the browser.
+
+          This is the bundle behind "Explore this repository's graph" in the book
+          (https://scbrown.github.io/quipu/explore/). It opens an in-memory quipu
+          store in a tab, imports a .qpack share through the same
+          share_transport -> share_import -> promote path the `quipu import` CLI
+          takes, and answers SPARQL through the same `tool_query` entry point the
+          REST API and the MCP server use.
+
+          Load it as an ES module from a Web Worker (the import of a large pack is
+          seconds of solid CPU and will freeze a main thread):
+
+            import init, { Explorer, explorerVersion }
+              from "./quipu_wasm_explorer.js";
+            await init();
+            const ex = Explorer.loadQpack(bytes, "source-label", timestampIso);
+            JSON.parse(ex.loadReport());   // manifest + import + promotion
+            JSON.parse(ex.query(sparql));  // SELECT/ASK/CONSTRUCT/DESCRIBE
+
+          Built WITHOUT the `shacl` feature. `import.validation.conforms` is
+          therefore a default and not a validation result -- the off-vocabulary
+          check does run, since it does not need the SHACL engine. Use the native
+          `quipu import` for full validation.
+
+          Reference page source: docs/book/src/explore/ in the quipu repository.
+          EOF
+          tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
+          ( cd dist && sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256" )
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          ls -la dist "dist/${NAME}"
+
+      # A bundle that ships but cannot instantiate is the failure this catches,
+      # and nothing upstream would: `cargo build` proves it compiles and
+      # wasm-bindgen proves the glue generated. Neither loads the module.
+      - name: Smoke-test the packaged bundle in a browser
+        env:
+          NAME: ${{ steps.package.outputs.name }}
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null
+          npm install --no-save playwright@1.56
+          npx playwright install --with-deps chromium
+          node scripts/smoke-wasm-explorer.mjs "dist/${NAME}"
+
+      - name: Upload to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          NAME: ${{ steps.package.outputs.name }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::no GitHub release found for tag ${TAG}"
+            exit 1
+          fi
+          gh release upload "$TAG" \
+            "dist/${NAME}.tar.gz" \
+            "dist/${NAME}.tar.gz.sha256" \
+            --clobber
+
+      # The book page serves the bundle and the pack from THIS site, because
+      # GitHub sends no CORS header on release-asset downloads and a browser
+      # therefore cannot fetch them cross-origin (measured 2026-09-05). So the
+      # page only picks up a new release when the docs workflow next runs, and
+      # nothing else would trigger it: a release-merge push touches CHANGELOG.md
+      # and Cargo.toml, neither of which is in docs.yml's path filter.
+      - name: Restage the book so it serves this release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run docs.yml --ref main
+
   # Attach release binaries built with the `full` feature bundle (Cargo.toml):
   # every feature the shipped binaries can actually use. NOT `--all-features` —
   # that would pull in lancedb, a backend the binaries cannot select.
