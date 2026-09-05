@@ -26,9 +26,9 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `4aa67ad54dd76fc83dd4e8967d1596ba4d6004c3` |
-| Quipu revision (syntax) | `4aa67ad54dd76fc83dd4e8967d1596ba4d6004c3` |
-| Quipu version | `quipu 0.3.35` |
+| Quipu revision (evaluation) | `84c4fabbe0edc989bd6d03be5986dcf6aeffec98` |
+| Quipu revision (syntax) | `84c4fabbe0edc989bd6d03be5986dcf6aeffec98` |
+| Quipu version | `quipu 0.3.36` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -177,7 +177,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **29/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-05T15:40:11Z by [CI run](https://github.com/scbrown/quipu/actions/runs/33975416865), from quipu `4aa67ad54dd7`.
+Ledger re-derived 2026-09-05T17:46:58Z by [CI run](https://github.com/scbrown/quipu/actions/runs/33981833173), from quipu `84c4fabbe0ed`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
