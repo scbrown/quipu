@@ -80,6 +80,12 @@ pub struct ShareOptions {
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
     pub turtle_view: bool,
+    /// Repository directory this share lives under (aegis-8fdp8d).
+    ///
+    /// `None` records nothing in the manifest, which consumers read as the
+    /// default. Set it only where a repository has actually chosen a name, so
+    /// that a share does not assert a layout its producer never configured.
+    pub pack_dir: Option<String>,
 }
 
 /// Default upper bound for a payload-returning share response.
@@ -115,6 +121,11 @@ impl SharePayloadRequest {
             no_shapes: self.no_shapes,
             parent_share: self.parent_share.clone(),
             turtle_view: self.turtle_view,
+            // Not settable over HTTP: pack_dir is a property of the producing
+            // REPOSITORY, not of a request, and letting a caller assert one
+            // would put a layout claim in a share from someone who does not own
+            // the layout.
+            pack_dir: None,
         }
     }
 
@@ -183,6 +194,54 @@ pub struct ShareManifest {
     pub producer: ShareProducer,
     /// Payload names.
     pub files: ShareFiles,
+    /// Repository directory this share and its deltas live under, WITHOUT a
+    /// trailing slash — `qpack` by default (aegis-8fdp8d).
+    ///
+    /// Carried in the manifest rather than compiled into any consumer because
+    /// the loudest consumer cannot see the repository at all: the wasm page
+    /// receives its graph as a release asset, so a directory name baked into
+    /// that bundle would send a renamed repo's readers to a path that does not
+    /// exist. Travelling in the artifact means the page's target is always the
+    /// target of the graph it is actually showing.
+    ///
+    /// Optional so every share already produced stays valid and no schema bump
+    /// is needed; `None` means the default. Read it with
+    /// [`ShareManifest::pack_dir_or_default`] rather than unwrapping, so the
+    /// default lives in exactly one place.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_dir: Option<String>,
+}
+
+/// The directory name a share uses when its manifest does not say.
+pub const DEFAULT_PACK_DIR: &str = "qpack";
+
+impl ShareManifest {
+    /// This share's repository directory, or the default when unset.
+    ///
+    /// A trailing slash is trimmed so callers can always join with one `/`, and
+    /// an empty or whitespace-only value falls back rather than producing a
+    /// path that starts at the repository root — a share that says its packs
+    /// live at `""` is malformed, and silently targeting the root would be the
+    /// damaging reading of it.
+    #[must_use]
+    pub fn pack_dir_or_default(&self) -> &str {
+        // Emptiness is checked AFTER trimming slashes, not before. The first
+        // version checked before, so "/" passed the guard and then trimmed to
+        // "" — resolving to the repository ROOT, which is the damaging reading
+        // of a malformed value and precisely what this function exists to stop.
+        // Caught by its own test rather than by review.
+        match self.pack_dir.as_deref() {
+            Some(d) => {
+                let trimmed = d.trim().trim_end_matches('/');
+                if trimmed.is_empty() {
+                    DEFAULT_PACK_DIR
+                } else {
+                    trimmed
+                }
+            }
+            None => DEFAULT_PACK_DIR,
+        }
+    }
 }
 
 pub(crate) fn sha256(bytes: &[u8]) -> String {
@@ -375,6 +434,7 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
             shapes: "shapes.ttl".into(),
             turtle_view: turtle.as_ref().map(|_| "export.ttl".to_string()),
         },
+        pack_dir: opts.pack_dir.clone(),
     };
     manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
 
