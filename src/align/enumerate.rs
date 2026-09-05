@@ -33,7 +33,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::namespace::{RDF_TYPE, RDFS_LABEL};
 use crate::store::Store;
 use crate::types::Value;
@@ -83,8 +83,28 @@ impl Enumeration {
 ///
 /// Propagates store errors.
 pub fn enumerate(store: &Store, graph_iri: &str) -> Result<Enumeration> {
+    // An ABSENT graph is a question this store cannot answer; an EMPTY one is a
+    // legitimate answer of zero. Until aegis-19o403 both returned an empty
+    // Enumeration, so a typo in a graph IRI read as "this graph has nothing to
+    // align" — and muldoon hit exactly that, with a namespace prefix, and
+    // believed the zero.
+    //
+    // The distinction is the whole contract. Do NOT "fix" this by erroring on
+    // emptiness: a registered graph with no labelled concepts is an informative
+    // 0 and the operator needs to see it.
+    //
+    // Note the near-precedent that does NOT apply: `query_context` deliberately
+    // scopes an unknown graph IRI to an EMPTY default graph rather than
+    // erroring, which is right for SPARQL — a query over a graph that does not
+    // exist genuinely has no rows. `enumerate` is not a query. It is the
+    // operator's discovery step, and its zero is read as "there is nothing to
+    // align here".
     let Some(graph) = store.lookup(graph_iri)? else {
-        return Ok(Enumeration::default());
+        return Err(Error::InvalidValue(format!(
+            "graph {graph_iri} is not interned in this store, so it has no concepts to \
+             enumerate — this is an absent graph, not an empty one. Check the IRI \
+             (a namespace prefix is the usual cause) or create it first."
+        )));
     };
     let Some(label_attr) = store.lookup(RDFS_LABEL)? else {
         // Nothing in this store has ever carried a label.

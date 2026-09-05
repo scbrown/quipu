@@ -1051,10 +1051,33 @@ fn an_unlabelled_entity_is_not_a_concept() {
 }
 
 #[test]
-fn an_absent_graph_enumerates_to_nothing_rather_than_erroring() {
+fn an_absent_graph_is_an_error_not_an_empty_enumeration() {
+    // INVERTED at aegis-19o403. This test previously asserted the opposite —
+    // `an_absent_graph_enumerates_to_nothing_rather_than_erroring` — so the
+    // defect was pinned as intended behaviour, which is why it survived review.
+    // muldoon hit it with a namespace prefix and believed the zero.
     let store = Store::open_in_memory().unwrap();
-    let out = enumerate(&store, "http://example.org/graph/never-registered").unwrap();
-    assert!(out.is_empty());
+    let err = enumerate(&store, "http://example.org/graph/never-registered")
+        .expect_err("an absent graph is a question the store cannot answer");
+    let msg = err.to_string();
+    assert!(msg.contains("never-registered"), "must name the IRI: {msg}");
+    assert!(
+        msg.contains("absent") && msg.contains("empty"),
+        "must say WHICH of the two states this is: {msg}"
+    );
+}
+
+#[test]
+fn a_registered_but_empty_graph_still_enumerates_to_zero() {
+    // The control, and the reason the fix above is not "error on emptiness".
+    // A registered graph with no labelled concepts is a legitimate, informative
+    // 0 and the operator needs to see it. Without this test, erroring on ANY
+    // zero would satisfy the test above — the wrong fix, passing.
+    let store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/registered-but-bare";
+    store.graph_create(g).unwrap();
+    let out = enumerate(&store, g).expect("a registered graph answers, even with nothing in it");
+    assert!(out.concepts.is_empty());
 }
 
 #[test]
@@ -1890,4 +1913,83 @@ fn after_a_retraction_propose_offers_the_pair_again() {
         "after retraction the pair MUST be proposed again — a retraction that \
          leaves the suppression in place has undone nothing that matters"
     );
+}
+
+// --- apply: who owns the graph NAME decides what absent means (aegis-19o403) ---
+
+#[test]
+fn apply_creates_the_derived_graph_it_computed_itself() {
+    // The contract that was unsatisfiable: `derived_graph_iri` is computed by
+    // the library and never handed back, so requiring the caller to
+    // graph_create it first asked them to pre-create a name they are not told.
+    let mut store = Store::open_in_memory().unwrap();
+    let iri = super::apply::derived_graph_iri("http://ex/a", "http://ex/b");
+    assert!(
+        store.lookup(&iri).unwrap().is_none(),
+        "precondition: not interned"
+    );
+
+    let set = MappingSet::new("urn:quipu:align:set:test");
+    let version = super::apply::set_version(&set).unwrap();
+    super::apply::apply(
+        &mut store,
+        &set,
+        &iri,
+        &version,
+        "2026-09-05T00:00:00Z",
+        None,
+    )
+    .expect("a derived graph is the library's own name, so it is created");
+
+    assert!(
+        store.lookup(&iri).unwrap().is_some(),
+        "the derived graph must exist after apply"
+    );
+}
+
+#[test]
+fn apply_still_refuses_a_caller_supplied_graph_it_has_never_seen() {
+    // The control, and the load-bearing half: auto-creating an arbitrary name
+    // would turn a typo into a brand new empty graph plus a successful-looking
+    // write nobody can find. Without this, "create whatever is missing" passes
+    // the test above and is the wrong fix.
+    let mut store = Store::open_in_memory().unwrap();
+    let set = MappingSet::new("urn:quipu:align:set:test");
+    let version = super::apply::set_version(&set).unwrap();
+    let err = super::apply::apply(
+        &mut store,
+        &set,
+        "http://example.org/graph/algnment-typo",
+        &version,
+        "2026-09-05T00:00:00Z",
+        None,
+    )
+    .expect_err("a name the CALLER chose is not created for them");
+    assert!(err.to_string().contains("algnment-typo"));
+    assert!(
+        store
+            .lookup("http://example.org/graph/algnment-typo")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn the_derived_iri_shape_accepts_only_what_this_library_computes() {
+    use super::apply::{derived_graph_iri, is_derived_graph_iri};
+    assert!(is_derived_graph_iri(&derived_graph_iri(
+        "http://ex/a",
+        "http://ex/b"
+    )));
+    // must REFUSE — each of these would let a caller-supplied name be created
+    for bad in [
+        "http://example.org/graph/x",
+        "urn:quipu:align:",
+        "urn:quipu:align:short:abcdefabcdef",
+        "urn:quipu:align:abcdefabcdef:nothex000000",
+        "urn:quipu:align:abcdefabcdef",
+        "urn:quipu:align:abcdefabcdef:abcdefabcdef:extra",
+    ] {
+        assert!(!is_derived_graph_iri(bad), "must refuse {bad}");
+    }
 }
