@@ -31,6 +31,20 @@ pub struct ShareImportRequest {
     /// path is one a caller now has to ask for by name.
     #[serde(default)]
     pub accept_exact: bool,
+    /// External attestation over the v1 manifest identity (aegis-c9c44).
+    ///
+    /// NOT ON WASM. `session_attestation` is `cfg(not(wasm32))` — signature
+    /// verification needs `ring`, which the browser build does not carry. A wasm
+    /// consumer therefore has no attestation concept at all, which is honest:
+    /// offering the field and never checking it would be worse than not having it.
+    #[cfg(not(target_arch = "wasm32"))]
+    ///
+    /// OPTIONAL, and `#[serde(default)]` so every existing caller keeps
+    /// deserialising unchanged. Absence is not silence: it is recorded as
+    /// `attestation.tier = "transport"`, which says plainly that the bytes were
+    /// checked and the AUTHOR was not.
+    #[serde(default)]
+    pub attestation: Option<crate::session_attestation::AttestationEnvelope>,
 }
 
 /// Count split between admitted and quarantined triples.
@@ -89,6 +103,10 @@ pub struct ShareImportResult {
     pub resolution: ImportResolution,
     pub validation: ImportValidation,
     pub promotion: PromotionStatus,
+    /// WHO produced this share, or an explicit statement that we do not know.
+    /// Absent on wasm, where there is no verifier to answer with.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub attestation: crate::share_attestation::AttestationStatus,
 }
 
 /// Request for the separate ROOT-promotion operation.
@@ -338,7 +356,16 @@ pub fn import_share(
     timestamp: &str,
     authenticated_actor: Option<&str>,
 ) -> Result<ShareImportResult> {
+    // MANIFEST IDENTITY FIRST, THEN AUTHORSHIP, and the order is the scope's
+    // (aegis-c9c44). `verify_share` recomputes the payload hashes and refuses a
+    // mismatch; attesting bytes that do not hash to what the manifest claims would
+    // be signing the wrong thing.
     verify_share(request)?;
+    // THEN who produced it, BEFORE anything is staged. A tampered, replayed, or
+    // unbound envelope must fail here rather than after the graph exists — the
+    // whole point of a pre-staging check is that a refusal leaves nothing behind.
+    #[cfg(not(target_arch = "wasm32"))]
+    let attestation = crate::share_attestation::verify_attestation(store, request, timestamp)?;
     let mut triples = parse_triples(&request.export_ntriples)?;
     let resolution = resolve_and_rewrite(store, &mut triples, request.accept_exact)?;
     let resolved = serialize(&triples)?;
@@ -402,6 +429,8 @@ pub fn import_share(
             eligible: !quarantined,
             blockers,
         },
+        #[cfg(not(target_arch = "wasm32"))]
+        attestation,
     })
 }
 
@@ -450,3 +479,7 @@ pub fn promote_import(
 
 #[cfg(test)]
 include!("share_import_tests.rs");
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "share_import_attestation_tests.rs"]
+mod share_import_attestation_tests;
