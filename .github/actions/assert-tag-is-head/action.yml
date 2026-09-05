@@ -35,11 +35,33 @@ description: >-
 #
 # A guard, rather than a note, because the button is one click and reads as safe.
 #
-# TO EXERCISE THE RELEASE PATH DELIBERATELY: create a throwaway tag and a
-# PRERELEASE for it (prerelease so a latest-published deploy lane cannot select
-# it), dispatch against that, then delete it. The job requires the release to
-# exist already, so it must be created before the dispatch rather than by it.
-# That tag's commit IS head, so this guard passes.
+# ── WHAT THIS DOES *NOT* BLOCK, AND WHY THAT MATTERS ──────────────────────
+#
+# THE LEGITIMATE REPAIR STILL WORKS. Dispatch with `--ref <tag>`:
+#
+#     gh workflow run release.yml --ref <tag> -f tag=<tag>
+#
+# Both asset jobs check out with NO `ref:`, so checkout takes `github.ref` — the
+# ref the run was dispatched on — and GITHUB_SHA is that ref's commit. Dispatched
+# on the tag, the build IS the tag and this guard passes. Dispatched on `main`
+# against an older tag, GITHUB_SHA is main's head and it refuses.
+#
+# So the guard discriminates the DIVERGENCE, not the repair: re-uploading assets
+# for a release whose upload failed remains available in its correct form, and
+# only rebuilding an old release from current main is refused.
+#
+# Spelled out because a reader who hits the refusal could reasonably conclude the
+# guard blocks all repairs and delete it. It does not. It compares against "what
+# this run actually built", and every good case falls out of that; the property
+# was not designed case-by-case, which is also why it is worth stating rather
+# than trusting a future reader to re-derive.
+#
+# TO EXERCISE THE RELEASE PATH DELIBERATELY on a tag you do not want to touch:
+# create a throwaway tag and a PRERELEASE for it (prerelease so a
+# latest-published deploy lane cannot select it), dispatch against that, then
+# delete it. The job requires the release to exist already, so it must be created
+# before the dispatch rather than by it. That tag's commit IS head, so this guard
+# passes.
 
 inputs:
   tag:
