@@ -11,6 +11,9 @@ pub mod pattern;
 pub mod pattern_util;
 pub mod property_path;
 pub mod rdfs;
+pub mod rdfs_closure;
+#[cfg(test)]
+mod rdfs_closure_tests;
 #[cfg(test)]
 mod tests;
 
