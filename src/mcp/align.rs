@@ -272,7 +272,10 @@ mod tests {
             "a matching pair across two graphs must propose at least one candidate; got {out}"
         );
         assert!(
-            out["expected_version"].as_str().unwrap().starts_with("sha256:"),
+            out["expected_version"]
+                .as_str()
+                .unwrap()
+                .starts_with("sha256:"),
             "propose must return the version apply requires, or the operator cannot proceed"
         );
         assert!(out["set_tsv"].as_str().unwrap().contains("subject_id"));
@@ -316,8 +319,7 @@ mod tests {
     #[test]
     fn apply_refuses_without_an_expected_version() {
         let (mut store, a, b) = two_graphs();
-        let proposal =
-            tool_align_propose(&store, &json!({ "graph_a": a, "graph_b": b })).unwrap();
+        let proposal = tool_align_propose(&store, &json!({ "graph_a": a, "graph_b": b })).unwrap();
 
         let err = tool_align_apply(
             &mut store,
@@ -344,7 +346,10 @@ mod tests {
                 "expected_version": proposal["expected_version"].as_str().unwrap(),
             }),
         );
-        assert!(applied.is_ok(), "carrying the version must work: {applied:?}");
+        assert!(
+            applied.is_ok(),
+            "carrying the version must work: {applied:?}"
+        );
     }
 
     /// All three tools are registered, and `propose` is not annotated with the

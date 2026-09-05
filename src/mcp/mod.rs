@@ -4,12 +4,12 @@
 //! Model Context Protocol tool calling convention. Bobbin's MCP server
 //! delegates knowledge graph operations to these handlers.
 
+pub mod align;
 #[cfg(feature = "owl")]
 pub mod explain;
 pub mod governance;
 pub mod graphiti;
 pub mod impact;
-pub mod align;
 pub mod knot;
 pub mod named_query;
 #[cfg(feature = "owl")]
@@ -25,12 +25,12 @@ mod value;
 
 use serde_json::Value as JsonValue;
 
+pub use align::{tool_align_apply, tool_align_decide, tool_align_propose};
 pub use governance::{
     tool_cooccurrence, tool_graph_create, tool_graph_label, tool_overlay_compose,
     tool_overlay_create, tool_overlay_write, tool_policy_check, tool_verdict_verify,
     tool_verifier_authorized,
 };
-pub use align::{tool_align_apply, tool_align_decide, tool_align_propose};
 pub use knot::tool_knot;
 
 use crate::error::{Error, Result};

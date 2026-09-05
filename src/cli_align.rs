@@ -131,9 +131,10 @@ fn cmd_decide(args: &[String]) {
         eprintln!("usage: quipu align decide <set.tsv> --decisions <rows.tsv> --reviewer <who>");
         std::process::exit(1);
     };
-    let (Some(rows_path), Some(reviewer)) =
-        (flag_value(args, "--decisions"), flag_value(args, "--reviewer"))
-    else {
+    let (Some(rows_path), Some(reviewer)) = (
+        flag_value(args, "--decisions"),
+        flag_value(args, "--reviewer"),
+    ) else {
         eprintln!("align decide: --decisions and --reviewer are required");
         std::process::exit(1);
     };
@@ -188,7 +189,9 @@ fn cmd_apply(args: &[String], db_path: &str) {
     let (Some(graph_a), Some(graph_b)) =
         (flag_value(args, "--graph-a"), flag_value(args, "--graph-b"))
     else {
-        eprintln!("align apply: --graph-a and --graph-b are required (the pair given to `propose`)");
+        eprintln!(
+            "align apply: --graph-a and --graph-b are required (the pair given to `propose`)"
+        );
         std::process::exit(1);
     };
     let graph_iri = apply::derived_graph_iri(graph_a, graph_b);
@@ -243,7 +246,10 @@ fn read_decisions(path: &str) -> Vec<DecisionRow> {
         }
         let parts: Vec<&str> = line.split('\t').collect();
         let [subject, object, verdict] = parts[..] else {
-            eprintln!("align decide: {path}:{}: expected 3 tab-separated fields", n + 1);
+            eprintln!(
+                "align decide: {path}:{}: expected 3 tab-separated fields",
+                n + 1
+            );
             std::process::exit(1);
         };
         let decision = match verdict {

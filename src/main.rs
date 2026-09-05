@@ -30,6 +30,7 @@
 //! Aliases: load=knot, query=read
 
 mod cli;
+mod cli_align;
 mod cli_audit;
 mod cli_changes;
 mod cli_commands;
@@ -41,7 +42,6 @@ mod cli_graph;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
-mod cli_align;
 mod cli_policy;
 mod cli_propose;
 
@@ -307,6 +307,9 @@ COMMANDS:
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--db <path>]
     quipu import delta <parent-share> <delta-share> [--actor <id>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
+    quipu align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
+    quipu align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
+    quipu align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
     quipu status <share-dir> [--db <path>]
     quipu merge <share-dir> [--actor <id>] [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
