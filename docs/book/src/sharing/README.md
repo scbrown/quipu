@@ -131,9 +131,15 @@ model above gives you and this path does not.
 Sub-exact matches are *not* applied: they come back as candidates for review. The
 rewrite is confined to the exact-name case.
 
-Closing that gap — every alignment an operator-accepted, recorded fact rather than
-a silent rewrite — is in progress. Until it lands, treat an import as
-identity-safe only where you control the naming in both stores.
+**This is a known gap, not the design.** The intended behaviour is the one
+`knot` already implements: an exact-name match should be *proposed* as an
+alignment for the operator to accept, and recorded as an `owl:sameAs` fact —
+visible, queryable, retractable — rather than applied as a silent rewrite. That
+work is in progress; when it lands this section describes it instead, and the
+model above becomes true of both verbs.
+
+Until then, treat an import as identity-safe only where you control the naming
+in both stores.
 
 ## What travels: facts, graphs, whole repositories
 
