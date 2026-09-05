@@ -33,6 +33,7 @@ fn request_from_files(
         // Local construction carries no envelope: these paths build a request from
         // bytes already in hand, so there is no producer to attest. The result then
         // reports tier "transport", which is the truth (aegis-c9c44).
+        #[cfg(not(target_arch = "wasm32"))]
         attestation: None,
         manifest,
         export_ntriples: get("export.nt")?,
