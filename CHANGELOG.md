@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.38] - 2026-09-05
+
+### Demo
+
+- *(align)* The alignment half of the sharing story, as a checked transcript([cbac8df](https://github.com/scbrown/quipu/commit/cbac8df761d1d8513ab528662bd9edbddbe46a69))
+
 ## [0.3.37] - 2026-09-05
 
 ### Added
