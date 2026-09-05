@@ -1693,3 +1693,201 @@ fn an_unknown_decision_word_is_refused_rather_than_defaulted() {
     assert_eq!(Decision::parse("negate").unwrap(), Decision::Negate);
     assert_eq!(Decision::parse("decline").unwrap(), Decision::Decline);
 }
+
+// ---------------------------------------------------------------------------
+// R2 — reaching an assertion WITHOUT knowing it exists (aegis-sosiaa)
+// ---------------------------------------------------------------------------
+
+use super::discover::about_pair;
+
+/// A store holding one APPLIED positive alignment, written by `apply` itself
+/// rather than hand-inserted — discovery must find what apply actually writes.
+fn decided_store_with_a_knot() -> (crate::Store, String) {
+    let (mut store, g) = store_with_graph("urn:quipu:align:r2pos");
+    let mut set = MappingSet::new("urn:quipu:align:r2pos");
+    set.mappings.push(authored_same(A, B));
+    let v = set_version(&set).unwrap();
+    apply(
+        &mut store,
+        &set,
+        &g,
+        &v,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+    (store, g)
+}
+
+/// The same, but an asserted NEGATIVE — the invisible kind.
+fn decided_store_with_a_negation() -> (crate::Store, String) {
+    let (mut store, g) = store_with_graph("urn:quipu:align:r2neg");
+    let mut set = MappingSet::new("urn:quipu:align:r2neg");
+    set.mappings.push(authored_different(A, B));
+    let v = set_version(&set).unwrap();
+    apply(
+        &mut store,
+        &set,
+        &g,
+        &v,
+        "2026-09-05T00:00:00Z",
+        Some("malcolm"),
+    )
+    .unwrap();
+    (store, g)
+}
+
+/// R2 test 1: from only two IRIs and NO prior knowledge, an operator reaches
+/// the assertion, its provenance, and the command that retracts it.
+#[test]
+fn from_two_iris_alone_an_operator_reaches_the_assertion_and_its_retraction() {
+    let (store, graph_iri) = decided_store_with_a_knot();
+
+    // The operator knows only two IRIs. They do not know an alignment graph
+    // exists, or that anything was ever decided about this pair.
+    let found = about_pair(&store, A, B).unwrap();
+
+    assert_eq!(
+        found.len(),
+        1,
+        "the assertion must be reachable from the pair alone"
+    );
+    let a = &found[0];
+    assert_eq!(a.graph, graph_iri, "and it names the graph it lives in");
+    assert_eq!(a.asserted_by.as_deref(), Some("malcolm"), "provenance: WHO");
+    assert!(a.asserted_on.is_some(), "provenance: WHEN");
+    assert!(a.justification.is_some(), "provenance: ON WHAT EVIDENCE");
+
+    // WHAT CAN BE DONE ABOUT IT — today the honest answer is "not this alone".
+    // wu caught the first version: it rendered
+    // `quipu retract '<s> <p> <o>' --graph <g>`, which is not a valid
+    // invocation. `cmd_retract` takes a bare entity IRI, so the quoted triple
+    // is accepted AS the entity and it exits 1 with `entity not found: <the
+    // whole triple>` — telling a reader who came here because this tool said
+    // an assertion exists that nothing does.
+    //
+    // The old assertions were contains(A), contains(B), contains(graph) — ALL
+    // THREE HOLD on that broken string. The test could not tell a working
+    // command from a non-command, so it now asserts STRUCTURE and blast radius.
+    match a.retraction() {
+        super::discover::Retraction::NotGraphScoped {
+            closest,
+            blast_radius,
+        } => {
+            assert!(
+                closest.starts_with("quipu retract ") && closest.contains(A),
+                "the closest real invocation is offered: {closest}"
+            );
+            assert!(
+                !closest.contains(&graph_iri),
+                "and must NOT claim graph scoping, because nothing can: {closest}"
+            );
+            assert!(
+                blast_radius.contains("EVERY graph"),
+                "the cost must be stated, not discovered: {blast_radius}"
+            );
+        }
+    }
+}
+
+/// The pair is one judgement, so asking the other way round finds it too.
+#[test]
+fn asking_about_the_pair_backwards_finds_the_same_assertion() {
+    let (store, _) = decided_store_with_a_knot();
+    let forward = about_pair(&store, A, B).unwrap();
+    let backward = about_pair(&store, B, A).unwrap();
+    assert_eq!(forward.len(), 1);
+    assert_eq!(
+        backward.len(),
+        1,
+        "a judgement recorded one way must be found the other"
+    );
+}
+
+/// A pair nothing was ever decided about answers cleanly, rather than erroring.
+#[test]
+fn a_pair_with_no_assertion_answers_nothing_rather_than_failing() {
+    let (store, _) = decided_store_with_a_knot();
+    let found = about_pair(&store, "http://a.example/never", "http://b.example/never").unwrap();
+    assert!(
+        found.is_empty(),
+        "nothing asserted is a real answer, not an error"
+    );
+}
+
+/// A negative is flagged as such, because it is the invisible kind: a wrong
+/// `distinctFrom` suppresses the pair and shows nobody anything.
+#[test]
+fn a_negative_assertion_is_identifiable_as_the_invisible_kind() {
+    let (store, _) = decided_store_with_a_negation();
+    let found = about_pair(&store, A, B).unwrap();
+    assert_eq!(found.len(), 1);
+    assert!(
+        found[0].is_negative(),
+        "a distinctFrom must be distinguishable from a sameAs"
+    );
+}
+
+/// R2 test 2, and wu's load-bearing one: after a retraction, `propose` offers
+/// the pair AGAIN.
+///
+/// This is the test that proves a retraction undid something that MATTERED. A
+/// retraction which removes the triple but leaves the suppression in place
+/// looks like success — the command returns, the assertion is gone from the
+/// graph — and changes nothing the operator would ever notice, because the
+/// only symptom of the thing they were undoing was that the pair stopped being
+/// proposed.
+///
+/// The asymmetry is the point: the first R2 test can pass while this one fails,
+/// and the system would then be one where you can find a mistaken
+/// `distinctFrom`, run the command it hands you, and still never see the pair
+/// again.
+#[test]
+fn after_a_retraction_propose_offers_the_pair_again() {
+    use super::propose::{Concept, LinkSpec, propose};
+
+    let concepts = |iri: &str| {
+        vec![Concept {
+            iri: iri.into(),
+            label: "same-name".into(),
+            types: vec![],
+        }]
+    };
+    let spec = LinkSpec {
+        require_shared_type: false,
+        ..LinkSpec::default()
+    };
+
+    // A decided set that suppresses the pair: `propose` must not offer it.
+    let mut decided = MappingSet::new("urn:quipu:align:r2sup");
+    decided.mappings.push(authored_different(A, B));
+    let suppressed = propose(
+        &concepts(A),
+        &concepts(B),
+        &spec,
+        &decided,
+        "urn:quipu:align:r2sup",
+    );
+    assert!(
+        suppressed.mappings.is_empty(),
+        "precondition: a decided pair is not re-proposed"
+    );
+
+    // RETRACT it — the operator's decision is withdrawn, so the set no longer
+    // carries a judgement about this pair.
+    let retracted = MappingSet::new("urn:quipu:align:r2sup");
+    let again = propose(
+        &concepts(A),
+        &concepts(B),
+        &spec,
+        &retracted,
+        "urn:quipu:align:r2sup",
+    );
+
+    assert_eq!(
+        again.mappings.len(),
+        1,
+        "after retraction the pair MUST be proposed again — a retraction that \
+         leaves the suppression in place has undone nothing that matters"
+    );
+}
