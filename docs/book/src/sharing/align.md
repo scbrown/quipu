@@ -17,7 +17,7 @@ Three properties hold throughout, and they are the reason the verb is split in t
 
 ## propose
 
-```
+```text
 quipu align propose <graph-a> <graph-b> [--out <set.tsv>] [--db <path>]
 ```
 
@@ -62,7 +62,7 @@ an empty result. An **empty** graph is a legitimate answer of zero and is return
 
 ## decide
 
-```
+```text
 quipu align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
 ```
 
@@ -85,7 +85,7 @@ check, which is the correct outcome and an annoying way to learn it.
 
 ## apply
 
-```
+```text
 quipu align apply <set.tsv> --graph-a <iri> --graph-b <iri> \
     --expected-version <sha> [--actor <who>] [--db <path>]
 ```
