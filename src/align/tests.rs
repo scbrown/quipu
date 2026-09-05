@@ -858,3 +858,19 @@ fn has_untraceable_is_a_measurement_and_not_a_verdict() {
         "and that is precisely why it must not be read as success"
     );
 }
+
+#[test]
+fn the_nothing_verified_output_warns_the_shell_caller_about_its_exit_code() {
+    // The Rust caller reads rustdoc; the shell caller reads OUTPUT. `|| handle`
+    // catches 1 and 2 alike, so the warning has to be where the person
+    // debugging will actually be looking (wu, PR #123).
+    let mut set = MappingSet::new("urn:t");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    let report = verify(&set, &[], &[]);
+
+    assert_eq!(report.exit_code(), 2);
+    let text = report.render();
+    assert!(text.contains("Exit status 2, not 1"), "{text}");
+    assert!(text.contains("-eq 1"), "{text}");
+}

@@ -110,6 +110,23 @@ impl VerifyReport {
     /// `2` for "nothing verified" matches the fleet's existing UNAVAILABLE
     /// tier, so the distinction survives all the way out to a shell rather
     /// than dying at the process boundary.
+    ///
+    /// # Shell callers: test `-eq 1`, not `-ne 0`
+    ///
+    /// `quipu align verify … || handle` catches **1 and 2 alike**, because the
+    /// shell's `||` is itself a two-state renderer. That is the last boundary
+    /// this distinction has to survive and the only one outside this code, so a
+    /// caller that treats "nothing verified" as "failed" has re-collapsed the
+    /// three states at the process edge (wu, PR #123).
+    ///
+    /// ```sh
+    /// quipu align verify "$graph"; rc=$?
+    /// case "$rc" in
+    ///   0) ;;                                    # verified
+    ///   2) echo "nothing to verify — has apply run?" ;;
+    ///   *) exit "$rc" ;;                         # a real failure
+    /// esac
+    /// ```
     #[must_use]
     pub fn exit_code(&self) -> i32 {
         match self.verdict() {
@@ -172,7 +189,10 @@ impl VerifyReport {
                  Every assertion traced, because there were no assertions. That is a vacuous pass\n\
                  and it is reported separately for that reason: \"verified\" and \"had nothing to\n\
                  verify\" lead to opposite next actions. The likely cause is that `align apply` has\n\
-                 not run yet.",
+                 not run yet.\n\
+                 \n\
+                 Exit status 2, not 1. A shell `|| handle` catches both — test `-eq 1` for a real\n\
+                 failure.",
                 self.unapplied.len()
             );
         } else if self.untraceable.is_empty() {
