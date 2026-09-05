@@ -77,15 +77,46 @@ pub struct VerifyReport {
 }
 
 impl VerifyReport {
-    /// Does this report mean failure?
+    /// Did any assertion trace to no mapping?
+    ///
+    /// Named for what it MEASURES, not for a verdict, because it is a
+    /// two-state projection of a three-state answer and `pub` (wu, PR #123).
+    /// `is_failure()` — its previous name — invites `!is_failure() == success`,
+    /// and that inference is wrong: it returns `false` for `NothingVerified`
+    /// too. A caller asking "was this run clean" must reach for
+    /// [`VerifyReport::verdict`] and meet all three states.
+    ///
+    /// This is the rendering boundary the class of bug lives at: the model was
+    /// three-state and the tests were three-state while the exported accessor
+    /// was two-state. Separating the counts is not the same as offering the
+    /// third answer where a caller reads it.
     ///
     /// An untraceable assertion FAILS rather than warns. A warning here would
     /// be read past exactly once and then forever, and the thing being warned
     /// about is an assertion that suppresses a pair everywhere while nobody is
     /// ever shown it again.
     #[must_use]
-    pub fn is_failure(&self) -> bool {
+    pub fn has_untraceable(&self) -> bool {
         !self.untraceable.is_empty()
+    }
+
+    /// Process exit status: `0` clean, `2` nothing verified, `1` failed.
+    ///
+    /// Exists so the ergonomic path a caller reaches for PRESERVES all three
+    /// states. Removing the misleading accessor is only half the fix — without
+    /// a correct convenience, the first CLI author writes their own two-state
+    /// collapse and it looks right to a reviewer.
+    ///
+    /// `2` for "nothing verified" matches the fleet's existing UNAVAILABLE
+    /// tier, so the distinction survives all the way out to a shell rather
+    /// than dying at the process boundary.
+    #[must_use]
+    pub fn exit_code(&self) -> i32 {
+        match self.verdict() {
+            Verdict::Ok => 0,
+            Verdict::Failed => 1,
+            Verdict::NothingVerified => 2,
+        }
     }
 
     /// How many assertions this run actually checked.
@@ -104,7 +135,7 @@ impl VerifyReport {
     /// "had nothing to verify" lead to opposite next actions.
     #[must_use]
     pub fn verdict(&self) -> Verdict {
-        if self.is_failure() {
+        if self.has_untraceable() {
             Verdict::Failed
         } else if self.traced() == 0 && !self.unapplied.is_empty() {
             Verdict::NothingVerified

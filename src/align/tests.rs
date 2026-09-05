@@ -613,7 +613,7 @@ fn an_untraceable_assertion_fails_rather_than_warns() {
         &[],
         &[("http://a.example/x".into(), "http://b.example/y".into())],
     );
-    assert!(report.is_failure());
+    assert!(report.has_untraceable());
     assert_eq!(report.untraceable.len(), 1);
     assert!(report.render().contains("FAILED"));
 }
@@ -633,7 +633,7 @@ fn a_traced_assertion_passes_in_both_predicates() {
         &[("http://a.example/1".into(), "http://b.example/1".into())],
         &[("http://a.example/2".into(), "http://b.example/2".into())],
     );
-    assert!(!report.is_failure());
+    assert!(!report.has_untraceable());
     assert_eq!(report.traced_same_as, 1);
     assert_eq!(report.traced_distinct_from, 1);
 }
@@ -653,7 +653,7 @@ fn a_declined_row_does_not_authorise_a_distinct_from() {
         &[("http://a.example/x".into(), "http://b.example/y".into())],
     );
     assert!(
-        report.is_failure(),
+        report.has_untraceable(),
         "a decline must not authorise an assertion"
     );
 }
@@ -669,7 +669,7 @@ fn assertion_direction_does_not_affect_tracing() {
         &[("http://b.example/1".into(), "http://a.example/1".into())],
         &[],
     );
-    assert!(!report.is_failure());
+    assert!(!report.has_untraceable());
     assert_eq!(report.traced_same_as, 1);
 }
 
@@ -682,7 +682,7 @@ fn an_authored_but_unapplied_row_is_reported_and_is_not_a_failure() {
         .push(authored_same("http://a.example/1", "http://b.example/1"));
 
     let report = verify(&set, &[], &[]);
-    assert!(!report.is_failure());
+    assert!(!report.has_untraceable());
     assert_eq!(report.unapplied.len(), 1);
     assert!(report.render().contains("not yet applied"));
     // And, because nothing was applied, this run verified nothing — see
@@ -738,7 +738,7 @@ fn a_run_that_checked_nothing_does_not_report_ok() {
 
     assert_eq!(report.traced(), 0);
     assert!(
-        !report.is_failure(),
+        !report.has_untraceable(),
         "nothing is wrong — but nothing was checked either"
     );
     assert_eq!(report.verdict(), Verdict::NothingVerified);
@@ -799,4 +799,62 @@ fn a_failure_outranks_nothing_verified() {
     );
     assert_eq!(report.verdict(), Verdict::Failed);
     assert!(report.render().contains("FAILED"));
+}
+
+// ---------------------------------------------------------------------------
+// wu, PR #123: the exported accessor was a two-state projection of a
+// three-state verdict — the collapse at the RENDERING boundary, in the fix for
+// the collapse. These pin that no public path loses the third state.
+
+#[test]
+fn no_public_accessor_collapses_the_three_verdicts() {
+    let mut authorised = MappingSet::new("urn:t");
+    authorised
+        .mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+
+    let ok = verify(
+        &authorised,
+        &[("http://a.example/1".into(), "http://b.example/1".into())],
+        &[],
+    );
+    let nothing = verify(&authorised, &[], &[]);
+    let failed = verify(
+        &MappingSet::new("urn:t"),
+        &[("http://x.example/9".into(), "http://y.example/9".into())],
+        &[],
+    );
+
+    // The three verdicts must remain three all the way to a process boundary.
+    let codes = [ok.exit_code(), nothing.exit_code(), failed.exit_code()];
+    assert_eq!(
+        codes,
+        [0, 2, 1],
+        "exit codes must distinguish all three states"
+    );
+
+    // 2 for "nothing verified" is the fleet's UNAVAILABLE tier, deliberately.
+    assert_eq!(nothing.exit_code(), 2);
+}
+
+#[test]
+fn has_untraceable_is_a_measurement_and_not_a_verdict() {
+    // It returns false for Ok AND for NothingVerified, which is correct for
+    // what it measures and wrong as a success test. The name has to say so,
+    // because `!is_failure() == success` is the inference that re-creates the
+    // bug one layer out.
+    let mut set = MappingSet::new("urn:t");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+
+    let nothing = verify(&set, &[], &[]);
+    assert!(
+        !nothing.has_untraceable(),
+        "nothing untraceable, because nothing was examined"
+    );
+    assert_ne!(
+        nothing.verdict(),
+        Verdict::Ok,
+        "and that is precisely why it must not be read as success"
+    );
 }
