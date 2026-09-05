@@ -278,6 +278,7 @@ jobs:
       - uses: ./.github/actions/wasm-explorer-smoke
         with:
           bundle-dir: wasm/explorer/pkg
+          node-bundle-dir: wasm/explorer/pkg-node
 
   check:
     name: Pre-commit checks
