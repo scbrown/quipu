@@ -158,6 +158,7 @@ dl#export-manifest dd { word-break: break-all; }
 #pr-preview dd { word-break: break-all; }
 /* The delta is the thing to review before anything opens, so it gets room —
    but bounded, because a large one belongs in the upload flow anyway. */
+#sw-state.bad { color: var(--accent); }
 pre.recipe {
   font-size: 12px; background: var(--bg); border: 1px solid var(--bg-elevated);
   border-radius: 4px; padding: 8px 10px; overflow-x: auto; margin: 10px 0;
@@ -328,7 +329,20 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
 <pre class="mono recipe">browser_navigate  https://scbrown.github.io/quipu/explore/
 browser_evaluate  await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 5")
 browser_evaluate  await window.quipu.set("urn:x", "rdfs:comment", JSON.stringify("hi"))
-browser_evaluate  await window.quipu.delta()</pre>
+browser_evaluate  await window.quipu.delta()
+
+<span class="muted"># or as HTTP, against this page's own path &mdash; no server anywhere:</span>
+browser_evaluate  await (await fetch("./query", {method:"POST",
+                    body: JSON.stringify({query:"SELECT ?s WHERE { ?s ?p ?o } LIMIT 5"})})).json()</pre>
+        <p class="note">
+          <strong>The fetch routes are relative to this page</strong> &mdash;
+          <code class="mono">./query</code>, not <code class="mono">/query</code>. A service
+          worker only controls the directory it is served from, and widening that needs a
+          response header GitHub Pages does not allow anyone to set. An absolute
+          <code class="mono">/query</code> gets an ordinary 404, which reads as &ldquo;the
+          worker is broken&rdquo; rather than &ldquo;that path was never mine&rdquo;.
+          Server status: <span id="sw-state" class="mono">registering&hellip;</span>
+        </p>
         <p class="note">
           <strong><code class="mono">search</code> is unavailable here and says so.</strong>
           Semantic search needs embeddings, which need quipu&rsquo;s <code class="mono">onnx</code>
