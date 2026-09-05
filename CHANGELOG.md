@@ -4,9 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [0.3.37] - 2026-09-05
 
+### Added
+
+- *(align)* A `quipu align` CLI verb — make src/align reachable([8212da0](https://github.com/scbrown/quipu/commit/8212da052ee65fec1e37e099bd6b7cda4722c69f))
+- *(align)* REST routes and three MCP tools — the surface is now reachable([ea67440](https://github.com/scbrown/quipu/commit/ea674409daa98efad4a7ad27c6b90bcfb1540a8d))
+
+### Changed
+
+- *(server)* Assets owns its routes, so server.rs is back under the ratchet([db83628](https://github.com/scbrown/quipu/commit/db83628d9c743d567b4a84fff419bb8172ec1d5a))
+
 ### Fixed
 
 - *(conformance)* PR mode for the ledger check, and the push trigger that never fired([0f63470](https://github.com/scbrown/quipu/commit/0f63470c29b119c643cb42e1b6eba299d581310d))
+- *(cli)* Document `align` in --help; cargo fmt([8cea89d](https://github.com/scbrown/quipu/commit/8cea89db010ffd8aa0b25e09b2926cb13e1e1c89))
+- *(server)* Re-export align tools at the crate root; own route module([0c54147](https://github.com/scbrown/quipu/commit/0c5414786ee021cc783c92c729f1765fd39f0d56))
 
 ### Miscellaneous
 
