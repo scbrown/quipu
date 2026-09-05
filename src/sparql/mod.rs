@@ -133,6 +133,20 @@ impl GraphScope {
         matches!(self, GraphScope::Default(g) if g.as_slice() == [0])
     }
 
+    /// True when this scope's default graph INCLUDES the ROOT default (`g = 0`),
+    /// as an entailment-regime compose does: `[0, companion]`.
+    ///
+    /// Distinct from [`Self::is_root_default`] on purpose. The RDFS class
+    /// hierarchy is rooted in `g = 0` (see `collect_class_and_subclasses`,
+    /// which reads `g = 0` explicitly), so expanding is sound exactly when the
+    /// answer already contains graph 0 — the hierarchy is not being applied
+    /// across a boundary, it is being applied inside its own graph. A `FROM`
+    /// that redefines the default graph away from ROOT still returns false and
+    /// stays literal.
+    pub(crate) fn includes_root_default(&self) -> bool {
+        matches!(self, GraphScope::Default(g) if g.contains(&0))
+    }
+
     /// The one graph a single-graph scope names (quipu-nip): `Some(g)` for a
     /// one-element `Default` (the service default, a one-graph `FROM`, or the
     /// `graph` request param) or `Named` (`GRAPH <iri>`), `None` for unions
@@ -192,6 +206,24 @@ pub struct TemporalContext {
     /// controlled `[[quipu.federation.remotes]]` list here, making that list
     /// the SSRF allowlist as well as the source of timeout, auth and provenance.
     pub service_remotes: Option<std::sync::Arc<crate::config::FederationConfig>>,
+    /// An explicit RDFS entailment regime was requested (aegis-g6bu6d).
+    ///
+    /// Set by the `entailment` request parameter, which composes each graph in
+    /// scope with its companion inferred graph. That compose turns the scope
+    /// from `[0]` into `[0, companion]`, and the live constant-`rdf:type`
+    /// subclass expansion is gated on `is_root_default()` — so WITHOUT this
+    /// flag, asking for a regime SILENTLY DROPPED the expansion and returned a
+    /// SUBSET of the unentailed answer, labelled as entailed.
+    ///
+    /// Measured before the fix, same entity and second: `aegis-alerts` is
+    /// asserted `AlertRule` only, and `ASK { it a Directive }` was TRUE with no
+    /// parameter and FALSE under `entailment: "rdfs"` (880 rows vs 767). The
+    /// companion graph is not a substitute for the expansion — on that store it
+    /// held zero `rdf:type` triples — so the regime traded something for
+    /// nothing.
+    ///
+    /// A regime must be a SUPERSET of the default answer, never a subset.
+    pub entails_rdfs: bool,
 }
 
 /// Execute a SPARQL query against the store (current state).
