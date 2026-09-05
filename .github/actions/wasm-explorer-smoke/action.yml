@@ -1,7 +1,8 @@
-name: Browser acceptance for the wasm explorer
+name: Acceptance for the wasm explorer
 description: >-
-  Install Playwright Chromium and run scripts/smoke-wasm-explorer.mjs against a
-  bundle directory. THE ONE DEFINITION both ci.yml and release.yml use.
+  Run both halves of the wasm acceptance against a built bundle — the browser
+  smoke under Playwright Chromium, and the headless nodejs smoke.
+  THE ONE DEFINITION both ci.yml and release.yml use.
 
 # WHY THE DIRECTORY IS AN INPUT AND NOT A CONSTANT (aegis-dsbt2g).
 #
@@ -24,6 +25,13 @@ inputs:
   bundle-dir:
     description: Directory holding the built bundle to load in the browser.
     required: true
+  node-bundle-dir:
+    description: >-
+      Directory holding the `wasm-bindgen --target nodejs` bundle. REQUIRED, and
+      deliberately not defaulted: an optional input here would let a caller that
+      forgot it pass with the headless half silently unrun, which is the exact
+      failure shape this action exists to prevent.
+    required: true
 
 runs:
   using: composite
@@ -41,3 +49,18 @@ runs:
         npm install --no-save playwright@1.56
         npx playwright install --with-deps chromium
         node scripts/smoke-wasm-explorer.mjs "$BUNDLE_DIR"
+
+    # THE HEADLESS HALF (aegis-onew9p §4.4). Same compiled .wasm, a different
+    # generated glue layer: CommonJS instead of ESM, filesystem loading instead
+    # of fetch, and no init() to await. None of that is exercised above, so a
+    # break in it is invisible to the browser smoke and fatal to every consumer
+    # that has no display — which is the case the nodejs target exists for.
+    #
+    # It needs no browser, so it runs SECOND: when both fail, the cheaper one
+    # having already passed tells you the fault is in the browser environment
+    # rather than in the bundle.
+    - name: Headless acceptance (smoke-wasm-node.mjs)
+      shell: bash
+      env:
+        NODE_BUNDLE_DIR: ${{ inputs.node-bundle-dir }}
+      run: node scripts/smoke-wasm-node.mjs "$NODE_BUNDLE_DIR"
