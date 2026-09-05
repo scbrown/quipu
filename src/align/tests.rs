@@ -917,6 +917,18 @@ fn negate_asserts_difference_rather_than_merely_suppressing() {
     assert_eq!(m.author_id.as_deref(), Some("malcolm"));
 }
 
+/// ⚠️ COVERAGE CHECK, generalisable: when a new behaviour has an obvious
+/// existing test nearby, ask whether that test would pass in BOTH worlds
+/// before counting it as coverage.
+///
+/// Here it does. `a_declined_pair_is_not_proposed_again` sits directly below,
+/// is obviously about declining, and passes whether or not `Decline` authors
+/// the row — because suppression works either way. So the adjacent, relevant,
+/// GREEN test is precisely the camouflage for the bug, and only the
+/// `author_id == None` assertion below distinguishes the two worlds.
+///
+/// Measured by sabotage: making `Decline` set `author_id` fails this test and
+/// leaves that one green.
 #[test]
 fn decline_suppresses_but_is_never_authored() {
     let out = decide(&proposed(), &[row(A, B, Decision::Decline)], "malcolm").unwrap();
