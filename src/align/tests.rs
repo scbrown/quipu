@@ -876,59 +876,20 @@ fn the_nothing_verified_output_warns_the_shell_caller_about_its_exit_code() {
 }
 
 // ---------------------------------------------------------------------------
-// R3/R5: the store already dedupes an IDENTICAL repeated graph write.
+// R3/R5 rest on a STORE contract, and it is pinned in the STORE's tests.
 //
-// MEASURED, because the schema reads the other way: the facts PK is
-// (e, a, v, tx), so the same triple in a second transaction looks like it
-// should produce a second row. It does not — `transact_to_graph` dedupes, and
-// two identical writes leave rows=1, live=1.
+// `transact_to_graph` skips an assertion whose (e, a, v) is already active in
+// that graph. Re-applying an unchanged mapping set is therefore idempotent
+// because of the STORE, not because of `apply` — and `apply`'s permissive
+// concurrency arm (two identical invocations are not refused) rests on the same
+// property.
 //
-// This is load-bearing twice over, which is why it is a test and not a note:
+// The test lives in `store::tests::duplicate_assert_into_a_named_graph_is_idempotent`,
+// not here, because it is a contract a change to `transact_to_graph` must meet.
+// An align-side test would fail on that change too, but it would point the
+// reader at align — and whoever edits the store looks at the store's tests to
+// see what they must preserve (wu, aegis-sosiaa).
 //
-//  * R3 (idempotent re-apply) is satisfied FOR AN UNCHANGED SET by the store
-//    rather than by `apply`. The risk that remains is the aegis-x1175 shape —
-//    the same pair with CHANGED derived content — where the triples differ and
-//    nothing dedupes them.
-//  * R5's permissive arm (two identical concurrent applies must NOT be refused)
-//    rests on this property. wu's point: without idempotence, letting both
-//    commit would double-write, so the guard would have to refuse identical
-//    applies too — the crying-wolf case R5 is explicitly tested against. R3 is
-//    therefore a PRECONDITION of R5, not merely earlier in the list.
-//
-// If this dedupe ever changes, R5's permissive arm becomes unsafe and nothing
-// else in the suite would say so.
-
-#[test]
-fn an_identical_repeated_graph_write_does_not_append() {
-    let mut store = crate::Store::open_in_memory().unwrap();
-    let g = store.graph_create("urn:quipu:align:idempotence").unwrap();
-    let triple =
-        "<http://a.example/x> <http://www.w3.org/2002/07/owl#sameAs> <http://b.example/y> .\n";
-
-    for _ in 0..2 {
-        crate::rdf::ingest_rdf_to_graph(
-            &mut store,
-            triple.as_bytes(),
-            oxrdfio::RdfFormat::NTriples,
-            None,
-            "2026-09-05T00:00:00Z",
-            None,
-            Some("align-test"),
-            g,
-        )
-        .unwrap();
-    }
-
-    let live: i64 = store
-        .conn
-        .query_row(
-            "SELECT COUNT(*) FROM facts WHERE g = ?1 AND op = 1 AND valid_to IS NULL",
-            [g],
-            |r| r.get(0),
-        )
-        .unwrap();
-    assert_eq!(
-        live, 1,
-        "a repeated identical write appended; R5's permissive arm is unsafe without this"
-    );
-}
+// What remains for align to prove is the aegis-x1175 case: the same pair with
+// CHANGED derived content, where the triples genuinely differ and nothing
+// dedupes them. That test belongs with `apply`.
