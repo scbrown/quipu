@@ -52,7 +52,7 @@ pub struct LinkSpec {
     pub floor: f64,
     /// At or above this, a pair is confident enough to bulk-accept.
     ///
-    /// Between the two is LogMap's "uncertain band" — the only region worth a
+    /// Between the two is the `LogMap` "uncertain band" — the only region worth a
     /// human's attention, and the reason both numbers live next to the scoring
     /// that produced them rather than in a command-line flag.
     pub auto_accept: f64,
