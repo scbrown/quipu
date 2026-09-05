@@ -480,7 +480,22 @@ def render_markdown(data: dict) -> str:
             f"**{entailment['passed']}/{entailment['cases']}** pass and "
             f"{entailment['unsupported']} are unsupported."
         )
-    out += ["", "## Entailment-regime commitments", "", headline,
+    # Ledger PROVENANCE beside the headline: WHEN it was re-derived and BY WHAT.
+    # A page that states only WHAT was measured cannot show that its own
+    # regression gate has been dead for two days — which is exactly what
+    # happened between 09-03 and 09-05 (aegis-1gp76j / aegis-tydvlg).
+    led = data["entailment"]
+    when = led.get("generated_at")
+    by = led.get("generated_by")
+    if when and by:
+        origin = f"[CI run]({by})" if by.startswith("http") else f"**{by}** — NOT CI-produced"
+        prov = f"Ledger re-derived {when} by {origin}, from quipu `{led['quipu_revision'][:12]}`."
+    else:
+        prov = (
+            "Ledger carries no re-derivation provenance — it predates "
+            "`generated_at`/`generated_by`, so WHEN and BY WHAT are unknown."
+        )
+    out += ["", "## Entailment-regime commitments", "", headline, prov,
         "Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.", "",
     ]
     if goals:

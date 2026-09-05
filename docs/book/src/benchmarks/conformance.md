@@ -177,6 +177,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **23/35** of their cases pass. The remaining 4 are deliberate non-goals.
+Ledger carries no re-derivation provenance — it predates `generated_at`/`generated_by`, so WHEN and BY WHAT are unknown.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS failures are the cases that genuinely need closure (`rdfs:subPropertyOf`, `rdfs:domain`, `rdfs:range`, `rdfs:subClassOf` over the query's default graph), and they need forward-chaining **materialisation**, not more of the existing pattern rewriting: a query like `SELECT ?x WHERE { ex:a ?x ex:c }` has a variable predicate, so an entailed triple has to exist to be matched and cannot be produced by expanding the pattern.

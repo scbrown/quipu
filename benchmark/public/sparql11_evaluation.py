@@ -7,6 +7,8 @@ import argparse
 import csv
 import hashlib
 import json
+import os
+from datetime import datetime, timezone
 import re
 import shutil
 import socket
@@ -798,6 +800,29 @@ def unsupported_reason(case: Case) -> str | None:
     return None
 
 
+def provenance() -> tuple[str, str]:
+    """When this ledger was produced, and BY WHAT.
+
+    `generated_at` alone is forgeable by accident: a local re-derive stamps it
+    exactly as CI does, so a reader could not tell a page backed by the pinned
+    runner from one backed by somebody's laptop. `generated_by` carries the CI
+    run URL when GitHub Actions produced it and the literal "local" otherwise,
+    which turns "only CI-produced ledgers go on the page" from a convention
+    nobody can check into a property of the ARTIFACT (aegis-1gp76j).
+
+    This is not hypothetical bookkeeping: a locally-run ledger takes
+    `quipu_revision` from the repo HEAD and `quipu_version` from whatever binary
+    was to hand, so it can credit a commit that never produced it.
+    """
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    server = os.environ.get("GITHUB_SERVER_URL")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    if server and repo and run_id:
+        return at, f"{server}/{repo}/actions/runs/{run_id}"
+    return at, "local"
+
+
 def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
     base = {
         "id": case.identifier,
@@ -969,11 +994,14 @@ def main() -> int:
                 parser.error(f"entailment inventory mismatch: missing={missing}, extra={extra}, cases={len(selected)}")
             bucket_counts = Counter(item["decision_bucket"] for item in selected)
             classes[test_class]["decision_buckets"] = dict(sorted(bucket_counts.items()))
+    generated_at, generated_by = provenance()
     report = {
         "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
         "suite_revision": revision,
         "quipu_revision": git_output(quipu_root, "rev-parse", "HEAD"),
         "quipu_version": version,
+        "generated_at": generated_at,
+        "generated_by": generated_by,
         "isolation": "one temporary SQLite store per executable test",
         "reproduce": {
             "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
