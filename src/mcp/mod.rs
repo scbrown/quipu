@@ -274,6 +274,10 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
             sparql::GraphScope::Default(composed)
         }
     };
+    // Whether an entailment regime was requested, for the evaluator's expansion
+    // gate (aegis-g6bu6d). Re-read rather than threaded out of the match above
+    // so the two cannot drift: the flag means exactly "the scope was composed".
+    let entails_rdfs = entailment_regime(input)?.is_some();
 
     Ok((
         query_str,
@@ -284,6 +288,7 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
                 .map(std::string::ToString::to_string),
             as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
             graph,
+            entails_rdfs,
             ..Default::default()
         },
     ))
