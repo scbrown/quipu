@@ -132,6 +132,11 @@ sharing-demo:
     cargo build --bin quipu
     examples/sharing-demo/run.sh --check
 
+# The alignment half: what sharing does NOT move — an opinion about identity.
+align-demo:
+    cargo build --bin quipu
+    examples/align-demo/run.sh --check
+
 # Load the SMAC datalinks tech tree and serve the 3D Datalinks view.
 # The graph lives in NeuralAmplifier (scbrown/NeuralAmplifier), which owns and
 # regenerates it — point `datalinks` at a checkout rather than vendoring a copy.
