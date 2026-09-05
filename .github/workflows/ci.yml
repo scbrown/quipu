@@ -291,6 +291,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pre-commit
+      - run: python3 scripts/check-private-keys.py
       - run: pre-commit run --all-files
         env:
           SKIP: mdbook-build
