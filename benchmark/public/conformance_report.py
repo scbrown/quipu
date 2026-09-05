@@ -451,13 +451,63 @@ def render_markdown(data: dict) -> str:
         counts = tally([row for row in shacl_rows if row.get("category") == category])
         out.append(f"| `{category}` | {counts['passed']} | {counts['failed']} | {counts['error']} | {counts['unsupported']} | {counts['cases']} |")
     entailment = classes["entailment"]["counts"]
-    out += ["", "## Entailment-regime commitments", "",
-        f"All six regimes remain deliberate non-goals: **{entailment['passed']}/{entailment['cases']}** pass and {entailment['unsupported']} are unsupported.",
-        "Local RDFS and OWL extensions are not standards-regime claims.", "",
-        "| Regime | Cases | Commitment |", "|---|---:|---|",
+    # Read the commitment from the LEDGER rather than printing a literal. The
+    # previous version stated "All six regimes remain deliberate non-goals" and
+    # a hardcoded third column, so flipping a regime changed nothing here and
+    # the page would have kept publishing the old claim over new data
+    # (aegis-1gp76j).
+    entailment_rows = [
+        row for row in data["entailment"].get("results", [])
+        if row.get("decision_bucket")
     ]
+    commitments: dict[str, str] = {}
+    for row in entailment_rows:
+        commitments.setdefault(row["decision_bucket"], row.get("commitment", "deliberate-non-goal"))
+    goals = sorted(r for r, c in commitments.items() if c == "goal")
+    non_goals = sorted(r for r, c in commitments.items() if c != "goal")
+
+    if goals:
+        goal_rows = [r for r in entailment_rows if commitments.get(r["decision_bucket"]) == "goal"]
+        goal_passed = sum(1 for r in goal_rows if r.get("status") == "passed")
+        headline = (
+            f"{len(goals)} of {len(commitments)} regimes are goals ({', '.join(goals)}): "
+            f"**{goal_passed}/{len(goal_rows)}** of their cases pass. "
+            f"The remaining {len(non_goals)} are deliberate non-goals."
+        )
+    else:
+        headline = (
+            f"All {len(commitments)} regimes remain deliberate non-goals: "
+            f"**{entailment['passed']}/{entailment['cases']}** pass and "
+            f"{entailment['unsupported']} are unsupported."
+        )
+    out += ["", "## Entailment-regime commitments", "", headline,
+        "Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.", "",
+    ]
+    if goals:
+        # The caveat rides WITH the number, in the generator, because a reader
+        # who sees only the fraction will size the remaining work from it and
+        # size the wrong thing (aegis-1gp76j).
+        out += [
+            "> **Do not read the goal-regime fraction as \"nearly done\".** The two numbers have "
+            "different characters. Most RDF-regime cases are `bind*` tests answerable under simple "
+            "entailment, so they pass without any additional inference — a high RDF score is not "
+            "evidence of an entailment engine. The RDFS failures are the cases that genuinely need "
+            "closure (`rdfs:subPropertyOf`, `rdfs:domain`, `rdfs:range`, `rdfs:subClassOf` over the "
+            "query's default graph), and they need forward-chaining **materialisation**, not more "
+            "of the existing pattern rewriting: a query like `SELECT ?x WHERE { ex:a ?x ex:c }` has "
+            "a variable predicate, so an entailed triple has to exist to be matched and cannot be "
+            "produced by expanding the pattern.",
+            "",
+        ]
+    out += ["| Regime | Cases | Passed | Commitment |", "|---|---:|---:|---|"]
     for regime, count in data["entailment"]["classes"]["entailment"]["decision_buckets"].items():
-        out.append(f"| {regime} | {count} | deliberate non-goal |")
+        commitment = commitments.get(regime, "deliberate-non-goal")
+        passed = sum(
+            1 for r in entailment_rows
+            if r.get("decision_bucket") == regime and r.get("status") == "passed"
+        )
+        label = "goal" if commitment == "goal" else "deliberate non-goal"
+        out.append(f"| {regime} | {count} | {passed} | {label} |")
     out += ["", "Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).", ""]
     return "\n".join(out)
 

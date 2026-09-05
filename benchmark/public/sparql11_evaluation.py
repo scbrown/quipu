@@ -55,9 +55,29 @@ ENTAILMENT_BUCKET = {
     for bucket, identifiers in ENTAILMENT_BUCKET_IDS.items()
     for identifier in identifiers
 }
+# The regime commitments, as DATA. Everything downstream derives from this map:
+# the ledger records what it finds here, and the published table reads the ledger.
+# Before aegis-1gp76j the string "deliberate-non-goal" was asserted as a constant
+# in run_case() and printed as a literal by conformance_report.py, so the ledger
+# did not RECORD a commitment -- it restated one, and no reader could tell.
+ENTAILMENT_COMMITMENT = {
+    # Answerable by RDFS closure over the query's default graph.
+    "RDF": "goal",
+    "RDFS": "goal",
+    # Need a real DL/RL reasoner; quipu's owl layer is a write gate with zero
+    # axioms today. Non-goal until the design (aegis-b5moll) is accepted.
+    "OWL-Direct": "deliberate-non-goal",
+    "OWL-RDF-Based": "deliberate-non-goal",
+    # RIF is a rule-interchange format and D is datatype entailment; neither is
+    # asked of quipu. Deliberate, not deferred.
+    "RIF": "deliberate-non-goal",
+    "D": "deliberate-non-goal",
+}
+
 ENTAILMENT_REASON = {
     bucket: f"{bucket} entailment regime is not implemented"
     for bucket in ENTAILMENT_BUCKET_IDS
+    if ENTAILMENT_COMMITMENT.get(bucket) != "goal"
 }
 
 
@@ -760,7 +780,13 @@ def normalize_delimited_numeric(value: str) -> str:
 
 def unsupported_reason(case: Case) -> str | None:
     if case.test_class == "entailment":
-        return ENTAILMENT_REASON.get(ENTAILMENT_BUCKET.get(case.identifier, ""), "unknown entailment regime is not implemented")
+        bucket = ENTAILMENT_BUCKET.get(case.identifier, "")
+        if ENTAILMENT_COMMITMENT.get(bucket) == "goal":
+            # Falls through and RUNS. A goal regime scored from a short-circuit
+            # is 0/n by construction, which reads as a failing engine rather
+            # than as a runner that never asked it anything.
+            return None
+        return ENTAILMENT_REASON.get(bucket, "unknown entailment regime is not implemented")
     if case.kind not in {"QueryEvaluationTest", "CSVResultFormatTest", "ProtocolTest", "UpdateEvaluationTest"}:
         return f"test kind {case.kind} is not executable by this runner"
     if case.test_class not in {"protocol", "update"} and not case.query:
@@ -785,7 +811,9 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
             entailment_regimes=list(case.entailment_regimes),
             entailment_profiles=list(case.entailment_profiles),
             decision_bucket=ENTAILMENT_BUCKET.get(case.identifier),
-            commitment="deliberate-non-goal",
+            commitment=ENTAILMENT_COMMITMENT.get(
+                ENTAILMENT_BUCKET.get(case.identifier, ""), "deliberate-non-goal"
+            ),
         )
     if reason := unsupported_reason(case):
         return {**base, "status": "unsupported", "reason": reason}

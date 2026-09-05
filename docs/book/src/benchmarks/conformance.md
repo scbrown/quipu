@@ -178,16 +178,16 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 
 ## Entailment-regime commitments
 
-All six regimes remain deliberate non-goals: **0/70** pass and 70 are unsupported.
-Local RDFS and OWL extensions are not standards-regime claims.
+All 6 regimes remain deliberate non-goals: **0/70** pass and 70 are unsupported.
+Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
-| Regime | Cases | Commitment |
-|---|---:|---|
-| D | 2 | deliberate non-goal |
-| OWL-Direct | 18 | deliberate non-goal |
-| OWL-RDF-Based | 11 | deliberate non-goal |
-| RDF | 16 | deliberate non-goal |
-| RDFS | 19 | deliberate non-goal |
-| RIF | 4 | deliberate non-goal |
+| Regime | Cases | Passed | Commitment |
+|---|---:|---:|---|
+| D | 2 | 0 | deliberate non-goal |
+| OWL-Direct | 18 | 0 | deliberate non-goal |
+| OWL-RDF-Based | 11 | 0 | deliberate non-goal |
+| RDF | 16 | 0 | deliberate non-goal |
+| RDFS | 19 | 0 | deliberate non-goal |
+| RIF | 4 | 0 | deliberate non-goal |
 
 Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).
