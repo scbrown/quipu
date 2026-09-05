@@ -316,7 +316,7 @@ impl LabelIndex {
 ///
 /// Git SHA-1 and SHA-256 object ids are 40 and 64 hex digits respectively;
 /// seven digits is the conventional minimum useful abbreviated commit id.
-fn is_slash_qualified_commit_id(name: &str) -> bool {
+pub(crate) fn is_slash_qualified_commit_id(name: &str) -> bool {
     let Some(rest) = name.strip_prefix("commit/") else {
         return false;
     };

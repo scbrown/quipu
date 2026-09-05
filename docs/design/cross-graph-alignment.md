@@ -253,6 +253,82 @@ An `--auto-exact` escape hatch preserving today's behaviour is acceptable if
 malcolm finds a caller that depends on it; it must be off by default, because
 the current default is the thing the directive is asking us to fix.
 
+## Precondition: alignment is the sole writer of `quipu:distinctFrom`
+
+Added during implementation (malcolm, with wu, 2026-09-05). It is a precondition
+rather than a note because the property it protects cannot be recovered once
+lost.
+
+A rejection splits in two, and only one half asserts anything:
+
+| operator outcome | recorded as | derives |
+| --- | --- | --- |
+| accept | `author_id`, `owl:sameAs` | `owl:sameAs` |
+| assert different | `author_id`, `predicate_modifier: Not` | `quipu:distinctFrom` |
+| decline — *not enough evidence* | `quipu_review: declined`, **no `author_id`** | nothing |
+| skip | neither | re-proposed |
+
+The split exists because `quipu:distinctFrom` is a **positive assertion of
+non-identity**, and most rejections in a review loop mean "not enough evidence",
+not "definitely different". Deriving one from a bare reject converts absence of
+evidence into an assertion — the mirror of the `skos:closeMatch` error above.
+The consequence is asymmetric in the dangerous direction: a wrong `owl:sameAs`
+merges two entities and looks wrong to the next reader, while a wrong
+`distinctFrom` **suppresses the pair everywhere, forever, and invisibly by
+construction**, because the system's response to it is to stop proposing the
+candidate. A declined row therefore carries no `author_id`, so an SSSOM consumer
+that has never heard of `quipu_review` reads it as an unauthored proposal —
+which is exactly true, since nothing was asserted.
+
+Measured 2026-09-05, behind a passing control: `https://quipu.dev/ontology/distinctFrom`
+holds **zero** assertions. (The 2230 `aegis:distinctFrom` in the fleet graph are a
+deliberately separate predicate, read by the graph-extract skill's own
+adjudication gate — `skills/graph-extract/SKILL.md` says so explicitly.)
+
+**That zero is what makes `align verify` total.** While alignment is the only
+writer of the quipu predicate, "every `distinctFrom` traces to an asserted
+mapping" admits no exceptions — there is no foreign corpus for a bad assertion
+to hide in. The moment an import, or any other feature, writes that predicate,
+the check degrades from total to partial **and cannot be restored**: nothing
+afterwards can tell which untraceable assertions were alignment's.
+
+So:
+
+- `verify` **FAILS** on an untraceable assertion. It does not warn. A warning
+  about an invisible-by-construction suppression is read past once and then
+  forever.
+- `verify`'s failure message states this precondition, so an operator hitting it
+  is told the difference between "fix the bug in `apply`" and "this check has
+  just permanently weakened".
+- **Traced is not correct.** `verify` proves PROVENANCE. A traced assertion is
+  one somebody took responsibility for; whether it is *true* is a question this
+  check does not ask, and its passing output says so — a green check whose
+  meaning is overread is how a review step becomes a rubber stamp.
+
+`verify` has **three** verdicts, not two, and the middle one is the point:
+
+| verdict | when | meaning |
+| --- | --- | --- |
+| `Ok` | assertions found, all traced | the graph and the set agree |
+| `NothingVerified` | the set authorises rows and the graph holds **none** of them | **this run checked nothing** |
+| `Failed` | an assertion traces to no mapping | see above |
+
+A two-state verdict is forced to render "nothing was checked" as "nothing
+failed". Every assertion traced — because there were none — and that is a green
+verdict over an empty check. It is not an error (the likely cause is that
+`apply` has not run), but it must not be silent, because *verified* and *had
+nothing to verify* lead to opposite next actions.
+
+The boundaries matter and are tested: one traced assertion is a real pass with
+an `unapplied` note beside it, not a vacuous one; an empty set over an empty
+graph is `Ok`, because "authorised nothing" is an honest state and flagging it
+would cry wolf on every fresh alignment; and a real failure outranks the
+vacuous-pass guard, so the guard can never downgrade a fault.
+
+If another feature does need that predicate, that is a decision to take
+deliberately and to record here, not to discover from a `verify` run that has
+quietly stopped meaning what it says.
+
 ## Not in scope
 
 - **Complex correspondences.** 1:1 `owl:sameAs` first. EDOAL and the Alignment
@@ -299,7 +375,23 @@ commands, and the round trip. Plus the `iv3df7.3` transcript step — import,
 align, query across both — because the story is the deliverable and a primitive
 nobody can see demonstrated is not shipped.
 
-## Open questions for the implementer
+## Open questions for the implementer — ANSWERED (malcolm, 2026-09-05)
+
+- **`promote` warns, and blocks only on request.** The `/import` migration below
+  is already a behavioural change to a shipped path; making `promote` newly
+  refuse in the same release means a broken caller cannot be attributed to
+  either change. Revisit once the primitive has usage.
+- **The alignment graph IRI is derived**, `urn:quipu:align:<a-hash>:<b-hash>`,
+  with an `--as` override. Acceptance criteria 5 and 6 both need it to be a
+  function of the inputs rather than of an operator typing the same string
+  twice.
+- **`skos:closeMatch` round-trips and derives nothing.** `predicate_id` stays a
+  free string, so a close match written by hand or by `sssom-py` survives
+  unchanged, and `derives_knot` is false for it. Near is not identical;
+  deriving `owl:sameAs` from a close match would launder a similarity into a
+  fact.
+
+The original questions, for the record:
 
 - Does `promote` block on undecided high-band candidates, or warn? Blocking is
   safer and more annoying; state the choice in the docs page.

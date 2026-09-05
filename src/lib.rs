@@ -3,6 +3,7 @@
 //! This crate implements an immutable bitemporal EAVT fact log backed by `SQLite`,
 //! designed as a foundation for agent-enforced knowledge graphs.
 
+pub mod align;
 pub mod compact;
 pub mod config;
 mod config_load;
