@@ -107,7 +107,7 @@ repos:
 
       - id: contributor-knowledge
         name: contributor projection and publication checks
-        entry: just contributor test
+        entry: scripts/check-contributor-knowledge.sh
         language: system
         pass_filenames: false
         files: ^(docs/knowledge/|scripts/(build-contributor|check-explorer)|shapes/contributor|queries/repository-share|\.github/workflows/docs\.yml)

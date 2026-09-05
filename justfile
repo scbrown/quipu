@@ -258,7 +258,7 @@ contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{cmd}}" in
-        test) node --test scripts/build-contributor-knowledge.test.mjs && scripts/check-explorer-published.test.sh ;;
+        test) scripts/check-contributor-knowledge.sh ;;
         generate) node scripts/build-contributor-knowledge.mjs . "{{output}}" ;;
         verify) node scripts/verify-contributor-knowledge.mjs "${QUIPU_BIN:?}" "{{output}}" ;;
         pack) scripts/build-repository-share.sh "${QUIPU_BIN:?}" "$(command -v bobbin)" "$PWD" "{{output}}" "$(git rev-parse HEAD)" ;;
