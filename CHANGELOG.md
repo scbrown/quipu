@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.33] - 2026-09-05
+
+### Added
+
+- *(docs)* Run the repository's own knowledge pack in the browser [] (#116)([a33c50b](https://github.com/scbrown/quipu/commit/a33c50b8fe271b794c8b19eab573979c10a54a9d))
+- *(docs)* Let the book page EDIT the graph and export it back [] (#117)([a284daf](https://github.com/scbrown/quipu/commit/a284daf2fe02f363dd6ff25b91b237954f1d541d))
+
 ## [0.3.32] - 2026-09-05
 
 ### Added
