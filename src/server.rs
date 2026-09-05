@@ -51,7 +51,6 @@ mod tools;
 #[path = "server/update.rs"]
 mod update;
 
-use assets::{components_js, datalinks_js, graph_canvas_js, three_js, ui};
 use base::{health, metrics_handler, print_usage, stats, version};
 use entity::{
     changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
@@ -410,13 +409,7 @@ async fn main() {
     }
 
     let app = Router::new()
-        // UI
-        .route("/", get(ui))
-        .route("/ui", get(ui))
-        .route("/quipu-components.js", get(components_js))
-        .route("/graph-canvas.js", get(graph_canvas_js))
-        .route("/datalinks.js", get(datalinks_js))
-        .route("/vendor/three.module.min.js", get(three_js))
+        .merge(assets::routes())
         // Core API
         .route("/health", get(health))
         .route("/version", get(version))

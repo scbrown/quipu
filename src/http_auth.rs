@@ -385,6 +385,7 @@ mod tests {
         let sources = [
             ("server.rs", include_str!("server.rs")),
             ("server/align.rs", include_str!("server/align.rs")),
+            ("server/assets.rs", include_str!("server/assets.rs")),
             (
                 "server/graph_store.rs",
                 include_str!("server/graph_store.rs"),
@@ -402,7 +403,6 @@ mod tests {
         // listed as route-free.
         const NO_ROUTES: &[&str] = &[
             "server/admission.rs",
-            "server/assets.rs",
             "server/base.rs",
             "server/entity.rs",
             "server/handle.rs",
