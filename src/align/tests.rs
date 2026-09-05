@@ -584,3 +584,133 @@ fn a_pair_below_the_floor_is_not_proposed() {
         .is_empty()
     );
 }
+
+// ---------------------------------------------------------------------------
+// verify — wu's four requirements on the total invariant.
+
+use super::verify::{VerifyReport, verify};
+
+fn authored_same(subject: &str, object: &str) -> Mapping {
+    let mut m = mapping(subject, object);
+    m.author_id = Some("malcolm".into());
+    m.mapping_justification = Justification::ManualMappingCuration;
+    m
+}
+
+fn authored_different(subject: &str, object: &str) -> Mapping {
+    let mut m = authored_same(subject, object);
+    m.predicate_modifier_not = Some(true);
+    m
+}
+
+#[test]
+fn an_untraceable_assertion_fails_rather_than_warns() {
+    // wu: a warning here is read past exactly once and then forever, and the
+    // thing warned about suppresses a pair everywhere while nobody is shown it.
+    let set = MappingSet::new("urn:t");
+    let report = verify(
+        &set,
+        &[],
+        &[("http://a.example/x".into(), "http://b.example/y".into())],
+    );
+    assert!(report.is_failure());
+    assert_eq!(report.untraceable.len(), 1);
+    assert!(report.render().contains("FAILED"));
+}
+
+#[test]
+fn a_traced_assertion_passes_in_both_predicates() {
+    let mut set = MappingSet::new("urn:t");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    set.mappings.push(authored_different(
+        "http://a.example/2",
+        "http://b.example/2",
+    ));
+
+    let report = verify(
+        &set,
+        &[("http://a.example/1".into(), "http://b.example/1".into())],
+        &[("http://a.example/2".into(), "http://b.example/2".into())],
+    );
+    assert!(!report.is_failure());
+    assert_eq!(report.traced_same_as, 1);
+    assert_eq!(report.traced_distinct_from, 1);
+}
+
+#[test]
+fn a_declined_row_does_not_authorise_a_distinct_from() {
+    // The whole reject split, checked from the verify side: if `apply` ever
+    // derived a distinctFrom from a decline, verify must call it untraceable.
+    let mut set = MappingSet::new("urn:t");
+    let mut declined = mapping("http://a.example/x", "http://b.example/y");
+    declined.quipu_review = Some(Review::Declined);
+    set.mappings.push(declined);
+
+    let report = verify(
+        &set,
+        &[],
+        &[("http://a.example/x".into(), "http://b.example/y".into())],
+    );
+    assert!(
+        report.is_failure(),
+        "a decline must not authorise an assertion"
+    );
+}
+
+#[test]
+fn assertion_direction_does_not_affect_tracing() {
+    let mut set = MappingSet::new("urn:t");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+    // Found the other way round in the graph.
+    let report = verify(
+        &set,
+        &[("http://b.example/1".into(), "http://a.example/1".into())],
+        &[],
+    );
+    assert!(!report.is_failure());
+    assert_eq!(report.traced_same_as, 1);
+}
+
+#[test]
+fn an_authored_but_unapplied_row_is_reported_and_is_not_a_failure() {
+    // "decided but not yet applied" and "applied wrongly" are different
+    // problems with different fixes, so verify must not collapse them.
+    let mut set = MappingSet::new("urn:t");
+    set.mappings
+        .push(authored_same("http://a.example/1", "http://b.example/1"));
+
+    let report = verify(&set, &[], &[]);
+    assert!(!report.is_failure());
+    assert_eq!(report.unapplied.len(), 1);
+    assert!(report.render().contains("not yet applied"));
+}
+
+#[test]
+fn the_pass_message_says_traced_is_not_correct() {
+    // wu: "Traced is not correct." A green check whose meaning is overread is
+    // how a review step becomes a rubber stamp, so the report has to disclaim
+    // it in its own words rather than relying on the reader knowing.
+    let report = VerifyReport::default();
+    let text = report.render();
+    assert!(text.contains("PROVENANCE, not correctness"), "{text}");
+    assert!(text.contains("SOLE writer"), "{text}");
+    assert!(text.contains("total to"), "{text}");
+}
+
+#[test]
+fn the_failure_message_states_the_exclusive_ownership_precondition() {
+    // The precondition has to appear where a failing operator will read it,
+    // not only in the spec — it is the difference between "fix the bug" and
+    // "this check just permanently weakened".
+    let report = verify(
+        &MappingSet::new("urn:t"),
+        &[],
+        &[("http://a.example/x".into(), "http://b.example/y".into())],
+    );
+    let text = report.render();
+    assert!(text.contains("sole writer"), "{text}");
+    assert!(text.contains("degrades to partial permanently"), "{text}");
+    assert!(text.contains(super::verify::QUIPU_DISTINCT_FROM), "{text}");
+}

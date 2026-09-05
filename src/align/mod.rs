@@ -10,6 +10,7 @@
 
 pub mod propose;
 pub mod sssom;
+pub mod verify;
 
 #[cfg(test)]
 mod tests;
