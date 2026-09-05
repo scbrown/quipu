@@ -37,6 +37,15 @@ aegis:CIWorkflow rdfs:subClassOf obo:BFO_0000002 .
 aegis:Capability rdfs:subClassOf obo:BFO_0000002 .
 aegis:CertifiedShareBundle rdfs:subClassOf obo:BFO_0000002 .
 aegis:Chunk rdfs:subClassOf obo:BFO_0000002 .
+# CiJob and LocalCommand are the DECLARED job and the DECLARED command — a CI
+# job as written in a workflow file (aegis:gatesPath, aegis:localEquivalent) and
+# the text of a command (aegis:commandText). Neither carries execution state,
+# and the occurrent block below already states the rule they follow: "their
+# associated definitions and records remain continuants". aegis:PushgatewayJob
+# and aegis:SystemdTimer are the standing precedent — a thing named "Job" or
+# "Timer" here is the configured thing, never a running of it. A RUN of either
+# would be an occurrent, as aegis:WorkflowRun is to aegis:CIWorkflow.
+aegis:CiJob rdfs:subClassOf obo:BFO_0000002 .
 aegis:CodeModule rdfs:subClassOf obo:BFO_0000002 .
 aegis:CodeSymbol rdfs:subClassOf obo:BFO_0000002 .
 aegis:Commit rdfs:subClassOf obo:BFO_0000002 .
@@ -64,6 +73,7 @@ aegis:GoogleAccount rdfs:subClassOf obo:BFO_0000002 .
 aegis:Host rdfs:subClassOf obo:BFO_0000002 .
 aegis:KnowledgeCertificationSeal rdfs:subClassOf obo:BFO_0000002 .
 aegis:Limitation rdfs:subClassOf obo:BFO_0000002 .
+aegis:LocalCommand rdfs:subClassOf obo:BFO_0000002 .
 aegis:MCPServer rdfs:subClassOf obo:BFO_0000002 .
 aegis:MLModel rdfs:subClassOf obo:BFO_0000002 .
 aegis:MediaLibrary rdfs:subClassOf obo:BFO_0000002 .
@@ -113,6 +123,10 @@ aegis:TraitValue rdfs:subClassOf obo:BFO_0000002 .
 aegis:Transition rdfs:subClassOf obo:BFO_0000002 .
 aegis:VerifierRegistration rdfs:subClassOf obo:BFO_0000002 .
 aegis:Watchlist rdfs:subClassOf obo:BFO_0000002 .
+# WorkItem is the tracker-agnostic sibling of aegis:Bead, which is already a
+# continuant. An item of work is a record that persists and changes state; the
+# state CHANGES are the occurrents (aegis:TransitionEvent).
+aegis:WorkItem rdfs:subClassOf obo:BFO_0000002 .
 aegis:Workflow rdfs:subClassOf obo:BFO_0000002 .
 aegis:WorkflowDefinition rdfs:subClassOf obo:BFO_0000002 .
 aegis:WorkflowStep rdfs:subClassOf obo:BFO_0000002 .
