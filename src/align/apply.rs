@@ -103,6 +103,23 @@ pub fn derived_graph_iri(graph_a: &str, graph_b: &str) -> String {
 ///
 /// # Errors
 /// A row carries an IRI that cannot be written as N-Triples.
+/// Is this an IRI `derived_graph_iri` would have produced?
+///
+/// `urn:quipu:align:<12 hex>:<12 hex>`, exactly. The shape is how `apply`
+/// tells a name IT invented from a name the CALLER chose, which decides
+/// whether an absent graph is created or refused (aegis-19o403).
+#[must_use]
+pub fn is_derived_graph_iri(iri: &str) -> bool {
+    let Some(rest) = iri.strip_prefix("urn:quipu:align:") else {
+        return false;
+    };
+    let Some((a, b)) = rest.split_once(':') else {
+        return false;
+    };
+    let hex12 = |s: &str| s.len() == 12 && s.bytes().all(|c| c.is_ascii_hexdigit());
+    hex12(a) && hex12(b)
+}
+
 pub fn derive_ntriples(set: &MappingSet, timestamp: &str) -> Result<String> {
     let mut out = String::new();
     let mut rows: Vec<_> = set
@@ -294,11 +311,33 @@ pub fn apply(
         )));
     }
 
-    let graph = store.lookup(graph_iri)?.ok_or_else(|| {
-        Error::InvalidValue(format!(
-            "alignment graph {graph_iri} is not interned; create it with graph_create first"
-        ))
-    })?;
+    // WHO OWNS THE NAME decides what an absent graph means (aegis-19o403).
+    //
+    // `derived_graph_iri(a, b)` is computed by this library and never handed
+    // back, so demanding the caller `graph_create` it first was an
+    // UNSATISFIABLE contract: they were asked to pre-create a name they are not
+    // told. muldoon could only satisfy it by reading our source. The precedent
+    // is already in this store — `Store::ensure_companion_inferred_graph`
+    // interns the `<g>#inferred` companion itself for exactly this reason: a
+    // DERIVED IRI belongs to the library, not to the caller's vocabulary.
+    //
+    // A caller-supplied IRI keeps the refusal, and that half is load-bearing:
+    // auto-creating an arbitrary name would turn `apply --graph algnment-x`
+    // into a brand new empty graph plus a successful-looking write that nobody
+    // can find. The current error is protecting against that correctly; it was
+    // only ever wrong for the name we invented ourselves.
+    let graph = match store.lookup(graph_iri)? {
+        Some(g) => g,
+        None if is_derived_graph_iri(graph_iri) => store.graph_create(graph_iri)?,
+        None => {
+            return Err(Error::InvalidValue(format!(
+                "alignment graph {graph_iri} is not interned; create it with graph_create \
+                 first. (Only the derived urn:quipu:align:… graph this library computes is \
+                 created for you — a name you chose is not, so that a typo cannot silently \
+                 mint a graph.)"
+            )));
+        }
+    };
 
     let before = live_facts(store, graph)?;
     let datums = plan(store, set, graph, timestamp)?;

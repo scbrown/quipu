@@ -1,3 +1,5 @@
+import { createConstellation } from "./constellation.js";
+
 // UI for the "Explore this repository's graph" page.
 //
 // Everything on screen is derived from a SPARQL query this file sends to the
@@ -163,23 +165,32 @@ GROUP BY ?type
 ORDER BY DESC(?n)`,
 
   modules: `${PREFIXES}
-SELECT ?module ?path ?language
+SELECT ?moduleIri ?path ?language
 WHERE {
   ?module rdf:type aegis:CodeModule ;
           aegis:filePath ?path .
   OPTIONAL { ?module aegis:language ?language }
+  BIND(STR(?module) AS ?moduleIri)
 }
 ORDER BY ?path`,
 
   documents: `${PREFIXES}
-SELECT ?document ?path
-WHERE { ?document rdf:type aegis:Document ; aegis:filePath ?path }
+SELECT ?documentIri ?path
+WHERE { ?document rdf:type aegis:Document ; aegis:filePath ?path
+  BIND(STR(?document) AS ?documentIri) }
 ORDER BY ?path`,
 };
 
 // The three canned queries the page ships with. Each is a real question the
 // artifact can answer, not a shape-of-SPARQL demo.
 const CANNED = [
+  { name: "How does the vision guide code?", sparql: `${PREFIXES}
+PREFIX q: <https://quipu.dev/knowledge/>
+SELECT ?decision ?path WHERE {
+  q:vision q:guides ?decision .
+  ?decision q:governs ?module .
+  ?module aegis:filePath ?path .
+}` },
   {
     name: "Which modules mention a name?",
     sparql: `${PREFIXES}
@@ -244,8 +255,8 @@ async function renderTypes() {
 async function renderBrowser() {
   const [modules, documents] = await Promise.all([query(Q.modules), query(Q.documents)]);
   const items = [
-    ...rows(modules).map((r) => ({ iri: r.module, path: r.path, kind: r.language || "code" })),
-    ...rows(documents).map((r) => ({ iri: r.document, path: r.path, kind: "doc" })),
+    ...rows(modules).map((r) => ({ iri: r.moduleIri, path: r.path, kind: r.language || "code" })),
+    ...rows(documents).map((r) => ({ iri: r.documentIri, path: r.path, kind: "doc" })),
   ].sort((a, b) => a.path.localeCompare(b.path));
 
   const list = $("#file-list");
@@ -267,7 +278,7 @@ async function renderBrowser() {
   filter.addEventListener("input", draw);
   draw();
   wireShowQuery("#browse-showq", Q.modules);
-  if (items.length) selectFile(items.find((i) => i.path === "src/share.rs") ?? items[0]);
+  if (items.length && !constellation.hasVision()) selectFile(items.find((i) => i.path === "src/share.rs") ?? items[0]);
 }
 
 function detailQuery(iri) {
@@ -291,9 +302,17 @@ async function selectFile(item) {
   $("#detail-iri").textContent = item.iri;
   const body = $("#detail-body");
   body.replaceChildren(el("p", { class: "muted", text: "querying…" }));
+  drawNeighbourhood(item);
+  renderFacts(item);
+  if (item.iri.startsWith("https://quipu.dev/knowledge/")) {
+    body.replaceChildren(el("p", { text: "This is contributor knowledge. Its source and related nodes are in the constellation card; its editable facts are below." }));
+    wireShowQuery("#detail-showq", factsQuery(item.iri));
+    return;
+  }
   const sparql = detailQuery(item.iri);
   wireShowQuery("#detail-showq", sparql);
   const result = await query(sparql);
+  if (selected !== item) return;
   const members = rows(result);
   body.replaceChildren();
   if (!members.length) {
@@ -312,8 +331,6 @@ async function selectFile(item) {
     table.append(tbody);
     body.append(table);
   }
-  drawNeighbourhood(item);
-  renderFacts(item);
 }
 
 // ------------------------------------------------------------- editing
@@ -393,6 +410,7 @@ async function afterWrite(item, outcome, description) {
   editNote(`${description} — tx ${outcome.tx_id}`);
   await renderFacts(item);
   await renderTypes();
+  await constellation.load();
   drawNeighbourhood(item);
   await refreshExport();
 }
@@ -696,123 +714,8 @@ async function downloadNtriples() {
 
 // ------------------------------------------------------------ graph panel
 
-// A small force layout on a 2D canvas. No library on purpose: the whole page is
-// already a 3 MB wasm download, and a graph of one file's neighbourhood is a
-// few dozen nodes — importing a renderer to draw it would cost more than it
-// draws.
-async function drawNeighbourhood(item) {
-  const sparql = `${PREFIXES}
-SELECT ?from ?rel ?to
-WHERE {
-  { <${item.iri}> ?rel ?to . FILTER(isIRI(?to)) BIND(<${item.iri}> AS ?from) }
-  UNION
-  { ?from ?rel <${item.iri}> . FILTER(isIRI(?from)) BIND(<${item.iri}> AS ?to) }
-  UNION
-  { ?from aegis:inDocument <${item.iri}> . ?from ?rel ?to . FILTER(isIRI(?to)) }
-}
-LIMIT 300`;
-  wireShowQuery("#graph-showq", sparql);
-  const result = await query(sparql).catch(() => null);
-  const edges = rows(result)
-    .filter((e) => e.from && e.to && e.from !== e.to)
-    .map((e) => ({ from: String(e.from), to: String(e.to), rel: short(String(e.rel)) }));
-  layout(edges, String(item.iri));
-}
-
-function layout(edges, focus) {
-  const canvas = $("#graph");
-  const ctx = canvas.getContext("2d");
-  const dpr = window.devicePixelRatio || 1;
-  const W = canvas.clientWidth, H = canvas.clientHeight;
-  canvas.width = W * dpr; canvas.height = H * dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  const ids = [...new Set(edges.flatMap((e) => [e.from, e.to]))];
-  $("#graph-count").textContent = ids.length
-    ? `${fmt(ids.length)} nodes, ${fmt(edges.length)} edges`
-    : "no linked neighbours in the pack";
-  ctx.clearRect(0, 0, W, H);
-  if (!ids.length) return;
-
-  // Simulate in a SQUARE space and fit the result to the canvas afterwards.
-  // Simulating directly in canvas coordinates looked like a bug: this panel is
-  // ~1180x320, so a symmetric repulsion runs out of vertical room long before
-  // horizontal and parks half the nodes in rows along the top and bottom edges.
-  // The graph was fine; the aspect ratio was doing the layout.
-  const S = 1000;
-  const nodes = new Map(ids.map((id, i) => {
-    const a = (i / ids.length) * Math.PI * 2;
-    return [id, { id, x: S / 2 + Math.cos(a) * S * 0.35, y: S / 2 + Math.sin(a) * S * 0.35,
-                  vx: 0, vy: 0 }];
-  }));
-  const hub = nodes.get(focus);
-  if (hub) { hub.x = S / 2; hub.y = S / 2; }
-
-  const repulsion = (S * S) / (nodes.size * 45);
-  for (let step = 0; step < 320; step++) {
-    for (const a of nodes.values()) {
-      for (const b of nodes.values()) {
-        if (a === b) continue;
-        const dx = a.x - b.x, dy = a.y - b.y;
-        const d2 = Math.max(64, dx * dx + dy * dy);
-        const f = repulsion / d2;
-        a.vx += dx * f; a.vy += dy * f;
-      }
-    }
-    for (const e of edges) {
-      const a = nodes.get(e.from), b = nodes.get(e.to);
-      if (!a || !b) continue;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const d = Math.max(1, Math.hypot(dx, dy));
-      const f = (d - 110) * 0.010;
-      a.vx += dx / d * f; a.vy += dy / d * f;
-      b.vx -= dx / d * f; b.vy -= dy / d * f;
-    }
-    for (const n of nodes.values()) {
-      n.vx += (S / 2 - n.x) * 0.004; n.vy += (S / 2 - n.y) * 0.004;
-      n.x += (n.vx *= 0.85); n.y += (n.vy *= 0.85);
-    }
-    if (hub) { hub.x = S / 2; hub.y = S / 2; hub.vx = hub.vy = 0; }
-  }
-
-  // Fit whatever shape came out into the canvas. No clamping anywhere in the
-  // simulation, so no node can be pressed flat against an edge by the geometry.
-  const pad = { l: 16, r: 130, t: 16, b: 16 };   // right pad leaves room for labels
-  const xs = [...nodes.values()].map((n) => n.x), ys = [...nodes.values()].map((n) => n.y);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minY = Math.min(...ys), maxY = Math.max(...ys);
-  const sx = (W - pad.l - pad.r) / Math.max(1, maxX - minX);
-  const sy = (H - pad.t - pad.b) / Math.max(1, maxY - minY);
-  for (const n of nodes.values()) {
-    n.px = pad.l + (n.x - minX) * sx;
-    n.py = pad.t + (n.y - minY) * sy;
-  }
-
-  ctx.strokeStyle = "rgba(136, 146, 164, 0.3)";
-  ctx.lineWidth = 1;
-  for (const e of edges) {
-    const a = nodes.get(e.from), b = nodes.get(e.to);
-    if (!a || !b) continue;
-    ctx.beginPath(); ctx.moveTo(a.px, a.py); ctx.lineTo(b.px, b.py); ctx.stroke();
-  }
-  ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, monospace";
-  for (const n of nodes.values()) {
-    const isHub = n.id === focus;
-    ctx.beginPath();
-    ctx.arc(n.px, n.py, isHub ? 7 : 4, 0, Math.PI * 2);
-    ctx.fillStyle = isHub ? "#e94560" : "#3987e5";
-    ctx.fill();
-    // Label the focus always, and the rest only while there is room. Past a
-    // couple of dozen nodes the labels overlap into an unreadable smear, which
-    // reads as a broken render rather than as a dense graph — so the honest
-    // move is to stop drawing them and say how many there are, which the
-    // heading beside this canvas already does.
-    if (isHub || nodes.size <= 18) {
-      ctx.fillStyle = isHub ? "#e0e0e0" : "#8892a4";
-      ctx.fillText(short(n.id).split("/").pop().slice(0, 26), n.px + 9, n.py + 3);
-    }
-  }
-}
+const constellation = createConstellation({ query, prefixes: PREFIXES, short, inspect: selectFile });
+function drawNeighbourhood(item) { constellation.focus(item); }
 
 // ------------------------------------------------------------- query panel
 
@@ -877,6 +780,7 @@ async function loadPack(bytes, source) {
     + `query against this tab's copy.`);
   $("main").hidden = false;
   await renderTypes();
+  await constellation.load();
   await renderBrowser();
   await refreshExport();
   reportReleaseFreshness(report.manifest.producer.version);

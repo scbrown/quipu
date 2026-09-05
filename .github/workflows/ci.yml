@@ -154,6 +154,8 @@ jobs:
       # fresh two-store run of the binary built immediately above.
       - name: Sharing and federation story demo
         run: examples/sharing-demo/run.sh --check
+      - name: Cross-graph alignment demo
+        run: examples/align-demo/run.sh --check
 
   # The release workflow ships binaries built with the `full` bundle. Without
   # this job an onnx-gated break would first appear during a release, which is

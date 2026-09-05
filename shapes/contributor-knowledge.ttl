@@ -1,0 +1,16 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix q: <https://quipu.dev/knowledge/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Repository-authored contributor narratives, with their own public vocabulary.
+# Episode here means a source-backed narrative record, not a fabricated live event.
+q:VisionShape a sh:NodeShape ; sh:targetClass q:Vision ;
+  sh:property [ sh:path rdfs:label ; sh:minCount 1 ] .
+q:EpisodeShape a sh:NodeShape ; sh:targetClass q:Episode ;
+  sh:property [ sh:path rdfs:label ; sh:minCount 1 ] ;
+  sh:property [ sh:path rdfs:comment ; sh:minCount 1 ] ;
+  sh:property [ sh:path <http://www.w3.org/ns/prov#wasDerivedFrom> ; sh:minCount 1 ; sh:nodeKind sh:IRI ] .
+q:BookShape a sh:NodeShape ; sh:targetClass q:Book ;
+  sh:property [ sh:path rdfs:label ; sh:minCount 1 ] .
+q:ChapterShape a sh:NodeShape ; sh:targetClass q:Chapter ;
+  sh:property [ sh:path rdfs:label ; sh:minCount 1 ] .
