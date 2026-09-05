@@ -169,47 +169,9 @@ pub fn cmd_query(args: &[String], db_path: &str) {
     let mut store = crate::cli_open::open_store(db_path);
 
     // `--fork <name>` scopes the default graph to a named fork (quipu-gp5).
-    let mut graph = crate::cli_fork::fork_scope(&store, args);
+    let graph = crate::cli_fork::fork_scope(&store, args);
 
-    // `--entailment rdfs` (aegis-1gp76j): materialise the RDFS closure and
-    // answer over the RDF merge of the graph AND its companion inferred graph.
-    //
-    // Composing the dataset here is what an entailment regime MEANS — a claim
-    // about what the default graph ENTAILS — so the closure belongs in the
-    // default graph for the duration of the answer. The alternative, rewriting
-    // the query to add `FROM <…> FROM <…#inferred>`, would make the answer
-    // describe a query the caller did not ask; for a conformance suite that is
-    // the runner scoring itself.
-    if let Some(regime) = flag_value(args, "--entailment") {
-        if !regime.eq_ignore_ascii_case("rdfs") {
-            eprintln!("error: unknown entailment regime {regime:?}; expected \"rdfs\"");
-            std::process::exit(1);
-        }
-        let base = match &graph {
-            quipu::GraphScope::Default(ids) if !ids.is_empty() => ids[0],
-            _ => quipu::schema::ROOT_GRAPH,
-        };
-        let timestamp = chrono_now();
-        match quipu::sparql::rdfs_closure::materialise(&mut store, base, &timestamp) {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("error materialising RDFS closure: {e}");
-                std::process::exit(1);
-            }
-        }
-        match store.companion_inferred_iri(base) {
-            Ok(iri) => match store.lookup(&iri) {
-                Ok(Some(companion)) => {
-                    graph = quipu::GraphScope::Default(vec![base, companion]);
-                }
-                _ => graph = quipu::GraphScope::Default(vec![base]),
-            },
-            Err(e) => {
-                eprintln!("error resolving companion graph: {e}");
-                std::process::exit(1);
-            }
-        }
-    }
+    let graph = crate::cli_entailment::apply(args, &mut store, graph);
 
     let ctx = quipu::TemporalContext {
         valid_at,

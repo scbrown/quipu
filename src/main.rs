@@ -36,6 +36,7 @@ mod cli_commands;
 mod cli_db;
 mod cli_explain;
 mod cli_export;
+mod cli_entailment;
 mod cli_fork;
 mod cli_graph;
 mod cli_open;
