@@ -71,6 +71,15 @@ that code, compiled for a different target. Then you get a SPARQL box, a module 
 document browser, a type distribution and a neighbourhood graph, all of it derived from
 queries the page will show you. It takes any Quipu pack, not just this one.
 
+**And it is not read-only.** Add, change or retract facts on any node — through the real
+`tool_set` / `tool_retract` / `tool_episode`, the same functions the REST API exposes,
+with the closed-vocabulary gate still enforcing what the sender's shapes allow. The views
+update as you go, and you can take the result with you: the edited store exports as a
+genuine `.qpack.tar.gz`, built by the same `share_payload` the CLI uses and declaring the
+pack it came from as its parent, so `quipu import` will take it back. Or download
+`export.nt` and `diff` it — it is line-oriented and canonically ordered, so a change is a
+reviewable diff.
+
 The bundle is a release asset (`quipu-<tag>-wasm.tar.gz`), so nothing here is committed
 and the Pages build needs no Rust.
 

@@ -20,7 +20,9 @@ knowledge graph, 61k triples shipped with every release, imported and queried
 **by Quipu itself compiled to WebAssembly**. The pack is verified against its
 manifest, its shapes are adopted, and it is staged and promoted in your tab
 before you can query it: the receiving half of the sharing story below, running
-rather than described. Still no server.
+rather than described. Then edit it — add, change and retract facts through the real
+write path — and export the result as a pack `quipu import` will take back. Still no
+server.
 
 ## What is Quipu?
 
