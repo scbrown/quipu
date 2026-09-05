@@ -316,6 +316,418 @@ _:node1 <http://example.org/label> "test" .
         let facts = store.entity_facts(thing_id).unwrap();
         assert_eq!(facts[0].value, Value::Ref(bnode_id));
     }
+    // ── STREAMING CHUNKED INGEST (aegis-j0yaxj.2) ────────────────────────────
+    //
+    // The prerequisite for benchmarking at 1B: `ingest_rdf_to_graph` parses the
+    // whole input into a Vec and commits ONE transaction, which cannot reach that
+    // scale by construction. These arms pin the properties that make the chunked
+    // form safe to substitute for it.
+
+    fn live_fact_count(store: &Store) -> i64 {
+        store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM facts WHERE op = 1 AND valid_to IS NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    /// THE LOAD-BEARING ONE: chunking must not change what lands.
+    ///
+    /// A chunked ingest that produced a different store from the one-shot form
+    /// would make every benchmark number a measurement of the harness. Same input,
+    /// three chunk sizes including one larger than the dataset, one datum at a
+    /// time -- all must agree with each other AND with the unchunked path.
+    #[test]
+    fn chunking_does_not_change_what_lands() {
+        let one_shot = {
+            let mut store = Store::open_in_memory().unwrap();
+            ingest_rdf(
+                &mut store,
+                TURTLE_DATA.as_bytes(),
+                RdfFormat::Turtle,
+                None,
+                "2026-04-04T00:00:00Z",
+                Some("test"),
+                None,
+            )
+            .unwrap();
+            live_fact_count(&store)
+        };
+
+        for chunk in [1usize, 3, 10_000] {
+            let mut store = Store::open_in_memory().unwrap();
+            ingest_rdf_chunked(
+                &mut store,
+                TURTLE_DATA.as_bytes(),
+                RdfFormat::Turtle,
+                None,
+                "2026-04-04T00:00:00Z",
+                Some("test"),
+                None,
+                0,
+                chunk,
+            )
+            .unwrap();
+            assert_eq!(
+                live_fact_count(&store),
+                one_shot,
+                "chunk={chunk} produced a different store from the one-shot ingest"
+            );
+        }
+    }
+
+    /// One transaction per chunk, and the count is arithmetic rather than luck.
+    #[test]
+    fn one_transaction_per_chunk_and_a_tail() {
+        let mut store = Store::open_in_memory().unwrap();
+        let report = ingest_rdf_chunked(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            0,
+            3,
+        )
+        .unwrap();
+
+        let expected = report.parsed.div_ceil(3);
+        assert_eq!(
+            report.tx_ids.len(),
+            expected,
+            "{} triples at chunk 3 must be {expected} transactions",
+            report.parsed
+        );
+    }
+
+    /// EVERY CHUNK CARRIES THE SAME TIMESTAMP.
+    ///
+    /// One ingest is one logical event. If chunks stamped their own time, a long
+    /// load would appear in the store as data that trickled in, and every temporal
+    /// read would believe it. Asserting ONE distinct `valid_from` is the check;
+    /// asserting a specific value would pass even if the code called `now()` and got
+    /// lucky within a second.
+    #[test]
+    fn every_chunk_carries_the_same_timestamp() {
+        let mut store = Store::open_in_memory().unwrap();
+        ingest_rdf_chunked(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            0,
+            1,
+        )
+        .unwrap();
+
+        let distinct: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(DISTINCT valid_from) FROM facts WHERE op = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(distinct, 1, "chunks disagreed about when the ingest happened");
+    }
+
+    /// An empty input commits NOTHING, not an empty transaction.
+    ///
+    /// A zero-datum tx would appear in the log as an ingest that happened, which is
+    /// the same class of lie as reporting a parse count as a write count.
+    #[test]
+    fn an_empty_input_commits_no_transaction() {
+        let mut store = Store::open_in_memory().unwrap();
+        let report = ingest_rdf_chunked(
+            &mut store,
+            "".as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            0,
+            100,
+        )
+        .unwrap();
+        assert_eq!(report.parsed, 0);
+        assert!(
+            report.tx_ids.is_empty(),
+            "an empty ingest opened a transaction: {:?}",
+            report.tx_ids
+        );
+    }
+
+    /// `parsed` IS NOT A WRITE COUNT, and this pins the difference rather than
+    /// documenting it.
+    ///
+    /// quipu #127: `ingest_rdf_to_graph` returns `datums.len()`, which malcolm
+    /// measured reporting 4 writes for a re-apply that stored nothing. This bead
+    /// publishes INGEST THROUGHPUT on a public trust page, so a harness taking the
+    /// number from here would report the parse -- the cheap half -- as the write.
+    /// Ingesting the same content twice parses it all again and writes nothing new.
+    #[test]
+    fn parsed_counts_triples_not_writes() {
+        let mut store = Store::open_in_memory().unwrap();
+        let first = ingest_rdf_chunked(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            0,
+            10,
+        )
+        .unwrap();
+        let after_first = live_fact_count(&store);
+
+        let second = ingest_rdf_chunked(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            0,
+            10,
+        )
+        .unwrap();
+        let after_second = live_fact_count(&store);
+
+        assert_eq!(
+            second.parsed, first.parsed,
+            "the second pass parsed a different number of triples"
+        );
+        assert_eq!(
+            after_second, after_first,
+            "the second pass wrote new facts; then this test cannot demonstrate the gap"
+        );
+        assert!(
+            i64::try_from(second.parsed).unwrap() > 0,
+            "parsed {} while writing 0 new facts is the whole point",
+            second.parsed
+        );
+    }
+
+    // ── DECLARED INGEST: refusing a partial load (aegis-j0yaxj.2) ────────────
+
+    const DECLARED_GRAPH: &str = "http://example.org/graphs/watdiv";
+
+    fn declared_store() -> (Store, i64) {
+        let store = Store::open_in_memory().unwrap();
+        let g = store.graph_create(DECLARED_GRAPH).unwrap();
+        (store, g)
+    }
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        format!("{:x}", Sha256::new().chain_update(bytes).finalize())
+    }
+
+    /// Counts the completion markers a declared ingest writes about its own graph.
+    fn completion_markers(store: &Store, g: i64) -> i64 {
+        let subject = store.lookup(DECLARED_GRAPH).unwrap().unwrap();
+        store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM facts f JOIN terms t ON t.id = f.a \
+                 WHERE f.e = ?1 AND f.g = ?2 AND f.op = 1 AND f.valid_to IS NULL \
+                   AND t.iri LIKE 'urn:quipu:ingest:%'",
+                rusqlite::params![subject, g],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    /// The happy path, and the guarantee that makes the marker trustworthy: the
+    /// completion assertions are in the SAME transaction as the last chunk.
+    #[test]
+    fn a_met_declaration_marks_the_graph_complete_in_the_final_chunks_tx() {
+        let (mut store, g) = declared_store();
+        let bytes = TURTLE_DATA.as_bytes();
+
+        // Chunk 1 is the adversarial size: it maximises the number of commits and
+        // so the number of chances to close the tx before the markers are ready.
+        let report = ingest_rdf_declared(
+            &mut store,
+            bytes,
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            g,
+            1,
+            &LoadDeclaration {
+                triples: turtle_triple_count(),
+                sha256: sha256_hex(bytes),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(completion_markers(&store, g), 3, "expected all three markers");
+
+        let last_tx = *report.tx_ids.last().unwrap();
+        let data_in_last_tx: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM facts f JOIN terms t ON t.id = f.a \
+                 WHERE f.tx = ?1 AND t.iri NOT LIKE 'urn:quipu:ingest:%'",
+                rusqlite::params![last_tx],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            data_in_last_tx > 0,
+            "the completion markers landed in a transaction of their own -- there is \
+             then a window in which the store says complete while data is still arriving"
+        );
+    }
+
+    /// THE ONE THAT MATTERS. A short load is refused, the partial graph is LEFT
+    /// VISIBLE, and it carries NO completion marker.
+    ///
+    /// malcolm, on this bead: the partial graph is the dangerous one, and note which
+    /// way it fails -- 700M has better latency than 1B, so truncation makes the
+    /// numbers look BETTER. A published good-looking result is not investigated.
+    #[test]
+    fn a_short_load_is_refused_and_leaves_an_unmarked_partial_graph() {
+        // Both chunk regimes, because they exercise different code. At 2 the tail is
+        // one of several commits; at 1000 the WHOLE load is the tail, so this arm is
+        // the one that fails if a refusal discards the batch it is holding. Without
+        // it the assertion below passes on the strength of the earlier chunks and
+        // pins nothing -- measured: dropping the tail commit left every arm green.
+        for chunk in [2usize, 1000] {
+            let (mut store, g) = declared_store();
+            let bytes = TURTLE_DATA.as_bytes();
+
+            let err = ingest_rdf_declared(
+                &mut store,
+                bytes,
+                RdfFormat::Turtle,
+                None,
+                "2026-04-04T00:00:00Z",
+                Some("test"),
+                None,
+                g,
+                chunk,
+                // The declaration claims more than the source holds: the load is short.
+                &LoadDeclaration {
+                    triples: turtle_triple_count() + 1,
+                    sha256: sha256_hex(bytes),
+                },
+            )
+            .unwrap_err();
+
+            let msg = err.to_string();
+            assert!(msg.contains("declaration unmet"), "unhelpful refusal: {msg}");
+            assert_eq!(
+                completion_markers(&store, g),
+                0,
+                "chunk={chunk}: a refused load marked its graph complete"
+            );
+
+            // EVERYTHING PARSED IS STILL THERE. Not merely "something landed": a
+            // vanished failed load and a load that never ran are the same
+            // observation, and half a failed load is worse than either.
+            let landed: i64 = store
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM facts WHERE g = ?1 AND op = 1",
+                    rusqlite::params![g],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                landed,
+                i64::try_from(turtle_triple_count()).unwrap(),
+                "chunk={chunk}: the refused load did not leave its partial graph in place"
+            );
+        }
+    }
+
+
+    /// The same bytes under a different pin is also refused -- a re-derivable result
+    /// needs the source identified, not merely counted.
+    #[test]
+    fn a_wrong_source_digest_is_refused_even_when_the_count_matches() {
+        let (mut store, g) = declared_store();
+        let err = ingest_rdf_declared(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            g,
+            4,
+            &LoadDeclaration {
+                triples: turtle_triple_count(),
+                sha256: "0".repeat(64),
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("sha256"), "{err}");
+        assert_eq!(completion_markers(&store, g), 0);
+    }
+
+    /// ROOT is refused: a declaration describes one load window, and ROOT is the
+    /// store -- its triple count is not the dataset's, so the check would be
+    /// meaningless in the direction that passes.
+    #[test]
+    fn a_declared_ingest_refuses_root() {
+        let mut store = Store::open_in_memory().unwrap();
+        let err = ingest_rdf_declared(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            crate::schema::ROOT_GRAPH,
+            4,
+            &LoadDeclaration {
+                triples: turtle_triple_count(),
+                sha256: sha256_hex(TURTLE_DATA.as_bytes()),
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("ROOT"), "{err}");
+    }
+
+    /// The declared count is what the FIXTURE holds, measured rather than written
+    /// down: a hardcoded number would make every arm above pass or fail for a
+    /// reason that has nothing to do with the declaration logic.
+    fn turtle_triple_count() -> usize {
+        let mut store = Store::open_in_memory().unwrap();
+        ingest_rdf_chunked(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            0,
+            1000,
+        )
+        .unwrap()
+        .parsed
+    }
+
 }
 
 /// aegis-fmyi acceptance: RDF term fidelity across a full ingest → store →
@@ -589,4 +1001,5 @@ ex:s ex:greeting "hello"@en ;
             "the exported slice re-ingests to exactly its triples"
         );
     }
+
 }
