@@ -333,24 +333,58 @@ fn re_running_the_closure_asserts_nothing_the_second_time() {
 #[test]
 fn rdfs2_domain_types_the_subject_of_a_literal_valued_premise() {
     let mut store = Store::open_in_memory().unwrap();
-    literal_triple(&mut store, G, "http://example.org/a", "http://example.org/name", "n");
-    triple(&mut store, G, "http://example.org/name", RDFS_DOMAIN, "http://example.org/Person");
+    literal_triple(
+        &mut store,
+        G,
+        "http://example.org/a",
+        "http://example.org/name",
+        "n",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/name",
+        RDFS_DOMAIN,
+        "http://example.org/Person",
+    );
     // CONTROL: an IRI-object premise through a DIFFERENT property, so the two
     // arms cannot mask each other.
-    triple(&mut store, G, "http://example.org/c", "http://example.org/knows", "http://example.org/d");
-    triple(&mut store, G, "http://example.org/knows", RDFS_DOMAIN, "http://example.org/Agent");
+    triple(
+        &mut store,
+        G,
+        "http://example.org/c",
+        "http://example.org/knows",
+        "http://example.org/d",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/knows",
+        RDFS_DOMAIN,
+        "http://example.org/Agent",
+    );
 
     let g = store.lookup(G).unwrap().unwrap();
     materialise(&mut store, g, TS).unwrap();
     let c = closure_of(&mut store, G);
 
     assert!(
-        has(&c, "http://example.org/c", RDF_TYPE, "http://example.org/Agent"),
+        has(
+            &c,
+            "http://example.org/c",
+            RDF_TYPE,
+            "http://example.org/Agent"
+        ),
         "CONTROL FAILED: rdfs2 does not fire even over an IRI object — the defect is \
          not literal-specific and this test cannot localise it"
     );
     assert!(
-        has(&c, "http://example.org/a", RDF_TYPE, "http://example.org/Person"),
+        has(
+            &c,
+            "http://example.org/a",
+            RDF_TYPE,
+            "http://example.org/Person"
+        ),
         "rdfs2 did not fire over a literal-valued premise"
     );
 }
@@ -361,16 +395,44 @@ fn rdfs2_domain_types_the_subject_of_a_literal_valued_premise() {
 #[test]
 fn a_type_derived_from_a_literal_premise_closes_under_subclass() {
     let mut store = Store::open_in_memory().unwrap();
-    literal_triple(&mut store, G, "http://example.org/a", "http://example.org/name", "n");
-    triple(&mut store, G, "http://example.org/name", RDFS_DOMAIN, "http://example.org/Person");
-    triple(&mut store, G, "http://example.org/Person", RDFS_SUBCLASS_OF, "http://example.org/Agent");
+    literal_triple(
+        &mut store,
+        G,
+        "http://example.org/a",
+        "http://example.org/name",
+        "n",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/name",
+        RDFS_DOMAIN,
+        "http://example.org/Person",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/Person",
+        RDFS_SUBCLASS_OF,
+        "http://example.org/Agent",
+    );
 
     let g = store.lookup(G).unwrap().unwrap();
     materialise(&mut store, g, TS).unwrap();
     let c = closure_of(&mut store, G);
-    assert!(has(&c, "http://example.org/a", RDF_TYPE, "http://example.org/Person"));
+    assert!(has(
+        &c,
+        "http://example.org/a",
+        RDF_TYPE,
+        "http://example.org/Person"
+    ));
     assert!(
-        has(&c, "http://example.org/a", RDF_TYPE, "http://example.org/Agent"),
+        has(
+            &c,
+            "http://example.org/a",
+            RDF_TYPE,
+            "http://example.org/Agent"
+        ),
         "rdfs9 must close a type that rdfs2 derived from a literal premise"
     );
 }
@@ -385,13 +447,26 @@ fn a_type_derived_from_a_literal_premise_closes_under_subclass() {
 #[test]
 fn rdfs3_still_does_not_type_a_literal_object() {
     let mut store = Store::open_in_memory().unwrap();
-    literal_triple(&mut store, G, "http://example.org/a", "http://example.org/name", "n");
-    triple(&mut store, G, "http://example.org/name", RDFS_RANGE, "http://example.org/Name");
+    literal_triple(
+        &mut store,
+        G,
+        "http://example.org/a",
+        "http://example.org/name",
+        "n",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/name",
+        RDFS_RANGE,
+        "http://example.org/Name",
+    );
     let g = store.lookup(G).unwrap().unwrap();
     let report = materialise(&mut store, g, TS).unwrap();
     let c = closure_of(&mut store, G);
     assert!(
-        !c.iter().any(|(_, p, o)| p == RDF_TYPE && o == "http://example.org/Name"),
+        !c.iter()
+            .any(|(_, p, o)| p == RDF_TYPE && o == "http://example.org/Name"),
         "a literal object must never be typed by rdfs3"
     );
     assert_eq!(
