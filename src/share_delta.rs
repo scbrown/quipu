@@ -369,6 +369,11 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
         return Err(Error::InvalidValue("delta result hash mismatch".into()));
     }
     Ok(ShareImportRequest {
+        // Local construction carries no envelope: these paths build a request from
+        // bytes already in hand, so there is no producer to attest. The result then
+        // reports tier "transport", which is the truth (aegis-c9c44).
+        #[cfg(not(target_arch = "wasm32"))]
+        attestation: None,
         manifest: manifest.result,
         export_ntriples: String::from_utf8(export)
             .map_err(|e| Error::Serialization(format!("delta result UTF-8: {e}")))?,
