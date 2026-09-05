@@ -71,7 +71,8 @@
 
 # Benchmarks
 
-- [SPARQL 1.1 Conformance](benchmarks/conformance.md)
+- [Public Benchmarks](benchmarks/README.md)
+  - [SPARQL 1.1 Conformance](benchmarks/conformance.md)
 
 # Operations
 
