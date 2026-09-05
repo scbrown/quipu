@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.32] - 2026-09-05
+
+### Added
+
+- *(auth)* Make the attestation replay set durable and savepoint-joined (#114)([64b63b7](https://github.com/scbrown/quipu/commit/64b63b7dbd2737ac962b14e94757781e405b2e6e))
+
 ## [0.3.31] - 2026-09-04
 
 ### Documentation
