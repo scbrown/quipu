@@ -474,3 +474,104 @@ fn rdfs3_still_does_not_type_a_literal_object() {
         "rdfs3 over a literal object must derive NOTHING, not an unreadable triple"
     );
 }
+
+/// One literal premise feeding BOTH rules, counted by `report.asserted` rather
+/// than by `closure_of()` — because the helper is IRI-only and CANNOT SEE an
+/// rdfs7 derivation whose object is a literal (wu, on #169).
+///
+/// This is the test that states the remaining incompleteness as a NUMBER rather
+/// than as a paragraph. The graph entails two things:
+///
+/// ```text
+/// ex:a ex:name "n" . + ex:name rdfs:domain ex:Person       |= ex:a rdf:type ex:Person  (rdfs2)
+/// ex:a ex:name "n" . + ex:name rdfs:subPropertyOf ex:label |= ex:a ex:label "n"        (rdfs7)
+/// ```
+///
+/// Exactly ONE is derived today. Asserting the count — not merely that rdfs2
+/// fired — is what makes the gap falsifiable: an implementation that started
+/// deriving the rdfs7 triple, or one that regressed rdfs2, both move this number
+/// and neither can pass quietly.
+///
+/// **When rdfs7 learns to carry literals this becomes 2, and this test is the
+/// thing that will notice.** Update it deliberately; do not relax it to a range.
+#[test]
+fn a_literal_premise_derives_rdfs2_but_not_yet_rdfs7() {
+    let mut store = Store::open_in_memory().unwrap();
+    literal_triple(
+        &mut store,
+        G,
+        "http://example.org/a",
+        "http://example.org/name",
+        "n",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/name",
+        RDFS_DOMAIN,
+        "http://example.org/Person",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/name",
+        RDFS_SUBPROPERTY_OF,
+        "http://example.org/label",
+    );
+
+    let g = store.lookup(G).unwrap().unwrap();
+    let report = materialise(&mut store, g, TS).unwrap();
+
+    assert_eq!(
+        report.asserted, 1,
+        "expected exactly the rdfs2 derivation. 0 means rdfs2 regressed over literal \
+         premises; 2 means rdfs7 has started carrying literals — which is the fix this \
+         number is waiting for, so update the test rather than widening it"
+    );
+    let c = closure_of(&mut store, G);
+    assert!(
+        has(
+            &c,
+            "http://example.org/a",
+            RDF_TYPE,
+            "http://example.org/Person"
+        ),
+        "and the one derivation is rdfs2's"
+    );
+}
+
+/// CONTROL for the test above: rdfs7 DOES fire over an IRI object.
+///
+/// Without this, `asserted == 1` is equally consistent with "rdfs7 is broken
+/// everywhere", and the number above would be measuring the wrong thing.
+#[test]
+fn rdfs7_fires_over_an_iri_object_control_for_the_literal_count() {
+    let mut store = Store::open_in_memory().unwrap();
+    triple(
+        &mut store,
+        G,
+        "http://example.org/a",
+        "http://example.org/name",
+        "http://example.org/n",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/name",
+        RDFS_SUBPROPERTY_OF,
+        "http://example.org/label",
+    );
+    let g = store.lookup(G).unwrap().unwrap();
+    materialise(&mut store, g, TS).unwrap();
+    let c = closure_of(&mut store, G);
+    assert!(
+        has(
+            &c,
+            "http://example.org/a",
+            "http://example.org/label",
+            "http://example.org/n"
+        ),
+        "CONTROL FAILED: rdfs7 does not fire even over an IRI object, so the literal \
+         count in the sibling test cannot localise anything"
+    );
+}
