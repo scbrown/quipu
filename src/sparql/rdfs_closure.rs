@@ -188,7 +188,7 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
             .map(|(s, _, o)| (*s, *o))
             .collect();
 
-        let mut derive = |rule: Rule, t: Triple, fresh: &mut BTreeSet<(Rule, Triple)>| {
+        let derive = |rule: Rule, t: Triple, fresh: &mut BTreeSet<(Rule, Triple)>| {
             if !known.contains(&t) {
                 fresh.insert((rule, t));
             }
