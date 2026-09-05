@@ -187,7 +187,7 @@ explorer mode="release":
     if [ "{{mode}}" = "local" ]; then
         REPO=$PWD
         cd wasm/explorer
-        cargo build --release --locked
+        cargo build --release
         TARGET=$(cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
         wasm-bindgen --target web --out-dir "$REPO/$DEST/pkg" \
             "$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
