@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.35] - 2026-09-05
+
+### Added
+
+- *(align)* Apply — decided mappings become owl:sameAs knots in an alignment graph (#127)([7020e86](https://github.com/scbrown/quipu/commit/7020e86ef9a7d79632582a72424dc23151e03045))
+- *(align)* Store-backed enumeration, and a proposal that counts what it set aside (#132)([395b11a](https://github.com/scbrown/quipu/commit/395b11a383a75f274e3033a70b6f157c5b967b56))
+- *(align)* Decide — the operator's judgement, applied to a proposed set (#137)([782122d](https://github.com/scbrown/quipu/commit/782122d519fb051df18829c8daae875929f2493e))
+- *(share)* Pack_dir, and a wasm-callable delta that REUSES share-delta/v1 (#135)([5e5682f](https://github.com/scbrown/quipu/commit/5e5682f8c627bd0785450b6c2d1b164892825aac))
+
 ## [0.3.34] - 2026-09-05
 
 ### Added

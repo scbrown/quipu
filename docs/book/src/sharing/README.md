@@ -119,27 +119,25 @@ places, and today one of them is stronger than the other.
 entity" is itself a fact in the graph — visible, queryable, and retractable like
 any other fact. That is the model the project is built around.
 
-**Import does not yet work that way.** On an *exact canonical-name* match
+**Import proposes; it does not merge.** On an *exact canonical-name* match
 (`src/share_import.rs`, `resolve_and_rewrite`: `score == 1.0 && matched_on ==
-"canonical_name:exact"`), the incoming foreign IRI is **rewritten to the local one
-in the triples themselves**. The merge appears in the import response as an
-`exact_merges` entry, but no `owl:sameAs` is written — so once the share is
-promoted, the graph holds no record that two identifiers were ever treated as one.
-That merge is not queryable and not retractable, which is exactly what the `knot`
-model above gives you and this path does not.
+"canonical_name:exact"`), the incoming foreign IRI is **kept**. The match is reported
+as an `exact_merges` entry carrying its score and `matched_on`, so a caller can accept
+the exact hits in one action — but nothing is applied to the triples, and the foreign
+identity survives the import intact.
 
-Sub-exact matches are *not* applied: they come back as candidates for review. The
-rewrite is confined to the exact-name case.
+Sub-exact matches are reported the same way, as candidates for review. The difference
+between exact and sub-exact is now the *confidence attached to a proposal*, not whether
+it is applied behind you.
 
-**This is a known gap, not the design.** The intended behaviour is the one
-`knot` already implements: an exact-name match should be *proposed* as an
-alignment for the operator to accept, and recorded as an `owl:sameAs` fact —
-visible, queryable, retractable — rather than applied as a silent rewrite. That
-work is in progress; when it lands this section describes it instead, and the
-model above becomes true of both verbs.
+`accept_exact` restores the older behaviour explicitly: exact matches are applied as IRI
+rewrites at import time. It defaults to false. Use it only where you control the naming
+in both stores, and note that a rewrite is still not recorded as an `owl:sameAs` — it
+remains the one path on which identity is not queryable and not retractable.
 
-Until then, treat an import as identity-safe only where you control the naming
-in both stores.
+Accepting a proposal is `knot`'s job, and that is the point of the split: an accepted
+alignment becomes an `owl:sameAs` fact — visible, queryable, retractable — rather than a
+silent edit to someone else's identifiers.
 
 ## What travels: facts, graphs, whole repositories
 

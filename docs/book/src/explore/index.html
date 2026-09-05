@@ -150,6 +150,25 @@ dl#export-manifest {
 dl#export-manifest dt { color: var(--text-muted); }
 dl#export-manifest dd { word-break: break-all; }
 
+#pr-preview dl {
+  display: grid; grid-template-columns: minmax(110px, max-content) 1fr;
+  gap: 4px 16px; font-size: 12.5px; margin: 12px 0;
+}
+#pr-preview dt { color: var(--text-muted); }
+#pr-preview dd { word-break: break-all; }
+/* The delta is the thing to review before anything opens, so it gets room —
+   but bounded, because a large one belongs in the upload flow anyway. */
+#sw-state.bad { color: var(--accent); }
+pre.recipe {
+  font-size: 12px; background: var(--bg); border: 1px solid var(--bg-elevated);
+  border-radius: 4px; padding: 8px 10px; overflow-x: auto; margin: 10px 0;
+}
+#pr-preview pre {
+  max-height: 320px; overflow: auto; font-size: 12px;
+  background: var(--bg); border: 1px solid var(--bg-elevated);
+  border-radius: 4px; padding: 8px 10px; white-space: pre-wrap; word-break: break-all;
+}
+
 #url-input, #file-input {
   font-family: var(--mono); font-size: 12px; color: var(--text);
   background: var(--bg); border: 1px solid var(--bg-elevated);
@@ -279,6 +298,59 @@ footer { margin-top: 34px; font-size: 12px; color: var(--text-muted); max-width:
           <button class="go" id="download-pack">Download .qpack.tar.gz</button>
           <button id="download-nt">Download export.nt</button>
         </div>
+
+        <h3>Propose these edits as a pull request</h3>
+        <p class="note">
+          No API and no token. The page turns your edits into a
+          <code class="mono">share-delta/v1</code> delta share &mdash; byte-for-byte the same
+          four files <code class="mono">quipu pack --since</code> writes and
+          <code class="mono">quipu import</code> applies &mdash; and hands them to
+          GitHub&rsquo;s own upload page. <strong>Nothing is sent anywhere by this page.</strong>
+          You review the change here, then GitHub opens the PR when you click its button.
+          All four files must land in the same directory: quipu verifies the manifest, the
+          update against its hash, and the shapes as one artifact.
+        </p>
+        <div class="row">
+          <button id="pr-prepare">Compute the delta</button>
+          <button class="go" id="pr-go" disabled>Download the files and open GitHub</button>
+        </div>
+        <div id="pr-preview"></div>
+
+        <h3>Drive this page from an agent</h3>
+        <p class="note">
+          This page <em>is</em> the server. <code class="mono">window.quipu</code> exposes the
+          same verbs as a quipu HTTP server and returns the same JSON, because
+          the page and the server call the same functions &mdash; the
+          <code class="mono">inference</code> marker and the <code class="mono">labels</code>
+          key travel unchanged, so client code written against the HTTP API runs here as-is.
+          Same-origin, no CORS, no port, no credential: an agent that wants this store loads
+          the page.
+        </p>
+<pre class="mono recipe">browser_navigate  https://scbrown.github.io/quipu/explore/
+browser_evaluate  await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 5")
+browser_evaluate  await window.quipu.set("urn:x", "rdfs:comment", JSON.stringify("hi"))
+browser_evaluate  await window.quipu.delta()
+
+<span class="muted"># or as HTTP, against this page's own path &mdash; no server anywhere:</span>
+browser_evaluate  await (await fetch("./query", {method:"POST",
+                    body: JSON.stringify({query:"SELECT ?s WHERE { ?s ?p ?o } LIMIT 5"})})).json()</pre>
+        <p class="note">
+          <strong>The fetch routes are relative to this page</strong> &mdash;
+          <code class="mono">./query</code>, not <code class="mono">/query</code>. A service
+          worker only controls the directory it is served from, and widening that needs a
+          response header GitHub Pages does not allow anyone to set. An absolute
+          <code class="mono">/query</code> gets an ordinary 404, which reads as &ldquo;the
+          worker is broken&rdquo; rather than &ldquo;that path was never mine&rdquo;.
+          Server status: <span id="sw-state" class="mono">registering&hellip;</span>
+        </p>
+        <p class="note">
+          <strong><code class="mono">search</code> is unavailable here and says so.</strong>
+          Semantic search needs embeddings, which need quipu&rsquo;s <code class="mono">onnx</code>
+          feature; this bundle is built without it. <code class="mono">window.quipu.search()</code>
+          <em>rejects</em> with a typed error naming the missing feature &mdash; it never resolves
+          to an empty list, because an empty list is indistinguishable from &ldquo;nothing
+          matched&rdquo;.
+        </p>
       </div>
     </section>
 

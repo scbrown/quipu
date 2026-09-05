@@ -118,5 +118,47 @@ runs:
         # cannot be wrong.
         TARGET=$(cargo metadata --format-version 1 --no-deps \
           | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
-        wasm-bindgen --target web --out-dir pkg \
-          "$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
+        WASM="$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
+        wasm-bindgen --target web --out-dir pkg "$WASM"
+        # The SAME .wasm, a second glue layer (aegis-onew9p §4.4). wasm-bindgen
+        # generates different JS for the nodejs target; it does not recompile,
+        # so the headless build costs one invocation rather than a second Rust
+        # build — and it is by construction the same engine as the browser one,
+        # which is the property that makes "the page and the CLI agree" extend
+        # to headless agents.
+        wasm-bindgen --target nodejs --out-dir pkg-node "$WASM"
+
+        # ASSERT THE PROPERTY, NOT THE MECHANISM.
+        #
+        # "Same engine by construction" is currently true because both calls
+        # above take the same $WASM. That is one shell variable, and nothing
+        # would catch a future edit that adds a second `cargo build` to a
+        # different path and points one of the two at it — the file would still
+        # be named the same and both bundles would still work.
+        #
+        # Measured 2026-09-05 at wasm-bindgen 0.2.128: the two emitted
+        # `_bg.wasm` are BYTE-IDENTICAL (sha256
+        # 4ad2740fb6d6400b91c22dec26f743c2058d605069509b7f1ed0ee5fd491d33a,
+        # 3241355 bytes, both targets). So the claim is checkable rather than
+        # merely stated, and this compares the artifacts rather than the source
+        # they were told to read.
+        #
+        # It asserts the PROPERTY: if someone points the two targets at
+        # different builds that happen to be bit-identical, nothing is wrong and
+        # this passes; if they differ in features or profile, it fails.
+        #
+        # ⚠ If a future wasm-bindgen post-processes the two targets differently,
+        # this will fail on a toolchain bump. That is the correct prompt to
+        # re-verify the "same engine" claim rather than a reason to delete the
+        # check — but it IS a legitimate failure, so read it before assuming a
+        # regression.
+        if ! cmp -s pkg/quipu_wasm_explorer_bg.wasm pkg-node/quipu_wasm_explorer_bg.wasm; then
+          echo "::error::the browser and nodejs bundles carry DIFFERENT wasm." \
+               "They are supposed to be one compile behind two glue layers, so" \
+               "a consumer choosing between them chooses a loader, not a version." \
+               "Either a second build crept in, or wasm-bindgen now post-processes" \
+               "the targets differently — check which before assuming a regression."
+          sha256sum pkg/quipu_wasm_explorer_bg.wasm pkg-node/quipu_wasm_explorer_bg.wasm
+          exit 1
+        fi
+        echo "browser and nodejs bundles carry byte-identical wasm"

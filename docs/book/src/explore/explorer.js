@@ -7,6 +7,25 @@
 // cannot reproduce is a screenshot with extra steps.
 
 const AEGIS = "http://aegis.gastown.local/ontology/";
+
+// The repository this page's graph belongs to. One definition, used by the
+// release-freshness check and by the PR flow below, so the two cannot drift
+// onto different repos (aegis-8fdp8d).
+const REPO = "scbrown/quipu";
+
+// No URL-size limit constant here any more, and the reason is worth keeping.
+// An earlier draft carried the delta in a `/new?value=` URL and switched to the
+// upload page above a measured 4 KB — below wu's four regimes, where the band
+// under the famous 414 fails as a 500 and reads as "GitHub is broken". That
+// budget is moot now: a delta share is four files, and no number of files
+// beyond one fits in a URL at any size. The measurement is what showed the
+// one-click path was never available for a VERIFIABLE delta, only for a quarter
+// of one.
+
+// The delta the reader is currently looking at, or null. Declared with the
+// other module state rather than beside its own functions: `refreshExport`
+// clears it after any write, and that reader sits earlier in the file.
+let lastDelta = null;
 const PREFIXES = `PREFIX aegis: <${AEGIS}>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -117,7 +136,7 @@ function renderProvenance(report, source, timings) {
 // because it is a nicety, not the page.
 async function reportReleaseFreshness(packVersion) {
   try {
-    const r = await fetch("https://api.github.com/repos/scbrown/quipu/releases/latest");
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
     if (!r.ok) return;
     const latest = (await r.json()).tag_name?.replace(/^quipu-ai-v/, "");
     if (!latest) return;
@@ -405,6 +424,15 @@ function editNote(text, bad = false) {
 }
 
 async function refreshExport() {
+  // Any write invalidates a delta computed before it. Clearing rather than
+  // silently recomputing, because the reader reviewed the OLD one and must not
+  // be able to open GitHub with something they never saw.
+  if (lastDelta) {
+    lastDelta = null;
+    $("#pr-go").disabled = true;
+    $("#pr-preview").replaceChildren(el("p", { class: "muted", text:
+      "Edited since the last delta was computed — press \u201cCompute the delta\u201d again." }));
+  }
   const log = await ask({ cmd: "editLog" }).catch(() => []);
   $("#edit-count").textContent = log.length
     ? `${fmt(log.length)} write${log.length === 1 ? "" : "s"} in this tab`
@@ -439,6 +467,195 @@ async function refreshExport() {
   } catch (err) {
     dl.replaceChildren(el("p", { class: "bad", text: err.message }));
   }
+}
+
+// --- window.quipu: this page IS the server (aegis-onew9p) -------------------
+//
+// Stiwi's ask: "is there a way for an agent to interact with just the html page.
+// loke treat embedded wasm quipu like a server".
+//
+// It very nearly already was. `Explorer::query`, `::set`, `::episode` and
+// `::retract` call `quipu::tool_query`, `tool_set`, `tool_episode` and
+// `tool_retract` — THE SAME functions the HTTP server's handlers call. So the
+// response shapes are identical by construction, not by a second
+// implementation kept in step: the `inference` marker, the `labels` key and the
+// `outcome`/`count` fields all travel because the same code emits them.
+//
+// That means this object is a NAMED SURFACE over work that already existed,
+// which is why it is small. Client code written against a quipu HTTP server
+// runs here unchanged.
+
+const UNSUPPORTED_SEARCH = {
+  error: "unsupported",
+  verb: "search",
+  // Named, not vague: a reader has to be able to tell "this build cannot" from
+  // "this query found nothing", and from "the feature is broken".
+  reason: "semantic search needs embeddings, which need quipu's `onnx` feature. "
+    + "This bundle is built with default-features = false, so `onnx` is not linked "
+    + "and there is no model to run. It is unavailable in the page, not failing.",
+  available: ["query", "episode", "set", "retract", "stats", "delta", "share", "version"],
+  server: "A quipu HTTP server answers POST /search; this page cannot.",
+};
+
+window.quipu = {
+  query: (sparql) => ask({ cmd: "query", sparql }),
+  stats: () => ask({ cmd: "stats" }),
+  episode: (body) =>
+    ask({ cmd: "episode", episode: typeof body === "string" ? body : JSON.stringify(body) }),
+  set: (entity, predicate, value) =>
+    ask({ cmd: "set", entity, predicate,
+          value: typeof value === "string" ? value : JSON.stringify(value) }),
+  retract: (entity, predicate = "", value = "") =>
+    ask({ cmd: "retract", entity, predicate,
+          value: value === "" ? "" : (typeof value === "string" ? value : JSON.stringify(value)) }),
+  delta: () => ask({ cmd: "delta" }),
+  share: () => ask({ cmd: "exportPack" }),
+  version: () => ask({ cmd: "version" }),
+
+  // REJECTS, and never resolves to an empty result.
+  //
+  // An empty array is indistinguishable from "nothing matched", which is the
+  // exact failure this codebase keeps paying for — a check that cannot see its
+  // target reporting the same value as a check that looked and found nothing.
+  // A 404-shaped absence would be just as bad: it reads as "wrong URL".
+  //
+  // Same discipline the load report already applies to SHACL, where the page
+  // says "not compiled" rather than claiming a conformance it never checked.
+  search: () => Promise.reject(Object.assign(new Error(UNSUPPORTED_SEARCH.reason), UNSUPPORTED_SEARCH)),
+};
+
+// --- The Service Worker half: fetch() into this page's store (§4.2) ---------
+//
+// sw.js intercepts POSTs to ./query and friends, but it CANNOT reach the module
+// worker that holds the store — a Service Worker has no handle on a page's
+// dedicated worker. So it asks a client, and this is the client half: take the
+// verb, run it through the same `ask` relay `window.quipu` uses, and answer on
+// the port the worker sent.
+//
+// One relay, two entrances. `window.quipu.query(...)` and
+// `fetch("./query", …)` reach the same store through the same code, so they
+// cannot answer differently — the property that makes the fetch form worth
+// having rather than a second surface to keep in step.
+
+const SW_VERB_TO_CMD = {
+  query: (b) => ({ cmd: "query", sparql: b.query ?? b.sparql }),
+  episode: (b) => ({ cmd: "episode", episode: JSON.stringify(b) }),
+  set: (b) => ({ cmd: "set", entity: b.entity, predicate: b.predicate,
+                 value: JSON.stringify(b.value) }),
+  retract: (b) => ({ cmd: "retract", entity: b.entity, predicate: b.predicate ?? "",
+                     value: b.value === undefined ? "" : JSON.stringify(b.value) }),
+  stats: () => ({ cmd: "stats" }),
+  delta: () => ({ cmd: "delta" }),
+};
+
+navigator.serviceWorker?.addEventListener("message", async (event) => {
+  const { quipuVerb, body } = event.data ?? {};
+  const port = event.ports?.[0];
+  if (!quipuVerb || !port) return;
+  try {
+    const build = SW_VERB_TO_CMD[quipuVerb];
+    if (!build) throw new Error(`unknown verb: ${quipuVerb}`);
+    port.postMessage({ ok: true, result: await ask(build(body ?? {})) });
+  } catch (err) {
+    // The message goes back as an error, never as an empty success. The service
+    // worker turns it into a 500 with the reason, so a caller can tell "the
+    // store refused this" from "the store answered nothing".
+    port.postMessage({ ok: false, error: String(err?.message ?? err) });
+  }
+});
+
+async function registerServer() {
+  if (!navigator.serviceWorker) return;
+  try {
+    await navigator.serviceWorker.register("./sw.js");
+    // Reported on the page rather than only in the console: "this page is a
+    // server" is a capability a reader cannot otherwise discover, and a silent
+    // registration failure would leave the documented fetch recipe 404ing with
+    // no explanation.
+    $("#sw-state").textContent =
+      "ready — POST to ./query, ./episode, ./set, ./retract, ./stats, ./delta on this path";
+  } catch (err) {
+    $("#sw-state").textContent =
+      `unavailable (${err.message}). window.quipu still works; only the fetch() form needs this.`;
+    $("#sw-state").classList.add("bad");
+  }
+}
+
+// --- Propose the edits as a PR, with no API and no token (aegis-8fdp8d) -----
+//
+// GitHub's own web pages do the work. The page computes the delta, SHOWS it,
+// and only then downloads the files and opens the upload page. Nothing is
+// transmitted by this page: `/upload` is an ordinary link and the reader is the
+// one who clicks "Propose changes".
+//
+// THE WHOLE ARTIFACT, not delta.ru alone. `quipu import`'s `materialize`
+// verifies the manifest, then the update against `delta_hash`, then reads the
+// shapes — so a lone delta.ru is a quarter of a delta share and nothing can
+// check its lineage. An earlier draft here sent one file to keep GitHub's
+// one-click `/new` flow, and a one-click that produces an unverifiable artifact
+// is a worse deal than a drag-and-drop that produces a real one.
+//
+// It is also what was asked for: "attaches the FILES at a common dir", plural.
+
+function uploadUrl(dir) {
+  return `https://github.com/${REPO}/upload/main/${dir}`;
+}
+
+async function prepareDelta() {
+  editNote("Computing the delta…");
+  const box = $("#pr-preview");
+  try {
+    const d = await ask({ cmd: "delta" });
+    lastDelta = d;
+    box.replaceChildren();
+
+    if (d.empty) {
+      // An unedited store has nothing to propose, and opening GitHub with an
+      // empty delta would be a worse answer than saying so.
+      box.append(el("p", { class: "muted", text:
+        "No changes yet — the store still matches the pack it loaded, so there "
+        + "is no delta to propose. Make an edit above first." }));
+      editNote("Nothing to propose.");
+      $("#pr-go").disabled = true;
+      return;
+    }
+
+    const facts = [
+      ["Delta id", d.manifest.delta_id],
+      ["Parent share", d.manifest.parent_share],
+      ["Goes to", `${d.dir}/`],
+      ["Files", d.files.map((f) => `${f.name} (${fmt(f.bytes)} B)`).join(", ")],
+      ["Total", `${fmt(d.total_bytes)} bytes`],
+    ];
+    const dl = el("dl");
+    for (const [k, v] of facts) {
+      dl.append(el("dt", { text: k }), el("dd", { class: "mono", text: v }));
+    }
+    // The update is the reviewable half — the manifest is hashes and the shapes
+    // are the parent's, so this is the part a human can actually judge.
+    box.append(dl, el("pre", { class: "mono", text: d.update }));
+    $("#pr-go").disabled = false;
+    editNote(`Delta ready: ${d.files.length} files, ${fmt(d.total_bytes)} bytes. `
+      + "Review the update above before opening GitHub.");
+  } catch (err) {
+    box.replaceChildren(el("p", { class: "bad", text: err.message }));
+    editNote(err.message, true);
+  }
+}
+
+function proposeAsPr() {
+  const d = lastDelta;
+  if (!d || d.empty) return;
+  // Files FIRST, then the page: a reader who lands on the upload page
+  // empty-handed has to come back for them.
+  for (const f of d.files) {
+    download(f.name, new Blob([f.contents], { type: "text/plain" }));
+  }
+  window.open(uploadUrl(d.dir), "_blank", "noopener");
+  editNote(`Downloaded ${d.files.length} files and opened GitHub's upload page for `
+    + `${d.dir}/ — drag all ${d.files.length} in, then click \u201cPropose changes\u201d. `
+    + "They must land in that directory together: quipu verifies the manifest, "
+    + "the update against its hash, and the shapes as one artifact.");
 }
 
 function download(name, blob) {
@@ -698,6 +915,9 @@ async function boot() {
       onclick: () => { $("#sparql").value = c.sparql; runSparql(); },
     }));
   }
+  registerServer();
+  $("#pr-prepare").addEventListener("click", prepareDelta);
+  $("#pr-go").addEventListener("click", proposeAsPr);
   $("#download-pack").addEventListener("click", downloadPack);
   $("#download-nt").addEventListener("click", downloadNtriples);
   $("#file-input").addEventListener("change", async (e) => {
