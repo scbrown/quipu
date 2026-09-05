@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.39] - 2026-09-05
+
+### Fixed
+
+- *(rdfs)* Rdfs2 fires over literal-valued premises([a302ebb](https://github.com/scbrown/quipu/commit/a302ebb8fce6c1838c9b7ac18736b04fe603a616))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([d4cb64c](https://github.com/scbrown/quipu/commit/d4cb64cf8496a3e67e7d463006dfb0f792c44868))
+- *(conformance)* Re-derive the ledgers and page on this head([93863c5](https://github.com/scbrown/quipu/commit/93863c5dba02c8477516f04ef63f5a33d7c22ba4))
+
+### Testing
+
+- *(rdfs)* State the rdfs7 gap as a COUNT, not a paragraph (wu, #169)([31cadac](https://github.com/scbrown/quipu/commit/31cadaca977d085ebe8aa51af973d0e4f05f296f))
+
+### Style
+
+- Cargo fmt the rdfs2 literal-premise tests([df044b3](https://github.com/scbrown/quipu/commit/df044b3b8c557948fcfd5c191ca1ec6aa043ec86))
+
 ## [0.3.38] - 2026-09-05
 
 
