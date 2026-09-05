@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.31] - 2026-09-04
+
+### Documentation
+
+- *(sharing)* Prove the two-store story end to end [.3]([af5682f](https://github.com/scbrown/quipu/commit/af5682fb2ae8f4fd0b0849b72dbf235db2bb95c6))
+
+### Testing
+
+- Clean up temporary test directories [] []([72f4990](https://github.com/scbrown/quipu/commit/72f49909e593024e30f03090c5851664f7565019))
+
 ## [0.3.30] - 2026-09-04
 
 ### .2
