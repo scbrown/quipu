@@ -4,9 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [0.3.39] - 2026-09-05
 
+### Added
+
+- *(cli)* `quipu ingest` — a streaming bulk load that refuses a short one([21f8ed9](https://github.com/scbrown/quipu/commit/21f8ed94e018f7e2396e708ce2816554c66a1a75))
+
+
+
+### Fixed
+
+- *(ci)* Run the owl tests, and give the three classes that failed a BFO root([cbf3d1f](https://github.com/scbrown/quipu/commit/cbf3d1fb0c7019c594214521df67b1cabe09385a))
+- *(tests)* Gate ingest_cli on `shacl` — the binary is not built without it([1b18623](https://github.com/scbrown/quipu/commit/1b18623309602f0097ed7a6fe87efdb69deb4f3b))
+- *(sparql)* An entailment regime must be a SUPERSET of the default answer([176ff15](https://github.com/scbrown/quipu/commit/176ff159fd6120afc8c9ce0bc457ef68a99c8c2a))
+- *(rdfs)* Rdfs2 fires over literal-valued premises([a302ebb](https://github.com/scbrown/quipu/commit/a302ebb8fce6c1838c9b7ac18736b04fe603a616))
+
 ### Miscellaneous
 
+- *(conformance)* Re-derive the ledgers on this branch's head — and the numbers did not move([7ae4a2e](https://github.com/scbrown/quipu/commit/7ae4a2e6e835e78d6b7197ea6c515cc018361cfe))
+- *(conformance)* Re-derive on 89c22f6 after merging main([10f8bc9](https://github.com/scbrown/quipu/commit/10f8bc977ae491f305f7f15a5e6275830b587c21))
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([4337220](https://github.com/scbrown/quipu/commit/43372205afdb762e3cdd6a7e5bcf5e879078db12))
 - *(conformance)* Re-derive the ledgers on this branch's HEAD([d4cb64c](https://github.com/scbrown/quipu/commit/d4cb64cf8496a3e67e7d463006dfb0f792c44868))
+- *(conformance)* Re-derive the ledgers and page on this head([93863c5](https://github.com/scbrown/quipu/commit/93863c5dba02c8477516f04ef63f5a33d7c22ba4))
+
+### Testing
+
+- *(rdfs)* State the rdfs7 gap as a COUNT, not a paragraph (wu, #169)([31cadac](https://github.com/scbrown/quipu/commit/31cadaca977d085ebe8aa51af973d0e4f05f296f))
+
+### Style
+
+- Cargo fmt the rdfs2 literal-premise tests([df044b3](https://github.com/scbrown/quipu/commit/df044b3b8c557948fcfd5c191ca1ec6aa043ec86))
 
 ## [0.3.38] - 2026-09-05
 
