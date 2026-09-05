@@ -571,3 +571,80 @@ jobs:
             "dist/quipu-${TAG}-repository.qpack.tar.gz" \
             "dist/quipu-${TAG}-repository.qpack.tar.gz.sha256" \
             --clobber
+
+  # THE REAL CRATES LANE (aegis-pb4rzi). It lives HERE, not in crates.yml.
+  #
+  # crates.yml triggers on `release: [published]`. release-plz creates the
+  # release with GITHUB_TOKEN, and GitHub deliberately does not trigger
+  # workflows from events raised by GITHUB_TOKEN — the same mechanism that stops
+  # its tag pushes from firing anything, and the reason the `artifacts` job
+  # above already lives in this workflow rather than on a tag trigger.
+  #
+  # So on a real release the crates publish never ran at all. crates.io sat at
+  # 0.3.27 from 2026-08-27 while the repo shipped through 0.3.33: six versions
+  # that never reached the registry, with `cargo add quipu-ai` quietly installing
+  # nine-day-old code. A missing crate fails loudly; a STALE one succeeds
+  # silently, which is why this was invisible.
+  #
+  # Running it as a job in this run removes the cross-workflow event entirely —
+  # there is nothing left to be swallowed.
+  crates:
+    name: Publish to crates.io
+    # AFTER the assets. A release whose binaries failed to build should not be
+    # announced to the registry, and crates.io publication is the one step here
+    # that cannot be undone: a version, once published, is permanent.
+    needs: [release-plz, wasm, artifacts]
+    # `always()` so a skipped/failed sibling does not silently swallow this job
+    # the way the missing event did — but the explicit success checks below mean
+    # it still refuses to publish on top of a broken release.
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      needs.release-plz.outputs.releases_created == 'true' &&
+      needs.wasm.result == 'success' &&
+      needs.artifacts.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # THE TAG, NOT Cargo.toml. The action refuses to publish when the crate is
+      # not at the version the caller intended, and that check is only worth
+      # anything if the two numbers come from different places. Reading git refs
+      # is independent of the manifest; deriving it with `cargo metadata` would
+      # compare a number to itself.
+      #
+      # On this path release-plz tags the very commit being built, so the two
+      # agree by construction and this reads as a consistency assertion rather
+      # than an independent one. It costs nothing, and it is the check that
+      # catches the case where they DON'T.
+      - name: Resolve the released version from the tag
+        id: want
+        run: |
+          set -euo pipefail
+          git fetch --tags --quiet
+          TAG="$(git tag --points-at HEAD | grep '^quipu-ai-v' | head -1 || true)"
+          if [ -z "$TAG" ]; then
+            echo "::error::release-plz reported a release but no quipu-ai-v* tag" \
+                 "points at HEAD. Refusing to publish a version this run cannot name."
+            exit 1
+          fi
+          echo "want=${TAG##*-v}" >> "$GITHUB_OUTPUT"
+          echo "tag ${TAG} -> version ${TAG##*-v}"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
+
+      # ONE definition, shared with crates.yml's manual lane. Change the steps
+      # in the action, not here — two hand-maintained copies of the same publish
+      # is the aegis-dsbt2g shape, and this lane already has a history of a green
+      # run that moved nothing.
+      - uses: ./.github/actions/crates-publish
+        with:
+          expected-version: ${{ steps.want.outputs.want }}
+          dry-run: 'false'

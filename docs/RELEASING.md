@@ -52,11 +52,21 @@ To exercise it for real:
 5. Delete the release and the tag.
 
 **Creating that prerelease fires `crates.yml`.** `release: [published]` fires for prereleases as
-well as real ones, so step 2 triggers the crates.io publish lane. The publish job now refuses a
-prerelease outright, which is what makes this procedure safe — without that guard, `cargo publish`
-would try to publish whatever version `Cargo.toml` currently holds, under a tag nobody intends to
-ship. Measured on 2026-09-05: the rehearsal at `rehearsal-wasm-20260905-0951` fired run
-`33959092337`, which failed only because crates.io Trusted Publishing is unconfigured.
+well as real ones, so step 2 triggers the crates.io publish lane. The publish job refuses a
+prerelease outright, and since aegis-pb4rzi it *also* refuses any ref named like a rehearsal
+(`rehearsal-*`, `*-rehearsal`, `test-*`) and any version that is not the one the run explicitly
+said it intended to publish. Without those, `cargo publish` would try to publish whatever version
+`Cargo.toml` currently holds, under a tag nobody intends to ship.
+
+Measured on 2026-09-05: the rehearsal at `rehearsal-wasm-20260905-0951` fired run `33959092337`,
+which failed **only because crates.io Trusted Publishing is unconfigured**. That is worth stating
+plainly, because it is the reason the guards above are not optional: a procedure whose safety
+depends on a different system being broken is not safe, it is untested — and it would have expired
+silently the moment Trusted Publishing was configured. Every refusal in
+`scripts/ci/crates-publish-guard.sh` holds with Trusted Publishing fully working, and
+`scripts/ci/crates-publish-guard.sh --selftest` demonstrates each of them (plus a control arm, so
+the suite can tell a correctly strict guard from a uniformly broken one). CI runs that selftest in
+`Pre-commit checks`, which gates `release-correctness`.
 
 That tag's commit *is* the commit being built, so `assert-tag-is-head` passes — the guard is
 designed to permit exactly this.
@@ -77,18 +87,36 @@ v0.3.33.
 
 ## What a release does NOT do
 
-`crates.yml` publishes `quipu-ai` to crates.io using crates.io Trusted Publishing. It is a
-separate lane: if it fails, the GitHub release and its assets are unaffected.
+A release **does** now publish `quipu-ai` to crates.io, but not from `crates.yml`. The real lane is
+the `crates` job in `release.yml`, added for aegis-pb4rzi; `crates.yml` is the manual lane only.
 
-**It does not fire on a release-plz release.** Its trigger is `release: [published]`, but a release
-created by a workflow using `GITHUB_TOKEN` does not trigger further workflows, and release-plz
-creates the release that way. Measured 2026-09-05 as a controlled pair: v0.3.34's release produced
-**no** `crates.yml` run at all, while a prerelease created by hand on the same day **did**. So in
-practice this lane runs only when dispatched, or when a human creates a release — which means a
-release reaching GitHub is not evidence that it reached crates.io, and nothing reports the
-difference. Verify a crates.io publish by the version appearing on crates.io, and
-**not** by dispatching that workflow with `dry_run=true` — the dry-run branch skips both the
-authentication and the publish steps, so it goes green without exercising either.
+**Why the publish moved.** `crates.yml` triggers on `release: [published]`, but a release created
+by a workflow using `GITHUB_TOKEN` does not trigger further workflows, and release-plz creates the
+release that way. Measured 2026-09-05 as a controlled pair: v0.3.34's release produced **no**
+`crates.yml` run at all, while a prerelease created by hand on the same day **did**. The cost of
+that was six versions: crates.io served 0.3.27 from 2026-08-27 while the repo shipped through
+0.3.33, so `cargo add quipu-ai` silently installed nine-day-old code. A missing crate fails loudly;
+a stale one succeeds silently, which is why nobody noticed.
+
+Running the publish as a job in `release.yml` removes the cross-workflow event entirely — there is
+nothing left to be swallowed. It runs after the wasm and binary asset jobs and only if both
+succeeded, because a crates.io version, once published, is permanent.
+
+**Do not read a green `crates.yml` run as a publish.** The 2026-09-03 run was `success` and moved
+nothing: it was dispatched with `dry_run=true`, and the dry-run branch skips both the
+authentication and the publish steps, so it goes green without exercising either. That
+indistinguishability is now fixed at both ends — the dry-run branch says in the log that it
+published nothing, and the real branch ends by polling crates.io and **failing** if the registry
+does not serve the version it was asked to publish.
+
+**Verify a publish by the registry, not by the workflow.** Note that crates.io requires a
+`User-Agent`; without one it answers 403, which reads as "blocked" or "absent" rather than "you
+forgot a header".
+
+```bash
+curl -s -H 'User-Agent: your-name (contact)' \
+  https://crates.io/api/v1/crates/quipu-ai | jq -r '.crate.max_version'
+```
 
 The crate is published as `quipu-ai`. The `quipu` name on crates.io belongs to an unrelated
 post-quantum cryptography library.
