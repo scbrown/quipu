@@ -84,6 +84,26 @@ jobs:
             flags: "--no-default-features"
           - name: shacl
             flags: "--features shacl"
+          # `owl` is a PUSH-matrix arm, not an extended-features one, and both
+          # halves of that are deliberate (aegis-0bk90r).
+          #
+          # WHY IT MUST RUN AT ALL: tests/bfo_lite_ontology.rs and
+          # tests/ontology_axiom_sets.rs are `#![cfg(feature = "owl")]`, so
+          # under every other arm they compile to NOTHING and the run reports
+          # `running 0 tests ... ok`. Seven tests read as green coverage while
+          # guarding nothing, and bfo_lite_ontology was in fact FAILING on main
+          # the whole time — three governed classes reached no BFO root.
+          #
+          # WHY NOT extended-features: that job is `if: github.event_name !=
+          # 'push'`, so it would still never run on a push to main — which is
+          # the gap, not a smaller version of it. And `owl = []` in Cargo.toml
+          # pulls no dependencies, so this arm costs compile time for cfg'd
+          # code and nothing else.
+          #
+          # `owl` is ENABLED in the deployed binary (confirmed via its own /version
+          # endpoint), so this guards behaviour that is serving, not an optional surface.
+          - name: shacl+owl
+            flags: "--features shacl,owl"
           # The gated RemoteProvider tests, which `--no-default-features`
           # compiles out entirely, run in extended-features on PRs/nightly.
           # Runs the LanceDB backend's own tests AND the config-selection test

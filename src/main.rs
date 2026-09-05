@@ -40,6 +40,7 @@ mod cli_explain;
 mod cli_export;
 mod cli_fork;
 mod cli_graph;
+mod cli_ingest;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
@@ -87,6 +88,7 @@ fn main() {
     let cmd = args[1].as_str();
     match cmd {
         "knot" | "load" => cli::cmd_knot(&args, db_path),
+        "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
@@ -274,6 +276,7 @@ fn print_usage() {
 
 COMMANDS:
     quipu knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
+    quipu ingest <file> --graph <iri> --timestamp <ISO-8601> --declare-count <n> --declare-sha256 <hex> [--format nt|ttl|nq] [--chunk N] [--db <path>]
     quipu read \"<sparql>\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]
     quipu cord [--type <IRI>] [--limit N] [--db <path>]
     quipu unravel [--tx N] [--valid-at <date>] [--db <path>]

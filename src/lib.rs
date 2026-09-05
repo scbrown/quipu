@@ -166,7 +166,10 @@ pub use provider::{
 };
 #[cfg(feature = "remote")]
 pub use provider::{RemoteProvider, federated_from_config};
-pub use rdf::{export_rdf, export_rdf_subset, ingest_rdf};
+pub use rdf::{
+    IngestReport, LoadDeclaration, export_rdf, export_rdf_subset, ingest_rdf, ingest_rdf_chunked,
+    ingest_rdf_declared,
+};
 pub use rdf_graph_store::{delete_rdf_graph, replace_rdf_graph};
 #[cfg(feature = "reactive-reasoner")]
 pub use reasoner::reactive::ReactiveReasoner;

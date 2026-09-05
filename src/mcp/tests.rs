@@ -3842,3 +3842,165 @@ fn entailment_refuses_a_non_string() {
     .expect_err("a non-string regime is a caller error, not a default");
     assert!(err.to_string().contains("must be a string"));
 }
+
+// --- a regime must be a SUPERSET of the default answer (aegis-g6bu6d) ---------
+//
+// The defect this pins was measured on the live service, not imagined: for the
+// SAME entity in the SAME second, `aegis-alerts` (asserted `AlertRule` only)
+// answered `ASK { it a Directive }` TRUE with no parameter and FALSE under
+// `entailment: "rdfs"` — 880 rows against 767. Asking for entailment returned
+// LESS, and labelled the smaller answer entailed.
+//
+// Cause: the live constant-`rdf:type` subclass expansion is gated on
+// `is_root_default()` (scope exactly `[0]`), and composing the regime's
+// companion graph turns the scope into `[0, companion]`. The regime therefore
+// TRADED the live expansion for the companion — and on that store the companion
+// held zero `rdf:type` triples, so it traded something for nothing.
+//
+// The fixture reproduces exactly that: the companion is materialised BEFORE the
+// class hierarchy is written, so it EXISTS (the absent-companion refusal cannot
+// fire and mask the bug) while carrying no type closure.
+
+const SUP_TS: &str = "2026-09-05T00:00:00Z";
+
+fn superset_fixture() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    let assert_root = |store: &mut Store, s: &str, p: &str, o: &str| {
+        let (e, a) = (store.intern(s).unwrap(), store.intern(p).unwrap());
+        let v = store.intern(o).unwrap();
+        store
+            .transact(
+                &[crate::store::Datum {
+                    entity: e,
+                    attribute: a,
+                    value: crate::types::Value::Ref(v),
+                    valid_from: SUP_TS.into(),
+                    valid_to: None,
+                    op: crate::types::Op::Assert,
+                }],
+                SUP_TS,
+                None,
+                None,
+            )
+            .unwrap();
+    };
+
+    // Something for the closure to chew on, so the companion graph is created
+    // and NON-empty — otherwise the absent-companion refusal fires and we would
+    // be testing the wrong guard.
+    assert_root(&mut store, "http://ex/a", "http://ex/b1", "http://ex/c");
+    assert_root(
+        &mut store,
+        "http://ex/b1",
+        crate::namespace::RDFS_SUBPROPERTY_OF,
+        "http://ex/b2",
+    );
+    crate::sparql::rdfs_closure::materialise(&mut store, 0, SUP_TS).unwrap();
+
+    // The class hierarchy lands AFTER materialisation, so the companion never
+    // received this type closure — the live condition exactly.
+    assert_root(
+        &mut store,
+        "http://ex/alerts",
+        crate::namespace::RDF_TYPE,
+        "http://ex/AlertRule",
+    );
+    assert_root(
+        &mut store,
+        "http://ex/AlertRule",
+        crate::namespace::RDFS_SUBCLASS_OF,
+        "http://ex/Directive",
+    );
+    store
+}
+
+const SUP_ASK: &str = "ASK { <http://ex/alerts> a <http://ex/Directive> }";
+const SUP_SELECT: &str = "SELECT ?s WHERE { ?s a <http://ex/Directive> }";
+
+#[test]
+fn an_entailment_regime_is_a_superset_of_the_default_answer() {
+    let store = superset_fixture();
+
+    let plain = tool_query(&store, &serde_json::json!({"query": SUP_ASK})).unwrap();
+    let regime = tool_query(
+        &store,
+        &serde_json::json!({"query": SUP_ASK, "entailment": "rdfs"}),
+    )
+    .unwrap();
+
+    // ANTI-VACUITY: if the default answer were false this assertion would hold
+    // for free, and the whole test would pass on a build that answers nothing.
+    assert_eq!(
+        plain["result"], true,
+        "fixture broken: the DEFAULT answer must already be true, or the \
+         superset relation below is vacuous"
+    );
+
+    // The relation, not two independent expectations. Stated this way it cannot
+    // be satisfied by making both answers equally wrong.
+    assert_eq!(
+        regime["result"], true,
+        "entailment:rdfs returned FALSE where the default returned TRUE — a \
+         regime must be a SUPERSET of the default answer, never a subset \
+         (aegis-g6bu6d)"
+    );
+    assert_eq!(regime["entailment"]["regime"], "rdfs");
+}
+
+#[test]
+fn an_entailment_regime_returns_no_fewer_rows_than_the_default() {
+    let store = superset_fixture();
+
+    let rows = |v: &serde_json::Value| -> Vec<String> {
+        v["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["s"].as_str().unwrap().to_string())
+            .collect()
+    };
+
+    let plain = tool_query(&store, &serde_json::json!({"query": SUP_SELECT})).unwrap();
+    let regime = tool_query(
+        &store,
+        &serde_json::json!({"query": SUP_SELECT, "entailment": "rdfs"}),
+    )
+    .unwrap();
+
+    let (plain_rows, regime_rows) = (rows(&plain), rows(&regime));
+
+    // ANTI-VACUITY again: an empty default set is a subset of everything.
+    assert!(
+        plain_rows.contains(&"http://ex/alerts".to_string()),
+        "fixture broken: the default answer must already contain the \
+         subclass-typed entity, else the containment below proves nothing"
+    );
+
+    for s in &plain_rows {
+        assert!(
+            regime_rows.contains(s),
+            "entailment:rdfs dropped {s} that the default answer returned \
+             (default {plain_rows:?} vs regime {regime_rows:?}) — a regime must \
+             be a SUPERSET (aegis-g6bu6d)"
+        );
+    }
+}
+
+#[test]
+fn the_regime_answer_still_carries_the_inference_marker() {
+    // The evaluator's expansion gate and the marker's gate must agree. If the
+    // regime expands but the marker is computed under the narrower condition,
+    // the answer is inferred and says nothing about it — the silent direction
+    // the marker exists to end.
+    let store = superset_fixture();
+    let out = tool_query(
+        &store,
+        &serde_json::json!({"query": SUP_SELECT, "entailment": "rdfs"}),
+    )
+    .unwrap();
+
+    assert_eq!(
+        out["inference"]["applied"], true,
+        "the regime answer is expanded, so it must carry the inference marker"
+    );
+}
