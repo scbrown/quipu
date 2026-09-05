@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.39] - 2026-09-05
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([d4cb64c](https://github.com/scbrown/quipu/commit/d4cb64cf8496a3e67e7d463006dfb0f792c44868))
+
 ## [0.3.38] - 2026-09-05
 
 
