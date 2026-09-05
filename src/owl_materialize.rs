@@ -210,31 +210,23 @@ impl Ontology {
                 // Caught by `per_write_cost_does_not_scale_with_store_size`,
                 // which is the only reason it is not still in here.
                 //
-                // Every fact these rules derive is ABOUT an entity the delta
-                // mentions — as a subject, or as a Ref object for the inverse
-                // and symmetric families, which put the object on the left. So
-                // the dedup set is exactly those entities' current facts, and
-                // that is bounded by the delta.
-                let mut ents: Vec<i64> = Vec::new();
-                for f in delta {
-                    if !ents.contains(&f.entity) {
-                        ents.push(f.entity);
-                    }
-                    if let Value::Ref(o) = &f.value
-                        && !ents.contains(o)
-                    {
-                        ents.push(*o);
-                    }
-                }
-                let existing = store.current_facts_for_entities_in_graphs(&ents, &graphs)?;
-                (delta.to_vec(), existing)
-                // NOTE: this preload is a cheap FIRST CUT only. Correctness does
-                // not rest on it — see the post-filter at the end of this
-                // function, which re-checks every staged datum against the store
-                // for exactly the entities it names. An earlier version relied on
-                // the preload being complete and it was not: it re-derived
-                // asserted ROOT facts into the companion (`paw partOf leg`),
-                // caught by `semi_naive_reaches_the_same_fixpoint_as_naive`.
+                // NO PRELOADED DEDUP SET AT ALL.
+                //
+                // There was one, described as "a cheap first cut". It was not
+                // cheap: it was `current_facts_for_entities_in_graphs`, and with
+                // no index leading on `e` it full-scanned. Re-measured after the
+                // post-filter was indexed and the wall clock did not move —
+                // 1400.4 ms before, 1396.7 ms after — because the scan had never
+                // been in the post-filter, it was here.
+                //
+                // It is not needed. `Pass::seen` starts empty and still
+                // de-duplicates WITHIN a pass, because `push` inserts as it
+                // goes; and everything already in the STORE is removed by the
+                // post-filter at the end of this function, which is the actual
+                // correctness guarantee and is scoped to the candidates. A
+                // preload can only ever be an optimisation, and this one cost
+                // more than it saved.
+                (delta.to_vec(), Vec::new())
             }
         };
         report.premise_facts_read += premises.len() + dedup.len();

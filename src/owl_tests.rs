@@ -996,6 +996,64 @@ fn per_write_cost_does_not_scale_with_store_size() {
 /// when the naive path was burning ~67 s of work per 60 s of wall clock.
 ///
 /// Run: `cargo test --features owl at_production_scale -- --ignored --nocapture`
+/// One-time production-scale confirmation against a store built by
+/// `quipu ingest` (aegis-2dp8e2, sattler's ruling: the bulk route, not a
+/// generator, and not a CI job).
+///
+/// Point it at a pre-ingested store:
+///   QUIPU_SCALE_DB=/path/to.db cargo test --release --features owl \
+///     scale_db_semi_naive -- --ignored --nocapture
+#[test]
+#[ignore = "needs QUIPU_SCALE_DB; the one-time confirmation"]
+fn scale_db_semi_naive_cost() {
+    let Ok(path) = std::env::var("QUIPU_SCALE_DB") else {
+        eprintln!("QUIPU_SCALE_DB unset — nothing measured");
+        return;
+    };
+    let mut store = Store::open(&path).unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+
+    let root_facts = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap()
+        .len();
+
+    let before = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    sn_ingest(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:newcomer a ex:Dog .\n",
+    );
+    let after = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let seed: Vec<_> = after
+        .iter()
+        .filter(|f| {
+            !before
+                .iter()
+                .any(|b| b.entity == f.entity && b.attribute == f.attribute && b.value == f.value)
+        })
+        .cloned()
+        .collect();
+
+    let t = std::time::Instant::now();
+    let r = ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+    eprintln!(
+        "SCALE-DB (release): {root_facts} root facts | ONE semi-naive write: \
+         {} premise facts read, {:.1} ms, {} passes",
+        r.premise_facts_read,
+        t.elapsed().as_secs_f64() * 1000.0,
+        r.passes
+    );
+    assert!(
+        root_facts > 100_000,
+        "fixture too small to be the confirmation"
+    );
+}
+
 #[test]
 #[ignore = "builds a ~640k-fact store; run explicitly"]
 fn per_write_cost_is_flat_at_production_scale() {
@@ -1077,4 +1135,53 @@ fn per_write_cost_is_flat_at_production_scale() {
          {small_read} at {small_facts} facts and {big_read} at {big_facts}. \
          Turning reactive OWL back on depends on this staying flat."
     );
+}
+
+/// How fast can a fixture of production size be BUILT? (aegis-2dp8e2)
+///
+/// The turtle route costs ~5 minutes per million facts because it pays the
+/// parser. If a direct-transact generator is fast enough, the production-scale
+/// assertion can run in CI rather than being an explicitly-invoked probe — which
+/// is the difference between a guard and a thing someone remembers to run.
+#[test]
+#[ignore = "measures fixture build cost; run explicitly"]
+fn fixture_build_cost_direct_vs_turtle() {
+    const N: usize = 100_000;
+
+    let t = std::time::Instant::now();
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let mut ttl = String::from("@prefix ex: <http://example.org/> .\n");
+    for i in 0..N {
+        ttl.push_str(&format!("ex:bg{i} a ex:Dog .\n"));
+    }
+    sn_ingest(&mut store, &ttl);
+    let turtle_ms = t.elapsed().as_secs_f64() * 1000.0;
+
+    let t = std::time::Instant::now();
+    let mut store2 = Store::open_in_memory().unwrap();
+    store2.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let dog = store2.intern("http://example.org/Dog").unwrap();
+    let rdf_type = store2.intern(crate::namespace::RDF_TYPE).unwrap();
+    let datums: Vec<crate::store::Datum> = (0..N)
+        .map(|i| {
+            let e = store2.intern(&format!("http://example.org/bg{i}")).unwrap();
+            crate::store::Datum {
+                entity: e,
+                attribute: rdf_type,
+                value: Value::Ref(dog),
+                valid_from: SN_TS.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }
+        })
+        .collect();
+    store2.transact(&datums, SN_TS, None, None).unwrap();
+    let direct_ms = t.elapsed().as_secs_f64() * 1000.0;
+
+    eprintln!(
+        "FIXTURE BUILD {N} facts: turtle {turtle_ms:.0} ms | direct {direct_ms:.0} ms | ratio {:.1}x",
+        turtle_ms / direct_ms
+    );
+    assert!(direct_ms > 0.0);
 }
