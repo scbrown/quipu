@@ -315,8 +315,9 @@ HAVING(?n > 1)
 
 ## 9. RDFS Subclass Inference
 
-Remember that `hw:WebApp rdfs:subClassOf hw:Service`. SPARQL type patterns are
-asserted-only: a constant and a variable type form mean the same thing.
+Remember that `hw:WebApp rdfs:subClassOf hw:Service`. **A constant type form
+infers; a variable type form does not.** The two spellings answer different
+questions, and the response says which one you got.
 
 ```sparql
 PREFIX hw: <http://example.org/homelab/>
@@ -327,59 +328,74 @@ WHERE {
 }
 ```
 
-This returns the three services asserted directly as `hw:Service`. It does not
-silently turn a syntactic type form into an RDFS entailment request.
+This returns every service **including** those asserted only as `hw:WebApp`,
+because a constant type form is expanded over `rdfs:subClassOf`. Quipu's formal
+default is reasoning-on.
 
-### One asserted form; make inference explicit
-
-These two forms now agree:
+### Two spellings, two questions
 
 ```sparql
-# ASSERTED ONLY
+# INFERS — a constant type is expanded over rdfs:subClassOf.  -> 6
 SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a hw:Service }
 
-# ASSERTED ONLY — equivalent spelling
+# ASSERTED ONLY — a VARIABLE type plus a filter is not expanded.  -> 3
 SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a ?t . FILTER(?t = hw:Service) }
 ```
 
-For the inferred question, say so with the standard property path:
+On this tutorial's dataset that is **6 against 3**: three entities are asserted
+`hw:Service` (`pihole`, `prometheus`, `minio`) and three are asserted `hw:WebApp`
+(`traefik`, `grafana`, `nginx`), which the constant form folds in.
 
 | Question | Form |
 |---|---|
-| vocabulary census, governance gating, "who emits the wrong type" | either asserted type form |
-| "what depends on X", blast radius, impact | explicit `a/rdfs:subClassOf*` path |
+| "what depends on X", blast radius, impact, "find it the way a reader would" | constant form `?s a hw:Service` (infers) |
+| **"is this entity DIRECTLY typed `hw:Service`?"** | **`?s a ?t . FILTER(?t = hw:Service)`** |
+| vocabulary census, governance gating, "who emits the wrong type" | the asserted-only form |
 
-To ask for inference explicitly:
+⚠️ **A hit on the constant form does not prove direct typing.** An entity typed
+only as `hw:WebApp` satisfies `?s a hw:Service`. If you are checking that
+something carries a type — a governance gate, an ingest read-back — the constant
+form will pass on a subclass and tell you nothing was wrong. Use the variable
+form plus a filter, or read the marker below.
+
+The explicit path form remains available and is unaffected by the default:
 
 ```sparql
 SELECT (COUNT(DISTINCT ?s) AS ?n) WHERE { ?s a/rdfs:subClassOf* hw:Service }
 ```
 
-### Migration marker: what was withheld
+### The marker: what was folded in
 
-Ambiguity here is expensive: both queries return HTTP 200 and both counts are
+Ambiguity here is expensive: both spellings return HTTP 200 and both counts are
 individually plausible, so a number answering the *other* question does not look
-wrong. The constant form used to widen through subclasses; during the migration
-window Quipu announces that withheld expansion only on queries whose answer could
-have changed:
+wrong. Quipu therefore reports the expansion, on exactly the queries whose answer
+it could have changed:
 
 ```json
 {
-  "count": 3,
+  "count": 6,
   "inference": {
-    "applied": false,
-    "withheldTypes": [
+    "applied": true,
+    "expandedTypes": [
       {"type": "http://example.org/homelab/Service",
        "subclasses": ["http://example.org/homelab/WebApp"]}
-    ]
+    ],
+    "note": "RDFS subclass expansion was applied to the constant rdf:type pattern; use a variable type plus FILTER for an asserted-only census"
   }
 }
 ```
 
-The field is **absent** when the flip did not change the query, so its presence
-is the signal. The subclasses are named so the reader can choose the explicit
-path form when the inferred answer is intended. A leaf type is never reported:
-the old and new answers already agree there.
+The field is **absent** when the query was not expanded, so its presence is the
+signal. The subclasses are named because "inference happened" is not actionable
+on its own — the reader needs to know that `Service` swallowed `WebApp`. A leaf
+type is never reported: with no subclasses there is nothing to fold in.
+
+> **History, so an older reading does not mislead.** For a period this page
+> documented the opposite — an `asserted-only` constant form announcing
+> `"applied": false` with a `withheldTypes` list. That flip was reverted when
+> formal reasoning defaults were enabled, and **that marker shape no longer
+> exists**. If you are looking for `withheldTypes`, you are reading a build that
+> is gone; branch on `inference.applied` instead.
 
 #### Every result shape carries it — including ASK
 
