@@ -4,13 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [0.3.39] - 2026-09-05
 
+### Added
+
+- *(share)* Wire the attestation verifier into import — it had ZERO callers([9ca7d54](https://github.com/scbrown/quipu/commit/9ca7d5403137f2ebbf80c5eee1061b5d0d366beb))
+- *(cli)* `quipu ingest` — a streaming bulk load that refuses a short one([21f8ed9](https://github.com/scbrown/quipu/commit/21f8ed94e018f7e2396e708ce2816554c66a1a75))
+
+
+
+
+
 ### Fixed
 
+- *(wasm)* Gate the attestation seam off wasm32 — the verifier is not there([16c8d08](https://github.com/scbrown/quipu/commit/16c8d086ca052e9f9a347640c9a9728c03bc0c1f))
+- *(tests)* Gate ingest_cli on `shacl` — the binary is not built without it([1b18623](https://github.com/scbrown/quipu/commit/1b18623309602f0097ed7a6fe87efdb69deb4f3b))
+- *(ci)* Run the owl tests, and give the three classes that failed a BFO root([cbf3d1f](https://github.com/scbrown/quipu/commit/cbf3d1fb0c7019c594214521df67b1cabe09385a))
+- *(sparql)* An entailment regime must be a SUPERSET of the default answer([176ff15](https://github.com/scbrown/quipu/commit/176ff159fd6120afc8c9ce0bc457ef68a99c8c2a))
 - *(rdfs)* Rdfs2 fires over literal-valued premises([a302ebb](https://github.com/scbrown/quipu/commit/a302ebb8fce6c1838c9b7ac18736b04fe603a616))
 - *(share)* Drop the stray space runs from the two attestation notes([998d7e6](https://github.com/scbrown/quipu/commit/998d7e658fb0241cc583843df84a760229d82f8b))
 
 ### Miscellaneous
 
+- *(conformance)* Re-derive the ledgers on this branch's head — and the numbers did not move([7ae4a2e](https://github.com/scbrown/quipu/commit/7ae4a2e6e835e78d6b7197ea6c515cc018361cfe))
+- *(conformance)* Re-derive on 89c22f6 after merging main([10f8bc9](https://github.com/scbrown/quipu/commit/10f8bc977ae491f305f7f15a5e6275830b587c21))
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([4337220](https://github.com/scbrown/quipu/commit/43372205afdb762e3cdd6a7e5bcf5e879078db12))
 - *(conformance)* Re-derive the ledgers on this branch's HEAD([d4cb64c](https://github.com/scbrown/quipu/commit/d4cb64cf8496a3e67e7d463006dfb0f792c44868))
 - *(conformance)* Re-derive the ledgers and page on this head([93863c5](https://github.com/scbrown/quipu/commit/93863c5dba02c8477516f04ef63f5a33d7c22ba4))
 - *(conformance)* Re-derive the ledgers on this head([b35b829](https://github.com/scbrown/quipu/commit/b35b8295b51061c306cd613e45dda91133d69dc2))
