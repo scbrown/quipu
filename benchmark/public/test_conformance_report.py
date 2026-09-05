@@ -311,3 +311,104 @@ class LedgerProvenanceTest(unittest.TestCase):
             root, _run, _first = self._repo(stack)
             code, messages = self._provenance(root, {"suite_revision": "abc"})
             self.assertEqual(code, 2, messages)
+
+
+class LedgerProvenancePrModeTest(unittest.TestCase):
+    """PR mode: only THIS PR's own changes can stale its ledger (aegis-1gp76j).
+
+    The strict arm asks "is this ledger derived from the code it ships beside?"
+    and belongs on main. On a PR it accidentally asks "has main moved?", which
+    charges a full re-derive for somebody else's merge. Both arms are tested
+    here because a green from one is not a green from the other — which is why
+    the arm is printed.
+    """
+
+    def _repo(self, stack):
+        import subprocess
+
+        root = pathlib.Path(stack.enter_context(tempfile.TemporaryDirectory()))
+        run = lambda *a: subprocess.run(  # noqa: E731
+            ["git", *a], cwd=root, check=True, capture_output=True, text=True
+        )
+        run("init", "-q", "-b", "main")
+        run("config", "user.email", "t@example.com")
+        run("config", "user.name", "t")
+        (root / "src").mkdir()
+        (root / "src" / "mine.rs").write_text("// v1\n")
+        (root / "src" / "theirs.rs").write_text("// v1\n")
+        run("add", "-A")
+        run("commit", "-qm", "base")
+        base = run("rev-parse", "HEAD").stdout.strip()
+        return root, run, base
+
+    def _provenance(self, root, data, pr_base=None):
+        original = REPORT._git
+        import subprocess
+
+        def fake(*args):
+            p = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=False)
+            return p.returncode, p.stdout.strip()
+
+        REPORT._git = fake
+        try:
+            return REPORT.ledger_provenance(data, pr_base)
+        finally:
+            REPORT._git = original
+
+    def _pr_over_someone_elses_merge(self, stack):
+        """A PR that changed NOTHING relevant, on a main that moved."""
+        root, run, base = self._repo(stack)
+        run("checkout", "-qb", "pr")
+        (root / "README.md").write_text("docs\n")
+        run("add", "-A")
+        run("commit", "-qm", "pr: docs only")
+        run("checkout", "-q", "main")
+        (root / "src" / "theirs.rs").write_text("// v2 — somebody else\n")
+        run("add", "-A")
+        run("commit", "-qm", "main: unrelated src change")
+        run("checkout", "-q", "pr")
+        run("merge", "-q", "--no-edit", "main")
+        return root, run, base
+
+    def test_pr_mode_ignores_a_src_change_that_came_from_main(self):
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, _run, base = self._pr_over_someone_elses_merge(stack)
+            code, messages = self._provenance(root, {"quipu_revision": base}, "main")
+            self.assertEqual(code, 0, messages)
+
+    def test_STRICT_mode_still_fails_on_that_same_tree(self):
+        # The discriminating control. Same repo, same ledger, no pr_base: the
+        # strict arm MUST still object, or PR mode has not narrowed anything and
+        # the first test would pass for the wrong reason.
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, _run, base = self._pr_over_someone_elses_merge(stack)
+            code, messages = self._provenance(root, {"quipu_revision": base})
+            self.assertEqual(code, 1, messages)
+            self.assertIn("theirs.rs", " ".join(messages))
+
+    def test_pr_mode_STILL_fails_when_the_PR_ITSELF_touches_src(self):
+        # wu's condition 3: a PR touching src re-derives, always.
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, run, base = self._repo(stack)
+            run("checkout", "-qb", "pr")
+            (root / "src" / "mine.rs").write_text("// v2 — mine\n")
+            run("add", "-A")
+            run("commit", "-qm", "pr: my own src change")
+            code, messages = self._provenance(root, {"quipu_revision": base}, "main")
+            self.assertEqual(code, 1, messages)
+            self.assertIn("mine.rs", " ".join(messages))
+
+    def test_pr_mode_with_an_unresolvable_base_is_UNVERIFIED(self):
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, _run, base = self._repo(stack)
+            code, messages = self._provenance(root, {"quipu_revision": base}, "no-such-ref")
+            self.assertEqual(code, 2, messages)
+            self.assertIn("UNVERIFIED", " ".join(messages))
