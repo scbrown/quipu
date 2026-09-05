@@ -21,5 +21,6 @@ globs:
 # release and show up as churn. AGENTS.md is deliberately NOT here: it is the
 # repo's primary agent doc and stays linted, beads block included.
 ignores:
+  - "CHANGELOG.md"
   - ".beads/**/*.md"
   - ".agents/**/*.md"
