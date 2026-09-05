@@ -472,4 +472,43 @@ mod tests {
         .unwrap();
         assert!(built.update.is_empty(), "got: {}", built.update);
     }
+
+    // --- what `delta_hash` actually covers, and why it matters (aegis-8fdp8d)
+    //
+    // `delta_hash` is sha256 over the delta.ru BYTES, and `materialize` verifies
+    // it the same way. That is a different thing from the share's `graph_hash`,
+    // which is RDFC-1.0 over a canonicalized graph.
+    //
+    // The distinction is load-bearing for the PR flow. malcolm's ruling on the
+    // page design — that a `#` retract section sits OUTSIDE the hash because
+    // comments are lexical rather than graph content — is correct about a GRAPH
+    // hash and does not transfer to this one: a byte hash covers every byte in
+    // the file, comments included. So a provenance header inside delta.ru is
+    // already inside v1's integrity envelope, provided the producer emits it so
+    // the manifest's delta_hash is computed over the same bytes.
+    //
+    // Pinned because a future change to make `delta_hash` graph-derived would
+    // silently invalidate that reasoning, and this is the test that would say so.
+    #[test]
+    fn delta_hash_is_over_file_bytes_so_a_comment_header_is_inside_the_envelope() {
+        let body = "DELETE DATA {\n  <urn:s> <urn:p> \"a\" .\n};\n\
+                    INSERT DATA {\n  <urn:s> <urn:p> \"b\" .\n};\n";
+        let header = "# quipu-delta-provenance/1\n# parent_share: sha256:aaa\n";
+        let with_header = format!("{header}{body}");
+
+        // A comment header is valid SPARQL Update — the parser accepts it, so a
+        // headered delta still applies.
+        spargebra::SparqlParser::new()
+            .parse_update(&with_header)
+            .expect("a leading comment header must not break SPARQL parsing");
+
+        // And it is inside the envelope: the byte hash changes when it is added,
+        // which is exactly what "covered by the hash" means.
+        assert_ne!(
+            sha256(body.as_bytes()),
+            sha256(with_header.as_bytes()),
+            "delta_hash must change when a header is added, or the header would \
+             sit outside the integrity envelope"
+        );
+    }
 }
