@@ -1993,3 +1993,49 @@ fn the_derived_iri_shape_accepts_only_what_this_library_computes() {
         assert!(!is_derived_graph_iri(bad), "must refuse {bad}");
     }
 }
+
+#[test]
+fn typed_entities_with_no_labels_are_counted_not_reported_as_nothing() {
+    // muldoon's fixture, on aegis-19o403: a graph of typed entities carrying
+    // ZERO rdfs:label. Alignment matches on labels, so it yields 0 concepts —
+    // the same 0 as a genuinely bare graph. muldoon caught it only by
+    // inspecting the graph by hand after distrusting the zero, and the
+    // reassuring reading ("nothing to align") is the one that wins by default.
+    let mut store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/typed-but-unlabelled";
+    for i in 0..3 {
+        typed(
+            &mut store,
+            g,
+            &format!("http://a.example/e{i}"),
+            "http://a.example/Thing",
+        );
+    }
+
+    let out = enumerate(&store, g).expect("a registered graph answers");
+
+    assert!(out.concepts.is_empty(), "no labels, so no concepts");
+    assert_eq!(out.unlabelled, 3, "but three entities WERE examined");
+    assert!(
+        !out.is_empty(),
+        "a graph with entities it could not match on is not an empty enumeration"
+    );
+}
+
+#[test]
+fn a_truly_bare_graph_reports_nothing_examined() {
+    // The control. Without it, any non-zero `unlabelled` would satisfy the test
+    // above and "nothing here" would become indistinguishable from "nothing I
+    // can match on" in the other direction.
+    let store = Store::open_in_memory().unwrap();
+    let g = "http://example.org/graph/bare";
+    store.graph_create(g).unwrap();
+
+    let out = enumerate(&store, g).expect("a registered graph answers");
+
+    assert_eq!(out.unlabelled, 0);
+    assert!(
+        out.is_empty(),
+        "nothing was examined, and that is the finding"
+    );
+}
