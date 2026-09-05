@@ -350,6 +350,7 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
             .map_err(|e| Error::InvalidValue(format!("delta shapes read: {e}")))?,
         source: delta_dir.into(),
         actor: None,
+        accept_exact: false,
     })
 }
 
