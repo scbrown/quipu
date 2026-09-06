@@ -109,6 +109,41 @@ transition at some fraction of the dataset) and working-set residency (the small
 3.2 GB and caches readily; the larger is 32.3 GB). They are not equivalent — the first says the
 cost never amortises, the second says it amortises whenever the store fits in memory.
 
+### Rate is not monotonic: it halves between 4.4M and 6.8M facts
+
+A second, larger load was instrumented per committed chunk at one-second resolution and **stopped
+deliberately** at 8,100,000 of 108,997,714 triples, because the shape had become the result.
+Rolling ten-commit rate:
+
+| facts ingested | rate | median host load |
+|---|---|---|
+| 800,000 | 1,035/s | — |
+| 2,300,000 | 1,085/s | — |
+| **4,400,000** | **1,650/s** | peak |
+| 5,300,000 | 1,479/s | — |
+| 6,800,000 | 705/s | — |
+| 8,100,000 | 761/s | 3.94 |
+
+**The rate rises to a peak at ~4.4M facts and then halves**, and it does so while the host gets
+QUIETER (median load 5.33 → 3.94 across the final bands). No figure from this load is published
+as a result: it is an incomplete run, its ledger row is marked `valid_result: false`, and a rate
+quoted from 7% of a dataset invites a division nobody should perform.
+
+**Three explanations were tested and all three are refuted:**
+
+1. **A fixed number of facts ingested.** The 10,916,457-triple load was ~14× faster at the same
+   absolute commit count. Two scales were required to test this; one cannot.
+2. **Host load.** Correlation of rate with one-minute load average is **+0.068** across a 5.2×
+   range (2.47–12.91) over 162 commit intervals — that is, none.
+3. **IRI cardinality**, the most mechanistic candidate: interning cost rising as distinct IRIs
+   accumulate. Measured directly — the 108,997,714-triple dataset carries **284,093** distinct
+   subjects in its first 2,000,000 triples against **396,970** for the 10,916,457-triple one. It
+   has *fewer*, so interning predicts the opposite of what was observed.
+
+**Why the smaller dataset is faster at matched fact count is unexplained**, and is published as
+unexplained. Three candidates are dead; proposing a fourth after seeing the data would not be a
+finding.
+
 ### Re-deriving it
 
 ```text
