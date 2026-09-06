@@ -29,12 +29,22 @@ fn request_from_files(
     };
     let manifest = serde_json::from_str::<ShareManifest>(&get("manifest.json")?)
         .map_err(|e| Error::InvalidValue(format!("share manifest: {e}")))?;
+    // LIFT THE EMBEDDED ENVELOPE (aegis-tadzdf). A share minted with `--attest`
+    // carries its envelope in the manifest; if we do not lift it here the
+    // attestation is inert and `claimed` is unreachable from the CLI -- the same
+    // "capability nothing invokes" defect this bead exists to close, one layer
+    // down. Measured: the first end-to-end run of the exercise reported
+    // `transport` for a share that carried a valid attestation.
+    //
+    // This grants NO trust. It only supplies what the share already brought;
+    // whether that reaches `claimed` or `attested` is decided in
+    // `share_attestation` by whether the session is REGISTERED here, which
+    // importing cannot change.
+    #[cfg(not(target_arch = "wasm32"))]
+    let embedded = manifest.attestation.as_ref().map(|a| a.envelope.clone());
     Ok(ShareImportRequest {
-        // Local construction carries no envelope: these paths build a request from
-        // bytes already in hand, so there is no producer to attest. The result then
-        // reports tier "transport", which is the truth (aegis-c9c44).
         #[cfg(not(target_arch = "wasm32"))]
-        attestation: None,
+        attestation: embedded,
         manifest,
         export_ntriples: get("export.nt")?,
         shapes_turtle: get("shapes.ttl")?,

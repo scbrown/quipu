@@ -71,6 +71,8 @@ pub mod share_delta;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod share_mint;
 pub mod share_transport;
 pub mod signing;
 pub mod sparql;

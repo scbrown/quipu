@@ -19,7 +19,12 @@ pub const WRITE_V1: &str = "quipu-write-v1";
 pub const SHARE_V1: &str = "quipu-share-v1";
 
 /// Server-protected binding installed by a trusted introducer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serializable because a producer's PUBLIC binding travels inside a share
+/// manifest (aegis-tadzdf). There is no private key in this struct, so carrying
+/// it exposes nothing; `revoked` is producer-asserted and therefore not to be
+/// trusted from a share — the consumer's own registered copy is authoritative.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionBinding {
     pub agent: String,
     pub session: String,
@@ -56,7 +61,7 @@ impl SessionBinding {
         Ok(Self {
             agent: agent.into(),
             session: session.into(),
-            key_id: sha256(&raw),
+            key_id: key_id_of_raw(&raw),
             public_key,
             introducer: introducer.into(),
             issued_at_epoch,
@@ -241,6 +246,76 @@ pub const fn nonce_horizon_secs(allowed_skew_secs: u64) -> u64 {
 /// passed. That order is load-bearing rather than tidy: consuming earlier would
 /// let an unsigned or malformed attestation burn a nonce, turning a rejected
 /// forgery into a denial of service against the session it was forging.
+/// The key id for a raw 32-byte ed25519 public key.
+///
+/// Extracted so `SessionBinding::new` and [`verify_unregistered`] cannot drift:
+/// if the two ever computed the id differently, an envelope would be checked
+/// against a key whose id it does not actually name, which is the one thing the
+/// id is there to prevent.
+fn key_id_of_raw(raw: &[u8]) -> String {
+    sha256(raw)
+}
+
+/// The key id for a lowercase-hex ed25519 public key, or `None` if it is not one.
+fn key_id_of(public_key: &str) -> Option<String> {
+    let raw = hex::decode(public_key).ok()?;
+    (raw.len() == 32 && public_key == public_key.to_ascii_lowercase()).then(|| key_id_of_raw(&raw))
+}
+
+/// Verify an envelope against a public key we were NOT told to trust (aegis-tadzdf).
+///
+/// This is the `claimed` tier's verifier. It runs every check `verify_binding`
+/// runs EXCEPT the two that require a registered session: the registry lookup
+/// itself, and nonce consumption.
+///
+/// **What a pass here does and does not mean.** It proves the bundle was not
+/// altered after signing, and that the four manifest identity fields were signed
+/// together — integrity without provenance. It says NOTHING about who holds the
+/// key, because nobody vouched for it. That is precisely the distinction the
+/// `claimed` tier exists to carry, and it is why a tampered bundle must still
+/// FAIL here rather than degrade to `claimed`: if `claimed` were handed out
+/// without checking the signature, it would mean nothing at all.
+///
+/// **Replay is deliberately NOT defended at this tier.** Nonce state is keyed by
+/// registered session, so there is nothing to spend against. Consuming nonces for
+/// unknown sessions would let any caller populate the replay table at will. A
+/// `claimed` import is therefore replayable, and the tier's note says so rather
+/// than leaving a reader to assume the protection carried over.
+pub fn verify_unregistered(
+    envelope: &AttestationEnvelope,
+    payload: &SignedBinding<'_>,
+    public_key: &str,
+    now_epoch: u64,
+    allowed_skew_secs: u64,
+) -> Result<()> {
+    validate_envelope(envelope, payload)?;
+    if envelope.issued_at_epoch.abs_diff(now_epoch) > allowed_skew_secs {
+        return Err(Error::InvalidValue(
+            "attestation issuance is outside the accepted clock window".into(),
+        ));
+    }
+    // The key_id must be the digest of the key we are about to verify against,
+    // or an envelope could name one key and be checked against another.
+    let expected = key_id_of(public_key).ok_or_else(|| {
+        Error::InvalidValue("accompanying public key is not 32-byte lowercase hex".into())
+    })?;
+    if envelope.key_id != expected {
+        return Err(Error::InvalidValue(
+            "attestation key_id does not match the accompanying public key".into(),
+        ));
+    }
+    if !crate::signing::verify_hex(
+        public_key,
+        &canonical_message(envelope, payload),
+        &envelope.signature,
+    ) {
+        return Err(Error::InvalidValue(
+            "attestation signature does not verify against the accompanying public key".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub fn verify_binding<B: AttestationBindings + ?Sized>(
     bindings: &B,
     envelope: &AttestationEnvelope,

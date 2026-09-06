@@ -156,6 +156,59 @@ Deep freeze produces read-only, full-history graphs. See
 
 ---
 
+## Producer attestation and the three trust tiers
+
+A share can carry a signed statement of **who produced it**. Every import reports the
+tier it reached, and the three are genuinely different claims — not degrees of the
+same one.
+
+| tier | what it means |
+|---|---|
+| `transport` | No envelope. The payload hashes verify, so the bytes are intact, but nothing says who produced them. |
+| `claimed` | A signature verifies against the key **the share itself supplied**. The bundle is unaltered since signing and its identity fields are bound together — but nobody here vouched for that key. Integrity without provenance. Replay is not defended at this tier. |
+| `attested` | The signature verifies against a session binding **registered out of band** on the importing store. |
+
+### Minting a share with an attestation
+
+```text
+quipu share --output <dir> ... --attest \
+  --attest-agent <agent> --attest-session <session> --attest-introducer <who> \
+  --attest-issued-at <epoch> --attest-nonce <32 hex chars> \
+  [--attest-key <path>] [--attest-ttl <secs>]
+```
+
+`--attest-issued-at` is required rather than defaulted to the wall clock: two runs
+over one pinned dataset must produce the same signed bytes, or the share is not
+re-derivable. `--attest-nonce` must be 32 lowercase hex characters and is checked at
+mint time — a share minted with any other nonce is refused by every importer.
+
+The key comes from `--attest-key`, else `$QUIPU_SIGNING_KEY`, else
+`.quipu/verifier.pk8`, created 0600 on first use. That is v1 host-file custody, the
+same the governance plane uses; it is not an HSM.
+
+### Registering a producer, out of band
+
+```text
+quipu attest register --agent <a> --session <s> --public-key <hex> \
+  --introducer <who> --issued-at <epoch> --expires-at <epoch> [--db <path>]
+quipu attest list [--db <path>]
+```
+
+**Importing a share never registers its producer.** This is the point, not an
+omission: a key that vouches for the bundle it arrived in vouches for nothing, and an
+attacker substituting the whole bundle would substitute the key with it. Registration
+is a separate act by the consumer, using a key obtained some other way — the same rule
+the governance plane states as *quipu never self-registers*.
+
+So a first import from an unknown producer reports `claimed`, and reports it honestly.
+Reaching `attested` requires someone to decide that this key is that producer.
+
+**Automated callers should require `attested`.** Accepting `claimed` is reasonable, but
+it should be a deliberate choice by a caller who says so, not the effect of a tier that
+merely does not read as failure.
+
+---
+
 ## Keeping this page honest
 
 `tests/cli_doc_drift.rs` reconciles **three** surfaces: the dispatch arms in

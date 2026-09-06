@@ -33,6 +33,20 @@ use crate::error::{Error, Result};
 /// persisting a fresh one (0600) if the file does not exist. v1 host-file
 /// custody — the private key sits on disk; protect the path with filesystem
 /// permissions until a real secret store lands.
+/// Where the host-file signing key lives: `$QUIPU_SIGNING_KEY`, else
+/// `.quipu/verifier.pk8`.
+///
+/// Factored out because `quipu-server` and the `share --attest` CLI path both
+/// need it, and two inline copies of a path convention drift silently -- the
+/// failure being a signature minted with one key and verified against another.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn default_key_path() -> std::path::PathBuf {
+    std::env::var("QUIPU_SIGNING_KEY").map_or_else(
+        |_| Path::new(".quipu").join("verifier.pk8"),
+        std::path::PathBuf::from,
+    )
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_or_generate(path: &Path) -> Result<Ed25519KeyPair> {
     let pkcs8: Vec<u8> = if path.exists() {

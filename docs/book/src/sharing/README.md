@@ -283,5 +283,32 @@ are stated here rather than left to be inferred from careful wording.
 | MCP share tools — `quipu_export` / `quipu_import` / `quipu_import_promote` | ✅ Built and provisioned |
 | Bobbin share **contract** + `quipu-share-v1` fixtures | ✅ Built (`bobbin:src/knowledge/share_contract.rs`) |
 | Bobbin **runtime adapter** — producing and consuming bundles live | 🔶 **Designed, not built.** The contract and fixtures exist; the adapter does not yet. |
-| External share **attestation** — proving *who* produced a share | 🔶 **Designed, not built.** Hash verification proves a share is intact; it does not yet prove authorship. |
+| External share **attestation** — proving *who* produced a share | ✅ Built, in **three tiers** — see below. Hash verification proves a share is intact; an attestation proves who signed it, and only a producer registered **out of band** reaches `attested`. |
 | Re-runnable two-store transcript | ✅ Built (`examples/sharing-demo/run.sh`), checked in CI, and embedded above from `expected.txt` |
+
+---
+
+## What an import proves about its producer
+
+Hash verification proves a share is **intact**. It says nothing about **who made it**. Those are
+different claims, and since aegis-tadzdf every import reports which one it reached.
+
+| tier | what it means | what it does NOT mean |
+|---|---|---|
+| `transport` | No attestation supplied. The payload hashes verify, so the bytes are intact. | Anything about authorship. |
+| `claimed` | A signature verifies against the key **the share itself carried**. The bundle is unaltered since signing and its identity fields are bound together. | That the key belongs to whoever it names — nobody here vouched for it. Replay is not defended at this tier. |
+| `attested` | The signature verifies against a session binding **registered out of band** on this store. | — |
+
+**A first import from an unknown producer reports `claimed`, and that is correct rather than a
+failure.** Reaching `attested` requires someone to decide that this key is that producer, using
+`quipu attest register` with a key obtained some other way.
+
+**Importing a share never registers its producer.** That is the design, not an omission: a key
+that vouches for the bundle it arrived in vouches for nothing, and an attacker replacing the whole
+bundle would replace the key along with it. The governance plane states the same rule for itself —
+*quipu never self-registers*.
+
+Automated callers should require `attested`. Accepting `claimed` is defensible, but it should be a
+caller's deliberate choice rather than the effect of a tier that merely does not read as failure.
+
+Command reference: [CLI — sharing](../reference/cli-sharing.md).
