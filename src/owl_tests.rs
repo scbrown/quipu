@@ -701,3 +701,490 @@ ex:contentHash a owl:DatatypeProperty, owl:FunctionalProperty .
         "an ambiguous batch must still be refused, got: {msg}"
     );
 }
+
+// --- semi-naive derive: same fixpoint, bounded cost (aegis-2dp8e2) -----------
+//
+// The naive path re-read EVERY current fact on every pass. Measured on the live
+// store: 641,803 facts, >= 2 scans per relevant write, ~67 s of work per 60 s of
+// wall clock at a 29 writes/min offered load — it could not keep up, and it
+// ratcheted, because its own output lands in the companion graph which is a
+// premise for the next run.
+//
+// Semi-naive is an EVALUATION-STRATEGY change, NOT a semantics change. The
+// fixpoint must be identical, and the test for that is a DIFF of the derived
+// sets — not a spot-check of a few ASKs, which passes while missing whole rule
+// families.
+
+const SN_TS: &str = "2026-01-01T00:00:00Z";
+
+/// An ontology exercising SEVEN single-premise families plus the one that is not.
+const SN_ONT: &str = r#"
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex:   <http://example.org/> .
+ex:Dog     rdfs:subClassOf ex:Mammal .
+ex:Mammal  rdfs:subClassOf ex:Animal .
+ex:Pet     owl:equivalentClass ex:Companion .
+ex:owns    owl:inverseOf ex:ownedBy .
+ex:knows   a owl:SymmetricProperty .
+ex:partOf  a owl:TransitiveProperty .
+ex:likes   rdfs:subPropertyOf ex:regards .
+ex:cares   owl:equivalentProperty ex:tends .
+ex:feeds   rdfs:domain ex:Keeper ; rdfs:range ex:Animal .
+"#;
+
+fn sn_ingest(store: &mut Store, ttl: &str) {
+    crate::rdf::ingest_rdf(
+        store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        SN_TS,
+        None,
+        None,
+    )
+    .unwrap();
+}
+
+/// Every fact in the companion inferred graph, as a comparable set.
+fn sn_derived(store: &Store) -> std::collections::BTreeSet<(i64, i64, Vec<u8>)> {
+    let companion = store
+        .lookup("urn:quipu:graph:root#inferred")
+        .unwrap()
+        .expect("companion graph");
+    store
+        .current_facts_in_graph(companion)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.entity, f.attribute, f.value.to_bytes()))
+        .collect()
+}
+
+#[test]
+fn semi_naive_reaches_the_same_fixpoint_as_naive() {
+    // THE correctness test. Two stores, identical input; one materialised the
+    // naive way, one from the delta. The DERIVED SETS must be equal — every
+    // rule family, not a sampled few.
+    let data = r#"
+@prefix ex: <http://example.org/> .
+ex:fido   a ex:Dog .
+ex:rex    a ex:Pet .
+ex:ann    ex:owns    ex:fido .
+ex:ann    ex:knows   ex:bob .
+ex:paw    ex:partOf  ex:leg .
+ex:leg    ex:partOf  ex:fido .
+ex:ann    ex:likes   ex:rex .
+ex:ann    ex:cares   ex:rex .
+ex:ann    ex:feeds   ex:fido .
+"#;
+
+    let mut naive = Store::open_in_memory().unwrap();
+    naive.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    sn_ingest(&mut naive, data);
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+    let rn = ont.materialize(&mut naive, SN_TS).unwrap();
+
+    let mut semi = Store::open_in_memory().unwrap();
+    semi.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    sn_ingest(&mut semi, data);
+    // The seed is every asserted fact — what a delta carrying this ingest holds.
+    let seed = semi
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let rs = ont.materialize_delta(&mut semi, SN_TS, &seed).unwrap();
+
+    // ANTI-VACUITY: if nothing was derived, set equality is trivially true and
+    // this test would pass against a materialiser that does nothing at all.
+    assert!(
+        rn.total > 0,
+        "fixture derives nothing — the comparison below would be vacuous"
+    );
+
+    assert_eq!(
+        sn_derived(&naive),
+        sn_derived(&semi),
+        "semi-naive must reach the SAME fixpoint as naive — it is an evaluation \
+         strategy, not a semantics change (naive total {}, semi total {})",
+        rn.total,
+        rs.total
+    );
+}
+
+#[test]
+fn transitive_closure_joins_the_delta_against_history() {
+    // THE ARM THAT DELTA-ONLY WOULD FAIL, and the reason the (delta x existing)
+    // path exists at all. `a→b` and `b→c` arrive in DIFFERENT transactions, so a
+    // delta-only adjacency sees one edge and cannot derive `a→c`.
+    //
+    // This deployment has ZERO transitive properties loaded, so nothing here
+    // exercises this path in production — which is exactly how it would rot
+    // unnoticed. Hence a test that loads one.
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+
+    // Transaction 1: a→b, materialised.
+    sn_ingest(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:a ex:partOf ex:b .\n",
+    );
+    let first = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    ont.materialize_delta(&mut store, SN_TS, &first).unwrap();
+
+    // Transaction 2: b→c ONLY. The delta does not contain a→b.
+    let before = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    sn_ingest(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:b ex:partOf ex:c .\n",
+    );
+    let after = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let seed: Vec<_> = after
+        .iter()
+        .filter(|f| {
+            !before
+                .iter()
+                .any(|b| b.entity == f.entity && b.attribute == f.attribute && b.value == f.value)
+        })
+        .cloned()
+        .collect();
+    assert_eq!(
+        seed.len(),
+        1,
+        "the seed must be the ONE new edge, not the store"
+    );
+
+    ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+
+    let result = crate::sparql::query(
+        &store,
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+         { <http://example.org/a> <http://example.org/partOf> <http://example.org/c> }",
+    )
+    .unwrap();
+    assert!(
+        matches!(result, crate::sparql::QueryResult::Ask(true)),
+        "a→c must be derived from a delta containing ONLY b→c, by joining it \
+         against the EXISTING a→b edge (aegis-2dp8e2)"
+    );
+}
+
+#[test]
+fn the_pass_budget_is_reported_not_silent() {
+    // A fixpoint that stopped early is indistinguishable from one that finished
+    // unless it says so. Normal runs must report the flag CLEAR — the assertion
+    // that stops the field being decorative.
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+    sn_ingest(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:fido a ex:Dog .\n",
+    );
+    let seed = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let r = ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+    assert!(
+        !r.pass_budget_exhausted,
+        "an ordinary run must not hit the budget"
+    );
+    assert!(r.passes > 0, "passes must be counted, not left at zero");
+}
+
+/// The two-size assertion sattler asked for: per-write cost must NOT track
+/// store size (aegis-2dp8e2).
+///
+/// Deliberately NOT a wall-clock benchmark. Timing under CI load measures the
+/// machine as much as the algorithm and goes flaky, and a flaky performance
+/// gate gets muted — which is how the naive path survived. `premise_facts_read`
+/// is the quantity that actually scaled, it is deterministic, and asserting on
+/// it is a real regression guard rather than a weather report.
+///
+/// ONE SIZE WOULD NOT DISTINGUISH THE TWO STRATEGIES. Naive and semi-naive both
+/// pass any single-size threshold you pick; only the RATIO between two sizes
+/// separates them. That is the whole design of this test.
+#[test]
+fn per_write_cost_does_not_scale_with_store_size() {
+    fn cost_at(entities: usize) -> (usize, usize) {
+        let mut store = Store::open_in_memory().unwrap();
+        store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+        let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+
+        // Bulk background: many typed entities the incoming write does not touch.
+        let mut ttl = String::from("@prefix ex: <http://example.org/> .\n");
+        for i in 0..entities {
+            ttl.push_str(&format!("ex:bg{i} a ex:Dog .\n"));
+        }
+        sn_ingest(&mut store, &ttl);
+        // Materialize the background the naive way, so both sizes start closed.
+        ont.materialize(&mut store, SN_TS).unwrap();
+
+        // ONE new write, the same at both sizes.
+        let before = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap();
+        sn_ingest(
+            &mut store,
+            "@prefix ex: <http://example.org/> .\nex:newcomer a ex:Dog .\n",
+        );
+        let after = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap();
+        let seed: Vec<_> = after
+            .iter()
+            .filter(|f| {
+                !before.iter().any(|b| {
+                    b.entity == f.entity && b.attribute == f.attribute && b.value == f.value
+                })
+            })
+            .cloned()
+            .collect();
+
+        let semi = ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+
+        // The naive cost of the SAME write, for the contrast.
+        let mut naive_store = Store::open_in_memory().unwrap();
+        naive_store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+        sn_ingest(&mut naive_store, &ttl);
+        ont.materialize(&mut naive_store, SN_TS).unwrap();
+        sn_ingest(
+            &mut naive_store,
+            "@prefix ex: <http://example.org/> .\nex:newcomer a ex:Dog .\n",
+        );
+        let naive = ont.materialize(&mut naive_store, SN_TS).unwrap();
+
+        (semi.premise_facts_read, naive.premise_facts_read)
+    }
+
+    let (semi_small, naive_small) = cost_at(50);
+    let (semi_big, naive_big) = cost_at(500); // 10x
+
+    // ANTI-VACUITY: the naive path MUST visibly scale, or "semi does not scale"
+    // is being asserted against a store too small to tell — the test would pass
+    // on a broken implementation and on a trivial fixture alike.
+    assert!(
+        naive_big > naive_small * 5,
+        "fixture too small to discriminate: naive read {naive_small} at 1x and \
+         {naive_big} at 10x, so this test cannot tell the strategies apart"
+    );
+
+    // THE ASSERTION. Semi-naive reads the delta plus an attribute-scoped dedup
+    // set. Both grow far slower than the store; the bound is deliberately loose
+    // (3x for a 10x store) so it guards the SHAPE without pinning an exact
+    // constant that ordinary changes would churn.
+    assert!(
+        semi_big < semi_small * 3,
+        "semi-naive per-write cost is tracking store size: read {semi_small} at \
+         1x and {semi_big} at 10x (naive: {naive_small} -> {naive_big}). The \
+         point of aegis-2dp8e2 is that this ratio stays flat."
+    );
+}
+
+/// Production-scale cost probe (aegis-2dp8e2). `#[ignore]`d: it builds a store
+/// the size of the live one, which is minutes of setup, and CI does not need to
+/// pay that on every push — `per_write_cost_does_not_scale_with_store_size`
+/// already guards the SHAPE at unit-test speed.
+///
+/// This one answers the question that shape test cannot: does the constant hold
+/// at the size where the defect actually bit? The live store was 641,803 facts
+/// when the naive path was burning ~67 s of work per 60 s of wall clock.
+///
+/// Run: `cargo test --features owl at_production_scale -- --ignored --nocapture`
+/// One-time production-scale confirmation against a store built by
+/// `quipu ingest` (aegis-2dp8e2, sattler's ruling: the bulk route, not a
+/// generator, and not a CI job).
+///
+/// Point it at a pre-ingested store:
+///
+/// ```text
+/// QUIPU_SCALE_DB=/path/to.db cargo test --release --features owl \
+///   scale_db_semi_naive -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "needs QUIPU_SCALE_DB; the one-time confirmation"]
+fn scale_db_semi_naive_cost() {
+    let Ok(path) = std::env::var("QUIPU_SCALE_DB") else {
+        eprintln!("QUIPU_SCALE_DB unset — nothing measured");
+        return;
+    };
+    let mut store = Store::open(&path).unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+
+    let root_facts = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap()
+        .len();
+
+    let before = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    sn_ingest(
+        &mut store,
+        "@prefix ex: <http://example.org/> .\nex:newcomer a ex:Dog .\n",
+    );
+    let after = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let seed: Vec<_> = after
+        .iter()
+        .filter(|f| {
+            !before
+                .iter()
+                .any(|b| b.entity == f.entity && b.attribute == f.attribute && b.value == f.value)
+        })
+        .cloned()
+        .collect();
+
+    let t = std::time::Instant::now();
+    let r = ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+    eprintln!(
+        "SCALE-DB (release): {root_facts} root facts | ONE semi-naive write: \
+         {} premise facts read, {:.1} ms, {} passes",
+        r.premise_facts_read,
+        t.elapsed().as_secs_f64() * 1000.0,
+        r.passes
+    );
+    assert!(
+        root_facts > 100_000,
+        "fixture too small to be the confirmation"
+    );
+}
+
+#[test]
+#[ignore = "builds a ~640k-fact store; run explicitly"]
+fn per_write_cost_is_flat_at_production_scale() {
+    fn probe(entities: usize) -> (usize, usize) {
+        let mut store = Store::open_in_memory().unwrap();
+        store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+        let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+
+        // Two facts per entity: a type (feeds subclass/equivalent) and an edge
+        // (feeds inverse/subproperty/domain-range), so the background exercises
+        // the families a real store does rather than one cheap rule.
+        let mut ttl = String::from("@prefix ex: <http://example.org/> .\n");
+        for i in 0..entities {
+            ttl.push_str(&format!("ex:bg{i} a ex:Dog ;\n  ex:owns ex:t{i} .\n"));
+        }
+        sn_ingest(&mut store, &ttl);
+        ont.materialize(&mut store, SN_TS).unwrap();
+
+        let facts = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap()
+            .len()
+            + store
+                .current_facts_in_graph(
+                    store
+                        .lookup("urn:quipu:graph:root#inferred")
+                        .unwrap()
+                        .unwrap(),
+                )
+                .unwrap()
+                .len();
+
+        let before = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap();
+        sn_ingest(
+            &mut store,
+            "@prefix ex: <http://example.org/> .\nex:newcomer a ex:Dog .\n",
+        );
+        let after = store
+            .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+            .unwrap();
+        let seed: Vec<_> = after
+            .iter()
+            .filter(|f| {
+                !before.iter().any(|b| {
+                    b.entity == f.entity && b.attribute == f.attribute && b.value == f.value
+                })
+            })
+            .cloned()
+            .collect();
+
+        let t = std::time::Instant::now();
+        let r = ont.materialize_delta(&mut store, SN_TS, &seed).unwrap();
+        eprintln!(
+            "  store {facts:>7} facts | ONE write: {:>4} premise facts read, {:>6.1} ms",
+            r.premise_facts_read,
+            t.elapsed().as_secs_f64() * 1000.0
+        );
+        (facts, r.premise_facts_read)
+    }
+
+    let (small_facts, small_read) = probe(1_000);
+    let (big_facts, big_read) = probe(200_000);
+
+    // ANTI-VACUITY: the sizes must actually differ by the order of magnitude
+    // this test claims to cover, or "flat" is being asserted across nothing.
+    assert!(
+        big_facts > small_facts * 50,
+        "sizes too close to be a scale test: {small_facts} vs {big_facts} facts"
+    );
+
+    // THE CLAIM. Per-write premise reads must not track store size. The naive
+    // path reads every fact — at this size that is the ~641k that could not keep
+    // up with 29 writes/min.
+    assert!(
+        big_read < small_read * 2,
+        "per-write cost is tracking store size at production scale: read \
+         {small_read} at {small_facts} facts and {big_read} at {big_facts}. \
+         Turning reactive OWL back on depends on this staying flat."
+    );
+}
+
+/// How fast can a fixture of production size be BUILT? (aegis-2dp8e2)
+///
+/// The turtle route costs ~5 minutes per million facts because it pays the
+/// parser. If a direct-transact generator is fast enough, the production-scale
+/// assertion can run in CI rather than being an explicitly-invoked probe — which
+/// is the difference between a guard and a thing someone remembers to run.
+#[test]
+#[ignore = "measures fixture build cost; run explicitly"]
+fn fixture_build_cost_direct_vs_turtle() {
+    const N: usize = 100_000;
+
+    let t = std::time::Instant::now();
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let mut ttl = String::from("@prefix ex: <http://example.org/> .\n");
+    for i in 0..N {
+        ttl.push_str(&format!("ex:bg{i} a ex:Dog .\n"));
+    }
+    sn_ingest(&mut store, &ttl);
+    let turtle_ms = t.elapsed().as_secs_f64() * 1000.0;
+
+    let t = std::time::Instant::now();
+    let mut store2 = Store::open_in_memory().unwrap();
+    store2.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    let dog = store2.intern("http://example.org/Dog").unwrap();
+    let rdf_type = store2.intern(crate::namespace::RDF_TYPE).unwrap();
+    let datums: Vec<crate::store::Datum> = (0..N)
+        .map(|i| {
+            let e = store2.intern(&format!("http://example.org/bg{i}")).unwrap();
+            crate::store::Datum {
+                entity: e,
+                attribute: rdf_type,
+                value: Value::Ref(dog),
+                valid_from: SN_TS.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }
+        })
+        .collect();
+    store2.transact(&datums, SN_TS, None, None).unwrap();
+    let direct_ms = t.elapsed().as_secs_f64() * 1000.0;
+
+    eprintln!(
+        "FIXTURE BUILD {N} facts: turtle {turtle_ms:.0} ms | direct {direct_ms:.0} ms | ratio {:.1}x",
+        turtle_ms / direct_ms
+    );
+    assert!(direct_ms > 0.0);
+}
