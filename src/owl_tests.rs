@@ -1668,7 +1668,7 @@ ex:tw a ex:Dog .
 ///
 /// This matters because `derive_pass` sets `premises = delta` in the semi-naive
 /// path, and the sameAs rule reads its AXIOMS out of `premises` (identity is
-/// ABox — see the rule). So a pre-existing identity is invisible to a delta that
+/// `ABox` — see the rule). So a pre-existing identity is invisible to a delta that
 /// does not restate it, and the rewrite would silently not fire.
 #[test]
 fn same_as_fires_when_the_identity_is_older_than_the_delta() {
