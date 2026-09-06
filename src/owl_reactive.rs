@@ -92,7 +92,23 @@ impl TransactObserver for ReactiveOwl {
         let mut relevant = false;
         for d in delta.asserts.iter().chain(delta.retracts.iter()) {
             if let Ok(attr_iri) = store.resolve(d.attribute)
-                && properties.contains(attr_iri.as_str())
+                // `owl:sameAs` is checked SEPARATELY from `properties`, and it has
+                // to be (aegis-3yhhcn). `vocab_of` is built from `ontology.axioms`,
+                // and `Axioms` has no sameAs field — because sameAs is ABox, an
+                // assertion about individuals written as ordinary data, while every
+                // other family here is TBox parsed from an ontology document. So
+                // this cannot be folded into `vocab_of`; there is nothing there for
+                // it to be folded into.
+                //
+                // Without this clause a sameAs-only write is judged irrelevant and
+                // the observer returns before materialising. MEASURED before the
+                // fix: asserting `fido sameAs rover` produced no rewrite, no
+                // closure, and ZERO `owl:materialize` transactions — and then an
+                // unrelated `dependsOn` write made both appear. The identity was
+                // not lost, it was DEFERRED to an arbitrary later write, which on a
+                // busy store looks like working and reproduces like a ghost.
+                && (properties.contains(attr_iri.as_str())
+                    || attr_iri.as_str() == crate::namespace::OWL_SAME_AS)
             {
                 relevant = true;
                 break;
@@ -259,6 +275,103 @@ ex:dependsOn a owl:ObjectProperty, owl:TransitiveProperty .
         assert_eq!(
             count, 0,
             "no materialization pass may run for unrelated vocabulary"
+        );
+    }
+
+    /// A sameAs-ONLY write must trigger materialisation on its own (aegis-3yhhcn).
+    ///
+    /// This goes through the OBSERVER deliberately. Every sameAs test on #183
+    /// calls `materialize_delta` directly, which proves the DERIVATION and is
+    /// silent about whether the production trigger ever invokes it for this
+    /// family — and it did not: `vocab_of` is built from the parsed `Axioms`, which
+    /// has no sameAs field, so a sameAs-only delta was judged irrelevant and the
+    /// observer returned before materialising.
+    ///
+    /// The failure it guards is not "sameAs is dead". Measured before the fix,
+    /// an unrelated `TBox`-relevant write DID activate the identity retroactively
+    /// — so the defect was that the effect of asserting an identity was deferred
+    /// to an arbitrary later write. On a busy store that looks like working.
+    #[test]
+    fn a_same_as_only_write_triggers_materialisation_by_itself() {
+        const ONT: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex: <http://example.org/> .
+ex:dependsOn a owl:ObjectProperty, owl:TransitiveProperty .
+"#;
+        let mut store = Store::open_in_memory().unwrap();
+        store.load_ontology("t", ONT, TS).unwrap();
+        store.add_observer(Arc::new(ReactiveOwl));
+        let ingest = |store: &mut Store, ttl: &str| {
+            crate::rdf::ingest_rdf(
+                store,
+                ttl.as_bytes(),
+                oxrdfio::RdfFormat::Turtle,
+                None,
+                TS,
+                None,
+                None,
+            )
+            .unwrap();
+        };
+        fn ask(store: &Store, q: &str) -> bool {
+            matches!(
+                crate::sparql::query(store, q).unwrap(),
+                crate::sparql::QueryResult::Ask(true)
+            )
+        }
+
+        // An ordinary fact on a predicate that is NOT in the TBox vocabulary, so
+        // nothing here can make the later delta relevant by accident.
+        ingest(
+            &mut store,
+            "@prefix ex: <http://example.org/> .\nex:fido ex:colour \"brown\" .\n",
+        );
+
+        // CONTROL, and the test is worth little without it: BEFORE the identity
+        // is asserted the rewrite must be ABSENT. Otherwise a store that somehow
+        // already believed it would let this test pass in both worlds.
+        assert!(
+            !ask(
+                &store,
+                "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+                 { <http://example.org/rover> <http://example.org/colour> \"brown\" }"
+            ),
+            "the rewrite must not exist before the identity is asserted"
+        );
+
+        // THE WRITE UNDER TEST: sameAs and nothing else.
+        ingest(
+            &mut store,
+            "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\
+             @prefix ex: <http://example.org/> .\nex:fido owl:sameAs ex:rover .\n",
+        );
+
+        let materialised: i64 = store
+            .prepare("SELECT COUNT(*) FROM transactions WHERE source = 'owl:materialize'")
+            .unwrap()
+            .query_row([], |r| r.get(0))
+            .unwrap();
+        assert!(
+            materialised > 0,
+            "a sameAs-only write must run the materialiser; it ran {materialised} time(s)"
+        );
+        assert!(
+            ask(
+                &store,
+                "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+                 { <http://example.org/rover> <http://example.org/colour> \"brown\" }"
+            ),
+            "the object rewrite must follow from the identity alone, with no \
+             unrelated write to trigger it"
+        );
+        assert!(
+            ask(
+                &store,
+                "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+                 { <http://example.org/rover> <http://www.w3.org/2002/07/owl#sameAs> \
+                   <http://example.org/fido> }"
+            ),
+            "the identity closure must follow from the identity alone"
         );
     }
 }
