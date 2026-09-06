@@ -58,6 +58,76 @@ impl<'a> Pass<'a> {
     }
 }
 
+/// Disjoint-set forest over entity ids, for the `owl:sameAs` identity closure.
+///
+/// eq-trans is transitive closure over the asserted pairs, and union-find
+/// reaches it in one linear pass instead of needing its own fixpoint: `a≡b` and
+/// `b≡c` land in the same set the moment both are seen, in either order. That
+/// order-independence is the property the equivalence fixture checks — a
+/// pairwise implementation would be sensitive to the order premises arrive in.
+#[derive(Default)]
+struct UnionFind {
+    parent: HashMap<i64, i64>,
+}
+
+impl UnionFind {
+    fn find(&mut self, x: i64) -> i64 {
+        let mut root = x;
+        while let Some(&p) = self.parent.get(&root) {
+            if p == root {
+                break;
+            }
+            root = p;
+        }
+        // Path compression, so a long identity chain does not make every later
+        // lookup walk it again.
+        let mut cur = x;
+        while let Some(&p) = self.parent.get(&cur) {
+            if p == cur {
+                break;
+            }
+            self.parent.insert(cur, root);
+            cur = p;
+        }
+        self.parent.entry(x).or_insert(root);
+        root
+    }
+
+    fn union(&mut self, a: i64, b: i64) {
+        let (ra, rb) = (self.find(a), self.find(b));
+        if ra != rb {
+            self.parent.insert(ra, rb);
+        }
+    }
+
+    /// The classes, keyed by representative. Singletons cannot occur: an entity
+    /// only enters the structure by being named in a sameAs triple.
+    fn classes(&mut self) -> HashMap<i64, Vec<i64>> {
+        let members: Vec<i64> = self.parent.keys().copied().collect();
+        let mut out: HashMap<i64, Vec<i64>> = HashMap::new();
+        for m in members {
+            let root = self.find(m);
+            out.entry(root).or_default().push(m);
+        }
+        for group in out.values_mut() {
+            group.sort_unstable();
+        }
+        out
+    }
+
+    /// The class containing `x`, or `None` when `x` has no asserted identity.
+    fn group_of<'a>(
+        &mut self,
+        x: i64,
+        classes: &'a HashMap<i64, Vec<i64>>,
+    ) -> Option<&'a Vec<i64>> {
+        if !self.parent.contains_key(&x) {
+            return None;
+        }
+        classes.get(&self.find(x))
+    }
+}
+
 impl Ontology {
     /// Materialize OWL 2 RL entailments into the store, to fixpoint.
     ///
@@ -400,6 +470,138 @@ impl Ontology {
                         v.clone(),
                         &mut report.equivalent_property_inferences,
                     );
+                }
+            }
+        }
+
+        // 4d. owl:sameAs — the identity closure and the subject/object rewrites
+        // (OWL 2 RL eq-sym, eq-trans, eq-rep-s, eq-rep-o). aegis-yro9m.
+        //
+        // ⚠️ THIS RULE READS ITS AXIOMS FROM THE DATA, NOT FROM THE ONTOLOGY,
+        // and it is the only one here that does. Every other family above comes
+        // from `self.axioms`, parsed out of an ontology document: subClassOf,
+        // inverseOf, the property characteristics. Those are TBox. `owl:sameAs`
+        // is ABox — an assertion ABOUT INDIVIDUALS — and on a live store it is
+        // written as ordinary data by the align feature and by `/knot`, never
+        // declared in an ontology. Reading it from `self.axioms` would compile,
+        // pass a hand-written ontology test, and leave every asserted identity
+        // in the store inert, which is precisely the defect this implements
+        // (aegis-yro9m: 191 sameAs triples doing nothing).
+        //
+        // The classes are computed by union-find over the asserted pairs rather
+        // than by iterating pairs, because eq-trans is transitive closure: a→b
+        // and b→c must yield a→c, and a pairwise pass would need its own
+        // fixpoint to get there. Union-find reaches it in one pass, and the
+        // outer loop then only has to converge the REWRITES.
+        if let Some(same_as_id) = store.lookup(crate::namespace::OWL_SAME_AS)? {
+            // ⚠️ THE IDENTITY AXIOMS ARE READ FROM THE FULL STORE, NEVER FROM
+            // `premises` — and under semi-naive those are different sets.
+            //
+            // Every other rule here reads its axioms from `self.axioms`, which is
+            // the parsed ontology and is therefore always complete. sameAs axioms
+            // live in the data, so the equivalent of "the whole ontology" is the
+            // whole store, not the delta. Reading them from `premises` derives
+            // strictly LESS than naive the moment an identity is older than the
+            // delta that needs it: transaction 1 asserts `a sameAs b`,
+            // transaction 2 adds `a p o`, and the delta carrying only `a p o`
+            // cannot see the identity, so `b p o` is never derived.
+            //
+            // Measured, not reasoned: `same_as_fires_when_the_identity_is_older_
+            // than_the_delta` FAILS against the premises-scoped version. Note
+            // that `semi_naive_reaches_the_same_fixpoint_as_naive` PASSES against
+            // it — that fixture seeds the delta with every asserted fact, so the
+            // identity is always present and the divergence is invisible to it.
+            let identity_facts = store.current_facts_in_graphs(&graphs)?;
+            let mut classes = UnionFind::default();
+            for f in &identity_facts {
+                if f.attribute == same_as_id
+                    && let Value::Ref(other) = &f.value
+                {
+                    classes.union(f.entity, *other);
+                }
+            }
+            let members = classes.classes();
+
+            // The other direction of the same problem: a delta carrying a NEW
+            // identity must rewrite facts asserted BEFORE it. Those facts are not
+            // in the delta either, so they are fetched for the newly-linked
+            // entities only — bounded by the identity's own class, not by the
+            // store.
+            let newly_identified: Vec<i64> = match seed {
+                None => Vec::new(),
+                Some(delta) => {
+                    let mut ids: Vec<i64> = Vec::new();
+                    for f in delta {
+                        if f.attribute == same_as_id
+                            && let Value::Ref(other) = &f.value
+                        {
+                            for &e in &[f.entity, *other] {
+                                if let Some(g) = classes.group_of(e, &members) {
+                                    ids.extend(g.iter().copied());
+                                }
+                            }
+                        }
+                    }
+                    ids.sort_unstable();
+                    ids.dedup();
+                    ids
+                }
+            };
+            let extra_facts = if newly_identified.is_empty() {
+                Vec::new()
+            } else {
+                store.current_facts_for_entities_in_graphs(&newly_identified, &graphs)?
+            };
+
+            // eq-sym + eq-trans together: every ordered pair within a class.
+            // Reflexive `x sameAs x` is deliberately NOT emitted — OWL 2 RL
+            // derives it, and it is inert noise that would inflate the
+            // companion graph by one triple per participating entity.
+            for group in members.values() {
+                for &x in group {
+                    for &y in group {
+                        if x != y {
+                            pass.push(x, same_as_id, Value::Ref(y), &mut report.same_as_inferences);
+                        }
+                    }
+                }
+            }
+
+            // eq-rep-s and eq-rep-o: restate each fact for every co-referent.
+            //
+            // The sameAs predicate itself is SKIPPED here: its closure is
+            // already complete above, and rewriting it would re-derive the same
+            // triples through a second path on every pass — work that converges
+            // to nothing but is paid for every time.
+            for f in premises.iter().chain(extra_facts.iter()) {
+                if f.attribute == same_as_id {
+                    continue;
+                }
+                if let Some(group) = classes.group_of(f.entity, &members) {
+                    for &alias in group {
+                        if alias != f.entity {
+                            pass.push(
+                                alias,
+                                f.attribute,
+                                f.value.clone(),
+                                &mut report.same_as_inferences,
+                            );
+                        }
+                    }
+                }
+                if let Value::Ref(o) = &f.value
+                    && let Some(group) = classes.group_of(*o, &members)
+                {
+                    for &alias in group {
+                        if alias != *o {
+                            pass.push(
+                                f.entity,
+                                f.attribute,
+                                Value::Ref(alias),
+                                &mut report.same_as_inferences,
+                            );
+                        }
+                    }
                 }
             }
         }

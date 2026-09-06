@@ -39,7 +39,10 @@ pub const SSSOM_NS: &str = "https://w3id.org/sssom/";
 /// `semapv:` — the mapping-justification vocabulary.
 pub const SEMAPV_NS: &str = "https://w3id.org/semapv/vocab/";
 /// The predicate an accepted mapping derives a knot from.
-pub const OWL_SAME_AS: &str = "http://www.w3.org/2002/07/owl#sameAs";
+// Re-exported, not redeclared: the OWL reasoner (src/owl_materialize.rs) now
+// consumes this same IRI, and two literals for one IRI is a drift waiting to
+// happen. The central home is `namespace`, which is what that module is for.
+pub use crate::namespace::OWL_SAME_AS;
 
 /// The SSSOM slots quipu writes, in the column order it emits them.
 ///

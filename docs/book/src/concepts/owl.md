@@ -45,11 +45,44 @@ On load, Quipu:
 | `owl:TransitiveProperty` | Materialization: full closure — `(a P b)`, `(b P c)` produce `(a P c)`, chained to fixpoint |
 | `owl:equivalentProperty` | Materialization: facts under either property are restated under the other |
 | `rdfs:domain` / `rdfs:range` | Materialization: infers type from property usage |
+| `owl:sameAs` | Materialization: identity closure (symmetric + transitive), and every fact about one individual is restated about its co-referents. **Subjects and objects only — predicates are not rewritten.** See below |
 
 > `owl:TransitiveProperty` and `owl:equivalentProperty` were parsed and counted
 > but **not materialized** before 2026-08-27 — the same silently-dropped shape
 > `rdfs:subPropertyOf` had before aegis-qfncf. Loading one reported success and
 > derived nothing.
+
+### `owl:sameAs`: identity comes from your DATA, not from the ontology
+
+Every other axiom in the table is read from the ontology document you load.
+`owl:sameAs` is **not** — it is read from the graph itself, because identity
+between individuals is asserted as ordinary data (the `quipu align` verbs and
+`/knot` both write it). You do not declare `owl:sameAs` in an ontology; you
+assert it about two things, and materialization picks it up:
+
+```turtle
+ex:dolt owl:sameAs ex:doltLan .
+ex:dolt ex:hosts   ex:beads .
+```
+
+After materialization `ex:doltLan ex:hosts ex:beads` is entailed, and the
+identity itself is closed both ways and through chains: with `a sameAs b` and
+`b sameAs c`, facts about `a` reach `c`.
+
+> ⚠️ **Predicates are not rewritten.** If you assert `owl:sameAs` between two
+> PROPERTIES, the identity itself is closed, but facts are **not** restated
+> under the co-referent property — `ex:box ex:hosts ex:svc` with
+> `ex:hosts owl:sameAs ex:runs` does **not** entail `ex:box ex:runs ex:svc`.
+> This is OWL 2 RL's `eq-rep-p`, and it is not implemented: the rule language
+> (`reasoner/ast.rs`) can only put variables in argument position, so a rule
+> quantifying over the predicate is not expressible. Use `owl:equivalentProperty`
+> instead, which IS materialized and is the right axiom for saying two
+> properties mean the same thing. Tracked as the named gap on aegis-yro9m.
+
+Before 2026-09-06 `owl:sameAs` was not implemented at all: assertions were
+accepted and stayed completely inert, so a reader landing on one twin never saw
+the other's facts (aegis-yro9m, filed after the identity had been asserted 191
+times on a live store).
 
 ## Materialization
 

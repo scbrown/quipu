@@ -766,6 +766,7 @@ fn semi_naive_reaches_the_same_fixpoint_as_naive() {
     // naive way, one from the delta. The DERIVED SETS must be equal — every
     // rule family, not a sampled few.
     let data = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix ex: <http://example.org/> .
 ex:fido   a ex:Dog .
 ex:rex    a ex:Pet .
@@ -776,6 +777,9 @@ ex:leg    ex:partOf  ex:fido .
 ex:ann    ex:likes   ex:rex .
 ex:ann    ex:cares   ex:rex .
 ex:ann    ex:feeds   ex:fido .
+ex:fido   owl:sameAs ex:fidoAlias .
+ex:ann    ex:knows   ex:annAlias .
+ex:ann    owl:sameAs ex:annAlias .
 "#;
 
     let mut naive = Store::open_in_memory().unwrap();
@@ -1187,4 +1191,398 @@ fn fixture_build_cost_direct_vs_turtle() {
         turtle_ms / direct_ms
     );
     assert!(direct_ms > 0.0);
+}
+
+// --- owl:sameAs (aegis-yro9m) ------------------------------------------------
+//
+// Filed 2026-08-02 and re-measured four times over a month: `owl:sameAs` was
+// asserted 191 times on the live store and did NOTHING. The corrections on that
+// bead matter for reading these tests. It was first reported as OWL being
+// compiled out; that was true, was fixed (aegis-06q1r), and was NOT this. The
+// surviving defect is that the OWL layer never implemented sameAs at all —
+// `grep -rn sameAs src/owl*.rs` returned zero hits, so there was nothing to
+// parse and nothing to materialise.
+//
+// ⚠️ The rule reads its axioms from the DATA, not from an ontology document,
+// and that is the whole point rather than an implementation detail. Every other
+// family here is TBox, declared in Turtle. sameAs is ABox: on this store it is
+// written by the align feature and by `/knot` as ordinary triples. An
+// implementation that parsed sameAs out of an ontology would pass a hand-written
+// ontology test and leave all 191 live assertions inert — the exact defect,
+// reproduced by its own fix. So every test below asserts identity in the DATA.
+
+const SA_TS: &str = "2026-01-01T00:00:00Z";
+/// Deliberately EMPTY of sameAs: identity arrives as data, never as an axiom.
+const SA_ONT: &str = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:hosts a owl:ObjectProperty .
+"#;
+
+fn sa_ingest(store: &mut Store, ttl: &str) {
+    crate::rdf::ingest_rdf(
+        store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        SA_TS,
+        None,
+        None,
+    )
+    .unwrap();
+}
+
+fn sa_ask(store: &Store, pattern: &str) -> bool {
+    let q = format!(
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> {{ {pattern} }}"
+    );
+    matches!(
+        crate::sparql::query(store, &q).unwrap(),
+        crate::sparql::QueryResult::Ask(true)
+    )
+}
+
+/// THE BEAD'S OWN DISCRIMINATING TEST, as an executable acceptance.
+///
+/// dearing ran exactly this shape against the live store on 2026-08-02 and
+/// again on 2026-08-30: two entities linked by `owl:sameAs`, with payload on
+/// only ONE side, and the twin's predicates absent from the other. It was the
+/// predicate-set comparison that discriminated, because hand-asserted symmetry
+/// and materialised symmetry render identically (the 154-of-188 reciprocal
+/// count was a trap they nearly fell into).
+#[test]
+fn same_as_propagates_predicates_to_the_twin() {
+    let ont = Ontology::from_turtle(SA_ONT).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    sa_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:node owl:sameAs ex:nodeAlias .
+ex:node ex:hosts   ex:payload .
+"#,
+    );
+
+    // CONTROL, before materialising: the twin must NOT already answer, or the
+    // assertion below would pass against a store that never inferred anything.
+    assert!(
+        !sa_ask(
+            &store,
+            "<http://example.org/nodeAlias> <http://example.org/hosts> <http://example.org/payload>"
+        ),
+        "the twin answers BEFORE materialisation — this fixture cannot detect the defect"
+    );
+
+    let report = ont.materialize(&mut store, SA_TS).unwrap();
+    assert!(
+        report.same_as_inferences > 0,
+        "nothing was derived from sameAs"
+    );
+
+    assert!(
+        sa_ask(
+            &store,
+            "<http://example.org/nodeAlias> <http://example.org/hosts> <http://example.org/payload>"
+        ),
+        "the sameAs twin must reach the fact — this is the assertion that was FALSE \
+         on the live store for a month (aegis-yro9m)"
+    );
+}
+
+/// eq-trans: identity is transitive, and a chain must close, not just join once.
+#[test]
+fn same_as_closes_transitively_over_a_chain() {
+    let ont = Ontology::from_turtle(SA_ONT).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    sa_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:a owl:sameAs ex:b .
+ex:b owl:sameAs ex:c .
+ex:a ex:hosts ex:payload .
+"#,
+    );
+    ont.materialize(&mut store, SA_TS).unwrap();
+
+    // a≡b≡c, so the payload reaches c, which is two links away and cannot be
+    // produced by a single pairwise join.
+    assert!(
+        sa_ask(
+            &store,
+            "<http://example.org/c> <http://example.org/hosts> <http://example.org/payload>"
+        ),
+        "the far end of an identity chain must receive the fact"
+    );
+    // eq-sym: the closure is symmetric, so c≡a is derived too.
+    assert!(
+        sa_ask(
+            &store,
+            "<http://example.org/c> <http://www.w3.org/2002/07/owl#sameAs> <http://example.org/a>"
+        ),
+        "identity is symmetric and transitive: c sameAs a"
+    );
+}
+
+/// eq-rep-o: the rewrite applies in OBJECT position, not only subject position.
+#[test]
+fn same_as_rewrites_the_object_not_only_the_subject() {
+    let ont = Ontology::from_turtle(SA_ONT).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    sa_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:target owl:sameAs ex:targetAlias .
+ex:node  ex:hosts   ex:target .
+"#,
+    );
+    ont.materialize(&mut store, SA_TS).unwrap();
+    assert!(
+        sa_ask(
+            &store,
+            "<http://example.org/node> <http://example.org/hosts> <http://example.org/targetAlias>"
+        ),
+        "a fact must be restated against the object's co-referent"
+    );
+}
+
+/// The regime must be a SUPERSET: sameAs may only ADD answers (aegis-g6bu6d).
+///
+/// The defect that rule exists for was measured on the live service: asking for
+/// entailment returned FEWER rows than asking without it, and labelled the
+/// smaller answer entailed. Any rule that composes graphs can reintroduce it.
+#[test]
+fn same_as_only_adds_answers_never_removes_them() {
+    let ont = Ontology::from_turtle(SA_ONT).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    sa_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:x owl:sameAs ex:y .
+ex:x ex:hosts ex:one .
+ex:y ex:hosts ex:two .
+ex:z ex:hosts ex:three .
+"#,
+    );
+    let asserted = crate::sparql::query(
+        &store,
+        "SELECT ?s ?o FROM <urn:quipu:graph:root> { ?s <http://example.org/hosts> ?o }",
+    )
+    .unwrap();
+    let before = match &asserted {
+        crate::sparql::QueryResult::Select { rows, .. } => rows.len(),
+        _ => panic!("expected SELECT"),
+    };
+
+    ont.materialize(&mut store, SA_TS).unwrap();
+
+    let entailed = crate::sparql::query(
+        &store,
+        "SELECT ?s ?o FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+         { ?s <http://example.org/hosts> ?o }",
+    )
+    .unwrap();
+    let after = match &entailed {
+        crate::sparql::QueryResult::Select { rows, .. } => rows.len(),
+        _ => panic!("expected SELECT"),
+    };
+
+    assert!(
+        after > before,
+        "the fixture must actually gain rows, or the superset check is vacuous \
+         (before {before}, after {after})"
+    );
+    // The untouched entity's fact survives: a rewrite must not displace anything.
+    assert!(
+        sa_ask(
+            &store,
+            "<http://example.org/z> <http://example.org/hosts> <http://example.org/three>"
+        ),
+        "a fact about an entity with no identity assertion must be unaffected"
+    );
+}
+
+/// Reflexive `x sameAs x` is deliberately NOT emitted.
+#[test]
+fn same_as_does_not_emit_reflexive_identity() {
+    let ont = Ontology::from_turtle(SA_ONT).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    sa_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:p owl:sameAs ex:q .
+"#,
+    );
+    ont.materialize(&mut store, SA_TS).unwrap();
+    let companion = store
+        .lookup("urn:quipu:graph:root#inferred")
+        .unwrap()
+        .expect("companion graph");
+    let same_as_id = store
+        .lookup(crate::namespace::OWL_SAME_AS)
+        .unwrap()
+        .unwrap();
+    let reflexive = store
+        .current_facts_in_graph(companion)
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == same_as_id && f.value == crate::types::Value::Ref(f.entity))
+        .count();
+    assert_eq!(
+        reflexive, 0,
+        "OWL 2 RL derives x sameAs x; it is inert noise and would add one triple \
+         per participating entity, so this implementation omits it"
+    );
+}
+
+/// Materialisation is idempotent — a second run derives nothing.
+#[test]
+fn same_as_materialisation_is_idempotent() {
+    let ont = Ontology::from_turtle(SA_ONT).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    sa_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:a owl:sameAs ex:b .
+ex:b owl:sameAs ex:c .
+ex:a ex:hosts ex:payload .
+"#,
+    );
+    let first = ont.materialize(&mut store, SA_TS).unwrap();
+    assert!(first.same_as_inferences > 0);
+    let second = ont.materialize(&mut store, "2026-01-02T00:00:00Z").unwrap();
+    assert_eq!(
+        second.same_as_inferences, 0,
+        "re-materialising must be a no-op; a non-zero count means the rule feeds \
+         itself and the companion graph ratchets on every run"
+    );
+}
+
+/// NAMED INCOMPLETENESS — `eq-rep-p` (predicate rewriting) is NOT implemented.
+///
+/// This asserts the COUNT of un-rewritten predicate occurrences, not merely that
+/// some exist (malcolm's condition on aegis-yro9m), so that anyone who later
+/// believes they implemented eq-rep-p fails here loudly rather than silently
+/// passing a weaker check.
+///
+/// Why it is omitted is a language limit, not a preference: `reasoner/ast.rs`
+/// declares `Atom { predicate: String, args: Vec<Term> }` — only ARGUMENTS can
+/// be variables, so a rule quantifying over predicate position is not
+/// expressible. Same wall as rdfs7 in aegis-x9bmhf.
+#[test]
+fn same_as_does_not_rewrite_predicates_and_the_count_says_so() {
+    let ont = Ontology::from_turtle(SA_ONT).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    sa_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:hosts owl:sameAs ex:runs .
+ex:box   ex:hosts   ex:svc .
+"#,
+    );
+    ont.materialize(&mut store, SA_TS).unwrap();
+
+    // CONTROL: the identity itself IS closed, so a zero below means "predicates
+    // are not rewritten", not "sameAs did nothing here".
+    assert!(
+        sa_ask(
+            &store,
+            "<http://example.org/runs> <http://www.w3.org/2002/07/owl#sameAs> <http://example.org/hosts>"
+        ),
+        "the identity closure must still fire over predicate IRIs"
+    );
+
+    let rewritten = usize::from(sa_ask(
+        &store,
+        "<http://example.org/box> <http://example.org/runs> <http://example.org/svc>",
+    ));
+    assert_eq!(
+        rewritten, 0,
+        "eq-rep-p is NOT implemented: a fact is not restated under a co-referent \
+         PREDICATE. If this is now 1, eq-rep-p was implemented and this test plus \
+         the user-facing note in docs/book/src/concepts/owl.md must be updated \
+         together (aegis-yro9m)"
+    );
+}
+
+/// THE DIVERGENCE CASE the equivalence fixture cannot reach.
+///
+/// `semi_naive_reaches_the_same_fixpoint_as_naive` seeds the delta with EVERY
+/// asserted fact, so the `owl:sameAs` triple is always in the frontier. That is
+/// the easy half. The half that matters in production is the opposite: identity
+/// was asserted in an earlier transaction, and the delta carries only a NEW FACT
+/// about one of the twins.
+///
+/// This matters because `derive_pass` sets `premises = delta` in the semi-naive
+/// path, and the sameAs rule reads its AXIOMS out of `premises` (identity is
+/// ABox — see the rule). So a pre-existing identity is invisible to a delta that
+/// does not restate it, and the rewrite would silently not fire.
+#[test]
+fn same_as_fires_when_the_identity_is_older_than_the_delta() {
+    let ont = Ontology::from_turtle(SN_ONT).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    // Transaction 1: the identity alone.
+    sn_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:old owl:sameAs ex:oldAlias .
+"#,
+    );
+    ont.materialize(&mut store, SN_TS).unwrap();
+
+    // Transaction 2: a new fact about one twin. The identity is NOT restated.
+    let before = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    sn_ingest(
+        &mut store,
+        r#"
+@prefix ex: <http://example.org/> .
+ex:old ex:likes ex:rex .
+"#,
+    );
+    let after = store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let seed: Vec<_> = after
+        .iter()
+        .filter(|f| {
+            !before
+                .iter()
+                .any(|b| b.entity == f.entity && b.attribute == f.attribute && b.value == f.value)
+        })
+        .cloned()
+        .collect();
+    assert_eq!(seed.len(), 1, "the delta must be exactly the one new fact");
+
+    ont.materialize_delta(&mut store, "2026-01-02T00:00:00Z", &seed)
+        .unwrap();
+
+    let reached = crate::sparql::query(
+        &store,
+        "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+         { <http://example.org/oldAlias> <http://example.org/likes> <http://example.org/rex> }",
+    )
+    .unwrap();
+    assert!(
+        matches!(reached, crate::sparql::QueryResult::Ask(true)),
+        "a delta carrying only a new FACT must still be rewritten across an identity \
+         asserted in an EARLIER transaction — otherwise semi-naive derives less than \
+         naive and the divergence is invisible to the seed-everything fixture"
+    );
 }
