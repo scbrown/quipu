@@ -17,7 +17,7 @@ interchange format.
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
             [--shapes NAME]... [--no-shapes] [--parent-share ID]
-            [--since <parent-share>] [--turtle]
+            [--since <parent-share>] [--turtle] [--destination internal]
 ```
 
 Writes a deterministic, git-native share into `<dir>`: RDFC-1.0 canonical
@@ -35,6 +35,56 @@ against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 | `--parent-share <ID>` | record lineage: the share this one descends from |
 | `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL |
 | `--turtle` | additionally write a Turtle view for humans |
+| `--destination internal` | skip the outward scrub and stamp the manifest `destination: internal`. LAN-internal destinations only — see below |
+
+### The outward scrub, and `--destination internal`
+
+Every share is checked against the store's own `aegis:InternalIdentifierPattern`
+catalogue — the rules tiered `block` — and refused if the payload matches one.
+Nothing is rewritten: an internal hostname or an RFC1918 address is *entity
+identity*, and silently editing it would produce a share that says something the
+store never said.
+
+That is the right default for a share bound for a public remote, and the wrong
+one for a share bound for an internal forge, where those identifiers are the
+point. `--destination internal` is the single explicit way to say so:
+
+```text
+quipu share --output qpack/today --destination internal
+```
+
+It does three things, and the third is what makes the first two safe:
+
+1. **Skips the outward scrub entirely.** Not a per-pattern exception, not an
+   allowlist — the check does not run.
+2. **Stamps `destination: "internal"`** into `manifest.json`, and
+   `quipu:destination "internal"` into `manifest.ttl`. The exemption travels
+   with the bytes instead of living in the shell history of whoever produced
+   them.
+3. **Binds that stamp into `share_id`.** Unlike `attestation`, the field is
+   *not* stripped before the manifest is hashed. Deleting it to launder the
+   payload onward leaves a manifest that no longer hashes to the id it carries,
+   and every consumer's verification refuses it.
+
+There is no environment variable and no config setting. A share that says
+nothing is scrubbed, including every share produced over HTTP: `POST /share`
+cannot select a destination, because a caller who could would be turning the
+guard off on a server they do not own.
+
+**What the marker buys you downstream.** `quipu import` of a stamped share runs
+the scrub the producer skipped. If the payload passes it imports normally — a
+share marked internal out of caution is not quarantined for it. If the payload
+fails, the import is refused unless the operator repeats the declaration with
+`quipu import <dir> --destination internal`. So internal facts cannot enter a
+store silently and then leave it in someone else's outward share.
+
+**Deltas are scrubbed separately, and they have to be.** `delta.ru` is not built
+from the store: its DELETE clause is lifted verbatim from the parent's
+`export.nt`. An identifier retracted from the graph yesterday is still quoted in
+today's delta — and the parent is usually the very internal share that was
+allowed to carry it. A full outward share of the same store passes cleanly while
+that delta does not, which is exactly why the delta document gets its own check
+rather than riding on the result share's.
 
 `--parent-share` is what makes `quipu merge` possible later. A share without a
 parent cannot be three-way merged — `merge` refuses with *"incoming share has no
@@ -44,7 +94,8 @@ when you know it, rather than trying to reconstruct it at reconnect time.
 ## `quipu import` — receive a share, into quarantine
 
 ```text
-quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--db <path>]
+quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>]
+            [--destination internal] [--db <path>]
 quipu import delta <parent-share> <delta-share> [--actor <id>]
 ```
 

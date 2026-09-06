@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 #[cfg(not(target_arch = "wasm32"))]
 pub use crate::share_mint::{AttestOptions, ShareAttestation};
+pub use crate::share_scrub::ShareDestination;
+use crate::share_scrub::enforce_destination;
 use crate::store::Store;
 
 /// The graph slice written into a share.
@@ -95,6 +97,15 @@ pub struct ShareOptions {
     /// additive rather than a format break.
     #[cfg(not(target_arch = "wasm32"))]
     pub attest: Option<AttestOptions>,
+    /// Where this share is bound, and therefore whether the outward scrub runs
+    /// (aegis-auw0o7).
+    ///
+    /// Defaults to `Outward`, which is the whole safety property: a producer
+    /// that says nothing is scrubbed. `Internal` is an OPERATOR decision about
+    /// one destination, and it is stamped into the manifest so the exemption
+    /// travels with the bytes rather than living in the shell history of
+    /// whoever ran the command.
+    pub destination: ShareDestination,
 }
 
 /// Default upper bound for a payload-returning share response.
@@ -141,6 +152,14 @@ impl SharePayloadRequest {
             // to sign a share of their choosing (aegis-tadzdf).
             #[cfg(not(target_arch = "wasm32"))]
             attest: None,
+            // Not settable over HTTP, for the same reason as the two above and
+            // one sharper still: this field decides whether the outward scrub
+            // runs. A request that could set it would let any caller who can
+            // reach the server turn the guard off for a payload of their
+            // choosing, which is the opposite of an explicit operator decision
+            // (aegis-auw0o7). An internal share is produced at the machine that
+            // owns the store, with `quipu share --destination internal`.
+            destination: ShareDestination::Outward,
         }
     }
 
@@ -238,6 +257,21 @@ pub struct ShareManifest {
     /// default lives in exactly one place.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack_dir: Option<String>,
+    /// Recorded ONLY on a share produced with an explicit internal destination
+    /// (aegis-auw0o7); `None` means outward, which is every share ever produced
+    /// before this field existed.
+    ///
+    /// UNLIKE `attestation`, this is NOT stripped by `manifest_bytes`, so it is
+    /// part of `share_id`. That is the point: the marker cannot be edited out
+    /// to launder an internal payload onward, because deleting it makes the
+    /// manifest hash to something other than the id it carries and every
+    /// consumer's `verify_share` refuses. A marker a downstream can remove
+    /// records a preference; one bound into the identity records a fact.
+    ///
+    /// Skipped when `None` so an outward share is byte-identical to one
+    /// produced before this existed — the field is additive, not a format break.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destination: Option<ShareDestination>,
 }
 
 /// The directory name a share uses when its manifest does not say.
@@ -360,65 +394,6 @@ fn shapes_bytes(store: &Store, names: &[String], no_shapes: bool) -> Result<Vec<
     Ok(out.into_bytes())
 }
 
-fn outward_scrub_patterns(store: &Store) -> Result<Vec<(String, regex::Regex)>> {
-    const QUERY: &str = "PREFIX aegis: <http://aegis.gastown.local/ontology/> \
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-        SELECT ?label ?regex WHERE { \
-          ?rule a aegis:InternalIdentifierPattern ; \
-                rdfs:label ?label ; \
-                aegis:regex ?regex ; \
-                aegis:enforcementTier \"block\" . \
-        } ORDER BY ?label ?regex";
-    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(store, QUERY)?
-    else {
-        return Err(Error::Store(
-            "share scrub: InternalIdentifierPattern query did not return rows".into(),
-        ));
-    };
-    rows.into_iter()
-        .map(|row| {
-            let label = match row.get("label") {
-                Some(crate::types::Value::Str(value)) => value.clone(),
-                _ => {
-                    return Err(Error::Store(
-                        "share scrub: pattern has no string label".into(),
-                    ));
-                }
-            };
-            let Some(crate::types::Value::Str(source)) = row.get("regex") else {
-                return Err(Error::Store(format!(
-                    "share scrub: pattern {label:?} has no string regex"
-                )));
-            };
-            let compiled = regex::Regex::new(source).map_err(|error| {
-                Error::InvalidValue(format!(
-                    "share scrub: pattern {label:?} has invalid regex: {error}"
-                ))
-            })?;
-            Ok((label, compiled))
-        })
-        .collect()
-}
-
-fn scrub_outward_payload(store: &Store, files: &BTreeMap<String, String>) -> Result<()> {
-    for (label, pattern) in outward_scrub_patterns(store)? {
-        for (name, contents) in files {
-            if name == "manifest.json" {
-                continue;
-            }
-            if let Some(hit) = pattern.find(contents) {
-                return Err(Error::PolicyDenied(format!(
-                    "share scrub refused {name}: InternalIdentifierPattern {label:?} matched bytes {}..{}; \
-                     identifiers are entity identity and are never rewritten at this boundary",
-                    hit.start(),
-                    hit.end()
-                )));
-            }
-        }
-    }
-    Ok(())
-}
-
 fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
     let graph = canonicalize_ntriples(&export_scope(
         store,
@@ -468,6 +443,11 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
             turtle_view: turtle.as_ref().map(|_| "export.ttl".to_string()),
         },
         pack_dir: opts.pack_dir.clone(),
+        // Stamped BEFORE share_id is computed, because it is part of the id.
+        destination: opts
+            .destination
+            .is_internal()
+            .then_some(ShareDestination::Internal),
     };
     manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
     // MINTED AFTER share_id EXISTS, because the envelope signs it. The field is
@@ -502,7 +482,7 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
                 .map_err(|e| Error::Serialization(format!("share Turtle UTF-8: {e}")))?,
         );
     }
-    scrub_outward_payload(store, &files)?;
+    enforce_destination(store, &files, opts.destination, "share scrub")?;
     Ok(SharePayload { manifest, files })
 }
 
@@ -515,6 +495,14 @@ fn manifest_turtle(manifest: &ShareManifest) -> String {
         .map_or_else(String::new, |parent| {
             format!(" ;\n  prov:wasRevisionOf <urn:{parent}>")
         });
+    // Emitted only when set, so an outward manifest.ttl is byte-identical to
+    // one produced before this field existed. A reader of the RDF view sees the
+    // same marker as a reader of the JSON — the exemption must not be visible
+    // in only one of the two representations a consumer might read.
+    let destination = match manifest.destination {
+        Some(ShareDestination::Internal) => " ;\n  quipu:destination \"internal\"",
+        _ => "",
+    };
     format!(
         r#"@prefix dcat: <http://www.w3.org/ns/dcat#> .
 @prefix dct: <http://purl.org/dc/terms/> .
@@ -527,7 +515,7 @@ fn manifest_turtle(manifest: &ShareManifest) -> String {
   dct:identifier {} ;
   prov:generatedAtTime {}^^xsd:dateTime ;
   prov:wasAttributedTo [ a prov:SoftwareAgent ;
-    dct:title {} ; quipu:version {} ]{parent} ;
+    dct:title {} ; quipu:version {} ]{parent}{destination} ;
   dcat:distribution [ a dcat:Distribution ;
     dcat:mediaType "application/n-triples" ;
     dcat:downloadURL <payload:export.nt> ;

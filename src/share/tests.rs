@@ -401,3 +401,148 @@ fn a_manifest_without_pack_dir_still_deserializes() {
     assert_eq!(back.pack_dir, None);
     assert_eq!(back.pack_dir_or_default(), "qpack");
 }
+
+/// A store carrying a block-tier rule and one fact that violates it.
+///
+/// `private.example` stands in for the RFC1918 address in an ordinary
+/// `rdfs:comment` that aegis-auw0o7 was raised for: a value that is entity
+/// identity, correct where it lives, and unpublishable outward.
+fn store_with_internal_identifier() -> Store {
+    let mut store = fixture();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+<urn:leak> <urn:p> "private.example" .
+"#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-29T00:00:01Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store
+}
+
+fn internal_opts() -> ShareOptions {
+    ShareOptions {
+        destination: ShareDestination::Internal,
+        ..Default::default()
+    }
+}
+
+/// ARM ONE of the aegis-auw0o7 pair: the internal share is produced.
+#[test]
+fn internal_destination_shares_the_identifier_and_stamps_the_manifest() {
+    let store = store_with_internal_identifier();
+    let root = tempfile::tempdir().unwrap();
+    let out = root.path().join("internal");
+    let manifest = share(&store, out.to_str().unwrap(), &internal_opts()).unwrap();
+
+    assert_eq!(manifest.destination, Some(ShareDestination::Internal));
+    let export = std::fs::read_to_string(out.join("export.nt")).unwrap();
+    assert!(
+        export.contains("private.example"),
+        "an internal share carries the identifier verbatim; rewriting it would \
+         change entity identity, which is what the scrub refuses to do"
+    );
+    // The marker is legible in BOTH representations a consumer might read.
+    let json = std::fs::read_to_string(out.join("manifest.json")).unwrap();
+    assert!(json.contains("\"destination\":\"internal\""), "{json}");
+    let turtle = std::fs::read_to_string(out.join("manifest.ttl")).unwrap();
+    assert!(
+        turtle.contains("quipu:destination \"internal\""),
+        "{turtle}"
+    );
+}
+
+/// ARM TWO: the SAME store, shared outward, is still refused — and the refusal
+/// names the flag, so a reader is not left hunting for an undocumented escape.
+#[test]
+fn the_same_store_shared_outward_is_refused_and_the_message_names_the_flag() {
+    let store = store_with_internal_identifier();
+    let root = tempfile::tempdir().unwrap();
+    let out = root.path().join("refused");
+    let error = share(&store, out.to_str().unwrap(), &ShareOptions::default()).unwrap_err();
+
+    assert!(error.to_string().contains("private host"), "{error}");
+    assert!(
+        error.to_string().contains("--destination internal"),
+        "the refusal must name the flag: {error}"
+    );
+    assert!(!error.to_string().contains("private.example"));
+    assert!(!out.exists(), "a refused share left a partial directory");
+}
+
+/// The marker cannot be edited out of a share to launder it onward.
+///
+/// This is why `destination` is inside `share_id` while `attestation` is not.
+/// A field stripped by `manifest_bytes` could be deleted downstream and the
+/// manifest would still verify — the marker would record a preference. Bound
+/// into the id, deleting it makes the manifest hash to something other than
+/// the id it carries, and every consumer's `verify_share` refuses.
+#[test]
+fn stripping_the_internal_marker_breaks_the_share_id() {
+    let store = store_with_internal_identifier();
+    let root = tempfile::tempdir().unwrap();
+    let out = root.path().join("internal");
+    let manifest = share(&store, out.to_str().unwrap(), &internal_opts()).unwrap();
+
+    let mut laundered = manifest.clone();
+    laundered.destination = None;
+    assert_ne!(
+        sha256(&manifest_bytes(&laundered, false).unwrap()),
+        manifest.share_id,
+        "removing the marker must not leave a manifest that still hashes to its id"
+    );
+
+    // ...and the consumer-side check is the one that actually refuses.
+    let request = crate::share_transport::read_local(out.to_str().unwrap()).unwrap();
+    let mut tampered = request.clone();
+    tampered.manifest.destination = None;
+    let error = crate::share_import::verify_share(&tampered).unwrap_err();
+    assert!(error.to_string().contains("share id mismatch"), "{error}");
+    // CONTROL: the untampered share verifies, so the refusal above is the
+    // edit and not some unrelated defect in the fixture.
+    crate::share_import::verify_share(&request).unwrap();
+}
+
+/// An outward share is byte-identical to one produced before this field
+/// existed: the field is additive, not a format break.
+///
+/// Asserted as the ABSENCE OF THE KEY rather than against a recorded hash,
+/// because the key's absence is the mechanism — `skip_serializing_if` is what
+/// keeps every `share_id` ever minted still correct.
+#[test]
+fn an_outward_share_carries_no_destination_key_at_all() {
+    let store = fixture();
+    let payload = share_payload(&store, &ShareOptions::default(), SHARE_PAYLOAD_MAX_BYTES).unwrap();
+    assert_eq!(payload.manifest.destination, None);
+    assert!(
+        !payload.files["manifest.json"].contains("destination"),
+        "{}",
+        payload.files["manifest.json"]
+    );
+    assert!(!payload.files["manifest.ttl"].contains("destination"));
+}
+
+/// HTTP callers cannot ask for the exemption.
+///
+/// The producer-side twin of the `#[serde(skip)]` on the import request: a
+/// remote caller who could set this would be turning the outward guard off for
+/// a payload of their choosing, on a server they do not own.
+#[test]
+fn the_http_request_cannot_select_an_internal_destination() {
+    let request: SharePayloadRequest =
+        serde_json::from_str(r#"{"destination":"internal"}"#).unwrap();
+    assert_eq!(request.options().destination, ShareDestination::Outward);
+
+    let store = store_with_internal_identifier();
+    let error = share_payload(&store, &request.options(), SHARE_PAYLOAD_MAX_BYTES).unwrap_err();
+    assert!(error.to_string().contains("private host"), "{error}");
+}

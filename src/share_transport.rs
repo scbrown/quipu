@@ -51,6 +51,7 @@ fn request_from_files(
         source: source.to_string(),
         actor: None,
         accept_exact: false,
+        destination: crate::share_scrub::ShareDestination::default(),
     })
 }
 
