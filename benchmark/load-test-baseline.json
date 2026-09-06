@@ -8,6 +8,7 @@
     "max_error_rate": 0.0,
     "max_p99_ms": {
       "episode": 2000.0,
+      "query_ask_unbounded": 1000.0,
       "query_bounded": 1000.0,
       "query_full_scan": 3000.0,
       "query_inferred_type": 3000.0,
