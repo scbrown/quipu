@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.42] - 2026-09-06
+
+### Added
+
+- *(owl)* Implement owl:sameAs — asserted identities stop being inert([787b0b6](https://github.com/scbrown/quipu/commit/787b0b6747231bfdf8f383c29c83a377a5647ff7))
+
+### Fixed
+
+- *(owl)* Backtick ABox so clippy doc_markdown is green([0e31c7d](https://github.com/scbrown/quipu/commit/0e31c7d6e96c0415bfa7137a73aa7c5a16086796))
+- *(owl)* Reactive materialisation must fire for an owl:sameAs write([409e675](https://github.com/scbrown/quipu/commit/409e6756f4407ccffd8cd352f25f19c9b2f01ba6))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers on this head([2502ca4](https://github.com/scbrown/quipu/commit/2502ca402400552ce4890c99e2f9d8bf3228e777))
+- *(conformance)* Re-derive the ledgers on the merged head([b3d7fc4](https://github.com/scbrown/quipu/commit/b3d7fc445354f705745f7eac9a1c569624452575))
+- *(conformance)* Re-derive the ledgers on the merged head([06986b0](https://github.com/scbrown/quipu/commit/06986b038c6af8febacb1cbcbc061c3b48d24bd2))
+- *(conformance)* Re-derive ledgers and page on bd8a03f([dced6c1](https://github.com/scbrown/quipu/commit/dced6c102b4af0a33ae067183a9e4e03ce0c6697))
+
+### Testing
+
+- *(owl)* Give the equivalence fixture a store-resident-premise arm([34ea7c3](https://github.com/scbrown/quipu/commit/34ea7c321e6d219aac6c93031617658a3ce83bed))
+- *(owl)* Condition 2 — make the fixpoint fixture SAY something about sameAs([2c31b0f](https://github.com/scbrown/quipu/commit/2c31b0ffcb5e85a5a656054cb0cc3c444ee85cbe))
+
 ## [0.3.41] - 2026-09-06
 
 ### Added
