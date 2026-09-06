@@ -402,3 +402,114 @@ fn the_same_delta_declared_internal_is_written() {
         "the internal delta carries the retraction verbatim"
     );
 }
+
+/// THE TRIPWIRE FOR THE NEXT FILE A DELTA LEARNS TO WRITE (aegis-auw0o7).
+///
+/// `delta.ru` went unscrubbed for the whole life of the delta format, and for a
+/// structural reason that will recur: the scrub lives with the SHARE producer,
+/// so a file the DELTA producer adds is outside it by default. A behavioural
+/// test for `delta.ru` proves that one file is covered and says nothing about
+/// the next one.
+///
+/// So this asserts the SET, then proves each payload file is covered
+/// INDIVIDUALLY — poisoning exactly one at a time, against a store whose own
+/// graph is clean, and requiring the refusal to NAME that file.
+///
+/// Both of those disciplines were added because the first version had neither.
+/// It poisoned everything at once and asserted only that the build refused;
+/// with the `delta.ru` scrub deleted it stayed GREEN, because the poisoned
+/// `shapes.ttl` refused first through the share producer's own check, and a
+/// poisoned graph would have refused on `export.nt` before either. An audit
+/// that passes in both worlds reads like coverage and measures something
+/// weaker.
+#[test]
+fn every_file_a_delta_writes_is_either_a_manifest_or_individually_scrubbed() {
+    // A store that knows the RULE and does not violate it, so `export.nt` can
+    // never be what refuses and each arm below is isolated to one file.
+    let mut clean = crate::Store::open_in_memory().unwrap();
+    crate::rdf::ingest_rdf(
+        &mut clean,
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+"#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-09-06T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+
+    // A PARENT that carried the identifier — the internal share, in the shape
+    // that produced this defect. Retracted from the store, still quoted in the
+    // update document the delta builds from it.
+    const POISONED_PARENT: &str = "<urn:leak> <urn:p> \"private.example\" .\n";
+
+    let delta = |parent_export: &str, no_shapes: bool, destination| {
+        crate::share_delta::build_delta(
+            &clean,
+            "sha256:0",
+            "sha256:0",
+            parent_export,
+            &ShareOptions {
+                no_shapes,
+                destination,
+                ..ShareOptions::default()
+            },
+        )
+    };
+    use crate::share::ShareDestination::{Internal, Outward};
+
+    // ---- the SET ----------------------------------------------------------
+    let built = delta(POISONED_PARENT, true, Internal).unwrap();
+    let names: Vec<String> = built
+        .files()
+        .unwrap()
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(
+        names,
+        vec!["manifest.json", "manifest.ttl", "delta.ru", "shapes.ttl"],
+        "a delta writes a file this audit does not know about. Decide here \
+         whether it can carry graph content outward: if it can, it must reach \
+         `enforce_destination`; if it cannot, add it to this list and say why."
+    );
+
+    // ---- delta.ru, ALONE --------------------------------------------------
+    // Shapes off, graph clean: the update document is the only file that can
+    // carry the identifier.
+    assert!(
+        built.update.contains("private.example"),
+        "the update must carry the identifier or the arm below is vacuous"
+    );
+    // CONTROL: with a clean parent this same call succeeds outward, so the
+    // refusal is the parent's content and not the fixture.
+    delta("", true, Outward).unwrap();
+    let error = delta(POISONED_PARENT, true, Outward).unwrap_err();
+    assert!(
+        error.to_string().contains("refused delta.ru"),
+        "delta.ru must be scrubbed on its own account: {error}"
+    );
+
+    // ---- shapes.ttl, ALONE ------------------------------------------------
+    clean
+        .load_shapes(
+            "poisoned-shapes",
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n# private.example\n",
+            "2026-09-06",
+        )
+        .unwrap();
+    // CONTROL: shapes omitted, clean parent — succeeds, so the refusal below
+    // is the shape text alone.
+    delta("", true, Outward).unwrap();
+    let error = delta("", false, Outward).unwrap_err();
+    assert!(
+        error.to_string().contains("refused shapes.ttl"),
+        "shapes.ttl must be scrubbed on its own account: {error}"
+    );
+}
