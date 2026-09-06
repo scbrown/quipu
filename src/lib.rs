@@ -67,6 +67,7 @@ pub mod share;
 // (aegis-8fdp8d).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
+pub mod share_completeness;
 pub mod share_delta;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
