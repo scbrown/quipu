@@ -310,10 +310,11 @@ COMMANDS:
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-share>] [--turtle]
+    quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     quipu attest list [--db <path>]
-    quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--db <path>]
+    quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
     quipu import delta <parent-share> <delta-share> [--actor <id>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
     quipu align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]

@@ -1,6 +1,6 @@
 //! Parent-bound SPARQL Update deltas for portable shares.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
@@ -243,6 +243,16 @@ pub fn build_delta_with_limit(
         },
     };
     manifest.delta_id = sha256(&manifest_bytes(&manifest, false)?);
+    // THE DELTA DOCUMENT IS SCRUBBED SEPARATELY, and it has to be (aegis-auw0o7).
+    // `share_payload` above scrubbed the RESULT share — the store as it is now.
+    // `delta.ru` is not built from the store: its DELETE clause is lifted from
+    // the PARENT's `export.nt`, so a triple that has since been retracted is
+    // still quoted verbatim in the document. An internal identifier removed
+    // from the graph yesterday therefore rides outward in today's delta,
+    // through a result share that scrubs perfectly clean. The parent is
+    // usually the very share that was allowed to carry it.
+    let files = BTreeMap::from([("delta.ru".to_string(), update.clone())]);
+    crate::share_scrub::enforce_destination(store, &files, opts.destination, "delta scrub")?;
     Ok(DeltaPayload {
         manifest,
         update,
@@ -382,6 +392,7 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
         source: delta_dir.into(),
         actor: None,
         accept_exact: false,
+        destination: crate::share_scrub::ShareDestination::default(),
     })
 }
 

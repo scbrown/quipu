@@ -44,6 +44,7 @@ fn real_share(store: &Store) -> (tempfile::TempDir, ShareImportRequest) {
         source: "https://example.org/producer/share".into(),
         actor: Some("alice".into()),
         accept_exact: false,
+        destination: Default::default(),
         attestation: None,
     };
     (dir, request)
@@ -270,6 +271,7 @@ fn attested_share(store: &Store, dir: &std::path::Path) -> ShareImportRequest {
         source: "https://example.org/producer/share".into(),
         actor: Some("alice".into()),
         accept_exact: false,
+        destination: Default::default(),
         attestation: Some(envelope),
     }
 }

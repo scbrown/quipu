@@ -140,7 +140,7 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         eprintln!(
             "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
              --construct <query>] [--shapes <name>]... [--no-shapes] \
-             [--parent-share <sha256:id>] [--turtle]"
+             [--parent-share <sha256:id>] [--turtle] [--destination internal]"
         );
         std::process::exit(1);
     });
@@ -183,6 +183,7 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         // never asserts a repository layout nobody configured.
         pack_dir: flag_value(args, "--pack-dir").map(String::from),
         attest: attest_options(args),
+        destination: destination_flag(args),
     };
     let store = crate::cli_open::open_store(db_path);
     if let Some(parent) = flag_value(args, "--since") {
@@ -313,7 +314,10 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         .get(2)
         .filter(|s| !s.starts_with("--"))
         .unwrap_or_else(|| {
-            eprintln!("usage: quipu import <share-dir|archive|URL> [--actor <id>] [--db <path>]");
+            eprintln!(
+                "usage: quipu import <share-dir|archive|URL> [--actor <id>] \
+                 [--destination internal] [--db <path>]"
+            );
             std::process::exit(1);
         });
     let actor = flag_value(args, "--actor");
@@ -327,6 +331,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         let mut request = quipu::share_transport::read_local(reference);
         if let Ok(request) = &mut request {
             request.actor = actor.map(String::from);
+            request.destination = destination_flag(args);
             request.source = flag_value(args, "--source")
                 .unwrap_or(reference)
                 .to_string();
@@ -341,6 +346,25 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         Err(error) => {
             eprintln!("import error: {error}");
             std::process::exit(1);
+        }
+    }
+}
+
+/// Read `--destination`, defaulting to outward (aegis-auw0o7).
+///
+/// `outward` is accepted explicitly as well as by omission, so a script can say
+/// what it means; anything else EXITS rather than falling back. A typo such as
+/// `--destination interal` silently defaulting to outward would be the benign
+/// direction, but `--destination internal-only` silently defaulting to outward
+/// on a payload the operator believed exempt is a refusal they will read as the
+/// guard misfiring — and the fix they reach for is to look for a way round it.
+fn destination_flag(args: &[String]) -> quipu::share::ShareDestination {
+    match flag_value(args, "--destination") {
+        None | Some("outward") => quipu::share::ShareDestination::Outward,
+        Some("internal") => quipu::share::ShareDestination::Internal,
+        Some(other) => {
+            eprintln!("--destination must be `outward` or `internal`, got {other:?}");
+            std::process::exit(2);
         }
     }
 }

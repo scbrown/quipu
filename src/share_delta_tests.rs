@@ -270,3 +270,135 @@ fn embedded_delta_budget_does_not_raise_the_default_ceiling() {
             .contains("exceeding max_bytes")
     );
 }
+
+/// A store carrying a block-tier rule and one fact that violates it.
+fn leaky_store() -> crate::Store {
+    let mut store = crate::Store::open_in_memory().unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+<urn:leak> <urn:p> "private.example" .
+"#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-09-06T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store
+}
+
+/// A DELTA CAN CARRY OUTWARD WHAT THE STORE NO LONGER HOLDS (aegis-auw0o7).
+///
+/// The result share is built from the store and scrubs clean — the identifier
+/// was retracted. `delta.ru` is not built from the store: its DELETE clause is
+/// lifted verbatim from the PARENT's `export.nt`, and the parent here is the
+/// internal share that was allowed to carry it. So the one path where an
+/// internal share's contents legitimately reappear later is exactly the path
+/// the producer-side scrub cannot see, and this is the test that says so.
+#[test]
+fn an_outward_delta_from_an_internal_parent_is_refused_for_the_update_document() {
+    let temp = tempfile::tempdir().unwrap();
+    let parent = temp.path().join("parent");
+    let mut store = leaky_store();
+    crate::share::share(
+        &store,
+        parent.to_str().unwrap(),
+        &ShareOptions {
+            no_shapes: true,
+            destination: crate::share::ShareDestination::Internal,
+            ..ShareOptions::default()
+        },
+    )
+    .unwrap();
+
+    // The identifier leaves the store. Everything the store can still say
+    // about itself is now publishable.
+    let leak = store.lookup("urn:leak").unwrap().unwrap();
+    let (_, retracted) = store
+        .retract_entity(leak, None, "2026-09-06T00:00:01Z", None)
+        .unwrap();
+    assert_eq!(retracted, 1, "fixture must actually remove the fact");
+
+    // CONTROL, and it is the whole point of the test: a full outward share of
+    // this store SUCCEEDS. The defect is invisible to that check.
+    let clean = temp.path().join("clean");
+    crate::share::share(
+        &store,
+        clean.to_str().unwrap(),
+        &ShareOptions {
+            no_shapes: true,
+            ..ShareOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        !std::fs::read_to_string(clean.join("export.nt"))
+            .unwrap()
+            .contains("private.example")
+    );
+
+    // The delta over the same state is refused.
+    let out = temp.path().join("delta");
+    let error = crate::share_delta::write_delta(
+        &store,
+        parent.to_str().unwrap(),
+        out.to_str().unwrap(),
+        &opts(),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("delta scrub"), "{error}");
+    assert!(error.to_string().contains("delta.ru"), "{error}");
+    assert!(
+        error.to_string().contains("--destination internal"),
+        "the refusal must name the flag: {error}"
+    );
+    assert!(!out.exists(), "a refused delta left a directory behind");
+}
+
+/// The paired arm: the same delta, declared internal, is produced.
+#[test]
+fn the_same_delta_declared_internal_is_written() {
+    let temp = tempfile::tempdir().unwrap();
+    let parent = temp.path().join("parent");
+    let mut store = leaky_store();
+    crate::share::share(
+        &store,
+        parent.to_str().unwrap(),
+        &ShareOptions {
+            no_shapes: true,
+            destination: crate::share::ShareDestination::Internal,
+            ..ShareOptions::default()
+        },
+    )
+    .unwrap();
+    let leak = store.lookup("urn:leak").unwrap().unwrap();
+    store
+        .retract_entity(leak, None, "2026-09-06T00:00:01Z", None)
+        .unwrap();
+
+    let out = temp.path().join("delta");
+    crate::share_delta::write_delta(
+        &store,
+        parent.to_str().unwrap(),
+        out.to_str().unwrap(),
+        &ShareOptions {
+            no_shapes: true,
+            destination: crate::share::ShareDestination::Internal,
+            ..ShareOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        std::fs::read_to_string(out.join("delta.ru"))
+            .unwrap()
+            .contains("private.example"),
+        "the internal delta carries the retraction verbatim"
+    );
+}
