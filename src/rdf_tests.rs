@@ -708,6 +708,52 @@ _:node1 <http://example.org/label> "test" .
         assert!(err.to_string().contains("ROOT"), "{err}");
     }
 
+    /// ROOT BY ITS IRI IS STILL ROOT, and the id check above cannot see it.
+    ///
+    /// `graph_create("urn:quipu:graph:root")` interns a NEW named graph with a
+    /// nonzero id, so `a_declared_ingest_refuses_root` passes while this exact
+    /// call sails through. malcolm measured the consequence on 2026-09-05:
+    /// 641,803 facts in a named graph and a ROOT query returning 0, which reads
+    /// as a successful load of nothing.
+    ///
+    /// Asserts on the STORE as well as the error, because "refused" is a claim
+    /// about what was written: a refusal that still staged the data would satisfy
+    /// an error-only assertion.
+    #[test]
+    fn a_declared_ingest_refuses_root_by_its_iri_too() {
+        let mut store = Store::open_in_memory().unwrap();
+        let graph = store.graph_create(crate::schema::ROOT_GRAPH_IRI).unwrap();
+        assert_ne!(
+            graph,
+            crate::schema::ROOT_GRAPH,
+            "precondition: the root IRI must intern as a NON-root id, otherwise this \
+             test is exercising the id check and not the IRI one"
+        );
+        let before = live_fact_count(&store);
+        let err = ingest_rdf_declared(
+            &mut store,
+            TURTLE_DATA.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-04-04T00:00:00Z",
+            Some("test"),
+            None,
+            graph,
+            4,
+            &LoadDeclaration {
+                triples: turtle_triple_count(),
+                sha256: sha256_hex(TURTLE_DATA.as_bytes()),
+            },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("ROOT"), "{err}");
+        assert_eq!(
+            live_fact_count(&store),
+            before,
+            "a refusal must write nothing"
+        );
+    }
+
     /// The declared count is what the FIXTURE holds, measured rather than written
     /// down: a hardcoded number would make every arm above pass or fail for a
     /// reason that has nothing to do with the declaration logic.

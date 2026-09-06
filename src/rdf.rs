@@ -402,6 +402,28 @@ pub fn ingest_rdf_declared(
         ));
     }
     let graph_iri = store.resolve(graph)?;
+    // ROOT BY NAME IS STILL ROOT. The check above compares the numeric id, and a
+    // caller who passes ROOT's IRI never reaches it: `graph_create` interns
+    // "urn:quipu:graph:root" as a NEW named graph with a nonzero id, so the refusal
+    // that exists twenty lines up is walked straight past. malcolm measured this on
+    // 2026-09-05 -- 641,803 facts landed in a named graph while a root query
+    // returned 0, caught only by an anti-vacuity assert; without it an empty root
+    // reads as a successful load.
+    //
+    // The root IRI is the one string a caller is likeliest to pass MEANING root, so
+    // the guard has to cover the spelling as well as the id. Documenting the hole
+    // instead was the alternative, and a documented hole in a guard is how the
+    // guard stops meaning anything.
+    if graph_iri == crate::schema::ROOT_GRAPH_IRI {
+        return Err(Error::InvalidValue(format!(
+            "declared ingest refuses ROOT: a declaration describes one load window, \
+             and ROOT is the whole store -- its triple count is not the dataset's. \
+             (Passed as the IRI '{}', which registers a NAMED graph shadowing ROOT's \
+             own name rather than writing to ROOT -- so the load would appear to \
+             succeed while a ROOT-scoped query returned nothing.)",
+            crate::schema::ROOT_GRAPH_IRI
+        )));
+    }
     let subject = store.intern(&graph_iri)?;
     let a_count = store.intern(&format!("{INGEST_NS}declaredTriples"))?;
     let a_sha = store.intern(&format!("{INGEST_NS}sourceSha256"))?;
