@@ -5,6 +5,7 @@
 //! delegates knowledge graph operations to these handlers.
 
 pub mod align;
+pub mod entailment;
 #[cfg(feature = "owl")]
 pub mod explain;
 pub mod governance;
@@ -413,22 +414,6 @@ fn entailment_regime(input: &JsonValue) -> Result<Option<&str>> {
 ///
 /// Present only when a regime was requested, so — as with `inference` — the
 /// field's PRESENCE is the signal.
-fn add_entailment(out: &mut JsonValue, regime: Option<&str>, graphs: usize) {
-    let Some(regime) = regime else {
-        return;
-    };
-    if let Some(obj) = out.as_object_mut() {
-        obj.insert(
-            "entailment".to_string(),
-            serde_json::json!({
-                "regime": regime,
-                "composedGraphs": graphs,
-                "note": "answered over the RDF merge of the requested graph(s) and their companion inferred graph(s); the closure is materialised out of band, so these rows are as fresh as the last materialisation",
-            }),
-        );
-    }
-}
-
 fn add_inference(out: &mut JsonValue, withheld: &[rdfs::WithheldType]) {
     if withheld.is_empty() {
         return;
@@ -519,12 +504,22 @@ pub fn tool_query_with_federation(
     // Same input the dataset composition read, so the marker cannot claim a
     // regime the answer was not computed under.
     let regime = entailment_regime(input).unwrap_or(None);
-    let composed_graphs = match query_context(store, input) {
+    // The ids, not just their count: the freshness marker has to pair each base
+    // graph with its companion, and a bare length cannot name a stale one.
+    let composed_ids: Vec<i64> = match query_context(store, input) {
         Ok((_, ctx)) => match &ctx.graph {
-            sparql::GraphScope::Default(ids) => ids.len(),
-            _ => 0,
+            sparql::GraphScope::Default(ids) => ids.clone(),
+            _ => Vec::new(),
         },
-        Err(_) => 0,
+        Err(_) => Vec::new(),
+    };
+    let composed_graphs = composed_ids.len();
+    // Computed once, not per result arm: all three arms report the same answer
+    // over the same dataset, so a per-arm read could only introduce a skew.
+    let entail_lags = if regime.is_some() {
+        entailment::entailment_freshness(store, &composed_ids)
+    } else {
+        Vec::new()
     };
     // Computed from the SAME `query_context` the executor used, so the label
     // describes the dataset the query actually read. Held as a Result: a
@@ -571,7 +566,7 @@ pub fn tool_query_with_federation(
                 "truncated": truncated
             });
             add_inference(&mut out, &inferred);
-            add_entailment(&mut out, regime, composed_graphs);
+            entailment::add_entailment(&mut out, regime, composed_graphs, &entail_lags);
             add_labels(&mut out, &labeled);
             Ok(out)
         }
@@ -584,7 +579,7 @@ pub fn tool_query_with_federation(
             // the marker is the only thing that can distinguish the two worlds.
             let mut out = serde_json::json!({ "result": result });
             add_inference(&mut out, &inferred);
-            add_entailment(&mut out, regime, composed_graphs);
+            entailment::add_entailment(&mut out, regime, composed_graphs, &entail_lags);
             add_labels(&mut out, &labeled);
             Ok(out)
         }
@@ -609,7 +604,7 @@ pub fn tool_query_with_federation(
                 "truncated": truncated
             });
             add_inference(&mut out, &inferred);
-            add_entailment(&mut out, regime, composed_graphs);
+            entailment::add_entailment(&mut out, regime, composed_graphs, &entail_lags);
             add_labels(&mut out, &labeled);
             Ok(out)
         }
