@@ -414,6 +414,9 @@ mod tests {
             "server/tests.rs",
             "server/tools.rs",
             "server/update.rs",
+            // WAL reset + passive checkpoint maintenance (aegis-raq1ok): a
+            // startup call and a background tick, no routes.
+            "server/wal_maintenance.rs",
         ];
         let server_rs = include_str!("server.rs");
         let mut declared = Vec::new();

@@ -165,3 +165,55 @@ impl StoreHandle {
         }
     }
 }
+
+impl ReadPool {
+    /// Build the pool for a served store. Lives here rather than in `serve`
+    /// because the construction rules — when a pool must NOT be built, and what
+    /// a partial open means — are properties of the pool, not of startup.
+    pub(crate) fn open(db_path: &str, store: &quipu::Store, want: usize) -> Self {
+        if db_path == ":memory:" {
+            ReadPool::empty()
+        } else if store.has_vector_delegate() || store.has_local_vector_backend() {
+            // FAIL SAFE, not fail silent. The vector backends are boxed trait
+            // objects and are not `Clone`, so `adopt_read_config_from` cannot carry
+            // them onto a pooled reader — and `unified_search`, `ask`,
+            // `search_nodes` and `search_facts` are all pooled AND vector-backed.
+            // A pool built here would answer those from the built-in SQLite vectors
+            // table while the writer answered from the configured backend: same
+            // question, two answers, no error, decided by which connection happened
+            // to take the request.
+            //
+            // Not reachable in this deployment — the REST server configures neither
+            // backend today (`lancedb: false`) — which is exactly why it needs to be
+            // a guard rather than a note. Whoever turns LanceDB on will not be
+            // thinking about the read pool.
+            eprintln!(
+                "read pool: DISABLED — a vector delegate/local backend is configured and \
+                 cannot be shared with read-only connections. Serving reads from the writer \
+                 rather than answering vector search two different ways."
+            );
+            ReadPool::empty()
+        } else {
+            let mut conns = Vec::with_capacity(want);
+            for i in 0..want {
+                match quipu::Store::open_read_only(&db_path) {
+                    Ok(mut r) => {
+                        r.adopt_read_config_from(store);
+                        conns.push(FairMutex::new(r));
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "warning: read connection {i} of {want} failed to open ({e}) — \
+                             continuing with {i}; reads fall back to the writer when the pool is empty"
+                        );
+                        break;
+                    }
+                }
+            }
+            ReadPool {
+                conns,
+                next: std::sync::atomic::AtomicUsize::new(0),
+            }
+        }
+    }
+}

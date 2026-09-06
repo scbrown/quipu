@@ -40,7 +40,7 @@ fn client_cardinality_is_capped_and_overflow_is_visible() {
     for i in 0..(MAX_CLIENTS * 4) {
         m.observe_client(&format!("caller{i}"), "unattributed", "/query", 0.1);
     }
-    let text = m.render(0, 0, 0);
+    let text = m.render(0, 0, 0, None);
     let clients: BTreeSet<&str> = text
         .lines()
         .filter(|l| l.starts_with("quipu_http_client_requests_total"))
@@ -79,7 +79,7 @@ fn client_cap_counts_clients_not_client_endpoint_pairs() {
     m.observe_client("new-caller", "unattributed", "/query", 0.1);
     m.observe_store_time("new-caller", "/query", 0.0, 0.1);
 
-    let text = m.render(0, 0, 0);
+    let text = m.render(0, 0, 0, None);
     assert!(text.contains(
             "quipu_http_client_requests_total{client=\"new-caller\",task=\"unattributed\",endpoint=\"/query\"} 1"
         ));
@@ -99,7 +99,7 @@ fn task_cardinality_is_independent_capped_and_overflow_is_visible() {
     for i in 0..(MAX_TASKS * 2) {
         m.observe_client("query-first", &format!("aegis-{i}"), "/query", 0.1);
     }
-    let text = m.render(0, 0, 0);
+    let text = m.render(0, 0, 0, None);
     let tasks: BTreeSet<&str> = text
         .lines()
         .filter(|l| l.starts_with("quipu_http_client_requests_total"))
@@ -125,7 +125,7 @@ fn store_time_separates_waiting_from_burning() {
     m.observe_store_time("ma5er-probe", "/query", 2.0, 0.15);
     m.observe_store_time("ma5er-probe", "/query", 2.0, 0.15);
     m.observe_store_time("bulk-writer", "/query", 0.0, 4.0);
-    let text = m.render(0, 0, 0);
+    let text = m.render(0, 0, 0, None);
 
     assert!(
         text.contains(
@@ -176,7 +176,7 @@ fn client_time_attribution_sums_and_start_time_is_absent_until_recorded() {
     m.observe_client("hank", "aegis-3aybc", "/query", 2.0);
     m.observe_client("hank", "aegis-3aybc", "/query", 3.0);
     m.observe_client("bobbin", "unattributed", "/query", 1.0);
-    let text = m.render(0, 0, 0);
+    let text = m.render(0, 0, 0, None);
     assert!(
             text.contains(
                 "quipu_http_client_requests_total{client=\"hank\",task=\"aegis-3aybc\",endpoint=\"/query\"} 2"
@@ -200,7 +200,7 @@ fn counters_histogram_and_gauges_render_in_exposition_format() {
     m.observe_request("/knot", 400, 0.004);
     m.observe_policy_outcome("satisfied");
     m.observe_policy_outcome("unknown");
-    let text = m.render(10, 200, 7);
+    let text = m.render(10, 200, 7, None);
 
     assert!(text.contains("quipu_http_requests_total{endpoint=\"/query\",status=\"200\"} 2"));
     assert!(text.contains("quipu_http_requests_total{endpoint=\"/knot\",status=\"400\"} 1"));
@@ -232,7 +232,7 @@ fn counters_histogram_and_gauges_render_in_exposition_format() {
 fn label_values_are_escaped() {
     let m = Metrics::default();
     m.observe_request("/od\"d\\path", 200, 0.01);
-    let text = m.render(0, 0, 0);
+    let text = m.render(0, 0, 0, None);
     assert!(text.contains("endpoint=\"/od\\\"d\\\\path\""));
 }
 
@@ -241,7 +241,7 @@ fn memory_metrics_render_and_count_writes() {
     let m = Metrics::default();
     m.observe_write(5);
     m.observe_write(3);
-    let text = m.render(0, 0, 0);
+    let text = m.render(0, 0, 0, None);
     assert!(text.contains("quipu_facts_written_total 8"));
     assert!(text.contains("process_resident_memory_bytes"));
     assert!(text.contains("process_virtual_memory_bytes"));
