@@ -20,6 +20,8 @@ pub const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
 pub const PROV: &str = "http://www.w3.org/ns/prov#";
 pub const SHACL: &str = "http://www.w3.org/ns/shacl#";
 pub const OWL: &str = "http://www.w3.org/2002/07/owl#";
+/// `owl:sameAs` — asserted identity between two individuals.
+pub const OWL_SAME_AS: &str = "http://www.w3.org/2002/07/owl#sameAs";
 pub const SKOS: &str = "http://www.w3.org/2004/02/skos/core#";
 
 // ── Bobbin namespace ──────────────────────────────────────────

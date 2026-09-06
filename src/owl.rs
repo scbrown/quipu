@@ -100,6 +100,11 @@ pub struct MaterializeReport {
     pub equivalent_class_inferences: usize,
     /// Domain/range type inferences.
     pub domain_range_inferences: usize,
+    /// `owl:sameAs` inferences: identity closure plus subject/object rewrites.
+    ///
+    /// Predicate rewrites (OWL 2 RL `eq-rep-p`) are NOT counted here because
+    /// they are not derived — see `same_as_unrewritten_predicates`.
+    pub same_as_inferences: usize,
     /// Total new facts materialized.
     pub total: usize,
     /// Derivation passes actually run (aegis-2dp8e2).
