@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::share::{ShareManifest, manifest_bytes, sha256};
+use crate::share_scrub::ShareDestination;
 use crate::store::Store;
 
 const SCHEMA_V1: &str = "https://github.com/scbrown/quipu/share-manifest/v1";
@@ -45,6 +46,16 @@ pub struct ShareImportRequest {
     /// checked and the AUTHOR was not.
     #[serde(default)]
     pub attestation: Option<crate::session_attestation::AttestationEnvelope>,
+    /// The destination the OPERATOR declares for this import (aegis-auw0o7) —
+    /// not the one the incoming manifest claims.
+    ///
+    /// `#[serde(skip)]`, so it is unreachable from the wire and every remote
+    /// caller is treated as outward-bound. The field exists to let the local
+    /// CLI say `--destination internal`; if a request could carry it, the gate
+    /// below would be one an untrusted caller could switch off, which is the
+    /// same hole the producer side refuses to open.
+    #[serde(skip)]
+    pub destination: crate::share_scrub::ShareDestination,
 }
 
 /// Count split between admitted and quarantined triples.
@@ -361,6 +372,38 @@ pub fn import_share(
     // mismatch; attesting bytes that do not hash to what the manifest claims would
     // be signing the wrong thing.
     verify_share(request)?;
+    // THEN THE DESTINATION MARKER THE SHARE CARRIES, still before anything is
+    // staged (aegis-auw0o7). A share stamped `internal` was produced with the
+    // outward scrub skipped, so importing it here is the moment that exemption
+    // would be forgotten: the triples land in a store from which someone else
+    // will later produce a share, and nothing downstream remembers where they
+    // came from.
+    //
+    // The gate is NOT a blanket refusal, and the difference matters. It runs
+    // the scrub the producer skipped and refuses only if the payload actually
+    // fails it. A share marked internal out of caution, carrying nothing an
+    // outward share could not carry, imports normally — the marker is checked
+    // against the bytes rather than believed.
+    //
+    // The manifest is checked AFTER `verify_share`, never before: the marker is
+    // inside the hash, so it means nothing until the bytes are known to hash to
+    // the id they claim.
+    if request
+        .manifest
+        .destination
+        .is_some_and(ShareDestination::is_internal)
+        && !request.destination.is_internal()
+    {
+        let files = BTreeMap::from([
+            ("export.nt".to_string(), request.export_ntriples.clone()),
+            ("shapes.ttl".to_string(), request.shapes_turtle.clone()),
+        ]);
+        crate::share_scrub::scrub_outward_payload(
+            store,
+            &files,
+            "import of a share marked destination=internal",
+        )?;
+    }
     // THEN who produced it, BEFORE anything is staged. A tampered, replayed, or
     // unbound envelope must fail here rather than after the graph exists — the
     // whole point of a pre-staging check is that a refusal leaves nothing behind.

@@ -24,6 +24,7 @@ mod tests {
             source: "https://example.org/alice/share".into(),
             actor: Some("alice".into()),
             accept_exact: false,
+            destination: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             attestation: None,
         };
@@ -193,5 +194,155 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// A store that both carries the block-tier rule and violates it.
+    fn leaky_store() -> Store {
+        let mut store = Store::open_in_memory().unwrap();
+        crate::rdf::ingest_rdf(
+            &mut store,
+            &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+<urn:leak> <urn:p> "private.example" .
+"#[..],
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+        store
+    }
+
+    /// Build an import request from a share of `source`, produced internally.
+    fn internal_request(source: &Store) -> (tempfile::TempDir, ShareImportRequest) {
+        let dir = tempfile::tempdir().unwrap();
+        let share_dir = dir.path().join("share");
+        crate::share::share(
+            source,
+            share_dir.to_str().unwrap(),
+            &crate::share::ShareOptions {
+                no_shapes: true,
+                destination: crate::share::ShareDestination::Internal,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let request = crate::share_transport::read_local(share_dir.to_str().unwrap()).unwrap();
+        assert_eq!(
+            request.manifest.destination,
+            Some(crate::share::ShareDestination::Internal),
+            "fixture must produce a stamped share, or the gate under test is untested"
+        );
+        (dir, request)
+    }
+
+    /// The marker travels: an internal share does not import silently into a
+    /// store that would later publish it (aegis-auw0o7).
+    #[test]
+    fn importing_an_internal_share_is_refused_unless_the_operator_declares_internal() {
+        let (_dir, request) = internal_request(&leaky_store());
+        let mut store = leaky_store();
+
+        let error = import_share(&mut store, &request, TS, None).unwrap_err();
+        assert!(error.to_string().contains("private host"), "{error}");
+        assert!(
+            error.to_string().contains("destination=internal"),
+            "the refusal must say WHY this share was checked: {error}"
+        );
+        assert!(
+            error.to_string().contains("--destination internal"),
+            "the refusal must name the flag: {error}"
+        );
+        // A refusal before staging leaves nothing behind.
+        assert!(
+            store.lookup(&request.manifest.share_id).unwrap().is_none(),
+            "a refused import staged a graph"
+        );
+
+        // The paired arm: the same bytes, with the operator declaring internal.
+        let mut declared = request.clone();
+        declared.destination = crate::share::ShareDestination::Internal;
+        let result = import_share(&mut store, &declared, TS, None).unwrap();
+        assert_eq!(result.share_id, request.manifest.share_id);
+    }
+
+    /// The gate checks the BYTES, not the marker.
+    ///
+    /// A share stamped internal out of caution, carrying nothing an outward
+    /// share could not carry, imports normally. Refusing it would make the flag
+    /// a quarantine rather than a scrub exemption, and would push producers
+    /// toward not stamping at all — which is the one outcome that loses the
+    /// marker entirely.
+    #[test]
+    fn an_internal_share_whose_payload_is_clean_imports_without_the_flag() {
+        let mut clean = Store::open_in_memory().unwrap();
+        crate::rdf::ingest_rdf(
+            &mut clean,
+            &b"<urn:ok> <urn:p> \"nothing internal here\" .\n"[..],
+            RdfFormat::NTriples,
+            None,
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+        let (_dir, request) = internal_request(&clean);
+
+        let mut store = leaky_store();
+        let result = import_share(&mut store, &request, TS, None).unwrap();
+        assert_eq!(result.share_id, request.manifest.share_id);
+    }
+
+    /// CONTROL for the pair above: an UNSTAMPED share of the same leaky store
+    /// imports without the flag.
+    ///
+    /// Without this, both tests above would pass if the gate refused every
+    /// import that happened to contain the pattern — which is a different and
+    /// much broader rule than the one that was ratified. The gate fires on the
+    /// MARKER; the scrub is what it does once it has fired.
+    #[test]
+    fn an_unstamped_share_is_not_checked_even_when_it_carries_the_pattern() {
+        let source = leaky_store();
+        let dir = tempfile::tempdir().unwrap();
+        let share_dir = dir.path().join("share");
+        // Produced outward would be refused, so write the payload by hand with
+        // no marker: this is precisely the pre-auw0o7 share, and the shape a
+        // laundering attempt would take.
+        let payload = crate::share::share_payload(
+            &source,
+            &crate::share::ShareOptions {
+                no_shapes: true,
+                destination: crate::share::ShareDestination::Internal,
+                ..Default::default()
+            },
+            crate::share::SHARE_PAYLOAD_MAX_BYTES,
+        )
+        .unwrap();
+        std::fs::create_dir_all(&share_dir).unwrap();
+        let mut manifest = payload.manifest.clone();
+        manifest.destination = None;
+        // Re-derive the id, as a laundering producer would have to: the marker
+        // is inside the hash, so it cannot merely be deleted.
+        manifest.share_id =
+            crate::share::sha256(&crate::share::manifest_bytes(&manifest, false).unwrap());
+        std::fs::write(
+            share_dir.join("manifest.json"),
+            crate::share::manifest_bytes(&manifest, true).unwrap(),
+        )
+        .unwrap();
+        for name in ["export.nt", "shapes.ttl"] {
+            std::fs::write(share_dir.join(name), &payload.files[name]).unwrap();
+        }
+
+        let request = crate::share_transport::read_local(share_dir.to_str().unwrap()).unwrap();
+        assert_eq!(request.manifest.destination, None);
+        let mut store = leaky_store();
+        import_share(&mut store, &request, TS, None).unwrap();
     }
 }
