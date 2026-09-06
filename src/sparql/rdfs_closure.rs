@@ -47,51 +47,51 @@
 //! Iterated to a fixed point, because rdfs2/rdfs3 produce types that rdfs9 then
 //! closes, and rdfs7 produces triples that rdfs2/rdfs3 then read.
 //!
-//! # Literal-valued premises: rdfs2 fires, rdfs7 does not yet
+//! # Literal-valued premises
 //!
-//! `load()` keeps only `Value::Ref` objects, so an IRI-only working set is all
-//! the fixed point sees. For the CONCLUSIONS of rdfs3 and rdfs9 that is correct
-//! — a literal cannot be typed and cannot be a class. But rdfs2 and rdfs7 take
-//! such triples as PREMISES, and both hold there:
+//! Both rules that take a literal-valued triple as a PREMISE now fire over one
+//! (aegis-x9bmhf):
 //!
 //! ```text
 //! ex:a ex:name "n" .  + ex:name rdfs:domain ex:Person  |= ex:a rdf:type ex:Person   (rdfs2)
 //! ex:a ex:b1   "n" .  + ex:b1 rdfs:subPropertyOf ex:b2 |= ex:a ex:b2 "n"            (rdfs7)
 //! ```
 //!
-//! **rdfs2 now fires** (aegis-x9bmhf). Its conclusion types the SUBJECT and is
-//! therefore all-IRI, so it needs only the `(s, p)` pairs of literal-valued
-//! triples — see [`load_literal_premises`]. Derivations from them are ordinary
-//! members of the fixed point: a type derived this way closes under rdfs9 like
-//! any other.
+//! Neither did before: `load()` kept only `Value::Ref` objects, so a
+//! literal-valued triple never entered the working set at all. The W3C
+//! entailment suite exercises none of this, so the score was unaffected in both
+//! directions — which is why it needed finding by review rather than by CI, and
+//! why `rdfs:domain` on a datatype property, one of the commonest inferences in
+//! real RDF, silently derived nothing.
 //!
-//! **rdfs7 still does not**, and the reason is sharper than "widen `Triple`".
-//! `Triple` is module-private and named in four places, so the alias itself is
-//! cheap. The blocker is that `known` and `fresh` are `BTreeSet`s, and
-//! [`crate::types::Value`] derives only `Debug, Clone, PartialEq` — no `Ord`,
-//! no `Eq`, because it carries `Float(f64)`. A set keyed on a literal therefore
-//! does not compile today.
+//! ## What carrying a literal cost
 //!
-//! Two routes, and they are not equal:
+//! rdfs7's conclusion COPIES the object, so the working set had to hold
+//! literals. `Obj` (private to this module) is that: an IRI id, or a literal
+//! as its SERIALISED BYTES.
+//! Bytes rather than a [`crate::types::Value`] because `known` and `fresh` are
+//! `BTreeSet`s and `Value` derives neither `Ord` nor `Eq` — it carries
+//! `Float(f64)`, which has no total order. Serialised form is already how the
+//! store orders values, so this needed no NaN decision and no change to
+//! `Value`. Implementing `Ord` on `Value` was the other route and would have
+//! forced one, with blast radius well beyond this module.
 //!
-//! * key the set on the value's SERIALISED BYTES, which is already how the
-//!   store orders values and needs no change to `Value`;
-//! * implement `Ord` on `Value`, which forces a NaN decision and has blast
-//!   radius far beyond this module.
+//! **The rules that may NOT range over a literal guard themselves**, via
+//! `Obj::as_ref_id`, rather than relying on the loader to have excluded them:
+//! rdfs3 types the OBJECT and rdfs9 reads it as a CLASS, and a literal can be
+//! neither. That guard is the one to keep intact — widening the premise set
+//! without it silently starts typing literals, which is the obvious wrong fix.
 //!
-//! The first is the one to take. Tracked on **aegis-x9bmhf**.
-//!
-//! The W3C entailment suite exercises none of this, so the 29/35 score was
-//! unaffected either way — which is why it needed a bead rather than a test:
-//! the suite will never catch it, and a user with real data will. `rdfs:domain`
-//! on a datatype property is one of the commonest inferences in practical RDF.
+//! Measured cost of the wider working set, on a store that derives NOTHING from
+//! it — the case that gains nothing and pays anyway: **~30 ms per 20 000 literal
+//! premises**, linear, dominated by the load rather than the rule loop. See the
+//! `bench_literal_heavy_closure*` tests, which are `#[ignore]`d and meant to be
+//! re-run by whoever next changes the working set.
 //!
 //! Note for anyone extending this: the `closure_of()` helper in the tests is
-//! IRI-only, so an rdfs7 derivation over a literal will be invisible to it even
-//! once it fires. Count `report.asserted` instead.
-//!
-//! And when rdfs7 does start carrying literals, [`load_literal_premises`] must
-//! move INSIDE the fixed point — see the warning on that function.
+//! IRI-only, so an rdfs7 derivation whose object is a literal is INVISIBLE to
+//! it. Count `report.asserted`, or read the companion graph directly — both
+//! arms exist in the tests.
 
 use std::collections::BTreeSet;
 
@@ -124,7 +124,44 @@ impl ClosureReport {
 /// One `(subject, predicate, object)` of interned ids. Objects are IRIs only —
 /// RDFS entailment ranges over resources, and a literal object cannot be the
 /// subject of a derived `rdf:type`.
-type Triple = (i64, i64, i64);
+type Triple = (i64, i64, Obj);
+
+/// An object position: an IRI, or a literal held as its SERIALISED BYTES.
+///
+/// The bytes rather than a [`Value`] because `known` and `fresh` are
+/// `BTreeSet`s and `Value` derives neither `Ord` nor `Eq` — it carries
+/// `Float(f64)`, which has no total order. Serialised form is already how the
+/// store orders values, so this needs no decision about NaN and no change to
+/// `Value`; implementing `Ord` on `Value` would have forced one, with blast
+/// radius well beyond this module.
+///
+/// Cloned into the set, so a literal object costs its own bytes per derived
+/// triple. That is the price of rdfs7 carrying literals at all.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Obj {
+    /// An IRI, as its interned id.
+    Ref(i64),
+    /// A literal, as the exact bytes the store holds.
+    Lit(Vec<u8>),
+}
+
+impl Obj {
+    /// The interned id, for the rules that may only range over resources.
+    const fn as_ref_id(&self) -> Option<i64> {
+        match self {
+            Self::Ref(id) => Some(*id),
+            Self::Lit(_) => None,
+        }
+    }
+
+    /// Back to a storable value.
+    fn into_value(self) -> Result<Value> {
+        match self {
+            Self::Ref(id) => Ok(Value::Ref(id)),
+            Self::Lit(bytes) => Value::from_bytes(&bytes),
+        }
+    }
+}
 
 /// Which RDFS rule derived a triple. Carried so each derivation is written
 /// with its own `reasoner:<rule>` provenance — the store REFUSES any other
@@ -160,52 +197,12 @@ impl Rule {
     }
 }
 
-/// The `(subject, predicate)` pairs of LITERAL-valued triples visible in
-/// `graphs` — premises for rdfs2, which types the SUBJECT and so never needs the
-/// object term at all (aegis-x9bmhf).
+/// Read every triple visible in `graphs`, literal objects included.
 ///
-/// Deliberately not `Triple`: carrying the literal would mean widening the core
-/// representation, which is rdfs7's problem and is measured separately. rdfs2
-/// wants only the pair, so this stays cheap.
-///
-/// ## Why loading this ONCE, outside the fixed point, is sound
-///
-/// No implemented rule can create a new literal-valued triple: rdfs2, rdfs3 and
-/// rdfs9 conclude `rdf:type`, rdfs5 and rdfs11 conclude the two hierarchy
-/// predicates, and rdfs7 — the only rule whose conclusion copies the premise's
-/// object — cannot see literal premises yet, which is exactly the half left
-/// open. So this set is fixed for the run.
-///
-/// ⚠️ **That stops being true the moment rdfs7 carries literals.** Whoever lands
-/// that must move this load inside the loop, or a literal derived in round N is
-/// silently invisible to rdfs2 in round N+1.
-fn load_literal_premises(store: &Store, graphs: &[i64]) -> Result<BTreeSet<(i64, i64)>> {
-    let mut out = BTreeSet::new();
-    let placeholders = graphs.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-    let sql = format!(
-        "SELECT e, a, v FROM facts \
-         WHERE g IN ({placeholders}) AND op = 1 AND valid_to IS NULL"
-    );
-    let mut stmt = store.prepare(&sql)?;
-    let params: Vec<&dyn rusqlite::ToSql> =
-        graphs.iter().map(|g| g as &dyn rusqlite::ToSql).collect();
-    let rows = stmt.query_map(params.as_slice(), |row| {
-        Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, i64>(1)?,
-            row.get::<_, Vec<u8>>(2)?,
-        ))
-    })?;
-    for row in rows {
-        let (s, p, raw) = row?;
-        if !matches!(Value::from_bytes(&raw), Ok(Value::Ref(_))) {
-            out.insert((s, p));
-        }
-    }
-    Ok(out)
-}
-
-/// Read every IRI-object triple visible in `graphs`.
+/// Literals enter the working set because rdfs7 copies the object into its
+/// conclusion. Rules that may only range over resources — rdfs3, rdfs9, and the
+/// schema slices — filter with [`Obj::as_ref_id`] rather than relying on the
+/// loader to have excluded them.
 fn load(store: &Store, graphs: &[i64]) -> Result<BTreeSet<Triple>> {
     let mut out = BTreeSet::new();
     let placeholders = graphs.iter().map(|_| "?").collect::<Vec<_>>().join(",");
@@ -227,8 +224,17 @@ fn load(store: &Store, graphs: &[i64]) -> Result<BTreeSet<Triple>> {
         let (s, p, raw) = row?;
         // Only Ref-valued objects participate: a literal cannot be a class, a
         // property, or the subject of a derived type.
-        if let Ok(Value::Ref(o)) = Value::from_bytes(&raw) {
-            out.insert((s, p, o));
+        // EVERY object, literal included: rdfs7 copies the object into its
+        // conclusion, so a literal-valued triple is a premise like any other.
+        // The rules that may not range over literals guard themselves below.
+        match Value::from_bytes(&raw) {
+            Ok(Value::Ref(o)) => {
+                out.insert((s, p, Obj::Ref(o)));
+            }
+            Ok(_) => {
+                out.insert((s, p, Obj::Lit(raw)));
+            }
+            Err(_) => {}
         }
     }
     Ok(out)
@@ -248,7 +254,6 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
 
     let companion = store.ensure_companion_inferred_graph(graph, timestamp)?;
     let mut known = load(store, &[graph, companion])?;
-    let literal_premises = load_literal_premises(store, &[graph, companion])?;
 
     let mut report = ClosureReport::default();
     let mut pending: std::collections::BTreeMap<Rule, Vec<Datum>> =
@@ -262,22 +267,22 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
         let sub_prop_of: Vec<(i64, i64)> = known
             .iter()
             .filter(|(_, p, _)| *p == sub_prop)
-            .map(|(s, _, o)| (*s, *o))
+            .filter_map(|(s, _, o)| o.as_ref_id().map(|id| (*s, id)))
             .collect();
         let sub_class_of: Vec<(i64, i64)> = known
             .iter()
             .filter(|(_, p, _)| *p == sub_class)
-            .map(|(s, _, o)| (*s, *o))
+            .filter_map(|(s, _, o)| o.as_ref_id().map(|id| (*s, id)))
             .collect();
         let domains: Vec<(i64, i64)> = known
             .iter()
             .filter(|(_, p, _)| *p == domain)
-            .map(|(s, _, o)| (*s, *o))
+            .filter_map(|(s, _, o)| o.as_ref_id().map(|id| (*s, id)))
             .collect();
         let ranges: Vec<(i64, i64)> = known
             .iter()
             .filter(|(_, p, _)| *p == range)
-            .map(|(s, _, o)| (*s, *o))
+            .filter_map(|(s, _, o)| o.as_ref_id().map(|id| (*s, id)))
             .collect();
 
         let derive = |rule: Rule, t: Triple, fresh: &mut BTreeSet<(Rule, Triple)>| {
@@ -286,46 +291,38 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
             }
         };
 
-        for &(s, p, o) in &known {
-            // rdfs7 — the rule neither existing mechanism can express.
+        for (s, p, o) in &known {
+            let (s, p) = (*s, *p);
+            // rdfs7 — the rule neither existing mechanism can express. Its
+            // conclusion COPIES the object, so it is the one rule that carries a
+            // literal through, and the reason `Obj` exists.
             for &(sub, sup) in &sub_prop_of {
                 if p == sub {
-                    derive(Rule::Rdfs7, (s, sup, o), &mut fresh);
+                    derive(Rule::Rdfs7, (s, sup, o.clone()), &mut fresh);
                 }
             }
-            // rdfs2 / rdfs3
+            // rdfs2 — types the SUBJECT, so the object's kind is irrelevant and
+            // a literal-valued premise counts (aegis-x9bmhf).
             for &(prop, class) in &domains {
                 if p == prop {
-                    derive(Rule::Rdfs2, (s, type_id, class), &mut fresh);
+                    derive(Rule::Rdfs2, (s, type_id, Obj::Ref(class)), &mut fresh);
                 }
             }
-            for &(prop, class) in &ranges {
-                if p == prop {
-                    derive(Rule::Rdfs3, (o, type_id, class), &mut fresh);
-                }
-            }
-            // rdfs9
-            if p == type_id {
-                for &(sub, sup) in &sub_class_of {
-                    if o == sub {
-                        derive(Rule::Rdfs9, (s, type_id, sup), &mut fresh);
+            // rdfs3 — types the OBJECT, so it may only fire over a resource. A
+            // literal cannot be the subject of an `rdf:type`.
+            if let Some(o_id) = o.as_ref_id() {
+                for &(prop, class) in &ranges {
+                    if p == prop {
+                        derive(Rule::Rdfs3, (o_id, type_id, Obj::Ref(class)), &mut fresh);
                     }
                 }
-            }
-        }
-        // rdfs2 over LITERAL-valued premises (aegis-x9bmhf). Only rdfs2: its
-        // conclusion types the SUBJECT and is therefore all-IRI. rdfs3 is
-        // deliberately absent here because its conclusion types the OBJECT, and
-        // a literal cannot be the subject of an rdf:type; rdfs7 is absent
-        // because its conclusion would have to carry the literal.
-        //
-        // Inside the loop, and reading the CURRENT `domains` slice, so a
-        // `rdfs:domain` triple that only becomes visible in a later round
-        // applies to these premises too — the same way it does for IRI ones.
-        for &(s, p) in &literal_premises {
-            for &(prop, class) in &domains {
-                if p == prop {
-                    derive(Rule::Rdfs2, (s, type_id, class), &mut fresh);
+                // rdfs9 — the object is a CLASS here, so likewise resource-only.
+                if p == type_id {
+                    for &(sub, sup) in &sub_class_of {
+                        if o_id == sub {
+                            derive(Rule::Rdfs9, (s, type_id, Obj::Ref(sup)), &mut fresh);
+                        }
+                    }
                 }
             }
         }
@@ -333,14 +330,14 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
         for &(a, b) in &sub_prop_of {
             for &(c, d) in &sub_prop_of {
                 if b == c {
-                    derive(Rule::Rdfs5, (a, sub_prop, d), &mut fresh);
+                    derive(Rule::Rdfs5, (a, sub_prop, Obj::Ref(d)), &mut fresh);
                 }
             }
         }
         for &(a, b) in &sub_class_of {
             for &(c, d) in &sub_class_of {
                 if b == c {
-                    derive(Rule::Rdfs11, (a, sub_class, d), &mut fresh);
+                    derive(Rule::Rdfs11, (a, sub_class, Obj::Ref(d)), &mut fresh);
                 }
             }
         }
@@ -348,17 +345,17 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
         if fresh.is_empty() {
             break;
         }
-        for &(rule, (s, p, o)) in &fresh {
-            pending.entry(rule).or_default().push(Datum {
-                entity: s,
-                attribute: p,
-                value: Value::Ref(o),
+        for (rule, (s, p, o)) in &fresh {
+            pending.entry(*rule).or_default().push(Datum {
+                entity: *s,
+                attribute: *p,
+                value: o.clone().into_value()?,
                 valid_from: timestamp.to_string(),
                 valid_to: None,
                 op: Op::Assert,
             });
         }
-        known.extend(fresh.iter().map(|&(_, t)| t));
+        known.extend(fresh.iter().map(|(_, t)| t.clone()));
     }
 
     // One transaction per rule, each carrying that rule's provenance. The

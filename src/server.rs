@@ -301,6 +301,8 @@ async fn main() {
         eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
     }
 
+    admission::init_read_admission_for_pool(read_pool.len());
+
     let vector_reads_pooled = store.has_sqlite_vector_backend();
     let state: SharedStore = Arc::new(StoreHandle {
         writer: FairMutex::new(store),
