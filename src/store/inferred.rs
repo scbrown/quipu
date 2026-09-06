@@ -152,6 +152,33 @@ impl Store {
         Ok(head)
     }
 
+    /// The newest `valid_from` in a graph, with its epoch seconds (aegis-ab4m51).
+    ///
+    /// Two values because they answer two different questions and only one of
+    /// them can be wrong: the string is what a reader sees, the epoch is what
+    /// the lag arithmetic needs. `valid_from` is TEXT and this crate carries no
+    /// date parser on purpose (`src/time.rs` formats but never parses), so the
+    /// conversion is SQLite's `strftime`, which already understands ISO-8601.
+    ///
+    /// The epoch is `Option` INSIDE the `Some`, and that nesting is the whole
+    /// point. The outer `None` means the graph holds no facts. An inner `None`
+    /// means a stamp SQLite could not parse — `valid_from` accepts a
+    /// caller-supplied `valid_at`, so it is not guaranteed to be ISO-8601.
+    /// Collapsing that case to 0 would render an unparseable stamp as "no lag",
+    /// i.e. as FRESH, which is the exact false reassurance this bead exists to
+    /// remove. UNKNOWN must never arrive as zero.
+    pub fn graph_newest_valid_from(&self, g: i64) -> Result<Option<(String, Option<i64>)>> {
+        Ok(self.conn.query_row(
+            "SELECT MAX(valid_from), CAST(strftime('%s', MAX(valid_from)) AS INTEGER) \
+             FROM facts WHERE g = ?1",
+            params![g],
+            |r| {
+                Ok(r.get::<_, Option<String>>(0)?
+                    .map(|s| (s, r.get::<_, Option<i64>>(1).ok().flatten())))
+            },
+        )?)
+    }
+
     /// Refresh `<companion> quipu:derivedAsOfTx <as_of>` inside the companion
     /// graph. Retract-then-assert, so the note stays single-valued.
     pub fn note_inferred_freshness(
