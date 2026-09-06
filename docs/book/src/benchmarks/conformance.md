@@ -98,7 +98,7 @@ The variable-endpoint case is a deliberate policy deviation because query data c
 
 Grouped by the reason the runner recorded.
 
-| Missing capability | Cases | Classes |
+| Why it is unsupported | Cases | Classes |
 |---|---:|---|
 | OWL-Direct entailment regime is not implemented | 18 | entailment |
 | OWL-RDF-Based entailment regime is not implemented | 11 | entailment |
