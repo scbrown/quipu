@@ -182,6 +182,7 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         // aegis-8fdp8d. Recorded only when the operator names it, so a share
         // never asserts a repository layout nobody configured.
         pack_dir: flag_value(args, "--pack-dir").map(String::from),
+        attest: attest_options(args),
     };
     let store = crate::cli_open::open_store(db_path);
     if let Some(parent) = flag_value(args, "--since") {
@@ -342,4 +343,50 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             std::process::exit(1);
         }
     }
+}
+
+/// Build `--attest` options, or `None` when the flag is absent (aegis-tadzdf).
+///
+/// EVERY identity flag is required once `--attest` is given. A default agent or
+/// session would put a name in a signed statement that the operator never chose,
+/// and the whole value of the envelope is that it says who signed.
+fn attest_options(args: &[String]) -> Option<quipu::share::AttestOptions> {
+    if !args.iter().any(|a| a == "--attest") {
+        return None;
+    }
+    let need = |name: &str| match flag_value(args, name) {
+        Some(v) => v.to_string(),
+        None => {
+            eprintln!("--attest requires {name}");
+            std::process::exit(2);
+        }
+    };
+    let key_path = flag_value(args, "--attest-key")
+        .map_or_else(quipu::signing::default_key_path, std::path::PathBuf::from);
+    let issued: u64 = match flag_value(args, "--attest-issued-at") {
+        Some(v) => v.parse().unwrap_or_else(|_| {
+            eprintln!("--attest-issued-at must be seconds since the epoch");
+            std::process::exit(2);
+        }),
+        None => {
+            eprintln!(
+                "--attest requires --attest-issued-at: a wall clock here would make two runs \
+                 over one pinned dataset produce different signed bytes, and the share would \
+                 not be re-derivable"
+            );
+            std::process::exit(2);
+        }
+    };
+    let ttl: u64 = flag_value(args, "--attest-ttl")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3600);
+    Some(quipu::share::AttestOptions {
+        key_path,
+        agent: need("--attest-agent"),
+        session: need("--attest-session"),
+        introducer: need("--attest-introducer"),
+        issued_at_epoch: issued,
+        expires_at_epoch: issued + ttl,
+        nonce: need("--attest-nonce"),
+    })
 }

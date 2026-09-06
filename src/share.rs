@@ -10,6 +10,7 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+pub use crate::share_mint::{AttestOptions, ShareAttestation};
 use crate::store::Store;
 
 /// The graph slice written into a share.
@@ -86,6 +87,12 @@ pub struct ShareOptions {
     /// default. Set it only where a repository has actually chosen a name, so
     /// that a share does not assert a layout its producer never configured.
     pub pack_dir: Option<String>,
+    /// Mint a producer attestation over this share's identity (aegis-tadzdf).
+    ///
+    /// Off by default: a share produced without it is byte-identical to one
+    /// produced before this existed, which is what makes the manifest field
+    /// additive rather than a format break.
+    pub attest: Option<AttestOptions>,
 }
 
 /// Default upper bound for a payload-returning share response.
@@ -126,6 +133,11 @@ impl SharePayloadRequest {
             // would put a layout claim in a share from someone who does not own
             // the layout.
             pack_dir: None,
+            // Not settable over HTTP either, and for a sharper reason: minting
+            // reads the server's PRIVATE KEY. A request that could ask for a
+            // signature would let any caller borrow the host's producer identity
+            // to sign a share of their choosing (aegis-tadzdf).
+            attest: None,
         }
     }
 
@@ -188,6 +200,18 @@ pub struct ShareManifest {
     pub scope: ShareScope,
     /// Prior share in this lineage.
     pub parent_share: Option<String>,
+    /// Producer attestation over this manifest's identity (aegis-tadzdf).
+    ///
+    /// ADDITIVE and EXCLUDED FROM `share_id`. The envelope signs `share_id`,
+    /// `graph_hash`, `shapes_hash` and `tx_anchor`, and `share_id` is itself the
+    /// hash of this manifest — so including the attestation in that hash would be
+    /// circular. `manifest_bytes` strips it alongside `share_id`, which also means
+    /// an attested and an unattested share of the same state carry the SAME
+    /// `share_id`: the attestation is a statement ABOUT the identity, not part of
+    /// it. Swapping it cannot change what was signed, only which key signed —
+    /// which is exactly the `claimed`/`attested` distinction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attestation: Option<ShareAttestation>,
     /// Timestamp of the anchored transaction, stable for unchanged state.
     pub created_at: String,
     /// Producer identity.
@@ -277,10 +301,13 @@ pub(crate) fn manifest_bytes(manifest: &ShareManifest, include_id: bool) -> Resu
     let mut value = serde_json::to_value(manifest)
         .map_err(|e| Error::Serialization(format!("share manifest: {e}")))?;
     if !include_id {
-        value
+        let object = value
             .as_object_mut()
-            .expect("serialized manifest is an object")
-            .remove("share_id");
+            .expect("serialized manifest is an object");
+        object.remove("share_id");
+        // Stripped for the same reason as share_id and stated at the field: the
+        // envelope signs share_id, and share_id is this hash.
+        object.remove("attestation");
     }
     let mut bytes = serde_json::to_vec(&value)
         .map_err(|e| Error::Serialization(format!("share manifest: {e}")))?;
@@ -424,6 +451,7 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
         shapes_hash: sha256(&shapes),
         scope: opts.scope.clone(),
         parent_share: opts.parent_share.clone(),
+        attestation: None,
         created_at,
         producer: ShareProducer {
             name: "quipu".into(),
@@ -437,6 +465,12 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
         pack_dir: opts.pack_dir.clone(),
     };
     manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
+    // MINTED AFTER share_id EXISTS, because the envelope signs it. The field is
+    // stripped from the hashed form (see `manifest_bytes`), so assigning it here
+    // cannot invalidate the id just computed.
+    if let Some(att) = opts.attest.as_ref() {
+        manifest.attestation = Some(crate::share_mint::mint_attestation(&manifest, att)?);
+    }
 
     let mut files = BTreeMap::new();
     files.insert(

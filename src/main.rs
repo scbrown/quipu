@@ -31,6 +31,7 @@
 
 mod cli;
 mod cli_align;
+mod cli_attest;
 mod cli_audit;
 mod cli_changes;
 mod cli_commands;
@@ -89,6 +90,7 @@ fn main() {
     match cmd {
         "knot" | "load" => cli::cmd_knot(&args, db_path),
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
+        "attest" => cli_attest::cmd_attest(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
@@ -307,7 +309,9 @@ COMMANDS:
     quipu graph import <db> --as <iri> [--db <path>]
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
-    quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-share>] [--turtle]
+    quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-share>] [--turtle]\n    quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
+    quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
+    quipu attest list [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--db <path>]
     quipu import delta <parent-share> <delta-share> [--actor <id>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]

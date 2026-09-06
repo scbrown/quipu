@@ -78,18 +78,70 @@ pub fn verify_attestation(
     // request must reach the same verdict, and a wall clock here would make the
     // skew window depend on when you happened to run it.
     let now_epoch = epoch_of(timestamp)?;
-    let principal = crate::session_attestation::verify_binding(
-        store,
+
+    // THREE TIERS, AND THE BRANCH IS ON WHETHER *WE* WERE TOLD TO TRUST THE KEY --
+    // never on whether the share brought one (aegis-tadzdf, malcolm's ruling).
+    //
+    // The registry is consulted FIRST and by session, so the decision cannot be
+    // influenced by anything the producer put in the bundle. A share that carries
+    // a binding does NOT get it registered; if it did, `attested` would mean "came
+    // with a self-signed claim" and a whole-bundle substitution would swap the key
+    // along with the data and still go green. `signing.rs` settled this for the
+    // governance plane in the same words: quipu never self-registers.
+    let registered =
+        crate::session_attestation::AttestationBindings::binding(store, &envelope.session)?;
+
+    if registered.is_some() {
+        let principal = crate::session_attestation::verify_binding(
+            store,
+            envelope,
+            &binding,
+            now_epoch,
+            ATTESTATION_SKEW_SECS,
+        )?;
+        return Ok(AttestationStatus {
+            tier: "attested".into(),
+            agent: Some(principal.agent),
+            session: Some(principal.session),
+            note: "envelope verified against a REGISTERED session binding over this manifest's identity; the nonce is spent"
+                .into(),
+        });
+    }
+
+    // Unregistered. The signature must STILL verify, against the key the share
+    // carries -- a tampered bundle fails here rather than degrading to `claimed`.
+    // If `claimed` were handed out without checking, it would mean nothing.
+    let Some(carried) = request.manifest.attestation.as_ref() else {
+        return Err(Error::InvalidValue(
+            "unbound attestation session, and the manifest carries no binding to check the \
+             envelope against: there is nothing here to verify. An unregistered session can \
+             only reach tier `claimed`, and only when the share itself supplies the key. \
+             Register the producer session (`quipu attest register`) or import without an \
+             envelope."
+                .into(),
+        ));
+    };
+    if carried.envelope != *envelope {
+        return Err(Error::InvalidValue(
+            "the supplied attestation envelope differs from the one embedded in the manifest"
+                .into(),
+        ));
+    }
+    crate::session_attestation::verify_unregistered(
         envelope,
         &binding,
+        &carried.binding.public_key,
         now_epoch,
         ATTESTATION_SKEW_SECS,
     )?;
     Ok(AttestationStatus {
-        tier: "attested".into(),
-        agent: Some(principal.agent),
-        session: Some(principal.session),
-        note: "envelope verified against a registered session binding over this manifest's identity; the nonce is spent"
+        tier: "claimed".into(),
+        agent: Some(carried.binding.agent.clone()),
+        session: Some(carried.binding.session.clone()),
+        note: "signature verifies against the key the SHARE ITSELF supplied, which nobody here \
+               vouched for: the bundle is unaltered since signing and its identity fields are \
+               bound together, but WHO produced it is unproven. Replay is not defended at this \
+               tier. Register the session out-of-band to reach `attested`."
             .into(),
     })
 }

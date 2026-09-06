@@ -258,10 +258,7 @@ async fn main() {
 
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
-    let signing_key_path = std::env::var("QUIPU_SIGNING_KEY").map_or_else(
-        |_| std::path::Path::new(".quipu").join("verifier.pk8"),
-        std::path::PathBuf::from,
-    );
+    let signing_key_path = quipu::signing::default_key_path();
     match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
         Ok(id) => {
             eprintln!(
