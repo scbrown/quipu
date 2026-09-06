@@ -3598,7 +3598,7 @@ fn ask_short_circuit_preserves_the_answer_on_every_pattern_shape() {
 /// stopped at one" is free.
 #[test]
 fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
-    use crate::sparql::{exists, pattern};
+    use crate::sparql::exists;
     let store = test_store_with_data();
     let ctx = TemporalContext::default();
 
@@ -3613,7 +3613,8 @@ fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
     );
 
     let ask_pattern = |q: &str| {
-        let spargebra::Query::Ask { pattern: p, .. } = spargebra::Query::parse(q, None).unwrap()
+        let spargebra::Query::Ask { pattern: p, .. } =
+            spargebra::SparqlParser::new().parse_query(q).unwrap()
         else {
             panic!("expected an ASK query");
         };
