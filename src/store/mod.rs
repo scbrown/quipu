@@ -37,6 +37,7 @@ mod settings;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod snapshot_upload;
 pub mod terms;
+pub mod wal;
 pub(crate) use terms::TermCache;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod attestation_tests;

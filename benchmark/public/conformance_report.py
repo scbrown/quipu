@@ -377,7 +377,12 @@ def render_markdown(data: dict) -> str:
                 ", ".join(CLASS_LABELS[name] for name in affected),
             ]
         )
-    out += _table(["Missing capability", "Cases", "Classes"], reason_rows, right={1})
+    # "Missing capability" was accurate when every reason read "<X> is not
+    # implemented". The non-goal regimes now state WHY they are non-goals
+    # (aegis-1gp76j item 3), and calling a deliberate decision a missing
+    # capability is the same backlog-flavoured misreading the reasons were
+    # rewritten to stop.
+    out += _table(["Why it is unsupported", "Cases", "Classes"], reason_rows, right={1})
 
     out += ["", "## Re-derive these numbers", "", "```sh"]
     reproduce = data["reproduce"]

@@ -157,6 +157,46 @@ impl Store {
         Ok(Some(binding))
     }
 
+    /// Every registered session binding, for the operator question a `claimed`
+    /// import raises: is this producer known here at all? (aegis-tadzdf)
+    ///
+    /// Ordered by session so two runs agree; an unordered listing that happened
+    /// to be stable in SQLite today would be a diff that churns tomorrow.
+    pub fn attestation_bindings(&self) -> Result<Vec<SessionBinding>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session, agent, public_key, introducer, issued_at_epoch,
+                    expires_at_epoch, revoked
+               FROM attestation_bindings ORDER BY session",
+        )?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut out = Vec::with_capacity(rows.len());
+        for (session, agent, public_key, introducer, issued, expires, revoked) in rows {
+            let mut binding = SessionBinding::new(
+                agent,
+                session,
+                public_key,
+                introducer,
+                issued.unsigned_abs(),
+                expires.unsigned_abs(),
+            )?;
+            binding.revoked = revoked != 0;
+            out.push(binding);
+        }
+        Ok(out)
+    }
+
     /// Forget nonces that can no longer be replayed.
     ///
     /// The horizon comes from [`nonce_horizon_secs`] and therefore from the

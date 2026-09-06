@@ -76,11 +76,50 @@ ENTAILMENT_COMMITMENT = {
     "D": "deliberate-non-goal",
 }
 
+# WHY each non-goal regime is a non-goal, in the words the published page shows
+# (aegis-1gp76j item 3). This used to be `f"{bucket} entailment regime is not
+# implemented"` for every bucket, which reads as a BACKLOG -- "not implemented
+# yet" -- when the decision is that we are deliberately not implementing it. The
+# reasoning existed only in the comment on ENTAILMENT_COMMITMENT above, i.e.
+# where a reader of the conformance page never stands.
+#
+# Keep these keyed to ENTAILMENT_COMMITMENT: a bucket that becomes a `goal` must
+# lose its reason, and the assertion below enforces that rather than trusting it.
+ENTAILMENT_NON_GOAL_REASON = {
+    "OWL-Direct": (
+        "OWL-Direct entailment is a deliberate non-goal pending a design "
+        "(aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer "
+        "is a write gate with no axioms -- no amount of RDFS closure reaches it"
+    ),
+    "OWL-RDF-Based": (
+        "OWL-RDF-Based entailment is a deliberate non-goal pending the same "
+        "design (aegis-b5moll): it needs an RL rule set or an external reasoner, "
+        "not an extension of the RDFS closure"
+    ),
+    "RIF": (
+        "RIF entailment is a deliberate non-goal: RIF is a rule-interchange "
+        "format, not a semantics asked of this store"
+    ),
+    "D": (
+        "D entailment (datatype entailment) is a deliberate non-goal: no "
+        "consumer asks for datatype entailment beyond simple and RDFS"
+    ),
+}
+
 ENTAILMENT_REASON = {
-    bucket: f"{bucket} entailment regime is not implemented"
+    bucket: ENTAILMENT_NON_GOAL_REASON[bucket]
     for bucket in ENTAILMENT_BUCKET_IDS
     if ENTAILMENT_COMMITMENT.get(bucket) != "goal"
 }
+
+# A non-goal without a stated reason is exactly the state item 3 existed to end,
+# and a goal carrying one is a stale rationale that would be published as live.
+# Both are caught here rather than at review time.
+assert set(ENTAILMENT_REASON) == {
+    bucket
+    for bucket in ENTAILMENT_BUCKET_IDS
+    if ENTAILMENT_COMMITMENT.get(bucket) != "goal"
+}, "every non-goal regime needs a published reason, and only non-goals may have one"
 
 
 # Buckets quipu can answer with a MATERIALISED closure, and the `--entailment`

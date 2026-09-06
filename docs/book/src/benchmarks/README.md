@@ -16,7 +16,8 @@ because a copied number rots silently while its source moves on.
 |---|---|---|---|
 | [SPARQL 1.1 conformance](conformance.md) | Quipu's query engine against the W3C RDF Tests at a pinned revision | this repository | **published**, re-derivable |
 | [Extraction → ingress](#extraction--ingress-text2kgbench) | a governed RML write of frozen upstream extractions into a disposable Quipu | [caboodle](https://github.com/scbrown/caboodle) `0a1b169` | **published**, with the boundary below |
-| [Performance](#performance-watdivlubm) | WatDiv / LUBM against Oxigraph | — | **NOT RUN** |
+| [Bulk ingest](#bulk-ingest-watdiv) | Quipu's own load rate for a pinned WatDiv dataset | this repository (`benchmark/public/watdiv_ingest.py`) | **published**, re-derivable |
+| [Performance](#performance-watdivlubm) | WatDiv / LUBM query latency against Oxigraph | — | **NOT RUN** |
 
 ## Extraction → ingress (Text2KGBench)
 
@@ -48,10 +49,156 @@ extractions into a governed graph without dropping or mangling any of them.* The
 quality of the extractions themselves is the upstream baseline's, and improving
 on it is a separate, unrun benchmark.
 
+## Bulk ingest (WatDiv)
+
+**This is NOT the Oxigraph comparison.** It measures one thing: how fast Quipu loads a pinned
+third-party dataset into a fresh store. No other engine is involved, and nothing here says
+anything about query latency. The comparison class below remains NOT RUN.
+
+### The measurement
+
+**Quipu ingested a 10,916,457-triple WatDiv dataset in 2,848.9 s — 3,831.8 live facts per second
+— into a 3,227,811,840-byte store (295.7 bytes per fact).** Release build, single process,
+`--chunk 50000`, on an idle-to-moderately-loaded 20-core host with 66 GB RAM, **store on ext4**.
+The storage medium is part of the number and is worth ~45x — see below.
+
+The population appears in the same sentence as the rate deliberately: WatDiv's "10M" archive
+contains 10,916,457 triples, not 10,000,000, and a rate quoted "at 10M" would be wrong by 9%
+before anyone checked anything else.
+
+| | |
+|---|---|
+| dataset | WatDiv 10M archive, `sha256 1d0a8a47…`; extracted N-Triples `sha256 7cfe0341…` |
+| triples | 10,916,457 declared, 10,916,460 live facts after load |
+| wall time | 2,848.9 s |
+| rate | 3,831.8 live facts/s |
+| store | 3,227,811,840 B = 295.7 B/fact |
+| build | release |
+| storage | ext4 (a tmpfs store is ~45x faster; see below) |
+
+**Why the fact count exceeds the triple count by exactly 3:** a declared ingest writes three
+completion markers (declared count, source digest, completion) into the graph. That identity is
+the load's own anti-vacuity check — a silently truncated load cannot produce it.
+
+**Throughput is a before/after delta of live facts read from the store**, never the loader's
+parse count. The two differ: the parse count reports triples the parser saw, and a re-ingest of
+identical content parses everything and writes nothing.
+
+### What this number does NOT support
+
+- **It is not a per-triple constant.** Rate varies ~10x within a single run (below), so a figure
+  taken from part of a load is not the load's rate. Only end-to-end figures are quoted here.
+- **It does not extrapolate.** See the refuted hypothesis below.
+- **It is not a comparison.** Quipu and Oxigraph share the SPARQL parser and RDF data model
+  (`spargebra`, `oxrdf`), so any future comparison measures storage and evaluation layers, never
+  independent engines, and must say so.
+
+### Rate is NOT constant within a load, and the obvious explanation is wrong
+
+Instrumented per committed chunk, the first quarter of a 10,916,457-triple load runs about **10x
+slower** than the rest (first-quartile median ~1,099 facts/s; later quartiles at or above the
+instrument's resolution). Correlation with host load average is **-0.09 across 2.1-8.7** — that
+is, essentially none — and with position in the run **+0.49**, over 161 commit intervals.
+
+The obvious reading is that the transition happens after a fixed number of facts. **That is
+refuted.** A 108,997,714-triple load of the same dataset family, same binary, same chunk size,
+was **14x slower at the same absolute commit count** (commits 41-55: 1,263 facts/s, against
+18,333 facts/s at those commits in the smaller load). Whatever causes the speed-up, it is not
+"N facts ingested".
+
+Two explanations remain untested and are recorded rather than chosen: a proportional effect (the
+transition at some fraction of the dataset) and working-set residency (the smaller store is
+3.2 GB and caches readily; the larger is 32.3 GB). They are not equivalent — the first says the
+cost never amortises, the second says it amortises whenever the store fits in memory.
+
+### ⚠ Every rate here is a STORAGE figure — the medium is worth ~45x
+
+**Measured on this host, same source prefix, same binary, same `--chunk 50000`, differing only in
+where the store file sits:**
+
+| store on | facts | wall | rate |
+|---|---|---|---|
+| tmpfs (RAM) | 8,100,003 | 187 s | **43,388 facts/s** |
+| ext4 (SSD) | 8,100,003 | ~2.2 h | **~1,000 facts/s** |
+
+So **the published 3,831.8 facts/s is a property of the disk at least as much as of Quipu**, and
+the same load in memory is roughly 45x faster. Roughly 98% of wall time on ext4 is durability
+rather than work.
+
+This is why every figure on this page names its **host shape, build profile and storage medium**
+together. A throughput number quoted without all three is not reproducible and not comparable: a
+reader on different storage will not come close, and will have no way to know why.
+
+It also bounds what a comparison against another engine could mean here. Two engines measured on
+this host would be measured mostly on its disk.
+
+### Rate is not monotonic: it halves between 4.4M and 6.8M facts
+
+A second, larger load was instrumented per committed chunk at one-second resolution and **stopped
+deliberately** at 8,100,000 of 108,997,714 triples, because the shape had become the result.
+Rolling ten-commit rate:
+
+| facts ingested | rate | median host load |
+|---|---|---|
+| 800,000 | 1,035/s | — |
+| 2,300,000 | 1,085/s | — |
+| **4,400,000** | **1,650/s** | peak |
+| 5,300,000 | 1,479/s | — |
+| 6,800,000 | 705/s | — |
+| 8,100,000 | 761/s | 3.94 |
+
+**The rate rises to a peak at ~4.4M facts and then halves**, and it does so while the host gets
+QUIETER (median load 5.33 → 3.94 across the final bands). No figure from this load is published
+as a result: it is an incomplete run, its ledger row is marked `valid_result: false`, and a rate
+quoted from 7% of a dataset invites a division nobody should perform.
+
+**Three explanations were tested and all three are refuted:**
+
+1. **A fixed number of facts ingested.** The 10,916,457-triple load was ~14× faster at the same
+   absolute commit count. Two scales were required to test this; one cannot.
+2. **Host load.** Correlation of rate with one-minute load average is **+0.068** across a 5.2×
+   range (2.47–12.91) over 162 commit intervals — that is, none.
+3. **IRI cardinality**, the most mechanistic candidate: interning cost rising as distinct IRIs
+   accumulate. Measured directly — the 108,997,714-triple dataset carries **284,093** distinct
+   subjects in its first 2,000,000 triples against **396,970** for the 10,916,457-triple one. It
+   has *fewer*, so interning predicts the opposite of what was observed.
+
+**Why the smaller dataset is faster at matched fact count is unexplained**, and is published as
+unexplained. Three candidates are dead; proposing a fourth after seeing the data would not be a
+finding.
+
+### Re-deriving it
+
+```text
+python3 benchmark/public/watdiv_ingest.py --scale 10M \
+  --archive <watdiv.10M.tar.bz2> --quipu <release quipu> \
+  --db <scratch>.db --output benchmark/public/results/watdiv-ingest.jsonl \
+  --pins benchmark/public/results/watdiv-pins.tsv
+```
+
+The archive is fetched once from the published WatDiv site; the runner pins its digest on first
+sight and **verifies** it afterwards, aborting on a mismatch rather than benchmarking bytes
+nobody pinned. The source is **streamed from the archive** and never unpacked — at the 100M scale
+the extracted form is ~15.6 GB, which would double the footprint of a run designed to leave
+nothing behind.
+
+Guards that decide whether a row may be quoted, each covered by a test in
+`benchmark/public/test_watdiv_ingest.py`:
+
+- a **non-zero exit** or a **contended host** marks the row `valid_result: false` with the reason
+  named — the row is still written, because an unlabelled fast number is the hazard, not a
+  labelled slow one;
+- an **unreadable store** reads as UNKNOWN rather than a zero baseline, which would otherwise
+  inflate the delta by whatever the store already held;
+- an archive with **no `.nt` member** is refused rather than silently benchmarking the first file
+  it finds.
+
 ## Performance (WatDiv/LUBM)
 
-**NOT RUN.** No WatDiv or LUBM figures exist, against Oxigraph or anything else,
-and none should be quoted from anywhere until a pinned runner produces them here.
+**NOT RUN.** No WatDiv or LUBM **query latency** figures exist against Oxigraph or
+anything else, and none should be quoted from anywhere until a pinned runner produces
+them here. The bulk-ingest section above is a different class and is not a substitute:
+a load rate says nothing about how fast either engine answers a query.
 
 This row exists so the absence is visible. The rule for this section is that a
 class with no result is published as NOT RUN and kept in the list, because the

@@ -6,6 +6,7 @@
 //! EXTEND, RDFS subclass inference, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
+pub mod exists;
 pub mod filter;
 pub mod pattern;
 pub mod pattern_util;
@@ -547,8 +548,9 @@ fn eval_parsed(store: &Store, parsed: Query, ctx: &TemporalContext) -> Result<Qu
             pattern, dataset, ..
         } => {
             let ctx = apply_dataset(store, dataset.as_ref(), ctx)?;
-            let (rows, _) = pattern::eval_pattern(store, &pattern, &ctx)?;
-            Ok(QueryResult::Ask(!rows.is_empty()))
+            Ok(QueryResult::Ask(exists::eval_pattern_exists(
+                store, &pattern, &ctx,
+            )?))
         }
         Query::Construct {
             template,

@@ -2,6 +2,62 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.40] - 2026-09-06
+
+### Added
+
+- *(rdfs)* Rdfs7 carries literals — the other half of([93de4ed](https://github.com/scbrown/quipu/commit/93de4edeb066d1c28b7b37d3d2d7b577a010c8cf))
+- *(entailment)* The marker separates FRESH from STALE, not just ABSENT from PRESENT([866c649](https://github.com/scbrown/quipu/commit/866c64951c50aa3d133943268693456e96d62f79))
+
+### Changed
+
+- *(mcp)* Move the entailment marker into its own module([3f32bb5](https://github.com/scbrown/quipu/commit/3f32bb545fcb6bebd072c4c7070406f2dc6b1b3c))
+
+### Documentation
+
+- *(conformance)* Say WHY each regime is a non-goal, on the page([fa49382](https://github.com/scbrown/quipu/commit/fa49382fe5a19d95eb246584b29f6671701e5f11))
+
+### Fixed
+
+- *(ingest)* ROOT by its IRI is still ROOT, and the id check could not see it([68157ae](https://github.com/scbrown/quipu/commit/68157ae5b7b02b89e4d2e2323f5bfd7f6ff2d725))
+- *(share)* Gate attestation for wasm32, and document the tiers([91eceec](https://github.com/scbrown/quipu/commit/91eceec3b3df4da67eb4dce074d8675aabd3bea7))
+- *(owl)* Bound the semi-naive dedup by candidates, not by attribute([921d265](https://github.com/scbrown/quipu/commit/921d265515e9edcd29c623dd7e6a7bfe5e1ad19d))
+- *(owl)* Fence a doc example, and re-derive the ledgers on the rebased HEAD([f1aac59](https://github.com/scbrown/quipu/commit/f1aac5951758711da4301b2fbd42c3cdace8b4f3))
+- *(sparql)* Clippy — drop the now-unused import and the deprecated parser call([383b623](https://github.com/scbrown/quipu/commit/383b6235b85d0410e518820911b3061c314d52b0))
+- *(store)* Reset the WAL before the read pool opens, and expose wal_bytes([1218de0](https://github.com/scbrown/quipu/commit/1218de01f47c57f68b805b1c003a7586041a5bef))
+- *(server)* Cancellable READ admission — the half that wedged the store([2b62fc2](https://github.com/scbrown/quipu/commit/2b62fc2730833ebfdd8ba460318240fb69ef7277))
+- *(server)* Keep the read-admission sizing in admission.rs, and format([112099a](https://github.com/scbrown/quipu/commit/112099a9ca86c3b69348040ca99925d61fd13ca6))
+- *(server)* Needless borrow in the extracted ReadPool::open([efca5e0](https://github.com/scbrown/quipu/commit/efca5e04be2049aa77730b9bd39fe739361ef565))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers on this head([554f76b](https://github.com/scbrown/quipu/commit/554f76bc23bdf4eb1808d50cb0ee845c36f3d716))
+- *(conformance)* Re-derive the ledgers on f1aac595([586e498](https://github.com/scbrown/quipu/commit/586e49845da08c3d7f50e155a531cfb0ce612f47))
+- *(conformance)* Re-derive ledgers on 33c81cd after merging main([d36106a](https://github.com/scbrown/quipu/commit/d36106a5ff2b2df8183c82a6f61d01441ecfd698))
+- *(conformance)* Re-derive the ledgers after taking main in([7ed0027](https://github.com/scbrown/quipu/commit/7ed0027dcc0e8b036daff8647b0e97e18f19975b))
+- *(conformance)* Re-derive the ledgers and page on this head([4393934](https://github.com/scbrown/quipu/commit/4393934cee84132eeadc5986c2fcccc8ecc05a85))
+- *(conformance)* Re-derive the ledgers and page on this head([0840693](https://github.com/scbrown/quipu/commit/0840693dc5f9cd8acd1ab1b5ea23770c4116b8a5))
+- *(conformance)* Re-derive ledgers on ce0b380 after merging main([c436187](https://github.com/scbrown/quipu/commit/c436187889f1f4d3a050e1dcb9b701c4ef92348a))
+- *(conformance)* Re-derive ledgers on 1826f55 after merging main([243b7a1](https://github.com/scbrown/quipu/commit/243b7a1b2cd29a1497a4f308c30922656e703691))
+- *(conformance)* Re-derive ledgers on 47c8f66 after merging main([822af0d](https://github.com/scbrown/quipu/commit/822af0dbec456f09b151db116f1ab26920d7a9ef))
+- *(conformance)* Re-derive ledgers on b96a99d — the non-goal reasons land([7736d4e](https://github.com/scbrown/quipu/commit/7736d4e38e6563f7cba30fe50d2a0e022fb71d72))
+- *(conformance)* Re-derive ledgers on f564857 after merging main([95bba47](https://github.com/scbrown/quipu/commit/95bba4708dbd45873a4363d2f89a95a3635e77d8))
+- *(conformance)* Re-derive ledgers on efca5e0 after the clippy fix([e6a197e](https://github.com/scbrown/quipu/commit/e6a197e04068c4119e1353907627ffa5d088be4a))
+- *(conformance)* Re-derive ledgers on 7727ca7 after merging main([ba64509](https://github.com/scbrown/quipu/commit/ba64509e33883fc160a4a4a7a2e2b09d4be19cb3))
+- *(conformance)* Re-derive ledgers on c0ce740 after merging main([43fe0f2](https://github.com/scbrown/quipu/commit/43fe0f2f8e15cc3314c927d3e8f31520eb9c5cac))
+- *(conformance)* Re-derive ledgers on d3d03eb after merging main([7cf3216](https://github.com/scbrown/quipu/commit/7cf32165b1db998ec8cf085176dbd9375ea1acc5))
+
+### Bench
+
+- *(oxigraph)* One-process Quipu-vs-Oxigraph harness that cannot flatter (#178)([01701f2](https://github.com/scbrown/quipu/commit/01701f255299de194aeb60849168a4b2aa195f88))
+
+### Perf
+
+- *(owl)* Semi-naive derive — materialize from the delta, not the whole store([fb5307b](https://github.com/scbrown/quipu/commit/fb5307b1964d1f0fde95575e11d2bcf50e521f6b))
+- *(owl)* Scope the dedup read on BOTH axes so an index can serve it([5bb65c5](https://github.com/scbrown/quipu/commit/5bb65c5e1353524165aa5af1139e414739c8242a))
+- *(owl)* Drop the dedup preload — it was the scan, and it was never needed([7724d7b](https://github.com/scbrown/quipu/commit/7724d7b7b84f745d9a35fd5365b9a41eded1f6d9))
+- *(sparql)* ASK stops at the first solution([62a0076](https://github.com/scbrown/quipu/commit/62a00767d7153729f93087af49bd7c7b9c02d666))
+
 ## [0.3.39] - 2026-09-05
 
 ### Added

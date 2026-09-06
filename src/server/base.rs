@@ -97,16 +97,20 @@ pub(crate) async fn health() -> impl IntoResponse {
 pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
-    let (entities, facts, predicates) = blocking(move || {
+    let (entities, facts, predicates, wal_bytes) = blocking(move || {
         // Metrics is read-only and must not join the writer queue. Prometheus
         // abandons timed-out responses, but spawn_blocking keeps their queued
         // work alive; one scrape per interval otherwise consumes task slots
         // until TasksMax starves unrelated store endpoints (aegis-vimo5).
         let store = store.read();
-        Ok(store.graph_counts()?)
+        let (e, f, p) = store.graph_counts()?;
+        // Read on the pooled read connection alongside the counts rather than
+        // in its own handler: one blocking hop, and the WAL number is then
+        // taken at the same instant as the facts it should be read against.
+        Ok((e, f, p, store.wal_bytes()))
     })
     .await?;
-    let body = quipu::metrics::metrics().render(entities, facts, predicates);
+    let body = quipu::metrics::metrics().render(entities, facts, predicates, wal_bytes);
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,

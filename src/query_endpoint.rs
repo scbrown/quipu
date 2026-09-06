@@ -9,10 +9,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
 
-use super::{
-    SharedStore,
-    base::{AppError, blocking},
-};
+use super::{SharedStore, admission::read_blocking, base::AppError};
 
 /// Conservative bounds for the two standard SPARQL Protocol transports.
 /// GET is intentionally small enough for common proxies; clients with larger
@@ -213,7 +210,7 @@ async fn query_core(
     // passed through two layers.
     let client = super::query_usage::client(&headers);
 
-    blocking(move || {
+    read_blocking(move || {
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the
         // record. Completion-only text logging is how the mfg0 killer query

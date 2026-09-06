@@ -26,9 +26,9 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `0e31c7d6e96c0415bfa7137a73aa7c5a16086796` |
-| Quipu revision (syntax) | `0e31c7d6e96c0415bfa7137a73aa7c5a16086796` |
-| Quipu version | `quipu 0.3.39` |
+| Quipu revision (evaluation) | `8271d0fcad9c1650d3f9fa4a23d1da3b71149797` |
+| Quipu revision (syntax) | `8271d0fcad9c1650d3f9fa4a23d1da3b71149797` |
+| Quipu version | `quipu 0.3.40` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -98,12 +98,12 @@ The variable-endpoint case is a deliberate policy deviation because query data c
 
 Grouped by the reason the runner recorded.
 
-| Missing capability | Cases | Classes |
+| Why it is unsupported | Cases | Classes |
 |---|---:|---|
-| OWL-Direct entailment regime is not implemented | 18 | entailment |
-| OWL-RDF-Based entailment regime is not implemented | 11 | entailment |
-| RIF entailment regime is not implemented | 4 | entailment |
-| D entailment regime is not implemented | 2 | entailment |
+| OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it | 18 | entailment |
+| OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure | 11 | entailment |
+| RIF entailment is a deliberate non-goal: RIF is a rule-interchange format, not a semantics asked of this store | 4 | entailment |
+| D entailment (datatype entailment) is a deliberate non-goal: no consumer asks for datatype entailment beyond simple and RDFS | 2 | entailment |
 | variable SERVICE endpoints are deliberately refused; endpoints must be operator-configured | 1 | federated query (`SERVICE`) |
 
 ## Re-derive these numbers
@@ -177,7 +177,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **29/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-06T21:25:26Z by [CI run](https://github.com/scbrown/quipu/actions/runs/34060714408), from quipu `0e31c7d6e96c`.
+Ledger re-derived 2026-09-06T21:08:04Z by [CI run](https://github.com/scbrown/quipu/actions/runs/34059865856), from quipu `8271d0fcad9c`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.

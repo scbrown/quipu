@@ -50,6 +50,8 @@ mod tests;
 mod tools;
 #[path = "server/update.rs"]
 mod update;
+#[path = "server/wal_maintenance.rs"]
+mod wal_maintenance;
 
 use base::{health, metrics_handler, print_usage, stats, version};
 use entity::{
@@ -258,10 +260,7 @@ async fn main() {
 
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
-    let signing_key_path = std::env::var("QUIPU_SIGNING_KEY").map_or_else(
-        |_| std::path::Path::new(".quipu").join("verifier.pk8"),
-        std::path::PathBuf::from,
-    );
+    let signing_key_path = quipu::signing::default_key_path();
     match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
         Ok(id) => {
             eprintln!(
@@ -289,56 +288,17 @@ async fn main() {
     // nothing. Same for a store we cannot open read-only — announce it and run
     // serialised rather than fail to boot, since a slow server is recoverable
     // and a dead one is not.
-    let read_pool = if db_path == ":memory:" {
-        ReadPool::empty()
-    } else if store.has_vector_delegate() || store.has_local_vector_backend() {
-        // FAIL SAFE, not fail silent. The vector backends are boxed trait
-        // objects and are not `Clone`, so `adopt_read_config_from` cannot carry
-        // them onto a pooled reader — and `unified_search`, `ask`,
-        // `search_nodes` and `search_facts` are all pooled AND vector-backed.
-        // A pool built here would answer those from the built-in SQLite vectors
-        // table while the writer answered from the configured backend: same
-        // question, two answers, no error, decided by which connection happened
-        // to take the request.
-        //
-        // Not reachable in this deployment — the REST server configures neither
-        // backend today (`lancedb: false`) — which is exactly why it needs to be
-        // a guard rather than a note. Whoever turns LanceDB on will not be
-        // thinking about the read pool.
-        eprintln!(
-            "read pool: DISABLED — a vector delegate/local backend is configured and \
-             cannot be shared with read-only connections. Serving reads from the writer \
-             rather than answering vector search two different ways."
-        );
-        ReadPool::empty()
-    } else {
-        let want = config.server.read_pool_size;
-        let mut conns = Vec::with_capacity(want);
-        for i in 0..want {
-            match quipu::Store::open_read_only(&db_path) {
-                Ok(mut r) => {
-                    r.adopt_read_config_from(&store);
-                    conns.push(FairMutex::new(r));
-                }
-                Err(e) => {
-                    eprintln!(
-                        "warning: read connection {i} of {want} failed to open ({e}) — \
-                         continuing with {i}; reads fall back to the writer when the pool is empty"
-                    );
-                    break;
-                }
-            }
-        }
-        ReadPool {
-            conns,
-            next: std::sync::atomic::AtomicUsize::new(0),
-        }
-    };
+    wal_maintenance::reset_at_startup(&store);
+
+    let read_pool = ReadPool::open(&db_path, &store, config.server.read_pool_size);
+
     if read_pool.len() > 0 {
         eprintln!("read pool: {} read-only connections", read_pool.len());
     } else {
         eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
     }
+
+    admission::init_read_admission_for_pool(read_pool.len());
 
     let vector_reads_pooled = store.has_sqlite_vector_backend();
     let state: SharedStore = Arc::new(StoreHandle {
@@ -669,6 +629,8 @@ async fn main() {
             }
         });
     }
+
+    wal_maintenance::spawn_periodic_checkpoint(push_store_outer.clone());
 
     // Event-log retention (quipu-9z9). Opt-in via `[quipu.events]
     // retention_days`; unset keeps today's keep-forever behaviour and spawns
