@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.40] - 2026-09-06
+
+### Added
+
+- *(rdfs)* Rdfs7 carries literals — the other half of([93de4ed](https://github.com/scbrown/quipu/commit/93de4edeb066d1c28b7b37d3d2d7b577a010c8cf))
+
+### Fixed
+
+- *(server)* Needless borrow in the extracted ReadPool::open([efca5e0](https://github.com/scbrown/quipu/commit/efca5e04be2049aa77730b9bd39fe739361ef565))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers on 33c81cd after merging main([d36106a](https://github.com/scbrown/quipu/commit/d36106a5ff2b2df8183c82a6f61d01441ecfd698))
+- *(conformance)* Re-derive the ledgers and page on this head([4393934](https://github.com/scbrown/quipu/commit/4393934cee84132eeadc5986c2fcccc8ecc05a85))
+- *(conformance)* Re-derive ledgers on 1826f55 after merging main([243b7a1](https://github.com/scbrown/quipu/commit/243b7a1b2cd29a1497a4f308c30922656e703691))
+- *(conformance)* Re-derive ledgers on 47c8f66 after merging main([822af0d](https://github.com/scbrown/quipu/commit/822af0dbec456f09b151db116f1ab26920d7a9ef))
+- *(conformance)* Re-derive ledgers on b96a99d — the non-goal reasons land([7736d4e](https://github.com/scbrown/quipu/commit/7736d4e38e6563f7cba30fe50d2a0e022fb71d72))
+- *(conformance)* Re-derive ledgers on f564857 after merging main([95bba47](https://github.com/scbrown/quipu/commit/95bba4708dbd45873a4363d2f89a95a3635e77d8))
+- *(conformance)* Re-derive ledgers on efca5e0 after the clippy fix([e6a197e](https://github.com/scbrown/quipu/commit/e6a197e04068c4119e1353907627ffa5d088be4a))
+- *(conformance)* Re-derive ledgers on 7727ca7 after merging main([ba64509](https://github.com/scbrown/quipu/commit/ba64509e33883fc160a4a4a7a2e2b09d4be19cb3))
+- *(conformance)* Re-derive ledgers on c0ce740 after merging main([43fe0f2](https://github.com/scbrown/quipu/commit/43fe0f2f8e15cc3314c927d3e8f31520eb9c5cac))
+- *(conformance)* Re-derive ledgers on d3d03eb after merging main([7cf3216](https://github.com/scbrown/quipu/commit/7cf32165b1db998ec8cf085176dbd9375ea1acc5))
+
+### Bench
+
+- *(oxigraph)* One-process Quipu-vs-Oxigraph harness that cannot flatter (#178)([01701f2](https://github.com/scbrown/quipu/commit/01701f255299de194aeb60849168a4b2aa195f88))
+
 ## [0.3.39] - 2026-09-05
 
 ### Added
