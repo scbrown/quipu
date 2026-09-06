@@ -30,7 +30,7 @@ use super::{Bindings, GraphScope, TemporalContext};
 /// needs the full set before any row is final, joins multiply, and `Union`
 /// concatenates two branches that would each need their own budget. When this
 /// says no, evaluation is exactly what it was before the pushdown existed.
-fn limit_pushdown_safe(pattern: &GraphPattern) -> bool {
+pub(crate) fn limit_pushdown_safe(pattern: &GraphPattern) -> bool {
     match pattern {
         GraphPattern::Bgp { .. } => true,
         GraphPattern::Project { inner, .. } | GraphPattern::Reduced { inner } => {

@@ -9,7 +9,7 @@ use axum::extract::State;
 use serde_json::{Value as JsonValue, json};
 
 use super::SharedStore;
-use super::admission::write_blocking;
+use super::admission::{read_blocking, write_blocking};
 use super::base::{AppError, blocking};
 
 macro_rules! ro_handler {
@@ -35,7 +35,7 @@ macro_rules! ro_handler {
             // connection is `SQLITE_OPEN_READ_ONLY`, so it returns "attempt to
             // write a readonly database" rather than racing the writer. That is
             // a 500 on a read endpoint, which is why the test exists.
-            blocking(move || Ok(axum::Json($tool(&s.read(), &i)?))).await
+            read_blocking(move || Ok(axum::Json($tool(&s.read(), &i)?))).await
         }
     };
 }
@@ -146,7 +146,7 @@ macro_rules! embed_handler {
             State(s): State<SharedStore>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
-            blocking(move || {
+            read_blocking(move || {
                 let mut i = i;
                 if i.get("embedding").is_none() {
                     if let Some(text) = i.get("query").and_then(|v| v.as_str()).map(str::to_owned) {

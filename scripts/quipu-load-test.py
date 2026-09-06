@@ -135,7 +135,18 @@ ex:LoadFixture rdfs:subClassOf ex:Thing .
 
 
 def request_for(sequence: int) -> tuple[str, str, dict]:
-    kind = sequence % 5
+    kind = sequence % 6
+    if kind == 5:
+        # ASK over an unbounded pattern (aegis-yzn4vp). This is the shape the
+        # obvious liveness probe uses, and before the short-circuit it was the
+        # MOST expensive question in the mix: 4.36 s on the 5.7 GB deployed
+        # store against 4.2 ms for the equivalent SELECT ... LIMIT 1, because
+        # the ASK arm materialised every solution to answer a yes/no question.
+        #
+        # It is measured as its own row rather than folded into query_full_scan
+        # because they are no longer the same cost class and a regression here
+        # is a health-probe outage, not a slow report.
+        return "query_ask_unbounded", "/query", {"query": "ASK { ?s ?p ?o }"}
     if kind == 0:
         return "query_bounded", "/query", {
             "query": "SELECT ?p ?o WHERE { <http://aegis.gastown.local/ontology/load-5feceb66ffc86f38d952> ?p ?o } LIMIT 20"
