@@ -132,3 +132,98 @@ The feature is not complete until these independent checks pass:
   fixtures fail before mutation; and
 - native and WASM materialize the same full-plus-delta golden chain and emit the
   same resulting RDFC digest.
+
+## Reconstruction completeness (aegis-9f899e)
+
+The sections above settle the **form**: a `.qpack` is a text share, not a SQLite
+blob. This section settles the **content**, and it is a widening: the share
+described above carries CURRENT FACTS ONLY, which is not enough to reconstruct
+the store it came from.
+
+### The gap, measured
+
+Three ordinary commands — `knot`, `retract`, `knot` — leave a store holding 5
+`facts` rows across 3 transactions and 2 entities. `quipu share` of that store
+emits **3 triples, 1 entity, 0 transactions**. `export_rdf_subset` calls
+`current_facts_in_graph` and serializes `(e, a, v)`; the rest of each row — `g`,
+`tx`, `valid_from`, `valid_to`, `op`, `retracted_tx` — and the whole
+`transactions` table stop at the boundary.
+
+Three questions the share cannot answer, and the first is why this matters:
+
+1. **Was there ever a `bob`?** No. A retracted entity leaves no trace at all, so
+   the share is not merely a lossy view — it is one whose loss falls exactly on
+   what somebody decided to remove.
+2. **When did `alice` become `principal`?** Unknowable. Both values are current
+   (legal multi-value RDF), so the share cannot even order them.
+3. **Who wrote any of it?** `transactions` carries timestamp/actor/source per
+   transaction and none of it appears.
+
+### Lossless with respect to a DECLARED set
+
+"Losslessly reconstructs the store" cannot mean *every table*, so the manifest
+names the set it carries. A consumer then reads what was excluded instead of
+inferring it, and adding a table later is a visible format change.
+
+The declared set is not a convenience. For the excluded group below it is a
+security requirement, and the manifest saying so is what stops a later
+contributor "completing" the format.
+
+| Group | Tables | Disposition |
+|---|---|---|
+| Content | `facts` (whole row), `transactions`, `terms`, `graphs`, `shapes`, `ontologies`, `queries`, `query_params`, `datasets`, `dataset_members`, `forks`, `proposals`, `term_spaces`, `schema_terms` | serialized |
+| Derived | `vectors` | regenerated under a pinned model, never serialized |
+| Log | `events` | serialized; `consumers` and `subscriptions` excluded |
+| **Excluded** | `attestation_bindings`, `attestation_nonces`, `frozen_packs.path`, `snapshot_uploads`, `snapshot_upload_parts` | never carried |
+
+### Why the excluded group is excluded
+
+**`attestation_bindings` is a trust registry, and carrying it would undo
+`aegis-tadzdf` by the back door.** It records which producer sessions *this*
+store was told to trust. `share_attestation.rs` consults it first and says why in
+its own comment: *"A share that carries a binding does NOT get it registered; if
+it did, `attested` would mean 'came with a self-signed claim' and a whole-bundle
+substitution would swap the key along with the data and still go green … quipu
+never self-registers."*
+
+So the format already refuses to let a bundle carry trust in through the front
+door. A "lossless" pack that serialized this table would carry it in through the
+back one — the same escalation, arriving labelled as completeness. Two rules each
+correct alone and wrong together; neither document anticipated the other.
+
+**`attestation_nonces` is replay state and is wrong in both directions.** Carry
+spent nonces and a legitimate re-import is refused as a replay; omit them
+silently and a replay the origin had already spent is accepted on the copy.
+Excluding it deliberately, and saying so, is the only honest option.
+
+`frozen_packs.path` is a producer-local filesystem path; carried verbatim it
+points the reconstruction at files that do not exist. `consumers` is a *reader's*
+cursor and `subscriptions` holds webhook URLs — reconstructing either would
+resume someone else's position or aim a new store at another store's endpoints.
+
+### Store identity
+
+An unpacked reconstruction **mints a new `store_id`** and records the source as
+explicit lineage. Identity is load-bearing in attestation and must not be
+transported, for the same reason as the trust registry.
+
+Recording lineage by *reusing* the source `store_id` would also be inert:
+measured, no code path compares `store_id` at all — not `share_merge`, not
+`share_import`, not `share_delta`. It is minted once per store
+(`store/open.rs:261`) and read in exactly one place, to stamp the manifest. What
+merge and status actually key on is `parent_share`, so lineage needs its own
+declared field rather than a field nothing consults.
+
+Consequence, stated so it is not discovered later: an unpacked reconstruction is
+a **different store that agrees with the original**. `quipu merge` against the
+origin still works, through `parent_share`. Divergence after unpack is a fork.
+
+### Size
+
+Sizes are the measured ones, and they are why the format is text-and-diffable
+rather than a single artifact re-added nightly: a lossless text pack is large on
+first import and its nightly cost is the git **delta**, not the whole file. The
+LFS decision is therefore made against a measured night-2-minus-night-1 diff, not
+against the full size. Vectors are excluded from that calculation entirely — they
+are regenerated, which is also why the pinned embedding model and config are part
+of the declared set rather than an implementation detail.
