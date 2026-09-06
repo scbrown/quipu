@@ -16,7 +16,7 @@ because a copied number rots silently while its source moves on.
 |---|---|---|---|
 | [SPARQL 1.1 conformance](conformance.md) | Quipu's query engine against the W3C RDF Tests at a pinned revision | this repository | **published**, re-derivable |
 | [Extraction → ingress](#extraction--ingress-text2kgbench) | a governed RML write of frozen upstream extractions into a disposable Quipu | [caboodle](https://github.com/scbrown/caboodle) `0a1b169` | **published**, with the boundary below |
-| [Bulk ingest](#bulk-ingest-watdiv) | Quipu's own load rate for a pinned WatDiv dataset | this repository's harness, run externally — see the gap below | **measured, NOT YET RE-DERIVABLE HERE** |
+| [Bulk ingest](#bulk-ingest-watdiv) | Quipu's own load rate for a pinned WatDiv dataset | this repository (`benchmark/public/watdiv_ingest.py`) | **published**, re-derivable |
 | [Performance](#performance-watdivlubm) | WatDiv / LUBM query latency against Oxigraph | — | **NOT RUN** |
 
 ## Extraction → ingress (Text2KGBench)
@@ -109,15 +109,31 @@ transition at some fraction of the dataset) and working-set residency (the small
 3.2 GB and caches readily; the larger is 32.3 GB). They are not equivalent — the first says the
 cost never amortises, the second says it amortises whenever the store fits in memory.
 
-### ⚠ The re-derivability gap, stated because rule 2 requires it
+### Re-deriving it
 
-**The harness that produced this number is not yet in this repository**, so a reader cannot
-re-derive it here, and rule 2 below is not satisfied. The figure is published with that gap named
-rather than omitted (rule 3) or copied in as though it were first-party (rule 4).
+```text
+python3 benchmark/public/watdiv_ingest.py --scale 10M \
+  --archive <watdiv.10M.tar.bz2> --quipu <release quipu> \
+  --db <scratch>.db --output benchmark/public/results/watdiv-ingest.jsonl \
+  --pins benchmark/public/results/watdiv-pins.tsv
+```
 
-Closing it means porting the ingest harness — dataset pinning by digest, the declared-count
-refusal, and the transient guards — into this repository as a checked-in runner, at which point
-this section becomes re-derivable on the same terms as the conformance page.
+The archive is fetched once from the published WatDiv site; the runner pins its digest on first
+sight and **verifies** it afterwards, aborting on a mismatch rather than benchmarking bytes
+nobody pinned. The source is **streamed from the archive** and never unpacked — at the 100M scale
+the extracted form is ~15.6 GB, which would double the footprint of a run designed to leave
+nothing behind.
+
+Guards that decide whether a row may be quoted, each covered by a test in
+`benchmark/public/test_watdiv_ingest.py`:
+
+* a **non-zero exit** or a **contended host** marks the row `valid_result: false` with the reason
+  named — the row is still written, because an unlabelled fast number is the hazard, not a
+  labelled slow one;
+* an **unreadable store** reads as UNKNOWN rather than a zero baseline, which would otherwise
+  inflate the delta by whatever the store already held;
+* an archive with **no `.nt` member** is refused rather than silently benchmarking the first file
+  it finds.
 
 ## Performance (WatDiv/LUBM)
 
