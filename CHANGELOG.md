@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.41] - 2026-09-06
+
+### Added
+
+- *(share)* --destination internal, stamped into share_id([d03bc04](https://github.com/scbrown/quipu/commit/d03bc04922944909880104895cf8720c6349683d))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers on 21e7246([044e4bf](https://github.com/scbrown/quipu/commit/044e4bfcbab0c26c365b0ddb08ac9162528a30e7))
+
+### Testing
+
+- *(share)* Prove each delta file is INDIVIDUALLY scrubbed, not just that something refused([793ab25](https://github.com/scbrown/quipu/commit/793ab252eca9aaa404f0109725ae5ff3429eb804))
+
 ## [0.3.40] - 2026-09-06
 
 ### Added
