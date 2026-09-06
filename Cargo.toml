@@ -54,6 +54,11 @@ path = "src/bin/seed_fixtures.rs"
 required-features = ["shacl"]
 
 [[bin]]
+name = "quipu-oxi-compare"
+path = "src/bin/oxi_compare.rs"
+required-features = ["oxicompare"]
+
+[[bin]]
 name = "quipu-shacl-conformance"
 path = "src/bin/quipu_shacl_conformance.rs"
 required-features = ["shacl"]
@@ -155,6 +160,16 @@ server = ["dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", 
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:tokio"]
 onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
 reactive-reasoner = []
+# The Quipu-vs-Oxigraph comparison harness (aegis-j0yaxj.2). OFF by default and
+# never in the shipped binaries: it exists to measure, not to ship.
+#
+# ⚠️ `oxigraph/rocksdb` is REQUIRED here and is NOT implied by `dep:oxigraph`.
+# The `server` feature pins oxigraph with `default-features = false`, which drops
+# its `rocksdb` default and with it `Store::open` — leaving only the in-memory
+# `Store::new`. Comparing an in-memory Oxigraph against an on-disk Quipu would
+# flatter Oxigraph on both latency and RSS while looking like a like-for-like
+# run, so the harness asks for the on-disk backend explicitly.
+oxicompare = ["dep:oxigraph", "oxigraph/rocksdb"]
 
 # What the shipped release binaries are built with — every feature the binaries
 # can actually USE. Named here rather than spelled out in the workflows so CI
