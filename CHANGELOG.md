@@ -7,6 +7,9 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - *(owl)* Implement owl:sameAs — asserted identities stop being inert([787b0b6](https://github.com/scbrown/quipu/commit/787b0b6747231bfdf8f383c29c83a377a5647ff7))
+- *(share)* The declared set in code, with the audit a round-trip cannot do([ef3df57](https://github.com/scbrown/quipu/commit/ef3df5778baac75035379788882302dd5fbd0b12))
+
+
 
 ### Fixed
 
@@ -18,6 +21,8 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Re-derive the ledgers on this head([2502ca4](https://github.com/scbrown/quipu/commit/2502ca402400552ce4890c99e2f9d8bf3228e777))
 - *(conformance)* Re-derive the ledgers on the merged head([b3d7fc4](https://github.com/scbrown/quipu/commit/b3d7fc445354f705745f7eac9a1c569624452575))
 - *(conformance)* Re-derive the ledgers on the merged head([06986b0](https://github.com/scbrown/quipu/commit/06986b038c6af8febacb1cbcbc061c3b48d24bd2))
+- *(conformance)* Re-derive ledgers and the published page on ef3df57([96e6006](https://github.com/scbrown/quipu/commit/96e60068e3c252a9d568a2c0b61ee180c9c2a301))
+- *(conformance)* Re-derive ledgers and page on the post-#183 merge head([cc85c49](https://github.com/scbrown/quipu/commit/cc85c49c0f722d72df0fda63c8119820bda87106))
 - *(conformance)* Re-derive ledgers and page on bd8a03f([dced6c1](https://github.com/scbrown/quipu/commit/dced6c102b4af0a33ae067183a9e4e03ce0c6697))
 
 ### Testing
