@@ -8,13 +8,21 @@ All notable changes to this project will be documented in this file.
 
 - *(share)* --destination internal, stamped into share_id([d03bc04](https://github.com/scbrown/quipu/commit/d03bc04922944909880104895cf8720c6349683d))
 
+
+
 ### Miscellaneous
 
+- *(conformance)* Re-derive the ledgers on the rebased head([b01a395](https://github.com/scbrown/quipu/commit/b01a395700ef114d329c3a86ee3fd29e9737b837))
 - *(conformance)* Re-derive ledgers on 21e7246([044e4bf](https://github.com/scbrown/quipu/commit/044e4bfcbab0c26c365b0ddb08ac9162528a30e7))
 
 ### Testing
 
 - *(share)* Prove each delta file is INDIVIDUALLY scrubbed, not just that something refused([793ab25](https://github.com/scbrown/quipu/commit/793ab252eca9aaa404f0109725ae5ff3429eb804))
+
+### Bench
+
+- *(watdiv)* Port the bulk-ingest runner in, so rule 2 is satisfied([bce035f](https://github.com/scbrown/quipu/commit/bce035f2364542a8da0e153a9b5294e4a33d8adf))
+- *(watdiv)* --limit, so store state can be held constant while the source varies([8271d0f](https://github.com/scbrown/quipu/commit/8271d0fcad9c1650d3f9fa4a23d1da3b71149797))
 
 ## [0.3.40] - 2026-09-06
 
