@@ -3541,3 +3541,108 @@ fn join_plan_ignores_source_order() {
         "smallest starts; then the connected chain beats staying small"
     );
 }
+
+// ── ASK short-circuit (aegis-yzn4vp) ───────────────────────────
+//
+// `ASK { ?s ?p ?o }` took 4.36 s on the deployed 5.7 GB store while
+// `SELECT ?s WHERE { ?s ?p ?o } LIMIT 1` took 4.2 ms, because the ASK arm
+// materialised every solution and then tested `!rows.is_empty()`.
+
+/// The behaviour that matters: ASK must still answer CORRECTLY, including on
+/// the patterns the short-circuit does NOT apply to.
+///
+/// A short-circuit that returns the wrong answer is worse than a slow one, and
+/// the failure would be silent — `true` is `true` whether one row or a million
+/// produced it.
+#[test]
+fn ask_short_circuit_preserves_the_answer_on_every_pattern_shape() {
+    let store = test_store_with_data();
+    // (query, expected) — the FILTER and MINUS arms are deliberately shapes
+    // `limit_pushdown_safe` rejects, so they exercise the fallback path.
+    let cases: &[(&str, bool)] = &[
+        ("ASK { ?s ?p ?o }", true),
+        (
+            "ASK { <http://example.org/alice> <http://example.org/name> ?n }",
+            true,
+        ),
+        (
+            "ASK { <http://example.org/nobody> <http://example.org/name> ?n }",
+            false,
+        ),
+        (
+            "ASK { ?s <http://example.org/name> ?n FILTER(?n = \"nobody-at-all\") }",
+            false,
+        ),
+        ("ASK { ?s ?p ?o MINUS { ?s ?p ?o } }", false),
+    ];
+    for (q, want) in cases {
+        match query(&store, q).unwrap() {
+            QueryResult::Ask(got) => assert_eq!(
+                got, *want,
+                "ASK returned {got} for `{q}`, expected {want} — the short-circuit \
+                 changed the ANSWER, not just the cost (aegis-yzn4vp)"
+            ),
+            other => panic!("expected Ask result for `{q}`, got {other:?}"),
+        }
+    }
+}
+
+/// ASK must not materialise more than it needs.
+///
+/// The cost is what the bead is about, and it cannot be asserted with a wall
+/// clock in a unit test without being flaky. So this asserts the MECHANISM
+/// instead: with a pushdown-safe pattern, `eval_pattern_exists` stops at one
+/// row, which is observable as the row count the capped evaluation returns.
+///
+/// ANTI-VACUITY: the fixture must hold MORE than one matching row, or "it
+/// stopped at one" is free.
+#[test]
+fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
+    use crate::sparql::exists;
+    let store = test_store_with_data();
+    let ctx = TemporalContext::default();
+
+    let all = query(&store, "SELECT ?s WHERE { ?s ?p ?o }").unwrap();
+    let total = match all {
+        QueryResult::Select { rows, .. } => rows.len(),
+        other => panic!("expected Select, got {other:?}"),
+    };
+    assert!(
+        total > 1,
+        "fixture broken: {total} row(s) match `?s ?p ?o`, so 'stopped after one' proves nothing"
+    );
+
+    let ask_pattern = |q: &str| {
+        let spargebra::Query::Ask { pattern: p, .. } =
+            spargebra::SparqlParser::new().parse_query(q).unwrap()
+        else {
+            panic!("expected an ASK query");
+        };
+        p
+    };
+
+    // THE MECHANISM, not the answer: a pushdown-safe ASK evaluates under a cap
+    // of exactly one row. Delete the cap and this returns None.
+    let safe = ask_pattern("ASK { ?s ?p ?o }");
+    assert_eq!(
+        exists::exists_row_limit(&safe, &ctx),
+        Some(1),
+        "ASK over a pushdown-safe pattern must evaluate capped at ONE row; it is \
+         materialising every solution to answer a yes/no question (aegis-yzn4vp)"
+    );
+
+    // And the fallback stays uncapped, so no pattern gains a shortcut that
+    // `limit_pushdown_safe` has not already judged prefix-safe.
+    let unsafe_pat = ask_pattern("ASK { ?s ?p ?o MINUS { ?s ?p ?o } }");
+    assert_eq!(
+        exists::exists_row_limit(&unsafe_pat, &ctx),
+        None,
+        "a pattern MINUS/FILTER can eliminate rows, so capping at one row could \
+         answer TRUE from a solution the full evaluation would have removed"
+    );
+
+    assert!(
+        exists::eval_pattern_exists(&store, &safe, &ctx).unwrap(),
+        "ASK over a non-empty store must still be true"
+    );
+}

@@ -133,12 +133,63 @@ impl Store {
         Self::init_with_attachments(conn, attachments)
     }
 
+    /// Move what can be moved out of the WAL, without ever blocking a reader
+    /// (aegis-raq1ok). Safe to call on a live serving store; see `store::wal`.
+    ///
+    /// Returns what SQLite actually achieved, so a caller can tell a checkpoint
+    /// that RAN from one that RETIRED the log — the distinction this incident
+    /// was made of.
+    pub fn checkpoint_wal_passive(&self) -> Result<crate::store::wal::CheckpointOutcome> {
+        crate::store::wal::checkpoint_passive(&self.conn)
+    }
+
+    /// Retire the WAL and RESET THE FILE. Blocks on readers — call only where
+    /// none can exist, i.e. at startup before the read pool opens
+    /// (aegis-raq1ok). See `store::wal::checkpoint_truncate`.
+    pub fn checkpoint_wal_truncate(&self) -> Result<crate::store::wal::CheckpointOutcome> {
+        crate::store::wal::checkpoint_truncate(&self.conn)
+    }
+
+    /// Size of the write-ahead log in bytes, or `None` when it cannot be read.
+    ///
+    /// `None` is deliberately distinct from `0`: an unreadable WAL and an empty
+    /// one are opposite findings, and a gauge that reports the first as the
+    /// second would say "healthy" about a store it could not see.
+    #[must_use]
+    pub fn wal_bytes(&self) -> Option<u64> {
+        let path: String = self
+            .conn
+            .query_row("PRAGMA database_list", [], |r| r.get(2))
+            .ok()?;
+        if path.is_empty() {
+            return None; // in-memory store: no WAL on disk, not a zero-byte one
+        }
+        std::fs::metadata(format!("{path}-wal"))
+            .ok()
+            .map(|m| m.len())
+    }
+
     pub(crate) fn init(conn: Connection) -> Result<Self> {
         Self::init_with_attachments(conn, &[])
     }
 
     fn init_with_attachments(conn: Connection, attachments: &[attach::Attachment]) -> Result<Self> {
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
+        // `wal_autocheckpoint` is stated EXPLICITLY rather than left to SQLite's
+        // default (aegis-raq1ok). Read the honest caveat before changing it:
+        // the deployed store reached a **1.06 GB** WAL against a 5.7 GB
+        // database while the default (1000 pages) was in force, so this pragma
+        // is NOT what was missing and setting it alone fixes nothing. SQLite
+        // cannot checkpoint past the oldest live reader, and the server holds a
+        // pool of long-lived read connections; a checkpoint that is attempted
+        // and blocked leaves the WAL growing exactly as observed.
+        //
+        // It is set anyway for two reasons: intent stops being inferred from a
+        // library default that can change under us, and the value becomes a
+        // thing a reader can see next to `quipu_wal_bytes`. The load-bearing
+        // parts of the fix are the passive checkpoints and that metric.
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA wal_autocheckpoint=1000;",
+        )?;
         conn.execute_batch(INIT_SQL)?;
         Self::ensure_store_identity(&conn)?;
         conn.execute_batch(VECTORS_SQL)?;

@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "c98d1860467588aa5c7c408f38369df5d4fd5d97",
+  "quipu_revision": "7727ca7d5e3b29dd6b9c7ecf33f38ab57a5f8632",
   "quipu_version": "quipu 0.3.39",
-  "generated_at": "2026-09-06T02:47:20Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/34007171386",
+  "generated_at": "2026-09-06T05:03:11Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/34012848290",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -2593,7 +2593,7 @@
       "decision_bucket": "D",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "D entailment regime is not implemented"
+      "reason": "D entailment (datatype entailment) is a deliberate non-goal: no consumer asks for datatype entailment beyond simple and RDFS"
     },
     {
       "class": "entailment",
@@ -2615,7 +2615,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -2682,7 +2682,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -2713,7 +2713,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2727,7 +2727,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2748,7 +2748,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -2786,7 +2786,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2823,7 +2823,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2837,7 +2837,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2851,7 +2851,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2865,7 +2865,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2879,7 +2879,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2893,7 +2893,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2907,7 +2907,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -2929,7 +2929,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -3293,7 +3293,7 @@
       "decision_bucket": "RIF",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "RIF entailment regime is not implemented"
+      "reason": "RIF entailment is a deliberate non-goal: RIF is a rule-interchange format, not a semantics asked of this store"
     },
     {
       "class": "entailment",
@@ -3307,7 +3307,7 @@
       "decision_bucket": "RIF",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "RIF entailment regime is not implemented"
+      "reason": "RIF entailment is a deliberate non-goal: RIF is a rule-interchange format, not a semantics asked of this store"
     },
     {
       "class": "entailment",
@@ -3321,7 +3321,7 @@
       "decision_bucket": "RIF",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "RIF entailment regime is not implemented"
+      "reason": "RIF entailment is a deliberate non-goal: RIF is a rule-interchange format, not a semantics asked of this store"
     },
     {
       "class": "entailment",
@@ -3335,7 +3335,7 @@
       "decision_bucket": "RIF",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "RIF entailment regime is not implemented"
+      "reason": "RIF entailment is a deliberate non-goal: RIF is a rule-interchange format, not a semantics asked of this store"
     },
     {
       "class": "entailment",
@@ -3352,7 +3352,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -3366,7 +3366,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -3380,7 +3380,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -3394,7 +3394,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -3408,7 +3408,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -3422,7 +3422,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -3436,7 +3436,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -3450,7 +3450,7 @@
       "decision_bucket": "OWL-Direct",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-Direct entailment regime is not implemented"
+      "reason": "OWL-Direct entailment is a deliberate non-goal pending a design (aegis-b5moll): it needs a real DL reasoner, and this store's OWL layer is a write gate with no axioms -- no amount of RDFS closure reaches it"
     },
     {
       "class": "entailment",
@@ -3600,7 +3600,7 @@
       "decision_bucket": "D",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "D entailment regime is not implemented"
+      "reason": "D entailment (datatype entailment) is a deliberate non-goal: no consumer asks for datatype entailment beyond simple and RDFS"
     },
     {
       "class": "entailment",
@@ -3626,7 +3626,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -3652,7 +3652,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -3677,7 +3677,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -3698,7 +3698,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -3718,7 +3718,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -3738,7 +3738,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "entailment",
@@ -3760,7 +3760,7 @@
       "decision_bucket": "OWL-RDF-Based",
       "commitment": "deliberate-non-goal",
       "status": "unsupported",
-      "reason": "OWL-RDF-Based entailment regime is not implemented"
+      "reason": "OWL-RDF-Based entailment is a deliberate non-goal pending the same design (aegis-b5moll): it needs an RL rule set or an external reasoner, not an extension of the RDFS closure"
     },
     {
       "class": "result-format",
