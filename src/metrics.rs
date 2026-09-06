@@ -343,7 +343,13 @@ impl Metrics {
 
     /// Render the Prometheus text exposition. Graph-size gauges are computed by
     /// the caller (cheap SQL count under the store lock) and passed in.
-    pub fn render(&self, entities: u64, facts: u64, predicates: u64) -> String {
+    pub fn render(
+        &self,
+        entities: u64,
+        facts: u64,
+        predicates: u64,
+        wal_bytes: Option<u64>,
+    ) -> String {
         let mut out = String::new();
 
         out.push_str(
@@ -528,6 +534,25 @@ impl Metrics {
             "quipu_facts_written_total {}",
             self.facts_written.load(Ordering::Relaxed)
         );
+
+        // WAL size (aegis-raq1ok). The deployed store reached a 1.06 GB
+        // write-ahead log against a 5.7 GB database while every other gauge
+        // read healthy: RSS was fine, tasks were single digits, writes
+        // completed, /health answered in microseconds. Nothing exposed the one
+        // number that was wrong, so the alert could not exist.
+        //
+        // EMITTED ONLY WHEN KNOWN. An unreadable WAL and an empty one are
+        // opposite findings; publishing 0 for "could not read" would let a
+        // blind gauge assert health, which is the failure this whole incident
+        // is made of. Absence of the series is the honest signal, and an alert
+        // should treat a missing series as unknown rather than as zero.
+        if let Some(bytes) = wal_bytes {
+            out.push_str(
+                "# HELP quipu_wal_bytes Size of the SQLite write-ahead log. Grows without bound when checkpoints are blocked by a live reader.\n\
+                 # TYPE quipu_wal_bytes gauge\n",
+            );
+            let _ = writeln!(out, "quipu_wal_bytes {bytes}");
+        }
 
         out
     }
