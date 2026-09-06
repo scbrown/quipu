@@ -1517,6 +1517,147 @@ ex:box   ex:hosts   ex:svc .
     );
 }
 
+/// The companion's derived facts as RESOLVED strings, comparable ACROSS stores.
+///
+/// `sn_derived` compares raw `(entity, attribute, value-bytes)` ids, which is
+/// correct only when both stores interned their terms in the SAME ORDER. The
+/// first arm satisfies that by construction — identical ingests, identical
+/// sequence. The second arm does not: it materialises between the two ingests,
+/// which interns the companion-graph terms early and shifts every later id. The
+/// two derived sets then differ in ids while being identical as TRIPLES, and the
+/// assertion fails for a reason that has nothing to do with the fixpoint.
+///
+/// Measured while adding that arm: 11 facts each side, structurally identical,
+/// every id different. Resolving first is what makes a cross-store comparison
+/// mean what it appears to mean.
+fn sn_derived_resolved(store: &Store) -> std::collections::BTreeSet<(String, String, String)> {
+    let companion = store
+        .lookup("urn:quipu:graph:root#inferred")
+        .unwrap()
+        .expect("companion graph");
+    store
+        .current_facts_in_graph(companion)
+        .unwrap()
+        .into_iter()
+        // The companion's SELF-DESCRIPTION is not an entailment. It carries
+        // `aegis:sourceKind "inferred"` and `quipu:derivedAsOfTx <n>`, and the
+        // latter records the premise HEAD the closure reflects — so it
+        // legitimately differs between a store materialised once and one
+        // materialised twice, which is exactly what this arm constructs.
+        // Measured: with it included the two sides differ ONLY in that triple,
+        // every entailment matching. Comparing it would fail the arm for
+        // bookkeeping rather than for semantics.
+        .filter(|f| f.entity != companion)
+        .map(|f| {
+            let value = match &f.value {
+                crate::types::Value::Ref(id) => store.resolve(*id).unwrap(),
+                other => format!("{other:?}"),
+            };
+            (
+                store.resolve(f.entity).unwrap(),
+                store.resolve(f.attribute).unwrap(),
+                value,
+            )
+        })
+        .collect()
+}
+
+/// SECOND ARM of the equivalence fixture: a STORE-RESIDENT premise held OUTSIDE
+/// the delta (malcolm's ruling on aegis-yro9m).
+///
+/// `semi_naive_reaches_the_same_fixpoint_as_naive` seeds the delta with EVERY
+/// asserted fact, so both paths read the same premises and cannot diverge. That
+/// is sound for the seven single-premise families — their second premise comes
+/// from the ONTOLOGY object, which is always complete regardless of frontier —
+/// and for `transitive`, which is special-cased as `(delta x existing)`.
+///
+/// `owl:sameAs` is the first rule whose second premise lives in the STORE. For
+/// that class the fixture above is structurally blind, and this arm is what
+/// makes the comparison discriminating:
+///
+///   the store-resident premise must be committed in an EARLIER transaction
+///   than the fact under test, and must NOT be in the delta.
+///
+/// Omitting it from the fixture entirely is a different and vacuous test: naive
+/// would then derive nothing either, both paths would agree, and the arm would
+/// be unfalsifiable in a new way.
+///
+/// The generalisable rule, worth keeping with the code: an equivalence test
+/// between an incremental and a full algorithm is only as strong as the
+/// NARROWEST frontier it ever runs with. This fixture owes one arm per
+/// premise-source — ontology-resident and store-resident — not one arm per rule.
+#[test]
+fn semi_naive_matches_naive_when_a_premise_is_older_than_the_delta() {
+    let ont = crate::owl::Ontology::from_turtle(SN_ONT).unwrap();
+    let identity = r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:tw owl:sameAs ex:twAlias .
+"#;
+    let later = r#"
+@prefix ex: <http://example.org/> .
+ex:tw ex:likes ex:rex .
+ex:tw a ex:Dog .
+"#;
+
+    // NAIVE: both transactions present, one full materialisation.
+    let mut naive = Store::open_in_memory().unwrap();
+    naive.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    sn_ingest(&mut naive, identity);
+    sn_ingest(&mut naive, later);
+    let rn = ont.materialize(&mut naive, SN_TS).unwrap();
+
+    // SEMI-NAIVE: the identity is materialised FIRST, so it is in the store and
+    // NOT in the delta that follows — the shape this arm exists to test.
+    let mut semi = Store::open_in_memory().unwrap();
+    semi.load_ontology("t", SN_ONT, SN_TS).unwrap();
+    sn_ingest(&mut semi, identity);
+    ont.materialize(&mut semi, SN_TS).unwrap();
+    let before = semi
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    sn_ingest(&mut semi, later);
+    let after = semi
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap();
+    let seed: Vec<_> = after
+        .iter()
+        .filter(|f| {
+            !before
+                .iter()
+                .any(|b| b.entity == f.entity && b.attribute == f.attribute && b.value == f.value)
+        })
+        .cloned()
+        .collect();
+    assert!(
+        !seed.is_empty()
+            && !seed.iter().any(|f| {
+                semi.lookup(crate::namespace::OWL_SAME_AS)
+                    .unwrap()
+                    .is_some_and(|sa| f.attribute == sa)
+            }),
+        "the delta must carry the new facts and NOT the identity — otherwise this \
+         arm degenerates into the seed-everything case it exists to escape"
+    );
+    ont.materialize_delta(&mut semi, "2026-01-02T00:00:00Z", &seed)
+        .unwrap();
+
+    // ANTI-VACUITY, as the first arm does: a comparison of two empty sets passes
+    // against a materialiser that does nothing.
+    assert!(
+        rn.total > 0,
+        "fixture derives nothing — the comparison below would be vacuous"
+    );
+    assert_eq!(
+        sn_derived_resolved(&semi),
+        sn_derived_resolved(&naive),
+        "semi-naive must reach the same fixpoint as naive even when the rule's \
+         other premise was committed in an earlier transaction and is absent \
+         from the delta (naive total {})",
+        rn.total
+    );
+}
+
 /// THE DIVERGENCE CASE the equivalence fixture cannot reach.
 ///
 /// `semi_naive_reaches_the_same_fixpoint_as_naive` seeds the delta with EVERY
