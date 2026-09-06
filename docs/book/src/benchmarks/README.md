@@ -86,10 +86,10 @@ identical content parses everything and writes nothing.
 
 ### What this number does NOT support
 
-* **It is not a per-triple constant.** Rate varies ~10x within a single run (below), so a figure
+- **It is not a per-triple constant.** Rate varies ~10x within a single run (below), so a figure
   taken from part of a load is not the load's rate. Only end-to-end figures are quoted here.
-* **It does not extrapolate.** See the refuted hypothesis below.
-* **It is not a comparison.** Quipu and Oxigraph share the SPARQL parser and RDF data model
+- **It does not extrapolate.** See the refuted hypothesis below.
+- **It is not a comparison.** Quipu and Oxigraph share the SPARQL parser and RDF data model
   (`spargebra`, `oxrdf`), so any future comparison measures storage and evaluation layers, never
   independent engines, and must say so.
 
@@ -185,12 +185,12 @@ nothing behind.
 Guards that decide whether a row may be quoted, each covered by a test in
 `benchmark/public/test_watdiv_ingest.py`:
 
-* a **non-zero exit** or a **contended host** marks the row `valid_result: false` with the reason
+- a **non-zero exit** or a **contended host** marks the row `valid_result: false` with the reason
   named — the row is still written, because an unlabelled fast number is the hazard, not a
   labelled slow one;
-* an **unreadable store** reads as UNKNOWN rather than a zero baseline, which would otherwise
+- an **unreadable store** reads as UNKNOWN rather than a zero baseline, which would otherwise
   inflate the delta by whatever the store already held;
-* an archive with **no `.nt` member** is refused rather than silently benchmarking the first file
+- an archive with **no `.nt` member** is refused rather than silently benchmarking the first file
   it finds.
 
 ## Performance (WatDiv/LUBM)
