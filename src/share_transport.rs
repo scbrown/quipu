@@ -40,6 +40,7 @@ fn request_from_files(
     // whether that reaches `claimed` or `attested` is decided in
     // `share_attestation` by whether the session is REGISTERED here, which
     // importing cannot change.
+    #[cfg(not(target_arch = "wasm32"))]
     let embedded = manifest.attestation.as_ref().map(|a| a.envelope.clone());
     Ok(ShareImportRequest {
         #[cfg(not(target_arch = "wasm32"))]

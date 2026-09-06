@@ -10,6 +10,7 @@ use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+#[cfg(not(target_arch = "wasm32"))]
 pub use crate::share_mint::{AttestOptions, ShareAttestation};
 use crate::store::Store;
 
@@ -92,6 +93,7 @@ pub struct ShareOptions {
     /// Off by default: a share produced without it is byte-identical to one
     /// produced before this existed, which is what makes the manifest field
     /// additive rather than a format break.
+    #[cfg(not(target_arch = "wasm32"))]
     pub attest: Option<AttestOptions>,
 }
 
@@ -137,6 +139,7 @@ impl SharePayloadRequest {
             // reads the server's PRIVATE KEY. A request that could ask for a
             // signature would let any caller borrow the host's producer identity
             // to sign a share of their choosing (aegis-tadzdf).
+            #[cfg(not(target_arch = "wasm32"))]
             attest: None,
         }
     }
@@ -210,6 +213,7 @@ pub struct ShareManifest {
     /// `share_id`: the attestation is a statement ABOUT the identity, not part of
     /// it. Swapping it cannot change what was signed, only which key signed —
     /// which is exactly the `claimed`/`attested` distinction.
+    #[cfg(not(target_arch = "wasm32"))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attestation: Option<ShareAttestation>,
     /// Timestamp of the anchored transaction, stable for unchanged state.
@@ -451,6 +455,7 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
         shapes_hash: sha256(&shapes),
         scope: opts.scope.clone(),
         parent_share: opts.parent_share.clone(),
+        #[cfg(not(target_arch = "wasm32"))]
         attestation: None,
         created_at,
         producer: ShareProducer {
@@ -468,6 +473,7 @@ fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayloa
     // MINTED AFTER share_id EXISTS, because the envelope signs it. The field is
     // stripped from the hashed form (see `manifest_bytes`), so assigning it here
     // cannot invalidate the id just computed.
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(att) = opts.attest.as_ref() {
         manifest.attestation = Some(crate::share_mint::mint_attestation(&manifest, att)?);
     }
