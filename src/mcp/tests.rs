@@ -4004,3 +4004,219 @@ fn the_regime_answer_still_carries_the_inference_marker() {
         "the regime answer is expanded, so it must carry the inference marker"
     );
 }
+
+// --- closure freshness: FRESH vs STALE, not merely PRESENT (aegis-ab4m51) -----
+//
+// The marker already separated ABSENT from PRESENT. It could not separate FRESH
+// from STALE, so `materialise -> ingest -> query` answered with the marker on
+// and the rows short: an answer that looks entailed and is not, indistinguishable
+// from a correct one.
+//
+// These arrive as a PAIR on purpose. "The lag is positive after a write" passes
+// against a marker hardcoded to always report a lag, so the equal-when-unwritten
+// control is what makes the first an assertion rather than a formality.
+
+fn ent_marker(store: &Store) -> JsonValue {
+    tool_query(
+        store,
+        &serde_json::json!({"query": ENT_QUERY, "graph": ENT_G, "entailment": "rdfs"}),
+    )
+    .unwrap()["entailment"]
+        .clone()
+}
+
+#[test]
+fn a_closure_with_no_write_after_it_reports_zero_lag() {
+    // THE CONTROL. Without it, a marker that always reported a lag would pass
+    // the staleness test below and be wrong about every healthy store.
+    let mut store = entailment_fixture();
+    let g = store.lookup(ENT_G).unwrap().unwrap();
+    crate::sparql::rdfs_closure::materialise(&mut store, g, ENT_TS).unwrap();
+
+    let marker = ent_marker(&store);
+    assert_eq!(
+        marker["worstLagSeconds"], 0,
+        "nothing was written after materialisation, so the closure is current"
+    );
+    // Silence in the healthy case: the per-graph list exists to name a culprit.
+    assert!(
+        marker.get("graphs").is_none(),
+        "the per-graph list is for explaining a lag, not for decorating a healthy answer"
+    );
+}
+
+#[test]
+fn an_ingest_after_materialisation_reports_a_positive_lag() {
+    let mut store = entailment_fixture();
+    let g = store.lookup(ENT_G).unwrap().unwrap();
+    crate::sparql::rdfs_closure::materialise(&mut store, g, ENT_TS).unwrap();
+
+    // One new fact, an hour after the closure was built.
+    const LATER: &str = "2026-09-05T01:00:00Z";
+    let (e, a) = (
+        store.intern("http://ex/new").unwrap(),
+        store.intern("http://ex/b1").unwrap(),
+    );
+    let v = store.intern("http://ex/c").unwrap();
+    store
+        .transact_to_graph(
+            &[crate::store::Datum {
+                entity: e,
+                attribute: a,
+                value: crate::types::Value::Ref(v),
+                valid_from: LATER.into(),
+                valid_to: None,
+                op: crate::types::Op::Assert,
+            }],
+            LATER,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+
+    let marker = ent_marker(&store);
+    assert_eq!(
+        marker["worstLagSeconds"], 3600,
+        "the closure now trails its premises by the hour between the two writes"
+    );
+    // The caller who sees a lag needs the culprit, and `composedGraphs` is an
+    // integer that cannot name one.
+    let graphs = marker["graphs"].as_array().expect("a lag names its graphs");
+    assert!(
+        graphs.iter().any(|entry| entry["graph"] == ENT_G),
+        "the lagging graph is named: {graphs:?}"
+    );
+}
+
+#[test]
+fn a_fresh_graph_does_not_mask_a_stale_one() {
+    // THE TEST THAT DISCRIMINATES THE DESIGN. Two store-wide maxima — the
+    // obvious implementation, and the one I proposed before malcolm refuted it
+    // on aegis-ab4m51 — report this composition as FRESH.
+    //
+    //   graph A   base 10:00   companion 10:00   fresh
+    //   graph B   base 09:00   companion 08:00   STALE by an hour
+    //
+    //   max(base) = 10:00, max(companion) = 10:00  ->  difference 0
+    //
+    // A maximum hides its minimum, so a fresh companion masks a stale one and
+    // the marker reassures on exactly the composition it exists to warn about.
+    // Difference-of-maxima is not maximum-of-differences.
+    //
+    // Asserted at this level rather than through `tool_query` because the tool
+    // takes ONE `graph` string, so a two-base-graph scope is not expressible
+    // there — the pairing logic is where the defect would live either way.
+    let lags = vec![
+        GraphLag {
+            graph: "http://ex/a".into(),
+            base_newest: Some("2026-09-05T10:00:00Z".into()),
+            companion_newest: Some("2026-09-05T10:00:00Z".into()),
+            lag_seconds: Some(0),
+        },
+        GraphLag {
+            graph: "http://ex/b".into(),
+            base_newest: Some("2026-09-05T09:00:00Z".into()),
+            companion_newest: Some("2026-09-05T08:00:00Z".into()),
+            lag_seconds: Some(3600),
+        },
+    ];
+    let mut out = serde_json::json!({});
+    add_entailment(&mut out, Some("rdfs"), 4, &lags);
+
+    assert_eq!(
+        out["entailment"]["worstLagSeconds"], 3600,
+        "the stalest graph decides the verdict, not the newest write in the store"
+    );
+
+    // The refuted implementation, computed here so the discrimination is shown
+    // rather than asserted: both maxima are 10:00, so it would have said 0.
+    let max_base = lags.iter().filter_map(|l| l.base_newest.as_ref()).max();
+    let max_comp = lags
+        .iter()
+        .filter_map(|l| l.companion_newest.as_ref())
+        .max();
+    assert_eq!(
+        max_base, max_comp,
+        "difference-of-maxima sees no lag here — which is precisely why it is wrong"
+    );
+}
+
+#[test]
+fn an_unmeasurable_lag_is_null_and_never_zero() {
+    // UNKNOWN must not arrive as "fresh". `valid_from` accepts a caller-supplied
+    // `valid_at`, so a stamp SQLite cannot parse is reachable, and rendering it
+    // as 0 would be the same false reassurance in a smaller place.
+    let lags = vec![
+        GraphLag {
+            graph: "http://ex/a".into(),
+            base_newest: Some("2026-09-05T10:00:00Z".into()),
+            companion_newest: Some("2026-09-05T10:00:00Z".into()),
+            lag_seconds: Some(0),
+        },
+        GraphLag {
+            graph: "http://ex/unparseable".into(),
+            base_newest: Some("whenever".into()),
+            companion_newest: Some("2026-09-05T08:00:00Z".into()),
+            lag_seconds: None,
+        },
+    ];
+    let mut out = serde_json::json!({});
+    add_entailment(&mut out, Some("rdfs"), 4, &lags);
+
+    assert!(
+        out["entailment"]["worstLagSeconds"].is_null(),
+        "one unmeasurable graph makes the verdict UNKNOWN, not 0: {}",
+        out["entailment"]
+    );
+    assert!(
+        out["entailment"]["graphs"].is_array(),
+        "and the list is emitted so the unmeasurable graph can be identified"
+    );
+}
+
+#[test]
+fn a_stamp_sqlite_cannot_parse_makes_the_lag_unknown_through_the_store() {
+    // This test exists because a mutation killed NOTHING. Collapsing the
+    // UNKNOWN arm of `entailment_freshness` to `Some(0)` left the whole suite
+    // green: `an_unmeasurable_lag_is_null_and_never_zero` builds its `GraphLag`
+    // values by hand, so it pins the RENDERING and never reaches the
+    // DERIVATION. Two adjacent things, one of them untested, and the passing
+    // test looked like coverage of both.
+    //
+    // So drive it through the store. `valid_from` is TEXT and accepts a
+    // caller-supplied `valid_at`, so an unparseable stamp is reachable rather
+    // than hypothetical, and `strftime` returns NULL for it.
+    let mut store = entailment_fixture();
+    let g = store.lookup(ENT_G).unwrap().unwrap();
+    crate::sparql::rdfs_closure::materialise(&mut store, g, ENT_TS).unwrap();
+
+    let (e, a) = (
+        store.intern("http://ex/unstamped").unwrap(),
+        store.intern("http://ex/b1").unwrap(),
+    );
+    let v = store.intern("http://ex/c").unwrap();
+    store
+        .transact_to_graph(
+            &[crate::store::Datum {
+                entity: e,
+                attribute: a,
+                value: crate::types::Value::Ref(v),
+                valid_from: "whenever".into(),
+                valid_to: None,
+                op: crate::types::Op::Assert,
+            }],
+            ENT_TS,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+
+    let marker = ent_marker(&store);
+    assert!(
+        marker["worstLagSeconds"].is_null(),
+        "an unreadable stamp is UNKNOWN, and UNKNOWN must never render as the \
+         reassuring answer: {marker}"
+    );
+}
