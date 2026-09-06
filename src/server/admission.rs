@@ -94,6 +94,18 @@ static READ_ADMISSION: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::
 const DEFAULT_READ_PERMITS: usize = 8;
 
 /// Size read admission from the actual read pool. Called once, from `serve`.
+///
+/// An EMPTY pool is not "no limit": reads then serialise on the writer lock, so
+/// one permit is the honest bound rather than a number that pretends to
+/// parallelism the store cannot deliver.
+pub(crate) fn init_read_admission_for_pool(pool_len: usize) {
+    let permits = if pool_len > 0 { pool_len } else { 1 };
+    init_read_admission(permits);
+    eprintln!("read admission: {permits} concurrent reads (cancellable while queued)");
+}
+
+/// The permit count directly, for tests and for callers that have already
+/// decided. Prefer [`init_read_admission_for_pool`] from `serve`.
 pub(crate) fn init_read_admission(permits: usize) {
     let _ = READ_ADMISSION.set(tokio::sync::Semaphore::new(permits.max(1)));
 }

@@ -9,11 +9,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
 
-use super::{
-    SharedStore,
-    admission::read_blocking,
-    base::AppError,
-};
+use super::{SharedStore, admission::read_blocking, base::AppError};
 
 /// Conservative bounds for the two standard SPARQL Protocol transports.
 /// GET is intentionally small enough for common proxies; clients with larger
