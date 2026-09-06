@@ -340,6 +340,21 @@ async fn main() {
         eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
     }
 
+    // Bound concurrent blocking reads to what can actually make progress
+    // (aegis-raq1ok). Admission is acquired in async context, so a client that
+    // gives up while queued is cancelled BEFORE it occupies a blocking-pool
+    // thread — the property the write path already had and the read path did
+    // not. An empty pool means reads serialise on the writer anyway, so one
+    // permit is the honest bound there rather than a number that pretends to
+    // parallelism the store cannot deliver.
+    let read_permits = if read_pool.len() > 0 {
+        read_pool.len()
+    } else {
+        1
+    };
+    admission::init_read_admission(read_permits);
+    eprintln!("read admission: {read_permits} concurrent reads (cancellable while queued)");
+
     let vector_reads_pooled = store.has_sqlite_vector_backend();
     let state: SharedStore = Arc::new(StoreHandle {
         writer: FairMutex::new(store),

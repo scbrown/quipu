@@ -507,7 +507,13 @@ async fn cancelled_write_waiter_never_starts_blocking_work() {
             Ok(())
         },
     ));
-    tokio::task::yield_now().await;
+    // Was `yield_now()`, which made this test UNFALSIFIABLE: measured on
+    // 2026-09-06 by bypassing `write_blocking_with`'s semaphore entirely — the
+    // test still passed, because the abort landed before the waiter's future
+    // was first polled. The guarantee it names has therefore never been
+    // protected. A real interval lets an unadmitted waiter reach
+    // `spawn_blocking` and set the flag, so the assertion can fail (aegis-raq1ok).
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     waiter.abort();
     assert!(waiter.await.unwrap_err().is_cancelled());
 
@@ -1480,5 +1486,116 @@ fn book_rest_reference_covers_every_route() {
             "route {path} has no presence in rest-api.md — document it or add \
              it to the UI-assets exclusion note"
         );
+    }
+}
+
+// --- read admission (aegis-raq1ok) -------------------------------------------
+//
+// The write path has had cancellable admission since it was written. The read
+// path did not, and on 2026-09-06 that asymmetry wedged the deployed server for 9 minutes:
+// 246 `/query` requests started and never completed, the last read finished at
+// 00:04:54Z and the next at 00:13:42Z after a restart, while `/health`,
+// `/version` and `/set` answered 200 in ~0 ms throughout. Abandoned readers kept
+// their uncancellable `spawn_blocking` threads until the cgroup refused to fork.
+
+/// The property, stated as the incident would have falsified it: a reader that
+/// gives up while queued must never reach the blocking pool.
+///
+/// This is the read twin of `cancelled_write_waiter_never_starts_blocking_work`.
+/// Both are needed — the write one passed throughout the outage, because the
+/// write path was never the broken half.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancelled_read_waiter_never_starts_blocking_work() {
+    let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let leader = tokio::spawn(super::admission::read_blocking_with(admission, move || {
+        started_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+        Ok(())
+    }));
+    started_rx.await.unwrap();
+
+    let ran = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let ran_in_waiter = ran.clone();
+    let waiter = tokio::spawn(super::admission::read_blocking_with(admission, move || {
+        ran_in_waiter.store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }));
+    // A single `yield_now` is NOT enough to make this test discriminating, and
+    // that is measured, not cautious: with the fix reverted (reads going
+    // straight to `blocking()`), a yield-then-abort version of this test still
+    // PASSED, because the abort usually landed before the waiter's future was
+    // ever polled. It would have been a test that passes in both worlds. A real
+    // interval guarantees the unadmitted waiter reaches `spawn_blocking` and
+    // sets the flag, so the assertion below can actually fail.
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    waiter.abort();
+    assert!(waiter.await.unwrap_err().is_cancelled());
+
+    release_tx.send(()).unwrap();
+    leader.await.unwrap().unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    assert!(
+        !ran.load(std::sync::atomic::Ordering::SeqCst),
+        "cancelled READ entered spawn_blocking and survived its HTTP future — \
+         this is the aegis-raq1ok wedge: the thread is now held by a client that \
+         has already gone away"
+    );
+}
+
+/// Admission must BOUND concurrent blocking reads, not merely order them.
+///
+/// The wedge was unbounded growth — in-flight reads went 17 -> 292 without ever
+/// plateauing, each one holding a thread. A semaphore that admitted everyone
+/// and only ordered them would pass the cancellation test above while leaving
+/// the ratchet in place, so the bound needs its own assertion.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn read_admission_bounds_concurrent_blocking_reads() {
+    const PERMITS: usize = 2;
+    const ARRIVALS: usize = 12;
+    let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(PERMITS)));
+
+    let in_flight = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let peak = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let (release_tx, release_rx) = tokio::sync::broadcast::channel::<()>(1);
+
+    let mut tasks = Vec::new();
+    for _ in 0..ARRIVALS {
+        let (inf, pk) = (in_flight.clone(), peak.clone());
+        let mut rx = release_rx.resubscribe();
+        tasks.push(tokio::spawn(super::admission::read_blocking_with(
+            admission,
+            move || {
+                let now = inf.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                pk.fetch_max(now, std::sync::atomic::Ordering::SeqCst);
+                // Hold the permit until every arrival has had its chance to run,
+                // so the peak reflects admission and not merely fast turnover.
+                let _ = rx.blocking_recv();
+                inf.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            },
+        )));
+    }
+
+    // Give every arrival a real chance to enter the pool before measuring.
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let observed = peak.load(std::sync::atomic::Ordering::SeqCst);
+
+    // ANTI-VACUITY: if nothing ever ran, "never exceeded PERMITS" is free.
+    assert!(
+        observed > 0,
+        "no read ever entered the blocking pool — the bound below would be vacuous"
+    );
+    assert!(
+        observed <= PERMITS,
+        "{observed} reads were in the blocking pool at once with only {PERMITS} \
+         permits — admission is ordering reads but not BOUNDING them, which is \
+         the aegis-raq1ok ratchet"
+    );
+
+    let _ = release_tx.send(());
+    for t in tasks {
+        let _ = t.await;
     }
 }
