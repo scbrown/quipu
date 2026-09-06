@@ -44,6 +44,8 @@ import sqlite3
 import subprocess
 import sys
 import tarfile
+import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -158,7 +160,44 @@ def stream_source(archive: Path):
     return tar, member.name, handle
 
 
-def measure_source(archive: Path) -> tuple[int, str, int]:
+class _LimitedLines:
+    """A byte stream truncated at `limit` newlines.
+
+    Wraps the archive member so BOTH passes see exactly the same prefix. The
+    declaration must describe the bytes the loader actually reads: a count taken
+    over the whole file and a load truncated to a prefix would refuse, and a
+    count taken from the loader's own stream would agree with anything.
+    """
+
+    def __init__(self, inner, limit: int):
+        self._inner = inner
+        self._limit = limit
+        self._seen = 0
+        self._buf = b""
+        self._done = False
+
+    def read(self, size: int = -1) -> bytes:
+        if self._done:
+            return b""
+        block = self._inner.read(1 << 20 if size is None or size < 0 else size)
+        if not block:
+            self._done = True
+            return b""
+        newlines = block.count(b"\n")
+        if self._seen + newlines < self._limit:
+            self._seen += newlines
+            return block
+        # Cut on the newline that reaches the limit, inclusive.
+        need = self._limit - self._seen
+        idx = -1
+        for _ in range(need):
+            idx = block.index(b"\n", idx + 1)
+        self._seen = self._limit
+        self._done = True
+        return block[: idx + 1]
+
+
+def measure_source(archive: Path, limit: int | None = None) -> tuple[int, str, int]:
     """Count triples, digest the bytes and size the source WITHOUT unpacking.
 
     A separate pass from the ingest on purpose. Computing the declaration from
@@ -166,6 +205,8 @@ def measure_source(archive: Path) -> tuple[int, str, int]:
     which agrees with anything and is not a declaration.
     """
     tar, _name, handle = stream_source(archive)
+    if limit is not None:
+        handle = _LimitedLines(handle, limit)
     try:
         digest = hashlib.sha256()
         triples = 0
@@ -260,6 +301,15 @@ def main(argv: list[str] | None = None) -> int:
         help="CONSTANT and supplied: two runs of one pinned dataset must produce the same store",
     )
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="ingest only the first N triples. Both the declaration pass and the load see "
+        "the SAME prefix, so the declared count and digest describe exactly what was "
+        "written. Used to hold store state constant while varying the source "
+        "(aegis-3sau5a arm 2).",
+    )
     parser.add_argument("--min-free-gb", type=int, default=60)
     parser.add_argument("--keep", action="store_true", help="leave the store behind")
     args = parser.parse_args(argv)
@@ -271,7 +321,7 @@ def main(argv: list[str] | None = None) -> int:
 
     archive_sha = sha256_file(args.archive)
     pin_state = verify_or_record_pin(args.pins, args.archive.name, archive_sha)
-    triples, source_sha, source_bytes = measure_source(args.archive)
+    triples, source_sha, source_bytes = measure_source(args.archive, args.limit)
     print(f"source: {triples} triples, {source_bytes} bytes, sha256 {source_sha} (pin {pin_state})")
 
     version = subprocess.run(
@@ -283,26 +333,52 @@ def main(argv: list[str] | None = None) -> int:
     before = live_facts(args.db)
 
     tar, _name, handle = stream_source(args.archive)
+    if args.limit is not None:
+        handle = _LimitedLines(handle, args.limit)
     started = time.monotonic()
     try:
-        proc = subprocess.Popen(
-            [
-                args.quipu, "ingest", "/dev/stdin",
-                "--graph", f"http://quipu.invalid/watdiv/{args.scale}",
-                "--timestamp", args.timestamp,
-                "--declare-count", str(triples),
-                "--declare-sha256", source_sha,
-                "--format", "nt",
-                "--chunk", str(args.chunk),
-                "--db", str(args.db),
-            ],
-            stdin=handle,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        _out, err = proc.communicate()
-        code = proc.returncode
+        # stdin=PIPE and a writer THREAD, not the reader object directly: a
+        # limited reader has no fileno() for the child to inherit, and writing
+        # the pipe inline while the child writes stdout/stderr can deadlock once
+        # either buffer fills. The thread lets communicate() drain both.
+        cmd = [
+            args.quipu, "ingest", "/dev/stdin",
+            "--graph", f"http://quipu.invalid/watdiv/{args.scale}",
+            "--timestamp", args.timestamp,
+            "--declare-count", str(triples),
+            "--declare-sha256", source_sha,
+            "--format", "nt",
+            "--chunk", str(args.chunk),
+            "--db", str(args.db),
+        ]
+        # stdin=PIPE fed by a writer THREAD, and the child's OUTPUT to temp files.
+        #
+        # NOT communicate(): it closes proc.stdin itself, racing the writer -- that
+        # produced "write to closed file" and a child that parsed 0, caught by the
+        # declared-count refusal, which is precisely what that guard exists for.
+        # NOT stdout=PIPE either: feeding one pipe while the child fills another
+        # deadlocks once a buffer fills. Files remove both problems.
+        with tempfile.TemporaryFile() as outf, tempfile.TemporaryFile() as errf:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=outf, stderr=errf)
+
+            def _feed():
+                try:
+                    for block in iter(lambda: handle.read(1 << 20), b""):
+                        proc.stdin.write(block)
+                except (BrokenPipeError, ValueError):
+                    pass
+                finally:
+                    try:
+                        proc.stdin.close()
+                    except (BrokenPipeError, ValueError):
+                        pass
+
+            writer = threading.Thread(target=_feed, daemon=True)
+            writer.start()
+            code = proc.wait()
+            writer.join(timeout=30)
+            errf.seek(0)
+            err = errf.read().decode(errors="replace")
     finally:
         tar.close()
     seconds = time.monotonic() - started

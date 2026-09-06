@@ -150,3 +150,45 @@ class LedgerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LimitTests(unittest.TestCase):
+    """--limit must give BOTH passes the same prefix.
+
+    If the declaration described the whole file while the load read a prefix, the
+    declared-count refusal would fire on every limited run; if it were computed
+    from the loader's own stream it would agree with anything. The property is
+    that a limited measure equals an unlimited measure of the same prefix.
+    """
+
+    def _archive(self, d, lines):
+        body = b"".join(b'<s%d> <p> "o" .\n' % i for i in range(lines))
+        nt = pathlib.Path(d) / "data.nt"
+        nt.write_bytes(body)
+        arc = pathlib.Path(d) / "w.tar.bz2"
+        with tarfile.open(arc, "w:bz2") as tar:
+            tar.add(nt, arcname="data.nt")
+        return arc, body
+
+    def test_limit_measures_exactly_the_first_n_triples(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as d:
+            arc, body = self._archive(d, 100)
+            triples, digest, size = MODULE.measure_source(arc, limit=10)
+            self.assertEqual(triples, 10)
+            prefix = b"".join(body.split(b"\n", 10)[:10]) + b""
+            # Rebuild the expected prefix the same way the reader cuts it:
+            expected = b"\n".join(body.split(b"\n")[:10]) + b"\n"
+            self.assertEqual(size, len(expected))
+            self.assertEqual(digest, hashlib.sha256(expected).hexdigest())
+
+    def test_limit_beyond_the_file_is_the_whole_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            arc, body = self._archive(d, 5)
+            self.assertEqual(MODULE.measure_source(arc, limit=999)[0], 5)
+            self.assertEqual(MODULE.measure_source(arc, limit=999), MODULE.measure_source(arc))
+
+    def test_no_limit_is_unchanged(self):
+        with tempfile.TemporaryDirectory() as d:
+            arc, body = self._archive(d, 50)
+            self.assertEqual(MODULE.measure_source(arc)[0], 50)
