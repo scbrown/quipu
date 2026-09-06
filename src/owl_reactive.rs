@@ -111,7 +111,24 @@ impl TransactObserver for ReactiveOwl {
         }
 
         let timestamp = crate::time::now_iso();
-        ontology.materialize(store, &timestamp)?;
+        // SEMI-NAIVE from this delta (aegis-2dp8e2). The full path re-read every
+        // current fact per pass — at 641,803 facts that was ~2.3 s per relevant
+        // write against a 29/min offered load, i.e. more work than wall clock,
+        // and it ratcheted because its own output is a premise next time.
+        let seed: Vec<crate::types::Fact> = delta
+            .asserts
+            .iter()
+            .map(|d| crate::types::Fact {
+                entity: d.entity,
+                attribute: d.attribute,
+                value: d.value.clone(),
+                tx: 0,
+                valid_from: d.valid_from.clone(),
+                valid_to: None,
+                op: crate::types::Op::Assert,
+            })
+            .collect();
+        ontology.materialize_delta(store, &timestamp, &seed)?;
         Ok(())
     }
 }
