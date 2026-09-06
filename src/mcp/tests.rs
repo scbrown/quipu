@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use super::entailment::{GraphLag, add_entailment};
 use super::graphiti::*;
 use super::tools::*;
 use super::*;
