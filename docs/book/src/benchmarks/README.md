@@ -59,7 +59,8 @@ anything about query latency. The comparison class below remains NOT RUN.
 
 **Quipu ingested a 10,916,457-triple WatDiv dataset in 2,848.9 s — 3,831.8 live facts per second
 — into a 3,227,811,840-byte store (295.7 bytes per fact).** Release build, single process,
-`--chunk 50000`, on an idle-to-moderately-loaded 20-core host with 66 GB RAM.
+`--chunk 50000`, on an idle-to-moderately-loaded 20-core host with 66 GB RAM, **store on ext4**.
+The storage medium is part of the number and is worth ~45x — see below.
 
 The population appears in the same sentence as the rate deliberately: WatDiv's "10M" archive
 contains 10,916,457 triples, not 10,000,000, and a rate quoted "at 10M" would be wrong by 9%
@@ -73,6 +74,7 @@ before anyone checked anything else.
 | rate | 3,831.8 live facts/s |
 | store | 3,227,811,840 B = 295.7 B/fact |
 | build | release |
+| storage | ext4 (a tmpfs store is ~45x faster; see below) |
 
 **Why the fact count exceeds the triple count by exactly 3:** a declared ingest writes three
 completion markers (declared count, source digest, completion) into the graph. That identity is
@@ -108,6 +110,27 @@ Two explanations remain untested and are recorded rather than chosen: a proporti
 transition at some fraction of the dataset) and working-set residency (the smaller store is
 3.2 GB and caches readily; the larger is 32.3 GB). They are not equivalent — the first says the
 cost never amortises, the second says it amortises whenever the store fits in memory.
+
+### ⚠ Every rate here is a STORAGE figure — the medium is worth ~45x
+
+**Measured on this host, same source prefix, same binary, same `--chunk 50000`, differing only in
+where the store file sits:**
+
+| store on | facts | wall | rate |
+|---|---|---|---|
+| tmpfs (RAM) | 8,100,003 | 187 s | **43,388 facts/s** |
+| ext4 (SSD) | 8,100,003 | ~2.2 h | **~1,000 facts/s** |
+
+So **the published 3,831.8 facts/s is a property of the disk at least as much as of Quipu**, and
+the same load in memory is roughly 45x faster. Roughly 98% of wall time on ext4 is durability
+rather than work.
+
+This is why every figure on this page names its **host shape, build profile and storage medium**
+together. A throughput number quoted without all three is not reproducible and not comparable: a
+reader on different storage will not come close, and will have no way to know why.
+
+It also bounds what a comparison against another engine could mean here. Two engines measured on
+this host would be measured mostly on its disk.
 
 ### Rate is not monotonic: it halves between 4.4M and 6.8M facts
 
