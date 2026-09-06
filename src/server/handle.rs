@@ -196,7 +196,7 @@ impl ReadPool {
         } else {
             let mut conns = Vec::with_capacity(want);
             for i in 0..want {
-                match quipu::Store::open_read_only(&db_path) {
+                match quipu::Store::open_read_only(db_path) {
                     Ok(mut r) => {
                         r.adopt_read_config_from(store);
                         conns.push(FairMutex::new(r));
