@@ -479,23 +479,16 @@ fn rdfs3_still_does_not_type_a_literal_object() {
 /// than by `closure_of()` — because the helper is IRI-only and CANNOT SEE an
 /// rdfs7 derivation whose object is a literal (wu, on #169).
 ///
-/// This is the test that states the remaining incompleteness as a NUMBER rather
-/// than as a paragraph. The graph entails two things:
-///
 /// ```text
 /// ex:a ex:name "n" . + ex:name rdfs:domain ex:Person       |= ex:a rdf:type ex:Person  (rdfs2)
 /// ex:a ex:name "n" . + ex:name rdfs:subPropertyOf ex:label |= ex:a ex:label "n"        (rdfs7)
 /// ```
 ///
-/// Exactly ONE is derived today. Asserting the count — not merely that rdfs2
-/// fired — is what makes the gap falsifiable: an implementation that started
-/// deriving the rdfs7 triple, or one that regressed rdfs2, both move this number
-/// and neither can pass quietly.
-///
-/// **When rdfs7 learns to carry literals this becomes 2, and this test is the
-/// thing that will notice.** Update it deliberately; do not relax it to a range.
+/// Both are derived. This asserted **1** while rdfs7 could not carry a literal,
+/// and the number moving to 2 is what announced that it now can — the test did
+/// the job it was written for rather than needing anyone to remember the gap.
 #[test]
-fn a_literal_premise_derives_rdfs2_but_not_yet_rdfs7() {
+fn a_literal_premise_derives_both_rdfs2_and_rdfs7() {
     let mut store = Store::open_in_memory().unwrap();
     literal_triple(
         &mut store,
@@ -523,10 +516,9 @@ fn a_literal_premise_derives_rdfs2_but_not_yet_rdfs7() {
     let report = materialise(&mut store, g, TS).unwrap();
 
     assert_eq!(
-        report.asserted, 1,
-        "expected exactly the rdfs2 derivation. 0 means rdfs2 regressed over literal \
-         premises; 2 means rdfs7 has started carrying literals — which is the fix this \
-         number is waiting for, so update the test rather than widening it"
+        report.asserted, 2,
+        "expected the rdfs2 type AND the rdfs7 copy. 1 means rdfs7 stopped carrying \
+         literals; 0 means rdfs2 regressed too"
     );
     let c = closure_of(&mut store, G);
     assert!(
@@ -536,7 +528,58 @@ fn a_literal_premise_derives_rdfs2_but_not_yet_rdfs7() {
             RDF_TYPE,
             "http://example.org/Person"
         ),
-        "and the one derivation is rdfs2's"
+        "rdfs2's derivation, which closure_of CAN see"
+    );
+}
+
+/// The rdfs7 derivation carries the literal VALUE, read back from the store.
+///
+/// `closure_of()` is IRI-only and would report this graph as holding nothing new,
+/// so this reads the companion graph directly. Asserting the count alone would
+/// not catch a derivation that fired with the wrong object — an empty string, or
+/// the subject's id reused as a value — and both would look like success.
+#[test]
+fn the_rdfs7_derivation_carries_the_literal_itself() {
+    let mut store = Store::open_in_memory().unwrap();
+    literal_triple(
+        &mut store,
+        G,
+        "http://example.org/a",
+        "http://example.org/name",
+        "n",
+    );
+    triple(
+        &mut store,
+        G,
+        "http://example.org/name",
+        RDFS_SUBPROPERTY_OF,
+        "http://example.org/label",
+    );
+    let g = store.lookup(G).unwrap().unwrap();
+    materialise(&mut store, g, TS).unwrap();
+
+    let companion = store.ensure_companion_inferred_graph(g, TS).unwrap();
+    let label = store.intern("http://example.org/label").unwrap();
+    let subject = store.intern("http://example.org/a").unwrap();
+    let mut stmt = store
+        .prepare("SELECT v FROM facts WHERE g = ?1 AND e = ?2 AND a = ?3 AND op = 1")
+        .unwrap();
+    let vals: Vec<Vec<u8>> = stmt
+        .query_map([companion, subject, label], |r| r.get::<_, Vec<u8>>(0))
+        .unwrap()
+        .map(std::result::Result::unwrap)
+        .collect();
+    drop(stmt);
+
+    assert_eq!(
+        vals.len(),
+        1,
+        "exactly one rdfs7 derivation for ex:a ex:label"
+    );
+    assert_eq!(
+        Value::from_bytes(&vals[0]).unwrap(),
+        Value::Str("n".into()),
+        "the derived triple must carry the LITERAL, not a placeholder or an id"
     );
 }
 
@@ -574,4 +617,98 @@ fn rdfs7_fires_over_an_iri_object_control_for_the_literal_count() {
         "CONTROL FAILED: rdfs7 does not fire even over an IRI object, so the literal \
          count in the sibling test cannot localise anything"
     );
+}
+
+/// What carrying literals COSTS, on this machine, 2026-09-05.
+///
+/// `#[ignore]`d deliberately and visibly — these are measurements, not guards,
+/// and they are meant to be re-run by whoever next changes the working set:
+/// `cargo test --features shacl bench_literal -- --ignored --nocapture`.
+///
+/// (Deliberately opt-in is a different thing from the silently-compiled-out
+/// tests of aegis-0bk90r: these are listed by the runner and one flag away.)
+///
+/// | premises | derives | elapsed |
+/// |---|---|---|
+/// | 20 000 with applicable schema | 40 000 | ~500 ms |
+/// | 20 000 with NO applicable schema | 0 | **~30 ms** |
+///
+/// The second row is the one that matters, because it is the cost imposed on a
+/// store that gains NOTHING from rdfs7: before this change those triples never
+/// entered the working set. ~1.5 µs per literal premise, linear in the premise
+/// count, and dominated by the load rather than the rule loop.
+#[test]
+#[ignore]
+fn bench_literal_heavy_closure_no_applicable_schema() {
+    // The REGRESSION case: literals that no rule applies to. Before rdfs7 these
+    // never entered the working set; now they do and derive nothing. This is the
+    // cost paid by a store that gains nothing.
+    for n in [1000usize, 5000, 20000] {
+        let mut store = Store::open_in_memory().unwrap();
+        triple(
+            &mut store,
+            G,
+            "http://example.org/other",
+            RDFS_DOMAIN,
+            "http://example.org/Person",
+        );
+        for i in 0..n {
+            literal_triple(
+                &mut store,
+                G,
+                &format!("http://example.org/s{i}"),
+                "http://example.org/name",
+                "v",
+            );
+        }
+        let g = store.lookup(G).unwrap().unwrap();
+        let t = std::time::Instant::now();
+        let r = materialise(&mut store, g, TS).unwrap();
+        println!(
+            "NO-SCHEMA n={n:>6}  asserted={:>7}  elapsed={:?}",
+            r.asserted,
+            t.elapsed()
+        );
+    }
+}
+
+#[test]
+#[ignore]
+fn bench_literal_heavy_closure() {
+    for n in [1000usize, 5000, 20000] {
+        let mut store = Store::open_in_memory().unwrap();
+        // A schema that fires, plus N literal-valued triples that are premises.
+        triple(
+            &mut store,
+            G,
+            "http://example.org/name",
+            RDFS_DOMAIN,
+            "http://example.org/Person",
+        );
+        triple(
+            &mut store,
+            G,
+            "http://example.org/name",
+            RDFS_SUBPROPERTY_OF,
+            "http://example.org/label",
+        );
+        for i in 0..n {
+            literal_triple(
+                &mut store,
+                G,
+                &format!("http://example.org/s{i}"),
+                "http://example.org/name",
+                "v",
+            );
+        }
+        let g = store.lookup(G).unwrap().unwrap();
+        let t = std::time::Instant::now();
+        let r = materialise(&mut store, g, TS).unwrap();
+        println!(
+            "n={n:>6}  asserted={:>7}  rounds={}  elapsed={:?}",
+            r.asserted,
+            r.rounds,
+            t.elapsed()
+        );
+    }
 }
