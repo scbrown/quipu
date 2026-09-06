@@ -797,12 +797,88 @@ ex:ann    owl:sameAs ex:annAlias .
         .unwrap();
     let rs = ont.materialize_delta(&mut semi, SN_TS, &seed).unwrap();
 
-    // ANTI-VACUITY: if nothing was derived, set equality is trivially true and
-    // this test would pass against a materialiser that does nothing at all.
-    assert!(
-        rn.total > 0,
-        "fixture derives nothing — the comparison below would be vacuous"
-    );
+    // ANTI-VACUITY, PER FAMILY — and the global `total > 0` it replaces was not
+    // enough (malcolm's condition 2 on aegis-yro9m).
+    //
+    // Both engines call the same `derive_pass`. So disabling ONE rule family
+    // disables it on BOTH sides, the two derived sets stay equal, and the
+    // comparison below passes — set equality between two identically crippled
+    // engines is trivially true. `total > 0` does not catch it either, because
+    // the eight other families keep the total comfortably positive.
+    //
+    // MEASURED, not reasoned: with `owl:sameAs` derivation switched off entirely,
+    // seven dedicated sameAs tests went red and THIS TEST STAYED GREEN. Its own
+    // doc comment claims it covers "every rule family, not a sampled few" — true
+    // of the COMPARISON, false of the COVERAGE, and that is the more dangerous
+    // half, because the claim is what stops anyone checking.
+    //
+    // So require each family to have fired ON BOTH SIDES. A family that stops
+    // firing now fails HERE, by name, instead of being silently excluded from a
+    // test that says it covers everything.
+    //
+    // WHAT IS DELIBERATELY *NOT* ASSERTED, and why — both were tried and both
+    // are false of correct behaviour:
+    //
+    //   * that the two counts are EQUAL. They are work counters, not fact
+    //     counters. `push` dedupes within a pass and the two strategies run
+    //     different pass structures over different premise sets. Measured:
+    //     subclass reports naive 2 / semi 6 with identical derived sets.
+    //
+    //   * that each count is individually > 0. Attribution is ORDER-DEPENDENT:
+    //     when two families would derive the same fact, whichever reaches it
+    //     first in that pass gets the increment and the other gets nothing.
+    //     Measured: domain_range reports naive 0 / semi 2, again with identical
+    //     derived sets — naive did derive those facts, under another family's
+    //     counter.
+    //
+    // So the assertion is that the family fired on AT LEAST ONE side. That still
+    // catches the case this guard exists for — a family that derives nothing
+    // anywhere, which is what a disabled or broken rule looks like — without
+    // asserting a stability the counters do not have.
+    let families: [(&str, usize, usize); 9] = [
+        ("subclass", rn.subclass_inferences, rs.subclass_inferences),
+        (
+            "sub_property",
+            rn.sub_property_inferences,
+            rs.sub_property_inferences,
+        ),
+        ("inverse", rn.inverse_inferences, rs.inverse_inferences),
+        (
+            "symmetric",
+            rn.symmetric_inferences,
+            rs.symmetric_inferences,
+        ),
+        (
+            "transitive",
+            rn.transitive_inferences,
+            rs.transitive_inferences,
+        ),
+        (
+            "equivalent_property",
+            rn.equivalent_property_inferences,
+            rs.equivalent_property_inferences,
+        ),
+        (
+            "equivalent_class",
+            rn.equivalent_class_inferences,
+            rs.equivalent_class_inferences,
+        ),
+        (
+            "domain_range",
+            rn.domain_range_inferences,
+            rs.domain_range_inferences,
+        ),
+        ("same_as", rn.same_as_inferences, rs.same_as_inferences),
+    ];
+    for (name, naive_count, semi_count) in families {
+        assert!(
+            naive_count + semi_count > 0,
+            "rule family {name:?} derived NOTHING on EITHER side (naive \
+             {naive_count}, semi-naive {semi_count}), so the set comparison below \
+             says nothing about it. Either the family is broken or the fixture \
+             stopped exercising it — both are findings."
+        );
+    }
 
     assert_eq!(
         sn_derived(&naive),
