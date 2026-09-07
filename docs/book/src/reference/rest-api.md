@@ -482,6 +482,19 @@ string itself parses as an IRI (has a `scheme://`). A correctly shaped `{"iri":
 ...}` (or a genuine string literal) for a triple that does not exist is still a
 quiet, idempotent `{"retracted": 0}`.
 
+### `POST /retract/source`
+
+Preview or apply a retraction by the **exact transaction source** string. Requires
+`source` and a nonempty `repair` ticket/reason. The default `apply: false` only
+previews; `apply: true` retracts the planned facts and stamps the transaction source
+as `repair:<ticket>`. Optional fields are `graph` (defaults to ROOT), `timestamp`,
+and `actor`. The graph must be committed; source matching is literal, not a prefix
+or pattern. As a write route, even preview requires the configured bearer.
+
+The response reports `planned`, the affected `entities` count, a bounded `sample`,
+`sample_truncated`, and `repair_source`. A preview has `applied: false` and null
+`tx_id`/`retracted`; an applied result reports the actual retraction transaction.
+
 ### `POST /episode/retract`
 
 Episode-scoped **logical** retraction. Retracts the facts an episode's ingest

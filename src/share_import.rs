@@ -367,6 +367,7 @@ pub fn import_share(
     timestamp: &str,
     authenticated_actor: Option<&str>,
 ) -> Result<ShareImportResult> {
+    let mut observation = crate::metrics::attestation::ImportObservation::new();
     // MANIFEST IDENTITY FIRST, THEN AUTHORSHIP, and the order is the scope's
     // (aegis-c9c44). `verify_share` recomputes the payload hashes and refuses a
     // mismatch; attesting bytes that do not hash to what the manifest claims would
@@ -409,6 +410,10 @@ pub fn import_share(
     // whole point of a pre-staging check is that a refusal leaves nothing behind.
     #[cfg(not(target_arch = "wasm32"))]
     let attestation = crate::share_attestation::verify_attestation(store, request, timestamp)?;
+    #[cfg(not(target_arch = "wasm32"))]
+    observation.tier(&attestation.tier);
+    #[cfg(target_arch = "wasm32")]
+    observation.tier("transport");
     let mut triples = parse_triples(&request.export_ntriples)?;
     let resolution = resolve_and_rewrite(store, &mut triples, request.accept_exact)?;
     let resolved = serialize(&triples)?;
@@ -449,6 +454,7 @@ pub fn import_share(
         )?;
         if quarantined { "quarantined" } else { "staged" }
     };
+    observation.outcome(outcome);
     Ok(ShareImportResult {
         outcome: outcome.into(),
         import_id: import_id(&request.manifest.share_id)?,

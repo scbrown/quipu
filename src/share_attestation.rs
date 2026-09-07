@@ -112,6 +112,8 @@ pub fn verify_attestation(
     // carries -- a tampered bundle fails here rather than degrading to `claimed`.
     // If `claimed` were handed out without checking, it would mean nothing.
     let Some(carried) = request.manifest.attestation.as_ref() else {
+        let mut observation = crate::metrics::attestation::VerificationObservation::new(&binding);
+        observation.result = crate::metrics::attestation::VerificationResult::Unbound;
         return Err(Error::InvalidValue(
             "unbound attestation session, and the manifest carries no binding to check the \
              envelope against: there is nothing here to verify. An unregistered session can \
@@ -122,6 +124,8 @@ pub fn verify_attestation(
         ));
     };
     if carried.envelope != *envelope {
+        let mut observation = crate::metrics::attestation::VerificationObservation::new(&binding);
+        observation.result = crate::metrics::attestation::VerificationResult::Invalid;
         return Err(Error::InvalidValue(
             "the supplied attestation envelope differs from the one embedded in the manifest"
                 .into(),

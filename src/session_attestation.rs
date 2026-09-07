@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::metrics::attestation::{VerificationObservation, VerificationResult as Verdict};
 use crate::share::sha256;
 
 pub const WRITE_V1: &str = "quipu-write-v1";
@@ -288,8 +289,12 @@ pub fn verify_unregistered(
     now_epoch: u64,
     allowed_skew_secs: u64,
 ) -> Result<()> {
+    let mut observation = VerificationObservation::new(payload);
+    observation.result = Verdict::Invalid;
     validate_envelope(envelope, payload)?;
+    observation.result = Verdict::Error;
     if envelope.issued_at_epoch.abs_diff(now_epoch) > allowed_skew_secs {
+        observation.result = Verdict::Skew;
         return Err(Error::InvalidValue(
             "attestation issuance is outside the accepted clock window".into(),
         ));
@@ -297,9 +302,11 @@ pub fn verify_unregistered(
     // The key_id must be the digest of the key we are about to verify against,
     // or an envelope could name one key and be checked against another.
     let expected = key_id_of(public_key).ok_or_else(|| {
+        observation.result = Verdict::Invalid;
         Error::InvalidValue("accompanying public key is not 32-byte lowercase hex".into())
     })?;
     if envelope.key_id != expected {
+        observation.result = Verdict::Invalid;
         return Err(Error::InvalidValue(
             "attestation key_id does not match the accompanying public key".into(),
         ));
@@ -309,10 +316,12 @@ pub fn verify_unregistered(
         &canonical_message(envelope, payload),
         &envelope.signature,
     ) {
+        observation.result = Verdict::Badsig;
         return Err(Error::InvalidValue(
             "attestation signature does not verify against the accompanying public key".into(),
         ));
     }
+    observation.result = Verdict::Ok;
     Ok(())
 }
 
@@ -323,37 +332,48 @@ pub fn verify_binding<B: AttestationBindings + ?Sized>(
     now_epoch: u64,
     allowed_skew_secs: u64,
 ) -> Result<VerifiedPrincipal> {
+    let mut observation = VerificationObservation::new(payload);
+    observation.result = Verdict::Invalid;
     validate_envelope(envelope, payload)?;
-    let binding = bindings
-        .binding(&envelope.session)?
-        .ok_or_else(|| Error::InvalidValue("unbound attestation session".into()))?;
+    observation.result = Verdict::Error;
+    let binding = bindings.binding(&envelope.session)?.ok_or_else(|| {
+        observation.result = Verdict::Unbound;
+        Error::InvalidValue("unbound attestation session".into())
+    })?;
     if binding.revoked {
+        observation.result = Verdict::Revoked;
         return Err(Error::InvalidValue("revoked attestation session".into()));
     }
     if now_epoch > binding.expires_at_epoch || now_epoch < binding.issued_at_epoch {
+        observation.result = Verdict::Skew;
         return Err(Error::InvalidValue(
             "expired or not-yet-valid session binding".into(),
         ));
     }
     if envelope.key_id != binding.key_id || envelope.introducer != binding.introducer {
+        observation.result = Verdict::Invalid;
         return Err(Error::InvalidValue(
             "attestation does not match protected session binding".into(),
         ));
     }
     if envelope.issued_at_epoch.abs_diff(now_epoch) > allowed_skew_secs {
+        observation.result = Verdict::Skew;
         return Err(Error::InvalidValue(
             "attestation issuance is outside the accepted clock window".into(),
         ));
     }
     let message = canonical_message(envelope, payload);
     if !crate::signing::verify_hex(&binding.public_key, &message, &envelope.signature) {
+        observation.result = Verdict::Badsig;
         return Err(Error::InvalidValue(
             "attestation signature does not verify".into(),
         ));
     }
     if !bindings.consume_nonce(&binding.session, &envelope.nonce, now_epoch)? {
+        observation.result = Verdict::Replay;
         return Err(Error::InvalidValue("attestation nonce replay".into()));
     }
+    observation.result = Verdict::Ok;
     Ok(VerifiedPrincipal {
         agent: binding.agent,
         session: binding.session,
