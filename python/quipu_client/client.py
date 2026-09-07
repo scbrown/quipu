@@ -229,6 +229,7 @@ class QuipuClient:
         *,
         shapes: str | None = None,
         timestamp: str | None = None,
+        valid_from: str | None = None,
         actor: str | None = None,
         source: str | None = None,
         graph: str | None = None,
@@ -236,12 +237,22 @@ class QuipuClient:
         snapshot: str | None = None,
     ) -> KnotResult:
         """``POST /knot`` — assert Turtle. Pass ``actor`` and ``source``:
-        omitting both lands facts with no audit trail at all."""
+        omitting both lands facts with no audit trail at all.
+
+        ``timestamp`` is TRANSACTION time (when this store came to believe the
+        facts, queried with ``tx``); ``valid_from`` is VALID time (when they
+        became true of the world, queried with ``valid_at``). Omitting
+        ``valid_from`` reuses ``timestamp`` for both. ``valid_from`` is RFC 3339
+        and is normalised server-side to ``YYYY-MM-DDTHH:MM:SSZ`` — read the
+        stored key back off ``result.valid_from``, not off what you sent, since
+        an offset spelling is converted. A malformed value is refused before
+        anything is written."""
         body = _drop_none(
             {
                 "turtle": turtle,
                 "shapes": shapes,
                 "timestamp": timestamp,
+                "valid_from": valid_from,
                 "actor": actor,
                 "source": source,
                 "graph": graph,

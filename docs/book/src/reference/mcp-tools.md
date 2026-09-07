@@ -79,7 +79,8 @@ Assert facts from Turtle data, with optional SHACL validation.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `turtle` | Yes | RDF Turtle data |
-| `timestamp` | No | Valid-time for the facts |
+| `timestamp` | No | Transaction-time: when this store came to believe the facts (defaults to now) |
+| `valid_from` | No | Valid-time: when the facts became true of the world. RFC 3339, normalised to UTC `Z`. Omit to reuse `timestamp` |
 | `actor` | No | Who is asserting |
 | `source` | No | Where the facts came from |
 | `shapes` | No | SHACL Turtle for validation gate |
@@ -87,7 +88,25 @@ Assert facts from Turtle data, with optional SHACL validation.
 | `replace_snapshot` | No | Replace this producer's prior facts (diffed), scoped to the target graph |
 | `snapshot` | No | Stable producer key required by `replace_snapshot` |
 
-Returns: transaction ID, fact count, and whether validation passed.
+Returns: transaction ID, fact count, the normalised `valid_from` actually
+stored, and whether validation passed.
+
+`timestamp` and `valid_from` are the store's two time axes and they answer
+different questions — `valid_from` is queried with `valid_at`, `timestamp` with
+`tx`/`as_of_tx`. A commit authored in March and ingested tonight wants
+`valid_from` in March and `timestamp` tonight; passing only `timestamp`
+collapses both, which is what this surface did before aegis-sb8of5.
+
+Valid-time is compared as **text**, so `valid_from` is normalised to
+`YYYY-MM-DDTHH:MM:SSZ`: a UTC offset is applied (git's `%aI` emits the author's
+local offset, and `2026-09-07T00:30:00+01:00` would otherwise sort *after*
+`2026-09-06T23:45:00Z`, though it is earlier) and sub-second precision is
+dropped (`.5Z` sorts before `Z`). A malformed value is refused before the
+vocabulary gate, the SHACL pass, or any transaction — nothing is written.
+
+`replace_snapshot` retractions are **not** back-dated: a replaced fact's
+`valid_to` is the transaction stamp, because "these stopped being true in March"
+is a different claim from "we replaced them tonight".
 
 ### `quipu_cord`
 

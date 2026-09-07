@@ -100,7 +100,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "type": "object",
                 "properties": {
                     "turtle": { "type": "string", "description": "RDF data in Turtle format to assert" },
-                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the assertion" },
+                    "timestamp": { "type": "string", "description": "TRANSACTION time: when this store came to believe the facts. Defaults to now. Also the valid-time unless valid_from is given." },
+                    "valid_from": { "type": "string", "description": "VALID time: when the facts became true OF THE WORLD, independent of when they were ingested. RFC 3339; a UTC offset (e.g. git's 2026-09-07T07:19:41+02:00) is normalised to Z and sub-second precision is dropped, because valid-time is compared as text. Malformed values are refused before anything is written. Omit to reuse timestamp — the absent case is byte-identical to the old behaviour." },
                     "actor": { "type": "string", "description": "Who is making the assertion" },
                     "source": { "type": "string", "description": "Provenance source (episode, file, etc.)" },
                     "shapes": { "type": "string", "description": "Optional SHACL shapes in Turtle for validation" },
