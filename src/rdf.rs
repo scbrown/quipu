@@ -552,8 +552,50 @@ pub fn ingest_rdf_to_graph(
     source: Option<&str>,
     graph: i64,
 ) -> Result<(i64, usize)> {
-    let datums = parse_rdf(store, reader, format, base_iri, timestamp)?;
+    ingest_rdf_bitemporal(
+        store, reader, format, base_iri, timestamp, timestamp, actor, source, graph,
+    )
+}
+
+/// Ingest RDF with the two time axes given SEPARATELY.
+///
+/// [`ingest_rdf_to_graph`] passes one timestamp to both, which is right for a
+/// writer recording something as it happens and wrong for one recording
+/// something that already happened. The axes are genuinely different questions:
+///
+/// | axis | parameter | answers |
+/// |---|---|---|
+/// | valid time | `valid_from` | when the datum became TRUE OF THE WORLD |
+/// | transaction time | `timestamp` | when this store came to BELIEVE it |
+///
+/// A git commit authored last March and ingested tonight has a valid-time in
+/// March and a transaction-time of tonight; collapsing them makes the store
+/// unable to answer "what did the graph say in April" and "what was true in
+/// April" as different questions, which is the whole point of a bitemporal log.
+///
+/// `valid_from` is expected to be normalised already — see
+/// [`crate::time::normalize_rfc3339_utc`] for why an un-normalised offset is a
+/// silent ordering bug rather than a cosmetic one. This function does not
+/// normalise, because a write path that quietly rewrites its caller's input is
+/// harder to reason about than one whose caller validated first and can report
+/// a malformed value as a refusal instead of a surprise.
+#[allow(clippy::too_many_arguments)]
+pub fn ingest_rdf_bitemporal(
+    store: &mut Store,
+    reader: impl Read,
+    format: RdfFormat,
+    base_iri: Option<&str>,
+    valid_from: &str,
+    timestamp: &str,
+    actor: Option<&str>,
+    source: Option<&str>,
+    graph: i64,
+) -> Result<(i64, usize)> {
+    let datums = parse_rdf(store, reader, format, base_iri, valid_from)?;
     let count = datums.len();
+    // TRANSACTION time, deliberately not `valid_from`: the transactions row
+    // records when this store learned the fact, and back-dating it would make
+    // `as_of_tx` history a fiction.
     let tx_id = store.transact_to_graph(&datums, timestamp, actor, source, graph)?;
     Ok((tx_id, count))
 }
@@ -562,12 +604,17 @@ pub fn ingest_rdf_to_graph(
 ///
 /// This is used by callers that must combine RDF assertions with other changes
 /// in one atomic transaction, such as replacing a producer-owned snapshot.
+///
+/// The timestamp parameter is the datum's **valid time** and only that — it
+/// stamps `Datum.valid_from` and never reaches a `transactions` row. It was
+/// called `timestamp` until aegis-sb8of5, which read as the transaction stamp
+/// and is how `/knot` came to pass one value to both axes.
 pub(crate) fn parse_rdf(
     store: &Store,
     reader: impl Read,
     format: RdfFormat,
     base_iri: Option<&str>,
-    timestamp: &str,
+    valid_from: &str,
 ) -> Result<Vec<Datum>> {
     let mut parser = RdfParser::from_format(format);
     if let Some(base) = base_iri {
@@ -589,7 +636,7 @@ pub(crate) fn parse_rdf(
             entity: e,
             attribute: a,
             value: v,
-            valid_from: timestamp.to_string(),
+            valid_from: valid_from.to_string(),
             valid_to: None,
             op: Op::Assert,
         });

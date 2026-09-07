@@ -6,6 +6,12 @@ use crate::{
     types::{Fact, Op, Value},
 };
 
+// aegis-byn4fn: the eighth argument is the transaction source. It is the
+// handle by which these facts can ever be retracted, so it belongs on the
+// write path itself; bundling the parameters into a struct to satisfy the
+// lint would hide it from every call site, which is how it came to be
+// missing in the first place.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn set_triple(
     store: &mut Store,
     entity: i64,
@@ -14,6 +20,7 @@ pub(super) fn set_triple(
     timestamp: &str,
     actor: Option<&str>,
     explicit_str: bool,
+    source: Option<&str>,
 ) -> Result<(i64, usize, usize)> {
     let current: Vec<Fact> = store
         .entity_facts(entity)?
@@ -56,6 +63,11 @@ pub(super) fn set_triple(
             op: Op::Assert,
         });
     }
-    let tx_id = store.transact(&datums, timestamp, actor, Some("set"))?;
+    // aegis-byn4fn: the source was the CONSTANT "set" — one key shared by every
+    // correction the fleet has ever made (26,008 transactions when measured), so
+    // a correction named no author and the retraction handle meant "every /set
+    // ever run". The caller's key wins; the fallback is per-actor.
+    let tag = crate::store::source_tag::resolve("set", actor, source);
+    let tx_id = store.transact(&datums, timestamp, actor, Some(&tag))?;
     Ok((tx_id, retracted, asserted))
 }

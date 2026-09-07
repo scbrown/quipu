@@ -237,13 +237,31 @@ curl -s localhost:3030/knot -X POST \
   -d '{"turtle": "@prefix ex: <http://example.org/> . ex:alice a ex:Person ."}'
 ```
 
-Optional fields: `shapes` (SHACL Turtle), `timestamp`, `actor`, `source`,
-`replace_snapshot` + `snapshot` (diffed replacement of a producer's prior
-facts under a stable key), and `graph` (a named-graph IRI that must already
-be registered committed-class via `POST /graph/create`; unknown IRIs error,
-overlay-class targets are refused, omitted means ROOT).
+Optional fields: `shapes` (SHACL Turtle), `timestamp`, `valid_from`, `actor`,
+`source`, `replace_snapshot` + `snapshot` (diffed replacement of a producer's
+prior facts under a stable key), and `graph` (a named-graph IRI that must
+already be registered committed-class via `POST /graph/create`; unknown IRIs
+error, overlay-class targets are refused, omitted means ROOT).
 
-Response: `{"tx_id": 1, "count": 2, "conforms": true}`
+`timestamp` is **transaction** time (when this store came to believe the facts,
+queried with `tx`/`as_of_tx`); `valid_from` is **valid** time (when they became
+true of the world, queried with `valid_at`). Omitting `valid_from` reuses
+`timestamp` for both, which is the historical behaviour. `valid_from` is RFC
+3339 and is normalised to `YYYY-MM-DDTHH:MM:SSZ` — valid-time is compared as
+text, so an un-normalised offset sorts wrongly rather than merely looking
+untidy. A malformed value is refused before anything is written.
+
+```bash
+# a commit authored in March, ingested tonight
+curl -s localhost:3030/knot -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"turtle": "@prefix ex: <http://example.org/> . ex:c1 a ex:Commit .",
+       "valid_from": "2026-03-04T09:15:00+01:00"}'
+```
+
+Response: `{"tx_id": 1, "count": 2, "conforms": true,
+"valid_from": "2026-03-04T08:15:00Z"}` — the echoed `valid_from` is the
+normalised key the facts were actually stored under.
 
 ### `POST /cord`
 
