@@ -41,7 +41,7 @@ impl Store {
         allow_orphan: bool,
         source: Option<&str>,
     ) -> Result<(i64, usize)> {
-        let facts: Vec<Fact> = store
+        let facts: Vec<Fact> = self
             .entity_facts(entity)?
             .into_iter()
             .filter(|f| predicate.is_none_or(|p| f.attribute == p))
@@ -74,7 +74,7 @@ impl Store {
             // alone: a bare string is the RIGHT shape there, so absence is a real
             // idempotent no-op, not a mistake.
             if let (Some(Value::Str(s)), Some(p)) = (value, predicate) {
-                let on_pred: Vec<Value> = store
+                let on_pred: Vec<Value> = self
                     .entity_facts(entity)?
                     .into_iter()
                     .filter(|f| f.attribute == p)
