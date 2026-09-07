@@ -1815,6 +1815,7 @@ fn retract_survives_duplicate_backing_rows() {
             "2026-01-03T00:00:00Z",
             Some("ian"),
             false,
+            None,
         )
         .expect("retraction must not fail on duplicate backing rows");
 
@@ -1878,6 +1879,7 @@ fn retract_one_type_leaves_the_others() {
             "2026-01-02T00:00:00Z",
             Some("ian"),
             false,
+            None,
         )
         .expect("targeted retraction must succeed");
 
@@ -1946,6 +1948,7 @@ fn retract_str_for_an_iri_edge_is_loud_not_silent() {
             "2026-01-02",
             None,
             false,
+            None,
         )
         .expect_err("a bare string for an IRI edge must be refused, not silently no-op");
     let msg = err.to_string();
@@ -1973,6 +1976,7 @@ fn retract_str_for_an_iri_edge_is_loud_not_silent() {
             "2026-01-03",
             None,
             false,
+            None,
         )
         .expect("a Ref-shaped object must retract the edge");
     assert_eq!(count, 1, "exactly the one reports_to edge");
@@ -2012,6 +2016,7 @@ fn retract_str_for_an_iri_edge_is_loud_not_silent() {
             "2026-01-04",
             None,
             false,
+            None,
         )
         .expect("re-retracting an absent, correctly-shaped edge must stay idempotent");
     assert_eq!(
@@ -2043,7 +2048,15 @@ fn retract_bare_iri_string_errors_even_with_no_matching_fact() {
     // signal it is a mis-shaped edge retract.
     let bare = Value::Str("http://example.org/Person".into());
     let err = store
-        .retract_triples(node, Some(rdf_type), Some(&bare), "2026-01-02", None, false)
+        .retract_triples(
+            node,
+            Some(rdf_type),
+            Some(&bare),
+            "2026-01-02",
+            None,
+            false,
+            None,
+        )
         .expect_err("a bare IRI-shaped string must be refused even with no matching fact");
     assert!(
         err.to_string().contains("iri"),
@@ -2055,7 +2068,15 @@ fn retract_bare_iri_string_errors_even_with_no_matching_fact() {
     // turned this into an error too would just move the ambiguity.
     let iri = Value::Ref(store.intern("http://example.org/Person").unwrap());
     let (_tx, count) = store
-        .retract_triples(node, Some(rdf_type), Some(&iri), "2026-01-03", None, false)
+        .retract_triples(
+            node,
+            Some(rdf_type),
+            Some(&iri),
+            "2026-01-03",
+            None,
+            false,
+            None,
+        )
         .expect("a correctly shaped, genuinely-absent object must stay a quiet no-op");
     assert_eq!(count, 0, "absent + correctly shaped -> 0, NOT an error");
 
@@ -2070,6 +2091,7 @@ fn retract_bare_iri_string_errors_even_with_no_matching_fact() {
             "2026-01-04",
             None,
             false,
+            None,
         )
         .expect("a plain literal with no matching fact is a legitimate no-op");
     assert_eq!(count, 0, "no scheme -> treated as a literal -> quiet no-op");
@@ -2116,7 +2138,7 @@ fn retract_refuses_to_orphan_the_last_type() {
         .unwrap();
     assert!(
         store
-            .retract_triples(e, Some(a), Some(&t), "2026-01-02", None, false)
+            .retract_triples(e, Some(a), Some(&t), "2026-01-02", None, false, None)
             .is_err(),
         "stripping the last type off a surviving node must be refused"
     );
@@ -2129,7 +2151,7 @@ fn retract_refuses_to_orphan_the_last_type() {
     // ARM 2: same call, explicit override -> allowed.
     assert!(
         store
-            .retract_triples(e, Some(a), Some(&t), "2026-01-02", None, true)
+            .retract_triples(e, Some(a), Some(&t), "2026-01-02", None, true, None)
             .is_ok(),
         "allow_orphan must let a caller do it deliberately"
     );
@@ -2148,7 +2170,7 @@ fn retract_refuses_to_orphan_the_last_type() {
     )
     .unwrap();
     assert!(
-        s2.retract_triples(e2, Some(a2), Some(&drop), "2026-01-02", None, false)
+        s2.retract_triples(e2, Some(a2), Some(&drop), "2026-01-02", None, false, None)
             .is_ok(),
         "dropping one of two types leaves the node typed — must be allowed"
     );
@@ -2165,7 +2187,7 @@ fn retract_refuses_to_orphan_the_last_type() {
     )
     .unwrap();
     assert!(
-        s3.retract_triples(e3, None, None, "2026-01-02", None, false)
+        s3.retract_triples(e3, None, None, "2026-01-02", None, false, None)
             .is_ok(),
         "retracting an entity whole removes identity AND references — no ghost"
     );
@@ -2249,7 +2271,7 @@ fn retraction_in_root_does_not_touch_an_overlay() {
     let (mut store, e, _root_attr, ov_attr) = store_with_tenant_overlay();
 
     let (_tx, count) = store
-        .retract_triples(e, None, None, "2026-01-03T00:00:00Z", None, true)
+        .retract_triples(e, None, None, "2026-01-03T00:00:00Z", None, true, None)
         .unwrap();
     assert_eq!(count, 1, "only ROOT's single fact is retractable from ROOT");
 
@@ -2302,7 +2324,15 @@ fn half_ghost_guard_does_not_count_overlay_facts_as_survivors() {
         .unwrap();
 
     let (_tx, count) = store
-        .retract_triples(e, Some(type_id), None, "2026-01-03T00:00:00Z", None, false)
+        .retract_triples(
+            e,
+            Some(type_id),
+            None,
+            "2026-01-03T00:00:00Z",
+            None,
+            false,
+            None,
+        )
         .expect("no ROOT fact survives, so this is not a half-ghost");
     assert_eq!(count, 1);
 }
