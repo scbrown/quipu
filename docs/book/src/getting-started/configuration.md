@@ -60,7 +60,7 @@ stops being read.
 | `server.bind` | `127.0.0.1:3030` | Server bind address |
 | `server.auth_token` | unset | Bearer token required on write endpoints when set |
 | `server.previous_auth_token` | unset | Previous write bearer accepted temporarily during rotation; requires `server.auth_token` and a positive grace duration |
-| `server.previous_auth_token_expires_at_epoch_secs` | unset | Absolute UTC Unix epoch expiry for the previous bearer; must be future and at most 24 hours away when starting |
+| `server.previous_auth_token_expires_at_epoch_secs` | unset | Absolute UTC Unix epoch expiry for the previous bearer; at most 24 hours away when starting; expired previous bearers are ignored |
 | `server.read_only` | `false` | Refuse all write endpoints |
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
@@ -102,9 +102,11 @@ secret.
 
 After consumers have switched, remove both `previous_auth_token` fields and
 restart again. That explicitly invalidates the old bearer immediately. If the
-cleanup restart is delayed, the old bearer still expires at the startup-derived
-deadline, and a restart never extends it. Invalid pairs, identical bearers,
-expired deadlines, and deadlines over 24 hours away make startup fail closed.
+cleanup restart is delayed, the old bearer still expires at the configured absolute
+deadline, and a restart never extends it. On restart, an expired previous bearer is dropped with a warning; the current
+bearer remains required and valid. Forgotten cleanup cannot cause a delayed
+startup outage. Invalid pairs, identical bearers, and deadlines over
+24 hours away still make startup fail closed.
 
 ## Attachments
 

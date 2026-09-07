@@ -22,6 +22,8 @@ mod admission;
 mod align;
 #[path = "server/assets.rs"]
 mod assets;
+#[path = "server/auth.rs"]
+mod auth;
 #[path = "server/base.rs"]
 mod base;
 #[path = "server/entity.rs"]
@@ -313,33 +315,10 @@ async fn main() {
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
     // in quipu::http_auth (unit-tested); this only wires it into axum.
-    let auth_policy = match quipu::http_auth::BearerPolicy::new(
-        config.server.auth_token.clone(),
-        config.server.previous_auth_token.clone(),
-        config.server.previous_auth_token_expires_at_epoch_secs,
-        quipu::time::epoch_secs(),
-    ) {
-        Ok(policy) => policy,
-        Err(reason) => {
-            eprintln!("error: invalid [quipu.server] bearer rotation configuration: {reason}");
-            std::process::exit(2);
-        }
-    };
+    let auth_policy = auth::bearer_policy(&config.server);
     let read_only = config.server.read_only;
     if read_only {
         eprintln!("server is READ-ONLY — write endpoints will return 403");
-    }
-    if auth_policy.requires_auth() {
-        eprintln!("write endpoints require a bearer token");
-    }
-    if config.server.previous_auth_token.is_some() {
-        eprintln!(
-            "temporary previous bearer enabled until UTC epoch second {}",
-            config
-                .server
-                .previous_auth_token_expires_at_epoch_secs
-                .unwrap_or_default()
-        );
     }
 
     // CORS: an allowlist restricts cross-origin requests when configured; an
