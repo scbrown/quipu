@@ -17,6 +17,9 @@ pub mod named_query;
 pub mod owl;
 pub mod path;
 pub mod proposal;
+pub mod repair;
+#[cfg(test)]
+mod repair_tests;
 pub mod resolution;
 pub mod search;
 #[cfg(test)]
@@ -33,6 +36,7 @@ pub use governance::{
     tool_verifier_authorized,
 };
 pub use knot::tool_knot;
+pub use repair::tool_retract_source;
 
 use crate::error::{Error, Result};
 use crate::resolution::{Contention, EntityCandidate};

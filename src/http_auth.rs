@@ -44,6 +44,9 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/import/promote",
     "/episodes/complete",
     "/retract",
+    // aegis-rz75m6: retract-only repair path. Writes a retraction transaction
+    // stamped repair:<ticket> when `apply` is true.
+    "/retract/source",
     "/set",
     "/episode/retract",
     "/shapes",

@@ -409,6 +409,7 @@ async fn main() {
         .route("/retract", post(retract))
         .route("/set", post(set_predicate))
         .route("/episode/retract", post(retract_episode))
+        .route("/retract/source", post(retract_source))
         .route("/shapes", post(shapes))
         .route("/reason", post(reason))
         .route("/explain", post(explain))
