@@ -49,9 +49,36 @@ resolve() { # resolve <repo-dir> -> prints "<tag>\t<version>" or fails with a me
   local d="$1" tag head_tree tag_tree
   tag=$(git -C "$d" tag --merged HEAD --sort=-creatordate 2>/dev/null | grep "^${PREFIX}" | head -1 || true)
   if [ -z "$tag" ]; then
+    # ── A SHALLOW CLONE CANNOT ANSWER THIS QUESTION (aegis-pfqttr) ──────────────
+    # `git tag --merged HEAD` computes ANCESTRY, and at fetch-depth: 1 there is no
+    # ancestry to compute — so it returns nothing whether or not a tag exists. The
+    # empty result is then indistinguishable from a genuine "no tag", and the
+    # message below would state a finding that is not true.
+    #
+    # That is worse than the `points-at` bug this script replaced: that one named a
+    # condition that WAS true. This would refuse every release while reporting the
+    # wrong reason, and it would read as a NEW bug in the fix — sending the next
+    # person to look at tags when the fault is in the checkout.
+    #
+    # Same class as aegis-9bgp, where a shallow clone nearly closed a live token
+    # leak by confidently answering "not in history". The crew rule is that a script
+    # about to conclude "X is not in history" must gate on depth FIRST. This is that
+    # gate. Distinct exit code (2) and distinct wording, so the blind spot can never
+    # be read as, or grepped as, the genuine no-tag case.
+    if [ "$(git -C "$d" rev-parse --is-shallow-repository 2>/dev/null)" = true ]; then
+      echo "this clone is SHALLOW, so ancestry cannot be computed and NO CONCLUSION about" >&2
+      echo "reachable tags is available. This is a blind spot, not a finding: a ${PREFIX}*" >&2
+      echo "tag may well exist and be reachable." >&2
+      echo "Fix the CHECKOUT, not the tags — the publish job needs actions/checkout with" >&2
+      echo "fetch-depth: 0." >&2
+      return 2
+    fi
     echo "no ${PREFIX}* tag is reachable from HEAD. Refusing to publish a version this run cannot name." >&2
     return 1
   fi
+  # NOTE: the shallow gate deliberately covers only the NO-TAG conclusion. If a tag
+  # WAS found, the tree comparison below is what makes the answer trustworthy, and it
+  # is unaffected by depth: it compares two trees this clone already has.
   head_tree=$(git -C "$d" rev-parse 'HEAD^{tree}')
   tag_tree=$(git -C "$d" rev-parse "${tag}^{tree}")
   if [ "$head_tree" != "$tag_tree" ]; then
@@ -118,6 +145,43 @@ if [ "${1:-}" = "--selftest" ]; then
     *"no quipu-ai-v* tag is reachable"*) echo "  ok: a tag on an unmerged branch is NOT reachable" ;;
     *) echo "  FAIL: picked up an unreachable tag: $out"; fail=1 ;;
   esac
+
+  # 6. THE SHALLOW BLIND SPOT (aegis-pfqttr). Case `a` is the realistic shape: the
+  #    tag sits on the commit BELOW a merge commit, so a depth-1 clone fetches the
+  #    merge and not the tag — `tag --merged HEAD` then returns empty for a repo
+  #    that genuinely has a reachable tag. Built as a REAL shallow clone rather
+  #    than by faking the marker, because the thing under test is git's behaviour.
+  git -C "$t" clone -q --depth 1 "file://$t/a" shallow 2>/dev/null || true
+  if [ -d "$t/shallow" ]; then
+    # CONTROL — if this clone is not actually shallow the arm below is vacuous: it
+    # would pass by taking the ordinary no-tag path and prove nothing at all.
+    chk "CONTROL: the fixture really is a shallow clone" \
+        "$(git -C "$t/shallow" rev-parse --is-shallow-repository)" "true"
+    # CONTROL — and the tag must genuinely be absent from it, or we are not
+    # exercising the empty-result path we care about.
+    chk "CONTROL: the tag is not present in the shallow clone" \
+        "$(git -C "$t/shallow" tag --list 'quipu-ai-v*' | wc -l | tr -d ' ')" "0"
+    out=$(resolve "$t/shallow" 2>&1 || true)
+    case "$out" in
+      *"no quipu-ai-v* tag is reachable"*)
+        echo "  FAIL: shallow clone reported the GENUINE no-tag finding — the blind spot is"
+        echo "        being stated as a fact. This is the bug aegis-pfqttr describes."; fail=1 ;;
+      *"clone is SHALLOW"*) echo "  ok: a shallow clone says SHALLOW, not 'no reachable tag'" ;;
+      *) echo "  FAIL: unexpected output from a shallow clone: $out"; fail=1 ;;
+    esac
+    # The exit code must separate the two refusals for a CALLER, not only for a reader.
+    # NB `cmd; rc=$?` is WRONG under `set -e` — the failing call exits the script
+    # before the check runs, and the suite then reports a pass-shaped early exit.
+    # Found by running it: the arm below silently never executed. Keep the `|| rc=$?`
+    # form, which makes the call part of a condition.
+    rc=0; resolve "$t/shallow" >/dev/null 2>&1 || rc=$?
+    chk "a shallow refusal exits 2, distinct from a genuine no-tag refusal (1)" "$rc" "2"
+    rc=0; resolve "$t/d" >/dev/null 2>&1 || rc=$?
+    chk "a genuine no-tag refusal still exits 1" "$rc" "1"
+  else
+    echo "  FAIL: could not build the shallow fixture — arm 6 did not run, which is NOT a pass"
+    fail=1
+  fi
 
   [ "$fail" = 0 ] && echo "  ALL PASS" || echo "  FAILURES ABOVE"
   exit "$fail"
