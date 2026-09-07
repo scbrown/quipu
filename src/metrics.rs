@@ -24,6 +24,8 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+pub(crate) mod attestation;
+
 /// Current process (resident, virtual) memory in bytes, from `/proc/self/statm`
 /// on Linux; `(0, 0)` elsewhere. `statm` fields are in pages; on the `x86_64`
 /// Linux quipu runs on the page size is 4096. Cheap in-kernel read — safe to
@@ -220,6 +222,7 @@ fn request_key<V>(
 
 #[derive(Default)]
 pub struct Metrics {
+    attestation: attestation::AttestationMetrics,
     /// (endpoint template, status) -> request count.
     requests: Mutex<BTreeMap<(String, u16), u64>>,
     /// endpoint template -> duration histogram.
@@ -351,6 +354,7 @@ impl Metrics {
         wal_bytes: Option<u64>,
     ) -> String {
         let mut out = String::new();
+        self.attestation.render(&mut out);
 
         out.push_str(
             "# HELP quipu_http_requests_total Requests served, by route template and status.\n\
