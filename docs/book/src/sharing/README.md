@@ -312,3 +312,36 @@ Automated callers should require `attested`. Accepting `claimed` is defensible, 
 caller's deliberate choice rather than the effect of a tier that merely does not read as failure.
 
 Command reference: [CLI — sharing](../reference/cli-sharing.md).
+
+## Import and attestation metrics
+
+The server's `/metrics` endpoint exposes process-local counters at the import and
+signature-verification decisions:
+
+| Counter | Labels | Meaning |
+|---|---|---|
+| `quipu_share_import_total` | `outcome`, `tier` | One completed or failed library import attempt. |
+| `quipu_attestation_verify_total` | `binding`, `result` | One verification decision for the `write` or `share` signed domain. |
+
+Import outcomes are `staged`, `quarantined`, `unchanged`, and `error`. Tiers are
+`transport`, `claimed`, `attested`, and `unverified`. A failure before trust has
+been established uses `unverified`, even if the request supplied an envelope.
+A failure after verification retains the verified tier. Malformed HTTP JSON and
+HTTP authentication refusals do not enter the library import path; see the HTTP
+request counters for those failures. An import is staging, not ROOT promotion.
+
+Verification results are `ok`, `badsig`, `replay`, `revoked`, `unbound`, `skew`,
+`invalid`, and `error`. `invalid` covers malformed envelopes and binding/domain
+mismatches; `error` covers inability to consult protected registry/replay state.
+`skew` includes expired or not-yet-valid registered sessions. No unsigned import
+increments verification success. A `claimed` signature can verify successfully
+without proving the producer's identity: use the import **tier** for that claim.
+The counters also cover library/CLI callers within their own processes; only the
+server's own observations appear in its scrape.
+
+Labels never contain keys, signatures, nonces, session identities, or error text.
+Series appear after observation; family declarations exist before the first
+attempt. Counters reset with the process, so compare increments within one
+`process_start_time_seconds` interval or use reset-aware Prometheus functions.
+A zero or absent verification-success series is not evidence that an import has
+proved authorship; verify a real operation and its corresponding counter delta.
