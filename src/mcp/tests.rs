@@ -144,6 +144,289 @@ fn knot_snapshot_replacement_retracts_removed_turtle_facts() {
     assert_eq!(tool_query(&store, &query).unwrap()["count"], 1);
 }
 
+// ── aegis-sb8of5: valid time and transaction time are separate axes ──────────
+//
+// These read the two axes through DIFFERENT mechanisms on purpose. Valid time
+// comes from `facts_as_of(valid_at)` — the query a reader asking "what was true
+// then" actually runs — and transaction time from the `transactions` row. A test
+// that read both from one place could pass while the store collapsed them, which
+// is the defect these exist to catch.
+
+/// Facts live at a valid-time instant, by the reader's own query path.
+fn live_at(store: &Store, valid_at: &str) -> usize {
+    store
+        .facts_as_of(&crate::store::AsOf {
+            tx: None,
+            valid_at: Some(valid_at.to_string()),
+        })
+        .unwrap()
+        .len()
+}
+
+/// The `transactions` row stamp for a given tx id.
+fn tx_stamp(store: &Store, tx_id: i64) -> String {
+    store
+        .list_transactions()
+        .unwrap()
+        .into_iter()
+        .find(|t| t.id == tx_id)
+        .expect("transaction exists")
+        .timestamp
+}
+
+#[test]
+fn knot_valid_from_is_independent_of_transaction_time() {
+    let mut store = Store::open_in_memory().unwrap();
+    // A commit authored in March, ingested in September.
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:c1 a ex:Commit .",
+            "valid_from": "2026-03-04T09:15:00Z",
+            "timestamp":  "2026-09-07T05:19:41Z",
+            "actor": "yupana",
+            "source": "promote demo@abc"
+        }),
+    )
+    .unwrap();
+    let tx_id = result["tx_id"].as_i64().unwrap();
+
+    // TRANSACTION axis: the store learned this in September, not March.
+    assert_eq!(tx_stamp(&store, tx_id), "2026-09-07T05:19:41Z");
+
+    // VALID axis: it was true in March — before the store believed it. The
+    // April reading is the one that fails if the axes are collapsed, and the
+    // February reading is the anti-vacuity control: if `live_at` returned
+    // everything regardless, this would be nonzero too.
+    assert_eq!(
+        live_at(&store, "2026-02-01T00:00:00Z"),
+        0,
+        "before valid_from"
+    );
+    assert_eq!(
+        live_at(&store, "2026-04-01T00:00:00Z"),
+        1,
+        "after valid_from, before ingest"
+    );
+    assert_eq!(live_at(&store, "2026-10-01T00:00:00Z"), 1, "after both");
+}
+
+#[test]
+fn knot_without_valid_from_collapses_both_axes_exactly_as_before() {
+    // Backwards compatibility, asserted as an EQUALITY between the two axes
+    // rather than as a hardcoded string, so it keeps meaning if the default
+    // timestamp changes.
+    let mut store = Store::open_in_memory().unwrap();
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:c2 a ex:Commit .",
+            "timestamp": "2026-09-07T05:19:41Z"
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        tx_stamp(&store, result["tx_id"].as_i64().unwrap()),
+        "2026-09-07T05:19:41Z"
+    );
+    assert_eq!(result["valid_from"], "2026-09-07T05:19:41Z");
+    assert_eq!(live_at(&store, "2026-09-07T05:19:41Z"), 1);
+    assert_eq!(
+        live_at(&store, "2026-09-07T05:19:40Z"),
+        0,
+        "not live one second earlier"
+    );
+}
+
+#[test]
+fn knot_defaults_valid_from_to_now_when_neither_is_given() {
+    // The both-absent path: `timestamp` defaults to now and `valid_from`
+    // follows it, so the facts must be live at that same instant.
+    let mut store = Store::open_in_memory().unwrap();
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({"turtle": "@prefix ex: <http://example.org/> . ex:c3 a ex:Commit ."}),
+    )
+    .unwrap();
+    let stored = result["valid_from"].as_str().unwrap().to_string();
+    assert_eq!(tx_stamp(&store, result["tx_id"].as_i64().unwrap()), stored);
+    assert_eq!(live_at(&store, &stored), 1);
+}
+
+#[test]
+fn knot_normalizes_a_local_offset_valid_from_and_echoes_the_stored_key() {
+    // git's %aI emits the author's local offset. Stored verbatim it would sort
+    // wrongly against every Z-shaped stamp in the store.
+    let mut store = Store::open_in_memory().unwrap();
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:c4 a ex:Commit .",
+            "valid_from": "2026-03-04T10:15:00+01:00",
+            "timestamp":  "2026-09-07T05:19:41Z"
+        }),
+    )
+    .unwrap();
+    assert_eq!(result["valid_from"], "2026-03-04T09:15:00Z");
+    // Queryable under the NORMALISED key, and not one second before it.
+    assert_eq!(live_at(&store, "2026-03-04T09:15:00Z"), 1);
+    assert_eq!(live_at(&store, "2026-03-04T09:14:59Z"), 0);
+}
+
+#[test]
+fn knot_refuses_a_malformed_valid_from_and_writes_nothing() {
+    let mut store = Store::open_in_memory().unwrap();
+    // A control write first, so "nothing changed" is measured against a store
+    // that demonstrably CAN change rather than against an empty one.
+    tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:ok a ex:Commit .",
+            "timestamp": "2026-09-07T05:19:41Z"
+        }),
+    )
+    .unwrap();
+    let txs_before = store.list_transactions().unwrap().len();
+    let facts_before = live_at(&store, "2026-09-07T05:19:41Z");
+    assert!(
+        txs_before > 0 && facts_before > 0,
+        "control: the store took a write"
+    );
+
+    for bad in [
+        "not a timestamp",
+        "2026-03-04",
+        "2026-13-04T09:15:00Z",
+        "2026-03-04T09:15:00",
+        "",
+    ] {
+        let err = tool_knot(
+            &mut store,
+            &serde_json::json!({
+                "turtle": "@prefix ex: <http://example.org/> . ex:bad a ex:Commit .",
+                "valid_from": bad
+            }),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("invalid 'valid_from'"),
+            "expected a valid_from refusal for {bad:?}, got: {err}"
+        );
+    }
+
+    assert_eq!(
+        store.list_transactions().unwrap().len(),
+        txs_before,
+        "no transaction opened"
+    );
+    assert_eq!(
+        live_at(&store, "2026-09-07T05:19:41Z"),
+        facts_before,
+        "no facts written"
+    );
+    // And the refused subject is absent by name, not merely by count.
+    assert_eq!(
+        tool_query(
+            &store,
+            &serde_json::json!({
+                "query": "PREFIX ex: <http://example.org/> SELECT ?s WHERE { ?s a ex:Commit }"
+            })
+        )
+        .unwrap()["count"],
+        1
+    );
+}
+
+#[test]
+fn knot_snapshot_arm_backdates_the_assertion_but_not_the_retraction() {
+    // The asymmetry the contract turns on: a replaced fact stopped being
+    // believed TONIGHT. Back-dating its valid_to to the incoming datum's
+    // valid-time would assert it stopped being TRUE in March, which is a
+    // different and false claim.
+    let mut store = Store::open_in_memory().unwrap();
+    let snapshot = |turtle: &str, valid_from: &str, timestamp: &str| {
+        serde_json::json!({
+            "turtle": turtle,
+            "valid_from": valid_from,
+            "timestamp": timestamp,
+            "replace_snapshot": true,
+            "snapshot": "code:demo"
+        })
+    };
+    let live = |store: &Store| -> i64 {
+        tool_query(
+            store,
+            &serde_json::json!({
+                "query": "PREFIX ex: <http://example.org/> SELECT ?s WHERE { ?s a ex:Module }"
+            }),
+        )
+        .unwrap()["count"]
+            .as_i64()
+            .unwrap()
+    };
+
+    tool_knot(
+        &mut store,
+        &snapshot(
+            "@prefix ex: <http://example.org/> . ex:a a ex:Module .",
+            "2026-01-01T00:00:00Z",
+            "2026-09-07T05:00:00Z",
+        ),
+    )
+    .unwrap();
+    assert_eq!(live(&store), 1);
+
+    // Replace it with a different module, back-dated to March.
+    let replaced = tool_knot(
+        &mut store,
+        &snapshot(
+            "@prefix ex: <http://example.org/> . ex:b a ex:Module .",
+            "2026-03-04T09:15:00Z",
+            "2026-09-07T06:00:00Z",
+        ),
+    )
+    .unwrap();
+    assert_eq!(replaced["replaced"], true);
+    assert_eq!(
+        live(&store),
+        1,
+        "the snapshot holds exactly its current contents"
+    );
+
+    // ex:a's closure is stamped with the TRANSACTION time, not March: at a
+    // valid-time between March and September it must still read as live.
+    assert_eq!(
+        live_at(&store, "2026-04-01T00:00:00Z"),
+        2,
+        "ex:a was not back-dated out of existence; ex:b is already valid"
+    );
+    // In January only ex:a is valid — ex:b's valid-time has not begun.
+    assert_eq!(live_at(&store, "2026-01-01T00:00:00Z"), 1);
+    // The retraction's own transaction is stamped tonight.
+    assert_eq!(
+        tx_stamp(&store, replaced["tx_id"].as_i64().unwrap()),
+        "2026-09-07T06:00:00Z"
+    );
+}
+
+#[test]
+fn knot_snapshot_arm_defaults_to_the_old_behaviour_without_valid_from() {
+    let mut store = Store::open_in_memory().unwrap();
+    let result = tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": "@prefix ex: <http://example.org/> . ex:a a ex:Module .",
+            "timestamp": "2026-08-07T10:00:00Z",
+            "replace_snapshot": true,
+            "snapshot": "code:demo"
+        }),
+    )
+    .unwrap();
+    assert_eq!(result["valid_from"], "2026-08-07T10:00:00Z");
+    assert_eq!(live_at(&store, "2026-08-07T10:00:00Z"), 1);
+    assert_eq!(live_at(&store, "2026-08-07T09:59:59Z"), 0);
+}
+
 #[test]
 fn knot_snapshot_replacement_requires_stable_identity() {
     let mut store = Store::open_in_memory().unwrap();

@@ -56,7 +56,7 @@ widens scope).
 
 | Method | Endpoint | Returns |
 |---|---|---|
-| `knot(turtle, shapes=, timestamp=, actor=, source=, graph=, ...)` | `POST /knot` | `KnotResult(tx_id, count, conforms)` |
+| `knot(turtle, shapes=, timestamp=, valid_from=, actor=, source=, graph=, ...)` | `POST /knot` | `KnotResult(tx_id, count, conforms, valid_from)` |
 | `episode(name, nodes=, edges=, replace_snapshot=, source=, timestamp=)` | `POST /episode` | `EpisodeResult(outcome, count, tx_id)` |
 | `set(entity, predicate, value, timestamp=, actor=)` | `POST /set` | `SetResult(tx_id, retracted, asserted, ...)` |
 | `retract(entity, predicate=, value=, timestamp=, actor=)` | `POST /retract` | `RetractResult(retracted)` |

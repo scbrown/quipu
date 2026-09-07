@@ -19,6 +19,11 @@ class KnotResult:
     tx_id: int
     count: int
     conforms: bool
+    #: The NORMALISED valid-time the facts were stored under, which is not
+    #: necessarily the spelling that was sent: an offset stamp is converted to
+    #: UTC and sub-second precision is dropped. Query with this, not with your
+    #: input. ``None`` from a server predating aegis-sb8of5.
+    valid_from: str | None
     raw: dict[str, Any] = field(repr=False)
 
     @classmethod
@@ -27,6 +32,7 @@ class KnotResult:
             tx_id=body.get("tx_id", 0),
             count=body.get("count", 0),
             conforms=body.get("conforms", True),
+            valid_from=body.get("valid_from"),
             raw=body,
         )
 
