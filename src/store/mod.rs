@@ -30,12 +30,16 @@ mod registry;
 pub mod registry_list;
 pub mod respace;
 mod respace_map;
+mod retract_triples;
 mod retraction;
 mod serialize;
 mod set;
 mod settings;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod snapshot_upload;
+pub mod source_tag;
+#[cfg(test)]
+mod source_tap_tests;
 pub mod terms;
 pub mod wal;
 pub(crate) use terms::TermCache;

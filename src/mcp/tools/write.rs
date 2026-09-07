@@ -65,6 +65,9 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             .get("allow_orphan")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
+        // aegis-byn4fn: a caller may name the producer key; absent one, the
+        // store derives `retract:<actor>` rather than the old constant.
+        input.get("source").and_then(|v| v.as_str()),
     )?;
 
     Ok(serde_json::json!({
@@ -141,6 +144,8 @@ pub fn tool_set(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         timestamp,
         actor,
         explicit_str,
+        // aegis-byn4fn: as above — `set:<actor>` when the caller names nothing.
+        input.get("source").and_then(|v| v.as_str()),
     )?;
 
     Ok(serde_json::json!({
