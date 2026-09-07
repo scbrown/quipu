@@ -4,8 +4,8 @@ Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
-The registry (`tool_definitions()`) exposes **45 tools** in a default build, or
-**46** when built with the `owl` feature (which adds `quipu_load_ontology`).
+The registry (`tool_definitions()`) exposes **46 tools** in a default build, or
+**47** when built with the `owl` feature (which adds `quipu_load_ontology`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -185,6 +185,51 @@ Response: `tx_id`, `retracted`, `episode`, `statements`, plus identity accountin
 Retraction is a more sensitive write than assertion. The endpoint honours
 read-only mode and bearer auth today; when per-principal scopes (hq-azs) and
 crew identity (hq-otm) land it should require an authorized principal.
+
+### `quipu_retract_source`
+
+Retract-only repair of facts owned by a **legacy transaction source**
+(`POST /retract/source`).
+
+Retraction in the store is source-scoped: it closes every currently-live fact
+whose transaction source equals a given string. `quipu_knot` composes its own
+tag as `snapshot:<key>`, so a producer can only ever clear what it wrote under
+that scheme — facts written under any other source string (a free-form producer
+string, a hand-run CLI promote) were unreachable by any retraction, permanently.
+This tool names the source explicitly and clears it.
+
+It is deliberately **not** a raw source-tag input on `quipu_knot`. There, one tag
+stamps a transaction that carries both retractions and new assertions, so a raw
+tag would let any caller write facts attributed to any producer. Here there is no
+`turtle` parameter at all, so the transaction cannot carry an assertion and
+impersonation is impossible by construction rather than by discipline.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `source` | Yes | EXACT transaction source string to retract — matched literally, never by prefix or pattern |
+| `repair` | Yes | Ticket or reason; stamped on the retraction transaction as `repair:<ticket>`, never the source being cleared |
+| `apply` | No | Default `false` = plan only, nothing is written |
+| `expect` | With `apply` | The planned count you are confirming; a mismatch is refused |
+| `graph` | No | Registered committed-graph IRI; absent targets ROOT (same rules as `quipu_knot`) |
+| `timestamp` | No | Retraction timestamp |
+| `actor` | No | Who is performing the repair |
+
+Response: `source`, `graph`, `planned`, `entities`, `applied`, `tx_id`,
+`retracted`, `repair_source`, `sample` (+ `sample_truncated`), and — on an
+applied call — `remaining`, a **fresh read of the post-state** rather than an
+echo of the request.
+
+Two properties worth knowing before using it:
+
+- **`planned: 0` is a real answer.** It means the named source owns no live
+  facts. `quipu_knot` reports `replaced: true, count: 0` both for a retraction
+  that removed nothing and for one that emptied a graph, so this question
+  previously had no answer.
+- **Re-keying order is retract FIRST, then re-promote.** The store dedups an
+  identical triple to one row carrying one source, and the existence check
+  ignores the transaction source — so asserting canonically first is skipped as
+  a duplicate, every row keeps its legacy source, and the retraction then
+  removes everything.
 
 ### `quipu_episode`
 

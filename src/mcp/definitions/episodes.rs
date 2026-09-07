@@ -53,6 +53,23 @@ pub(super) fn defs() -> Vec<JsonValue> {
             }
         }),
         serde_json::json!({
+            "name": "quipu_retract_source",
+            "description": "RETRACT-ONLY repair: retract every currently-live fact whose transaction source equals an exact string. Reaches facts that no snapshot replacement can touch — quipu_knot composes its own tag as snapshot:<key>, so facts written under any other source (a free-form producer string, a hand-run CLI promote) were previously unretractable forever. There is NO turtle input: the transaction cannot carry an assertion, so this cannot write facts attributed to the named producer. The retraction is stamped with its OWN source, repair:<ticket>, never the source being cleared. PLANS BY DEFAULT: without apply=true it writes nothing and reports what would be retracted, so planned:0 means 'that source owns nothing live'. Applying requires expect=<planned> as a confirmation handshake, and the response reports 'remaining' — a fresh read of the post-state, not an echo of the request. RE-KEYING ORDER: retract FIRST, then re-promote canonically; asserting first is skipped as a duplicate and the retraction then removes everything.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "source": { "type": "string", "description": "EXACT transaction source string to retract. Matched literally — never by prefix or pattern. Read it from GET /transactions or an entity's history." },
+                    "repair": { "type": "string", "description": "Ticket or reason. Stamped on the retraction transaction as repair:<ticket>, so the log records who cleared these facts and why." },
+                    "apply": { "type": "boolean", "description": "Default false = plan only, nothing is written. true commits the retraction and requires 'expect'." },
+                    "expect": { "type": "integer", "description": "Required with apply=true: the planned count you are confirming. A mismatch is refused — the store moved, or this is not the source you measured." },
+                    "graph": { "type": "string", "description": "Optional registered committed-graph IRI; absent targets ROOT. Same graph rules as quipu_knot." },
+                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the retraction" },
+                    "actor": { "type": "string", "description": "Who is performing the repair" }
+                },
+                "required": ["source", "repair"]
+            }
+        }),
+        serde_json::json!({
             "name": "quipu_episode",
             "description": "Ingest structured knowledge from an agent episode (nodes + edges)",
             "inputSchema": {

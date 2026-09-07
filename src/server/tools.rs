@@ -337,6 +337,11 @@ ro_handler!(path_backtest, quipu::tool_path_backtest);
 rw_handler!(retract, quipu::tool_retract);
 rw_handler!(set_predicate, quipu::tool_set);
 rw_handler!(retract_episode, quipu::tool_retract_episode);
+// aegis-rz75m6: retract-only repair of a legacy transaction source. It is a
+// write even when `apply` is false — the plan path reads only, but the SAME
+// route applies, so classifying it by its cheapest arm would leave the
+// applying arm unguarded in read-only mode and behind no bearer.
+rw_handler!(retract_source, quipu::tool_retract_source);
 
 pub(crate) async fn validate(
     State(store): State<SharedStore>,
