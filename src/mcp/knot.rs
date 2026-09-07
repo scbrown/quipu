@@ -65,11 +65,36 @@ fn resolve_committed_graph(store: &Store, graph: Option<&str>) -> Result<i64> {
 
 /// MCP tool: `quipu_knot` -- Assert facts with optional SHACL validation.
 ///
-/// Input: `{ "turtle": "<data>", "timestamp": "...", "actor": "...",
-///           "source": "...", "shapes": "<optional shapes turtle>",
+/// Input: `{ "turtle": "<data>", "timestamp": "...", "valid_from": "...",
+///           "actor": "...", "source": "...", "shapes": "<optional shapes turtle>",
 ///           "replace_snapshot": false, "snapshot": "<stable producer key>",
 ///           "graph": "<registered committed-graph IRI>" }`
 /// Output: `{ "tx_id": N, "count": N }` or validation feedback on failure.
+///
+/// ## The two time axes, and why `valid_from` had to be added (aegis-sb8of5)
+///
+/// `timestamp` was passed to BOTH `parse_rdf` (which stamps `Datum.valid_from`)
+/// and `transact_to_graph` (which stamps the `transactions` row), so the store
+/// could not be told that a datum was true before it was ingested:
+///
+/// | axis | parameter | answers | queried by |
+/// |---|---|---|---|
+/// | valid time | `valid_from` | when the datum became TRUE OF THE WORLD | `valid_at` |
+/// | transaction time | `timestamp` | when this store came to BELIEVE it | `tx` / `as_of_tx` |
+///
+/// Absent `valid_from`, the two collapse to `timestamp` exactly as before —
+/// this is additive, and the no-`valid_from` path is byte-identical.
+///
+/// Two things deliberately do NOT move with `valid_from`:
+///
+/// - **Snapshot retractions.** `replace_snapshot` closes prior facts, and a
+///   fact's `valid_to` comes from the transaction stamp in `stage_and_guard`.
+///   Back-dating a deletion to the asserted datum's valid-time would make the
+///   store claim the old facts stopped being true in the past, which is a
+///   different assertion from "we replaced them tonight". The retraction plan
+///   also carries each closed fact's ORIGINAL `valid_from` forward, untouched.
+/// - **Refusal records.** A gate refusal is an event in this store's own life,
+///   so it is stamped when it happened, never with the payload's valid-time.
 pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let turtle = input
         .get("turtle")
@@ -81,6 +106,23 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         .get("timestamp")
         .and_then(|v| v.as_str())
         .unwrap_or(&now);
+
+    // Normalised and REJECTED HERE, upstream of the vocabulary gate, the SHACL
+    // pass and any transaction: a malformed valid-time must write nothing at
+    // all, not be discovered after facts have been staged. `timestamp` is left
+    // unvalidated on purpose — it has always been free text on this surface and
+    // tightening it would refuse callers that work today, which is a different
+    // change from adding a parameter.
+    let valid_from_input = input.get("valid_from").and_then(|v| v.as_str());
+    let valid_from = match valid_from_input {
+        None => timestamp.to_string(),
+        Some(raw) => crate::time::normalize_rfc3339_utc(raw).ok_or_else(|| {
+            Error::InvalidValue(format!(
+                "invalid 'valid_from': {raw:?} is not an RFC 3339 date-time \
+                 (expected e.g. 2026-09-07T05:19:41Z or 2026-09-07T07:19:41+02:00)"
+            ))
+        })?,
+    };
 
     let actor = input.get("actor").and_then(|v| v.as_str());
     let source = input.get("source").and_then(|v| v.as_str());
@@ -200,7 +242,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             turtle.as_bytes(),
             oxrdfio::RdfFormat::Turtle,
             None,
-            timestamp,
+            &valid_from,
         )?;
         let count = assertions.len();
         datums.retain(|old| {
@@ -212,11 +254,12 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_tag), graph)?;
         (tx_id, count)
     } else {
-        crate::rdf::ingest_rdf_to_graph(
+        crate::rdf::ingest_rdf_bitemporal(
             store,
             turtle.as_bytes(),
             oxrdfio::RdfFormat::Turtle,
             None,
+            &valid_from,
             timestamp,
             actor,
             source,
@@ -224,11 +267,15 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         )?
     };
 
+    // `valid_from` is echoed as the NORMALISED value actually stored, not as
+    // the caller sent it: a caller passing a local-offset stamp otherwise has
+    // no way to learn which key its facts can be queried under.
     Ok(serde_json::json!({
         "conforms": true,
         "tx_id": tx_id,
         "count": count,
         "snapshot": snapshot,
-        "replaced": replace_snapshot
+        "replaced": replace_snapshot,
+        "valid_from": valid_from
     }))
 }
