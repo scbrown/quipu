@@ -696,7 +696,17 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --tags --quiet
-          if ! OUT="$(.github/scripts/resolve-release-tag.sh .)"; then
+          # `if ! OUT=$(...)` would FLATTEN the script's exit 2 into a generic
+          # failure, and exit 2 is the whole point of aegis-pfqttr: it separates
+          # "this clone is SHALLOW so no conclusion is available" from "there is
+          # genuinely no reachable tag". Flattened, both refusals print the same
+          # annotation and send the operator to look at TAGS when the fault is the
+          # CHECKOUT. Capture the code and branch on it. (malcolm, reviewing #196.)
+          rc=0; OUT="$(.github/scripts/resolve-release-tag.sh .)" || rc=$?
+          if [ "$rc" -eq 2 ]; then
+            echo "::error::the release checkout is SHALLOW, so ancestry cannot be computed and NO conclusion about reachable tags is available. This is a blind spot, not a missing tag. Fix the CHECKOUT — actions/checkout with fetch-depth: 0 — not the tags."
+            exit 2
+          elif [ "$rc" -ne 0 ]; then
             echo "::error::release-plz reported a release but the tag could not be resolved. See above."
             exit 1
           fi
