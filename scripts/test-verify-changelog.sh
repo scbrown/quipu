@@ -39,6 +39,7 @@ make_repo() {
     cp "$REPO_ROOT/scripts/verify-changelog.sh" scripts/
     cp "$REPO_ROOT/scripts/fix-changelog.sh" scripts/
     cp "$REPO_ROOT/scripts/filter-packaged-commits.py" scripts/
+    cp "$REPO_ROOT/scripts/check-release-window.py" scripts/
     printf '[package]\nname="probe"\nversion="1.0.0"\nedition="2021"\nexclude=["docs/"]\n' > Cargo.toml
     echo a > src/lib.rs; git add -A; git commit -qm "feat: the released thing"
     git tag v1.0.0
@@ -213,6 +214,59 @@ else
   fail=$((fail + 1))
 fi
 rm -rf "$d"
+
+# The raw window must catch an entry absent from BOTH cliff and the changelog.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  echo bare >> src/lib.rs
+  git commit -qam "Support a feature with no prefix"
+) >/dev/null 2>&1
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
+check "bare subject omitted by both tools fails" 1 "nonconventional commits omitted" "$d"
+
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  echo bare >> src/lib.rs
+  git commit -qam "Support a feature with no prefix"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; entry "$e"; } > "$d/CHANGELOG.md"
+check "explicit entry repairs immutable bare subject" 0 "none missing, none extra" "$d"
+
+# #202 is a squash commit with a multiline body. The exact subject correction
+# must match its FIRST LINE, then survive the automatic fixer's regeneration.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  echo rotation >> src/lib.rs
+  git commit -qam $'Support bearer rotation with a restart-safe grace deadline (#202)\n\n* feat(auth): bounded grace\n\n* fix(auth): restart deadline'
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+git -C "$d" tag quipu-ai-v1.0.0 HEAD~3
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
+  entry "$b"; entry "$c"; echo; echo "## [1.0.0] - 2025-12-01"; echo;
+  entry "$a"; } > "$d/CHANGELOG.md"
+fix_out="$(cd "$d" && ./scripts/fix-changelog.sh 2>&1)"; fix_rc=$?
+if [[ "$fix_rc" -eq 0 ]] && grep -qF "[$e]" "$d/CHANGELOG.md"; then
+  echo "  PASS  regeneration retains corrected multiline squash subject"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  regeneration dropped corrected squash subject: $fix_out" >&2
+  fail=$((fail + 1))
+fi
+window_out="$(cd "$d" && python3 scripts/check-release-window.py 2>&1)"; window_rc=$?
+if [[ "$window_rc" -eq 0 ]] && grep -qF "1 bare subjects explicitly documented" <<<"$window_out"; then
+  echo "  PASS  pre-release guard uses package-qualified window"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  pre-release window guard: $window_out" >&2
+  fail=$((fail + 1))
+fi
+check "regenerated bare-subject correction verifies" 0 "none missing, none extra" "$d"
 
 echo
 echo "  ${pass} passed, ${fail} failed"

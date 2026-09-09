@@ -47,6 +47,9 @@ trim = true
 # `[] []`. The bracket rules mirror the paren ones, and the run rule comes first so
 # a sequence of bracketed refs collapses in one pass rather than leaving gaps.
 commit_preprocessors = [
+    # Repair the merged #202 subject without rewriting history. Keep this exact
+    # correction so automatic regeneration retains its reviewed release entry.
+    { pattern = '(?m)^Support bearer rotation with a restart-safe grace deadline \(#202\)$', replace = "feat(auth): support bearer rotation with a restart-safe grace deadline (#202)" },
     # "(ID, rest)" -> "(rest)"   e.g. (proj-1a2b, #36/#37) -> (#36/#37)
     { pattern = '\((?:aegis|hq|gassy|qp)-[a-z0-9]{3,6}(?:\.[0-9]+)*,[ \t]*', replace = "(" },
     # "(rest, ID)" -> "(rest)"

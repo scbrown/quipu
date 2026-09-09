@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-09-09
+
+### Added
+
+- *(repair)* Retract-only repair path for legacy transaction sources([ce6770a](https://github.com/scbrown/quipu/commit/ce6770a013267fcd13d034591f7bd6c05755464b))
+- *(knot)* Valid time and transaction time are separate axes (#200)([fad5b6e](https://github.com/scbrown/quipu/commit/fad5b6efb7ea9966d441f129cb60b8ecc06caddb))
+- *(metrics)* Observe share import trust and attestation verdicts (#201)([4ee494b](https://github.com/scbrown/quipu/commit/4ee494ba891e64f57ec28e24cda4c268bc6947e0))
+- *(auth)* Support bearer rotation with a restart-safe grace deadline (#202)([9ed8d9d](https://github.com/scbrown/quipu/commit/9ed8d9dca7a84afcecf7ee33a29d3feb3e6c345b))
+- *(owl)* A materialize action, so scheduled entailment has something to call (#203)([debdc93](https://github.com/scbrown/quipu/commit/debdc936367498342c3292be70a96a9c79e31c8d))
+
+### Fixed
+
+- *(store)* Every write path stamps a transaction source (#197)([456e4fc](https://github.com/scbrown/quipu/commit/456e4fcdf600f3dc2bb0b275e6c7e0f8b72bf81c))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers and page on ce6770a([bc4a152](https://github.com/scbrown/quipu/commit/bc4a152474437cc1f6fd0f392c7e5941201234b4))
+- *(conformance)* Re-derive the ledgers onto main's HEAD([d012326](https://github.com/scbrown/quipu/commit/d01232622bfb8cbf87499c4d924c5506a29636a3))
+
 ## [0.3.42] - 2026-09-06
 
 ### Added
