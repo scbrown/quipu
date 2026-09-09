@@ -69,6 +69,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # release-plz checks optional features too, including Lance's protobuf
+      # build. Match the prerequisite used by CI's extended feature job.
+      - name: Install protobuf compiler for semver checks
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       # DO NOT split this into ordered `command: release` / `command: release-pr`
       # steps to fix the full-history changelog dump. That was tried on 2026-08-02
       # and MEASURED NOT TO WORK — recorded here so the next person does not spend
