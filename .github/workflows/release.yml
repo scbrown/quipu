@@ -69,6 +69,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Inspect merged subjects across the package release window before the
+      # action can cut a release. A PR title lint cannot see final squash titles.
+      - name: Require coverage for nonconventional commits in the release window
+        run: python3 scripts/check-release-window.py
+
       # release-plz checks optional features too, including Lance's protobuf
       # build. Match the prerequisite used by CI's extended feature job.
       - name: Install protobuf compiler for semver checks

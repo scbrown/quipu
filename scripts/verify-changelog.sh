@@ -89,10 +89,15 @@ fi
 # failure is not. Keep those outcomes distinct so the guard fails closed.
 cliff_hashes="$(git-cliff --config "$CLIFF_CONFIG" "$range" 2>/dev/null \
   | grep -oE '\[[0-9a-f]{7}\]' | tr -d '[]' | sort -u || true)"
-expected=""
+# Independently inspect the raw window BEFORE trusting git-cliff's filtered list.
+# Otherwise generator and verifier can silently agree to omit a bare squash title.
+bare_hashes="$(printf '%s\n' "$newest_section" | python3 scripts/check-release-window.py \
+  --range "$range" --section-stdin)" || exit $?
+expected="$bare_hashes"
 if [[ -n "$cliff_hashes" ]]; then
-  expected="$(printf '%s\n' "$cliff_hashes" | scripts/filter-packaged-commits.py)" \
+  packaged="$(printf '%s\n' "$cliff_hashes" | scripts/filter-packaged-commits.py)" \
     || { echo "ERROR: could not determine packaged release content" >&2; exit 2; }
+  expected="$(printf '%s\n%s\n' "$bare_hashes" "$packaged" | sed '/^$/d' | sort -u)"
 fi
 # Actual = hashes present in the newest CHANGELOG section.
 actual="$(printf '%s\n' "$newest_section" | grep -oE '\[[0-9a-f]{7}\]' | tr -d '[]' | sort -u || true)"
