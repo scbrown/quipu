@@ -1,0 +1,9 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# The demo's explicit identifier policy. Stored in its own named graph so the
+# shared payload and its quarantine/admission transcript remain unchanged.
+<urn:demo:private-identifiers> a aegis:InternalIdentifierPattern ;
+    rdfs:label "Demo private identifiers" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .

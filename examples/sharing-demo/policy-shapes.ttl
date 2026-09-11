@@ -1,0 +1,6 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+<urn:demo:IdentifierPolicyShape> a sh:NodeShape ;
+    sh:targetClass aegis:InternalIdentifierPattern ;
+    sh:nodeKind sh:IRI .
