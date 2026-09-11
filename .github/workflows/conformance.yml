@@ -53,14 +53,7 @@ permissions:
 jobs:
   published-matches-ledger:
     name: Published results match the ledgers
-    # On push this runs AFTER the derive job and against the tree that job
-    # produced — otherwise it reads the pre-derive sha and fails on exactly the
-    # staleness the derive job exists to remove. `always()` keeps it running on
-    # pull_request, where re-run-conformance is skipped.
-    needs: [re-run-conformance]
-    if: >-
-      always() &&
-      (github.event_name == 'pull_request' || github.event_name == 'push')
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       # fetch-depth: 0 is REQUIRED, not tidiness. --check now also asks whether
@@ -76,17 +69,6 @@ jobs:
       # No Rust and no suite checkout: this job only compares the committed
       # page and badges against the committed ledgers, so it finishes in
       # seconds and can run on every touch of benchmark/.
-      - name: Read main AFTER the derive job committed
-        # The workflow was triggered at the pre-derive sha. The derive job has
-        # since pushed the ledgers it produced, so validate THAT, not the sha we
-        # were handed. Without this the check reports the staleness just fixed.
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          git checkout FETCH_HEAD
-          echo "validating $(git rev-parse --short HEAD)"
-
       - name: Page and badges agree with the ledgers
         run: python3 benchmark/public/conformance_report.py --check
 
@@ -95,25 +77,12 @@ jobs:
 
   re-run-conformance:
     name: Re-derive conformance from the pinned W3C suite
-    # DERIVE AT MERGE (aegis-fn3hdn). `push` is here so main's ledger is
-    # produced FROM main, after the merge that moved it. Committing ledgers on
-    # a branch cannot work: the provenance arm is lenient on a PR (it
-    # intersects drift with that PR's own diff) and STRICT on push (`own` is
-    # None, so every CODE_PATHS file differing ledger_rev..HEAD counts,
-    # including every OTHER PR merged since). So a ledger correct at review
-    # time goes stale by MERGE ORDER, through no fault of its PR, and whoever
-    # merges second reds main. Measured 2026-09-11: all three open PRs were
-    # predicted to red main on merge, and one did.
     if: >-
       github.event_name == 'release' ||
       github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    permissions:
-      # Only this job writes, and only to commit the ledgers it just derived.
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -176,19 +145,6 @@ jobs:
             --quipu "${{ steps.bin.outputs.path }}" \
             --output /tmp/sparql11-syntax.json
 
-      - name: SPARQL 1.1 syntax did not regress
-        # sparql11-syntax was the ONE suite with no regression gate, because
-        # check_regression.py could not read its row shape at all (it keys on
-        # class/manifest/id; syntax rows carry `test`, and record `passed: true`
-        # rather than `status: "passed"`). That was tolerable while nothing
-        # auto-committed. With derive-at-merge it is not: whatever main derives
-        # is committed and published, so an ungated suite is one a regression
-        # ships through silently. aegis-fn3hdn.
-        run: |
-          python3 benchmark/public/check_regression.py \
-            --baseline benchmark/public/results/sparql11-syntax.json \
-            --candidate /tmp/sparql11-syntax.json
-
       # The evaluation runner exits nonzero whenever anything fails, which is
       # every run today. Its ledger is what matters here, so its exit status is
       # deliberately ignored and check_regression makes the call.
@@ -248,30 +204,6 @@ jobs:
           python3 benchmark/public/check_regression.py \
             --baseline benchmark/public/results/sparql11-entailment.json \
             --candidate /tmp/sparql11-entailment.json
-
-      - name: Commit the re-derived ledgers to main
-        # The ledger is now produced FROM main's HEAD, so it cannot be stale by
-        # merge order. This commit touches only benchmark/public/results and
-        # docs/, both OUTSIDE CODE_PATHS ("src", "benchmark/public/*.py") — so
-        # it cannot invalidate the ledger it just wrote, and the push it
-        # triggers re-runs this job to a no-op rather than a loop.
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -euo pipefail
-          for f in sparql11-syntax sparql11-evaluation sparql11-entailment \
-                   sparql11-federated-query shacl-core; do
-            cp "/tmp/$f.json" "benchmark/public/results/$f.json"
-          done
-          python3 benchmark/public/conformance_report.py
-          if git diff --quiet -- benchmark/public/results docs/book/src/benchmarks; then
-            echo "ledgers already derived from this HEAD — nothing to commit"
-            exit 0
-          fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add benchmark/public/results docs/book/src/benchmarks
-          git commit -m "chore(conformance): derive the ledgers on ${GITHUB_SHA:0:8} (aegis-fn3hdn)"
-          git push origin HEAD:main
 
       - name: Publish the re-derived ledgers
         if: always()
