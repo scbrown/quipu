@@ -44,15 +44,15 @@ impl Atom {
 
 /// A body literal: either a positive atom or a negated one.
 ///
-/// Negation is parsed and preserved in the AST so the stratifier can reason
-/// about it, but the Phase 2 evaluator rejects negated atoms at eval time
-/// with a clear error. Negation support lands with the rest of the open
-/// questions (see design doc Q6).
+/// The evaluator supports stratified negation-as-failure over materialized
+/// facts, including derived predicates from lower strata. Variables in negated
+/// atoms must be bound by positive atoms; unsafe negation and negation cycles
+/// are rejected.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BodyAtom {
     /// Positive body literal.
     Positive(Atom),
-    /// Negated body literal (reserved for future NAF support).
+    /// Negated body literal, evaluated as a stratified antijoin.
     Negative(Atom),
 }
 
