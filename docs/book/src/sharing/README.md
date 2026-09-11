@@ -26,6 +26,10 @@ included here verbatim. `just sharing-demo` creates two fresh stores and checks
 that a new run still matches it; the required CI `Build` job runs the same
 check.
 
+The demo loads an explicit identifier-policy catalogue before its outward share.
+Its policy lives in a separate named graph, so it does not become widget data
+in the shared ROOT graph.
+
 ```text
 {{#include ../../../../examples/sharing-demo/expected.txt}}
 ```
@@ -64,6 +68,49 @@ flowchart LR
   BR -.->|"quipu status dir/"| D{{"diverged?"}}
   D -.->|"quipu merge dir/<br/>conflict ⇒ exit 2"| BR
 ```
+
+## Prepare an outward share
+
+Outward sharing checks the outgoing bytes against the store's block-tier
+identifier-policy catalogue. Load your reviewed policy before the first share;
+loading only your data's SHACL shapes does not supply these rules.
+
+For a minimal example, save this shape as `identifier-policy.shapes.ttl`:
+
+```turtle
+{{#include ../../../../examples/sharing-demo/policy-shapes.ttl}}
+```
+
+Save its rule as `identifier-policy.ttl`:
+
+```turtle
+{{#include ../../../../examples/sharing-demo/policy.ttl}}
+```
+
+This demonstration rule only detects `private.example`. For real publication,
+replace it with a reviewed catalogue covering the identifiers your organization
+needs to exclude. The checker evaluates the supplied rules; a non-empty
+catalogue does not establish that your policy covers every private identifier.
+
+Load the policy into the same database that will produce the share:
+
+```bash
+quipu shapes load identifier-policy identifier-policy.shapes.ttl --db my.db
+quipu knot identifier-policy.ttl --graph urn:quipu:identifier-policy --db my.db
+quipu share --output graph-share --db my.db
+```
+
+Also load the shapes governing your application data before ingesting it. The
+catalogue graph is separate from ROOT, the default share scope; its location
+does not change which application facts travel. Each rule's type, label,
+regular expression and `block` tier must be together in ROOT or one named graph.
+Fragments split across graphs do not form a usable rule.
+
+The CLI exits **2** if there is no block-tier catalogue, **1** if a rule matches,
+and **0** after checking a clean payload. A refusal creates no partial output
+directory. `--no-shapes` does not bypass the catalogue check. Use
+`--destination internal` only for an intended internal transfer; it skips the
+outward check and stamps the resulting artifact accordingly.
 
 ## What a share is
 
@@ -287,6 +334,46 @@ are stated here rather than left to be inferred from careful wording.
 | Re-runnable two-store transcript | ✅ Built (`examples/sharing-demo/run.sh`), checked in CI, and embedded above from `expected.txt` |
 
 ---
+
+## Producing the repository release share
+
+The repository release producer runs on a trusted host that can reach the live
+identifier-policy authority. Configure `QUIPU_POLICY_SERVER` there; use
+`QUIPU_POLICY_TOKEN_FILE` when authentication is required. Keep both the authority
+configuration and catalogue on that host. A missing, unreachable, empty,
+truncated, or malformed catalogue refuses production. There is no fixture or
+internal-destination fallback for a public release.
+
+`just contributor pack <output>` uses this same boundary. The producer projects
+policy into a temporary copy of the index, scrubs the outward share, and proves
+its import into a fresh receiver before making the output directory available.
+The source index retains no policy projection. Failure leaves no share output.
+
+For a release, check out the exact release tag in a clean source clone and use
+its checksum-verified native binary. On the trusted host:
+
+```sh
+bash scripts/publish-repository-share.sh --prepare "$TAG" \
+  "$QUIPU_BIN" "$BOBBIN_BIN" "$SOURCE_REPO" "$NEW_OUTPUT"
+```
+
+`--prepare` creates the text qpack archive, checksum and provenance receipt
+locally. `--publish` additionally uploads those three explicit files to the
+existing release. It refuses to replace existing assets. The receipt binds the
+archive to the release tag, source revision and native binary hash; it includes
+no policy content or authority address.
+
+The hosted release job uploads native binaries first. A separately managed
+trusted-host trigger must then run the producer. The hosted job waits for its
+three assets and verifies the receipt against its own source and binary. It
+fails if the producer cannot deliver within the deadline. Provision and prove
+that trigger before enabling this workflow; a local `--prepare` pass alone does
+not establish release automation.
+
+These receipt checks establish byte and build correspondence under the release
+uploader's authority. They are not a cryptographic producer attestation and do
+not upgrade an import from `transport` to `attested`; those tiers are described
+below. Neither the catalogue nor the producer's private logs are release assets.
 
 ## What an import proves about its producer
 

@@ -5,7 +5,7 @@
 
 use crate::cli::{chrono_now, flag_value};
 
-/// `quipu pack <graph-iri> --out <file>` / `quipu pack --verify <file>`
+/// `quipu pack [graph-iri] --out <file>` / `quipu pack --verify <file>`
 /// (quipu #81).
 ///
 /// Top-level `pack`, deliberately not `quipu graph pack`: `quipu_graph` is an
@@ -35,15 +35,7 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
     let graph = args
         .get(2)
         .filter(|a| !a.starts_with("--"))
-        .unwrap_or_else(|| {
-            eprintln!(
-                "usage: quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] \
-             [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]\n       \
-             repo packs: --repo OWNER/NAME --repo-sha SHA --model-id ID --model-version V\n       \
-             quipu pack --verify <file>"
-            );
-            std::process::exit(1);
-        });
+        .map_or(quipu::schema::ROOT_GRAPH_IRI, String::as_str);
     let out = flag_value(args, "--out").unwrap_or_else(|| {
         eprintln!("quipu pack requires --out <file.qpack.db>");
         std::process::exit(1);
@@ -194,7 +186,11 @@ pub fn cmd_share(args: &[String], db_path: &str) {
             ),
             Err(error) => {
                 eprintln!("share delta error: {error}");
-                std::process::exit(1);
+                std::process::exit(if matches!(error, quipu::Error::CannotVerify(_)) {
+                    2
+                } else {
+                    1
+                });
             }
         }
         return;
@@ -208,7 +204,11 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         }
         Err(error) => {
             eprintln!("share error: {error}");
-            std::process::exit(1);
+            std::process::exit(if matches!(error, quipu::Error::CannotVerify(_)) {
+                2
+            } else {
+                1
+            });
         }
     }
 }

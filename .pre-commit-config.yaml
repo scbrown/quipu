@@ -111,4 +111,4 @@ repos:
         entry: scripts/check-contributor-knowledge.sh
         language: system
         pass_filenames: false
-        files: ^(docs/knowledge/|scripts/(build-contributor|check-explorer)|shapes/contributor|queries/repository-share|\.github/workflows/docs\.yml)
+        files: ^(docs/knowledge/|scripts/(build-contributor|check-explorer|build-repository-share|private-share-policy|publish-repository-share|verify-repository-share|test_private_share|test_repository_share)|shapes/contributor|queries/repository-share|\.github/workflows/(docs|release)\.yml)

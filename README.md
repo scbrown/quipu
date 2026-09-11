@@ -28,6 +28,10 @@ knowledge, without either one having to trust the other by default.** Every step
 explicit, hash-verified, and labelled with where it came from — so you never absorb
 someone else's knowledge by accident.
 
+Before exporting, [load an identifier-policy catalogue](https://scbrown.github.io/quipu/sharing/#prepare-an-outward-share)
+and the shapes governing your data. Outward sharing is the default: a missing
+block-tier catalogue refuses with exit 2; a matched identifier refuses with exit 1.
+
 ```sh
 quipu share --output ./share            # a git-native bundle: facts + shapes + lineage
 quipu import ./their-share              # verifies hashes, lands in QUARANTINE, not ROOT

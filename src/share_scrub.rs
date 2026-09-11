@@ -41,20 +41,30 @@ impl ShareDestination {
 pub const INTERNAL_FLAG: &str = "--destination internal";
 
 fn outward_scrub_patterns(store: &Store) -> Result<Vec<(String, regex::Regex)>> {
-    const QUERY: &str = "PREFIX aegis: <http://aegis.gastown.local/ontology/> \
-        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
-        SELECT ?label ?regex WHERE { \
-          ?rule a aegis:InternalIdentifierPattern ; \
-                rdfs:label ?label ; \
-                aegis:regex ?regex ; \
-                aegis:enforcementTier \"block\" . \
-        } ORDER BY ?label ?regex";
-    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(store, QUERY)?
+    const PREFIXES: &str = "PREFIX aegis: <http://aegis.gastown.local/ontology/> \
+        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>";
+    const PATTERN: &str = "?rule a aegis:InternalIdentifierPattern ; \
+        rdfs:label ?label ; aegis:regex ?regex ; aegis:enforcementTier \"block\" .";
+    // Read complete rules in ROOT and in each named graph. Do not merge
+    // partial rule statements from unrelated graphs into a new policy.
+    let query = format!(
+        "{PREFIXES} SELECT DISTINCT ?label ?regex WHERE {{ \
+        {{ {PATTERN} }} UNION {{ GRAPH ?catalogue {{ {PATTERN} }} }} \
+        }} ORDER BY ?label ?regex"
+    );
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(store, &query)?
     else {
         return Err(Error::Store(
             "share scrub: InternalIdentifierPattern query did not return rows".into(),
         ));
     };
+    if rows.is_empty() {
+        return Err(Error::CannotVerify(format!(
+            "share scrub found no block-tier patterns in ROOT or named graphs; \
+             load an identifier-policy catalogue before sharing outward. \
+             Use {INTERNAL_FLAG} only for an internal destination."
+        )));
+    }
     rows.into_iter()
         .map(|row| {
             let label = match row.get("label") {
@@ -132,3 +142,23 @@ pub(crate) fn enforce_destination(
     }
     scrub_outward_payload(store, files, context)
 }
+
+#[cfg(test)]
+pub(crate) fn seed_test_catalogue(store: &mut Store) {
+    let graph = store.overlay_create("urn:test:catalogue", 0).unwrap();
+    crate::rdf::ingest_rdf_to_graph(
+        store,
+        include_bytes!("../tests/fixtures/share-catalogue.ttl").as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-01T00:00:00Z",
+        None,
+        Some("test-catalogue"),
+        graph,
+    )
+    .unwrap();
+}
+
+#[cfg(test)]
+#[path = "share_scrub_tests.rs"]
+mod tests;

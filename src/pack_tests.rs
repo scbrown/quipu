@@ -932,3 +932,179 @@ fn the_turtle_bundle_refuses_an_unknown_graph_and_writes_nothing() {
         "a refused export must not leave a partial bundle"
     );
 }
+
+#[test]
+fn root_pack_keeps_scope_vectors_and_round_trips() {
+    let mut store = producer(0);
+    let root = crate::schema::ROOT_GRAPH_IRI;
+    let s = store.intern("urn:test:root-subject").unwrap();
+    let p = store.intern("urn:test:predicate").unwrap();
+    store
+        .transact(
+            &[crate::store::Datum {
+                entity: s,
+                attribute: p,
+                value: Value::Str("root-only".into()),
+                valid_from: TS.into(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            TS,
+            None,
+            Some("root-pack-test"),
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO vectors (entity_id, text, embedding, valid_from) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![s, "root embedding", vec![0u8, 1, 2, 3], TS],
+        )
+        .unwrap();
+    let opts = PackOptions {
+        with_vectors: true,
+        ..Default::default()
+    };
+    let out = tmp("root-pack");
+    let m = pack(&store, root, &out, &opts, TS).unwrap();
+    assert_eq!(m.source_graph, root);
+    assert_eq!(m.name, "root");
+    let counts: serde_json::Value = serde_json::from_str(&m.counts).unwrap();
+    assert_eq!(counts["facts"], 1);
+    assert_eq!(counts["vectors"], 1);
+    assert!(verify(&out).unwrap().2);
+    let opened = Store::open(&out).unwrap();
+    assert_eq!(opened.current_facts_in_graph(0).unwrap().len(), 1);
+    assert!(opened.lookup("http://example.org/s").unwrap().is_none());
+    let vector_iri: String = opened
+        .conn
+        .query_row(
+            "SELECT iri FROM terms JOIN vectors ON terms.id = vectors.entity_id",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(vector_iri, "urn:test:root-subject");
+    let (bytes_manifest, _) = pack_to_bytes(&store, root, &opts, TS).unwrap();
+    assert_eq!(m.content_hash, bytes_manifest.content_hash);
+    let turtle = tmp("root-turtle");
+    let tm = pack_turtle(&store, root, &turtle, &PackOptions::default(), TS).unwrap();
+    assert_eq!(m.content_hash, tm.content_hash);
+    let dest = tmp("root-unpack");
+    let report = unpack(&out, &dest, None, TS).unwrap();
+    assert_eq!(report.graph, root);
+    assert_eq!(
+        Store::open(&dest)
+            .unwrap()
+            .current_facts_in_graph(0)
+            .unwrap()
+            .len(),
+        1
+    );
+    let named_dest = tmp("root-into-named");
+    unpack(&out, &named_dest, Some("urn:test:destination"), TS).unwrap();
+    let named = Store::open(&named_dest).unwrap();
+    assert!(named.current_facts_in_graph(0).unwrap().is_empty());
+    let g = named.lookup("urn:test:destination").unwrap().unwrap();
+    assert!(!named.current_facts_in_graph(g).unwrap().is_empty());
+}
+
+#[test]
+fn empty_root_pack_is_valid_without_an_interned_root_iri() {
+    let store = Store::open_in_memory().unwrap();
+    let out = tmp("empty-root");
+    let m = pack(
+        &store,
+        crate::schema::ROOT_GRAPH_IRI,
+        &out,
+        &PackOptions::default(),
+        TS,
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&m.counts).unwrap()["facts"],
+        0
+    );
+    assert!(verify(&out).unwrap().2);
+}
+
+#[test]
+fn root_pack_carries_declared_labels_and_verifies_without_cache_drift() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .set_graph_label_by_id(
+            0,
+            &GraphLabel {
+                freshness: Some(Freshness::Fresh),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    assert!(store.graph_label_drift().unwrap().is_empty());
+    let out = tmp("root-labelled");
+    pack(
+        &store,
+        crate::schema::ROOT_GRAPH_IRI,
+        &out,
+        &PackOptions::default(),
+        TS,
+    )
+    .unwrap();
+    assert!(verify(&out).unwrap().2);
+    let opened = Store::open(&out).unwrap();
+    assert_eq!(
+        opened.label_of_id(0).unwrap().freshness.value,
+        Some(Freshness::Fresh)
+    );
+    assert!(opened.graph_label_drift().unwrap().is_empty());
+}
+
+#[test]
+fn root_selector_does_not_borrow_a_named_graph_with_the_same_iri() {
+    let mut store = Store::open_in_memory().unwrap();
+    let root = crate::schema::ROOT_GRAPH_IRI;
+    store.overlay_create(root, 0).unwrap();
+    store
+        .set_graph_label(
+            root,
+            &GraphLabel {
+                freshness: Some(Freshness::Fresh),
+                ..Default::default()
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+    let out = tmp("root-collision");
+    pack(&store, root, &out, &PackOptions::default(), TS).unwrap();
+    assert!(verify(&out).unwrap().2);
+    assert_eq!(
+        Store::open(&out)
+            .unwrap()
+            .label_of_id(0)
+            .unwrap()
+            .freshness
+            .value,
+        None
+    );
+    assert!(
+        store
+            .set_graph_label_by_id(
+                0,
+                &GraphLabel {
+                    freshness: Some(Freshness::Stale),
+                    ..Default::default()
+                },
+                TS,
+                None
+            )
+            .is_err()
+    );
+    assert_eq!(
+        store.label_of(root).unwrap().freshness.value,
+        Some(Freshness::Fresh)
+    );
+    assert!(store.graph_label_drift().unwrap().is_empty());
+}

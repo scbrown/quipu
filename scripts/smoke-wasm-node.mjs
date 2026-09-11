@@ -70,6 +70,10 @@ ex:beta  a ex:Widget ; rdfs:label "Beta" .
 const run = (args) => execFileSync(quipu, args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 run(["shapes", "load", "smoke", shapes, "--db", db]);
 run(["knot", seed, "--db", db]);
+// Match the browser fixture: check outward sharing against a real catalogue
+// without adding policy facts to the widget graph being shared.
+run(["shapes", "load", "smoke-policy", join(repo, "examples/sharing-demo/policy-shapes.ttl"), "--db", db]);
+run(["knot", join(repo, "examples/sharing-demo/policy.ttl"), "--graph", "urn:smoke:policy", "--db", db]);
 const shareDir = join(work, "share");
 run(["share", "--output", shareDir, "--db", db]);
 

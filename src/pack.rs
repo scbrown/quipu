@@ -116,8 +116,11 @@ pub fn canonical_content(
     shapes: &[String],
     queries: &[String],
 ) -> Result<String> {
-    let (bytes, _) =
-        crate::rdf::export_rdf_subset(store, oxrdfio::RdfFormat::NTriples, Some(graph_iri))?;
+    let (bytes, _) = crate::rdf::export_rdf_subset(
+        store,
+        oxrdfio::RdfFormat::NTriples,
+        (graph_iri != crate::schema::ROOT_GRAPH_IRI).then_some(graph_iri),
+    )?;
     let text = String::from_utf8(bytes)
         .map_err(|e| Error::Serialization(format!("pack: non-UTF8 N-Triples: {e}")))?;
 
@@ -174,7 +177,11 @@ pub fn canonical_content(
     }
 
     out.push_str("## labels\n");
-    let l = store.label_of(graph_iri)?;
+    let l = if graph_iri == crate::schema::ROOT_GRAPH_IRI {
+        store.label_of_id(0)?
+    } else {
+        store.label_of(graph_iri)?
+    };
     if let Some(f) = l.freshness.value {
         out.push_str(&format!("freshness={f}\n"));
     }
@@ -351,7 +358,7 @@ fn pack_into(
                 .into(),
         ));
     }
-    if store.lookup(graph_iri)?.is_none() {
+    if graph_iri != crate::schema::ROOT_GRAPH_IRI && store.lookup(graph_iri)?.is_none() {
         return Err(Error::InvalidValue(format!(
             "pack: unknown graph: {graph_iri}"
         )));
@@ -373,12 +380,21 @@ fn pack_into(
     let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
     let hash = content_hash(&canonical);
 
-    let facts = store.current_facts_in_graph(store.lookup(graph_iri)?.unwrap_or(0))?;
+    let graph_id = if graph_iri == crate::schema::ROOT_GRAPH_IRI {
+        0
+    } else {
+        store.lookup(graph_iri)?.unwrap_or(0)
+    };
+    let facts = store.current_facts_in_graph(graph_id)?;
     let fact_count = facts.len();
     {
         // Re-intern through the ordinary write path: ids and `Ref` BLOBs come
         // out correct by construction rather than by remapping.
-        let g = out.overlay_create(graph_iri, 0)?;
+        let g = if graph_iri == crate::schema::ROOT_GRAPH_IRI {
+            0
+        } else {
+            out.overlay_create(graph_iri, 0)?
+        };
         let mut datums = Vec::with_capacity(facts.len());
         for f in &facts {
             let e_iri = store.resolve(f.entity)?;
@@ -460,7 +476,11 @@ fn pack_into(
 
         // Carry the graph's label so a consumer can compose it (#67) without
         // taking the producer's word for it out of band.
-        let l = store.label_of(graph_iri)?;
+        let l = if graph_iri == crate::schema::ROOT_GRAPH_IRI {
+            store.label_of_id(0)?
+        } else {
+            store.label_of(graph_iri)?
+        };
         let label = crate::store::labels::GraphLabel {
             durability: None,
             freshness: l.freshness.value,
@@ -471,7 +491,7 @@ fn pack_into(
             kind: l.kind.value.clone(),
         };
         if !label.is_empty() {
-            out.set_graph_label(graph_iri, &label, timestamp, None)?;
+            out.set_graph_label_by_id(g, &label, timestamp, None)?;
         }
 
         let manifest = Manifest {

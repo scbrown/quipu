@@ -258,7 +258,8 @@ mod tests {
     #[test]
     fn local_directory_loads_into_memory_without_a_database_file() {
         let temp = tempfile::tempdir().unwrap();
-        let source = crate::Store::open_in_memory().unwrap();
+        let mut source = crate::Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
         let out = temp.path().join("share");
         share(
             &source,
@@ -278,7 +279,8 @@ mod tests {
     #[test]
     fn gzip_release_artifact_loads_the_same_share() {
         let temp = tempfile::tempdir().unwrap();
-        let source = crate::Store::open_in_memory().unwrap();
+        let mut source = crate::Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
         let out = temp.path().join("share");
         let manifest = share(
             &source,
@@ -321,7 +323,8 @@ mod tests {
     #[test]
     fn read_archive_bytes_refuses_a_truncated_archive() {
         let temp = tempfile::tempdir().unwrap();
-        let source = crate::Store::open_in_memory().unwrap();
+        let mut source = crate::Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
         let out = temp.path().join("share");
         share(
             &source,
@@ -353,7 +356,8 @@ mod tests {
     #[test]
     fn read_archive_bytes_refuses_an_undeclared_file() {
         let temp = tempfile::tempdir().unwrap();
-        let source = crate::Store::open_in_memory().unwrap();
+        let mut source = crate::Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
         let out = temp.path().join("share");
         share(
             &source,

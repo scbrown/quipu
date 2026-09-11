@@ -19,7 +19,8 @@ pub struct ImportReport {
     pub vectors: usize,
 }
 
-/// Import every fact from `src` into the local named graph `graph_iri` in `dst`.
+/// Import every fact from `src` into `graph_iri` in `dst`.
+/// The reserved [`crate::schema::ROOT_GRAPH_IRI`] selects the default graph.
 ///
 /// The source is opened read-only. Term identity is resolved by IRI into the
 /// destination dictionary, so an IRI present in both files has exactly one
@@ -57,7 +58,11 @@ pub fn import_graph(dst: &Path, src: &Path, graph_iri: &str) -> Result<ImportRep
     for (foreign, iri) in &source_terms {
         ids.insert(*foreign, super::intern_in_space(&tx, iri)?);
     }
-    let graph = super::intern_in_space(&tx, graph_iri)?;
+    let graph = if graph_iri == crate::schema::ROOT_GRAPH_IRI {
+        crate::schema::ROOT_GRAPH
+    } else {
+        super::intern_in_space(&tx, graph_iri)?
+    };
     tx.execute(
         "INSERT OR IGNORE INTO graphs (g, class, parent_branch, created_at, source) \
          VALUES (?1, 'committed', NULL, '1970-01-01T00:00:00Z', NULL)",

@@ -38,7 +38,7 @@ pub fn pack_turtle(
     opts: &PackOptions,
     timestamp: &str,
 ) -> Result<Manifest> {
-    if store.lookup(graph_iri)?.is_none() {
+    if graph_iri != crate::schema::ROOT_GRAPH_IRI && store.lookup(graph_iri)?.is_none() {
         return Err(Error::InvalidValue(format!(
             "pack: unknown graph: {graph_iri}"
         )));
@@ -62,8 +62,11 @@ pub fn pack_turtle(
             .map_err(|e| Error::Store(format!("pack: writing {name}: {e}")))
     };
 
-    let (graph_ttl, fact_count) =
-        crate::rdf::export_rdf_subset(store, oxrdfio::RdfFormat::Turtle, Some(graph_iri))?;
+    let (graph_ttl, fact_count) = crate::rdf::export_rdf_subset(
+        store,
+        oxrdfio::RdfFormat::Turtle,
+        (graph_iri != crate::schema::ROOT_GRAPH_IRI).then_some(graph_iri),
+    )?;
     write("graph.ttl", &graph_ttl)?;
 
     let mut shapes_ttl = String::new();
