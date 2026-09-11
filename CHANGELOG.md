@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Re-derive ledgers and page on ce6770a([bc4a152](https://github.com/scbrown/quipu/commit/bc4a152474437cc1f6fd0f392c7e5941201234b4))
 - *(conformance)* Re-derive the ledgers onto main's HEAD([d012326](https://github.com/scbrown/quipu/commit/d01232622bfb8cbf87499c4d924c5506a29636a3))
 - *(conformance)* Publish CI ledgers from 84ecc38([ffe6327](https://github.com/scbrown/quipu/commit/ffe6327bd39bf594f4d5c3018ec92e0bd2884d62))
+- *(conformance)* Revert derive-at-merge: it cannot push to a protected main([49b9adb](https://github.com/scbrown/quipu/commit/49b9adb37f6ec1e94872211ca223419bb16e610b))
 
 ## [0.3.42] - 2026-09-06
 
