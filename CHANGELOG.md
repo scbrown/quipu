@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2026-09-11
+
+### Documentation
+
+- *(reasoner)* Describe supported stratified negation([8f90d70](https://github.com/scbrown/quipu/commit/8f90d70ae8e7e92b00b1add9063452b9d91167ef))
+
+### Fixed
+
+- *(share)* A LAZILY created table was undeclared, and the audits made declaring it impossible([d832129](https://github.com/scbrown/quipu/commit/d8321290ee1dab2e38dbd1a71497b45bc3a1a057))
+- *(cli)* Honor explicit database for archive imports([17a3fbd](https://github.com/scbrown/quipu/commit/17a3fbdf8c1411afede1a50b435dd25abbfaf78c))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([b0b3899](https://github.com/scbrown/quipu/commit/b0b389951febc8266476e60d8601cfc735d8137c))
+- *(conformance)* Re-derive the ledgers on main's HEAD([e31697a](https://github.com/scbrown/quipu/commit/e31697a41eda659d98959b359dc1fd71375a1655))
+- *(conformance)* Refresh ledgers for the documented source revision([419885a](https://github.com/scbrown/quipu/commit/419885a24166c31a4c6d555d6d505c4682de9434))
+- *(conformance)* Refresh ledgers after CLI import fix([d5dad95](https://github.com/scbrown/quipu/commit/d5dad953cf609d1eece21008f51e8b89fee08f36))
+
 ## [0.4.0] - 2026-09-09
 
 ### Added
