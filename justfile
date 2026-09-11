@@ -257,6 +257,7 @@ changelog-verify *args:
 # fail in only one, and passed a section holding 221 commits against 1 expected.
 changelog-verify-test:
     ./scripts/test-verify-changelog.sh
+    python3 scripts/test_changelog_scrub.py
 
 # Repository contributor graph: generate, prove the receiver, or build the release share.
 contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":
