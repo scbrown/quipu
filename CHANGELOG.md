@@ -15,11 +15,13 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - *(store)* Every write path stamps a transaction source (#197)([456e4fc](https://github.com/scbrown/quipu/commit/456e4fcdf600f3dc2bb0b275e6c7e0f8b72bf81c))
+- *(conformance)* Stamp producer provenance on every ledger([84ecc38](https://github.com/scbrown/quipu/commit/84ecc387d03bc03f2fcedcceb41674b2bed69a26))
 
 ### Miscellaneous
 
 - *(conformance)* Re-derive ledgers and page on ce6770a([bc4a152](https://github.com/scbrown/quipu/commit/bc4a152474437cc1f6fd0f392c7e5941201234b4))
 - *(conformance)* Re-derive the ledgers onto main's HEAD([d012326](https://github.com/scbrown/quipu/commit/d01232622bfb8cbf87499c4d924c5506a29636a3))
+- *(conformance)* Publish CI ledgers from 84ecc38([ffe6327](https://github.com/scbrown/quipu/commit/ffe6327bd39bf594f4d5c3018ec92e0bd2884d62))
 
 ## [0.3.42] - 2026-09-06
 
