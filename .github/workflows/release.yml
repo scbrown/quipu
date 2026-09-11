@@ -69,6 +69,16 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Inspect merged subjects across the package release window before the
+      # action can cut a release. A PR title lint cannot see final squash titles.
+      - name: Require coverage for nonconventional commits in the release window
+        run: python3 scripts/check-release-window.py
+
+      # release-plz checks optional features too, including Lance's protobuf
+      # build. Match the prerequisite used by CI's extended feature job.
+      - name: Install protobuf compiler for semver checks
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       # DO NOT split this into ordered `command: release` / `command: release-pr`
       # steps to fix the full-history changelog dump. That was tried on 2026-08-02
       # and MEASURED NOT TO WORK — recorded here so the next person does not spend

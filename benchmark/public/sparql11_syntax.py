@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from conformance_provenance import provenance
+
 PINNED_SUITE_REVISION = "369a90d1a60c021b746df2e411da0ff36258a758"
 BLOCK = re.compile(r"(?ms)^:[^\s]+\s+rdf:type\s+mf:(PositiveSyntaxTest11|NegativeSyntaxTest11)\s*;(.*?)(?=^:[^\s]+\s+rdf:type|\Z)")
 ACTION = re.compile(r"mf:action\s+<([^>]+)>")
@@ -89,6 +91,7 @@ def main() -> int:
         "results": results,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    report["generated_at"], report["generated_by"] = provenance()
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report["totals"], sort_keys=True))
     return 0 if passed == len(results) else 1

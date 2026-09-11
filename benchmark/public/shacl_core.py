@@ -14,6 +14,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from conformance_provenance import provenance
+
 PINNED_SUITE_REVISION = "9c863967bceaef1a87c24e4dd761eda763823120"
 RUNNER_VERSION = 1
 INCLUDES = re.compile(r"mf:include\s+<([^>]+)>")
@@ -378,6 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         "reproduce": {"runner": "python3 benchmark/public/shacl_core.py", "suite": "/tmp/data-shapes/data-shapes-test-suite/tests"},
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    report["generated_at"], report["generated_by"] = provenance()
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(counts, sort_keys=True))
     if args.baseline:
