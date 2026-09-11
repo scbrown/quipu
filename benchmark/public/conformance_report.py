@@ -682,6 +682,30 @@ def ledger_provenance(data: dict, pr_base: str | None = None) -> tuple[int, list
     if unknown:
         return 2, unknown
     if drifted:
+        if own is not None:
+            # PR MODE IS ADVISORY SINCE DERIVE-AT-MERGE (aegis-fn3hdn).
+            #
+            # A branch CANNOT carry a ledger that stays valid: this arm is
+            # lenient and the push arm is STRICT, so a ledger derived at review
+            # time goes stale by MERGE ORDER — whoever merges second reds main
+            # through no fault of their PR. Failing the PR forced every author
+            # to commit a re-derived ledger onto their branch, which then
+            # collided textually with every other branch doing the same on the
+            # same six generated files.
+            #
+            # main now derives its OWN ledger after each merge, from the merged
+            # tree, so the guarantee this check used to enforce is produced by
+            # CONSTRUCTION rather than by refusing the PR. Report the drift so
+            # it stays visible; exit 0 so the branch need not carry a ledger.
+            #
+            # The strict arm on push is UNCHANGED and is what actually holds
+            # aegis-1gp76j (main green with a ledger from different code).
+            # Do not relax that one.
+            return 0, [
+                *drifted,
+                "PR mode: advisory only — main re-derives after merge "
+                "(aegis-fn3hdn). Do NOT commit ledgers on a branch.",
+            ]
         return 1, drifted
     return 0, []
 
@@ -743,6 +767,14 @@ def main(argv: list[str] | None = None) -> int:
         arm = f"PR mode (base {base})" if base else "STRICT mode (ledger revision must be HEAD)"
         print(f"conformance_report: provenance arm = {arm}")
         code, messages = ledger_provenance(data, base)
+        if code == 0 and messages:
+            # Advisory drift (PR mode since aegis-fn3hdn). Exit 0, but SAY SO:
+            # a warning nobody prints is a warning nobody acts on, and the
+            # reader standing here is the PR author deciding whether to commit
+            # a ledger onto their branch. They should not.
+            print("conformance_report: ledger drift, ADVISORY (not failing):", file=sys.stderr)
+            for message in messages:
+                print(f"  {message}", file=sys.stderr)
         if code:
             label = (
                 "ledger provenance CANNOT BE VERIFIED"
@@ -760,8 +792,13 @@ def main(argv: list[str] | None = None) -> int:
             return code
         print(f"conformance_report: {len(files)} published artifact(s) match the ledgers")
         if base:
+            # Do not claim coverage when the advisory above just reported drift
+            # — two contradictory lines leave the reader guessing which is true.
             print(
-                "conformance_report: every ledger covers THIS PR's own "
+                "conformance_report: ledger does NOT cover this PR's own changes; "
+                "main will derive after merge (advisory, aegis-fn3hdn)"
+                if messages
+                else "conformance_report: every ledger covers THIS PR's own "
                 "conformance-relevant changes (main's are checked on push)"
             )
         else:
