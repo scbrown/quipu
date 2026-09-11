@@ -21,6 +21,10 @@ The binary `.qpack.db` is internal plumbing, not the published artifact. A share
 is the canonical, line-oriented interchange surface that makes review and
 three-way history meaningful:
 
+First [prepare the store's identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+and load the shapes governing its data. These outward-share examples assume
+both prerequisites are present in the selected store:
+
 ```bash
 quipu share --output graph-share
 quipu share --output project-share --group-id project-a --shapes project-shapes --turtle
