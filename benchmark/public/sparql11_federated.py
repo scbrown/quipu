@@ -16,6 +16,8 @@ import urllib.request
 from collections import Counter
 from pathlib import Path
 
+from conformance_provenance import provenance
+
 HERE = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("sparql11_evaluation", HERE / "sparql11_evaluation.py")
 EVAL = importlib.util.module_from_spec(SPEC)
@@ -144,6 +146,7 @@ def main() -> int:
     counts = Counter(row["status"] for row in results)
     report = {"benchmark": "W3C RDF Tests SPARQL 1.1 federated query", "suite_revision": revision, "quipu_revision": EVAL.git_output(Path(__file__).resolve().parents[2], "rev-parse", "HEAD"), "quipu_version": subprocess.run([str(args.quipu), "--version"], check=True, text=True, capture_output=True).stdout.strip(), "scope": "all seven Working Group-approved BasicFederatedQuery SERVICE cases", "policy": "SERVICE IRIs must match operator-configured remotes; variable endpoints are a deliberate policy deviation", "classes": {"federated-query": {"cases": len(results), **dict(sorted(counts.items()))}}, "results": results}
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    report["generated_at"], report["generated_by"] = provenance()
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report["classes"], sort_keys=True))
     return 0 if counts["failed"] == 0 and counts["error"] == 0 else 1

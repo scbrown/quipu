@@ -1803,3 +1803,120 @@ ex:old ex:likes ex:rex .
          naive and the divergence is invisible to the seed-everything fixture"
     );
 }
+
+// ── aegis-v3gf6u: the SCHEDULED half of the 2s6xpb mitigation ────────────────
+//
+// ⚠️ THE SEVEN EXISTING sameAs TESTS ALL PASS AGAINST THE BROKEN DEPLOYMENT,
+// and that is the point of these. `same_as_propagates_predicates_to_the_twin`
+// asserts almost exactly the acceptance muldoon measured FAILING in production
+// — because it calls `Ontology::materialize` directly and therefore never
+// touches the entry point a scheduler has to reach. A unit test that constructs
+// the ontology itself cannot see that nothing in the deployment ever constructs
+// it. So these go through `tool_load_ontology`, the dispatch surface the timer
+// will actually call.
+
+#[test]
+fn materialize_action_derives_from_already_loaded_ontologies() {
+    // The scheduled path: load happened at some point in the past, facts arrived
+    // later with no reactive observer, and the timer must still close them.
+    let mut store = Store::open_in_memory().unwrap();
+    crate::mcp::owl::tool_load_ontology(
+        &mut store,
+        &serde_json::json!({"action": "load", "name": "t", "turtle": SN_ONT}),
+    )
+    .unwrap();
+
+    // Facts asserted AFTER the load, exactly as a live store receives them.
+    sn_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:twin owl:sameAs ex:original .
+ex:original ex:likes ex:rex .
+"#,
+    );
+
+    // CONTROL: without the scheduled run the twin does NOT see it. If this
+    // passes, the test below proves nothing — the entailment would already be
+    // there and `materialize` could be a no-op.
+    let ask = "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+               { <http://example.org/twin> <http://example.org/likes> <http://example.org/rex> }";
+    assert!(
+        matches!(
+            crate::sparql::query(&store, ask).unwrap(),
+            crate::sparql::QueryResult::Ask(false)
+        ),
+        "precondition: with no reactive observer the twin must NOT see it yet"
+    );
+
+    let out = crate::mcp::owl::tool_load_ontology(
+        &mut store,
+        &serde_json::json!({"action": "materialize"}),
+    )
+    .unwrap();
+    assert_eq!(out["action"], "materialize");
+    assert_eq!(out["ontologies"], 1);
+    assert!(
+        out["materialized"]["total"].as_u64().unwrap() > 0,
+        "a scheduled run that derives nothing is indistinguishable from one that never ran"
+    );
+
+    assert!(
+        matches!(
+            crate::sparql::query(&store, ask).unwrap(),
+            crate::sparql::QueryResult::Ask(true)
+        ),
+        "the scheduled run must close the identity the write path no longer closes"
+    );
+}
+
+#[test]
+fn materialize_action_reports_an_empty_store_rather_than_faking_success() {
+    // A scheduler must be able to tell "ran, derived nothing" from "there was
+    // nothing loaded to derive from" — conflating them is the exact failure this
+    // bead exists to fix, one level up.
+    let mut store = Store::open_in_memory().unwrap();
+    let out = crate::mcp::owl::tool_load_ontology(
+        &mut store,
+        &serde_json::json!({"action": "materialize"}),
+    )
+    .unwrap();
+    assert_eq!(out["ontologies"], 0);
+    assert!(out["materialized"].is_null());
+    assert!(out["note"].as_str().unwrap().contains("no ontologies"));
+}
+
+#[test]
+fn materialize_action_is_reachable_by_name_from_the_dispatch_table() {
+    // aegis: a library with no caller passes every gate. These tests would all
+    // pass if `"materialize"` were spelled differently in the match arm than in
+    // the request a timer sends, so assert the STRING, and assert that a
+    // neighbouring typo is still refused and names the real actions.
+    let mut store = Store::open_in_memory().unwrap();
+    let err = crate::mcp::owl::tool_load_ontology(
+        &mut store,
+        &serde_json::json!({"action": "materialise"}),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("unknown action 'materialise'"), "got: {err}");
+    assert!(
+        err.contains("materialize"),
+        "the refusal must name the real action: {err}"
+    );
+
+    // And the positive half, which is the one that matters: the exact string a
+    // timer will send must be ACCEPTED. Without this the test passes even when
+    // the match arm is renamed, because the error text is a separate constant —
+    // measured: under a sabotage that renamed the arm, the two asserts above
+    // both still passed.
+    let ok = crate::mcp::owl::tool_load_ontology(
+        &mut store,
+        &serde_json::json!({"action": "materialize"}),
+    );
+    assert!(
+        ok.is_ok() && ok.unwrap()["action"] == "materialize",
+        "the literal action string a scheduler sends must be handled, not merely mentioned"
+    );
+}

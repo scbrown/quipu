@@ -16,8 +16,10 @@ pub enum AuthOutcome {
     NotRequired,
     /// The endpoint is a write on a server configured without a token.
     OpenWrite,
-    /// A configured bearer authenticated the write.
-    Authenticated,
+    /// The current configured bearer authenticated the write.
+    AuthenticatedCurrent,
+    /// The temporary previous bearer authenticated during its grace window.
+    AuthenticatedPrevious,
     /// The write lacked the configured bearer or supplied the wrong one.
     Unauthorized,
     /// Server read-only mode refused the write regardless of credentials.
@@ -32,7 +34,8 @@ impl AuthOutcome {
             Self::Pending => "pending",
             Self::NotRequired => "not_required",
             Self::OpenWrite => "open_write",
-            Self::Authenticated => "authenticated",
+            Self::AuthenticatedCurrent => "authenticated_current",
+            Self::AuthenticatedPrevious => "authenticated_previous",
             Self::Unauthorized => "unauthorized",
             Self::ReadOnly => "read_only",
         }
@@ -221,6 +224,32 @@ mod tests {
         assert_eq!(value["result_size"], 3);
         assert_eq!(value["auth_outcome"], "not_required");
         assert!(value.get("authorization").is_none());
+    }
+
+    #[test]
+    fn structured_log_distinguishes_bearer_generation_without_secret_material() {
+        for (outcome, expected) in [
+            (AuthOutcome::AuthenticatedCurrent, "authenticated_current"),
+            (AuthOutcome::AuthenticatedPrevious, "authenticated_previous"),
+        ] {
+            let line = structured_request_log(
+                "request_complete",
+                8,
+                "agent-adhoc",
+                "aegis-ko8eck",
+                "POST",
+                "/episode",
+                "/episode",
+                Some(200),
+                Some(1),
+                outcome,
+                None,
+            );
+            let value: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(value["auth_outcome"], expected);
+            assert!(!line.contains("secret"));
+            assert!(value.get("authorization").is_none());
+        }
     }
 
     #[test]

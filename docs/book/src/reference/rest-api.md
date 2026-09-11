@@ -1113,11 +1113,40 @@ through to `list`.
 
 ### `POST /ontology`
 
-Manage OWL ontologies: `{"action": "load"|"list"|"remove", "name",
-"turtle", "timestamp"}` (mirrors `quipu_load_ontology`). Registered even
-without the `owl` feature — a build without it answers with an explicit
+Manage OWL ontologies: `{"action": "load"|"materialize"|"list"|"remove",
+"name", "turtle", "timestamp"}` (mirrors `quipu_load_ontology`). Registered
+even without the `owl` feature — a build without it answers with an explicit
 error naming the missing feature rather than a 404, so "not compiled in"
 and "no such route" stay distinguishable.
+
+**`materialize` re-derives entailments from the ontologies already loaded**,
+without loading anything. It is the endpoint a scheduler calls, and it exists
+because on a deployment with `[quipu.owl] reactive_materialize = false` there
+is otherwise nothing that ever runs the reasoner: `ReactiveOwl` is not
+registered, so the write path never materialises, and OWL entailment is dark
+for every family rather than merely delayed (aegis-v3gf6u).
+
+```bash
+curl -s localhost:3030/ontology -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $QUIPU_AUTH_TOKEN" \
+  -d '{"action": "materialize"}'
+# {"action":"materialize","ontologies":7,
+#  "materialized":{"same_as_inferences":42, ..., "total":118}}
+```
+
+It materialises the **combined** ontology, matching what the write gate
+reasons over: an axiom in one document over a class declared in another is
+invisible to either alone. A store with nothing loaded answers `"ontologies":
+0` with a null `materialized` and a note, rather than reporting a successful
+run of zero — a scheduler has to be able to tell "ran, derived nothing" from
+"there was nothing to derive from".
+
+Cadence must exceed the scan cost: the full pass re-reads every current fact,
+measured at ~2.3 s against 641,803 facts. That cost per WRITE is what made the
+reactive observer an OOM (aegis-2s6xpb); the same work on a timer is the same
+closure without the per-write scan. Entailments land in the companion inferred
+graph, so a wrong `owl:sameAs` pair stays quarantined and re-derivable.
 
 ### `POST /subscriptions`
 

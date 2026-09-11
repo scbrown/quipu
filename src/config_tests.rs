@@ -334,6 +334,28 @@ store_path = "/data/quipu.db"
 }
 
 #[test]
+fn parse_bounded_previous_bearer_config() {
+    let file: ConfigFile = toml::from_str(
+        r#"
+[quipu.server]
+auth_token = "new-token"
+previous_auth_token = "old-token"
+previous_auth_token_expires_at_epoch_secs = 2000000000
+"#,
+    )
+    .unwrap();
+    assert_eq!(file.quipu.server.auth_token.as_deref(), Some("new-token"));
+    assert_eq!(
+        file.quipu.server.previous_auth_token.as_deref(),
+        Some("old-token")
+    );
+    assert_eq!(
+        file.quipu.server.previous_auth_token_expires_at_epoch_secs,
+        Some(2_000_000_000)
+    );
+}
+
+#[test]
 fn empty_file_gives_defaults() {
     let toml_str = "";
     let file: ConfigFile = toml::from_str(toml_str).unwrap();
