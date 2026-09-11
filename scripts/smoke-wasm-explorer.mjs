@@ -306,23 +306,11 @@ try {
   check("the exported pack is a non-trivial archive", packBytes.length > 200,
     `${packBytes.length} bytes`);
 
-  // EXTRACT, then import the DIRECTORY — not the archive.
-  //
-  // `quipu import <archive>` routes through `share_transport::import_in_memory`
-  // (cli_pack.rs), which builds a FRESH in-memory store and IGNORES `--db`. A
-  // fresh store has no shapes, so every type in the pack is off-vocabulary and
-  // the result is always `quarantined`. That is a transient verification, not
-  // an import into your store, and it cannot show the edit arriving. Measured
-  // both ways on one store and one pack: directory -> staged, 5 accepted;
-  // archive -> quarantined, off_vocabulary [ex:Widget], "no local shapes
-  // loaded". Same recipe `scripts/build-repository-share.sh` uses, and for the
-  // same reason.
+  // Import the browser's archive directly into a shape-governed native store.
+  // This must persist staging: the next process promotes and queries the edit.
   const roundDb = join(work, "roundtrip.db");
-  const unpacked = join(work, "unpacked");
-  mkdirSync(unpacked, { recursive: true });
-  execFileSync("tar", ["-C", unpacked, "-xzf", edited]);
   run(["shapes", "load", "smoke", shapes, "--db", roundDb]);
-  const importJson = JSON.parse(run(["import", unpacked, "--db", roundDb]));
+  const importJson = JSON.parse(run(["import", edited, "--db", roundDb]));
   check("`quipu import` accepts the browser-produced pack",
     importJson.outcome === "staged" && importJson.promotion.eligible === true,
     `${importJson.outcome}, eligible=${importJson.promotion?.eligible}, ` +
