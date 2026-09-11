@@ -390,7 +390,8 @@ mod tests {
 
     #[test]
     fn missing_parent_refuses_before_merge() {
-        let store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut store);
         let root = tempfile::tempdir().unwrap();
         let dir = root.path().join("incoming");
         crate::share::share(
@@ -410,6 +411,7 @@ mod tests {
     fn clean_reconnect_writes_one_tx_with_two_provenance_parents() {
         let root = tempfile::tempdir().unwrap();
         let mut source = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
         source.load_shapes("merge", SHAPES, "2026-08-29").unwrap();
         crate::rdf::ingest_rdf(
             &mut source,
@@ -454,6 +456,8 @@ mod tests {
         .unwrap();
 
         let mut local = Store::open_in_memory().unwrap();
+
+        crate::share_scrub::seed_test_catalogue(&mut local);
         local.load_shapes("merge", SHAPES, "2026-08-29").unwrap();
         crate::rdf::ingest_rdf(&mut local, format!("<https://example.org/s> <{P_ONE}> \"base\" .\n<https://example.org/s> <{P_MANY}> \"ours\" .\n").as_bytes(), RdfFormat::NTriples, None, "2026-08-29T00:02:00Z", None, Some("ours")).unwrap();
         let result = merge(

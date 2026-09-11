@@ -52,6 +52,7 @@ fn real_share(store: &Store) -> (tempfile::TempDir, ShareImportRequest) {
 
 fn producer_store() -> Store {
     let mut store = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut store);
     crate::rdf::ingest_rdf(
         &mut store,
         &b"<urn:a> <urn:p> \"one\" .\n"[..],
@@ -121,6 +122,7 @@ fn a_share_with_no_envelope_still_imports_and_says_it_is_only_transport_trusted(
     let producer = producer_store();
     let (_d, req) = real_share(&producer);
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     let out = import_share(&mut consumer, &req, TS, None).unwrap();
     assert_eq!(out.attestation.tier, "transport");
     assert!(out.attestation.agent.is_none());
@@ -143,6 +145,7 @@ fn a_valid_envelope_is_verified_and_names_the_producer() {
     let producer = producer_store();
     let (_d, mut req) = real_share(&producer);
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     req.attestation = Some(attest(&consumer, &req.manifest));
     let out = import_share(&mut consumer, &req, TS, None).unwrap();
     assert_eq!(out.attestation.tier, "attested");
@@ -158,6 +161,7 @@ fn a_tampered_envelope_is_refused_and_nothing_is_staged() {
     let producer = producer_store();
     let (_d, mut req) = real_share(&producer);
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     let mut env = attest(&consumer, &req.manifest);
     env.signature = hex::encode([0u8; 64]);
     req.attestation = Some(env);
@@ -181,6 +185,7 @@ fn a_replayed_nonce_is_refused_on_the_second_import() {
     let producer = producer_store();
     let (_d, mut req) = real_share(&producer);
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     req.attestation = Some(attest(&consumer, &req.manifest));
     let first = import_share(&mut consumer, &req, TS, None);
     assert!(
@@ -198,6 +203,7 @@ fn an_envelope_bound_to_another_share_is_refused() {
     let producer = producer_store();
     let (_d, mut req) = real_share(&producer);
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     let mut other = req.manifest.clone();
     other.share_id = format!("sha256:{}", "c".repeat(64));
     req.attestation = Some(attest(&consumer, &other));
@@ -216,6 +222,7 @@ fn an_unbound_session_is_refused() {
     let producer = producer_store();
     let (_d, mut req) = real_share(&producer);
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     let mut env = attest(&consumer, &req.manifest);
     env.session = "never-registered".into();
     req.attestation = Some(env);
@@ -230,6 +237,7 @@ fn a_write_domain_envelope_is_refused_for_a_share() {
     let producer = producer_store();
     let (_d, mut req) = real_share(&producer);
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     let mut env = attest(&consumer, &req.manifest);
     env.version = crate::session_attestation::WRITE_V1.into();
     req.attestation = Some(env);
@@ -283,6 +291,7 @@ fn an_unregistered_producer_key_is_claimed_not_attested() {
     let dir = tempfile::tempdir().unwrap();
     let req = attested_share(&producer, dir.path());
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     let out = import_share(&mut consumer, &req, TS, None).unwrap();
     assert_eq!(out.attestation.tier, "claimed", "{}", out.attestation.note);
     assert_eq!(out.attestation.agent.as_deref(), Some("producer-agent"));
@@ -302,6 +311,7 @@ fn registering_out_of_band_reaches_attested() {
     let dir = tempfile::tempdir().unwrap();
     let req = attested_share(&producer, dir.path());
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
 
     // The operator obtains the binding some other way and registers it. Taking
     // the public key from the share here is a TEST convenience for reaching the
@@ -324,6 +334,7 @@ fn import_does_not_register_the_binding_it_carries() {
     let dir = tempfile::tempdir().unwrap();
     let req = attested_share(&producer, dir.path());
     let mut consumer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
 
     let first = import_share(&mut consumer, &req, TS, None).unwrap();
     assert_eq!(first.attestation.tier, "claimed");
@@ -375,6 +386,8 @@ fn a_bad_signature_is_refused_at_the_claimed_tier_and_stages_nothing() {
         .signature = bad;
 
     let mut consumer = Store::open_in_memory().unwrap();
+
+    crate::share_scrub::seed_test_catalogue(&mut consumer);
     let before = staged_graphs(&consumer);
     let err = import_share(&mut consumer, &req, TS, None).unwrap_err();
     assert!(

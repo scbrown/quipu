@@ -2,6 +2,7 @@ use super::*;
 
 fn fixture() -> Store {
     let mut store = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut store);
     crate::rdf::ingest_rdf(
         &mut store,
         &b"<urn:z> <urn:p> \"last\" .\n<urn:a> <urn:p> \"first\" .\n"[..],
@@ -150,7 +151,7 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
 }
 
 #[test]
-fn outward_share_ignores_warn_tier_and_absent_catalog() {
+fn outward_share_ignores_warn_tier_with_a_block_catalogue() {
     let mut store = fixture();
     crate::rdf::ingest_rdf(
         &mut store,
@@ -272,7 +273,9 @@ fn defaults_to_all_loaded_shapes_and_refuses_silent_empty_output() {
     assert!(text.contains("# --- another-shape ---"));
     assert!(text.contains("# --- fixture-shapes ---"));
 
-    let empty_store = Store::open_in_memory().unwrap();
+    let mut empty_store = Store::open_in_memory().unwrap();
+
+    crate::share_scrub::seed_test_catalogue(&mut empty_store);
     let refused = root.path().join("refused");
     let error = share(
         &empty_store,
@@ -545,4 +548,44 @@ fn the_http_request_cannot_select_an_internal_destination() {
     let store = store_with_internal_identifier();
     let error = share_payload(&store, &request.options(), SHARE_PAYLOAD_MAX_BYTES).unwrap_err();
     assert!(error.to_string().contains("private host"), "{error}");
+}
+
+#[test]
+fn outward_share_reads_named_graph_catalogue_without_changing_payload_scope() {
+    let mut store = fixture();
+    let catalogue = store
+        .overlay_create("urn:test:policy-catalogue", 0)
+        .unwrap();
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+<urn:leak> <urn:p> "private.example" .
+"#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-29T00:00:01Z",
+        None,
+        None,
+        catalogue,
+    )
+    .unwrap();
+
+    // A clean ROOT payload remains shareable even though rules live elsewhere.
+    let clean = share_payload(&store, &ShareOptions::default(), SHARE_PAYLOAD_MAX_BYTES).unwrap();
+    assert!(!clean.files["export.nt"].contains("private.example"));
+    let opts = ShareOptions {
+        scope: ShareScope::Graph("urn:test:policy-catalogue".into()),
+        ..Default::default()
+    };
+    let root = tempfile::tempdir().unwrap();
+    let out = root.path().join("refused");
+    let error = share(&store, out.to_str().unwrap(), &opts).unwrap_err();
+    assert!(error.to_string().contains("private host"));
+    assert!(!error.to_string().contains("private.example"));
+    assert!(!out.exists(), "a refused share left a partial directory");
 }

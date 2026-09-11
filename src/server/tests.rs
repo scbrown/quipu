@@ -74,7 +74,19 @@ async fn query_form_entity_dereferences_json_ld_and_html() {
 
 #[tokio::test]
 async fn post_share_returns_reconstructable_canonical_files() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    let catalogue = store.overlay_create("urn:test:catalogue", 0).unwrap();
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut store,
+        include_bytes!("../../tests/fixtures/share-catalogue.ttl").as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-01T00:00:00Z",
+        None,
+        Some("test-catalogue"),
+        catalogue,
+    )
+    .unwrap();
     store
         .load_shapes(
             "http-share-test",

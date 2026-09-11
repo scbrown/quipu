@@ -9,16 +9,17 @@
 > `quipu:recommendsFloor`) — a pack today carries the graph's labels but not
 > the fuller policy vocabulary. See `docs/design/knowledge-packs.md`.
 
-A knowledge pack is a **distributable graph artifact**: one named graph's
+A binary pack is an **internal graph artifact**: one graph's
 current facts, plus the shapes, stored queries, and labels that make it usable,
 in a single file you can version, hand to another agent or environment, verify,
 and import. The artifact format *is* the database format — a pack is an
 ordinary Quipu SQLite store with a one-row `pack_manifest` table describing
 itself.
 
-For a git repository, use the complementary **share directory**. A pack is an
-attachable SQLite artifact; a share is the canonical, line-oriented interchange
-surface that makes review and three-way history meaningful:
+For publication in a git repository, **qpack means the text share directory**.
+The binary `.qpack.db` is internal plumbing, not the published artifact. A share
+is the canonical, line-oriented interchange surface that makes review and
+three-way history meaningful:
 
 ```bash
 quipu share --output graph-share
@@ -38,12 +39,18 @@ byte-identical. Use `--parent-share sha256:...` when continuing a lineage.
 
 Before any bundle is returned or its output directory is published, Quipu
 evaluates every block-tier `InternalIdentifierPattern` present in the local
-policy graph against the exact graph, shapes, and optional Turtle bytes. A hit
+ROOT and named graphs against the exact graph, shapes, and optional Turtle bytes. A hit
 refuses the entire share and leaves no partial directory. The gate never
 rewrites a match: IRIs are entity identity, so replacing a private-looking IRI
-would silently create a different graph. Warning-tier rules remain advisory,
-and a store with no such policy catalogue retains Quipu's deployment-neutral
-default rather than inheriting homelab-specific patterns.
+would silently create a different graph. Warning-tier rules do not block.
+Rules must be complete within one graph; statements split across graphs are
+not combined into a rule. Duplicate rules are checked once. Catalogue location
+does not change the selected share payload scope.
+
+An empty block-tier catalogue refuses outward sharing: the CLI exits 2
+(cannot verify), distinct from exit 1 for a matched identifier and exit 0 for
+a checked, clean share. Load a catalogue before sharing outward. The explicit
+`--destination internal` path remains available for internal transfers.
 
 Remote callers can request the identical artifact without access to the server's
 filesystem using `POST /share`. The response is
@@ -79,6 +86,18 @@ than the sorted N-Triples producer. `export.nt` remains normative and
   content hash, creation time, source graph, producer identity, and row counts.
 
 ## Creating a pack
+
+Omit the graph argument to pack the ROOT default graph, or explicitly use
+`urn:quipu:graph:root`. The manifest records that IRI and defaults the name to
+`root`. ROOT packs contain only current ROOT facts, excluding named graphs and
+materialized inference graphs. `--with-vectors` carries embeddings for terms in
+the pack. ROOT uses its own graph-label row, without borrowing labels from an
+interned term with the same IRI. Verification and Turtle export use the same scope.
+Unpacking defaults to ROOT for these packs; `--into <iri>` selects a named graph.
+
+```bash
+quipu pack --out root.qpack.db --with-vectors
+```
 
 ```bash
 quipu pack urn:example:graph --out domain.qpack.db --name "domain" --version 1.0.0

@@ -1,0 +1,6 @@
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<urn:test:identifier-rule> a aegis:InternalIdentifierPattern ;
+    rdfs:label "fixture identifier" ;
+    aegis:regex "FIXTURE[_]PRIVATE[_]TOKEN" ;
+    aegis:enforcementTier "block" .

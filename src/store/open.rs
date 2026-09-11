@@ -397,7 +397,7 @@ impl Store {
             return Ok(());
         };
         if lifecycle.as_deref() == Some("frozen") {
-            let iri = self.resolve(graph).unwrap_or_else(|_| format!("g={graph}"));
+            let iri = self.graph_display_name(graph);
             return Err(Error::Store(format!(
                 "refusing to write to graph '{iri}': it is FROZEN — its rows \
                  live in a read-only archive pack. Thaw it first: \
