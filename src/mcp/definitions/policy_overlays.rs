@@ -14,6 +14,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "tx": {"type": "integer", "description": "Maximum transaction for the policy evaluation."},
                     "policy": { "type": "string", "description": "Policy IRI whose aegis:claim to evaluate (alternative to inline 'claim')" },
                     "claim": { "type": "string", "description": "Inline SPARQL ASK claim (alternative to 'policy')" },
                     "target": { "type": "string", "description": "Target IRI bound to the $target placeholder" },
@@ -100,6 +101,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "precedence": {"type": "string", "enum": ["nearest", "governed"], "description": "Overlay composition precedence (default: nearest)."},
                     "overlay": { "type": "string", "description": "Overlay graph IRI" }
                 },
                 "required": ["overlay"]

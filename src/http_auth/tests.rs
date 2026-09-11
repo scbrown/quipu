@@ -314,6 +314,7 @@ fn routes_in_server_source() -> Vec<String> {
         "server/base.rs",
         "server/entity.rs",
         "server/handle.rs",
+        "server/input_fields.rs",
         "server/publication.rs",
         "server/query_usage.rs",
         "server/reason.rs",
