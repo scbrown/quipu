@@ -321,26 +321,25 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             std::process::exit(1);
         });
     let actor = flag_value(args, "--actor");
-    let transient = reference.starts_with("https://")
-        || reference.starts_with("http://")
-        || !std::path::Path::new(reference).is_dir();
-    let imported = if transient {
-        quipu::share_transport::import_in_memory(reference, &timestamp, actor)
-            .map(|(_, result)| result)
-    } else {
-        let mut request = quipu::share_transport::read_local(reference);
-        if let Ok(request) = &mut request {
-            request.actor = actor.map(String::from);
-            request.destination = destination_flag(args);
-            request.source = flag_value(args, "--source")
-                .unwrap_or(reference)
-                .to_string();
-        }
-        request.and_then(|request| {
-            let mut store = crate::cli_open::open_store(db_path);
-            quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
-        })
-    };
+    // Keep no-file archive/URL verification as the default, but an explicit
+    // database selects the same local shapes, bindings and staging as a directory.
+    let transient = flag_value(args, "--db").is_none()
+        && (reference.starts_with("https://")
+            || reference.starts_with("http://")
+            || !std::path::Path::new(reference).is_dir());
+    let imported = quipu::share_transport::read_reference(reference).and_then(|mut request| {
+        request.actor = actor.map(String::from);
+        request.destination = destination_flag(args);
+        request.source = flag_value(args, "--source")
+            .unwrap_or(reference)
+            .to_string();
+        let mut store = if transient {
+            quipu::Store::open_in_memory()?
+        } else {
+            crate::cli_open::open_store(db_path)
+        };
+        quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
+    });
     match imported {
         Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
         Err(error) => {

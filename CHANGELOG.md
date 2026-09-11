@@ -15,11 +15,13 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - *(store)* Every write path stamps a transaction source (#197)([456e4fc](https://github.com/scbrown/quipu/commit/456e4fcdf600f3dc2bb0b275e6c7e0f8b72bf81c))
+- *(conformance)* Stamp producer provenance on every ledger([84ecc38](https://github.com/scbrown/quipu/commit/84ecc387d03bc03f2fcedcceb41674b2bed69a26))
 
 ### Miscellaneous
 
 - *(conformance)* Re-derive ledgers and page on ce6770a([bc4a152](https://github.com/scbrown/quipu/commit/bc4a152474437cc1f6fd0f392c7e5941201234b4))
 - *(conformance)* Re-derive the ledgers onto main's HEAD([d012326](https://github.com/scbrown/quipu/commit/d01232622bfb8cbf87499c4d924c5506a29636a3))
+- *(conformance)* Publish CI ledgers from 84ecc38([ffe6327](https://github.com/scbrown/quipu/commit/ffe6327bd39bf594f4d5c3018ec92e0bd2884d62))
 
 ## [0.3.42] - 2026-09-06
 
@@ -258,14 +260,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- *(align)* SSSOM mapping set, propose and verify [] (#123)([2d048a8](https://github.com/scbrown/quipu/commit/2d048a8df40d85b484d12356c8a7355dea8f3090))
+- *(align)* SSSOM mapping set, propose and verify (#123)([2d048a8](https://github.com/scbrown/quipu/commit/2d048a8df40d85b484d12356c8a7355dea8f3090))
 
 ## [0.3.33] - 2026-09-05
 
 ### Added
 
-- *(docs)* Run the repository's own knowledge pack in the browser [] (#116)([a33c50b](https://github.com/scbrown/quipu/commit/a33c50b8fe271b794c8b19eab573979c10a54a9d))
-- *(docs)* Let the book page EDIT the graph and export it back [] (#117)([a284daf](https://github.com/scbrown/quipu/commit/a284daf2fe02f363dd6ff25b91b237954f1d541d))
+- *(docs)* Run the repository's own knowledge pack in the browser (#116)([a33c50b](https://github.com/scbrown/quipu/commit/a33c50b8fe271b794c8b19eab573979c10a54a9d))
+- *(docs)* Let the book page EDIT the graph and export it back (#117)([a284daf](https://github.com/scbrown/quipu/commit/a284daf2fe02f363dd6ff25b91b237954f1d541d))
 
 ## [0.3.32] - 2026-09-05
 
@@ -277,15 +279,15 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
-- *(sharing)* Prove the two-store story end to end [.3]([af5682f](https://github.com/scbrown/quipu/commit/af5682fb2ae8f4fd0b0849b72dbf235db2bb95c6))
+- *(sharing)* Prove the two-store story end to end([af5682f](https://github.com/scbrown/quipu/commit/af5682fb2ae8f4fd0b0849b72dbf235db2bb95c6))
 
 ### Testing
 
-- Clean up temporary test directories [] []([72f4990](https://github.com/scbrown/quipu/commit/72f49909e593024e30f03090c5851664f7565019))
+- Clean up temporary test directories([72f4990](https://github.com/scbrown/quipu/commit/72f49909e593024e30f03090c5851664f7565019))
 
 ## [0.3.30] - 2026-09-04
 
-### .2
+### Other
 
 - Publish 10/10 SPARQL result formats([ab46b57](https://github.com/scbrown/quipu/commit/ab46b5730e5390e257213474a1bf731b7cf9b5b8))
 - Add SPARQL query form transport defaults([3749cfc](https://github.com/scbrown/quipu/commit/3749cfcdea4f821b672c618eab9d3f06f7c13563))
@@ -293,27 +295,22 @@ All notable changes to this project will be documented in this file.
 - Reach full SPARQL query protocol conformance([5b5e11f](https://github.com/scbrown/quipu/commit/5b5e11fe025af69c7c47633e1c2cd7aae148736c))
 - Complete SPARQL protocol and update conformance([6f01994](https://github.com/scbrown/quipu/commit/6f019948eea02b25f4c4e311eae5e8410eb17c58))
 
-### .3
-
 - Add pinned SHACL and entailment ledgers([f34a712](https://github.com/scbrown/quipu/commit/f34a7120690bc75bdcbe90c06889b14ce168472d))
-
-### .7
-
 - Score W3C federated query suite([7f77b9b](https://github.com/scbrown/quipu/commit/7f77b9b350772ef33469cc4e496e60a3243ac2df))
 
 ### Added
 
-- *(release)* Embed repository knowledge share (.4)([5459846](https://github.com/scbrown/quipu/commit/5459846ed8c4b965090940d41ad890a626b8be29))
+- *(release)* Embed repository knowledge share([5459846](https://github.com/scbrown/quipu/commit/5459846ed8c4b965090940d41ad890a626b8be29))
 
 ### Documentation
 
-- Sharing reference, and tests against two kinds of doc rot [.2]([148780a](https://github.com/scbrown/quipu/commit/148780aeb74de779be62820dc2cfa5cd452b993a))
-- *(benchmarks)* Link conformance back to Sharing & Federation []([48b31e4](https://github.com/scbrown/quipu/commit/48b31e4f9aaff7b5e9f64db4cfbc6420d74d8cf8))
-- *(share)* Align CLI reference with text artifacts (.2)([ca3d3e9](https://github.com/scbrown/quipu/commit/ca3d3e9c28057f91d9b145b3939118caf2f8a3de))
+- Sharing reference, and tests against two kinds of doc rot([148780a](https://github.com/scbrown/quipu/commit/148780aeb74de779be62820dc2cfa5cd452b993a))
+- *(benchmarks)* Link conformance back to Sharing & Federation([48b31e4](https://github.com/scbrown/quipu/commit/48b31e4f9aaff7b5e9f64db4cfbc6420d74d8cf8))
+- *(share)* Align CLI reference with text artifacts([ca3d3e9](https://github.com/scbrown/quipu/commit/ca3d3e9c28057f91d9b145b3939118caf2f8a3de))
 
 ### Fixed
 
-- *(release)* Require conforming fresh-store share proof (.4)([78eb8a1](https://github.com/scbrown/quipu/commit/78eb8a1e3013f1e0f6de13c4d76b6c6cee9478b4))
+- *(release)* Require conforming fresh-store share proof([78eb8a1](https://github.com/scbrown/quipu/commit/78eb8a1e3013f1e0f6de13c4d76b6c6cee9478b4))
 - *(service)* Preserve RDF result term identity([304ebe2](https://github.com/scbrown/quipu/commit/304ebe21c13444baa053892d80b232a48d8a6e4f))
 - *(ci)* Split source-size ratchet violations([7877c74](https://github.com/scbrown/quipu/commit/7877c74bcb5e9e0947428d6e3292c1f3401a669d))
 
@@ -321,7 +318,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.3.28] - 2026-09-03
 
-### .1
+### Other
 
 - Implement language and datatype constructors([7c5c029](https://github.com/scbrown/quipu/commit/7c5c029f1aa3a8595ba98aeeab1dbba7e0d5617f))
 - Publish 108 query evaluation passes([d2c258a](https://github.com/scbrown/quipu/commit/d2c258a108475af94466013d86fd70c8cac0b155))
@@ -348,14 +345,14 @@ All notable changes to this project will be documented in this file.
 
 - *(sparql)* Evaluate numeric arithmetic expressions([a0fc8fc](https://github.com/scbrown/quipu/commit/a0fc8fca0b89919d0fd11d567ffb178bdf819069))
 - *(pack)* Verify and incrementally load repo artifacts([2c7675f](https://github.com/scbrown/quipu/commit/2c7675fa232378217d73d7fab03014e3887fd17e))
-- *(sparql)* Evaluate numeric builtins [.1]([d3f9a19](https://github.com/scbrown/quipu/commit/d3f9a1926d02fa9f0ed00b86fc1114e8ac29d044))
-- *(sparql)* Evaluate string builtins [.1]([88aed04](https://github.com/scbrown/quipu/commit/88aed0460791ffa99ae8f90bf21f1b2b7a8f783a))
-- *(sparql)* Evaluate hash builtins [.1]([f910f24](https://github.com/scbrown/quipu/commit/f910f24fc72d91e99def68267a232533a5e3864b))
-- *(cli)* Load W3C named graph fixtures (.1)([7895151](https://github.com/scbrown/quipu/commit/78951512a99cbf491fb06095bf71a55686f43c13))
-- *(sparql)* Complete query evaluation conformance (.1)([07173bd](https://github.com/scbrown/quipu/commit/07173bd8f3bdbfe8af504074521e215126317840))
-- *(share)* Load text qpacks by reference (.5)([d664328](https://github.com/scbrown/quipu/commit/d664328c565021b12d479cbb6a29cb8bc18ddf1d))
-- *(share)* Canonicalize and describe share payloads (.5)([ef9e406](https://github.com/scbrown/quipu/commit/ef9e4068d851d1597bb572458f512c2488f3583e))
-- *(share)* Add parent-bound delta artifacts (.5)([5179018](https://github.com/scbrown/quipu/commit/5179018fbbc6c8812eae004fe6be1e690609f80c))
+- *(sparql)* Evaluate numeric builtins([d3f9a19](https://github.com/scbrown/quipu/commit/d3f9a1926d02fa9f0ed00b86fc1114e8ac29d044))
+- *(sparql)* Evaluate string builtins([88aed04](https://github.com/scbrown/quipu/commit/88aed0460791ffa99ae8f90bf21f1b2b7a8f783a))
+- *(sparql)* Evaluate hash builtins([f910f24](https://github.com/scbrown/quipu/commit/f910f24fc72d91e99def68267a232533a5e3864b))
+- *(cli)* Load W3C named graph fixtures([7895151](https://github.com/scbrown/quipu/commit/78951512a99cbf491fb06095bf71a55686f43c13))
+- *(sparql)* Complete query evaluation conformance([07173bd](https://github.com/scbrown/quipu/commit/07173bd8f3bdbfe8af504074521e215126317840))
+- *(share)* Load text qpacks by reference([d664328](https://github.com/scbrown/quipu/commit/d664328c565021b12d479cbb6a29cb8bc18ddf1d))
+- *(share)* Canonicalize and describe share payloads([ef9e406](https://github.com/scbrown/quipu/commit/ef9e4068d851d1597bb572458f512c2488f3583e))
+- *(share)* Add parent-bound delta artifacts([5179018](https://github.com/scbrown/quipu/commit/5179018fbbc6c8812eae004fe6be1e690609f80c))
 
 ### Changed
 
@@ -363,19 +360,19 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
-- *(conformance)* Publish 81 query evaluation passes [.1]([1a6e4d7](https://github.com/scbrown/quipu/commit/1a6e4d7989ee4b7e2f3440d5cee2bffcf6ac95dd))
-- *(conformance)* Publish 96 query evaluation passes [.1]([2d52b45](https://github.com/scbrown/quipu/commit/2d52b45d5c429f2028910b370c76c26a1bdfb734))
-- *(conformance)* Publish 104 query evaluation passes [.1]([5331256](https://github.com/scbrown/quipu/commit/53312569f1d437412b4d3fc055b399fae2e4e348))
-- Tell sharing and federation as one primitive [.1]([312f48a](https://github.com/scbrown/quipu/commit/312f48aa3576b1c63286a6c5ecd1740e4e270023))
-- *(share)* Publish unified artifact contract (.5,.1)([a5a8444](https://github.com/scbrown/quipu/commit/a5a8444fd29fad8205ecfdd42a9223cfe737ec5c))
+- *(conformance)* Publish 81 query evaluation passes([1a6e4d7](https://github.com/scbrown/quipu/commit/1a6e4d7989ee4b7e2f3440d5cee2bffcf6ac95dd))
+- *(conformance)* Publish 96 query evaluation passes([2d52b45](https://github.com/scbrown/quipu/commit/2d52b45d5c429f2028910b370c76c26a1bdfb734))
+- *(conformance)* Publish 104 query evaluation passes([5331256](https://github.com/scbrown/quipu/commit/53312569f1d437412b4d3fc055b399fae2e4e348))
+- Tell sharing and federation as one primitive([312f48a](https://github.com/scbrown/quipu/commit/312f48aa3576b1c63286a6c5ecd1740e4e270023))
+- *(share)* Publish unified artifact contract([a5a8444](https://github.com/scbrown/quipu/commit/a5a8444fd29fad8205ecfdd42a9223cfe737ec5c))
 
 ### Fixed
 
-- *(sparql)* Support feature-unified pattern enums (.1)([c558b8e](https://github.com/scbrown/quipu/commit/c558b8ecddd13d00649a24698b6f7660b4c7d116))
+- *(sparql)* Support feature-unified pattern enums([c558b8e](https://github.com/scbrown/quipu/commit/c558b8ecddd13d00649a24698b6f7660b4c7d116))
 
 ### Testing
 
-- *(conformance)* Compare CONSTRUCT RDF graphs (.1)([093d107](https://github.com/scbrown/quipu/commit/093d107622bea57b78109a579e500b5ce193db02))
+- *(conformance)* Compare CONSTRUCT RDF graphs([093d107](https://github.com/scbrown/quipu/commit/093d107622bea57b78109a579e500b5ce193db02))
 
 ### Bench
 

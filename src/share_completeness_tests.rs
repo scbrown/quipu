@@ -1,6 +1,59 @@
 use super::*;
 use crate::Store;
 
+/// Every table name a `CREATE TABLE` in the SOURCE creates, test sources aside.
+///
+/// Finds a table wherever it is declared — `schema.rs`, `store/migrate.rs`, or a
+/// feature module — and, unlike `sqlite_master` on a fresh store, finds one that
+/// is created LAZILY on a code path no fixture walks.
+fn tables_created_in_source() -> std::collections::BTreeSet<String> {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut found = std::collections::BTreeSet::new();
+    let mut stack = vec![src];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("read src") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            // Test sources re-declare tables in fixtures (and declare throwaways
+            // like `t`), which are not store schema.
+            if path.to_string_lossy().contains("test") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read source");
+            for line in text.lines() {
+                let trimmed = line.trim_start();
+                if trimmed.starts_with("//") || trimmed.starts_with("--") {
+                    continue;
+                }
+                let lower = line.to_ascii_lowercase();
+                let Some(at) = lower.find("create table") else {
+                    continue;
+                };
+                let rest = line[at + "create table".len()..].trim_start();
+                let rest = rest
+                    .strip_prefix("IF NOT EXISTS")
+                    .or_else(|| rest.strip_prefix("if not exists"))
+                    .unwrap_or(rest)
+                    .trim_start();
+                let table: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !table.is_empty() {
+                    found.insert(table);
+                }
+            }
+        }
+    }
+    found
+}
+
 /// Every table a real store creates must be classified.
 ///
 /// THIS IS THE CHECK A ROUND-TRIP CANNOT DO. A round-trip proves that what you
@@ -48,13 +101,23 @@ fn every_table_a_real_store_creates_is_classified() {
     );
 }
 
-/// The reverse direction: nothing declared that no store creates.
+/// The reverse direction: nothing declared that nothing creates.
 ///
 /// A stale entry is not harmless. It makes the list look more complete than it
 /// is, and a reader checking "is X handled?" gets a yes for a table that no
 /// longer exists — while the table that replaced it may be undeclared.
+///
+/// ⚠️ "Creates" means a FRESH STORE **or** anywhere in the source, and the union
+/// is load-bearing rather than belt-and-braces. Checking a fresh store alone —
+/// which this test did until 2026-09-11 — makes a LAZILY created table look
+/// stale, because a fresh store genuinely does not have one. Paired with the
+/// forward audit, which cannot SEE a lazy table, that did not merely leave a
+/// gap: the forward test never asked for `pack_loads` to be declared and this
+/// one REFUSED it when it was, so the correct state was unreachable and the
+/// only stable configuration was the wrong one (aegis-9f899e, measured — the
+/// declaration failed exactly here).
 #[test]
-fn nothing_is_declared_that_a_real_store_does_not_create() {
+fn nothing_is_declared_that_nothing_creates() {
     let store = Store::open_in_memory().unwrap();
     let mut stmt = store
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -64,17 +127,18 @@ fn nothing_is_declared_that_a_real_store_does_not_create() {
         .unwrap()
         .map(std::result::Result::unwrap)
         .collect();
+    let in_source = tables_created_in_source();
 
     let stale: Vec<&str> = DECLARED
         .iter()
         .map(|(name, _)| *name)
-        .filter(|name| !live.contains(*name))
+        .filter(|name| !live.contains(*name) && !in_source.contains(*name))
         .collect();
     assert!(
         stale.is_empty(),
-        "declared table(s) {stale:?} are not created by a real store. Either the \
-         name is wrong or the table is gone; a stale entry makes this list read \
-         as more complete than it is."
+        "declared table(s) {stale:?} are created neither by a fresh store nor \
+         anywhere in the source. Either the name is wrong or the table is gone; \
+         a stale entry makes this list read as more complete than it is."
     );
 }
 
@@ -129,4 +193,55 @@ fn carried_is_content_and_log_only() {
             "{name} is carried but is neither Content nor Log"
         );
     }
+}
+
+/// The live-schema audit above cannot see a table that is created LAZILY, and
+/// this is the test that can.
+///
+/// `every_table_a_real_store_creates_is_classified` opens a store and asks
+/// `sqlite_master`. That is the right instrument for anything schema init or a
+/// migration creates — and it is structurally blind to a table created later,
+/// on a code path the fixture never walks, because such a table is absent from
+/// the fixture and from `DECLARED` at the same time and so compares equal.
+///
+/// `pack_loads` is exactly that table. `pack_load.rs` creates it in the
+/// DESTINATION store when a pack is loaded, so a fresh store has 24 tables and
+/// no `pack_loads` while any store that has ever loaded a pack has 25 — and it
+/// went undeclared, silently, under a passing audit whose stated purpose was to
+/// catch precisely this (aegis-9f899e, measured 2026-09-11).
+///
+/// So this scans the SOURCE for every `CREATE TABLE`, which finds a table
+/// wherever it is created and regardless of whether any fixture creates it. The
+/// two tests are complements and neither is redundant: the source scan cannot
+/// see a table a dependency creates, and the live audit cannot see a lazy one.
+#[test]
+fn every_table_created_anywhere_in_the_source_is_classified() {
+    // Lives in the pack ARTIFACT, not in a store — `pack.rs` writes it into the
+    // .qpack.db file itself. A store round-trip must never carry it, so it is
+    // correctly absent from DECLARED rather than missing from it.
+    const NOT_A_STORE_TABLE: &[&str] = &["pack_manifest"];
+
+    let found = tables_created_in_source();
+
+    // ANTI-VACUITY: a scan that found nothing — a moved directory, a changed
+    // extension — would pass the loop below while auditing nothing at all.
+    assert!(
+        found.len() >= 20,
+        "expected to find the schema in the source, found {} table(s): {found:?}",
+        found.len()
+    );
+
+    let undeclared: Vec<&String> = found
+        .iter()
+        .filter(|name| !NOT_A_STORE_TABLE.contains(&name.as_str()))
+        .filter(|name| disposition(name).is_none())
+        .collect();
+    assert!(
+        undeclared.is_empty(),
+        "table(s) {undeclared:?} are created somewhere in the source and are \
+         declared NOWHERE. A reconstruction silently drops them. If a table is \
+         created lazily it will NOT appear in a fresh store, so the live-schema \
+         audit cannot catch it — that is why this test exists (aegis-9f899e). \
+         Classify each in `DECLARED`, with the reason beside it when Excluded."
+    );
 }

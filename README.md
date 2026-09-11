@@ -76,9 +76,9 @@ queries the page will show you. It takes any Quipu pack, not just this one.
 with the closed-vocabulary gate still enforcing what the sender's shapes allow. The views
 update as you go, and you can take the result with you: the edited store exports as a
 genuine `.qpack.tar.gz`, built by the same `share_payload` the CLI uses and declaring the
-pack it came from as its parent, so `quipu import` will take it back — extract it first
-and import the *directory*, since `quipu import <archive>` verifies into a throwaway
-in-memory store and ignores `--db`. Or download
+pack it came from as its parent. Import it directly with
+`quipu import <archive> --db your.db` to stage it against your database's loaded shapes;
+promotion is a separate step. Without `--db`, archive verification stays in memory. Or download
 `export.nt` and `diff` it — it is line-oriented and canonically ordered, so a change is a
 reviewable diff.
 
@@ -174,7 +174,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 **🧠 Reasoning Engine**
 
-- **Datalog over EAVT** — forward-chaining rules in Turtle DSL, evaluated by `datafrog` with semi-naive fixpoint. Rules are parsed and stratified; evaluation of negated body atoms is not yet implemented (the evaluator rejects `not` rules). Derived facts are first-class triples with provenance.
+- **Datalog over EAVT** — forward-chaining rules in Turtle DSL, evaluated by `datafrog` with semi-naive fixpoint. Supports stratified negation-as-failure; variables in negated atoms must be bound by positive atoms, and negation cycles are rejected. Derived facts are first-class triples with provenance.
 - **Reactive evaluation** — `TransactObserver` re-runs affected rules on every write. Delta-aware: only changed predicates trigger re-evaluation. Behind the non-default `reactive-reasoner` feature; `reason --reactive` errors without it.
 - **Counterfactual queries** — `Store::speculate()` forks a hypothetical view via SQLite SAVEPOINT. Answer "what if we remove X?" without mutation.
 - **Impact analysis** — BFS walk over entity edges with configurable depth and predicate filters. CLI (`quipu impact`), REST (`POST /impact`), and MCP tool.
@@ -293,7 +293,7 @@ quipu reason --rules rules.ttl --db ops.db
 
 The reasoner adds forward-chaining inference over the EAVT fact log:
 
-- **Datalog rule engine** — rules written in Turtle DSL, evaluated with semi-naive `datafrog`. Negation is parsed and stratified, but evaluation of negated body atoms is not yet implemented (the evaluator rejects `not` rules). Derived facts written back via `Store::transact()` with full provenance.
+- **Datalog rule engine** — rules written in Turtle DSL, evaluated with semi-naive `datafrog`. Supports stratified negation-as-failure over materialized facts, including derived predicates from lower strata; unsafe negation and negation cycles are rejected. Derived facts written back via `Store::transact()` with full provenance.
 - **Reactive evaluation** — `TransactObserver` keeps derived facts fresh as base facts change. Delta-aware: only affected rules re-run. Optional `reactive-reasoner` feature.
 - **Counterfactual queries** — `Store::speculate()` forks a view (SQLite SAVEPOINT) to answer "what if?" without mutation.
 - **Impact analysis** — BFS walk over entity edges with configurable hop depth and predicate filters. Available as CLI, REST endpoint (`POST /impact`), and MCP tool.
@@ -469,7 +469,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Context pipeline | ✅ | Text search + link expansion |
 | **Reasoner** | | |
 | Impact analysis (BFS) | ✅ | CLI, REST, MCP tool |
-| Datalog rule engine (datafrog) | ✅ | Turtle DSL; stratification present, negated-atom evaluation not yet implemented (evaluator rejects `not` rules) |
+| Datalog rule engine (datafrog) | ✅ | Turtle DSL; stratified negation-as-failure with safe variable binding; negation cycles rejected |
 | Reactive evaluation | ✅ | TransactObserver, delta-aware. Optional `reactive-reasoner` feature; `reason --reactive` errors without it |
 | Counterfactual queries | ✅ | `speculate()` via SQLite SAVEPOINT |
 | Incremental truth maintenance | 🔜 | Planned (Phase 5) |

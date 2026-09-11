@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.3.42"
+version = "0.4.0"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -218,6 +218,7 @@ unnested_or_patterns = "warn"
 unused_self = "warn"
 
 [dev-dependencies]
+syn = { version = "2", features = ["full", "visit"] }
 tempfile = "3"
 # Dev-only: the label-lattice homomorphism proptest (quipu #66). Already in the
 # lock file transitively, so this pulls no new supply chain and nothing new

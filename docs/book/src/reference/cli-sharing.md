@@ -101,8 +101,11 @@ quipu import delta <parent-share> <delta-share> [--actor <id>]
 
 Verifies the manifest and payload hashes, then stages a local directory in its
 selected store. Archives and URLs are fetched under fixed size limits and
-materialized in a fresh in-memory store, so no downloaded artifact or database
-is left behind. **Import never touches ROOT without promotion.** A hash mismatch
+materialized in a fresh in-memory store by default, so no downloaded artifact
+or database is left behind. With an explicit `--db <path>`, archives and URLs
+stage in that database using its loaded shapes and registered identities, just
+like a directory. Carried shapes are not automatically adopted: a receiver
+without a matching local vocabulary still quarantines the typed data. **Import never touches ROOT without promotion.** A hash mismatch
 is refused outright:
 
 ```text
@@ -111,9 +114,9 @@ share graph hash mismatch: manifest=… actual=…
 
 | Flag | Effect |
 |---|---|
-| `--source <uri>` | record where the share came from; defaults to the directory path |
+| `--source <uri>` | record where the share came from; defaults to the directory, archive path, or URL |
 | `--actor <id>` | attribute the import |
-| `--db <path>` | store file |
+| `--db <path>` | stage in this store, including archive and URL imports |
 
 `import delta` verifies the full parent and the delta's lineage, hashes and
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared

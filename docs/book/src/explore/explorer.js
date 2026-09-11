@@ -695,9 +695,8 @@ async function downloadPack() {
     download(`quipu-edited-${m.share_id.slice(7, 19)}.qpack.tar.gz`,
       new Blob([bytes], { type: "application/gzip" }));
     editNote(`Downloaded ${fmt(bytes.byteLength)} bytes. `
-      + "Verify it locally: `tar -xzf <file> -C dir && quipu import dir --db your.db` "
-      + "(a DIRECTORY — `quipu import <archive>` verifies into a throwaway in-memory "
-      + "store and ignores --db).");
+      + "Stage it locally: `quipu import <file> --db your.db` "
+      + "(load the matching shapes in your database first; promotion is separate).");
   } catch (err) { editNote(err.message, true); }
 }
 

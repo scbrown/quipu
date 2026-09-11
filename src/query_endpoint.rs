@@ -334,7 +334,7 @@ async fn query_core(
                     body["truncated"] = json!(true);
                 }
                 return Ok(super::query_usage::annotate(
-                    axum::Json(body).into_response(),
+                    axum::Json(super::input_fields::annotate_query(&input, body)).into_response(),
                     query_shape,
                     json_rows.len(),
                 ));
@@ -369,6 +369,7 @@ async fn query_core(
                     // this, one Accept header reopens the exact silence the marker
                     // closes on the bespoke shape — for SELECT as much as for ASK.
                     let mut headers = HeaderMap::new();
+                    super::input_fields::query_header(&input, &mut headers);
                     if let Ok(ct) = axum::http::HeaderValue::from_str(content_type) {
                         headers.insert(axum::http::header::CONTENT_TYPE, ct);
                     }
@@ -395,7 +396,7 @@ async fn query_core(
             )?;
             let result_size = quipu::request_usage::json_result_size(&result);
             Ok(super::query_usage::annotate(
-                axum::Json(result).into_response(),
+                axum::Json(super::input_fields::annotate_query(&input, result)).into_response(),
                 query_shape,
                 result_size,
             ))
