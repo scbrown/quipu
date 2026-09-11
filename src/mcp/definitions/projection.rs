@@ -28,6 +28,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "edge_budget": {"type": "integer", "description": "Maximum number of projected edges."},
                     "limit": { "type": "integer", "description": "Max nodes to return, ranked by degree (default: 250, hard max: 2000)" },
                     "type": { "type": "string", "description": "Restrict to nodes of this rdf:type IRI (edges are scoped to the filtered set too)" },
                     "include_episodes": { "type": "boolean", "description": "Include prov:Activity episode nodes (default: false)" }
@@ -40,6 +41,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "timestamp": {"type": "string", "description": "Timestamp used for persisted community assignments."},
                     "algorithm": { "type": "string", "enum": ["stats", "in_degree", "pagerank", "ppr", "components", "louvain", "shortest_path"], "description": "Algorithm to run (default: stats)" },
                     "type": { "type": "string", "description": "Restrict the projection to nodes of this rdf:type IRI" },
                     "predicate": { "type": "string", "description": "Restrict the projection to edges with this predicate IRI" },

@@ -49,7 +49,10 @@ pub(crate) async fn export(
             (None, None) => quipu::export_rdf_subset(&store, format, graph)?,
             _ => unreachable!("mutually exclusive export scopes checked above"),
         };
-        Ok(([(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response())
+        let mut response =
+            ([(axum::http::header::CONTENT_TYPE, content_type)], bytes).into_response();
+        super::input_fields::header("quipu_export", &input, response.headers_mut());
+        Ok(response)
     })
     .await
 }
@@ -133,7 +136,11 @@ pub(crate) async fn knot(
         if let Some(work) = work {
             finish_deferred_embed(&store, &work)?;
         }
-        Ok(axum::Json(result))
+        Ok(axum::Json(super::input_fields::annotate(
+            "quipu_knot",
+            &input,
+            result,
+        )))
     })
     .await
 }

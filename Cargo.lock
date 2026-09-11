@@ -4688,6 +4688,7 @@ dependencies = [
  "sparesults",
  "spargebra",
  "strsim",
+ "syn 2.0.117",
  "tar",
  "tempfile",
  "thiserror 2.0.18",

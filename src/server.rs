@@ -32,6 +32,8 @@ mod entity;
 mod graph_store;
 #[path = "server/handle.rs"]
 mod handle;
+#[path = "server/input_fields.rs"]
+mod input_fields;
 #[path = "server/publication.rs"]
 mod publication;
 mod query_endpoint;
