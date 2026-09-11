@@ -203,7 +203,20 @@ class PublishedArtifactsTests(unittest.TestCase):
     """The committed page and badges must match the committed ledgers."""
 
     def test_check_mode_passes_against_what_is_committed(self):
-        code = REPORT.main(["--results-dir", str(RESULTS), "--docs-dir", str(DOCS), "--check"])
+        # This class asserts the PAGE matches the LEDGERS. `--check` also runs
+        # the provenance arm, and since derive-at-merge (aegis-fn3hdn) a branch
+        # legitimately carries ledgers older than its own src changes — main
+        # derives after the merge. Run the PR arm so this test keeps measuring
+        # what it is named for instead of failing on a drift that is now by
+        # design. Provenance has its own tests below, both arms.
+        code = REPORT.main(
+            [
+                "--results-dir", str(RESULTS),
+                "--docs-dir", str(DOCS),
+                "--check",
+                "--pr-base", "origin/main",
+            ]
+        )
         self.assertEqual(code, 0, "run: python3 benchmark/public/conformance_report.py")
 
     def test_the_page_states_the_claim_boundary_and_the_real_numbers(self):
@@ -390,8 +403,18 @@ class LedgerProvenancePrModeTest(unittest.TestCase):
             self.assertEqual(code, 1, messages)
             self.assertIn("theirs.rs", " ".join(messages))
 
-    def test_pr_mode_STILL_fails_when_the_PR_ITSELF_touches_src(self):
-        # wu's condition 3: a PR touching src re-derives, always.
+    def test_pr_mode_is_ADVISORY_when_the_PR_ITSELF_touches_src(self):
+        # SUPERSEDES wu's condition 3 ("a PR touching src re-derives, always"),
+        # per sattler's derive-at-merge ruling (aegis-fn3hdn). A branch cannot
+        # carry a ledger that stays valid: this arm is lenient and the push arm
+        # is strict, so a ledger correct at review time goes stale by MERGE
+        # ORDER and whoever merges second reds main. main now derives its own
+        # ledger after every merge, so the guarantee is produced by
+        # construction rather than by refusing the PR.
+        #
+        # Asserting the MESSAGE, not just exit 0: a test that only checked the
+        # code would keep passing if provenance stopped detecting drift at all,
+        # which is the failure this whole check exists to prevent.
         import contextlib
 
         with contextlib.ExitStack() as stack:
@@ -401,6 +424,24 @@ class LedgerProvenancePrModeTest(unittest.TestCase):
             run("add", "-A")
             run("commit", "-qm", "pr: my own src change")
             code, messages = self._provenance(root, {"quipu_revision": base}, "main")
+            self.assertEqual(code, 0, messages)
+            joined = " ".join(messages)
+            self.assertIn("mine.rs", joined)
+            self.assertIn("advisory", joined.lower())
+
+    def test_STRICT_mode_still_FAILS_when_the_same_src_change_is_on_main(self):
+        # The other half, and the one that must not move: derive-at-merge
+        # relaxes the PR arm ONLY. On push the same drift is still a failure —
+        # that is what holds aegis-1gp76j, and what makes the advisory above
+        # safe rather than a hole.
+        import contextlib
+
+        with contextlib.ExitStack() as stack:
+            root, run, base = self._repo(stack)
+            (root / "src" / "mine.rs").write_text("// v2 — mine\n")
+            run("add", "-A")
+            run("commit", "-qm", "main: a src change")
+            code, messages = self._provenance(root, {"quipu_revision": base})
             self.assertEqual(code, 1, messages)
             self.assertIn("mine.rs", " ".join(messages))
 
@@ -412,3 +453,77 @@ class LedgerProvenancePrModeTest(unittest.TestCase):
             code, messages = self._provenance(root, {"quipu_revision": base}, "no-such-ref")
             self.assertEqual(code, 2, messages)
             self.assertIn("UNVERIFIED", " ".join(messages))
+
+
+class SyntaxSuiteRegressionGateTest(unittest.TestCase):
+    """The FIFTH suite's regression gate — the standing arm for aegis-fn3hdn.
+
+    `sparql11-syntax` had no regression gate at all, because check_regression
+    could not read its ledger: syntax rows key on `test` rather than
+    class/manifest/id, and record `passed: true` rather than `status: "passed"`.
+    That was survivable while nothing auto-committed. With derive-at-merge,
+    whatever main derives is committed and published, so an ungated suite is one
+    a regression ships through in silence.
+
+    sattler's standing condition: regress one suite -> red, no commit. These are
+    that arm, kept as a test rather than as something someone once ran.
+    """
+
+    def _ledger(self):
+        import json
+        return json.loads((RESULTS / "sparql11-syntax.json").read_text())
+
+    def test_the_syntax_ledger_is_readable_by_the_regression_checker(self):
+        # The precondition. If this breaks, the gate below goes VACUOUS rather
+        # than loud, which is the failure mode that let the hole exist.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_regression", str(RESULTS.parent / "check_regression.py")
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        rows = module.load_rows(RESULTS / "sparql11-syntax.json")
+        self.assertGreater(len(rows), 20, "syntax ledger read as nearly empty")
+        self.assertTrue(
+            any(module._passed(row) for row in rows.values()),
+            "no syntax row reads as PASSING — the gate cannot detect a regression",
+        )
+
+    def test_a_regressed_syntax_row_is_CAUGHT(self):
+        import importlib.util, json, tempfile, pathlib
+        spec = importlib.util.spec_from_file_location(
+            "check_regression", str(RESULTS.parent / "check_regression.py")
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        data = self._ledger()
+        flipped = None
+        for row in data["results"]:
+            if row.get("passed") is True:
+                row["passed"] = False
+                flipped = row["test"]
+                break
+        self.assertIsNotNone(flipped, "no passing syntax row to sabotage")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = pathlib.Path(tmp) / "sparql11-syntax.json"
+            candidate.write_text(json.dumps(data))
+            code = module.main(
+                ["--baseline", str(RESULTS / "sparql11-syntax.json"),
+                 "--candidate", str(candidate)]
+            )
+        self.assertEqual(code, 1, "a regressed syntax row must FAIL the gate")
+
+    def test_an_unchanged_syntax_ledger_PASSES(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "check_regression", str(RESULTS.parent / "check_regression.py")
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        code = module.main(
+            ["--baseline", str(RESULTS / "sparql11-syntax.json"),
+             "--candidate", str(RESULTS / "sparql11-syntax.json")]
+        )
+        self.assertEqual(code, 0)
