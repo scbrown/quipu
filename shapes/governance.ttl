@@ -29,6 +29,17 @@
 @prefix rml:    <http://semweb.mmlab.be/ns/rml#> .
 @prefix rr:     <http://www.w3.org/ns/r2rml#> .
 
+# Schema declarations are resources in their own right. Sanction their standard
+# RDF types without sanctioning instances of every class declared in the data.
+# The write vocabulary continues to come exclusively from loaded shape sets.
+<urn:quipu:shape:OntologyClass> a sh:NodeShape ;
+    sh:targetClass rdfs:Class ;
+    sh:nodeKind sh:IRI .
+
+<urn:quipu:shape:OntologyProperty> a sh:NodeShape ;
+    sh:targetClass rdf:Property ;
+    sh:nodeKind sh:IRI .
+
 # ═══════════════════════════════════════════════════════════════════
 # Class hierarchy — reuse the existing governance types (RDFS subclass,
 # so the parent's shape ALSO applies to the child via inference).

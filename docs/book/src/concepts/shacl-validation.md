@@ -70,6 +70,17 @@ curl -s localhost:3030/shapes -X POST \
 quipu shapes list --db homelab.db
 ```
 
+### Declaring ontology classes and properties
+
+The bundled `governance` shape set sanctions named ontology resources typed
+`rdfs:Class` and `rdf:Property`. Load that set before an adapter imports its
+ontology declarations through `/knot`. These declarations require IRI subjects.
+
+Declaring `<urn:example:Task> a rdfs:Class` in the data graph does **not**
+authorize instances of `urn:example:Task`. The write vocabulary still comes
+from loaded shape sets; add and load a shape targeting the intended class
+before writing its instances. Unknown types continue to be refused.
+
 ## Validation in Action
 
 Try to add a Host without a hostname:
