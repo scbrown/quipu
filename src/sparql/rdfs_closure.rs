@@ -222,8 +222,6 @@ fn load(store: &Store, graphs: &[i64]) -> Result<BTreeSet<Triple>> {
     })?;
     for row in rows {
         let (s, p, raw) = row?;
-        // Only Ref-valued objects participate: a literal cannot be a class, a
-        // property, or the subject of a derived type.
         // EVERY object, literal included: rdfs7 copies the object into its
         // conclusion, so a literal-valued triple is a premise like any other.
         // The rules that may not range over literals guard themselves below.
