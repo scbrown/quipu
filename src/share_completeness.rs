@@ -75,6 +75,19 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // In-flight multipart transfer scaffolding, meaningless off its own host.
     ("snapshot_uploads", Disposition::Excluded),
     ("snapshot_upload_parts", Disposition::Excluded),
+    // THIS STORE's record of which packs IT loaded — `repository`,
+    // `repository_sha`, `loaded_at`. Restored onto a consumer it asserts that
+    // store loaded packs it never loaded, which is `consumers` and
+    // `frozen_packs` again: someone else's local position, replayed as fact.
+    //
+    // It is also the table this audit was BLIND to until 2026-09-11, and the
+    // reason is worth keeping next to the entry: `pack_loads` is created
+    // LAZILY, by the unpack path (`pack_load.rs`), never by schema init. Every
+    // fixture built with `Store::open_in_memory()` therefore has 24 tables and
+    // no `pack_loads`, so the live-schema audit below could not see it, while
+    // any store that has ever loaded a pack has 25. Measured: fresh store 24 /
+    // no pack_loads; after one `quipu unpack`, 25 / present.
+    ("pack_loads", Disposition::Excluded),
 ];
 
 /// What a reconstruction does with `table`, or `None` if it is undeclared.
