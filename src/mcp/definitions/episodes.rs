@@ -14,6 +14,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "allow_orphan": {"type": "boolean", "description": "Allow identity facts to be removed from a still-referenced entity."},
+                    "source": {"type": "string", "description": "Provenance source of the retraction."},
                     "entity": { "type": "string", "description": "IRI of the entity to retract" },
                     "predicate": { "type": "string", "description": "Optional: only retract facts with this predicate IRI" },
                     "value": { "description": "Optional: only retract facts with this object value. A bare string is a literal; use {\"iri\": \"...\"} for a reference, or {\"int\"|\"float\"|\"bool\": ...}. With entity + predicate this pins a single triple." },
@@ -29,6 +31,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "source": {"type": "string", "description": "Provenance source of the update."},
                     "entity": { "type": "string", "description": "IRI of the entity (must exist)" },
                     "predicate": { "type": "string", "description": "Predicate IRI to set (may be new)" },
                     "value": { "description": "New object value. A bare string is a literal; use {\"iri\": \"...\"} for an edge, or {\"int\"|\"float\"|\"bool\": ...} / {\"value\", \"lang\"|\"datatype\"}. A bare string aimed at an IRI-valued predicate is refused loudly." },
@@ -44,6 +47,9 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "episode_id": {"type": "string", "description": "Alias for episode."},
+                    "name": {"type": "string", "description": "Alias for episode."},
+                    "orphan_policy": {"type": "string", "description": "Alias for on_orphan."},
                     "episode": { "type": "string", "description": "Episode name/identifier to retract (aliases: episode_id, name)" },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the retraction" },
                     "actor": { "type": "string", "description": "Who is performing the retraction" },
@@ -75,11 +81,13 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "graph": {"type": "string", "description": "Destination graph for the episode."},
+                    "shapes": {"type": "string", "description": "Optional SHACL validation shapes in Turtle."},
+                    "replace_snapshot": {"type": "boolean", "description": "Replace facts previously asserted by this episode."},
                     "name": { "type": "string", "description": "Episode name/identifier" },
                     "episode_body": { "type": "string", "description": "Natural language description of the knowledge" },
                     "source": { "type": "string", "description": "Who/what produced this episode" },
                     "group_id": { "type": "string", "description": "Knowledge graph group (e.g. aegis-ontology)" },
-                    "timestamp": { "type": "string", "description": "ISO-8601 timestamp for the assertion" },
                     "nodes": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "type": { "type": "string" }, "description": { "type": "string" }, "properties": { "type": "object" } }, "required": ["name"] }, "description": "Entity nodes to create" },
                     "edges": { "type": "array", "items": { "type": "object", "properties": { "source": { "type": "string" }, "target": { "type": "string" }, "relation": { "type": "string" } }, "required": ["source", "target", "relation"] }, "description": "Relationship edges between nodes" }
                 },
