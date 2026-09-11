@@ -75,15 +75,15 @@ class PrivatePolicyTest(unittest.TestCase):
         self.assertNotIn("SECOND_PRIVATE_RULE", result.stdout + result.stderr)
 
     def test_empty_truncated_and_partial_catalogues_refuse_without_output(self):
-        for document in (
+        for index, document in enumerate((
             {"count": 0, "rows": [], "truncated": False},
             {"count": 1, "rows": Authority.document["rows"], "truncated": True},
             {"count": 2, "rows": Authority.document["rows"], "truncated": False},
             {"count": 1, "rows": [{"iri": "urn:policy:one", "label": "private"}], "truncated": False},
-        ):
+        )):
             with self.subTest(document=document):
                 Authority.document = document
-                result, output = self.run_projection()
+                result, output = self.run_projection(f"refused-{index}.ttl")
                 self.assertEqual(result.returncode, 2)
                 self.assertFalse(output.exists())
 
