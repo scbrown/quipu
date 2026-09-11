@@ -335,6 +335,46 @@ are stated here rather than left to be inferred from careful wording.
 
 ---
 
+## Producing the repository release share
+
+The repository release producer runs on a trusted host that can reach the live
+identifier-policy authority. Configure `QUIPU_POLICY_SERVER` there; use
+`QUIPU_POLICY_TOKEN_FILE` when authentication is required. Keep both the authority
+configuration and catalogue on that host. A missing, unreachable, empty,
+truncated, or malformed catalogue refuses production. There is no fixture or
+internal-destination fallback for a public release.
+
+`just contributor pack <output>` uses this same boundary. The producer projects
+policy into a temporary copy of the index, scrubs the outward share, and proves
+its import into a fresh receiver before making the output directory available.
+The source index retains no policy projection. Failure leaves no share output.
+
+For a release, check out the exact release tag in a clean source clone and use
+its checksum-verified native binary. On the trusted host:
+
+```sh
+bash scripts/publish-repository-share.sh --prepare "$TAG" \
+  "$QUIPU_BIN" "$BOBBIN_BIN" "$SOURCE_REPO" "$NEW_OUTPUT"
+```
+
+`--prepare` creates the text qpack archive, checksum and provenance receipt
+locally. `--publish` additionally uploads those three explicit files to the
+existing release. It refuses to replace existing assets. The receipt binds the
+archive to the release tag, source revision and native binary hash; it includes
+no policy content or authority address.
+
+The hosted release job uploads native binaries first. A separately managed
+trusted-host trigger must then run the producer. The hosted job waits for its
+three assets and verifies the receipt against its own source and binary. It
+fails if the producer cannot deliver within the deadline. Provision and prove
+that trigger before enabling this workflow; a local `--prepare` pass alone does
+not establish release automation.
+
+These receipt checks establish byte and build correspondence under the release
+uploader's authority. They are not a cryptographic producer attestation and do
+not upgrade an import from `transport` to `attested`; those tiers are described
+below. Neither the catalogue nor the producer's private logs are release assets.
+
 ## What an import proves about its producer
 
 Hash verification proves a share is **intact**. It says nothing about **who made it**. Those are

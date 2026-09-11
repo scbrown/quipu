@@ -596,51 +596,50 @@ jobs:
           "${BIN}/quipu" knot "${TMP}/t.ttl" --db "${TMP}/smoke.db"
           "${BIN}/quipu" stats --db "${TMP}/smoke.db"
 
-      - name: Build the repository share artifact
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
-          TARGET: ${{ matrix.target }}
-        run: |
-          set -euo pipefail
-          BIN="target/${TARGET}/release/quipu"
-          TMP="$(mktemp -d)"
-          SHARE="${TMP}/repository-share"
-          PACK="dist/quipu-${TAG}-repository.qpack.tar.gz"
-          BOBBIN_TAG="v0.13.0"
-          BOBBIN_ARCHIVE="bobbin-${BOBBIN_TAG}-x86_64-unknown-linux-gnu.tar.gz"
-          gh release download "${BOBBIN_TAG}" --repo scbrown/bobbin \
-            --pattern "${BOBBIN_ARCHIVE}" --dir "${TMP}"
-          tar -C "${TMP}" -xzf "${TMP}/${BOBBIN_ARCHIVE}"
-          BOBBIN_DIR="${TMP}/bobbin-${BOBBIN_TAG}-x86_64-unknown-linux-gnu"
-          export LD_LIBRARY_PATH="${BOBBIN_DIR}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-          scripts/build-repository-share.sh \
-            "${BIN}" "${BOBBIN_DIR}/bobbin" "$GITHUB_WORKSPACE" \
-            "${SHARE}" "$GITHUB_SHA"
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
-            --numeric-owner -C "${SHARE}" -czf "${PACK}" .
-          "${BIN}" import "${PACK}"
-          ( cd dist && sha256sum "$(basename "${PACK}")" > "$(basename "${PACK}").sha256" )
-
-      - name: Upload to the GitHub release
+      - name: Upload native binaries to the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
           NAME: ${{ steps.package.outputs.name }}
         run: |
           set -euo pipefail
-          # Fail loudly rather than silently producing an artifact nobody can
-          # find: if the tag has no release, something upstream went wrong.
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            echo "::error::no GitHub release found for tag ${TAG}"
+          gh release view "$TAG" >/dev/null
+          gh release upload "$TAG" \
+            "dist/${NAME}.tar.gz" "dist/${NAME}.tar.gz.sha256" --clobber
+
+      # The trusted producer observes the native assets, obtains live policy,
+      # and uploads only its verified share. Hosted runners never receive the
+      # private catalogue or authority configuration.
+      - name: Require the trusted repository share
+        timeout-minutes: 45
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          TMP="$(mktemp -d)"
+          PACK="quipu-${TAG}-repository.qpack.tar.gz"
+          complete=false
+          for attempt in $(seq 1 80); do
+            if gh release download "$TAG" --repo scbrown/quipu --dir "$TMP" --clobber \
+                --pattern "$PACK" --pattern "$PACK.sha256" \
+                --pattern "$PACK.provenance.json" &&
+                test -s "$TMP/$PACK" && test -s "$TMP/$PACK.sha256" &&
+                test -s "$TMP/$PACK.provenance.json"; then
+              complete=true
+              break
+            fi
+            sleep 30
+          done
+          if [[ "$complete" != true ]]; then
+            echo '::error::trusted repository share was not published before the deadline'
             exit 1
           fi
-          gh release upload "$TAG" \
-            "dist/${NAME}.tar.gz" \
-            "dist/${NAME}.tar.gz.sha256" \
-            "dist/quipu-${TAG}-repository.qpack.tar.gz" \
-            "dist/quipu-${TAG}-repository.qpack.tar.gz.sha256" \
-            --clobber
+          BIN="target/${TARGET}/release/quipu"
+          python3 scripts/verify-repository-share-provenance.py \
+            "$TMP/$PACK" "$BIN" "$(git rev-parse HEAD)" "$TAG"
+          "$BIN" import "$TMP/$PACK" --db "$TMP/receiver.db"
 
   # THE REAL CRATES LANE (aegis-pb4rzi). It lives HERE, not in crates.yml.
   #
