@@ -122,6 +122,7 @@ pub fn pack_turtle(
             "embedding_dimension": store.embedding_config().dimension,
         })
         .to_string(),
+        destination: Some(opts.destination),
     };
     write(
         "manifest.json",

@@ -1147,3 +1147,182 @@ fn a_refused_turtle_bundle_leaves_no_directory_behind() {
         "a refused turtle bundle left a partial directory at {out:?}"
     );
 }
+
+/// Every `canonical_content` caller either SCRUBS or is classified here.
+///
+/// wu's structural objection to the two fixes above (#222): three producers,
+/// three separate accidents, and nothing stopping a fourth. Both fixes were
+/// correct and neither made the next one safe — the scrub is something an
+/// author has to remember, and the two that forgot were written by people who
+/// knew about it.
+///
+/// So this is the mechanism rather than more vigilance: a new caller of
+/// `canonical_content` fails this test until someone decides, in writing,
+/// which group it is in. Same shape as the DECLARED table audit in
+/// `share_completeness` — the list is the decision, and the test is what makes
+/// skipping the decision impossible.
+#[test]
+fn every_canonical_content_caller_scrubs_or_is_classified() {
+    /// Callers that legitimately do NOT scrub, each with the reason.
+    ///
+    /// `verify` recomputes a pack's hash to compare it with the stored one.
+    /// Scrubbing there would change the canonical text, so the recomputed hash
+    /// could never match a hash a producer took over unscrubbed content. It
+    /// reads what IS in a pack; the producers decide what is allowed in.
+    const NOT_A_PRODUCER: &[&str] = &[
+        "verify",
+        // The definition matches its own name. Named here rather than filtered
+        // silently, so the list stays a record of every decision rather than of
+        // the interesting ones.
+        "canonical_content",
+    ];
+
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut callers: std::collections::BTreeMap<String, bool> = std::collections::BTreeMap::new();
+    let mut stack = vec![src];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("read src") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") || path.to_string_lossy().contains("test")
+            {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read source");
+            // Split on top-level `fn` boundaries. Approximate, and adequate:
+            // the anti-vacuity assertions below fail loudly if the split stops
+            // finding the functions we know are there.
+            let mut current: Option<String> = None;
+            let mut body = String::new();
+            let flush =
+                |name: &Option<String>,
+                 body: &str,
+                 out: &mut std::collections::BTreeMap<String, bool>| {
+                    if let Some(n) = name
+                        .as_ref()
+                        .filter(|_| body.contains("canonical_content("))
+                    {
+                        let scrubs = body.contains("enforce_pack_destination(");
+                        *out.entry(n.clone()).or_insert(false) |= scrubs;
+                    }
+                };
+            for line in text.lines() {
+                if let Some(rest) = line
+                    .strip_prefix("pub fn ")
+                    .or_else(|| line.strip_prefix("fn "))
+                    .or_else(|| line.strip_prefix("pub(crate) fn "))
+                {
+                    flush(&current, &body, &mut callers);
+                    body.clear();
+                    current = Some(
+                        rest.chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                            .collect(),
+                    );
+                }
+                body.push_str(line);
+                body.push('\n');
+            }
+            flush(&current, &body, &mut callers);
+        }
+    }
+
+    // ANTI-VACUITY. A scan that found nothing — a moved file, a renamed
+    // function, a broken split — would pass the loop below while auditing
+    // nothing, which is the exact failure this test exists to prevent one
+    // level down.
+    assert!(
+        callers.len() >= 3,
+        "expected at least the three known callers, found {}: {callers:?}",
+        callers.len()
+    );
+    for known in ["pack_into", "pack_turtle", "verify"] {
+        assert!(
+            callers.contains_key(known),
+            "the scan did not find `{known}`, which calls canonical_content — \
+             the function-splitting heuristic has stopped working and this \
+             audit is not auditing. Found: {callers:?}"
+        );
+    }
+
+    let unscrubbed: Vec<&String> = callers
+        .iter()
+        .filter(|(name, scrubs)| !**scrubs && !NOT_A_PRODUCER.contains(&name.as_str()))
+        .map(|(name, _)| name)
+        .collect();
+    assert!(
+        unscrubbed.is_empty(),
+        "canonical_content caller(s) {unscrubbed:?} neither call \
+         `enforce_pack_destination` nor appear in NOT_A_PRODUCER. A pack \
+         producer that skips the scrub ships internal identifiers outward — \
+         that has happened twice already (.qpack, then the turtle bundle). \
+         Either call the scrub, or add the name to NOT_A_PRODUCER with the \
+         reason it is not a producer (aegis-9f899e)."
+    );
+}
+
+#[test]
+fn the_manifest_records_the_destination_so_a_consumer_can_check_it() {
+    // wu on #222: contract 2 says the published pack ASSERTS the scrub, but a
+    // consumer could not check that from the artifact — an internal pack was
+    // indistinguishable from a scrubbed one. The producer enforcing a rule and
+    // the artifact declaring it are two different guarantees, and only the
+    // second survives the trip.
+    let store = producer(0);
+
+    let outward = tmp("manifest-outward");
+    let m = pack(&store, "urn:g:pack", &outward, &PackOptions::default(), TS).unwrap();
+    assert_eq!(
+        m.destination,
+        Some(crate::share_scrub::ShareDestination::Outward)
+    );
+    // Read it BACK off the file — an in-memory value proves the struct, not
+    // the artifact, and the artifact is what a consumer gets.
+    assert_eq!(
+        read_manifest(&outward).unwrap().destination,
+        Some(crate::share_scrub::ShareDestination::Outward)
+    );
+
+    let internal = tmp("manifest-internal");
+    let opts = PackOptions {
+        destination: crate::share_scrub::ShareDestination::Internal,
+        ..Default::default()
+    };
+    pack(&store, "urn:g:pack", &internal, &opts, TS).unwrap();
+    assert_eq!(
+        read_manifest(&internal).unwrap().destination,
+        Some(crate::share_scrub::ShareDestination::Internal),
+        "an internal pack must be DISTINGUISHABLE from a scrubbed one"
+    );
+}
+
+#[test]
+fn a_pack_predating_the_destination_column_reads_as_unknown_not_as_scrubbed() {
+    // The back-compat arm, and the direction matters. A pack cut before
+    // aegis-9f899e ran NO scrub at all, so defaulting it to `Outward` would
+    // assert a guarantee nothing provided — the reassuring reading of missing
+    // data. `None` means UNKNOWN and a consumer must not read it as clean.
+    let store = producer(0);
+    let out = tmp("manifest-legacy");
+    pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
+
+    // Make it look like a pre-9f899e pack.
+    {
+        let conn = rusqlite::Connection::open(&out).unwrap();
+        conn.execute_batch("ALTER TABLE pack_manifest DROP COLUMN destination;")
+            .expect("drop the column to simulate an older pack");
+    }
+
+    let m = read_manifest(&out).expect("an older pack must still be READABLE");
+    assert_eq!(
+        m.destination, None,
+        "a pack with no destination column must read as UNKNOWN"
+    );
+    // The rest of the manifest must survive — a back-compat path that returns
+    // None by failing the whole read would pass the assertion above.
+    assert_eq!(m.source_graph, "urn:g:pack");
+    assert!(m.content_hash.starts_with("sha256:"));
+}
