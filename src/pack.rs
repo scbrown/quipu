@@ -87,6 +87,11 @@ pub struct PackOptions {
     pub repository: Option<String>,
     /// Git commit whose repository graph is carried by the pack.
     pub repository_sha: Option<String>,
+    /// Where this pack is bound, and therefore whether the outward identifier
+    /// scrub runs. Defaults to [`ShareDestination::Outward`], so a caller that
+    /// names no destination gets the scrub — the same default, and for the same
+    /// reason, as a share (`share_scrub.rs`).
+    pub destination: crate::share_scrub::ShareDestination,
     /// Embedding model identifier used to produce repository knowledge.
     pub model_id: Option<String>,
     /// Version of the embedding model used to produce repository knowledge.
@@ -371,6 +376,23 @@ fn pack_into(
     }
 
     let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
+
+    // THE OUTWARD SCRUB. `canonical` is exactly what this pack carries —
+    // triples, shapes, queries, labels — so scrubbing it scrubs the payload,
+    // and doing it HERE covers `pack_to_bytes` (the WASM producer) as well as
+    // `pack`, rather than only the path that happens to write a file.
+    //
+    // This was MISSING until aegis-9f899e: `share()` refuses a block-tier
+    // internal identifier and a pack shipped the same fact verbatim. Two
+    // producers of outward artifacts, one scrubbing and one not — measured by
+    // sabotage, not assumed (`pack_tests.rs`).
+    crate::share_scrub::enforce_destination(
+        store,
+        &std::collections::BTreeMap::from([("pack content".to_string(), canonical.clone())]),
+        opts.destination,
+        "pack",
+    )?;
+
     let hash = content_hash(&canonical);
 
     let facts = store.current_facts_in_graph(store.lookup(graph_iri)?.unwrap_or(0))?;

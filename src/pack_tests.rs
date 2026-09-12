@@ -932,3 +932,136 @@ fn the_turtle_bundle_refuses_an_unknown_graph_and_writes_nothing() {
         "a refused export must not leave a partial bundle"
     );
 }
+
+// --- aegis-9f899e contract 2: the PUBLISHED pack asserts the SCRUB ---
+//
+// sattler's design contract is TWO artifacts with DIFFERENT contracts and a
+// test each: `--full` asserts LOSSLESS (row counts + content hashes across the
+// live tables), the published/default pack asserts the SCRUB (operational
+// tables absent, no internal identifiers). Explicitly: "Do not collapse them
+// into one test over both" — an equivalence test over a shared implementation
+// passes while shipping either wrongly.
+//
+// This is the SCRUB half, and it is written as a SABOTAGE because the contract
+// says so and because the reason is load-bearing: a test over already-clean
+// input cannot detect a leak. It asserts the contaminant is in the SOURCE
+// first, so a pack that omits it for the wrong reason — an empty graph, a
+// pack that carried nothing at all — cannot pass.
+
+/// The block-tier catalogue plus one fact that violates it, in the graph that
+/// gets packed.
+fn producer_with_a_leak(identifier: &str) -> Store {
+    let mut store = producer(0);
+    crate::rdf::ingest_rdf(
+        &mut store,
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+"#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        TS,
+        None,
+        None,
+    )
+    .unwrap();
+    // The leak goes in the PACKED graph, not the default one — a pack only
+    // carries facts from the graph it is told to pack, so a leak anywhere else
+    // would be omitted for a reason that has nothing to do with the scrub.
+    let g = store.lookup("urn:g:pack").unwrap().unwrap();
+    let s = store.intern("http://example.org/leak").unwrap();
+    let p = store.intern("http://example.org/host").unwrap();
+    store
+        .overlay_write(g, Op::Assert, s, p, Value::Str(identifier.into()), TS)
+        .unwrap();
+    store
+}
+
+#[test]
+fn the_published_pack_does_not_carry_an_internal_identifier() {
+    const LEAK: &str = "private.example";
+    let store = producer_with_a_leak(LEAK);
+
+    // ANTI-VACUITY: the contaminant must actually be in the source, in the
+    // graph being packed. Without this the assertion below passes against a
+    // pack that carried nothing.
+    let present = crate::sparql::query(
+        &store,
+        "ASK { GRAPH <urn:g:pack> { <http://example.org/leak> <http://example.org/host> \
+         \"private.example\" } }",
+    )
+    .unwrap();
+    assert!(
+        matches!(present, crate::sparql::QueryResult::Ask(true)),
+        "sabotage did not land — the leak is not in the packed graph, so this \
+         test would prove nothing"
+    );
+
+    let out = tmp("scrub");
+    let result = pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS);
+
+    // Both arms are accepted because the CONTRACT is "the published pack does
+    // not carry it", which refusing and omitting both satisfy. Measured today:
+    // it REFUSES, with the same shape as `share()` — the rule is named, the
+    // identifier is not reprinted, and `--destination internal` is named as the
+    // escape hatch.
+    match result {
+        // Refusing is the correct outcome and the one `share()` already gives
+        // for the same input (share/tests.rs).
+        Err(error) => {
+            let text = error.to_string();
+            assert!(
+                text.contains("private host"),
+                "a refusal must name the RULE that fired, got: {text}"
+            );
+            assert!(
+                !text.contains(LEAK),
+                "the refusal reprinted the identifier it exists to withhold: {text}"
+            );
+        }
+        // Producing a pack is only correct if the identifier is absent from it.
+        Ok(_) => {
+            let bytes = std::fs::read(&out).expect("read the built pack");
+            let found = bytes
+                .windows(LEAK.len())
+                .any(|window| window == LEAK.as_bytes());
+            assert!(
+                !found,
+                "PUBLISHED PACK LEAKS: {LEAK:?} is present verbatim in the pack \
+                 file. `share()` REFUSES this exact input (an outward share runs \
+                 share_scrub::enforce_destination), but pack.rs has no \
+                 destination and never calls the scrub, so the same fact ships. \
+                 aegis-9f899e contract 2."
+            );
+        }
+    }
+}
+
+#[test]
+fn destination_internal_is_a_real_escape_hatch_for_a_pack() {
+    // The refusal above NAMES `--destination internal`. A refusal that names an
+    // escape hatch which does not work is worse than one that names none, so
+    // this is the other half of the pair rather than a nicety — and it is the
+    // arm that would stay green if the flag were wired to nothing, which is why
+    // it asserts the identifier is PRESENT rather than merely that pack said Ok.
+    const LEAK: &str = "private.example";
+    let store = producer_with_a_leak(LEAK);
+    let out = tmp("internal");
+    let opts = PackOptions {
+        destination: crate::share_scrub::ShareDestination::Internal,
+        ..Default::default()
+    };
+    pack(&store, "urn:g:pack", &out, &opts, TS)
+        .expect("an internal-bound pack must not be refused by the outward scrub");
+
+    let bytes = std::fs::read(&out).expect("read the built pack");
+    assert!(
+        bytes.windows(LEAK.len()).any(|w| w == LEAK.as_bytes()),
+        "the internal pack does NOT carry {LEAK:?} — then the outward refusal \
+         proves nothing about the scrub, because the fact never reached the pack \
+         on either setting"
+    );
+}
