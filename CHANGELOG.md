@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-09-12
+
+### Fixed
+
+- *(conformance)* Gate the FIFTH suite, and teach the checker its dialect([1d404f3](https://github.com/scbrown/quipu/commit/1d404f306dfbc64e2669b30edbde4c745b79ca4a))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([826b3b5](https://github.com/scbrown/quipu/commit/826b3b5d7254edfc13016b886f0bdab5fd2fe580))
+- *(conformance)* Re-derive the ledgers and page on this HEAD([3e764ae](https://github.com/scbrown/quipu/commit/3e764ae2002beb055a0f08827fbdb2e6d9e26a1c))
+- *(conformance)* Re-derive on the post-#222 merge HEAD([e04e856](https://github.com/scbrown/quipu/commit/e04e8562afb126f5a952c256500c0b3863f47585))
+
 ## [0.4.1] - 2026-09-11
 
 ### Documentation
