@@ -145,6 +145,19 @@ jobs:
             --quipu "${{ steps.bin.outputs.path }}" \
             --output /tmp/sparql11-syntax.json
 
+      - name: SPARQL 1.1 syntax did not regress
+        # sparql11-syntax was the ONE suite with no regression gate, because
+        # check_regression.py could not read its row shape at all (it keys on
+        # class/manifest/id; syntax rows carry `test`, and record `passed: true`
+        # rather than `status: "passed"`). That was tolerable while nothing
+        # auto-committed. With derive-at-merge it is not: whatever main derives
+        # is committed and published, so an ungated suite is one a regression
+        # ships through silently. aegis-fn3hdn.
+        run: |
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/sparql11-syntax.json \
+            --candidate /tmp/sparql11-syntax.json
+
       # The evaluation runner exits nonzero whenever anything fails, which is
       # every run today. Its ledger is what matters here, so its exit status is
       # deliberately ignored and check_regression makes the call.
