@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-09-12
+
+### Added
+
+- *(pack)* Record the destination in the manifest, and audit every producer([e6307f7](https://github.com/scbrown/quipu/commit/e6307f7a8461db36fc561ba211c7b81393711bd2))
+- *(pack)* --full, a LOSSLESS whole-store pack (9f899e contract 1)([2e94ead](https://github.com/scbrown/quipu/commit/2e94eadf8e932f63ae762f8ef17a5f7420b47ced))
+
+### Fixed
+
+- *(pack)* The published pack never ran the outward identifier scrub([2d7215c](https://github.com/scbrown/quipu/commit/2d7215c70f9596a48c3370ee0461f8e1b9342148))
+- *(pack)* The TURTLE bundle leaked too — scrub every pack producer([76caa02](https://github.com/scbrown/quipu/commit/76caa02b1c0c22847fc8205005ed7663949734c9))
+- *(test)* The anti-vacuity guard counted ASSERTIONS, not retractions([23f350d](https://github.com/scbrown/quipu/commit/23f350d6feab51489fc7c6535d3a8fbfd1c768f8))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers and re-render the page([870a853](https://github.com/scbrown/quipu/commit/870a8538db87b17f55fec82207d6012b808865bb))
+- *(conformance)* Re-derive the ledgers and re-render the page([ff0ed85](https://github.com/scbrown/quipu/commit/ff0ed85530ee401b051261361a955b9dca9c7c3d))
+- *(conformance)* Re-derive on 23f350d, ledgers and page together([e67ae7b](https://github.com/scbrown/quipu/commit/e67ae7b5b36161db4baccc0be1c6a7489742c1c7))
+
 ## [0.4.1] - 2026-09-11
 
 ### Documentation
