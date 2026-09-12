@@ -8,12 +8,16 @@ All notable changes to this project will be documented in this file.
 
 - *(rdfs)* Delete the pre-fix loader comment that contradicts the loader([81dc516](https://github.com/scbrown/quipu/commit/81dc516825d2cce2647a51c18f0df047b4dc3563))
 - *(reasoner)* Describe supported stratified negation([8f90d70](https://github.com/scbrown/quipu/commit/8f90d70ae8e7e92b00b1add9063452b9d91167ef))
+- *(embedding)* The server's /knot DOES embed — this said it did not([f479c7d](https://github.com/scbrown/quipu/commit/f479c7dfd91b2aec49d68ff56f6a97659431c1ff))
 
 ### Fixed
 
 - *(shapes)* Sanction named RDF schema declarations([c2e7a38](https://github.com/scbrown/quipu/commit/c2e7a380238dae9396ca980399a1dd57616e170f))
 - *(share)* A LAZILY created table was undeclared, and the audits made declaring it impossible([d832129](https://github.com/scbrown/quipu/commit/d8321290ee1dab2e38dbd1a71497b45bc3a1a057))
 - *(cli)* Honor explicit database for archive imports([17a3fbd](https://github.com/scbrown/quipu/commit/17a3fbdf8c1411afede1a50b435dd25abbfaf78c))
+- Report ignored fields on tool HTTP requests([689dd96](https://github.com/scbrown/quipu/commit/689dd9698b1b6822dae0af6015cc6b60ff955585))
+- *(conformance)* Derive the ledger at MERGE, not on the branch([7f437ba](https://github.com/scbrown/quipu/commit/7f437ba4900b09f5bb2fc30cf586700afc2d3445))
+- *(conformance)* Gate the FIFTH suite, so derive-at-merge cannot publish a regression([abd9c0b](https://github.com/scbrown/quipu/commit/abd9c0be1446550b2ad9e6abf38d2dd04e04b84d))
 
 ### Miscellaneous
 
@@ -23,6 +27,17 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Re-derive the ledgers on main's HEAD([e31697a](https://github.com/scbrown/quipu/commit/e31697a41eda659d98959b359dc1fd71375a1655))
 - *(conformance)* Refresh ledgers for the documented source revision([419885a](https://github.com/scbrown/quipu/commit/419885a24166c31a4c6d555d6d505c4682de9434))
 - *(conformance)* Refresh ledgers after CLI import fix([d5dad95](https://github.com/scbrown/quipu/commit/d5dad953cf609d1eece21008f51e8b89fee08f36))
+- Release v0.4.1([fbe6f26](https://github.com/scbrown/quipu/commit/fbe6f26c80a30e05b237d15375cc45d19afa2782))
+- *(conformance)* Refresh ledgers after HTTP field reporting([05b377b](https://github.com/scbrown/quipu/commit/05b377b46172e84b51b98c3edbd725f27cd66756))
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([864f11e](https://github.com/scbrown/quipu/commit/864f11e200d2b64dda1c472ad48797d080248b33))
+
+### Testing
+
+- *(conformance)* Make the fn3hdn arms standing tests, not something once run([1045171](https://github.com/scbrown/quipu/commit/104517132a5b3b83b04fe742bbce0e529b866f17))
+
+### Reverted
+
+- Revert derive-at-merge: it cannot push to a protected main([49b9adb](https://github.com/scbrown/quipu/commit/49b9adb37f6ec1e94872211ca223419bb16e610b))
 
 ## [0.4.0] - 2026-09-09
 
