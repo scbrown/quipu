@@ -251,6 +251,41 @@ pub fn content_hash(canonical: &str) -> String {
 }
 
 /// The `pack_manifest` DDL. One row, by construction.
+/// Create `pack_manifest` and write the single row, for every pack producer.
+///
+/// Shared so the published pack and the `--full` pack cannot drift apart on
+/// the manifest schema — the column list appears once. Same reasoning as
+/// `enforce_pack_destination`: the third producer is the one that forgets.
+///
+/// # Errors
+/// Propagates SQLite errors from the create or the insert.
+pub(crate) fn write_manifest(conn: &rusqlite::Connection, manifest: &Manifest) -> Result<()> {
+    conn.execute_batch(MANIFEST_SQL)?;
+    conn.execute(
+        "INSERT OR REPLACE INTO pack_manifest \
+         (id, pack_format, name, version, term_space, content_hash, created_at, \
+          source_graph, producer, counts, destination) \
+         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        rusqlite::params![
+            manifest.pack_format,
+            manifest.name,
+            manifest.version,
+            manifest.term_space,
+            manifest.content_hash,
+            manifest.created_at,
+            manifest.source_graph,
+            manifest.producer,
+            manifest.counts,
+            manifest.destination.map(|d| if d.is_internal() {
+                "internal"
+            } else {
+                "outward"
+            }),
+        ],
+    )?;
+    Ok(())
+}
+
 pub(crate) const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest (
      id           INTEGER PRIMARY KEY CHECK (id = 1),
      pack_format  TEXT NOT NULL,
@@ -559,31 +594,7 @@ fn pack_into(
             // rather than having to trust that the producer ran it (wu, #222).
             destination: Some(opts.destination),
         };
-        out.conn.execute_batch(MANIFEST_SQL)?;
-        out.conn.execute(
-            "INSERT OR REPLACE INTO pack_manifest \
-             (id, pack_format, name, version, term_space, content_hash, created_at, \
-              source_graph, producer, counts, destination) \
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            rusqlite::params![
-                manifest.pack_format,
-                manifest.name,
-                manifest.version,
-                manifest.term_space,
-                manifest.content_hash,
-                manifest.created_at,
-                manifest.source_graph,
-                manifest.producer,
-                manifest.counts,
-                manifest.destination.map(|d| {
-                    if d.is_internal() {
-                        "internal"
-                    } else {
-                        "outward"
-                    }
-                }),
-            ],
-        )?;
+        write_manifest(&out.conn, &manifest)?;
 
         Ok(manifest)
     }

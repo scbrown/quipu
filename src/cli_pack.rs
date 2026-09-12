@@ -39,7 +39,7 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
             eprintln!(
                 "usage: quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] \
              [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]\n       \
-             [--destination internal]\n       \
+             [--destination internal] [--full]\n       \
              repo packs: --repo OWNER/NAME --repo-sha SHA --model-id ID --model-version V\n       \
              quipu pack --verify <file>"
             );
@@ -88,7 +88,19 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
     // rather than a store. Export-only: nothing unpacks it, because its purpose
     // is to be read by something that is not Quipu.
     let turtle = flag_value(args, "--format") == Some("turtle");
-    let packed = if turtle {
+    // `--full` is a DIFFERENT ARTIFACT, not a mode of this one: a lossless
+    // whole-store copy for internal backup, which takes no graph and refuses an
+    // outward destination. Dispatched here rather than folded into `pack` so the
+    // two contracts stay separable (aegis-9f899e).
+    let full = args.iter().any(|a| a == "--full");
+    let packed = if full && turtle {
+        Err(quipu::error::Error::InvalidValue(
+            "pack --full --format turtle: a full pack is a whole-store artifact,              not an interop bundle. Use one or the other."
+                .into(),
+        ))
+    } else if full {
+        quipu::pack_full::pack_full(&store, out, &opts, &chrono_now())
+    } else if turtle {
         quipu::pack::pack_turtle(&store, graph, out, &opts, &chrono_now())
     } else {
         quipu::pack::pack(&store, graph, out, &opts, &chrono_now())
