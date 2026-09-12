@@ -74,6 +74,62 @@ Check that specific tests from each side of the conflict are present and passing
 not verify by count.** If a resolution drops one side's hunk and keeps another's, the total can
 match while the content is wrong — a matching count is precisely what a lost hunk looks like.
 
+### A red conformance ledger during review is EXPECTED — derive ONCE, last
+
+If your PR touches `CODE_PATHS` — `src/` or `benchmark/public/*.py` — the
+**Published results match the ledgers** check will be red until you commit re-derived
+ledgers. Re-deriving is a manual chore:
+
+```bash
+gh workflow run conformance.yml --ref <your-branch>     # ~5 min
+gh run download <run-id> -D /tmp/led
+cp /tmp/led/conformance-ledgers-*/*.json benchmark/public/results/
+python3 benchmark/public/conformance_report.py          # re-render the page
+python3 benchmark/public/conformance_report.py --check   # must be rc=0
+git add benchmark/public/results/ docs/book/src/benchmarks/   # ONE commit, both
+```
+
+**Do it ONCE, after review has converged. Not when the check first goes red.**
+
+A red *required* check invites you to green it immediately, and that instinct is what
+makes this expensive. Every review comment that produces a source change — which is what
+a good review produces — invalidates the ledger again, so greening early costs one full
+derive *per review round* instead of one per PR. Measured on 2026-09-11: a one-line fix to
+a test module, made in response to a correct review finding, staled a ledger that had been
+derived twenty minutes earlier.
+
+Two facts make waiting safe, and you need both:
+
+- **A ledger/docs commit does NOT re-stale the ledger.** So committing the ledgers does not
+  invalidate them, and there is no deadlock — a natural first guess, and a wrong one that
+  sends you hunting a cycle that is not there.
+- **A source change usually DOES.** Derive after the last source change, not after the first.
+
+The check is literally a two-point CONTENT diff between the ledger's stamped revision and
+`HEAD`, restricted to those paths (`conformance_report.py:668`):
+
+```bash
+git diff --name-only <ledger quipu_revision> <head> -- src 'benchmark/public/*.py'
+```
+
+It is not "was there a commit touching `CODE_PATHS`", and the difference is slack you can
+use: a source change made and then **reverted** within the PR leaves that diff EMPTY, so the
+existing ledger still stands and needs no re-derive. Likewise a source file moved and moved
+back. If you are unsure whether you owe a derive, run that diff — it is the same question the
+gate asks, and it answers in a second.
+
+Commit the ledgers **and** the rendered page together. The gate asks for them in two steps
+whose messages read as unrelated failures — `a ledger was NOT derived from the code it
+ships with`, then `published results disagree with the ledgers` — but the published page
+embeds each ledger's provenance stamp, so re-deriving necessarily stales it. They are two
+steps of one chore, and splitting them costs an extra CI round.
+
+Finally, when comparing ledgers by hand, compare the **result field per test id** — never
+whole row objects and never file bytes. `duration_ms` lives inside each result row, so a
+row-level diff reports ~98 differences on `shacl-core` on every run, and a byte-level diff
+makes any two ledger-touching PRs conflict unconditionally. Timing is an observation about
+the machine, not about conformance.
+
 ## Adding New Dependencies
 
 Heavy or optional dependencies MUST be feature-gated:
