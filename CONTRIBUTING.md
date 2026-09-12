@@ -100,12 +100,23 @@ derived twenty minutes earlier.
 
 Two facts make waiting safe, and you need both:
 
-- **A ledger/docs commit does NOT re-stale the ledger.** The provenance check compares the
-  ledger's stamp against the last commit touching `CODE_PATHS`, not against `HEAD`. So
-  committing the ledgers does not invalidate them, and there is no deadlock — a natural
-  first guess, and a wrong one that sends you hunting a cycle that is not there.
-- **A source commit DOES.** That is the whole of the rule: derive after the last source
-  change, not after the first.
+- **A ledger/docs commit does NOT re-stale the ledger.** So committing the ledgers does not
+  invalidate them, and there is no deadlock — a natural first guess, and a wrong one that
+  sends you hunting a cycle that is not there.
+- **A source change usually DOES.** Derive after the last source change, not after the first.
+
+The check is literally a two-point CONTENT diff between the ledger's stamped revision and
+`HEAD`, restricted to those paths (`conformance_report.py:668`):
+
+```
+git diff --name-only <ledger quipu_revision> <head> -- src 'benchmark/public/*.py'
+```
+
+It is not "was there a commit touching `CODE_PATHS`", and the difference is slack you can
+use: a source change made and then **reverted** within the PR leaves that diff EMPTY, so the
+existing ledger still stands and needs no re-derive. Likewise a source file moved and moved
+back. If you are unsure whether you owe a derive, run that diff — it is the same question the
+gate asks, and it answers in a second.
 
 Commit the ledgers **and** the rendered page together. The gate asks for them in two steps
 whose messages read as unrelated failures — `a ledger was NOT derived from the code it
