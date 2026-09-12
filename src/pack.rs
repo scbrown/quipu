@@ -60,6 +60,15 @@ pub struct Manifest {
     pub producer: String,
     /// Row counts, as JSON.
     pub counts: String,
+    /// Which destination this pack was BUILT for, and therefore whether the
+    /// outward identifier scrub ran on it.
+    ///
+    /// `None` is not a default — it means the producer did not record it,
+    /// which is true of every pack cut before aegis-9f899e. Such a pack was
+    /// built with no scrub at all, so rendering it as `Outward` would assert a
+    /// guarantee nothing provided. A consumer that needs the assurance must
+    /// treat `None` as UNKNOWN and not as clean.
+    pub destination: Option<crate::share_scrub::ShareDestination>,
 }
 
 /// Options for [`pack`].
@@ -87,6 +96,11 @@ pub struct PackOptions {
     pub repository: Option<String>,
     /// Git commit whose repository graph is carried by the pack.
     pub repository_sha: Option<String>,
+    /// Where this pack is bound, and therefore whether the outward identifier
+    /// scrub runs. Defaults to [`ShareDestination::Outward`], so a caller that
+    /// names no destination gets the scrub — the same default, and for the same
+    /// reason, as a share (`share_scrub.rs`).
+    pub destination: crate::share_scrub::ShareDestination,
     /// Embedding model identifier used to produce repository knowledge.
     pub model_id: Option<String>,
     /// Version of the embedding model used to produce repository knowledge.
@@ -110,6 +124,36 @@ pub use crate::pack_load::{LoadOptions, UnpackReport, unpack, unpack_verified};
 ///
 /// # Errors
 /// Store and serialization errors.
+/// The outward identifier scrub for every pack producer.
+///
+/// `canonical` is exactly what a pack carries — triples, shapes, queries,
+/// labels — so scrubbing it scrubs the payload rather than a proxy for it.
+///
+/// This is a shared function rather than a line inside one producer because
+/// there are THREE of them and putting it in `pack_into` covered only two.
+/// `pack()` and `pack_to_bytes()` share `pack_into`; `pack_turtle()` does not —
+/// it calls [`canonical_content`] directly — so the `--format turtle` bundle
+/// went on shipping the identifier after the .qpack stopped. Measured by test,
+/// because `grep -c scrub src/pack_turtle.rs` returns 0 for "no scrub" AND for
+/// "scrubbed via a wrapper", and cannot tell them apart (aegis-9f899e).
+///
+/// # Errors
+/// [`Error::PolicyDenied`] if an outward-bound pack carries a block-tier
+/// `InternalIdentifierPattern`. Callers must invoke this BEFORE writing any
+/// output, so a refusal leaves nothing behind.
+pub(crate) fn enforce_pack_destination(
+    store: &Store,
+    canonical: &str,
+    destination: crate::share_scrub::ShareDestination,
+) -> Result<()> {
+    crate::share_scrub::enforce_destination(
+        store,
+        &std::collections::BTreeMap::from([("pack content".to_string(), canonical.to_string())]),
+        destination,
+        "pack",
+    )
+}
+
 pub fn canonical_content(
     store: &Store,
     graph_iri: &str,
@@ -217,7 +261,10 @@ pub(crate) const MANIFEST_SQL: &str = "CREATE TABLE IF NOT EXISTS pack_manifest 
      created_at   TEXT NOT NULL,
      source_graph TEXT NOT NULL,
      producer     TEXT NOT NULL,
-     counts       TEXT NOT NULL
+     counts       TEXT NOT NULL,
+     -- Nullable ON PURPOSE: a pack written before aegis-9f899e has no row for
+     -- this and must read back as UNKNOWN rather than as either destination.
+     destination  TEXT
  );";
 
 pub(crate) fn local_name(iri: &str) -> String {
@@ -371,6 +418,9 @@ fn pack_into(
     }
 
     let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
+
+    enforce_pack_destination(store, &canonical, opts.destination)?;
+
     let hash = content_hash(&canonical);
 
     let facts = store.current_facts_in_graph(store.lookup(graph_iri)?.unwrap_or(0))?;
@@ -505,13 +555,16 @@ fn pack_into(
                 "embedding_dimension": store.embedding_config().dimension,
             })
             .to_string(),
+            // Recorded so a CONSUMER can check the scrub from the artifact,
+            // rather than having to trust that the producer ran it (wu, #222).
+            destination: Some(opts.destination),
         };
         out.conn.execute_batch(MANIFEST_SQL)?;
         out.conn.execute(
             "INSERT OR REPLACE INTO pack_manifest \
              (id, pack_format, name, version, term_space, content_hash, created_at, \
-              source_graph, producer, counts) \
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+              source_graph, producer, counts, destination) \
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
                 manifest.pack_format,
                 manifest.name,
@@ -522,6 +575,13 @@ fn pack_into(
                 manifest.source_graph,
                 manifest.producer,
                 manifest.counts,
+                manifest.destination.map(|d| {
+                    if d.is_internal() {
+                        "internal"
+                    } else {
+                        "outward"
+                    }
+                }),
             ],
         )?;
 
@@ -536,6 +596,23 @@ fn pack_into(
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_manifest(path: &str) -> Result<Manifest> {
     let conn = rusqlite::Connection::open(path)?;
+    // `destination` arrived with aegis-9f899e. A pack cut before it has no such
+    // column, and SELECTing one by name fails the whole read — so the column is
+    // fetched separately and its absence degrades to `None` (UNKNOWN) instead
+    // of making an older pack unreadable.
+    let destination: Option<crate::share_scrub::ShareDestination> = conn
+        .query_row(
+            "SELECT destination FROM pack_manifest WHERE id = 1",
+            [],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .ok()
+        .flatten()
+        .and_then(|text| match text.as_str() {
+            "outward" => Some(crate::share_scrub::ShareDestination::Outward),
+            "internal" => Some(crate::share_scrub::ShareDestination::Internal),
+            _ => None,
+        });
     conn.query_row(
         "SELECT pack_format, name, version, term_space, content_hash, created_at, \
                 source_graph, producer, counts FROM pack_manifest WHERE id = 1",
@@ -551,6 +628,7 @@ pub fn read_manifest(path: &str) -> Result<Manifest> {
                 source_graph: r.get(6)?,
                 producer: r.get(7)?,
                 counts: r.get(8)?,
+                destination,
             })
         },
     )
@@ -564,6 +642,15 @@ pub fn read_manifest(path: &str) -> Result<Manifest> {
 /// # Errors
 /// The file is not a pack, or cannot be opened as a store.
 #[cfg(not(target_arch = "wasm32"))]
+/// Recompute a pack's content hash and compare it with the stored one.
+///
+/// ⚠️ This is the one [`canonical_content`] caller that must NOT scrub, and the
+/// reason is structural rather than an oversight: the scrub would change the
+/// canonical text, so the recomputed hash could never match a hash stored by a
+/// producer that hashed the unscrubbed content. Verification reads what IS in
+/// the pack; the producers decide what is allowed IN. Anyone auditing scrub
+/// coverage by enumerating `canonical_content` callers should stop here
+/// (aegis-9f899e, wu's census on #222).
 pub fn verify(path: &str) -> Result<(String, String, bool)> {
     let manifest = read_manifest(path)?;
     let store = Store::open(path)?;

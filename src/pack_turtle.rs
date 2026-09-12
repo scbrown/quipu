@@ -53,6 +53,11 @@ pub fn pack_turtle(
         ));
     }
     let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
+
+    // Before `create_dir_all`, so a refused bundle leaves no directory behind —
+    // the same ordering `share()` keeps, and asserted by its own test.
+    super::pack::enforce_pack_destination(store, &canonical, opts.destination)?;
+
     let hash = content_hash(&canonical);
 
     std::fs::create_dir_all(out_dir)
@@ -117,6 +122,7 @@ pub fn pack_turtle(
             "embedding_dimension": store.embedding_config().dimension,
         })
         .to_string(),
+        destination: Some(opts.destination),
     };
     write(
         "manifest.json",

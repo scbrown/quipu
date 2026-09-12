@@ -932,3 +932,397 @@ fn the_turtle_bundle_refuses_an_unknown_graph_and_writes_nothing() {
         "a refused export must not leave a partial bundle"
     );
 }
+
+// --- aegis-9f899e contract 2: the PUBLISHED pack asserts the SCRUB ---
+//
+// sattler's design contract is TWO artifacts with DIFFERENT contracts and a
+// test each: `--full` asserts LOSSLESS (row counts + content hashes across the
+// live tables), the published/default pack asserts the SCRUB (operational
+// tables absent, no internal identifiers). Explicitly: "Do not collapse them
+// into one test over both" — an equivalence test over a shared implementation
+// passes while shipping either wrongly.
+//
+// This is the SCRUB half, and it is written as a SABOTAGE because the contract
+// says so and because the reason is load-bearing: a test over already-clean
+// input cannot detect a leak. It asserts the contaminant is in the SOURCE
+// first, so a pack that omits it for the wrong reason — an empty graph, a
+// pack that carried nothing at all — cannot pass.
+
+/// The block-tier catalogue plus one fact that violates it, in the graph that
+/// gets packed.
+fn producer_with_a_leak(identifier: &str) -> Store {
+    let mut store = producer(0);
+    crate::rdf::ingest_rdf(
+        &mut store,
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+"#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        TS,
+        None,
+        None,
+    )
+    .unwrap();
+    // The leak goes in the PACKED graph, not the default one — a pack only
+    // carries facts from the graph it is told to pack, so a leak anywhere else
+    // would be omitted for a reason that has nothing to do with the scrub.
+    let g = store.lookup("urn:g:pack").unwrap().unwrap();
+    let s = store.intern("http://example.org/leak").unwrap();
+    let p = store.intern("http://example.org/host").unwrap();
+    store
+        .overlay_write(g, Op::Assert, s, p, Value::Str(identifier.into()), TS)
+        .unwrap();
+    store
+}
+
+#[test]
+fn the_published_pack_does_not_carry_an_internal_identifier() {
+    const LEAK: &str = "private.example";
+    let store = producer_with_a_leak(LEAK);
+
+    // ANTI-VACUITY: the contaminant must actually be in the source, in the
+    // graph being packed. Without this the assertion below passes against a
+    // pack that carried nothing.
+    let present = crate::sparql::query(
+        &store,
+        "ASK { GRAPH <urn:g:pack> { <http://example.org/leak> <http://example.org/host> \
+         \"private.example\" } }",
+    )
+    .unwrap();
+    assert!(
+        matches!(present, crate::sparql::QueryResult::Ask(true)),
+        "sabotage did not land — the leak is not in the packed graph, so this \
+         test would prove nothing"
+    );
+
+    let out = tmp("scrub");
+    let result = pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS);
+
+    // Both arms are accepted because the CONTRACT is "the published pack does
+    // not carry it", which refusing and omitting both satisfy. Measured today:
+    // it REFUSES, with the same shape as `share()` — the rule is named, the
+    // identifier is not reprinted, and `--destination internal` is named as the
+    // escape hatch.
+    match result {
+        // Refusing is the correct outcome and the one `share()` already gives
+        // for the same input (share/tests.rs).
+        Err(error) => {
+            let text = error.to_string();
+            assert!(
+                text.contains("private host"),
+                "a refusal must name the RULE that fired, got: {text}"
+            );
+            assert!(
+                !text.contains(LEAK),
+                "the refusal reprinted the identifier it exists to withhold: {text}"
+            );
+        }
+        // Producing a pack is only correct if the identifier is absent from it.
+        Ok(_) => {
+            let bytes = std::fs::read(&out).expect("read the built pack");
+            let found = bytes
+                .windows(LEAK.len())
+                .any(|window| window == LEAK.as_bytes());
+            assert!(
+                !found,
+                "PUBLISHED PACK LEAKS: {LEAK:?} is present verbatim in the pack \
+                 file. `share()` REFUSES this exact input (an outward share runs \
+                 share_scrub::enforce_destination), but pack.rs has no \
+                 destination and never calls the scrub, so the same fact ships. \
+                 aegis-9f899e contract 2."
+            );
+        }
+    }
+}
+
+#[test]
+fn destination_internal_is_a_real_escape_hatch_for_a_pack() {
+    // The refusal above NAMES `--destination internal`. A refusal that names an
+    // escape hatch which does not work is worse than one that names none, so
+    // this is the other half of the pair rather than a nicety — and it is the
+    // arm that would stay green if the flag were wired to nothing, which is why
+    // it asserts the identifier is PRESENT rather than merely that pack said Ok.
+    const LEAK: &str = "private.example";
+    let store = producer_with_a_leak(LEAK);
+    let out = tmp("internal");
+    let opts = PackOptions {
+        destination: crate::share_scrub::ShareDestination::Internal,
+        ..Default::default()
+    };
+    pack(&store, "urn:g:pack", &out, &opts, TS)
+        .expect("an internal-bound pack must not be refused by the outward scrub");
+
+    let bytes = std::fs::read(&out).expect("read the built pack");
+    assert!(
+        bytes.windows(LEAK.len()).any(|w| w == LEAK.as_bytes()),
+        "the internal pack does NOT carry {LEAK:?} — then the outward refusal \
+         proves nothing about the scrub, because the fact never reached the pack \
+         on either setting"
+    );
+}
+
+#[test]
+fn the_turtle_bundle_does_not_carry_an_internal_identifier_either() {
+    // A SECOND producer, found while checking my own fix. `pack_turtle` is the
+    // `--format turtle` interop bundle: it calls `canonical_content` DIRECTLY
+    // rather than going through `pack_into`, so the scrub added there did not
+    // cover it — and a turtle bundle is as outward-facing as a .qpack.
+    //
+    // Proven by TEST rather than by grep. `grep -c scrub src/pack_turtle.rs`
+    // returns 0, but a zero there would also be returned by a function that
+    // delegates to a wrapper which scrubs, so the grep cannot tell "no scrub"
+    // from "scrubbed elsewhere" (wu, on #222). Only running it can.
+    const LEAK: &str = "private.example";
+    let store = producer_with_a_leak(LEAK);
+
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("bundle");
+    let result = pack_turtle(
+        &store,
+        "urn:g:pack",
+        out.to_str().unwrap(),
+        &PackOptions::default(),
+        TS,
+    );
+
+    match result {
+        Err(error) => {
+            let text = error.to_string();
+            assert!(
+                text.contains("private host"),
+                "a refusal must name the RULE that fired, got: {text}"
+            );
+            assert!(!text.contains(LEAK), "the refusal reprinted the identifier");
+        }
+        Ok(_) => {
+            // Walk every file the bundle wrote — the leak could be in payload,
+            // shapes or manifest, and checking only the one you expect is how a
+            // second path stays open behind a passing test.
+            let mut hits = Vec::new();
+            for entry in std::fs::read_dir(&out).expect("bundle dir") {
+                let path = entry.expect("entry").path();
+                if path.is_file() {
+                    let bytes = std::fs::read(&path).expect("read bundle file");
+                    if bytes.windows(LEAK.len()).any(|w| w == LEAK.as_bytes()) {
+                        hits.push(path.file_name().unwrap().to_string_lossy().into_owned());
+                    }
+                }
+            }
+            assert!(
+                hits.is_empty(),
+                "TURTLE BUNDLE LEAKS: {LEAK:?} present in {hits:?}. \
+                 `pack_turtle` calls canonical_content directly instead of \
+                 going through `pack_into`, so the outward scrub does not run \
+                 on this path (aegis-9f899e contract 2)."
+            );
+        }
+    }
+}
+
+#[test]
+fn a_refused_turtle_bundle_leaves_no_directory_behind() {
+    // The scrub must run BEFORE `create_dir_all`. A refusal that has already
+    // created the output directory leaves a half-built bundle next to the one
+    // a reader expects, and `share()` has its own test for exactly this
+    // ordering — the guard's POSITION is part of the guard.
+    let store = producer_with_a_leak("private.example");
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("refused-bundle");
+    let error = pack_turtle(
+        &store,
+        "urn:g:pack",
+        out.to_str().unwrap(),
+        &PackOptions::default(),
+        TS,
+    )
+    .expect_err("an outward turtle bundle carrying a block-tier identifier must be refused");
+    assert!(error.to_string().contains("private host"));
+    assert!(
+        !out.exists(),
+        "a refused turtle bundle left a partial directory at {out:?}"
+    );
+}
+
+/// Every `canonical_content` caller either SCRUBS or is classified here.
+///
+/// wu's structural objection to the two fixes above (#222): three producers,
+/// three separate accidents, and nothing stopping a fourth. Both fixes were
+/// correct and neither made the next one safe — the scrub is something an
+/// author has to remember, and the two that forgot were written by people who
+/// knew about it.
+///
+/// So this is the mechanism rather than more vigilance: a new caller of
+/// `canonical_content` fails this test until someone decides, in writing,
+/// which group it is in. Same shape as the DECLARED table audit in
+/// `share_completeness` — the list is the decision, and the test is what makes
+/// skipping the decision impossible.
+#[test]
+fn every_canonical_content_caller_scrubs_or_is_classified() {
+    /// Callers that legitimately do NOT scrub, each with the reason.
+    ///
+    /// `verify` recomputes a pack's hash to compare it with the stored one.
+    /// Scrubbing there would change the canonical text, so the recomputed hash
+    /// could never match a hash a producer took over unscrubbed content. It
+    /// reads what IS in a pack; the producers decide what is allowed in.
+    const NOT_A_PRODUCER: &[&str] = &[
+        "verify",
+        // The definition matches its own name. Named here rather than filtered
+        // silently, so the list stays a record of every decision rather than of
+        // the interesting ones.
+        "canonical_content",
+    ];
+
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut callers: std::collections::BTreeMap<String, bool> = std::collections::BTreeMap::new();
+    let mut stack = vec![src];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("read src") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "rs") || path.to_string_lossy().contains("test")
+            {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read source");
+            // Split on top-level `fn` boundaries. Approximate, and adequate:
+            // the anti-vacuity assertions below fail loudly if the split stops
+            // finding the functions we know are there.
+            let mut current: Option<String> = None;
+            let mut body = String::new();
+            let flush =
+                |name: &Option<String>,
+                 body: &str,
+                 out: &mut std::collections::BTreeMap<String, bool>| {
+                    if let Some(n) = name
+                        .as_ref()
+                        .filter(|_| body.contains("canonical_content("))
+                    {
+                        let scrubs = body.contains("enforce_pack_destination(");
+                        *out.entry(n.clone()).or_insert(false) |= scrubs;
+                    }
+                };
+            for line in text.lines() {
+                if let Some(rest) = line
+                    .strip_prefix("pub fn ")
+                    .or_else(|| line.strip_prefix("fn "))
+                    .or_else(|| line.strip_prefix("pub(crate) fn "))
+                {
+                    flush(&current, &body, &mut callers);
+                    body.clear();
+                    current = Some(
+                        rest.chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                            .collect(),
+                    );
+                }
+                body.push_str(line);
+                body.push('\n');
+            }
+            flush(&current, &body, &mut callers);
+        }
+    }
+
+    // ANTI-VACUITY. A scan that found nothing — a moved file, a renamed
+    // function, a broken split — would pass the loop below while auditing
+    // nothing, which is the exact failure this test exists to prevent one
+    // level down.
+    assert!(
+        callers.len() >= 3,
+        "expected at least the three known callers, found {}: {callers:?}",
+        callers.len()
+    );
+    for known in ["pack_into", "pack_turtle", "verify"] {
+        assert!(
+            callers.contains_key(known),
+            "the scan did not find `{known}`, which calls canonical_content — \
+             the function-splitting heuristic has stopped working and this \
+             audit is not auditing. Found: {callers:?}"
+        );
+    }
+
+    let unscrubbed: Vec<&String> = callers
+        .iter()
+        .filter(|(name, scrubs)| !**scrubs && !NOT_A_PRODUCER.contains(&name.as_str()))
+        .map(|(name, _)| name)
+        .collect();
+    assert!(
+        unscrubbed.is_empty(),
+        "canonical_content caller(s) {unscrubbed:?} neither call \
+         `enforce_pack_destination` nor appear in NOT_A_PRODUCER. A pack \
+         producer that skips the scrub ships internal identifiers outward — \
+         that has happened twice already (.qpack, then the turtle bundle). \
+         Either call the scrub, or add the name to NOT_A_PRODUCER with the \
+         reason it is not a producer (aegis-9f899e)."
+    );
+}
+
+#[test]
+fn the_manifest_records_the_destination_so_a_consumer_can_check_it() {
+    // wu on #222: contract 2 says the published pack ASSERTS the scrub, but a
+    // consumer could not check that from the artifact — an internal pack was
+    // indistinguishable from a scrubbed one. The producer enforcing a rule and
+    // the artifact declaring it are two different guarantees, and only the
+    // second survives the trip.
+    let store = producer(0);
+
+    let outward = tmp("manifest-outward");
+    let m = pack(&store, "urn:g:pack", &outward, &PackOptions::default(), TS).unwrap();
+    assert_eq!(
+        m.destination,
+        Some(crate::share_scrub::ShareDestination::Outward)
+    );
+    // Read it BACK off the file — an in-memory value proves the struct, not
+    // the artifact, and the artifact is what a consumer gets.
+    assert_eq!(
+        read_manifest(&outward).unwrap().destination,
+        Some(crate::share_scrub::ShareDestination::Outward)
+    );
+
+    let internal = tmp("manifest-internal");
+    let opts = PackOptions {
+        destination: crate::share_scrub::ShareDestination::Internal,
+        ..Default::default()
+    };
+    pack(&store, "urn:g:pack", &internal, &opts, TS).unwrap();
+    assert_eq!(
+        read_manifest(&internal).unwrap().destination,
+        Some(crate::share_scrub::ShareDestination::Internal),
+        "an internal pack must be DISTINGUISHABLE from a scrubbed one"
+    );
+}
+
+#[test]
+fn a_pack_predating_the_destination_column_reads_as_unknown_not_as_scrubbed() {
+    // The back-compat arm, and the direction matters. A pack cut before
+    // aegis-9f899e ran NO scrub at all, so defaulting it to `Outward` would
+    // assert a guarantee nothing provided — the reassuring reading of missing
+    // data. `None` means UNKNOWN and a consumer must not read it as clean.
+    let store = producer(0);
+    let out = tmp("manifest-legacy");
+    pack(&store, "urn:g:pack", &out, &PackOptions::default(), TS).unwrap();
+
+    // Make it look like a pre-9f899e pack.
+    {
+        let conn = rusqlite::Connection::open(&out).unwrap();
+        conn.execute_batch("ALTER TABLE pack_manifest DROP COLUMN destination;")
+            .expect("drop the column to simulate an older pack");
+    }
+
+    let m = read_manifest(&out).expect("an older pack must still be READABLE");
+    assert_eq!(
+        m.destination, None,
+        "a pack with no destination column must read as UNKNOWN"
+    );
+    // The rest of the manifest must survive — a back-compat path that returns
+    // None by failing the whole read would pass the assertion above.
+    assert_eq!(m.source_graph, "urn:g:pack");
+    assert!(m.content_hash.starts_with("sha256:"));
+}
