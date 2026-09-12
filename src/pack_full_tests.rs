@@ -95,7 +95,11 @@ fn the_full_pack_carries_every_row_of_every_carried_table() {
     // it is asserted about.
     let retractions: i64 = store
         .conn
-        .query_row("SELECT COUNT(*) FROM facts WHERE op = 1", [], |r| r.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE op = ?1",
+            [crate::types::Op::Retract as i64],
+            |r| r.get(0),
+        )
         .unwrap();
     assert!(retractions > 0, "fixture must carry retraction history");
     assert!(
@@ -159,13 +163,20 @@ fn the_full_pack_carries_the_retraction_itself_not_just_the_row_count() {
     pack_full(&store, &out, &internal(), TS).unwrap();
     let packed = rusqlite::Connection::open(&out).unwrap();
 
-    let retractions: i64 = packed
-        .query_row("SELECT COUNT(*) FROM facts WHERE op = 1", [], |r| r.get(0))
-        .unwrap();
-    let source_retractions: i64 = store
-        .conn
-        .query_row("SELECT COUNT(*) FROM facts WHERE op = 1", [], |r| r.get(0))
-        .unwrap();
+    // `Op::Retract as i64`, NOT the literal 1. Retract is 0 and Assert is 1, so
+    // `WHERE op = 1` counts ASSERTIONS — which made the anti-vacuity guard below
+    // pass on a fixture containing no retraction at all, i.e. it ruled out
+    // exactly the thing it was written to rule out (wu, on #225). Binding to the
+    // enum means a future renumbering cannot silently invert this again.
+    let retract = crate::types::Op::Retract as i64;
+    let count_retractions = |conn: &rusqlite::Connection| -> i64 {
+        conn.query_row("SELECT COUNT(*) FROM facts WHERE op = ?1", [retract], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    };
+    let retractions = count_retractions(&packed);
+    let source_retractions = count_retractions(&store.conn);
     assert!(
         source_retractions > 0,
         "fixture has no retraction — this test would prove nothing"
