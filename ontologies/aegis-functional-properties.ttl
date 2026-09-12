@@ -13,6 +13,19 @@ aegis:hash       a owl:FunctionalProperty .
 aegis:contentHash a owl:FunctionalProperty .
 aegis:groupId    a owl:FunctionalProperty .
 
-# A node has one current description. Quipu closes an earlier value and keeps
-# it in bitemporal/provenance history; two competing values in one batch fail.
-rdfs:comment     a owl:FunctionalProperty .
+# rdfs:comment is deliberately ABSENT, for the same reason rdfs:label is: it has
+# multiple producers and is not an identifier.  It was declared functional in
+# 10ecb85 on the premise that "a node has one current description".  The deployed
+# graph falsifies that premise -- measured 2026-09-12 (aegis-buipvc), 992 entities
+# carry more than one current rdfs:comment and 90.3% of them hold GENUINELY
+# DISTINCT FACTS rather than successive drafts of one description.  One host
+# entity alone carries 46: one names the services and glibc version it runs,
+# another describes its network mounts, another records a monitoring quirk --
+# different observations by different producers, not one description rewritten.
+# A single entity showed ten distinct prov:wasGeneratedBy episodes.
+#
+# Enforcing functionality over that shape does not tidy the graph, it blocks every
+# POST /ontology with 200 violations, and the only conforming repair would close
+# 1,690 facts out of the current view.  If one-current-description is still wanted,
+# the surplus belongs on a multi-valued annotation predicate first; the axiom can
+# return after that migration, not before it.

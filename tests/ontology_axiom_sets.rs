@@ -9,13 +9,23 @@ fn production_functional_property_set_is_parseable_and_complete() {
     let ontology = Ontology::from_turtle(ttl).expect("functional-property ontology parses");
     let summary = ontology.axiom_summary();
 
-    assert_eq!(summary["functional_properties"], 6);
+    assert_eq!(summary["functional_properties"], 5);
     assert_eq!(summary["disjoint_with"], 0);
+    // rdfs:comment must NOT be functional: it is a multi-producer annotation in
+    // this graph, not an identifier (aegis-buipvc). Asserting its ABSENCE is the
+    // point of this line -- a count alone would pass if some other axiom were
+    // dropped and this one kept.
+    assert!(
+        !ontology
+            .axioms
+            .functional_properties
+            .contains("http://www.w3.org/2000/01/rdf-schema#comment")
+    );
     assert!(
         ontology
             .axioms
             .functional_properties
-            .contains("http://www.w3.org/2000/01/rdf-schema#comment")
+            .contains("http://aegis.gastown.local/ontology/sha")
     );
 }
 
@@ -48,7 +58,7 @@ fn production_topology_type_set_has_only_the_safe_range() {
 }
 
 #[test]
-fn production_cardinality_axioms_reject_ambiguous_comments_by_default() {
+fn production_cardinality_axioms_reject_ambiguous_scalars_by_default() {
     let mut store = Store::open_in_memory().unwrap();
     store
         .load_ontology(
@@ -61,15 +71,15 @@ fn production_cardinality_axioms_reject_ambiguous_comments_by_default() {
 
     let err = quipu::rdf::ingest_rdf(
         &mut store,
-        &br#"@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-            <http://example.org/node> rdfs:comment "first", "second" ."#[..],
+        &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+            <http://example.org/node> aegis:sha "first", "second" ."#[..],
         oxrdfio::RdfFormat::Turtle,
         None,
         "2026-01-01T00:00:01Z",
         None,
         None,
     )
-    .expect_err("two current descriptions in one write must be refused");
+    .expect_err("two current values for a functional scalar must be refused");
 
     assert!(err.to_string().contains("OWL constraint violation"));
     assert!(err.to_string().contains("max 1"));
