@@ -108,7 +108,7 @@ Two facts make waiting safe, and you need both:
 The check is literally a two-point CONTENT diff between the ledger's stamped revision and
 `HEAD`, restricted to those paths (`conformance_report.py:668`):
 
-```
+```bash
 git diff --name-only <ledger quipu_revision> <head> -- src 'benchmark/public/*.py'
 ```
 
