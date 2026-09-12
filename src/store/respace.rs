@@ -166,6 +166,8 @@ fn classify_optional_column(table: &str, column: &str) -> Option<TermIdKind> {
         "source_graph",
         "producer",
         "counts",
+        // Carries "outward"/"internal", never a term id (aegis-9f899e).
+        "destination",
     ];
     (table == "pack_manifest" && PACK_MANIFEST.contains(&column)).then_some(TermIdKind::None)
 }
