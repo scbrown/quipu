@@ -115,6 +115,36 @@ pub use crate::pack_load::{LoadOptions, UnpackReport, unpack, unpack_verified};
 ///
 /// # Errors
 /// Store and serialization errors.
+/// The outward identifier scrub for every pack producer.
+///
+/// `canonical` is exactly what a pack carries — triples, shapes, queries,
+/// labels — so scrubbing it scrubs the payload rather than a proxy for it.
+///
+/// This is a shared function rather than a line inside one producer because
+/// there are THREE of them and putting it in `pack_into` covered only two.
+/// `pack()` and `pack_to_bytes()` share `pack_into`; `pack_turtle()` does not —
+/// it calls [`canonical_content`] directly — so the `--format turtle` bundle
+/// went on shipping the identifier after the .qpack stopped. Measured by test,
+/// because `grep -c scrub src/pack_turtle.rs` returns 0 for "no scrub" AND for
+/// "scrubbed via a wrapper", and cannot tell them apart (aegis-9f899e).
+///
+/// # Errors
+/// [`Error::PolicyDenied`] if an outward-bound pack carries a block-tier
+/// `InternalIdentifierPattern`. Callers must invoke this BEFORE writing any
+/// output, so a refusal leaves nothing behind.
+pub(crate) fn enforce_pack_destination(
+    store: &Store,
+    canonical: &str,
+    destination: crate::share_scrub::ShareDestination,
+) -> Result<()> {
+    crate::share_scrub::enforce_destination(
+        store,
+        &std::collections::BTreeMap::from([("pack content".to_string(), canonical.to_string())]),
+        destination,
+        "pack",
+    )
+}
+
 pub fn canonical_content(
     store: &Store,
     graph_iri: &str,
@@ -377,21 +407,7 @@ fn pack_into(
 
     let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
 
-    // THE OUTWARD SCRUB. `canonical` is exactly what this pack carries —
-    // triples, shapes, queries, labels — so scrubbing it scrubs the payload,
-    // and doing it HERE covers `pack_to_bytes` (the WASM producer) as well as
-    // `pack`, rather than only the path that happens to write a file.
-    //
-    // This was MISSING until aegis-9f899e: `share()` refuses a block-tier
-    // internal identifier and a pack shipped the same fact verbatim. Two
-    // producers of outward artifacts, one scrubbing and one not — measured by
-    // sabotage, not assumed (`pack_tests.rs`).
-    crate::share_scrub::enforce_destination(
-        store,
-        &std::collections::BTreeMap::from([("pack content".to_string(), canonical.clone())]),
-        opts.destination,
-        "pack",
-    )?;
+    enforce_pack_destination(store, &canonical, opts.destination)?;
 
     let hash = content_hash(&canonical);
 

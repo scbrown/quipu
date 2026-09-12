@@ -1065,3 +1065,85 @@ fn destination_internal_is_a_real_escape_hatch_for_a_pack() {
          on either setting"
     );
 }
+
+#[test]
+fn the_turtle_bundle_does_not_carry_an_internal_identifier_either() {
+    // A SECOND producer, found while checking my own fix. `pack_turtle` is the
+    // `--format turtle` interop bundle: it calls `canonical_content` DIRECTLY
+    // rather than going through `pack_into`, so the scrub added there did not
+    // cover it — and a turtle bundle is as outward-facing as a .qpack.
+    //
+    // Proven by TEST rather than by grep. `grep -c scrub src/pack_turtle.rs`
+    // returns 0, but a zero there would also be returned by a function that
+    // delegates to a wrapper which scrubs, so the grep cannot tell "no scrub"
+    // from "scrubbed elsewhere" (wu, on #222). Only running it can.
+    const LEAK: &str = "private.example";
+    let store = producer_with_a_leak(LEAK);
+
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("bundle");
+    let result = pack_turtle(
+        &store,
+        "urn:g:pack",
+        out.to_str().unwrap(),
+        &PackOptions::default(),
+        TS,
+    );
+
+    match result {
+        Err(error) => {
+            let text = error.to_string();
+            assert!(
+                text.contains("private host"),
+                "a refusal must name the RULE that fired, got: {text}"
+            );
+            assert!(!text.contains(LEAK), "the refusal reprinted the identifier");
+        }
+        Ok(_) => {
+            // Walk every file the bundle wrote — the leak could be in payload,
+            // shapes or manifest, and checking only the one you expect is how a
+            // second path stays open behind a passing test.
+            let mut hits = Vec::new();
+            for entry in std::fs::read_dir(&out).expect("bundle dir") {
+                let path = entry.expect("entry").path();
+                if path.is_file() {
+                    let bytes = std::fs::read(&path).expect("read bundle file");
+                    if bytes.windows(LEAK.len()).any(|w| w == LEAK.as_bytes()) {
+                        hits.push(path.file_name().unwrap().to_string_lossy().into_owned());
+                    }
+                }
+            }
+            assert!(
+                hits.is_empty(),
+                "TURTLE BUNDLE LEAKS: {LEAK:?} present in {hits:?}. \
+                 `pack_turtle` calls canonical_content directly instead of \
+                 going through `pack_into`, so the outward scrub does not run \
+                 on this path (aegis-9f899e contract 2)."
+            );
+        }
+    }
+}
+
+#[test]
+fn a_refused_turtle_bundle_leaves_no_directory_behind() {
+    // The scrub must run BEFORE `create_dir_all`. A refusal that has already
+    // created the output directory leaves a half-built bundle next to the one
+    // a reader expects, and `share()` has its own test for exactly this
+    // ordering — the guard's POSITION is part of the guard.
+    let store = producer_with_a_leak("private.example");
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("refused-bundle");
+    let error = pack_turtle(
+        &store,
+        "urn:g:pack",
+        out.to_str().unwrap(),
+        &PackOptions::default(),
+        TS,
+    )
+    .expect_err("an outward turtle bundle carrying a block-tier identifier must be refused");
+    assert!(error.to_string().contains("private host"));
+    assert!(
+        !out.exists(),
+        "a refused turtle bundle left a partial directory at {out:?}"
+    );
+}
