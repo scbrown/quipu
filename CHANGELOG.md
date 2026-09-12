@@ -4,15 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [0.5.0] - 2026-09-12
 
+### Added
+
+- *(pack)* Record the destination in the manifest, and audit every producer([e6307f7](https://github.com/scbrown/quipu/commit/e6307f7a8461db36fc561ba211c7b81393711bd2))
+
+
+
 ### Fixed
 
 - *(conformance)* Gate the FIFTH suite, and teach the checker its dialect([1d404f3](https://github.com/scbrown/quipu/commit/1d404f306dfbc64e2669b30edbde4c745b79ca4a))
+- *(pack)* The published pack never ran the outward identifier scrub([2d7215c](https://github.com/scbrown/quipu/commit/2d7215c70f9596a48c3370ee0461f8e1b9342148))
+- *(pack)* The TURTLE bundle leaked too — scrub every pack producer([76caa02](https://github.com/scbrown/quipu/commit/76caa02b1c0c22847fc8205005ed7663949734c9))
 
 ### Miscellaneous
 
 - *(conformance)* Re-derive the ledgers on this branch's HEAD([826b3b5](https://github.com/scbrown/quipu/commit/826b3b5d7254edfc13016b886f0bdab5fd2fe580))
 - *(conformance)* Re-derive the ledgers and page on this HEAD([3e764ae](https://github.com/scbrown/quipu/commit/3e764ae2002beb055a0f08827fbdb2e6d9e26a1c))
+- *(conformance)* Re-derive the ledgers and re-render the page([870a853](https://github.com/scbrown/quipu/commit/870a8538db87b17f55fec82207d6012b808865bb))
 - *(conformance)* Re-derive on the post-#222 merge HEAD([e04e856](https://github.com/scbrown/quipu/commit/e04e8562afb126f5a952c256500c0b3863f47585))
+
+### Bench
+
+- *(watdiv)* --skip, because a PREFIX of the archive is not a homogeneous slice([22af9f0](https://github.com/scbrown/quipu/commit/22af9f053185bd0086be01efd1cebc6653a27593))
+- Check a dataset is homogeneous BEFORE using it for a scaling curve([0d39d39](https://github.com/scbrown/quipu/commit/0d39d39eb0360ed316131b571d05f00d9878cc7a))
 
 ## [0.4.1] - 2026-09-11
 
