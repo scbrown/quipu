@@ -42,5 +42,15 @@ pub fn open_store(db_path: &str) -> Store {
         eprintln!("error: {e}");
         std::process::exit(1);
     }
+    // `[quipu.search]` was PARSED here and then silently dropped: the server
+    // applied it (`server.rs`) and the CLI did not, so every `quipu query` ran
+    // on the built-in defaults no matter what the config file said. The query
+    // budget's own timeout message names that setting as the remedy --
+    // "raise [quipu.search] query_timeout_ms" -- so the one instruction an
+    // operator is given when a query is cut short could not work from the CLI.
+    // Measured against a real multi-million-fact store: 30,000 ms regardless
+    // of the configured value, from the current directory and from the store's
+    // directory alike.
+    store.search_config_mut().clone_from(&config().search);
     store
 }
