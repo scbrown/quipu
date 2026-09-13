@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-09-12
+
+### Fixed
+
+- *(owl)* Rdfs:comment is not a functional property in this graph (#228)([a5c1ea4](https://github.com/scbrown/quipu/commit/a5c1ea4b712dd52297ebb73a38cbd47c320c894d))
+
 ## [0.5.0] - 2026-09-12
 
 ### Added
