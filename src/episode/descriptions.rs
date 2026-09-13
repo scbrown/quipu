@@ -21,6 +21,51 @@ pub(super) fn current_content_hash(
     }))
 }
 
+/// Is a content-hash match really "it is already there"? (aegis-7oswq4)
+///
+/// The hash lives on the episode ACTIVITY node and survives the retraction of
+/// the entities that episode generated, so a match alone says "this content was
+/// ingested once", not "this content is in the store". A re-post after a
+/// cleanup therefore short-circuited to `unchanged` with nothing in the graph —
+/// and `unchanged` is the signal the crew rulebook documents as "it was already
+/// there", the gate for labelling a source bead ingested. Measured 2026-09-12:
+/// 200 retracted entities, re-post returned `outcome: unchanged, count: 0,
+/// tx_id: 0`, and a control-gated read-back found 0.
+///
+/// So a hash match must ALSO find the generated entities still present. The
+/// test is strict — at least as many distinct entities as the episode declares,
+/// not merely one — because a PARTIAL retraction is not "already there" either.
+/// Re-writing is idempotent, so falling through to a real write is the safe
+/// branch whenever presence is in doubt.
+///
+/// The presence query is object-bound, so `idx_vaet (v, a, e, …)` serves it,
+/// and it runs only once the hash has already matched.
+pub(super) fn is_unchanged(
+    store: &Store,
+    ep_iri: &str,
+    base_ns: &str,
+    episode: &Episode,
+    existing_hash: &Option<String>,
+    new_hash: &str,
+) -> Result<bool> {
+    if existing_hash.as_deref() != Some(new_hash) {
+        return Ok(false);
+    }
+    let expected: HashSet<String> = episode
+        .nodes
+        .iter()
+        .map(|n| node_iri(&n.name, base_ns))
+        .collect();
+    if expected.is_empty() {
+        return Ok(true);
+    }
+    let query = format!(
+        "SELECT ?s WHERE {{ ?s <{}wasGeneratedBy> <{ep_iri}> }}",
+        namespace::PROV,
+    );
+    Ok(crate::sparql::query(store, &query)?.rows().len() >= expected.len())
+}
+
 /// Parse and commit an ordinary episode after reconciling description revisions.
 pub(super) fn ingest_reconciled(
     store: &mut Store,
