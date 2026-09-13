@@ -34,6 +34,18 @@ fn fixture(root: &Path) -> (String, String) {
         None,
     )
     .unwrap();
+    let policy_graph = source.overlay_create("urn:test:catalogue", 0).unwrap();
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut source,
+        include_bytes!("fixtures/share-catalogue.ttl").as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-09-11",
+        None,
+        Some("import-cli-policy"),
+        policy_graph,
+    )
+    .unwrap();
     let dir = root.join("share");
     quipu::share::share(&source, dir.to_str().unwrap(), &Default::default()).unwrap();
     let archive = root.join("share.qpack.tar.gz");

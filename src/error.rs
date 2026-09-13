@@ -26,6 +26,10 @@ pub enum Error {
     #[error("policy denied: {0}")]
     PolicyDenied(String),
 
+    /// A required verification subject is unavailable; no clean verdict exists.
+    #[error("cannot verify: {0}")]
+    CannotVerify(String),
+
     #[error(
         "query timeout: exceeded {limit_ms}ms (ran {elapsed_ms}ms) — narrow the query \
          (exact-IRI or rdfs:label lookups, not FILTER(CONTAINS(...)) over unbound patterns) \

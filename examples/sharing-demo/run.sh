@@ -24,6 +24,8 @@ a_db="$work/store-a.db"
 b_db="$work/store-b.db"
 
 "$quipu" shapes load demo "$fixtures/shapes.ttl" --db "$a_db" >/dev/null
+"$quipu" shapes load demo-policy "$fixtures/policy-shapes.ttl" --db "$a_db" >/dev/null
+"$quipu" knot "$fixtures/policy.ttl" --graph urn:demo:policy --db "$a_db" >/dev/null
 "$quipu" knot "$fixtures/store-a-base.ttl" --db "$a_db" >/dev/null
 "$quipu" share --output "$work/shares/base" --shapes demo --db "$a_db" >/dev/null
 

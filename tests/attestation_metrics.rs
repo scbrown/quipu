@@ -75,6 +75,18 @@ fn share_binding(m: &ShareManifest) -> SignedBinding<'_> {
 #[test]
 fn real_imports_and_verifier_failures_increment_exactly_once() {
     let mut producer = Store::open_in_memory().unwrap();
+    let catalogue = producer.overlay_create("urn:test:catalogue", 0).unwrap();
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut producer,
+        include_bytes!("fixtures/share-catalogue.ttl").as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-01T00:00:00Z",
+        None,
+        Some("test-catalogue"),
+        catalogue,
+    )
+    .unwrap();
     quipu::rdf::ingest_rdf(
         &mut producer,
         &b"<urn:a> <urn:p> \"one\" .\n"[..],
