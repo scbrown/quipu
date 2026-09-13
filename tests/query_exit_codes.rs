@@ -18,6 +18,13 @@
 //! non-zero on *every* query would satisfy both failure assertions and look
 //! fixed.
 
+// `[[bin]] quipu` is `required-features = ["shacl"]`, so under
+// `--no-default-features` the binary is NOT BUILT and `CARGO_BIN_EXE_quipu`
+// names a path that does not exist -- the tests would panic with `NotFound`
+// rather than failing an assertion. Same gate as `tests/pack_cli.rs`, and the
+// same defect that turned main red from #236 (aegis-z29mwm).
+#![cfg(feature = "shacl")]
+
 use std::process::Command;
 
 /// Enough rows that an unbounded scan is not instant, so a 1 ms budget bites.
