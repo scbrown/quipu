@@ -803,3 +803,54 @@ ex:r a rule:Rule ; rule:id "UNSAFE" ;
         "expected an unsafe-negation rejection, got: {err}"
     );
 }
+
+
+/// A BOUND object in a rule atom narrows the premise load; a VARIABLE object
+/// must still load the whole predicate (aegis-svtdyn).
+///
+/// The reactive reasoner loaded facts by PREDICATE alone, so the single rule
+/// deployed on the aegis graph — `rdf:type(?x, <Commit>)` — made every write
+/// read all 241,700 current `rdf:type` facts to reach the 4,634 it needs.
+/// Narrowing is only safe if an unbound object still widens, so both arms are
+/// asserted here; testing the narrow arm alone would pass on a change that
+/// silently dropped facts a variable-object rule depends on.
+#[test]
+fn a_bound_object_narrows_the_premise_load_and_a_variable_one_does_not() {
+    use super::evaluate::World;
+
+    let build = |body: &str| {
+        let mut store = Store::open_in_memory().unwrap();
+        assert_triple(&mut store, &format!("{PFX}a"), &format!("{PFX}type"), &format!("{PFX}Commit"));
+        assert_triple(&mut store, &format!("{PFX}b"), &format!("{PFX}type"), &format!("{PFX}Other"));
+        let ttl = format!(
+            r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+ex:r a rule:Rule ; rule:id "R" ;
+    rule:head "<{PFX}derived>(?x, <{PFX}Yes>)" ; rule:body "{body}" .
+"#
+        );
+        let rs = parse_rules(&ttl, Some(PFX)).expect("rules parse");
+        let world =
+            World::load_graphs_rule_indices(&store, &rs, &[crate::schema::ROOT_GRAPH], &[0])
+                .expect("world loads");
+        world
+            .tuples
+            .get(&format!("{PFX}type"))
+            .map_or(0, std::collections::BTreeSet::len)
+    };
+
+    // BOUND object: only the <Commit> fact is a premise, so only it is read.
+    let bound = build(&format!("<{PFX}type>(?x, <{PFX}Commit>)"));
+    assert_eq!(
+        bound, 1,
+        "a bound object must narrow the load to its own value, got {bound} type-facts"
+    );
+
+    // VARIABLE object: every type fact is a premise and must still be read.
+    let unbound = build(&format!("<{PFX}type>(?x, ?t)"));
+    assert_eq!(
+        unbound, 2,
+        "a variable object must still load the whole predicate, got {unbound} type-facts"
+    );
+}

@@ -242,12 +242,41 @@ impl Store {
         graphs: &[i64],
         excluded_sources: &[String],
     ) -> Result<Vec<Fact>> {
+        let unrestricted: Vec<(i64, Option<Vec<Vec<u8>>>)> =
+            attributes.iter().map(|a| (*a, None)).collect();
+        self.current_facts_for_attribute_values_in_graphs_excluding_sources(
+            &unrestricted,
+            graphs,
+            excluded_sources,
+        )
+    }
+
+    /// As above, but each attribute may carry a set of VALUES to restrict to
+    /// (aegis-svtdyn).
+    ///
+    /// A Datalog atom with a bound object — `rdf:type(?x, <aegis:Commit>)` — is
+    /// satisfied only by facts whose value is that constant, but the reactive
+    /// reasoner loaded the whole PREDICATE and discarded the rest in memory.
+    /// MEASURED on the 2026-09-12 production corpus: the single loaded rule
+    /// (`git_commit_subsumes_commit`) made every write load all **241,700**
+    /// current `rdf:type` facts to reach the **1,292** typed `aegis:Commit` and
+    /// **3,342** typed `aegis:GitCommit` it actually needs — a 52x over-read,
+    /// on every write.
+    ///
+    /// `None` means "no restriction" and is the old behaviour exactly, which is
+    /// what an atom with a VARIABLE object must still get.
+    ///
+    /// The restricted arm is `(a = ? AND v IN (…))`, which `idx_vaet (v, a, e,
+    /// valid_from)` already serves — no new index.
+    pub fn current_facts_for_attribute_values_in_graphs_excluding_sources(
+        &self,
+        attributes: &[(i64, Option<Vec<Vec<u8>>>)],
+        graphs: &[i64],
+        excluded_sources: &[String],
+    ) -> Result<Vec<Fact>> {
         if attributes.is_empty() || graphs.is_empty() {
             return Ok(Vec::new());
         }
-        let attr_placeholders = std::iter::repeat_n("?", attributes.len())
-            .collect::<Vec<_>>()
-            .join(", ");
         let graph_placeholders = std::iter::repeat_n("?", graphs.len())
             .collect::<Vec<_>>()
             .join(", ");
@@ -260,18 +289,46 @@ impl Store {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
+        // One OR-arm per attribute so a bound-object atom narrows to its own
+        // values while an unbound one still reads the whole predicate.
+        let attr_clause = attributes
+            .iter()
+            .map(|(_a, vals)| match vals {
+                Some(v) if !v.is_empty() => {
+                    let ph = std::iter::repeat_n("?", v.len())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("(f.a = ? AND f.v IN ({ph}))")
+                }
+                // An EMPTY restriction set is not "no restriction": it is a
+                // predicate whose constant is not interned, which matches
+                // nothing. Saying `f.a = ?` there would silently widen it back.
+                Some(_) => "(0)".to_string(),
+                None => "(f.a = ?)".to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(" OR ");
         let sql = format!(
             "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
              FROM facts f JOIN transactions t ON f.tx = t.id \
-             WHERE f.op = 1 AND f.valid_to IS NULL AND f.a IN ({attr_placeholders}) \
+             WHERE f.op = 1 AND f.valid_to IS NULL AND ({attr_clause}) \
                AND f.g IN ({graph_placeholders}) \
                AND (t.source IS NULL OR t.source NOT IN ({src_placeholders})) \
              ORDER BY f.e, f.a"
         );
-        let mut values: Vec<rusqlite::types::Value> = attributes
-            .iter()
-            .map(|a| rusqlite::types::Value::Integer(*a))
-            .collect();
+        let mut values: Vec<rusqlite::types::Value> = Vec::new();
+        for (a, vals) in attributes {
+            match vals {
+                Some(v) if !v.is_empty() => {
+                    values.push(rusqlite::types::Value::Integer(*a));
+                    for b in v {
+                        values.push(rusqlite::types::Value::Blob(b.clone()));
+                    }
+                }
+                Some(_) => {}
+                None => values.push(rusqlite::types::Value::Integer(*a)),
+            }
+        }
         for g in graphs {
             values.push(rusqlite::types::Value::Integer(*g));
         }

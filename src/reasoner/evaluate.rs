@@ -374,13 +374,42 @@ impl World {
         rule_indices: &[usize],
     ) -> Result<Self> {
         let mut preds: BTreeSet<String> = BTreeSet::new();
+        // Per predicate, the set of BOUND object constants every atom using it
+        // carries — or None the moment one atom leaves the object unbound
+        // (aegis-svtdyn).
+        //
+        // A bound object is a filter the store can apply: `rdf:type(?x,
+        // <aegis:Commit>)` is satisfied only by facts whose value is that
+        // constant. Collecting predicates alone made every write load the whole
+        // predicate and discard the rest in memory — measured on the production
+        // corpus as 241,700 current `rdf:type` facts loaded to reach 4,634.
+        //
+        // None is the widening case and MUST win: one unbound atom means the
+        // predicate has to be read in full, so `or_insert` cannot be used to
+        // "add" to an existing None.
+        let mut bound_objects: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
+        let mut note = |atom: &crate::reasoner::ast::Atom| {
+            let slot = bound_objects.entry(atom.predicate.clone()).or_insert(Some(BTreeSet::new()));
+            match atom.args.get(1) {
+                Some(crate::reasoner::ast::Term::Iri(iri)) => {
+                    if let Some(set) = slot.as_mut() {
+                        set.insert(iri.clone());
+                    }
+                }
+                // A variable object, a literal, or a unary atom: unrestricted.
+                _ => *slot = None,
+            }
+        };
         for &rule_idx in rule_indices {
             let rule = &ruleset.rules[rule_idx];
             preds.insert(rule.head.predicate.clone());
+            note(&rule.head);
             for body in &rule.body {
                 preds.insert(body.atom().predicate.clone());
+                note(body.atom());
             }
         }
+        drop(note);
 
         // Look up (don't intern) — a predicate with no existing facts is
         // fine, it just starts empty and may get written into later.
@@ -415,9 +444,23 @@ impl World {
             .iter()
             .map(|&i| format!("reasoner:{}", ruleset.rules[i].id))
             .collect();
-        let attribute_ids: Vec<i64> = attr_to_pred.keys().copied().collect();
-        let facts = store.current_facts_for_attributes_in_graphs_excluding_sources(
-            &attribute_ids,
+        // Carry each attribute's bound-object restriction into the query. An
+        // IRI that is not interned yields an EMPTY set, which matches nothing —
+        // correct, and distinct from None, which matches everything.
+        let attr_values: Vec<(i64, Option<Vec<Vec<u8>>>)> = attr_to_pred
+            .iter()
+            .map(|(&attr_id, pred)| {
+                let restriction = bound_objects.get(pred).and_then(|o| o.as_ref()).map(|iris| {
+                    iris.iter()
+                        .filter_map(|iri| store.lookup(iri).ok().flatten())
+                        .map(|id| Value::Ref(id).to_bytes())
+                        .collect::<Vec<Vec<u8>>>()
+                });
+                (attr_id, restriction)
+            })
+            .collect();
+        let facts = store.current_facts_for_attribute_values_in_graphs_excluding_sources(
+            &attr_values,
             graphs,
             &excluded_sources,
         )?;
