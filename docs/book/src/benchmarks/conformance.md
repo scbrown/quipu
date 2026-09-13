@@ -26,8 +26,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `4a9f0d17df754c2aee9990e94bfa22e7ea65d4f4` |
-| Quipu revision (syntax) | `4a9f0d17df754c2aee9990e94bfa22e7ea65d4f4` |
+| Quipu revision (evaluation) | `51c68cafe4df7c8e52026fa396fac88aed8f515f` |
+| Quipu revision (syntax) | `51c68cafe4df7c8e52026fa396fac88aed8f515f` |
 | Quipu version | `quipu 0.5.1` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -177,7 +177,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **29/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-13T14:23:53Z by [CI run](https://github.com/scbrown/quipu/actions/runs/34762311359), from quipu `4a9f0d17df75`.
+Ledger re-derived 2026-09-13T15:48:06Z by **local** — NOT CI-produced, from quipu `51c68cafe4df`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
