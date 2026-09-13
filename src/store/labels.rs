@@ -228,168 +228,6 @@ impl Store {
         self.set_graph_label_until(graph_iri, label, timestamp, None, actor)
     }
 
-    /// Declare a graph label that expires at `valid_to`.
-    ///
-    /// After expiry the whole declaration reads as undeclared; expiry never
-    /// manufactures an `unknown` value or preserves the last safe value.
-    pub fn set_graph_label_until(
-        &mut self,
-        graph_iri: &str,
-        label: &GraphLabel,
-        timestamp: &str,
-        valid_to: Option<&str>,
-        actor: Option<&str>,
-    ) -> Result<i64> {
-        if let Some(end) = valid_to
-            && (end.len() != 20 || !end.ends_with('Z') || end <= timestamp)
-        {
-            return Err(Error::InvalidValue(format!(
-                "label valid_to '{end}' must be canonical UTC and later than valid_from '{timestamp}'"
-            )));
-        }
-        if label.is_empty() {
-            return Err(Error::InvalidValue(format!(
-                "set_graph_label on '{graph_iri}' declares no axis; to clear a \
-                 label, retract the meta-graph facts explicitly"
-            )));
-        }
-
-        let meta_g = self.meta_graph_id()?;
-        let subject = self.intern(graph_iri)?;
-
-        let mut datums: Vec<Datum> = Vec::new();
-        if let Some(f) = label.freshness {
-            datums.push(Datum {
-                entity: subject,
-                attribute: self.intern(QUIPU_FRESHNESS)?,
-                value: Value::Str(f.as_str().to_string()),
-                valid_from: timestamp.to_string(),
-                valid_to: valid_to.map(str::to_string),
-                op: Op::Assert,
-            });
-        }
-        if let Some(d) = label.durability {
-            datums.push(Datum {
-                entity: subject,
-                attribute: self.intern(QUIPU_DURABILITY)?,
-                value: Value::Str(d.as_str().to_string()),
-                valid_from: timestamp.to_string(),
-                valid_to: valid_to.map(str::to_string),
-                op: Op::Assert,
-            });
-        }
-        if let Some(t) = &label.trust {
-            let trust_term = self.intern(&t.iri)?;
-            let chain_term = self.intern(&t.chain)?;
-            datums.push(Datum {
-                entity: subject,
-                attribute: self.intern(QUIPU_TRUST)?,
-                value: Value::Ref(trust_term),
-                valid_from: timestamp.to_string(),
-                valid_to: valid_to.map(str::to_string),
-                op: Op::Assert,
-            });
-            // The chain and rank are facts about the TRUST VALUE, not about the
-            // graph — that is what makes the ordering data rather than a
-            // hardcoded enum, and what lets two consumers ship different chains.
-            datums.push(Datum {
-                entity: trust_term,
-                attribute: self.intern(QUIPU_IN_CHAIN)?,
-                value: Value::Ref(chain_term),
-                valid_from: timestamp.to_string(),
-                valid_to: valid_to.map(str::to_string),
-                op: Op::Assert,
-            });
-            datums.push(Datum {
-                entity: trust_term,
-                attribute: self.intern(QUIPU_TRUST_RANK)?,
-                value: Value::Int(t.rank),
-                valid_from: timestamp.to_string(),
-                valid_to: valid_to.map(str::to_string),
-                op: Op::Assert,
-            });
-        }
-        if let Some(p) = &label.policy {
-            let attr = self.intern(QUIPU_POLICY_CLASS)?;
-            for tok in p.tokens() {
-                datums.push(Datum {
-                    entity: subject,
-                    attribute: attr,
-                    value: Value::Str(tok.to_string()),
-                    valid_from: timestamp.to_string(),
-                    valid_to: valid_to.map(str::to_string),
-                    op: Op::Assert,
-                });
-            }
-        }
-        if let Some(k) = &label.kind {
-            datums.push(Datum {
-                entity: subject,
-                attribute: self.intern(QUIPU_DATA_KIND)?,
-                value: Value::Str(k.as_str().to_string()),
-                valid_from: timestamp.to_string(),
-                valid_to: valid_to.map(str::to_string),
-                op: Op::Assert,
-            });
-        }
-
-        let policy_encoded = match &label.policy {
-            Some(p) => Some(encode_policy(p)?),
-            None => None,
-        };
-
-        // One savepoint over BOTH writes. `transact_to_graph` opens its own
-        // `quipu_transact` inside this one — the same nesting `speculate` uses.
-        self.conn.execute_batch("SAVEPOINT quipu_set_label")?;
-        let result = (|| -> Result<i64> {
-            let tx =
-                self.transact_to_graph(&datums, timestamp, actor, Some("graph-label"), meta_g)?;
-            let updated = self.conn.execute(
-                "UPDATE graphs SET fresh_rank = ?2, durability_rank = ?3, trust_rank = ?4, trust_chain = ?5, \
-                 policy = ?6, labels_tx = ?7, labels_valid_to = ?8, data_kind = ?9 WHERE g = ?1",
-                params![
-                    subject,
-                    label.freshness.map(|f| f as i64),
-                    label.durability.map(|d| d as i64),
-                    label.trust.as_ref().map(|t| t.rank),
-                    label.trust.as_ref().map(|t| t.chain.clone()),
-                    policy_encoded,
-                    tx,
-                    valid_to,
-                    label.kind.as_ref().map(|k| k.as_str().to_string()),
-                ],
-            )?;
-            // An UPDATE matching no row is not an error in SQL, and that is
-            // exactly how this would go wrong quietly: labelling a graph that
-            // was never registered in `graphs` (a typo'd IRI, most likely)
-            // would write the meta-graph facts and cache nothing, leaving
-            // permanent drift that only `doctor labels` would ever surface.
-            // Refuse instead, and let the savepoint take the facts back out.
-            if updated != 1 {
-                return Err(Error::InvalidValue(format!(
-                    "cannot label '{graph_iri}': it is not a registered graph \
-                     (no row in `graphs`). Create it first — labelling an \
-                     unregistered graph would write facts the cache could \
-                     never mirror."
-                )));
-            }
-            Ok(tx)
-        })();
-
-        match result {
-            Ok(tx) => {
-                self.conn.execute_batch("RELEASE quipu_set_label")?;
-                Ok(tx)
-            }
-            Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_set_label; RELEASE quipu_set_label");
-                Err(e)
-            }
-        }
-    }
-
     /// Read a graph's label from the cache.
     ///
     /// An unregistered or unlabelled graph yields [`Coverage::None`] on every
@@ -413,7 +251,7 @@ impl Store {
     /// # Errors
     /// As [`Store::label_of`].
     pub fn label_of_id(&self, g: i64) -> Result<ReadLabel> {
-        let graph_iri = self.resolve(g).unwrap_or_else(|_| format!("g={g}"));
+        let graph_iri = self.graph_display_name(g);
         let graph_iri = graph_iri.as_str();
 
         let row: Option<CacheRow> = self
@@ -638,10 +476,26 @@ impl Store {
         }
     }
 
+    fn label_subject(&self, graph: i64) -> Result<i64> {
+        if graph == crate::schema::ROOT_GRAPH {
+            let Some(subject) = self.lookup(crate::schema::ROOT_GRAPH_IRI)? else {
+                return Ok(0);
+            };
+            let named: bool = self.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM graphs WHERE g=?1)",
+                [subject],
+                |r| r.get(0),
+            )?;
+            Ok(if named { 0 } else { subject })
+        } else {
+            Ok(graph)
+        }
+    }
+
     /// The trust IRI currently asserted for `g` in the meta-graph.
     fn declared_trust_iri(&self, g: i64) -> Result<Option<String>> {
         let meta_g = self.meta_graph_id()?;
-        let v = self.current_value(g, QUIPU_TRUST, meta_g)?;
+        let v = self.current_value(self.label_subject(g)?, QUIPU_TRUST, meta_g)?;
         self.ref_iri(v.as_ref())
     }
 
@@ -807,7 +661,7 @@ impl Store {
         }
 
         for &g in graphs {
-            let iri = self.resolve(g).unwrap_or_else(|_| format!("g={g}"));
+            let iri = self.graph_display_name(g);
             let l = self.label_of_id(g)?;
 
             if let Some(min) = min_fresh {
@@ -941,10 +795,12 @@ impl Store {
             .collect::<std::result::Result<_, _>>()?;
 
         for (g, fresh_rank, durability_rank, trust_rank, trust_chain, policy, data_kind) in rows {
-            let graph_iri = self.resolve(g).unwrap_or_else(|_| format!("g={g}"));
+            let graph_iri = self.graph_display_name(g);
+
+            let subject = self.label_subject(g)?;
 
             // Freshness.
-            let rdf_fresh = self.declared_str(g, QUIPU_FRESHNESS, meta_g)?;
+            let rdf_fresh = self.declared_str(subject, QUIPU_FRESHNESS, meta_g)?;
             let cached_fresh = match fresh_rank {
                 Some(0) => Some("stale".to_string()),
                 Some(1) => Some("recomputing".to_string()),
@@ -961,7 +817,7 @@ impl Store {
                 });
             }
 
-            let rdf_durability = self.declared_str(g, QUIPU_DURABILITY, meta_g)?;
+            let rdf_durability = self.declared_str(subject, QUIPU_DURABILITY, meta_g)?;
             let cached_durability = match durability_rank {
                 Some(0) => Some("soleRecord".to_string()),
                 Some(1) => Some("reproducible".to_string()),
@@ -1013,7 +869,7 @@ impl Store {
 
             // Kind — a plain string compare; the axis is categorical and both
             // sides store the declared token verbatim.
-            let rdf_kind = self.declared_str(g, QUIPU_DATA_KIND, meta_g)?;
+            let rdf_kind = self.declared_str(subject, QUIPU_DATA_KIND, meta_g)?;
             if rdf_kind != data_kind {
                 drift.push(LabelDrift {
                     graph_iri: graph_iri.clone(),
@@ -1025,7 +881,7 @@ impl Store {
 
             // Policy — compare as SETS, since the cache is a canonical join and
             // a string compare would report a false drift on reordering.
-            let rdf_tokens = self.declared_all(g, QUIPU_POLICY_CLASS, meta_g)?;
+            let rdf_tokens = self.declared_all(subject, QUIPU_POLICY_CLASS, meta_g)?;
             let rdf_policy = if rdf_tokens.is_empty() {
                 None
             } else {
@@ -1083,3 +939,6 @@ impl Store {
 #[cfg(test)]
 #[path = "labels_tests.rs"]
 mod tests;
+
+#[path = "labels_write.rs"]
+mod write;

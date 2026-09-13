@@ -14,6 +14,11 @@ interchange format.
 
 ## `quipu share` — produce a share
 
+Prerequisite: [load the identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+and the shapes governing your data. The default destination is outward.
+An empty block-tier catalogue exits 2 (cannot verify); a matching identifier
+exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this check.
+
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
             [--shapes NAME]... [--no-shapes] [--parent-share ID]

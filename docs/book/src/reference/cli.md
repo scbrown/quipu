@@ -142,6 +142,10 @@ The three scope flags are mutually exclusive. Omit all three for ROOT.
 ### `quipu share`
 
 Write a deterministic directory intended for git storage and interchange.
+First [load an identifier-policy catalogue](../sharing/README.md#prepare-an-outward-share)
+and your data's shapes into the same store. The examples below assume that setup.
+Outward shares refuse with exit 2 when no block-tier catalogue is available,
+exit 1 when a rule matches, and exit 0 when the checked payload is clean.
 
 ```bash
 quipu share --output knowledge-share --db my.db

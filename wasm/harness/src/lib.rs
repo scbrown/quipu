@@ -180,6 +180,25 @@ pub fn scenario_import(bytes: &[u8]) -> Result<String, JsValue> {
 pub fn scenario_pack(path: &str) -> Result<Vec<u8>, JsValue> {
     use quipu::types::{Op, Value};
     let mut store = quipu::Store::open(path).map_err(err_js)?;
+    // Keep the synthetic outward policy separate from the two packed facts.
+    store
+        .load_shapes(
+            "pack-policy",
+            include_str!("../../../examples/sharing-demo/policy-shapes.ttl"),
+            TS,
+        )
+        .map_err(err_js)?;
+    store
+        .graph_create("urn:test:pack-policy")
+        .map_err(err_js)?;
+    quipu::tool_knot(
+        &mut store,
+        &serde_json::json!({
+            "turtle": include_str!("../../../tests/fixtures/share-catalogue.ttl"),
+            "graph": "urn:test:pack-policy",
+        }),
+    )
+    .map_err(err_js)?;
     let g = store
         .overlay_create("urn:g:browser-pack", 0)
         .map_err(err_js)?;

@@ -42,6 +42,15 @@ pub struct GraphInfo {
 }
 
 impl Store {
+    /// Canonical name for a graph id, retaining an explicit unknown-id diagnostic.
+    pub(crate) fn graph_display_name(&self, graph: i64) -> String {
+        if graph == crate::schema::ROOT_GRAPH {
+            ROOT_GRAPH_IRI.to_string()
+        } else {
+            self.resolve(graph).unwrap_or_else(|_| format!("g={graph}"))
+        }
+    }
+
     /// Live triple counts for every registered graph, excluding the metadata graph.
     ///
     /// This is the read-side inventory used by standards descriptions. Counts
@@ -144,11 +153,7 @@ impl Store {
         let mut out = Vec::with_capacity(rows.len());
         for (g, class, source, lc, fresh, durab, trust_rank, trust_chain, policy, data_kind) in rows
         {
-            let iri = if g == 0 {
-                ROOT_GRAPH_IRI.to_string()
-            } else {
-                self.resolve(g).unwrap_or_else(|_| format!("g={g}"))
-            };
+            let iri = self.graph_display_name(g);
             out.push(GraphInfo {
                 iri,
                 g,
@@ -301,5 +306,22 @@ fn rank_to_durability(rank: i64) -> String {
         1 => "reproducible".into(),
         2 => "backed".into(),
         other => format!("<invalid {other}>"),
+    }
+}
+
+#[cfg(test)]
+mod display_tests {
+    use super::*;
+
+    #[test]
+    fn root_named_and_unknown_graph_names_remain_distinct() {
+        let store = Store::open_in_memory().unwrap();
+        assert_eq!(store.graph_display_name(0), ROOT_GRAPH_IRI);
+        let named = store.overlay_create("urn:test:named", 0).unwrap();
+        assert_eq!(store.graph_display_name(named), "urn:test:named");
+        assert_eq!(
+            store.graph_display_name(i64::MAX),
+            format!("g={}", i64::MAX)
+        );
     }
 }

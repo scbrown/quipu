@@ -76,6 +76,10 @@ ex:beta  a ex:Widget ; rdfs:label "Beta" .
 const run = (args) => execFileSync(quipu, args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 run(["shapes", "load", "smoke", shapes, "--db", db]);
 run(["knot", seed, "--db", db]);
+// Outward fixture shares must exercise a real catalogue. Keep policy facts in
+// their own graph so the widget payload and its exact-count assertions stay scoped.
+run(["shapes", "load", "smoke-policy", join(repo, "examples/sharing-demo/policy-shapes.ttl"), "--db", db]);
+run(["knot", join(repo, "examples/sharing-demo/policy.ttl"), "--graph", "urn:smoke:policy", "--db", db]);
 const shareDir = join(work, "share");
 run(["share", "--output", shareDir, "--db", db]);
 
@@ -83,6 +87,14 @@ const packName = "smoke.qpack.tar.gz";
 execFileSync("tar", ["--sort=name", "--mtime=UTC 1970-01-01", "--owner=0", "--group=0",
   "--numeric-owner", "-C", shareDir, "-czf", join(work, packName), "."]);
 const producerManifest = JSON.parse(readFileSync(join(shareDir, "manifest.json"), "utf8"));
+
+// The receiver owns its policy; it is deliberately absent from the source pack.
+const receiverPolicy = JSON.stringify({
+  name: "smoke-receiver-policy", source: "synthetic acceptance fixture",
+  graph: "urn:smoke:receiver-policy",
+  nodes: [{ name: "smoke-private-identifiers", type: "InternalIdentifierPattern",
+    properties: { regex: "private[.]example", enforcementTier: "block" } }],
+});
 
 // ---- 2. Serve the packaged bundle exactly as the book page would ----------
 
@@ -290,6 +302,17 @@ try {
       && editLog.filter((e) => e.op === "set").length === 2
       && editLog.filter((e) => e.op === "retract").length === 1,
     JSON.stringify(editLog.map((e) => e.op)));
+
+  const noPolicy = await page.evaluate(() => window.ask({ cmd: "exportManifest" })
+    .then(() => null, (e) => e.message));
+  check("outward browser export refuses an empty receiver catalogue",
+    typeof noPolicy === "string" && noPolicy.includes("no block-tier patterns"), noPolicy);
+  await page.evaluate((episode) => window.ask({ cmd: "episode", episode }), receiverPolicy);
+
+  const receiverRoot = await page.evaluate(() => window.ask({
+    cmd: "query", sparql: "SELECT ?s WHERE { ?s a <http://aegis.gastown.local/ontology/InternalIdentifierPattern> }",
+  }));
+  check("receiver policy stays outside the shared ROOT graph", receiverRoot.rows.length === 0);
 
   const exportManifest = await page.evaluate(() => window.ask({ cmd: "exportManifest" }));
   check("the exported pack declares the pack it came from as its parent",

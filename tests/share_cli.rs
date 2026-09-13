@@ -25,6 +25,7 @@ fn cli_writes_byte_identical_shares_for_unchanged_state() {
             "2026-08-29",
         )
         .unwrap();
+    seed_catalogue(&mut store);
     drop(store);
 
     let first = root.path().join("first");
@@ -62,7 +63,9 @@ fn cli_writes_byte_identical_shares_for_unchanged_state() {
 fn cli_refuses_empty_shapes_unless_explicitly_requested() {
     let root = tempfile::tempdir().unwrap();
     let db = root.path().join("empty.db");
-    drop(quipu::Store::open(db.to_str().unwrap()).unwrap());
+    let mut store = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    seed_catalogue(&mut store);
+    drop(store);
 
     let refused = root.path().join("refused");
     let result = Command::new(env!("CARGO_BIN_EXE_quipu"))
@@ -98,4 +101,60 @@ fn cli_refuses_empty_shapes_unless_explicitly_requested() {
             .len(),
         0
     );
+}
+
+fn seed_catalogue(store: &mut quipu::Store) {
+    let graph = store.overlay_create("urn:test:catalogue", 0).unwrap();
+    quipu::rdf::ingest_rdf_to_graph(
+        store,
+        include_bytes!("fixtures/share-catalogue.ttl").as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-08-01T00:00:00Z",
+        None,
+        Some("test-catalogue"),
+        graph,
+    )
+    .unwrap();
+}
+
+#[test]
+fn outward_cli_distinguishes_cannot_verify_from_violation() {
+    let root = tempfile::tempdir().unwrap();
+    let db = root.path().join("source.db");
+    let mut store = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    let empty = root.path().join("empty");
+    let run = |out: &std::path::Path| {
+        Command::new(env!("CARGO_BIN_EXE_quipu"))
+            .args([
+                "share",
+                "--output",
+                out.to_str().unwrap(),
+                "--no-shapes",
+                "--db",
+                db.to_str().unwrap(),
+            ])
+            .output()
+            .unwrap()
+    };
+    let result = run(&empty);
+    assert_eq!(result.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("cannot verify"));
+    assert!(!empty.exists());
+    seed_catalogue(&mut store);
+    let clean = root.path().join("clean");
+    assert_eq!(run(&clean).status.code(), Some(0));
+    quipu::ingest_rdf(
+        &mut store,
+        &b"<urn:leak> <urn:p> \"FIXTURE_PRIVATE_TOKEN\" ."[..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-08-01T00:00:01Z",
+        None,
+        Some("sabotage"),
+    )
+    .unwrap();
+    let bad = root.path().join("bad");
+    assert_eq!(run(&bad).status.code(), Some(1));
+    assert!(!bad.exists());
 }

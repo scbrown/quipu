@@ -70,12 +70,24 @@ ex:beta  a ex:Widget ; rdfs:label "Beta" .
 const run = (args) => execFileSync(quipu, args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 run(["shapes", "load", "smoke", shapes, "--db", db]);
 run(["knot", seed, "--db", db]);
+// Match the browser fixture: check outward sharing against a real catalogue
+// without adding policy facts to the widget graph being shared.
+run(["shapes", "load", "smoke-policy", join(repo, "examples/sharing-demo/policy-shapes.ttl"), "--db", db]);
+run(["knot", join(repo, "examples/sharing-demo/policy.ttl"), "--graph", "urn:smoke:policy", "--db", db]);
 const shareDir = join(work, "share");
 run(["share", "--output", shareDir, "--db", db]);
 
 execFileSync("tar", ["--sort=name", "--mtime=UTC 1970-01-01", "--owner=0", "--group=0",
   "--numeric-owner", "-C", shareDir, "-czf", join(work, "smoke.qpack.tar.gz"), "."]);
 const producerManifest = JSON.parse(readFileSync(join(shareDir, "manifest.json"), "utf8"));
+
+// The receiver owns its policy; it is deliberately absent from the source pack.
+const receiverPolicy = JSON.stringify({
+  name: "smoke-receiver-policy", source: "synthetic acceptance fixture",
+  graph: "urn:smoke:receiver-policy",
+  nodes: [{ name: "smoke-private-identifiers", type: "InternalIdentifierPattern",
+    properties: { regex: "private[.]example", enforcementTier: "block" } }],
+});
 
 // ---- 2. Load the nodejs bundle in-process ---------------------------------
 //
@@ -167,6 +179,16 @@ check("a second /set replaces rather than appends",
   `count=${afterSecond.rows?.[0]?.n} retracted=${setAgain.retracted}`);
 
 // ---- 5. The delta: the reason a headless producer is worth having ---------
+
+let noPolicy = null;
+try { ex.delta(); } catch (e) { noPolicy = String(e); }
+check("outward node delta refuses an empty receiver catalogue",
+  noPolicy?.includes("no block-tier patterns") === true, noPolicy);
+ex.episode(receiverPolicy);
+
+const receiverRoot = JSON.parse(ex.query(
+  "SELECT ?s WHERE { ?s a <http://aegis.gastown.local/ontology/InternalIdentifierPattern> }"));
+check("receiver policy stays outside the shared ROOT graph", receiverRoot.rows.length === 0);
 
 const delta = JSON.parse(ex.delta());
 check("the delta is non-empty after edits", delta.empty === false,

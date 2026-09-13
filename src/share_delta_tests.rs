@@ -2,6 +2,7 @@ use super::*;
 
 fn store(value: &str) -> crate::Store {
     let mut store = crate::Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut store);
     let rdf = format!("<http://example.test/a> <http://example.test/p> \"{value}\" .");
     crate::rdf::ingest_rdf(
         &mut store,
@@ -274,6 +275,7 @@ fn embedded_delta_budget_does_not_raise_the_default_ceiling() {
 /// A store carrying a block-tier rule and one fact that violates it.
 fn leaky_store() -> crate::Store {
     let mut store = crate::Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut store);
     crate::rdf::ingest_rdf(
         &mut store,
         &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .

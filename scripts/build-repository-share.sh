@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 if [ "$#" -ne 5 ]; then
   echo "usage: $0 <quipu-bin> <bobbin-bin> <source-repo> <output-dir> <repository-sha>" >&2
@@ -12,11 +13,20 @@ SOURCE=$(readlink -f "$3")
 OUTPUT=$4
 REPOSITORY_SHA=$5
 QUERY="$SOURCE/queries/repository-share-quipu.rq"
+[[ "$REPOSITORY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'invalid repository revision' >&2; exit 2; }
 
 test -x "$QUIPU_BIN"
 test -x "$BOBBIN_BIN"
 test -f "$QUERY"
 test ! -e "$OUTPUT" || { echo "output already exists: $OUTPUT" >&2; exit 2; }
+
+# Run only on the trusted producer. The authority address and credential stay
+# in its private environment; neither belongs in hosted workflow configuration.
+PRIVATE=$(mktemp -d "$(dirname "$OUTPUT")/.quipu-producer.XXXXXX")
+trap 'rm -rf "$PRIVATE"' EXIT
+python3 "$SOURCE/scripts/private-share-policy.py" "$PRIVATE/policy.ttl"
+FINAL_OUTPUT=$OUTPUT
+OUTPUT="$PRIVATE/share"
 
 mkdir -p "$SOURCE/.bobbin"
 python3 - "$SOURCE/.bobbin/config.toml" <<'PY'
@@ -41,19 +51,31 @@ env -u BOBBIN_SERVER -u BOBBIN_QUIPU_REMOTE \
   "$BOBBIN_BIN" index "$SOURCE" --source "$SOURCE" --repo quipu \
   --force --skip-calibrate --json
 
-DB="$SOURCE/.bobbin/quipu/quipu.db"
-test -s "$DB"
+INDEX_DB="$SOURCE/.bobbin/quipu/quipu.db"
+test -s "$INDEX_DB"
+# Policy is build-local. Never cache it in the index: retired rules must not
+# survive a later successful authority fetch, nor leave private data in source.
+DB="$PRIVATE/producer.db"
+python3 - "$INDEX_DB" "$DB" <<'PY'
+import sqlite3
+import sys
+
+with sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True) as source:
+    with sqlite3.connect(sys.argv[2]) as destination:
+        source.backup(destination)
+PY
 
 for shape in "$SOURCE"/shapes/*.ttl; do
   name=$(basename "$shape" .ttl)
   "$QUIPU_BIN" shapes load "$name" "$shape" --db "$DB"
 done
 
-CONTEXT=$(mktemp)
-FRESH_DB=$(mktemp)
-IMPORT_JSON=$(mktemp)
-QUERY_JSON=$(mktemp)
-trap 'rm -f "$CONTEXT" "$FRESH_DB" "$IMPORT_JSON" "$QUERY_JSON"' EXIT
+"$QUIPU_BIN" knot "$PRIVATE/policy.ttl" --graph urn:quipu:private-release-policy --db "$DB"
+
+CONTEXT="$PRIVATE/context.ttl"
+FRESH_DB="$PRIVATE/receiver.db"
+IMPORT_JSON="$PRIVATE/import.json"
+QUERY_JSON="$PRIVATE/query.json"
 python3 - "$CONTEXT" "$REPOSITORY_SHA" <<'PY'
 from pathlib import Path
 import sys
@@ -112,3 +134,6 @@ node "$SOURCE/scripts/verify-contributor-knowledge.mjs" "$QUIPU_BIN" "$FRESH_DB"
 
 wc -c "$OUTPUT"/*
 wc -l "$OUTPUT/export.nt"
+
+# Failed scrubs and failed receiver verification expose no output directory.
+mv -T "$OUTPUT" "$FINAL_OUTPUT"

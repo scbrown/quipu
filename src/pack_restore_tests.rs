@@ -63,7 +63,8 @@ fn full_pack(dir: &tempfile::TempDir, leaf: &str) -> String {
 }
 
 fn published_pack(dir: &tempfile::TempDir, leaf: &str) -> String {
-    let store = store_with_history();
+    let mut store = store_with_history();
+    crate::share_scrub::seed_test_catalogue(&mut store);
     let out = at(dir, leaf);
     crate::pack::pack(&store, GRAPH, &out, &PackOptions::default(), TS).unwrap();
     out

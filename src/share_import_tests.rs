@@ -42,6 +42,7 @@ mod tests {
         // label. This is the collision the rewrite used to resolve silently.
         let plant = |iri: &str| {
             let mut st = Store::open_in_memory().unwrap();
+            crate::share_scrub::seed_test_catalogue(&mut st);
             let nt = format!(
                 "<{iri}> <http://www.w3.org/2000/01/rdf-schema#label> \"Alice\" .\n"
             );
@@ -86,6 +87,7 @@ mod tests {
     #[test]
     fn verified_share_stages_then_promotes_explicitly() {
         let mut source = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
         crate::rdf::ingest_rdf(
             &mut source,
             &b"<https://example.org/alice> <http://www.w3.org/2000/01/rdf-schema#label> \"Alice\" .\n"[..],
@@ -97,6 +99,7 @@ mod tests {
         ).unwrap();
         let (_dir, request) = request(&source);
         let mut target = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut target);
         let staged = import_share(&mut target, &request, TS, Some("legacy-shared-bearer")).unwrap();
         assert_eq!(staged.outcome, "staged");
         assert!(staged.promotion.eligible);
@@ -151,10 +154,12 @@ mod tests {
 
     #[test]
     fn hash_mismatch_writes_nothing() {
-        let source = Store::open_in_memory().unwrap();
+        let mut source = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
         let (_dir, mut request) = request(&source);
         request.export_ntriples.push_str("# tampered\n");
         let mut target = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut target);
         assert!(import_share(&mut target, &request, TS, None).is_err());
         assert!(
             target
@@ -167,6 +172,7 @@ mod tests {
     #[test]
     fn off_vocabulary_share_is_quarantined_and_cannot_promote() {
         let mut source = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
         crate::rdf::ingest_rdf(
             &mut source,
             &b"<https://example.org/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://foreign.example/Unknown> .\n"[..],
@@ -178,6 +184,7 @@ mod tests {
         ).unwrap();
         let (_dir, request) = request(&source);
         let mut target = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut target);
         let result = import_share(&mut target, &request, TS, None).unwrap();
         assert_eq!(result.outcome, "quarantined");
         assert_eq!(result.triples.quarantined, 1);
