@@ -1210,6 +1210,23 @@ fn every_canonical_content_caller_scrubs_or_is_classified() {
                     }
                 };
             for line in text.lines() {
+                // A MENTION IS NOT A CALL. Whole-line comments are dropped
+                // before matching, because a doc comment that merely NAMES the
+                // primitive is attributed to whichever `fn` precedes it and
+                // reported as an unscrubbed caller. That happened to
+                // `pack_full::verify_full`, whose doc comment explains why
+                // `pack::verify`'s hash cannot serve a full pack — and the
+                // audit read the explanation as the thing it describes
+                // (aegis-9f899e).
+                //
+                // Only lines that are ENTIRELY a comment are stripped. Cutting
+                // every line at its first `//` would truncate real code after a
+                // string containing `//` (`"http://..."` is everywhere here)
+                // and could hide an actual call — imprecision in the blind
+                // direction, which is worse than the false alarm it fixes.
+                if line.trim_start().starts_with("//") {
+                    continue;
+                }
                 if let Some(rest) = line
                     .strip_prefix("pub fn ")
                     .or_else(|| line.strip_prefix("fn "))

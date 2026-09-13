@@ -134,6 +134,40 @@ pub fn pack_full(
     built
 }
 
+/// Recompute a full pack's hash and compare it to what its manifest claims.
+///
+/// [`crate::pack::verify`] CANNOT answer this question for a full pack, and the
+/// way it fails is the reason this exists. It recomputes
+/// `content_hash(canonical_content(.., manifest.source_graph, ..))`, and a full
+/// pack's `source_graph` is the sentinel `urn:quipu:whole-store`, which is not
+/// a graph in the store at all — so the call dies with `unknown graph:
+/// urn:quipu:whole-store`. Measured on an intact pack (aegis-9f899e): the
+/// artifact was complete and correct, and the only verify command quipu has
+/// reported it as a missing graph. For a BACKUP, "is this intact?" is the
+/// primary question, and it was unanswerable.
+///
+/// Returns `(claimed, recomputed, matches)`, the same shape as
+/// [`crate::pack::verify`], so a caller can dispatch on format and treat the
+/// results uniformly.
+///
+/// # Errors
+/// Propagates a missing or unreadable manifest and SQLite errors from the
+/// re-hash.
+/// Gated like [`crate::pack::read_manifest`], which it calls: that one is
+/// `cfg(not(wasm32))`, and this module is NOT gated as a whole, so an ungated
+/// function here reaches a gated one and the wasm32 `--lib` check fails to
+/// compile. Found by running that arm, after a static argument that the arm
+/// could not be affected — the argument enumerated references to the NEW
+/// module and missed the new function added to this EXISTING one (aegis-9f899e).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn verify_full(pack_path: &str) -> Result<(String, String, bool)> {
+    let manifest = crate::pack::read_manifest(pack_path)?;
+    let conn = Connection::open(pack_path)?;
+    let recomputed = content_hash_of(&conn)?;
+    let matches = recomputed == manifest.content_hash;
+    Ok((manifest.content_hash, recomputed, matches))
+}
+
 /// Every non-internal table in an open connection.
 fn live_tables(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
