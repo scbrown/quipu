@@ -1569,3 +1569,63 @@ fn outcome_wire_strings_are_distinct() {
     let uniq: std::collections::HashSet<_> = all.iter().collect();
     assert_eq!(uniq.len(), 3, "outcome strings collide: {all:?}");
 }
+
+/// A hash match is not PRESENCE: after the generated entities are retracted, a
+/// re-post must WRITE, not report `unchanged` (aegis-7oswq4).
+///
+/// The content hash lives on the episode ACTIVITY node and outlives the
+/// retraction of what the episode generated. `unchanged` is the signal the crew
+/// rulebook documents as "it is already there" — the gate for labelling a source
+/// bead ingested — so this reported success for data that was gone. Measured on
+/// the deployed store: 200 retracted entities, re-post returned
+/// `outcome: unchanged, count: 0, tx_id: 0`, read-back found 0.
+///
+/// Both arms are asserted together. Keeping ONLY the re-write arm would pass on
+/// a change that broke ordinary idempotency — which is the property hq-fhc added
+/// and the one a caller retrying after a lost response depends on.
+#[test]
+fn a_repost_after_retraction_writes_again_but_ordinary_idempotency_survives() {
+    let mut store = Store::open_in_memory().unwrap();
+    let ep = parse_episode(
+        r#"{"name": "revive-probe", "episode_body": "b", "source": "s",
+            "nodes": [{"name": "beta", "type": "Probe", "description": "d"}],
+            "edges": []}"#,
+    );
+
+    let first =
+        ingest_episode_outcome(&mut store, &ep, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+    assert_eq!(first.2, IngestOutcome::Created);
+
+    // ARM 1 — ordinary idempotency, unchanged: the entities are still there.
+    let retry =
+        ingest_episode_outcome(&mut store, &ep, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
+    assert_eq!(
+        retry.2,
+        IngestOutcome::Unchanged,
+        "with its entities present, an identical re-post must still report unchanged"
+    );
+
+    // Now retract what the episode generated, as a fixture cleanup does.
+    let beta = store
+        .lookup(&format!("{TEST_BASE_NS}beta"))
+        .unwrap()
+        .expect("beta was written");
+    store
+        .retract_entity(beta, None, "2026-01-03T00:00:00Z", Some("cleanup"))
+        .expect("retract the generated entity");
+
+    // ARM 2 — the bug: the hash still matches, but the data is gone.
+    let revived =
+        ingest_episode_outcome(&mut store, &ep, "2026-01-04T00:00:00Z", TEST_BASE_NS).unwrap();
+    assert_ne!(
+        revived.2,
+        IngestOutcome::Unchanged,
+        "after its entities were retracted a re-post must WRITE, not report `unchanged` \
+         — `unchanged` is the documented signal that the data is already present"
+    );
+    assert!(
+        revived.1 > 0,
+        "and it must actually write something, got count={}",
+        revived.1
+    );
+}

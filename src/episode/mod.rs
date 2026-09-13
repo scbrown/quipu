@@ -388,7 +388,12 @@ pub fn ingest_episode_outcome(
 
     // Idempotency fast path: same content already recorded → skip the write.
     // Reported as `Unchanged`, NOT as a bare `count: 0` — see `IngestOutcome`.
-    if existing_hash.as_deref() == Some(new_hash.as_str()) {
+    //
+    // A HASH MATCH IS NOT PRESENCE (aegis-7oswq4): the hash outlives the
+    // retraction of the entities it was recorded for, so `is_unchanged` also
+    // confirms those entities are still in the store. Rationale and the
+    // measurement are on `descriptions::is_unchanged`.
+    if descriptions::is_unchanged(store, &ep_iri, base_ns, episode, &existing_hash, &new_hash)? {
         return Ok((NOOP_TX, 0, IngestOutcome::Unchanged));
     }
 
