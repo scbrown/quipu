@@ -1079,6 +1079,7 @@ fn root_pack_carries_declared_labels_and_verifies_without_cache_drift() {
 #[test]
 fn root_selector_does_not_borrow_a_named_graph_with_the_same_iri() {
     let mut store = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut store);
     let root = crate::schema::ROOT_GRAPH_IRI;
     store.overlay_create(root, 0).unwrap();
     store
