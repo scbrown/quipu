@@ -124,6 +124,7 @@ fn main() {
         "graph" => cli_graph::cmd_graph(&args, db_path),
         "fork" => cli_fork::cmd_fork(&args, db_path),
         "unpack" => cli_pack::cmd_unpack(&args, db_path),
+        "restore" => cli_pack::cmd_restore(&args, db_path),
         "migrate-vectors" => cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
         _ => {
@@ -308,7 +309,8 @@ COMMANDS:
     quipu changes [--since-tx N] [--db <path>]
     quipu graph import <db> --as <iri> [--db <path>]
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
-    quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
+    quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
+    quipu restore <file.qpack> [--force] [--db <path>]               REPLACES the store with a --full pack
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-share>] [--turtle]
     quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]

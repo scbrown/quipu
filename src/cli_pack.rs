@@ -12,7 +12,19 @@ use crate::cli::{chrono_now, flag_value};
 /// MCP tool name and a `graph` subcommand would collide with it.
 pub fn cmd_pack(args: &[String], db_path: &str) {
     if let Some(path) = flag_value(args, "--verify") {
-        match quipu::pack::verify(path) {
+        // Dispatch on the FORMAT, because the two artifacts hash differently
+        // and `pack::verify` cannot recompute a full pack's hash at all: it
+        // hashes canonical CURRENT-FACTS content for `manifest.source_graph`,
+        // and a full pack's is the sentinel `urn:quipu:whole-store`. Measured
+        // on an intact pack, this printed `unknown graph:
+        // urn:quipu:whole-store` — so the lossless BACKUP was the one artifact
+        // whose integrity could not be checked, which is the question a backup
+        // exists to answer (aegis-9f899e).
+        let verified = match quipu::pack::read_manifest(path).map(|m| m.pack_format) {
+            Ok(f) if f == quipu::pack_restore::FORMAT_FULL => quipu::pack_full::verify_full(path),
+            _ => quipu::pack::verify(path),
+        };
+        match verified {
             Ok((stored, recomputed, true)) => {
                 println!("pack: OK\n  content_hash: {stored}");
                 let _ = recomputed;
@@ -146,6 +158,34 @@ pub fn cmd_unpack(args: &[String], db_path: &str) {
         ),
         Err(e) => {
             eprintln!("unpack error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `quipu restore <full-pack> [--force]` — REPLACE this store with a full pack.
+///
+/// The sibling of [`cmd_unpack`] and deliberately a different verb: `unpack`
+/// merges, `restore` replaces, and which one happens is declared by the
+/// operator rather than inferred from how empty the destination looks
+/// (aegis-9f899e, settled with wu).
+pub fn cmd_restore(args: &[String], db_path: &str) {
+    let Some(pack) = args.get(2).filter(|s| !s.starts_with("--")) else {
+        eprintln!(
+            "usage: quipu restore <file.qpack> [--force] [--db <path>]\n       \
+             REPLACES the store at --db with the pack's whole contents. To MERGE a \
+             published pack into an existing store, use `quipu unpack` instead."
+        );
+        std::process::exit(1);
+    };
+    let force = args.iter().any(|a| a == "--force");
+    match quipu::pack_restore::restore(pack, db_path, force) {
+        Ok(r) => println!(
+            "restored {pack} -> {}\n  content_hash: {}\n  tables:       {}\n  replaced:     {} live fact(s)",
+            r.destination, r.content_hash, r.tables, r.replaced_facts
+        ),
+        Err(e) => {
+            eprintln!("restore error: {e}");
             std::process::exit(1);
         }
     }

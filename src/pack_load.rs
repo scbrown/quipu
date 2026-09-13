@@ -64,6 +64,13 @@ pub fn unpack_verified(
     timestamp: &str,
 ) -> Result<UnpackReport> {
     let manifest = read_manifest(pack_path)?;
+    // THE FORMAT GATE, and its position is part of the guard (aegis-9f899e).
+    // It runs before `verify`, because `verify` hashes a PUBLISHED pack's
+    // canonical content: handed a full pack it dies on the sentinel
+    // `source_graph`, reporting `unknown graph: urn:quipu:whole-store` for an
+    // artifact that is intact and merely needs `quipu restore`. A wrong-verb
+    // refusal must not wear a corruption diagnosis.
+    crate::pack_restore::require_format(&manifest, crate::pack_restore::Verb::Unpack)?;
     let (stored, recomputed, matches) = verify(pack_path)?;
     if !matches {
         return Err(Error::InvalidValue(format!(

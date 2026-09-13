@@ -66,6 +66,10 @@ pub mod share;
 // artifact the CLI does, and it can only do that if the builder compiles there
 // (aegis-8fdp8d).
 pub mod pack_full;
+// The format gate + `restore`. Filesystem-bound like `pack_load`, so gated the
+// same way.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod pack_restore;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
 pub mod share_completeness;
