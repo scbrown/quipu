@@ -79,6 +79,23 @@ class BadgeTests(unittest.TestCase):
 
 
 class LedgerShapeTests(unittest.TestCase):
+    def test_multiline_build_banner_keeps_the_version_table_cell_on_one_line(self):
+        import shutil
+
+        with tempfile.TemporaryDirectory() as directory:
+            results = pathlib.Path(directory)
+            for source in RESULTS.glob("*.json"):
+                shutil.copyfile(source, results / source.name)
+            path = results / REPORT.EVALUATION_LEDGER
+            evaluation = json.loads(path.read_text())
+            evaluation["quipu_version"] = "quipu 0.5.1\ngit_sha: abc1234"
+            path.write_text(json.dumps(evaluation))
+            data = REPORT.load(results)
+            self.assertEqual(data["quipu_version"], "quipu 0.5.1")
+            page = REPORT.render_markdown(data)
+            self.assertIn("| Quipu version | `quipu 0.5.1` |", page)
+            self.assertNotIn("git_sha: abc1234", page)
+
     def test_unsupported_rows_carry_reason_executed_rows_carry_diagnostic(self):
         self.assertEqual(REPORT.reason_of(evaluation_row(":u", "unsupported")), "because")
         self.assertEqual(REPORT.reason_of(evaluation_row(":f", "failed")), "because")
