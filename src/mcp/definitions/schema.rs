@@ -14,6 +14,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "graph": {"type": "string", "description": "Named graph override for the stored query."},
                     "name": { "type": "string", "description": "Named query to run; omit (or 'list') to list the catalog." },
                     "params": { "type": "object", "description": "Parameter map for the named query (see catalog for names/types)." }
                 }

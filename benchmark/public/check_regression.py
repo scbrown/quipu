@@ -51,12 +51,44 @@ def load_rows(path: Path) -> dict[tuple[str, str, str], dict]:
     for row in rows:
         try:
             key = (row["class"], row["manifest"], row["id"])
-        except (KeyError, TypeError) as error:
-            raise LedgerError(f"{path}: result row missing class/manifest/id: {row!r}") from error
+        except (KeyError, TypeError):
+            # The SYNTAX ledger carries a different row shape — `test` is the
+            # identifier and there is no class/manifest — so this checker could
+            # not read it at all, which is why sparql11-syntax was the one suite
+            # with NO regression gate (aegis-fn3hdn). It matters more now: with
+            # derive-at-merge, whatever main derives is committed and published,
+            # so an ungated suite is one a regression ships through silently.
+            # Key it on its own identifier rather than leaving it unguarded.
+            try:
+                # NOT path.name: baseline and candidate are DIFFERENT files
+                # (results/x.json vs /tmp/x.json), so keying on the filename
+                # gives every row a different key on each side and the compare
+                # reports every test as both removed and added. Caught by the
+                # sabotage naming the wrong tests. One constant manifest — the
+                # syntax suite has exactly one.
+                key = ("syntax", "sparql11-syntax", row["test"])
+            except (KeyError, TypeError) as error:
+                raise LedgerError(
+                    f"{path}: result row missing class/manifest/id and test: {row!r}"
+                ) from error
         if key in indexed:
             raise LedgerError(f"{path}: duplicate result row for {key!r}")
         indexed[key] = row
     return indexed
+
+
+def _passed(row: dict) -> bool:
+    """Did this row pass, in EITHER ledger dialect?
+
+    Most suites record `status: "passed"`. The syntax suite records a boolean
+    `passed`. Comparing only the first silently treats every syntax row as
+    not-passing, so nothing can ever regress and the gate reads clean on a real
+    regression — worse than the loud parse error it replaced (aegis-fn3hdn).
+    Caught by sabotaging a syntax row and reading the OUTPUT, not the exit code.
+    """
+    if row.get("status") == PASSED:
+        return True
+    return row.get(PASSED) is True
 
 
 def class_counts(rows: dict[tuple[str, str, str], dict]) -> dict[str, dict[str, int]]:
@@ -64,7 +96,7 @@ def class_counts(rows: dict[tuple[str, str, str], dict]) -> dict[str, dict[str, 
     for (test_class, _, _), row in rows.items():
         bucket = counts.setdefault(test_class, {"passed": 0, "cases": 0})
         bucket["cases"] += 1
-        if row.get("status") == PASSED:
+        if _passed(row):
             bucket["passed"] += 1
     return counts
 
@@ -74,14 +106,14 @@ def compare(baseline: dict, candidate: dict) -> dict:
     regressed = sorted(
         key
         for key, row in baseline.items()
-        if row.get("status") == PASSED
-        and candidate.get(key, {}).get("status") != PASSED
+        if _passed(row)
+        and not _passed(candidate.get(key, {}))
     )
     improved = sorted(
         key
         for key, row in candidate.items()
-        if row.get("status") == PASSED
-        and baseline.get(key, {}).get("status") != PASSED
+        if _passed(row)
+        and not _passed(baseline.get(key, {}))
     )
     # A test present in the baseline and absent from the candidate is a
     # regression in its own right even if it was already failing: the suite

@@ -8,6 +8,7 @@ import concurrent.futures
 import hashlib
 import json
 import math
+import os
 import statistics
 import time
 import urllib.error
@@ -34,13 +35,32 @@ def percentile(values: list[float], pct: float) -> float:
     return ordered[rank]
 
 
+# Write endpoints require a bearer on the deployed fleet while reads stay open
+# (aegis-z10). Without one this harness cannot seed its own fixture against a
+# production server, so the acceptance bar "run the checked-in harness on the
+# deployed corpus" was unreachable with the checked-in harness. Never printed.
+_AUTH_TOKEN: str | None = None
+
+# Last error body per operation, so a seed failure can say WHY.
+_LAST_ERROR_BODY: dict[str, str] = {}
+
+
+def _headers(json_body: bool) -> dict[str, str]:
+    headers = {"X-Quipu-Client": "load-test"}
+    if json_body:
+        headers["Content-Type"] = "application/json"
+    if _AUTH_TOKEN:
+        headers["Authorization"] = f"Bearer {_AUTH_TOKEN}"
+    return headers
+
+
 def post(base_url: str, path: str, payload: dict, timeout: float, operation: str) -> Sample:
     started = time.monotonic()
     status = "ok"
     request = urllib.request.Request(
         base_url + path,
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "X-Quipu-Client": "load-test"},
+        headers=_headers(json_body=True),
         method="POST",
     )
     try:
@@ -49,7 +69,11 @@ def post(base_url: str, path: str, payload: dict, timeout: float, operation: str
             if response.status != 200:
                 status = f"http_{response.status}"
     except urllib.error.HTTPError as error:
-        error.read()
+        body = error.read().decode(errors="replace")
+        # Keep the server's reason. A bare "http_400" on the seed sent a reader
+        # hunting their own payload when the refusal was a pre-existing OWL
+        # violation elsewhere in the store (aegis-svtdyn, 2026-09-12).
+        _LAST_ERROR_BODY[operation] = body[:2000]
         status = f"http_{error.code}"
     except TimeoutError:
         status = "timeout"
@@ -60,9 +84,7 @@ def post(base_url: str, path: str, payload: dict, timeout: float, operation: str
 
 
 def get_text(base_url: str, path: str, timeout: float) -> str:
-    request = urllib.request.Request(
-        base_url + path, headers={"X-Quipu-Client": "load-test"}
-    )
+    request = urllib.request.Request(base_url + path, headers=_headers(json_body=False))
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read().decode()
 
@@ -71,7 +93,7 @@ def post_json(base_url: str, path: str, payload: dict, timeout: float) -> dict:
     request = urllib.request.Request(
         base_url + path,
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "X-Quipu-Client": "load-test"},
+        headers=_headers(json_body=True),
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -94,7 +116,10 @@ ex:LoadFixture rdfs:subClassOf ex:Thing .
         "seed_ontology",
     )
     if ontology.status != "ok":
-        raise RuntimeError(f"ontology seed failed: {ontology.status}")
+        raise RuntimeError(
+            f"ontology seed failed: {ontology.status}: "
+            f"{_LAST_ERROR_BODY.get('seed_ontology', '<no body>')}"
+        )
     nodes = [
         {
             "name": f"load-{hashlib.sha256(str(index).encode()).hexdigest()[:20]}",
@@ -120,7 +145,10 @@ ex:LoadFixture rdfs:subClassOf ex:Thing .
         "seed",
     )
     if sample.status != "ok":
-        raise RuntimeError(f"fixture seed failed: {sample.status}")
+        raise RuntimeError(
+            f"fixture seed failed: {sample.status}: "
+            f"{_LAST_ERROR_BODY.get('seed', '<no body>')}"
+        )
     inferred = post_json(
         base_url,
         "/query",
@@ -203,8 +231,37 @@ def parse_peak_rss(metrics: str) -> int:
     raise RuntimeError("/metrics omitted quipu_process_peak_rss_bytes")
 
 
-def evaluate(report: dict, baseline: dict) -> list[str]:
+def evaluate(report: dict, baseline: dict) -> tuple[list[str], list[str]]:
+    """Grade a report. Returns (failures, unmeasured).
+
+    MEMORY IS GRADED ON RUN-ATTRIBUTABLE GROWTH, NOT ON THE ABSOLUTE PEAK
+    (aegis-svtdyn, sattler ruling 2026-09-12). `quipu_process_peak_rss_bytes` is
+    a high-water mark since process START, so the post-run reading is the max of
+    what this run did and everything the process had already done. Against the
+    production corpus the working set alone is ~450 MB, so the ABSOLUTE peak can
+    never come in under 512 MiB no matter how good the code is — grading it made
+    the ratchet print a failure on a run that met every criterion it was
+    re-derived to. `peak_rss_growth_bytes` is the quantity this run caused, and
+    it is what the bound now applies to.
+
+    Growth is a LOWER bound, never a certificate: zero growth means the run did
+    not push past a mark the process had already set, not that the run was cheap.
+
+    `unmeasured` is retained as a channel — a two-state verdict is forced to
+    render "this instrument could not see the bound" as pass or as fail, and both
+    are wrong — but it has no producer now that the absolute bound is retired.
+    Re-add a producer here if another unmeasurable bound appears; do not delete
+    the channel and re-learn why it existed.
+
+    NOT GRADED HERE: the accepted criteria also include a steady-state resident
+    bound (median resident <= 2.5 GB). Sampling it would mean polling /metrics
+    during the run, and /metrics is itself a whole-store scan costing seconds on
+    a production-size corpus (aegis-9rep3c) — the observer would distort the
+    measurement. Start/end resident are reported as context instead; the
+    steady-state bound belongs to the monitoring alert (aegis-5ml8rk).
+    """
     failures = []
+    unmeasured = []
     limits = baseline["limits"]
     total_errors = sum(report["errors"].values())
     error_rate = total_errors / max(1, report["requests"])
@@ -214,21 +271,32 @@ def evaluate(report: dict, baseline: dict) -> list[str]:
         failures.append(
             f"throughput {report['throughput_rps']:.3f} < {limits['min_throughput_rps']:.3f} rps"
         )
-    if report["peak_rss_bytes"] > limits["max_peak_rss_bytes"]:
-        failures.append(
-            f"peak RSS {report['peak_rss_bytes']} > {limits['max_peak_rss_bytes']} bytes"
-        )
+    max_rss = limits["max_peak_rss_bytes"]
+    baseline_peak = report.get("baseline_peak_rss_bytes", 0)
+    growth = report.get("peak_rss_growth_bytes", 0)
+    # Growth IS attributable to this run on a warm process as well as a cold
+    # one, so it is always graded. It is a LOWER bound, never a certificate:
+    # zero growth means the run did not push past a mark the process had
+    # already set, not that the run was cheap.
+    if growth > max_rss:
+        failures.append(f"peak RSS grew {growth} > {max_rss} bytes during this run")
+    # The ABSOLUTE peak is deliberately NOT graded — see the docstring. It is
+    # reported so a reader can see what the process was carrying.
+    _ = baseline_peak
     for operation, max_p99 in limits["max_p99_ms"].items():
         actual = report["operations"].get(operation, {}).get("p99_ms", float("inf"))
         if actual > max_p99:
             failures.append(f"{operation} p99 {actual:.3f} > {max_p99:.3f} ms")
     if report["read_progress_during_writes"] < limits["min_read_progress_during_writes"]:
         failures.append("no successful read overlapped a write; WAL read-pool progress unproven")
-    return failures
+    return failures, unmeasured
 
 
 def run(args: argparse.Namespace) -> dict:
     get_text(args.url, "/health", args.timeout)
+    # Read the high-water mark BEFORE seeding. Everything after this point is
+    # ours; everything before it belongs to whatever the process did earlier.
+    baseline_peak_rss = parse_peak_rss(get_text(args.url, "/metrics", args.timeout))
     seed(args.url, args.seed_nodes, args.timeout)
     all_samples: list[Sample] = []
     levels = []
@@ -250,6 +318,8 @@ def run(args: argparse.Namespace) -> dict:
     elapsed = time.monotonic() - overall_start
     peak_rss = parse_peak_rss(get_text(args.url, "/metrics", args.timeout))
     report = summarize(all_samples, elapsed, peak_rss)
+    report["baseline_peak_rss_bytes"] = baseline_peak_rss
+    report["peak_rss_growth_bytes"] = max(0, peak_rss - baseline_peak_rss)
     writes = [sample for sample in all_samples if sample.operation == "episode"]
     reads = [sample for sample in all_samples if sample.operation != "episode" and sample.status == "ok"]
     report["read_progress_during_writes"] = sum(
@@ -278,13 +348,45 @@ def self_test() -> None:
             "min_read_progress_during_writes": 1,
         }
     }
-    report = {
-        "requests": 2, "errors": {}, "throughput_rps": 2.0, "peak_rss_bytes": 99,
-        "operations": {"query_bounded": {"p99_ms": 9.0}}, "read_progress_during_writes": 1,
-    }
-    assert evaluate(report, base) == []
-    report["errors"] = {"http_408": 1}
-    assert any("error rate" in failure for failure in evaluate(report, base))
+
+    def clean(**overrides):
+        report = {
+            "requests": 2, "errors": {}, "throughput_rps": 2.0, "peak_rss_bytes": 99,
+            "operations": {"query_bounded": {"p99_ms": 9.0}},
+            "read_progress_during_writes": 1,
+            "baseline_peak_rss_bytes": 10, "peak_rss_growth_bytes": 89,
+        }
+        report.update(overrides)
+        return report
+
+    assert evaluate(clean(), base) == ([], [])
+    assert any("error rate" in f for f in evaluate(clean(errors={"http_408": 1}), base)[0])
+
+    # RSS verdict, all four arms. A cold process grades the absolute peak; a
+    # process already over the bound cannot grade it at all and must say so
+    # rather than emit a failure nothing in the code under test could clear.
+    # GROWTH is the graded quantity; the ABSOLUTE peak is not (aegis-svtdyn
+    # ruling 2026-09-12). These arms pin exactly that, in both directions.
+
+    # A huge absolute peak with growth inside the bound PASSES. This is the real
+    # production shape — ~450 MB of working set the run did not cause — and the
+    # case that used to print a failure on a passing run.
+    big_absolute = clean(peak_rss_bytes=5000, baseline_peak_rss_bytes=4950, peak_rss_growth_bytes=50)
+    assert evaluate(big_absolute, base) == ([], []), evaluate(big_absolute, base)
+
+    # Growth over the bound FAILS, warm process or cold — it is attributable
+    # either way.
+    grew_warm = clean(peak_rss_bytes=5200, baseline_peak_rss_bytes=5000, peak_rss_growth_bytes=200)
+    assert any("grew 200" in f for f in evaluate(grew_warm, base)[0]), evaluate(grew_warm, base)
+    grew_cold = clean(peak_rss_bytes=101, baseline_peak_rss_bytes=10, peak_rss_growth_bytes=91)
+    assert not evaluate(grew_cold, base)[0], "growth of 91 is within a bound of 100"
+
+    # The boundary: growth exactly AT the bound passes, one byte over fails.
+    at_bound = clean(peak_rss_bytes=200, baseline_peak_rss_bytes=100, peak_rss_growth_bytes=100)
+    assert evaluate(at_bound, base) == ([], []), evaluate(at_bound, base)
+    over_bound = clean(peak_rss_bytes=201, baseline_peak_rss_bytes=100, peak_rss_growth_bytes=101)
+    assert any("grew 101" in f for f in evaluate(over_bound, base)[0])
+
     print("quipu-load-test self-test: PASS")
 
 
@@ -298,20 +400,36 @@ def main() -> int:
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--self-test", action="store_true")
+    parser.add_argument(
+        "--auth-token-file",
+        type=Path,
+        help="file holding the bearer for write endpoints; QUIPU_AUTH_TOKEN overrides it",
+    )
     args = parser.parse_args()
     if args.self_test:
         self_test()
         return 0
+    global _AUTH_TOKEN
+    _AUTH_TOKEN = os.environ.get("QUIPU_AUTH_TOKEN") or (
+        args.auth_token_file.read_text().strip() if args.auth_token_file else None
+    )
     report = run(args)
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.write_text(rendered)
     print(rendered, end="")
     if args.baseline:
-        failures = evaluate(report, json.loads(args.baseline.read_text()))
+        failures, unmeasured = evaluate(report, json.loads(args.baseline.read_text()))
+        for item in unmeasured:
+            print(f"UNMEASURED: {item}")
         for failure in failures:
             print(f"RATCHET: {failure}")
-        return 1 if failures else 0
+        if failures:
+            return 1
+        # Exit 2, not 0: a bound the instrument could not see is not a bound
+        # the code under test satisfied, and a green run that silently dropped
+        # one of its criteria is the failure this distinction exists to stop.
+        return 2 if unmeasured else 0
     return 0
 
 

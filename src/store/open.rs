@@ -213,6 +213,9 @@ impl Store {
         // AFTER migrate_named_graphs: idx_geav must exist before the index it
         // makes redundant is dropped (quipu-fcg).
         Self::migrate_drop_eavt(&conn)?;
+        // Attribute-scoped current-fact index (aegis-svtdyn). Additive; no
+        // ordering constraint beyond the `facts` table existing.
+        Self::migrate_current_fact_index(&conn)?;
         // BEFORE `migrate_graph_labels`, which interns the meta-graph IRI: that
         // intern must know the store's space, or on a non-zero-space store it
         // allocates the reserved graph OUTSIDE the space that owns it.

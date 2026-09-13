@@ -32,14 +32,25 @@ async fn align_propose(
 ) -> Result<Json<JsonValue>, AppError> {
     blocking(move || {
         let st = store.lock();
-        Ok(Json(quipu::tool_align_propose(&st, &input)?))
+        Ok(Json(super::input_fields::annotate(
+            "quipu_align_propose",
+            &input,
+            quipu::tool_align_propose(&st, &input)?,
+        )))
     })
     .await
 }
 
 /// READ — touches no store at all.
 async fn align_decide(Json(input): Json<JsonValue>) -> Result<Json<JsonValue>, AppError> {
-    blocking(move || Ok(Json(quipu::tool_align_decide(&input)?))).await
+    blocking(move || {
+        Ok(Json(super::input_fields::annotate(
+            "quipu_align_decide",
+            &input,
+            quipu::tool_align_decide(&input)?,
+        )))
+    })
+    .await
 }
 
 /// WRITE — the only alignment route that takes the writer.
@@ -49,7 +60,11 @@ async fn align_apply(
 ) -> Result<Json<JsonValue>, AppError> {
     blocking(move || {
         let mut st = store.lock();
-        Ok(Json(quipu::tool_align_apply(&mut st, &input)?))
+        Ok(Json(super::input_fields::annotate(
+            "quipu_align_apply",
+            &input,
+            quipu::tool_align_apply(&mut st, &input)?,
+        )))
     })
     .await
 }

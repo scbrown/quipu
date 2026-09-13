@@ -418,6 +418,12 @@ pub(crate) fn attached_pack_manifests(
                 pack_format: r.get(0)?, name: r.get(1)?, version: r.get(2)?,
                 term_space: r.get(3)?, content_hash: r.get(4)?, created_at: r.get(5)?,
                 source_graph: r.get(6)?, producer: r.get(7)?, counts: r.get(8)?,
+                // Not selected here on purpose. This reader exists to check the
+                // TERM SPACE of an attached pack, and it must keep reading a
+                // pack cut before `destination` existed — so it reports UNKNOWN
+                // rather than guessing. `pack::read_manifest` is the reader that
+                // resolves it (aegis-9f899e).
+                destination: None,
             }),
         ).map_err(|e| Error::InvalidValue(format!(
             "cannot attach pack {:?} as {alias}: unreadable pack_manifest: {e}", a.path

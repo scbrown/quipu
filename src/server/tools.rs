@@ -35,7 +35,14 @@ macro_rules! ro_handler {
             // connection is `SQLITE_OPEN_READ_ONLY`, so it returns "attempt to
             // write a readonly database" rather than racing the writer. That is
             // a 500 on a read endpoint, which is why the test exists.
-            read_blocking(move || Ok(axum::Json($tool(&s.read(), &i)?))).await
+            read_blocking(move || {
+                Ok(axum::Json(super::input_fields::annotate(
+                    stringify!($tool),
+                    &i,
+                    $tool(&s.read(), &i)?,
+                )))
+            })
+            .await
         }
     };
 }
@@ -118,7 +125,11 @@ macro_rules! rw_handler {
                 if let Some(work) = work {
                     finish_deferred_embed(&s, &work)?;
                 }
-                Ok(axum::Json(out))
+                Ok(axum::Json(super::input_fields::annotate(
+                    stringify!($tool),
+                    &i,
+                    out,
+                )))
             })
             .await
         }
@@ -147,6 +158,7 @@ macro_rules! embed_handler {
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
             read_blocking(move || {
+                let original = i.clone();
                 let mut i = i;
                 if i.get("embedding").is_none() {
                     if let Some(text) = i.get("query").and_then(|v| v.as_str()).map(str::to_owned) {
@@ -160,7 +172,11 @@ macro_rules! embed_handler {
                         }
                     }
                 }
-                Ok(axum::Json($tool(&s.vector_read(), &i)?))
+                Ok(axum::Json(super::input_fields::annotate(
+                    stringify!($tool),
+                    &original,
+                    $tool(&s.vector_read(), &i)?,
+                )))
             })
             .await
         }
@@ -251,11 +267,15 @@ pub(crate) async fn graphs_list(
     State(s): State<SharedStore>,
     axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let input = json!({
-        "kind": q.get("kind"),
-        "lifecycle": q.get("lifecycle"),
-    });
-    blocking(move || Ok(axum::Json(quipu::tool_graph_list(&s.read(), &input)?))).await
+    let input = serde_json::to_value(q).expect("query parameters serialize");
+    blocking(move || {
+        Ok(axum::Json(super::input_fields::annotate(
+            "quipu_graph_list",
+            &input,
+            quipu::tool_graph_list(&s.read(), &input)?,
+        )))
+    })
+    .await
 }
 
 rw_handler!(graph_create, quipu::tool_graph_create);
@@ -277,7 +297,11 @@ pub(crate) async fn policy_check(
     if let Some(outcome) = result.get("outcome").and_then(|v| v.as_str()) {
         quipu::metrics::metrics().observe_policy_outcome(outcome);
     }
-    Ok(axum::Json(result))
+    Ok(axum::Json(super::input_fields::annotate(
+        "quipu_policy_check",
+        &i,
+        result,
+    )))
 }
 ro_handler!(verifier_authorized, quipu::tool_verifier_authorized);
 ro_handler!(verdict_verify, quipu::tool_verdict_verify);
@@ -296,7 +320,11 @@ pub(crate) async fn overlay_write(
         if let Some(work) = work {
             finish_deferred_embed(&store, &work)?;
         }
-        Ok(axum::Json(result))
+        Ok(axum::Json(super::input_fields::annotate(
+            "quipu_overlay_write",
+            &input,
+            result,
+        )))
     })
     .await
 }
@@ -354,6 +382,7 @@ pub(crate) async fn validate(
     // so validating under it would serialize every other request behind an
     // arbitrary caller's data. That property is why this handler had no lock at
     // all before, and it is preserved rather than traded away.
+    let original = input.clone();
     let mut input = input;
     let resolved = {
         let guard = store.lock();
@@ -364,7 +393,14 @@ pub(crate) async fn validate(
     {
         obj.insert("shapes".to_string(), JsonValue::String(turtle));
     }
-    blocking(move || Ok(axum::Json(quipu::tool_validate(&input)?))).await
+    blocking(move || {
+        Ok(axum::Json(super::input_fields::annotate(
+            "quipu_validate",
+            &original,
+            quipu::tool_validate(&input)?,
+        )))
+    })
+    .await
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

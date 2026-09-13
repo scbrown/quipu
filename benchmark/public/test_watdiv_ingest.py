@@ -192,3 +192,46 @@ class LimitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             arc, body = self._archive(d, 50)
             self.assertEqual(MODULE.measure_source(arc)[0], 50)
+
+    def test_skip_advances_past_exactly_that_many_triples(self):
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as d:
+            arc, body = self._archive(d, 100)
+            triples, digest, size = MODULE.measure_source(arc, skip=40)
+            self.assertEqual(triples, 60)
+            expected = b"\n".join(body.split(b"\n")[40:100]) + b"\n"
+            self.assertEqual(size, len(expected))
+            self.assertEqual(digest, hashlib.sha256(expected).hexdigest())
+
+    def test_skip_then_limit_is_the_window_between_them(self):
+        import hashlib
+
+        # The composition the slice runs use. An off-by-one in either wrapper
+        # moves the whole window, and a window from the wrong region of a
+        # non-homogeneous archive is precisely the defect --skip exists to avoid.
+        with tempfile.TemporaryDirectory() as d:
+            arc, body = self._archive(d, 100)
+            triples, digest, size = MODULE.measure_source(arc, limit=25, skip=40)
+            self.assertEqual(triples, 25)
+            expected = b"\n".join(body.split(b"\n")[40:65]) + b"\n"
+            self.assertEqual(digest, hashlib.sha256(expected).hexdigest())
+
+    def test_skip_boundary_inside_a_read_block(self):
+        # The buffered branch: the skip boundary falls mid-block, so the tail of
+        # that block must survive. A body well over the 1 MiB read size.
+        with tempfile.TemporaryDirectory() as d:
+            arc, body = self._archive(d, 200_000)
+            self.assertEqual(MODULE.measure_source(arc, skip=150_000)[0], 50_000)
+
+    def test_skip_of_zero_and_beyond_the_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            arc, _ = self._archive(d, 30)
+            self.assertEqual(MODULE.measure_source(arc, skip=0), MODULE.measure_source(arc))
+            self.assertEqual(MODULE.measure_source(arc, skip=30)[0], 0)
+            self.assertEqual(MODULE.measure_source(arc, skip=999)[0], 0)
+
+    def test_row_carries_the_window_so_a_slice_is_not_read_as_the_archive(self):
+        r = row(triples=2_000_000, skip=6_750_000, limit=2_000_000)
+        self.assertEqual(r["source"]["window"], {"skip": 6_750_000, "limit": 2_000_000})
+        self.assertEqual(row()["source"]["window"], {"skip": None, "limit": None})

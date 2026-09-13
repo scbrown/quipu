@@ -160,6 +160,50 @@ def stream_source(archive: Path):
     return tar, member.name, handle
 
 
+class _SkippedLines:
+    """A byte stream advanced past the first `skip` newlines.
+
+    The companion to _LimitedLines, and the reason it exists: WatDiv's archives
+    are NOT homogeneous, so a prefix is not a controlled sample of one. The 100M
+    archive's first-seen terms per triple fall monotonically from 0.4225 to
+    0.2877 over its first 6.25M triples and then STEP to ~0.48 -- so every
+    `--limit` window starting at triple 0 sweeps a 1.5x range of the very
+    quantity that dominates ingest cost, and a rate curve over it reads as the
+    store slowing down or speeding up with size (aegis-aoib92).
+
+    Skipping past the transition and taking a window from the flat region is
+    what makes source cardinality a CONSTANT, so that store size is the only
+    thing varying along the curve.
+    """
+
+    def __init__(self, inner, skip: int):
+        self._inner = inner
+        self._buf = b""
+        remaining = skip
+        # Discard whole blocks while they are entirely inside the skipped region;
+        # keep the tail of the block that contains the boundary. Counting
+        # newlines per block and slicing once is O(bytes) with no per-line work.
+        while remaining > 0:
+            block = self._inner.read(1 << 20)
+            if not block:
+                break
+            count = block.count(b"\n")
+            if count < remaining:
+                remaining -= count
+                continue
+            idx = -1
+            for _ in range(remaining):
+                idx = block.index(b"\n", idx + 1)
+            self._buf = block[idx + 1:]
+            remaining = 0
+
+    def read(self, size: int = -1) -> bytes:
+        if self._buf:
+            out, self._buf = self._buf, b""
+            return out
+        return self._inner.read(1 << 20 if size is None or size < 0 else size)
+
+
 class _LimitedLines:
     """A byte stream truncated at `limit` newlines.
 
@@ -197,7 +241,9 @@ class _LimitedLines:
         return block[: idx + 1]
 
 
-def measure_source(archive: Path, limit: int | None = None) -> tuple[int, str, int]:
+def measure_source(
+    archive: Path, limit: int | None = None, skip: int | None = None
+) -> tuple[int, str, int]:
     """Count triples, digest the bytes and size the source WITHOUT unpacking.
 
     A separate pass from the ingest on purpose. Computing the declaration from
@@ -205,6 +251,10 @@ def measure_source(archive: Path, limit: int | None = None) -> tuple[int, str, i
     which agrees with anything and is not a declaration.
     """
     tar, _name, handle = stream_source(archive)
+    # SKIP BEFORE LIMIT, in both passes, or the declaration describes a
+    # different window from the one loaded and the declared-count guard fires.
+    if skip is not None:
+        handle = _SkippedLines(handle, skip)
     if limit is not None:
         handle = _LimitedLines(handle, limit)
     try:
@@ -239,6 +289,8 @@ def build_row(
     store_bytes: int,
     load1: float,
     ncpu: int,
+    skip: int | None = None,
+    limit: int | None = None,
 ) -> dict:
     written = facts_after - max(facts_before, 0)
     busy = load1 >= ncpu * BUSY_LOAD_FRACTION
@@ -259,6 +311,11 @@ def build_row(
             "nt_sha256": source_sha,
             "triples_declared": triples,
             "bytes": source_bytes,
+            # The WINDOW travels with the number. `scale` names the archive, not
+            # what was read from it, so a sliced row is indistinguishable from a
+            # whole-archive one without this -- and a rate is only re-derivable
+            # if a reader can reconstruct the exact triples it was taken over.
+            "window": {"skip": skip, "limit": limit},
         },
         "quipu": {
             "binary": quipu_bin,
@@ -310,6 +367,15 @@ def main(argv: list[str] | None = None) -> int:
         "written. Used to hold store state constant while varying the source "
         "(aegis-3sau5a arm 2).",
     )
+    parser.add_argument(
+        "--skip",
+        type=int,
+        default=None,
+        help="discard the first N triples before ingesting. Applied to BOTH the "
+        "declaration pass and the load, ahead of --limit, so the two describe the "
+        "same window. Use it to take a slice from a region of CONSTANT term "
+        "cardinality: a prefix of a WatDiv archive is not one (aegis-aoib92).",
+    )
     parser.add_argument("--min-free-gb", type=int, default=60)
     parser.add_argument("--keep", action="store_true", help="leave the store behind")
     args = parser.parse_args(argv)
@@ -321,7 +387,7 @@ def main(argv: list[str] | None = None) -> int:
 
     archive_sha = sha256_file(args.archive)
     pin_state = verify_or_record_pin(args.pins, args.archive.name, archive_sha)
-    triples, source_sha, source_bytes = measure_source(args.archive, args.limit)
+    triples, source_sha, source_bytes = measure_source(args.archive, args.limit, args.skip)
     print(f"source: {triples} triples, {source_bytes} bytes, sha256 {source_sha} (pin {pin_state})")
 
     version = subprocess.run(
@@ -333,6 +399,8 @@ def main(argv: list[str] | None = None) -> int:
     before = live_facts(args.db)
 
     tar, _name, handle = stream_source(args.archive)
+    if args.skip is not None:
+        handle = _SkippedLines(handle, args.skip)
     if args.limit is not None:
         handle = _LimitedLines(handle, args.limit)
     started = time.monotonic()
@@ -408,6 +476,8 @@ def main(argv: list[str] | None = None) -> int:
         store_bytes=store_bytes,
         load1=load_average(),
         ncpu=cpu_count(),
+        skip=args.skip,
+        limit=args.limit,
     )
 
     # LEDGER BEFORE CLEANUP, so a failed run still leaves a record.

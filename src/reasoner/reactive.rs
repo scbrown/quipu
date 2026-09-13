@@ -13,7 +13,7 @@
 //! disappeared tuples are retracted. Full incremental TMS (tracking
 //! individual derivation support sets) is deferred to Phase 5.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::RwLock;
 
 use super::evaluate;
@@ -119,13 +119,65 @@ impl ReactiveReasoner {
 impl RuleIndex {
     /// Determine which rule indices are affected by a set of changed
     /// predicate IRIs, including transitive dependents.
+    /// Predicates-only convenience: every changed predicate widens to "objects
+    /// unknown". Retained for the tests that exercise predicate-level reachability
+    /// (transitive dependents, reload) where the object plays no part.
+    #[cfg(test)]
     fn affected_rules(&self, changed_preds: &BTreeSet<String>) -> BTreeSet<usize> {
+        let widened: BTreeMap<String, Option<BTreeSet<String>>> =
+            changed_preds.iter().map(|p| (p.clone(), None)).collect();
+        self.affected_rules_for_changes(&widened)
+    }
+
+    /// As above, but each changed predicate may carry the set of OBJECT IRIs
+    /// that actually moved (aegis-svtdyn).
+    ///
+    /// A body atom with a bound object — `rdf:type(?x, <aegis:Commit>)` — cannot
+    /// be newly satisfied, nor newly unsatisfied, by a change whose object is
+    /// something else. Keying the wake on the PREDICATE alone therefore ran a
+    /// full reactive evaluation for writes that provably cannot change a
+    /// derivation: on the aegis graph the one loaded rule bodies on
+    /// `rdf:type(?x, <Commit>)`, and ordinary agent writes assert `rdf:type`
+    /// with every other class in the vocabulary.
+    ///
+    /// `None` means "objects unknown" and MUST widen — a literal-valued change,
+    /// or an object IRI that could not be resolved, has to be treated as
+    /// possibly-matching. Retractions are carried in the same map as
+    /// assertions, so a premise DISAPPEARING still wakes the rule that rests on
+    /// it; that is the direction a narrowing like this gets wrong, so it is
+    /// tested explicitly.
+    fn affected_rules_for_changes(
+        &self,
+        changed: &BTreeMap<String, Option<BTreeSet<String>>>,
+    ) -> BTreeSet<usize> {
         let mut affected = BTreeSet::new();
 
-        // Direct: rules whose body references a changed predicate.
-        for pred in changed_preds {
-            if let Some(indices) = self.pred_to_rules.get(pred) {
-                for &idx in indices {
+        // Direct: rules with a body atom whose predicate changed AND whose
+        // bound object (if it has one) is among the objects that moved.
+        for (pred, objects) in changed {
+            let Some(indices) = self.pred_to_rules.get(pred) else {
+                continue;
+            };
+            for &idx in indices {
+                let rule = &self.ruleset.rules[idx];
+                let touched = rule.body.iter().any(|b| {
+                    let atom = b.atom();
+                    if &atom.predicate != pred {
+                        return false;
+                    }
+                    match (objects, atom.args.get(1)) {
+                        // Objects unknown: must assume it matches.
+                        (None, _) => true,
+                        // Bound object: wake only if that exact IRI moved.
+                        (Some(moved), Some(crate::reasoner::ast::Term::Iri(iri))) => {
+                            moved.contains(iri)
+                        }
+                        // Variable or literal object, or a unary atom: any
+                        // change to the predicate can matter.
+                        (Some(_), _) => true,
+                    }
+                });
+                if touched {
                     affected.insert(idx);
                 }
             }
@@ -161,31 +213,57 @@ impl TransactObserver for ReactiveReasoner {
             return Ok(());
         }
 
-        // Collect predicate IRIs that were touched in this delta.
-        let mut changed_attrs: BTreeSet<i64> = BTreeSet::new();
-        for d in &delta.asserts {
-            changed_attrs.insert(d.attribute);
-        }
-        for d in &delta.retracts {
-            changed_attrs.insert(d.attribute);
+        // Collect the (predicate, object) pairs this delta touched — assertions
+        // and retractions alike, because a premise disappearing changes a
+        // derivation exactly as much as one appearing.
+        let mut changed_attrs: BTreeMap<i64, Option<BTreeSet<i64>>> = BTreeMap::new();
+        for d in delta.asserts.iter().chain(delta.retracts.iter()) {
+            let slot = changed_attrs
+                .entry(d.attribute)
+                .or_insert(Some(BTreeSet::new()));
+            match d.value {
+                crate::types::Value::Ref(target) => {
+                    if let Some(set) = slot.as_mut() {
+                        set.insert(target);
+                    }
+                }
+                // A literal object cannot be a rule's bound IRI object, but
+                // widening here is the safe direction and costs nothing: a
+                // predicate no rule bodies on is dropped by the lookup anyway.
+                _ => *slot = None,
+            }
         }
 
         if changed_attrs.is_empty() {
             return Ok(());
         }
 
-        // Resolve attribute IDs to predicate IRIs.
-        let mut changed_preds = BTreeSet::new();
-        for &attr_id in &changed_attrs {
-            if let Ok(iri) = store.resolve(attr_id) {
-                changed_preds.insert(iri);
-            }
+        // Resolve attribute and object IDs to IRIs. An id that will not resolve
+        // widens its predicate rather than silently dropping out of the set.
+        let mut changed: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
+        for (&attr_id, objects) in &changed_attrs {
+            let Ok(pred) = store.resolve(attr_id) else {
+                continue;
+            };
+            let resolved = objects.as_ref().and_then(|ids| {
+                let mut out = BTreeSet::new();
+                for &id in ids {
+                    match store.resolve(id) {
+                        Ok(iri) => {
+                            out.insert(iri);
+                        }
+                        Err(_) => return None,
+                    }
+                }
+                Some(out)
+            });
+            changed.insert(pred, resolved);
         }
 
         // Hold the read lock across the whole evaluation so a concurrent
         // reload cannot swap the ruleset out from under the affected-set.
         let index = self.index.read().expect("rule index lock poisoned");
-        let affected = index.affected_rules(&changed_preds);
+        let affected = index.affected_rules_for_changes(&changed);
         if affected.is_empty() {
             return Ok(());
         }
@@ -527,6 +605,84 @@ ex:r1 a rule:Rule ; rule:id "R1" ;
         assert!(
             affected.contains(&0),
             "after reload the new rule must be reachable from its body predicate"
+        );
+    }
+
+    /// The wake condition must respect a body atom's BOUND OBJECT — and must still
+    /// widen everywhere that narrowing would be unsound (aegis-svtdyn).
+    ///
+    /// `affected_rules` keyed on the changed PREDICATE alone, so on the aegis graph
+    /// — whose one rule bodies on `rdf:type(?x, <Commit>)` — every ordinary write of
+    /// `rdf:type` with any other class ran a full reactive evaluation that provably
+    /// could not change a derivation.
+    ///
+    /// All five arms are asserted together on purpose. The narrow arm alone would
+    /// pass on a change that silently stopped waking rules whose premises were
+    /// RETRACTED, which is the direction that leaves stale derivations behind.
+    #[test]
+    fn the_wake_condition_respects_a_bound_object_but_still_widens_when_it_must() {
+        let ttl = format!(
+            r#"
+    @prefix rule: <{RULE_NS}> .
+    @prefix ex: <http://example.org/rules/> .
+
+    ex:bound a rule:Rule ; rule:id "BOUND" ;
+        rule:head "<{PFX}type>(?x, <{PFX}GitCommit>)" ;
+        rule:body "<{PFX}type>(?x, <{PFX}Commit>)" .
+    ex:free a rule:Rule ; rule:id "FREE" ;
+        rule:head "<{PFX}h>(?x, ?y)" ; rule:body "<{PFX}p>(?x, ?y)" .
+    "#
+        );
+        let reasoner = ReactiveReasoner::new(make_ruleset(&ttl));
+        let index = reasoner.index.read().unwrap();
+
+        let changed = |pred: &str, objects: Option<Vec<String>>| {
+            let mut m = BTreeMap::new();
+            m.insert(
+                pred.to_string(),
+                objects.map(|v| v.into_iter().collect::<BTreeSet<String>>()),
+            );
+            index.affected_rules_for_changes(&m)
+        };
+
+        // 1. The bound object MOVED -> wake.
+        assert!(
+            changed(&format!("{PFX}type"), Some(vec![format!("{PFX}Commit")])).contains(&0),
+            "a change to the rule's own bound object must wake it"
+        );
+
+        // 2. A DIFFERENT object on the same predicate -> do NOT wake. This is the
+        //    whole optimisation: it is the shape of ordinary agent traffic.
+        assert!(
+            changed(
+                &format!("{PFX}type"),
+                Some(vec![format!("{PFX}Observation")])
+            )
+            .is_empty(),
+            "a type-write of an unrelated class must not wake a rule bodied on <Commit>"
+        );
+
+        // 3. Objects UNKNOWN (a literal value, or an unresolvable id) -> wake. The
+        //    safe direction, and the one a narrowing must never drop.
+        assert!(
+            changed(&format!("{PFX}type"), None).contains(&0),
+            "objects unknown must widen, not narrow"
+        );
+
+        // 4. A VARIABLE object on the body atom -> any change to that predicate wakes.
+        assert!(
+            changed(&format!("{PFX}p"), Some(vec![format!("{PFX}anything")])).contains(&1),
+            "a variable-object rule must wake on any object"
+        );
+
+        // 5. A predicate no rule bodies on -> nothing wakes.
+        assert!(
+            changed(
+                &format!("{PFX}unrelated"),
+                Some(vec![format!("{PFX}Commit")])
+            )
+            .is_empty(),
+            "an unrelated predicate must wake nothing"
         );
     }
 }

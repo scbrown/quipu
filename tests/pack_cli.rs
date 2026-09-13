@@ -19,6 +19,18 @@ fn omitted_graph_packs_root_and_verifies() {
         Some("pack-cli-test"),
     )
     .unwrap();
+    let policy_graph = store.overlay_create("urn:test:catalogue", 0).unwrap();
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut store,
+        include_bytes!("fixtures/share-catalogue.ttl").as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-09-09T00:00:00Z",
+        None,
+        Some("pack-cli-policy"),
+        policy_graph,
+    )
+    .unwrap();
     drop(store);
     let result = Command::new(env!("CARGO_BIN_EXE_quipu"))
         .args([

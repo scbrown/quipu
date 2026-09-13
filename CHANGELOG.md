@@ -2,6 +2,79 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-09-12
+
+### Fixed
+
+- *(owl)* Rdfs:comment is not a functional property in this graph (#228)([a5c1ea4](https://github.com/scbrown/quipu/commit/a5c1ea4b712dd52297ebb73a38cbd47c320c894d))
+
+## [0.5.0] - 2026-09-12
+
+### Added
+
+- *(pack)* Record the destination in the manifest, and audit every producer([e6307f7](https://github.com/scbrown/quipu/commit/e6307f7a8461db36fc561ba211c7b81393711bd2))
+- *(pack)* --full, a LOSSLESS whole-store pack (9f899e contract 1)([2e94ead](https://github.com/scbrown/quipu/commit/2e94eadf8e932f63ae762f8ef17a5f7420b47ced))
+
+
+
+### Fixed
+
+- *(conformance)* Gate the FIFTH suite, and teach the checker its dialect([1d404f3](https://github.com/scbrown/quipu/commit/1d404f306dfbc64e2669b30edbde4c745b79ca4a))
+- *(pack)* The published pack never ran the outward identifier scrub([2d7215c](https://github.com/scbrown/quipu/commit/2d7215c70f9596a48c3370ee0461f8e1b9342148))
+- *(pack)* The TURTLE bundle leaked too — scrub every pack producer([76caa02](https://github.com/scbrown/quipu/commit/76caa02b1c0c22847fc8205005ed7663949734c9))
+- *(test)* The anti-vacuity guard counted ASSERTIONS, not retractions([23f350d](https://github.com/scbrown/quipu/commit/23f350d6feab51489fc7c6535d3a8fbfd1c768f8))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([826b3b5](https://github.com/scbrown/quipu/commit/826b3b5d7254edfc13016b886f0bdab5fd2fe580))
+- *(conformance)* Re-derive the ledgers and page on this HEAD([3e764ae](https://github.com/scbrown/quipu/commit/3e764ae2002beb055a0f08827fbdb2e6d9e26a1c))
+- *(conformance)* Re-derive the ledgers and re-render the page([870a853](https://github.com/scbrown/quipu/commit/870a8538db87b17f55fec82207d6012b808865bb))
+- *(conformance)* Re-derive on the post-#222 merge HEAD([e04e856](https://github.com/scbrown/quipu/commit/e04e8562afb126f5a952c256500c0b3863f47585))
+- Release v0.5.0([768ebb8](https://github.com/scbrown/quipu/commit/768ebb84a7fe4b3abc16cd5a9f9aa29d46691910))
+- *(conformance)* Re-derive the ledgers and re-render the page([ff0ed85](https://github.com/scbrown/quipu/commit/ff0ed85530ee401b051261361a955b9dca9c7c3d))
+- *(conformance)* Re-derive on 23f350d, ledgers and page together([e67ae7b](https://github.com/scbrown/quipu/commit/e67ae7b5b36161db4baccc0be1c6a7489742c1c7))
+
+### Bench
+
+- *(watdiv)* --skip, because a PREFIX of the archive is not a homogeneous slice([22af9f0](https://github.com/scbrown/quipu/commit/22af9f053185bd0086be01efd1cebc6653a27593))
+- Check a dataset is homogeneous BEFORE using it for a scaling curve([0d39d39](https://github.com/scbrown/quipu/commit/0d39d39eb0360ed316131b571d05f00d9878cc7a))
+## [0.4.1] - 2026-09-11
+
+### Documentation
+
+- *(rdfs)* Delete the pre-fix loader comment that contradicts the loader([81dc516](https://github.com/scbrown/quipu/commit/81dc516825d2cce2647a51c18f0df047b4dc3563))
+- *(reasoner)* Describe supported stratified negation([8f90d70](https://github.com/scbrown/quipu/commit/8f90d70ae8e7e92b00b1add9063452b9d91167ef))
+- *(embedding)* The server's /knot DOES embed — this said it did not([f479c7d](https://github.com/scbrown/quipu/commit/f479c7dfd91b2aec49d68ff56f6a97659431c1ff))
+
+### Fixed
+
+- *(shapes)* Sanction named RDF schema declarations([c2e7a38](https://github.com/scbrown/quipu/commit/c2e7a380238dae9396ca980399a1dd57616e170f))
+- *(share)* A LAZILY created table was undeclared, and the audits made declaring it impossible([d832129](https://github.com/scbrown/quipu/commit/d8321290ee1dab2e38dbd1a71497b45bc3a1a057))
+- *(cli)* Honor explicit database for archive imports([17a3fbd](https://github.com/scbrown/quipu/commit/17a3fbdf8c1411afede1a50b435dd25abbfaf78c))
+- Report ignored fields on tool HTTP requests([689dd96](https://github.com/scbrown/quipu/commit/689dd9698b1b6822dae0af6015cc6b60ff955585))
+- *(conformance)* Derive the ledger at MERGE, not on the branch([7f437ba](https://github.com/scbrown/quipu/commit/7f437ba4900b09f5bb2fc30cf586700afc2d3445))
+- *(conformance)* Gate the FIFTH suite, so derive-at-merge cannot publish a regression([abd9c0b](https://github.com/scbrown/quipu/commit/abd9c0be1446550b2ad9e6abf38d2dd04e04b84d))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers on 81dc516([996c2fd](https://github.com/scbrown/quipu/commit/996c2fd061f1a5621a6e746174254fdf77357f90))
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([c88c99b](https://github.com/scbrown/quipu/commit/c88c99b53472efd0220bbd63b2d216e1c6d05306))
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([b0b3899](https://github.com/scbrown/quipu/commit/b0b389951febc8266476e60d8601cfc735d8137c))
+- *(conformance)* Re-derive the ledgers on main's HEAD([e31697a](https://github.com/scbrown/quipu/commit/e31697a41eda659d98959b359dc1fd71375a1655))
+- *(conformance)* Refresh ledgers for the documented source revision([419885a](https://github.com/scbrown/quipu/commit/419885a24166c31a4c6d555d6d505c4682de9434))
+- *(conformance)* Refresh ledgers after CLI import fix([d5dad95](https://github.com/scbrown/quipu/commit/d5dad953cf609d1eece21008f51e8b89fee08f36))
+- Release v0.4.1([fbe6f26](https://github.com/scbrown/quipu/commit/fbe6f26c80a30e05b237d15375cc45d19afa2782))
+- *(conformance)* Refresh ledgers after HTTP field reporting([05b377b](https://github.com/scbrown/quipu/commit/05b377b46172e84b51b98c3edbd725f27cd66756))
+- *(conformance)* Re-derive the ledgers on this branch's HEAD([864f11e](https://github.com/scbrown/quipu/commit/864f11e200d2b64dda1c472ad48797d080248b33))
+
+### Testing
+
+- *(conformance)* Make the fn3hdn arms standing tests, not something once run([1045171](https://github.com/scbrown/quipu/commit/104517132a5b3b83b04fe742bbce0e529b866f17))
+
+### Reverted
+
+- Revert derive-at-merge: it cannot push to a protected main([49b9adb](https://github.com/scbrown/quipu/commit/49b9adb37f6ec1e94872211ca223419bb16e610b))
+
 ## [0.4.0] - 2026-09-09
 
 ### Added

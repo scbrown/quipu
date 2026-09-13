@@ -56,9 +56,19 @@ them in `.bobbin/config.toml`:
     tokenizer_path = \"models/all-MiniLM-L6-v2/tokenizer.json\"
     dimension = 384
 
-Note that `quipu knot` does NOT embed — only `/episode` writes auto-embed.
-Run `quipu-server --embed-backfill` once after knotting to embed a store
-loaded from Turtle. See docs/book/src/concepts/embeddings.md.";
+⚠️ THE SERVER'S /knot DOES EMBED. This text said it did not, which was wrong
+in the direction that hides work: `POST /knot` collects deferred embed work in
+`Store::transact` and `server/publication.rs` drains it through
+`finish_deferred_embed` on every write handler. On a host with
+`auto_embed = true` a bulk publish therefore runs ONNX inference, and the
+`promote` step reports Complete only after that finishes (observed by gennaro
+during the aegis-2s6xpb soak, 2026-09-07 — which is how this was found).
+
+Only the CLI `quipu knot` skips embedding, because it does not run the server's
+drain. `quipu-server --embed-backfill` is for a store loaded that way, not for
+anything published through the HTTP surface. Running it after a server publish
+costs a full-store ONNX pass and changes nothing.
+See docs/book/src/concepts/embeddings.md.";
 
 /// Build embeddable text for an entity from its current facts.
 ///

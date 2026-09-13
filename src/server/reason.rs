@@ -69,7 +69,11 @@ pub(crate) async fn shapes(
             }
         }
 
-        Ok(axum::Json(out))
+        Ok(axum::Json(super::input_fields::annotate(
+            "quipu_shapes",
+            &i,
+            out,
+        )))
     })
     .await
 }
@@ -115,7 +119,11 @@ pub(crate) async fn explain(
             .and_then(JsonValue::as_u64)
             .map_or(quipu::explain::DEFAULT_EXPLAIN_DEPTH, |d| d as usize);
         let tree = quipu::explain::explain(&s.read(), &subject, &predicate, &object, depth)?;
-        Ok(axum::Json(tree))
+        Ok(axum::Json(super::input_fields::annotate(
+            "quipu_explain",
+            &i,
+            tree,
+        )))
     })
     .await
 }
@@ -172,17 +180,21 @@ pub(crate) async fn reason(
         }
         .map_err(|e| quipu::Error::Store(format!("reasoner error: {e}")))?;
 
-        Ok(axum::Json(json!({
-            "rules": ruleset.len(),
-            "strata_run": report.strata_run,
-            "asserted": report.asserted,
-            "retracted": report.retracted,
-            "per_rule": report
-                .per_rule
-                .iter()
-                .map(|(id, n)| json!({"rule": id, "asserted": n}))
-                .collect::<Vec<_>>(),
-        })))
+        Ok(axum::Json(super::input_fields::annotate(
+            "quipu_reason",
+            &i,
+            json!({
+                "rules": ruleset.len(),
+                "strata_run": report.strata_run,
+                "asserted": report.asserted,
+                "retracted": report.retracted,
+                "per_rule": report
+                    .per_rule
+                    .iter()
+                    .map(|(id, n)| json!({"rule": id, "asserted": n}))
+                    .collect::<Vec<_>>(),
+            }),
+        )))
     })
     .await
 }

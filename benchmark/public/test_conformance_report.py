@@ -412,3 +412,57 @@ class LedgerProvenancePrModeTest(unittest.TestCase):
             code, messages = self._provenance(root, {"quipu_revision": base}, "no-such-ref")
             self.assertEqual(code, 2, messages)
             self.assertIn("UNVERIFIED", " ".join(messages))
+
+
+class SyntaxSuiteRegressionGateTest(unittest.TestCase):
+    """The FIFTH suite's regression gate — the standing arm for aegis-fn3hdn.
+
+    `sparql11-syntax` had no regression gate at all, because check_regression
+    could not read its ledger: syntax rows key on `test` rather than
+    class/manifest/id, and record `passed: true` rather than `status: "passed"`.
+    Nothing errored — the checker simply found no rows it understood and
+    reported "no regression", which is the shape of a gate that has stopped
+    guarding rather than one that has broken.
+
+    sattler's standing condition for the fn3hdn work: regress one suite -> red.
+    These are that arm, kept as a test rather than as something someone once ran.
+    """
+
+    LEDGER = RESULTS / "sparql11-syntax.json"
+
+    def test_the_syntax_ledger_is_readable_by_the_regression_checker(self):
+        # The anti-vacuity precondition. Both assertions below would pass
+        # against an EMPTY parse, which is exactly how the hole survived: the
+        # checker answered "no regression" about rows it never read.
+        rows = REGRESSION.load_rows(self.LEDGER)
+        self.assertGreater(len(rows), 20, "syntax ledger read as nearly empty")
+        self.assertTrue(
+            any(REGRESSION._passed(row) for row in rows.values()),
+            "no syntax row reads as PASSING — the gate cannot detect a regression",
+        )
+
+    def test_a_regressed_syntax_row_is_CAUGHT(self):
+        data = json.loads(self.LEDGER.read_text())
+        flipped = None
+        for row in data["results"]:
+            if row.get("passed") is True:
+                row["passed"] = False
+                flipped = row["test"]
+                break
+        self.assertIsNotNone(flipped, "no passing syntax row to sabotage")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = pathlib.Path(tmp) / "sparql11-syntax.json"
+            candidate.write_text(json.dumps(data))
+            code = REGRESSION.main(
+                ["--baseline", str(self.LEDGER), "--candidate", str(candidate)]
+            )
+        self.assertEqual(code, 1, f"regressing {flipped} must FAIL the gate")
+
+    def test_an_unchanged_syntax_ledger_PASSES(self):
+        # The other half of the pair: a gate that fails on everything is not a
+        # gate either.
+        code = REGRESSION.main(
+            ["--baseline", str(self.LEDGER), "--candidate", str(self.LEDGER)]
+        )
+        self.assertEqual(code, 0)

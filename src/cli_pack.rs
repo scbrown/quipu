@@ -12,7 +12,19 @@ use crate::cli::{chrono_now, flag_value};
 /// MCP tool name and a `graph` subcommand would collide with it.
 pub fn cmd_pack(args: &[String], db_path: &str) {
     if let Some(path) = flag_value(args, "--verify") {
-        match quipu::pack::verify(path) {
+        // Dispatch on the FORMAT, because the two artifacts hash differently
+        // and `pack::verify` cannot recompute a full pack's hash at all: it
+        // hashes canonical CURRENT-FACTS content for `manifest.source_graph`,
+        // and a full pack's is the sentinel `urn:quipu:whole-store`. Measured
+        // on an intact pack, this printed `unknown graph:
+        // urn:quipu:whole-store` — so the lossless BACKUP was the one artifact
+        // whose integrity could not be checked, which is the question a backup
+        // exists to answer (aegis-9f899e).
+        let verified = match quipu::pack::read_manifest(path).map(|m| m.pack_format) {
+            Ok(f) if f == quipu::pack_restore::FORMAT_FULL => quipu::pack_full::verify_full(path),
+            _ => quipu::pack::verify(path),
+        };
+        match verified {
             Ok((stored, recomputed, true)) => {
                 println!("pack: OK\n  content_hash: {stored}");
                 let _ = recomputed;
@@ -69,13 +81,29 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         repository_sha: flag_value(args, "--repo-sha").map(String::from),
         model_id: flag_value(args, "--model-id").map(String::from),
         model_version: flag_value(args, "--model-version").map(String::from),
+        destination: match flag_value(args, "--destination") {
+            Some("internal") => quipu::share::ShareDestination::Internal,
+            _ => quipu::share::ShareDestination::Outward,
+        },
     };
 
     // `--format turtle` writes an interop BUNDLE (a directory of plain files)
     // rather than a store. Export-only: nothing unpacks it, because its purpose
     // is to be read by something that is not Quipu.
     let turtle = flag_value(args, "--format") == Some("turtle");
-    let packed = if turtle {
+    // `--full` is a DIFFERENT ARTIFACT, not a mode of this one: a lossless
+    // whole-store copy for internal backup, which takes no graph and refuses an
+    // outward destination. Dispatched here rather than folded into `pack` so the
+    // two contracts stay separable (aegis-9f899e).
+    let full = args.iter().any(|a| a == "--full");
+    let packed = if full && turtle {
+        Err(quipu::error::Error::InvalidValue(
+            "pack --full --format turtle: a full pack is a whole-store artifact,              not an interop bundle. Use one or the other."
+                .into(),
+        ))
+    } else if full {
+        quipu::pack_full::pack_full(&store, out, &opts, &chrono_now())
+    } else if turtle {
         quipu::pack::pack_turtle(&store, graph, out, &opts, &chrono_now())
     } else {
         quipu::pack::pack(&store, graph, out, &opts, &chrono_now())
@@ -121,6 +149,34 @@ pub fn cmd_unpack(args: &[String], db_path: &str) {
         ),
         Err(e) => {
             eprintln!("unpack error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `quipu restore <full-pack> [--force]` — REPLACE this store with a full pack.
+///
+/// The sibling of [`cmd_unpack`] and deliberately a different verb: `unpack`
+/// merges, `restore` replaces, and which one happens is declared by the
+/// operator rather than inferred from how empty the destination looks
+/// (aegis-9f899e, settled with wu).
+pub fn cmd_restore(args: &[String], db_path: &str) {
+    let Some(pack) = args.get(2).filter(|s| !s.starts_with("--")) else {
+        eprintln!(
+            "usage: quipu restore <file.qpack> [--force] [--db <path>]\n       \
+             REPLACES the store at --db with the pack's whole contents. To MERGE a \
+             published pack into an existing store, use `quipu unpack` instead."
+        );
+        std::process::exit(1);
+    };
+    let force = args.iter().any(|a| a == "--force");
+    match quipu::pack_restore::restore(pack, db_path, force) {
+        Ok(r) => println!(
+            "restored {pack} -> {}\n  content_hash: {}\n  tables:       {}\n  replaced:     {} live fact(s)",
+            r.destination, r.content_hash, r.tables, r.replaced_facts
+        ),
+        Err(e) => {
+            eprintln!("restore error: {e}");
             std::process::exit(1);
         }
     }
@@ -321,26 +377,25 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             std::process::exit(1);
         });
     let actor = flag_value(args, "--actor");
-    let transient = reference.starts_with("https://")
-        || reference.starts_with("http://")
-        || !std::path::Path::new(reference).is_dir();
-    let imported = if transient {
-        quipu::share_transport::import_in_memory(reference, &timestamp, actor)
-            .map(|(_, result)| result)
-    } else {
-        let mut request = quipu::share_transport::read_local(reference);
-        if let Ok(request) = &mut request {
-            request.actor = actor.map(String::from);
-            request.destination = destination_flag(args);
-            request.source = flag_value(args, "--source")
-                .unwrap_or(reference)
-                .to_string();
-        }
-        request.and_then(|request| {
-            let mut store = crate::cli_open::open_store(db_path);
-            quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
-        })
-    };
+    // Keep no-file archive/URL verification as the default, but an explicit
+    // database selects the same local shapes, bindings and staging as a directory.
+    let transient = flag_value(args, "--db").is_none()
+        && (reference.starts_with("https://")
+            || reference.starts_with("http://")
+            || !std::path::Path::new(reference).is_dir());
+    let imported = quipu::share_transport::read_reference(reference).and_then(|mut request| {
+        request.actor = actor.map(String::from);
+        request.destination = destination_flag(args);
+        request.source = flag_value(args, "--source")
+            .unwrap_or(reference)
+            .to_string();
+        let mut store = if transient {
+            quipu::Store::open_in_memory()?
+        } else {
+            crate::cli_open::open_store(db_path)
+        };
+        quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
+    });
     match imported {
         Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
         Err(error) => {

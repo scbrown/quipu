@@ -1,10 +1,12 @@
 # Design: The Signing Plane — governing the trust root like everything else
 
-> **Implementation status (2026-08-09):** ⬜ **Proposed, nothing built.**
-> Distilled from a design session with Stiwi; the task-signing concept
-> (§6) is human-originated (Stiwi, 2026-08-09). v1 signing as described
-> in §2 is live (`src/signing.rs`, `src/governance/verdict_facts.rs`,
-> `quipu_verdict_verify`); everything from §5 on is future work.
+> **Implementation status (2026-09-11):** **v1 verdict signing and verifier
+> registration are implemented (§2).** Native session/share attestation also
+> ships with a protected binding registry and durable nonce replay protection
+> (§2.1). **The signing-plane governance proposals in §5–§7 remain future work.**
+> The implementation and regression tests below identify these separate scopes.
+> This design originated in a session with Stiwi; the task-signing concept
+> (§6) is human-originated (Stiwi, 2026-08-09).
 
 ## 1. The question
 
@@ -37,6 +39,49 @@ design.
 The "separate system" is therefore two distinct things: (a) key custody
 outside the store, and (b) the scheme duplicated per writer with nothing
 checking the copies agree. (a) is load-bearing (§4); (b) is debt (§5).
+
+Implementation anchors: [`src/signing.rs`](../../src/signing.rs) supplies the
+Ed25519 primitives and `sign_roundtrips_and_rejects_tampering` regression;
+[`src/governance/verdict_facts.rs`](../../src/governance/verdict_facts.rs)
+emits signed verdict facts. `test_signed_verdict_end_to_end_root_of_trust` in
+[`src/mcp/tests.rs`](../../src/mcp/tests.rs) proves that a registered, authorized
+signer's verdict verifies as trusted and that tampering breaks the seal.
+
+### 2.1. Session/share attestation — implemented, separate from verdict registration
+
+The common verifier in
+[`src/session_attestation.rs`](../../src/session_attestation.rs) handles
+`quipu-write-v1` and `quipu-share-v1` as distinct canonical payload domains.
+`both_domains_use_one_verifier_and_distinct_canonical_builders` and
+`tamper_substitution_replay_and_domain_downgrade_are_rejected` cover that
+boundary. Share import reaches it through
+[`src/share_attestation.rs`](../../src/share_attestation.rs).
+
+Session bindings and spent nonces live in protected SQLite tables
+([`src/store/attestation.rs`](../../src/store/attestation.rs)), separate from
+graph-writable `VerifierRegistration` facts. Nonce spending participates in
+the mutation's savepoint: rollback returns the nonce, accepted mutations keep
+it spent, and the spend survives reopening the store. These are separate
+regressions in
+[`src/store/attestation_tests.rs`](../../src/store/attestation_tests.rs):
+`a_rolled_back_mutation_gives_the_nonce_back`,
+`an_accepted_mutation_keeps_the_nonce_spent`, and
+`a_spent_nonce_is_still_spent_after_a_reopen`.
+
+Native imports distinguish **transport** (no envelope), **claimed** (a valid
+self-carried identity without a local binding), and **attested** (verified
+against an independently registered binding). Import never registers its own
+producer: `import_does_not_register_the_binding_it_carries` and
+`registering_out_of_band_reaches_attested` in
+[`src/share_import_attestation_tests.rs`](../../src/share_import_attestation_tests.rs)
+exercise that distinction through the real import path. The native CLI
+provides `share --attest` and `attest register`; see the
+[CLI sharing reference](../book/src/reference/cli-sharing.md). Browser imports
+do not provide this attestation verifier.
+
+This nonce replay protection prevents reusing an attestation. It does not
+implement the historical, as-of trust-root verification proposed below, or
+§6's task-scoped capability model.
 
 ## 3. What replay actually covers today — measured honestly
 

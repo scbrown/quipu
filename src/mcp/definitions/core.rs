@@ -14,6 +14,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "entailment": {"type": "string", "description": "Entailment regime; currently rdfs."},
+                    "fork": {"type": "string", "description": "Named fork to query."},
+                    "graph": {"type": "string", "description": "Named graph to query."},
+                    "include_kinds": {"type": "array", "description": "Graph kinds included in the query dataset.", "items": {"type": "string"}},
+                    "row_labels": {"type": "boolean", "description": "Include per-row graph labels."},
                     "query": { "type": "string", "description": "SPARQL SELECT query" },
                     "valid_at": { "type": "string", "description": "Point-in-time for valid-time filtering (ISO-8601). Omit for current state." },
                     "tx": { "type": "integer", "description": "Maximum transaction ID to consider. Omit for all transactions." },
@@ -141,6 +146,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "valid_at": {"type": "string", "description": "Valid-time instant used to select stored validation shapes."},
+                    "as_of_tx": {"type": "integer", "description": "Transaction ceiling used to select stored validation shapes."},
                     "shapes": { "type": "string", "description": "SHACL shapes in Turtle format" },
                     "data": { "type": "string", "description": "RDF data in Turtle format to validate" }
                 },

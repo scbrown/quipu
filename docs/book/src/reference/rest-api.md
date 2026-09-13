@@ -2,6 +2,29 @@
 
 The `quipu-server` binary exposes all Quipu operations over HTTP (Axum).
 
+## Unrecognized request fields
+
+Successful tool-backed JSON endpoints report unrecognized top-level request keys
+in a sorted `ignored_fields` array. Requests containing only recognized keys omit
+that field. The accepted keys come from the tool's input schema, with HTTP adapter
+fields accounted for separately. `/reason`, `/subscriptions`, `/graph/create`,
+and `/graph/label` also report unrecognized keys. Errors retain their existing status and response body.
+
+This is reporting, not rejection or a preview mode. For example, a successful
+`POST /knot` containing `"dry_run": true` still **writes** and includes
+`"ignored_fields": ["dry_run"]`. `/knot` does not support dry runs.
+
+`POST /export` and `/query` responses negotiated as standard SPARQL results or RDF
+preserve their standard bodies and report the JSON array in the
+`X-Quipu-Ignored-Fields` response header instead. `/search/nodes` reports `verbose`
+as ignored; the separate `/search_nodes` endpoint supports it.
+
+Reporting covers undeclared top-level fields, not nested keys, value types, or
+whether a recognized option applies to a particular action. It does not cover
+non-tool endpoints such as `/share`, `/import`, `/import/promote`, entity GETs,
+SPARQL protocol form fields, or direct Rust library calls. An absent warning on
+those surfaces is not evidence that every supplied field was used.
+
 ## Starting the Server
 
 ```bash
