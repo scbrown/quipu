@@ -153,6 +153,13 @@ pub fn pack_full(
 /// # Errors
 /// Propagates a missing or unreadable manifest and SQLite errors from the
 /// re-hash.
+/// Gated like [`crate::pack::read_manifest`], which it calls: that one is
+/// `cfg(not(wasm32))`, and this module is NOT gated as a whole, so an ungated
+/// function here reaches a gated one and the wasm32 `--lib` check fails to
+/// compile. Found by running that arm, after a static argument that the arm
+/// could not be affected — the argument enumerated references to the NEW
+/// module and missed the new function added to this EXISTING one (aegis-9f899e).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn verify_full(pack_path: &str) -> Result<(String, String, bool)> {
     let manifest = crate::pack::read_manifest(pack_path)?;
     let conn = Connection::open(pack_path)?;
