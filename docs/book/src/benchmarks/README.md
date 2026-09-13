@@ -200,6 +200,26 @@ anything else, and none should be quoted from anywhere until a pinned runner pro
 them here. The bulk-ingest section above is a different class and is not a substitute:
 a load rate says nothing about how fast either engine answers a query.
 
+**This is not "re-measuring": no measurement is in progress.** The obstacle is the
+dataset, not the schedule, and it is worth stating so that the absence is not read as
+a result being withheld.
+
+- WatDiv publishes pre-generated archives at **10M, 100M and 1000M triples only**.
+  There is no published 1M archive, so a 1M checkpoint cannot be taken from one.
+- **A prefix slice of a larger archive is not a smaller valid dataset.** It is a
+  truncated one, and the queries reference entities the truncation removed, so their
+  joins cannot complete: the timings measure a failed-join search rather than work.
+  Measured on a 1,000,000-line prefix of the 10M archive, the slow query shapes
+  returned **zero rows** — any latency read from them describes the search for a match
+  that was never in the store.
+- A 1M checkpoint must therefore be **generated once and hash-pinned**, with the
+  artifact digest committed beside the published archive digests. Generating per run
+  would make the figure irreproducible, since it would depend on generator version and
+  seed; generating once and pinning the artifact moves re-derivability to the artifact,
+  and the seed stops mattering.
+
+Until that pinned artifact exists, this class stays NOT RUN.
+
 This row exists so the absence is visible. The rule for this section is that a
 class with no result is published as NOT RUN and kept in the list, because the
 alternative — leaving it out until it looks good — is how a benchmark page stops
