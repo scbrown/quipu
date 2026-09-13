@@ -26,8 +26,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `663f52db96d6c3c2fa7e58270e0f644c9e1c4d5d` |
-| Quipu revision (syntax) | `663f52db96d6c3c2fa7e58270e0f644c9e1c4d5d` |
+| Quipu revision (evaluation) | `1541f172484b60d741e4295e57b133c368c04275` |
+| Quipu revision (syntax) | `1541f172484b60d741e4295e57b133c368c04275` |
 | Quipu version | `quipu 0.5.1` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -177,7 +177,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **29/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-13T00:55:30Z by [CI run](https://github.com/scbrown/quipu/actions/runs/34729023945), from quipu `663f52db96d6`.
+Ledger re-derived 2026-09-13T02:16:15Z by [CI run](https://github.com/scbrown/quipu/actions/runs/34732436406), from quipu `1541f172484b`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
