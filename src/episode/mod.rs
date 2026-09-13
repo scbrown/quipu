@@ -389,28 +389,12 @@ pub fn ingest_episode_outcome(
     // Idempotency fast path: same content already recorded → skip the write.
     // Reported as `Unchanged`, NOT as a bare `count: 0` — see `IngestOutcome`.
     //
-    // A HASH MATCH IS NOT PRESENCE (aegis-7oswq4). The hash lives on the episode
-    // activity node and outlives the retraction of the entities the episode
-    // generated, so after a cleanup a re-post used to short-circuit to
-    // `unchanged` with nothing in the store — and `unchanged` is the signal the
-    // crew rulebook documents as "it is already there", the gate for labelling a
-    // source bead ingested. Measured 2026-09-12: 200 retracted entities, re-post
-    // returned `outcome: unchanged, count: 0, tx_id: 0`, and a read-back found 0.
-    //
-    // So confirm the generated entities are still present before trusting the
-    // hash. Strict (`<` not `== 0`): a PARTIAL retraction is also not "already
-    // there", and re-writing is idempotent, so the conservative branch is safe.
-    if existing_hash.as_deref() == Some(new_hash.as_str()) {
-        let expected = episode
-            .nodes
-            .iter()
-            .map(|n| node_iri(&n.name, base_ns))
-            .collect::<std::collections::BTreeSet<_>>()
-            .len();
-        let present = descriptions::generated_entity_count(store, &ep_iri)?;
-        if expected == 0 || present >= expected {
-            return Ok((NOOP_TX, 0, IngestOutcome::Unchanged));
-        }
+    // A HASH MATCH IS NOT PRESENCE (aegis-7oswq4): the hash outlives the
+    // retraction of the entities it was recorded for, so `is_unchanged` also
+    // confirms those entities are still in the store. Rationale and the
+    // measurement are on `descriptions::is_unchanged`.
+    if descriptions::is_unchanged(store, &ep_iri, base_ns, episode, &existing_hash, &new_hash)? {
+        return Ok((NOOP_TX, 0, IngestOutcome::Unchanged));
     }
 
     let actor = episode.source.as_deref();
