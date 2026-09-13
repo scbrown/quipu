@@ -234,15 +234,31 @@ def parse_peak_rss(metrics: str) -> int:
 def evaluate(report: dict, baseline: dict) -> tuple[list[str], list[str]]:
     """Grade a report. Returns (failures, unmeasured).
 
-    `unmeasured` exists because a two-state verdict is FORCED to render "this
-    instrument could not see the bound" as "the bound was not exceeded" or as
-    "the bound was exceeded", and both readings are wrong. The RSS bound is the
-    case that needs it: `quipu_process_peak_rss_bytes` is a high-water mark
-    since process start, so on a long-lived server the post-run reading is the
-    max of what this run did and everything the process had already done. On
-    the deployed fleet that reading was 2.42 GB against a 512 MiB bound before
-    a single harness request was sent (aegis-svtdyn, 2026-09-12) — a number no
-    change to the code under test could have moved.
+    MEMORY IS GRADED ON RUN-ATTRIBUTABLE GROWTH, NOT ON THE ABSOLUTE PEAK
+    (aegis-svtdyn, sattler ruling 2026-09-12). `quipu_process_peak_rss_bytes` is
+    a high-water mark since process START, so the post-run reading is the max of
+    what this run did and everything the process had already done. Against the
+    production corpus the working set alone is ~450 MB, so the ABSOLUTE peak can
+    never come in under 512 MiB no matter how good the code is — grading it made
+    the ratchet print a failure on a run that met every criterion it was
+    re-derived to. `peak_rss_growth_bytes` is the quantity this run caused, and
+    it is what the bound now applies to.
+
+    Growth is a LOWER bound, never a certificate: zero growth means the run did
+    not push past a mark the process had already set, not that the run was cheap.
+
+    `unmeasured` is retained as a channel — a two-state verdict is forced to
+    render "this instrument could not see the bound" as pass or as fail, and both
+    are wrong — but it has no producer now that the absolute bound is retired.
+    Re-add a producer here if another unmeasurable bound appears; do not delete
+    the channel and re-learn why it existed.
+
+    NOT GRADED HERE: the accepted criteria also include a steady-state resident
+    bound (median resident <= 2.5 GB). Sampling it would mean polling /metrics
+    during the run, and /metrics is itself a whole-store scan costing seconds on
+    a production-size corpus (aegis-9rep3c) — the observer would distort the
+    measurement. Start/end resident are reported as context instead; the
+    steady-state bound belongs to the monitoring alert (aegis-5ml8rk).
     """
     failures = []
     unmeasured = []
@@ -264,15 +280,9 @@ def evaluate(report: dict, baseline: dict) -> tuple[list[str], list[str]]:
     # already set, not that the run was cheap.
     if growth > max_rss:
         failures.append(f"peak RSS grew {growth} > {max_rss} bytes during this run")
-    if baseline_peak > max_rss:
-        unmeasured.append(
-            f"peak RSS bound {max_rss} bytes: NOT MEASURED. The server had already "
-            f"reached {baseline_peak} bytes before this run began, so the post-run "
-            f"reading of {report['peak_rss_bytes']} is not attributable to this load. "
-            f"Restart the server and re-run to measure this bound."
-        )
-    elif report["peak_rss_bytes"] > max_rss:
-        failures.append(f"peak RSS {report['peak_rss_bytes']} > {max_rss} bytes")
+    # The ABSOLUTE peak is deliberately NOT graded — see the docstring. It is
+    # reported so a reader can see what the process was carrying.
+    _ = baseline_peak
     for operation, max_p99 in limits["max_p99_ms"].items():
         actual = report["operations"].get(operation, {}).get("p99_ms", float("inf"))
         if actual > max_p99:
@@ -355,24 +365,27 @@ def self_test() -> None:
     # RSS verdict, all four arms. A cold process grades the absolute peak; a
     # process already over the bound cannot grade it at all and must say so
     # rather than emit a failure nothing in the code under test could clear.
-    cold_over = clean(peak_rss_bytes=101, baseline_peak_rss_bytes=10, peak_rss_growth_bytes=91)
-    failures, unmeasured = evaluate(cold_over, base)
-    assert any("peak RSS 101" in f for f in failures), failures
-    assert unmeasured == [], unmeasured
+    # GROWTH is the graded quantity; the ABSOLUTE peak is not (aegis-svtdyn
+    # ruling 2026-09-12). These arms pin exactly that, in both directions.
 
-    warm_over = clean(peak_rss_bytes=5000, baseline_peak_rss_bytes=5000, peak_rss_growth_bytes=0)
-    failures, unmeasured = evaluate(warm_over, base)
-    assert failures == [], failures
-    assert any("NOT MEASURED" in u for u in unmeasured), unmeasured
+    # A huge absolute peak with growth inside the bound PASSES. This is the real
+    # production shape — ~450 MB of working set the run did not cause — and the
+    # case that used to print a failure on a passing run.
+    big_absolute = clean(peak_rss_bytes=5000, baseline_peak_rss_bytes=4950, peak_rss_growth_bytes=50)
+    assert evaluate(big_absolute, base) == ([], []), evaluate(big_absolute, base)
 
-    warm_grew = clean(peak_rss_bytes=5200, baseline_peak_rss_bytes=5000, peak_rss_growth_bytes=200)
-    failures, unmeasured = evaluate(warm_grew, base)
-    assert any("grew 200" in f for f in failures), failures
-    assert any("NOT MEASURED" in u for u in unmeasured), unmeasured
+    # Growth over the bound FAILS, warm process or cold — it is attributable
+    # either way.
+    grew_warm = clean(peak_rss_bytes=5200, baseline_peak_rss_bytes=5000, peak_rss_growth_bytes=200)
+    assert any("grew 200" in f for f in evaluate(grew_warm, base)[0]), evaluate(grew_warm, base)
+    grew_cold = clean(peak_rss_bytes=101, baseline_peak_rss_bytes=10, peak_rss_growth_bytes=91)
+    assert not evaluate(grew_cold, base)[0], "growth of 91 is within a bound of 100"
 
-    # The boundary itself: baseline exactly AT the bound is still measurable.
-    at_bound = clean(peak_rss_bytes=100, baseline_peak_rss_bytes=100, peak_rss_growth_bytes=0)
+    # The boundary: growth exactly AT the bound passes, one byte over fails.
+    at_bound = clean(peak_rss_bytes=200, baseline_peak_rss_bytes=100, peak_rss_growth_bytes=100)
     assert evaluate(at_bound, base) == ([], []), evaluate(at_bound, base)
+    over_bound = clean(peak_rss_bytes=201, baseline_peak_rss_bytes=100, peak_rss_growth_bytes=101)
+    assert any("grew 101" in f for f in evaluate(over_bound, base)[0])
 
     print("quipu-load-test self-test: PASS")
 
