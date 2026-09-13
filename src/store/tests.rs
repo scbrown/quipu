@@ -3082,3 +3082,37 @@ fn warm_term_cache_respects_the_cap() {
         "warm admitted {warmed} entries past a cap of 5"
     );
 }
+
+#[test]
+fn label_index_scan_uses_the_current_fact_index() {
+    // aegis-svtdyn. `resolution::LabelIndex::build` runs this scan on EVERY
+    // episode write, BEFORE the per-node loop, so even a zero-node episode pays
+    // it. On the production corpus `idx_aevt` made it touch 807,985 rows to
+    // return 86,603 (a 9.3x over-read, 0.32s) because that index carries
+    // neither `valid_to` nor `op`.
+    //
+    // Pin the PLAN, not the index's existence: a `sqlite_master` check would
+    // stay green if the index were present and the query stopped using it,
+    // which is the regression that actually costs the write path.
+    let store = Store::open_in_memory().unwrap();
+    let mut stmt = store
+        .conn
+        .prepare(
+            "EXPLAIN QUERY PLAN \
+             SELECT e, v FROM facts WHERE a IN (4) AND valid_to IS NULL AND op = 1",
+        )
+        .unwrap();
+    let details: Vec<String> = stmt
+        .query_map([], |row| row.get(3))
+        .unwrap()
+        .map(|row| row.unwrap())
+        .collect();
+    assert!(
+        details.iter().any(|d| d.contains("idx_current_aev")),
+        "the current-fact label scan must use idx_current_aev, plan={details:?}"
+    );
+    assert!(
+        !details.iter().any(|d| d.contains("SCAN facts")),
+        "the current-fact label scan must not full-scan facts, plan={details:?}"
+    );
+}
