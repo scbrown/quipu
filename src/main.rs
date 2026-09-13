@@ -60,6 +60,7 @@ fn main() {
     // it must not load config or open a store (aegis-j0nq).
     if args[1] == "--version" || args[1] == "-V" || args[1] == "version" {
         println!("quipu {}", env!("CARGO_PKG_VERSION"));
+        println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
         return;
     }
 
