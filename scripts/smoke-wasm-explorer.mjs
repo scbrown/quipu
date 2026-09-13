@@ -88,6 +88,14 @@ execFileSync("tar", ["--sort=name", "--mtime=UTC 1970-01-01", "--owner=0", "--gr
   "--numeric-owner", "-C", shareDir, "-czf", join(work, packName), "."]);
 const producerManifest = JSON.parse(readFileSync(join(shareDir, "manifest.json"), "utf8"));
 
+// The receiver owns its policy; it is deliberately absent from the source pack.
+const receiverPolicy = JSON.stringify({
+  name: "smoke-receiver-policy", source: "synthetic acceptance fixture",
+  graph: "urn:smoke:receiver-policy",
+  nodes: [{ name: "smoke-private-identifiers", type: "InternalIdentifierPattern",
+    properties: { regex: "private[.]example", enforcementTier: "block" } }],
+});
+
 // ---- 2. Serve the packaged bundle exactly as the book page would ----------
 
 const site = join(work, "site");
@@ -294,6 +302,17 @@ try {
       && editLog.filter((e) => e.op === "set").length === 2
       && editLog.filter((e) => e.op === "retract").length === 1,
     JSON.stringify(editLog.map((e) => e.op)));
+
+  const noPolicy = await page.evaluate(() => window.ask({ cmd: "exportManifest" })
+    .then(() => null, (e) => e.message));
+  check("outward browser export refuses an empty receiver catalogue",
+    typeof noPolicy === "string" && noPolicy.includes("no block-tier patterns"), noPolicy);
+  await page.evaluate((episode) => window.ask({ cmd: "episode", episode }), receiverPolicy);
+
+  const receiverRoot = await page.evaluate(() => window.ask({
+    cmd: "query", sparql: "SELECT ?s WHERE { ?s a <http://aegis.gastown.local/ontology/InternalIdentifierPattern> }",
+  }));
+  check("receiver policy stays outside the shared ROOT graph", receiverRoot.rows.length === 0);
 
   const exportManifest = await page.evaluate(() => window.ask({ cmd: "exportManifest" }));
   check("the exported pack declares the pack it came from as its parent",

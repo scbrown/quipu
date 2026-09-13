@@ -112,6 +112,19 @@ directory. `--no-shapes` does not bypass the catalogue check. Use
 `--destination internal` only for an intended internal transfer; it skips the
 outward check and stamps the resulting artifact accordingly.
 
+## Release publication rollout
+
+Native releases can ship before the trusted repository-share producer is enabled.
+While the repository variable `TRUSTED_REPOSITORY_SHARE_ENABLED` is unset or not
+`true`, the release summary explicitly records that no new repository qpack was
+published. The release may therefore have no graph artifact for the explorer.
+
+Enable that variable only after the managed trusted producer is installed and
+its scheduled execution has been observed. Once enabled, the release job requires
+the qpack, checksum and source/binary provenance receipt; missing or invalid
+artifacts fail the job. The first enabled release must separately prove published
+artifact delivery. Hosted runners never receive the private policy catalogue.
+
 ## What a share is
 
 A **share** is a directory you can commit to git, attach to an email, or publish

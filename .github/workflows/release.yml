@@ -610,7 +610,13 @@ jobs:
       # The trusted producer observes the native assets, obtains live policy,
       # and uploads only its verified share. Hosted runners never receive the
       # private catalogue or authority configuration.
+      - name: Record deferred repository share publication
+        if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED != 'true'
+        run: |
+          echo 'Repository qpack publication is disabled pending trusted producer activation. No new repository qpack was published by this job.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Require the trusted repository share
+        if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED == 'true'
         timeout-minutes: 45
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
