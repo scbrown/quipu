@@ -419,6 +419,15 @@ fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalC
             }
         },
         Err(e) => {
+            // DELIBERATELY does not exit, unlike the one-shot `quipu query`
+            // path in `cli.rs`, which exits 2 on a query that did not complete
+            // and 1 on one that failed (aegis-41rc28).
+            //
+            // This twin serves `cmd_repl`. Exiting here would end the
+            // operator's interactive session on a typo, and a REPL has no exit
+            // status per query for anyone to branch on -- the false-success
+            // that bug is about cannot arise. If you are here to "make the two
+            // consistent", the inconsistency is the point.
             eprintln!("query error: {e}");
         }
     }
