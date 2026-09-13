@@ -47,26 +47,37 @@ fn write_config(dir: &std::path::Path, body: &str) {
     std::fs::write(dir.join(".bobbin/config.toml"), body).unwrap();
 }
 
-fn query_exit(cwd: &std::path::Path, db: &str, sparql: &str) -> i32 {
-    Command::new(env!("CARGO_BIN_EXE_quipu"))
+/// Returns the exit code, plus what the process said, so a failure in an
+/// environment the author cannot reach reports the evidence rather than just
+/// the number. A bare `left: 0 right: 2` is not enough to diagnose from a CI
+/// log.
+fn query_run(cwd: &std::path::Path, db: &str, sparql: &str) -> (i32, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_quipu"))
         .current_dir(cwd)
         .args(["query", sparql, "--db", db])
         .output()
-        .unwrap()
+        .unwrap();
+    let code = out
         .status
         .code()
-        .expect("quipu was killed by a signal rather than exiting")
+        .expect("quipu was killed by a signal rather than exiting");
+    let detail = format!(
+        "exit={code}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    (code, detail)
 }
 
 #[test]
 fn a_successful_query_still_exits_zero() {
     let dir = tempfile::tempdir().unwrap();
     let db = seeded_store(dir.path());
+    let (code, detail) = query_run(dir.path(), &db, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 2");
     assert_eq!(
-        query_exit(dir.path(), &db, "SELECT ?s WHERE { ?s ?p ?o } LIMIT 2"),
-        0,
+        code, 0,
         "the control failed: a working query must still exit 0, or the \
-         assertions below prove nothing"
+         assertions below prove nothing.\n{detail}"
     );
 }
 
@@ -74,10 +85,10 @@ fn a_successful_query_still_exits_zero() {
 fn a_malformed_query_exits_one() {
     let dir = tempfile::tempdir().unwrap();
     let db = seeded_store(dir.path());
+    let (code, detail) = query_run(dir.path(), &db, "SELECT ?s WHERE { this is not sparql");
     assert_eq!(
-        query_exit(dir.path(), &db, "SELECT ?s WHERE { this is not sparql"),
-        1,
-        "a query that cannot be parsed must exit 1"
+        code, 1,
+        "a query that cannot be parsed must exit 1.\n{detail}"
     );
 }
 
@@ -86,11 +97,11 @@ fn a_timed_out_query_exits_two_not_zero() {
     let dir = tempfile::tempdir().unwrap();
     let db = seeded_store(dir.path());
     write_config(dir.path(), "[quipu.search]\nquery_timeout_ms = 1\n");
+    let (code, detail) = query_run(dir.path(), &db, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }");
     assert_eq!(
-        query_exit(dir.path(), &db, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"),
-        2,
+        code, 2,
         "a timed-out query exited 0, so it is indistinguishable from a \
-         successful empty result (aegis-41rc28)"
+         successful empty result (aegis-41rc28).\n{detail}"
     );
 }
 
@@ -99,13 +110,13 @@ fn a_join_complexity_refusal_exits_two_not_zero() {
     let dir = tempfile::tempdir().unwrap();
     let db = seeded_store(dir.path());
     write_config(dir.path(), "[quipu.search]\nmax_join_rows = 10\n");
+    let (code, detail) = query_run(
+        dir.path(),
+        &db,
+        "SELECT ?a ?b WHERE { ?a ?p ?o . ?b ?q ?r }",
+    );
     assert_eq!(
-        query_exit(
-            dir.path(),
-            &db,
-            "SELECT ?a ?b WHERE { ?a ?p ?o . ?b ?q ?r }"
-        ),
-        2,
-        "a join-complexity refusal is also a query that did not complete"
+        code, 2,
+        "a join-complexity refusal is also a query that did not complete.\n{detail}"
     );
 }
