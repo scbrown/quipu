@@ -161,7 +161,7 @@ def load(results_dir: Path) -> dict:
         "classes": classes,
         "suite_revision": evaluation["suite_revision"],
         "quipu_revision": evaluation["quipu_revision"],
-        "quipu_version": evaluation["quipu_version"],
+        "quipu_version": evaluation["quipu_version"].splitlines()[0],
         "syntax_quipu_revision": syntax["quipu_revision"],
         "isolation": evaluation.get("isolation", ""),
         "reproduce": evaluation.get("reproduce", {}),

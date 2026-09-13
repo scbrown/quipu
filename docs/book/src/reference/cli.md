@@ -8,6 +8,21 @@ The `quipu` binary provides a command-line interface for all operations.
 |------|-------------|
 | `--db <path>` | Store database path (default: `.bobbin/quipu/quipu.db`) |
 
+## Build identity
+
+`quipu --version` (also `-V` or `version`) reports two lines without loading
+configuration or opening a database:
+
+```text
+quipu <version>
+git_sha: <build-commit>
+```
+
+The first line retains the version-only format for existing parsers. The second
+line identifies the source commit, or `unknown` when built without Git metadata.
+Compare known build commits to detect differences between releases; equal version
+strings alone do not establish that two binaries contain the same code.
+
 ## Commands
 
 ### `quipu knot <file.ttl>`
