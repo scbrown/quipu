@@ -8,8 +8,8 @@
 That is the whole idea. The rest of this page is how it works, and what proves
 it.
 
-**[Try the receiving half in your browser](../explore/.)** — every Quipu release
-ships a knowledge pack of this repository, and that page imports it with Quipu
+**[Try the receiving half in your browser](../explore/.)** — Quipu releases can
+include a knowledge pack of this repository, and that page imports it with Quipu
 compiled to WebAssembly. You watch the manifest get verified, the bundled shapes
 get adopted, and the graph get staged and promoted, and then you query it — and then
 edit it and export a pack that declares this one as its parent, which is the lineage
