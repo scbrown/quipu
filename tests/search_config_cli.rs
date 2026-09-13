@@ -18,6 +18,14 @@
 //! finish would also pass with the setting still ignored, since the default is
 //! already larger than any query in a test fixture.
 
+// The `quipu` binary is `required-features = ["shacl"]`, so under
+// `--no-default-features` it is NOT BUILT and `CARGO_BIN_EXE_quipu` names a
+// path that does not exist. Without this gate the test panics with
+// `NotFound` rather than failing an assertion, and it does so only in a clean
+// target -- a developer whose target still holds a `--features shacl` binary
+// sees it pass. That is how it reached main red (aegis-z29mwm).
+#![cfg(feature = "shacl")]
+
 use std::process::Command;
 
 /// Build a store with enough rows that an unconstrained scan is not instant.
