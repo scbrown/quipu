@@ -804,7 +804,6 @@ ex:r a rule:Rule ; rule:id "UNSAFE" ;
     );
 }
 
-
 /// A BOUND object in a rule atom narrows the premise load; a VARIABLE object
 /// must still load the whole predicate (aegis-svtdyn).
 ///
@@ -814,14 +813,29 @@ ex:r a rule:Rule ; rule:id "UNSAFE" ;
 /// Narrowing is only safe if an unbound object still widens, so both arms are
 /// asserted here; testing the narrow arm alone would pass on a change that
 /// silently dropped facts a variable-object rule depends on.
+// Gated to the feature its subject lives behind: `World::load_graphs_rule_indices`
+// is `#[cfg(feature = "reactive-reasoner")]`, so without this the DEFAULT feature
+// set fails to compile the test module — which a feature-scoped `cargo test --lib`
+// run never reveals, because it only ever compiles the features it was given.
+#[cfg(feature = "reactive-reasoner")]
 #[test]
 fn a_bound_object_narrows_the_premise_load_and_a_variable_one_does_not() {
     use super::evaluate::World;
 
     let build = |body: &str| {
         let mut store = Store::open_in_memory().unwrap();
-        assert_triple(&mut store, &format!("{PFX}a"), &format!("{PFX}type"), &format!("{PFX}Commit"));
-        assert_triple(&mut store, &format!("{PFX}b"), &format!("{PFX}type"), &format!("{PFX}Other"));
+        assert_triple(
+            &mut store,
+            &format!("{PFX}a"),
+            &format!("{PFX}type"),
+            &format!("{PFX}Commit"),
+        );
+        assert_triple(
+            &mut store,
+            &format!("{PFX}b"),
+            &format!("{PFX}type"),
+            &format!("{PFX}Other"),
+        );
         let ttl = format!(
             r#"
 @prefix rule: <{RULE_NS}> .

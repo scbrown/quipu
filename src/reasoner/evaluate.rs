@@ -388,28 +388,33 @@ impl World {
         // predicate has to be read in full, so `or_insert` cannot be used to
         // "add" to an existing None.
         let mut bound_objects: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
-        let mut note = |atom: &crate::reasoner::ast::Atom| {
-            let slot = bound_objects.entry(atom.predicate.clone()).or_insert(Some(BTreeSet::new()));
-            match atom.args.get(1) {
-                Some(crate::reasoner::ast::Term::Iri(iri)) => {
-                    if let Some(set) = slot.as_mut() {
-                        set.insert(iri.clone());
+        // Scoped so the borrow of `bound_objects` ends at the block, rather than
+        // with a `drop()` of a closure — which does not implement Drop.
+        {
+            let mut note = |atom: &crate::reasoner::ast::Atom| {
+                let slot = bound_objects
+                    .entry(atom.predicate.clone())
+                    .or_insert(Some(BTreeSet::new()));
+                match atom.args.get(1) {
+                    Some(crate::reasoner::ast::Term::Iri(iri)) => {
+                        if let Some(set) = slot.as_mut() {
+                            set.insert(iri.clone());
+                        }
                     }
+                    // A variable object, a literal, or a unary atom: unrestricted.
+                    _ => *slot = None,
                 }
-                // A variable object, a literal, or a unary atom: unrestricted.
-                _ => *slot = None,
-            }
-        };
-        for &rule_idx in rule_indices {
-            let rule = &ruleset.rules[rule_idx];
-            preds.insert(rule.head.predicate.clone());
-            note(&rule.head);
-            for body in &rule.body {
-                preds.insert(body.atom().predicate.clone());
-                note(body.atom());
+            };
+            for &rule_idx in rule_indices {
+                let rule = &ruleset.rules[rule_idx];
+                preds.insert(rule.head.predicate.clone());
+                note(&rule.head);
+                for body in &rule.body {
+                    preds.insert(body.atom().predicate.clone());
+                    note(body.atom());
+                }
             }
         }
-        drop(note);
 
         // Look up (don't intern) — a predicate with no existing facts is
         // fine, it just starts empty and may get written into later.
@@ -450,12 +455,15 @@ impl World {
         let attr_values: Vec<(i64, Option<Vec<Vec<u8>>>)> = attr_to_pred
             .iter()
             .map(|(&attr_id, pred)| {
-                let restriction = bound_objects.get(pred).and_then(|o| o.as_ref()).map(|iris| {
-                    iris.iter()
-                        .filter_map(|iri| store.lookup(iri).ok().flatten())
-                        .map(|id| Value::Ref(id).to_bytes())
-                        .collect::<Vec<Vec<u8>>>()
-                });
+                let restriction = bound_objects
+                    .get(pred)
+                    .and_then(|o| o.as_ref())
+                    .map(|iris| {
+                        iris.iter()
+                            .filter_map(|iri| store.lookup(iri).ok().flatten())
+                            .map(|id| Value::Ref(id).to_bytes())
+                            .collect::<Vec<Vec<u8>>>()
+                    });
                 (attr_id, restriction)
             })
             .collect();
