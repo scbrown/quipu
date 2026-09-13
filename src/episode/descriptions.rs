@@ -21,6 +21,24 @@ pub(super) fn current_content_hash(
     }))
 }
 
+/// How many entities still carry `prov:wasGeneratedBy <ep_iri>` (aegis-7oswq4).
+///
+/// The content hash lives on the episode ACTIVITY node and survives the
+/// retraction of the entities that episode generated — so a hash match alone
+/// says "this content was ingested once", not "this content is in the store".
+/// A re-post after a cleanup then short-circuited to `unchanged`, which the
+/// crew rulebook documents as the signal to label a source bead ingested.
+///
+/// Object-bound, so `idx_vaet (v, a, e, …)` serves it, and it only runs on the
+/// hash-match path.
+pub(super) fn generated_entity_count(store: &Store, ep_iri: &str) -> Result<usize> {
+    let query = format!(
+        "SELECT ?s WHERE {{ ?s <{}wasGeneratedBy> <{ep_iri}> }}",
+        crate::namespace::PROV,
+    );
+    Ok(crate::sparql::query(store, &query)?.rows().len())
+}
+
 /// Parse and commit an ordinary episode after reconciling description revisions.
 pub(super) fn ingest_reconciled(
     store: &mut Store,
