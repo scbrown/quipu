@@ -221,7 +221,16 @@ class PublishedArtifactsTests(unittest.TestCase):
     """The committed page and badges must match the committed ledgers."""
 
     def test_check_mode_passes_against_what_is_committed(self):
-        code = REPORT.main(["--results-dir", str(RESULTS), "--docs-dir", str(DOCS), "--check"])
+        # `--arm content`, deliberately: this class asserts the CONTENT
+        # guarantee its own docstring states. The default arm also asks about
+        # provenance, so with it this test reds whenever the branch's ledger
+        # stamp is stale — a different guarantee, a different remedy, and it
+        # would drag this unit test (which runs in the CONTENT job) red for a
+        # PROVENANCE reason, defeating the whole point of the split
+        # (aegis-fn3hdn). Provenance has its own job and its own test.
+        code = REPORT.main(
+            ["--results-dir", str(RESULTS), "--docs-dir", str(DOCS), "--check", "--arm", "content"]
+        )
         self.assertEqual(code, 0, "run: python3 benchmark/public/conformance_report.py")
 
     def test_the_page_states_the_claim_boundary_and_the_real_numbers(self):
@@ -585,8 +594,14 @@ class ArmSeparationTest(unittest.TestCase):
                 page = work / "docs/book/src/benchmarks/conformance.md"
                 if not page.is_file():
                     self.skipTest("page unavailable")
+                # Provenance BEFORE the sabotage, so the claim is about what
+                # the page edit CHANGES rather than about this branch happening
+                # to have fresh stamps. An absolute `== 0` passes only while the
+                # branch's ledgers are current, which on a src-touching PR they
+                # are not — so it would fail for a reason that has nothing to do
+                # with what is being tested.
+                before = self._run(work, "--arm", "provenance").returncode
                 page.write_text(page.read_text() + "\n<!-- disagreement -->\n")
-
                 content = self._run(work, "--arm", "content")
                 provenance = self._run(work, "--arm", "provenance")
 
@@ -595,8 +610,8 @@ class ArmSeparationTest(unittest.TestCase):
                     "a disagreeing page must still BLOCK on the content arm",
                 )
                 self.assertEqual(
-                    provenance.returncode, 0,
-                    "a disagreeing page says nothing about the stamps:\n"
+                    provenance.returncode, before,
+                    "a disagreeing page must not change the provenance verdict:\n"
                     + provenance.stdout + provenance.stderr,
                 )
             finally:
