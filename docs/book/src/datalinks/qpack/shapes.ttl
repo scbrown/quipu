@@ -1,0 +1,14 @@
+# --- datalinks ---
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+<urn:datalinks:0Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/Ability> ; sh:nodeKind sh:IRI .
+<urn:datalinks:1Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/Armor> ; sh:nodeKind sh:IRI .
+<urn:datalinks:2Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/Chassis> ; sh:nodeKind sh:IRI .
+<urn:datalinks:3Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/Facility> ; sh:nodeKind sh:IRI .
+<urn:datalinks:4Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/Reactor> ; sh:nodeKind sh:IRI .
+<urn:datalinks:5Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/ResourceYield> ; sh:nodeKind sh:IRI .
+<urn:datalinks:6Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/SecretProject> ; sh:nodeKind sh:IRI .
+<urn:datalinks:7Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/SocialModel> ; sh:nodeKind sh:IRI .
+<urn:datalinks:8Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/Technology> ; sh:nodeKind sh:IRI .
+<urn:datalinks:9Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/TerraformAction> ; sh:nodeKind sh:IRI .
+<urn:datalinks:10Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/Unit> ; sh:nodeKind sh:IRI .
+<urn:datalinks:11Shape> a sh:NodeShape ; sh:targetClass <http://neuralamplifier.local/ontology/smac/Weapon> ; sh:nodeKind sh:IRI .

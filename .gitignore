@@ -85,6 +85,7 @@ data/*.log
 docs/book/src/datalinks/datalinks.js
 docs/book/src/datalinks/graph-canvas.js
 docs/book/src/datalinks/vendor/
+docs/book/src/datalinks/demo.qpack.tar.gz
 
 # Release artifacts staged into the book by the docs workflow (or
 # `just explorer`): the wasm bundle and the repository knowledge pack the
