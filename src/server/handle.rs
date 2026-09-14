@@ -28,6 +28,7 @@ pub(crate) type SharedStore = Arc<StoreHandle>;
 /// `FairMutex` — so every existing call site is unchanged and writes are still
 /// serialised. `read()` is the new path.
 pub(crate) struct StoreHandle {
+    pub(crate) graph_metrics: super::graph_metrics::GraphMetrics,
     pub(crate) writer: FairMutex<quipu::Store>,
     pub(crate) readers: ReadPool,
     /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
@@ -99,6 +100,7 @@ impl StoreHandle {
     #[cfg(test)]
     pub(crate) fn writer_only(store: quipu::Store) -> Self {
         Self {
+            graph_metrics: super::graph_metrics::GraphMetrics::new(":memory:"),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),

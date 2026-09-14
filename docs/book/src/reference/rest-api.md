@@ -1030,8 +1030,19 @@ maps every declared Cargo feature to whether this binary compiled it in.
 ### `GET /metrics`
 
 Prometheus scrape endpoint (`text/plain; version=0.0.4`). Request counters
-come from the middleware; graph-size gauges cost one cheap SQL aggregate —
-deliberately not `/stats`' full scan.
+come from the middleware. Graph-size gauges use a per-store snapshot: a single
+background task scans the live root graph at startup and again five minutes
+after each refresh completes. Scrapes neither acquire database connections nor
+trigger scans. WAL size still comes from a current filesystem metadata read.
+
+Before the first successful refresh, graph-size gauges are omitted and
+`quipu_graph_counts_ready` is zero. A failed refresh retains the last successful
+snapshot and increments `quipu_graph_counts_refresh_failures_total`; it never
+substitutes zero counts. `quipu_graph_counts_age_seconds` and
+`quipu_graph_counts_last_success_timestamp_seconds` expose stale data, while
+`quipu_graph_counts_refresh_duration_seconds` includes the last attempt's pool
+wait and scan time. These freshness signals must be considered when consuming
+the graph-size gauges: a successful HTTP scrape alone does not prove fresh counts.
 
 Caller attribution uses the normalized `X-Quipu-Client` header (falling back
 to `User-Agent`, then `unattributed`) and is capped at 32 identities; overflow
