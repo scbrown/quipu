@@ -184,10 +184,23 @@ pub fn cmd_restore(args: &[String], db_path: &str) {
     };
     let force = args.iter().any(|a| a == "--force");
     match quipu::pack_restore::restore(pack, db_path, force) {
-        Ok(r) => println!(
-            "restored {pack} -> {}\n  content_hash: {}\n  tables:       {}\n  replaced:     {} live fact(s)",
-            r.destination, r.content_hash, r.tables, r.replaced_facts
-        ),
+        Ok(r) => {
+            println!(
+                "restored {pack} -> {}\n  content_hash: {}\n  tables:       {}\n  replaced:     {} live fact(s)",
+                r.destination, r.content_hash, r.tables, r.replaced_facts
+            );
+            // Printed only when there IS something to rebuild. A restore that
+            // carried everything says nothing here rather than printing a
+            // reassurance, and an incomplete one cannot be mistaken for
+            // complete by an operator reading the success line (aegis-9f899e).
+            if let Some(notice) = r.regenerate {
+                println!("  REGENERATE:   {notice}");
+                println!(
+                    "                facts, history and provenance are complete; \
+                     derived data is NOT, until this is rebuilt."
+                );
+            }
+        }
         Err(e) => {
             eprintln!("restore error: {e}");
             std::process::exit(1);

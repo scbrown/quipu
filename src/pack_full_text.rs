@@ -119,7 +119,39 @@ pub fn pack_full_text(
             }
         }
 
+        // THE REGENERATED SET DOES NOT TRAVEL IN TEXT, and `DECLARED` says so at
+        // the entry rather than leaving it to this module: "~2.2 GB of floats at
+        // homelab scale, which rules out text. The pinned embedding model and
+        // config are part of the declared set precisely because regeneration is
+        // only reconstruction if the recipe travels."
+        //
+        // The binary `--full` pack transports them anyway — a backup that forces
+        // a re-embed on restore is a poor backup — so this is the one place the
+        // two whole-store packs deliberately carry different content, and it is
+        // why the two hashes are not comparable to each other.
+        //
+        // Inlining them would defeat the artifact's whole purpose: `quote()`
+        // renders a BLOB as X'<hex>', roughly doubling the bytes, so a
+        // vector-bearing store would produce a 4-5 GB "git-friendly" file.
+        let mut regenerated = Vec::new();
+        for table in crate::pack_full::regenerated() {
+            if present.iter().any(|t| t == table) {
+                // Counted BEFORE the delete. Afterwards the per-table count is
+                // 0, which is honest about the artifact and useless to a
+                // consumer asking "how much do I have to rebuild?".
+                let n: i64 =
+                    conn.query_row(&format!("SELECT COUNT(*) FROM \"{table}\""), [], |r| {
+                        r.get(0)
+                    })?;
+                conn.execute(&format!("DELETE FROM \"{table}\""), [])?;
+                regenerated.push((table, n));
+            }
+        }
+
+        let recipe = embedding_recipe(store)?;
         let mut manifest = manifest_for(&conn, opts, timestamp, &pruned)?;
+        manifest.counts = merge_counts(&manifest.counts, &regenerated, &recipe)?;
+        drop(present);
         // The format is what tells `restore` which reader to use, and the gate
         // reads it BEFORE hashing so a wrong-verb artifact is never reported as
         // corrupt (see `pack_restore`).
@@ -137,6 +169,96 @@ pub fn pack_full_text(
         }
     }
     built
+}
+
+/// The recipe a consumer needs to REGENERATE what this pack does not carry.
+///
+/// A name alone is not a recipe: `all-MiniLM-L6-v2` names a family, and two
+/// files under that name need not produce the same vectors. The digest is what
+/// makes "re-embed with the same model" checkable rather than assumed, which is
+/// the whole of `DECLARED`'s "regeneration is only reconstruction if the recipe
+/// travels".
+fn embedding_recipe(store: &crate::store::Store) -> Result<serde_json::Value> {
+    let config = store.embedding_config();
+    let model = config
+        .model_path
+        .as_ref()
+        .and_then(|p| p.file_name())
+        .map(|p| p.to_string_lossy().into_owned());
+    // Absent model, absent digest — and reported as null rather than as a
+    // string, so a consumer cannot mistake "no model configured" for a match.
+    let digest = match config.model_path.as_ref() {
+        Some(path) if path.exists() => Some(sha256_file(path)?),
+        _ => None,
+    };
+    Ok(serde_json::json!({
+        "embedding_model": model,
+        "embedding_model_sha256": digest,
+        "embedding_dimension": config.dimension,
+    }))
+}
+
+/// SHA-256 of a file, streamed rather than read whole: an ONNX model is ~90 MB.
+fn sha256_file(path: &std::path::Path) -> Result<String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        Error::Store(format!(
+            "pack --full --format text: {}: {e}",
+            path.display()
+        ))
+    })?;
+    let mut ctx = ring::digest::Context::new(&ring::digest::SHA256);
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf).map_err(|e| {
+            Error::Store(format!(
+                "pack --full --format text: {}: {e}",
+                path.display()
+            ))
+        })?;
+        if n == 0 {
+            break;
+        }
+        ctx.update(&buf[..n]);
+    }
+    let mut hex = String::from("sha256:");
+    for byte in ctx.finish().as_ref() {
+        hex.push_str(&format!("{byte:02x}"));
+    }
+    Ok(hex)
+}
+
+/// Fold the regenerated set and its recipe into the manifest's counts JSON.
+///
+/// Recorded IN the manifest rather than only in this module's documentation so
+/// a consumer can tell what is missing and how to rebuild it **from the
+/// artifact**, without having to trust that the producer followed a convention.
+fn merge_counts(
+    counts: &str,
+    regenerated: &[(&str, i64)],
+    recipe: &serde_json::Value,
+) -> Result<String> {
+    let mut value: serde_json::Value = serde_json::from_str(counts)
+        .map_err(|e| Error::Store(format!("pack --full --format text: counts: {e}")))?;
+    let map = value
+        .as_object_mut()
+        .ok_or_else(|| Error::Store("pack --full --format text: counts is not an object".into()))?;
+    // The per-table counts are taken AFTER the prune, so a regenerated table
+    // reads 0 there. That zero is honest about the artifact and misleading
+    // about the source, so the source count is recorded separately.
+    let source_counts: serde_json::Map<String, serde_json::Value> = regenerated
+        .iter()
+        .map(|(t, n)| ((*t).to_string(), serde_json::json!(n)))
+        .collect();
+    let names: Vec<&str> = regenerated.iter().map(|(t, _)| *t).collect();
+    map.insert("regenerated".into(), serde_json::json!(names));
+    map.insert(
+        "regenerated_source_counts".into(),
+        serde_json::Value::Object(source_counts),
+    );
+    map.insert("regeneration_recipe".into(), recipe.clone());
+    serde_json::to_string(&value)
+        .map_err(|e| Error::Store(format!("pack --full --format text: counts: {e}")))
 }
 
 /// Write `schema.sql`, `data/<table>.sql` and the manifest for a pruned copy.
@@ -328,6 +450,49 @@ pub fn read_manifest_dir(dir: &str) -> Result<Manifest> {
             path.display()
         ))
     })
+}
+
+/// A human-readable statement of what a restored text pack still has to rebuild.
+///
+/// Returns `None` when the pack carried everything — so a caller printing this
+/// says nothing rather than saying "regenerate: none", which reads like a
+/// reassurance nobody checked.
+#[must_use]
+pub fn regeneration_notice(counts: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(counts).ok()?;
+    let names = value.get("regenerated")?.as_array()?;
+    if names.is_empty() {
+        return None;
+    }
+    let sources = value.get("regenerated_source_counts");
+    let listed: Vec<String> = names
+        .iter()
+        .filter_map(|n| n.as_str())
+        .map(|n| {
+            let rows = sources
+                .and_then(|s| s.get(n))
+                .and_then(serde_json::Value::as_i64);
+            match rows {
+                Some(rows) => format!("{n} ({rows} row(s))"),
+                None => n.to_string(),
+            }
+        })
+        .collect();
+    let recipe = value.get("regeneration_recipe");
+    let model = recipe
+        .and_then(|r| r.get("embedding_model"))
+        .and_then(serde_json::Value::as_str);
+    let digest = recipe
+        .and_then(|r| r.get("embedding_model_sha256"))
+        .and_then(serde_json::Value::as_str);
+    let with = match (model, digest) {
+        // The digest is what makes "the same model" checkable; a bare name is a
+        // family, not a model, so it is reported as the weaker claim it is.
+        (Some(m), Some(d)) => format!(" with {m} ({d})"),
+        (Some(m), None) => format!(" with {m} (no digest recorded — name only)"),
+        _ => " — NO MODEL RECORDED, so the original vectors are not reproducible".to_string(),
+    };
+    Some(format!("{}{with}", listed.join(", ")))
 }
 
 /// Is `path` a text pack directory?

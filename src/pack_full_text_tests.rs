@@ -250,3 +250,109 @@ fn the_manifest_declares_the_text_format_so_the_gate_can_route_it() {
     assert_eq!(manifest.pack_format, FORMAT_FULL_TEXT);
     assert!(is_text_pack(&out), "a text pack must be recognised as one");
 }
+
+/// A fixture that actually HAS vectors.
+///
+/// Every other fixture here has `vectors: 0`, and that is exactly why the
+/// regenerated-set decision went unnoticed for a whole implementation: a pack
+/// that drops nothing looks identical to one that drops the right thing.
+fn store_with_vectors() -> Store {
+    let store = store_with_history_and_a_pipe();
+    store
+        .conn
+        .execute(
+            "INSERT INTO vectors (entity_id, text, embedding, valid_from) \
+             VALUES (1, 'alice', X'0102030405060708', ?1)",
+            [TS],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO vectors (entity_id, text, embedding, valid_from) \
+             VALUES (2, 'bob', X'0807060504030201', ?1)",
+            [TS],
+        )
+        .unwrap();
+    store
+}
+
+#[test]
+fn vectors_are_not_transported_and_the_recipe_is() {
+    // sattler's ruling, 2026-09-14, and `DECLARED`'s own note at the entry:
+    // "~2.2 GB of floats at homelab scale, which rules out text." Inlining them
+    // would hex-double a 2.2 GB table into a 4-5 GB "git-friendly" artifact,
+    // which fails the half of the directive that says git-friendly.
+    let store = store_with_vectors();
+
+    // ANTI-VACUITY: a pack that drops nothing passes this test on a fixture
+    // with nothing to drop, which is how the original implementation shipped
+    // carrying vectors without anyone noticing.
+    let before: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM vectors", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(before, 2, "fixture must actually carry vectors");
+
+    let (dir, out) = packed("vectors", &store);
+
+    let data = std::path::Path::new(&out)
+        .join(DATA_DIR)
+        .join("vectors.sql");
+    if data.exists() {
+        let text = std::fs::read_to_string(&data).unwrap();
+        assert!(
+            !text.contains("INSERT"),
+            "the text pack must not inline vector rows"
+        );
+    }
+
+    let manifest = read_manifest_dir(&out).unwrap();
+    let counts: serde_json::Value = serde_json::from_str(&manifest.counts).unwrap();
+    assert_eq!(
+        counts["regenerated"],
+        serde_json::json!(["vectors"]),
+        "the pack must DECLARE what it did not carry"
+    );
+    assert_eq!(
+        counts["regenerated_source_counts"]["vectors"],
+        serde_json::json!(2),
+        "the source count must survive the prune that zeroes the table"
+    );
+
+    // And the reconstruction is still exact over what the pack does carry.
+    let rebuilt = dir.path().join("rebuilt.db").to_string_lossy().into_owned();
+    let (m, recomputed) = rebuild(&out, &rebuilt).unwrap();
+    assert_eq!(recomputed, m.content_hash);
+
+    let conn = rusqlite::Connection::open(&rebuilt).unwrap();
+    let after: i64 = conn
+        .query_row("SELECT COUNT(*) FROM vectors", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(after, 0, "vectors are rebuilt by the consumer, not shipped");
+}
+
+#[test]
+fn a_restore_that_must_rebuild_says_so() {
+    // The failure this prevents is a store that looks fully restored and
+    // silently answers vector search with nothing.
+    let store = store_with_vectors();
+    let (_dir, out) = packed("notice", &store);
+    let manifest = read_manifest_dir(&out).unwrap();
+
+    let notice = regeneration_notice(&manifest.counts)
+        .expect("a pack that dropped vectors must report that they need rebuilding");
+    assert!(notice.contains("vectors"), "got: {notice}");
+    assert!(
+        notice.contains('2'),
+        "the row count belongs in the notice: {notice}"
+    );
+}
+
+#[test]
+fn a_pack_with_nothing_to_rebuild_stays_silent() {
+    // The other half, and the reason the notice is an Option: a reassurance
+    // printed unconditionally is one nobody checks.
+    let counts = serde_json::json!({"regenerated": []}).to_string();
+    assert!(regeneration_notice(&counts).is_none());
+}

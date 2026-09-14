@@ -730,7 +730,7 @@ quipu unpack repo.qpack.db --expect-repo scbrown/example --head-sha "$(git rev-p
 | `--with-vectors` | Include embeddings (refused unless the SQLite vector backend is active) |
 | `--format turtle` | Also embed a Turtle serialization |
 | `--full` | A LOSSLESS whole-store pack for internal backup, read by `quipu restore`. Carries every carried table with its full history, so it refuses an outward destination |
-| `--full --format text` | The same lossless whole-store pack **as text** — a git-friendly directory rather than a SQLite file |
+| `--full --format text` | The same whole-store pack **as text** — a git-friendly directory rather than a SQLite file. Does not transport derived data (`vectors`); the manifest carries the recipe to rebuild it |
 | `--verify <file>` | Recompute and check the pack's content hash |
 | `--into <graph-iri>` | Unpack target graph (default: the pack's own graph IRI) |
 | `--repo` / `--repo-sha` / `--model-id` / `--model-version` | All-or-none provenance for a repository pack. The manifest also carries the Quipu version, build SHA, and pack schema version. |
@@ -774,6 +774,11 @@ referential integrity, and then **refuses unless the reconstruction hashes
 identically to what the manifest claims** — nothing is written to the
 destination until that holds. A dump missing a file, a table, or a single row is
 rejected rather than installed as a quietly smaller store.
+
+A text pack does not carry derived data (`vectors`), because hex-encoded
+embeddings would make it gigabytes. It records the row count and the embedding
+recipe instead, and `restore` prints a `REGENERATE:` line so an incomplete store
+cannot be mistaken for a complete one.
 
 Like `--full`, this refuses an outward destination: it carries the event log and
 every operational table, and publishing one is the operator's decision.

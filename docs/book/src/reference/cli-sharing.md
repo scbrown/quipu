@@ -213,6 +213,21 @@ is left behind. A full pack carries the event log and every operational table
 that is not explicitly excluded, so publishing one is the operator's decision
 rather than something this command may acquire by convenience.
 
+`--format text` does **not** transport the declared *regenerated* set. Today that
+is `vectors`: embeddings are derived data, roughly 2.2 GB of floats at homelab
+scale, and `quote()` renders a BLOB as `X'<hex>'` — so inlining them would
+produce a 4–5 GB "git-friendly" artifact, which is not one. The manifest instead
+records what was left out, how many rows it was, and the recipe to rebuild it
+(embedding model name, its SHA-256, and the dimension), and `restore` prints a
+`REGENERATE:` line naming them. A restore from a text pack is therefore complete
+in facts, history and provenance, and **not** complete in derived data until
+those are rebuilt — which is why it says so rather than reporting plain success.
+
+The binary `--full` pack still transports vectors: a backup that forces a
+re-embed on restore is a poor backup. The two whole-store packs therefore carry
+different content by design, and their content hashes are **not** comparable to
+each other.
+
 `--format text` writes `manifest.json`, `schema.sql`, and `data/<table>.sql`.
 Rows are emitted one `INSERT` per line, ordered by the row text itself, so a row
 moving on disk produces no diff and a committed pack changes only when its

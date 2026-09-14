@@ -48,6 +48,23 @@ pub fn excluded() -> Vec<&'static str> {
         .collect()
 }
 
+/// Tables a reconstruction REGENERATES rather than transports.
+///
+/// Separate from [`excluded`] because the two mean different things to a
+/// consumer: an excluded table is one the reconstruction must never have, while
+/// a regenerated one is content it is expected to rebuild from the recipe the
+/// manifest carries. The binary `--full` pack transports these anyway (a backup
+/// that forces a re-embed on restore is a poor backup); the TEXT pack does not,
+/// for the reason `DECLARED` states at the entry itself.
+#[must_use]
+pub fn regenerated() -> Vec<&'static str> {
+    DECLARED
+        .iter()
+        .filter(|(_, d)| matches!(d, Disposition::Regenerated))
+        .map(|(name, _)| *name)
+        .collect()
+}
+
 /// Build a lossless whole-store pack at `out_path`.
 ///
 /// # Errors

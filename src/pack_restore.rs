@@ -166,6 +166,14 @@ pub struct RestoreReport {
     /// Table count in the restored store. `i64` because that is what
     /// `COUNT(*)` is; narrowing it would be a cast with nothing to gain.
     pub tables: i64,
+    /// What the restored store still has to REBUILD, and with what.
+    ///
+    /// `None` for a binary `--full` pack, which transports everything. A text
+    /// pack does not carry the declared `Regenerated` set, so a restore from
+    /// one is complete in facts and history and NOT complete in derived data.
+    /// Saying so in the report is the point: the alternative is a store that
+    /// looks fully restored and silently answers vector search with nothing.
+    pub regenerate: Option<String>,
 }
 
 /// Replace `destination` with the whole-store contents of a `--full` pack.
@@ -250,6 +258,9 @@ pub fn restore(pack_path: &str, destination: &str, force: bool) -> Result<Restor
         content_hash: manifest.content_hash,
         replaced_facts,
         tables,
+        // A binary full pack transports the regenerated set, so there is
+        // genuinely nothing to rebuild. Stated rather than defaulted.
+        regenerate: None,
     })
 }
 
@@ -333,11 +344,13 @@ fn restore_text(dir: &str, destination: &str, force: bool) -> Result<RestoreRepo
         [],
         |r| r.get(0),
     )?;
+    let counts = manifest.counts.clone();
     Ok(RestoreReport {
         destination: destination.to_string(),
         content_hash: manifest.content_hash,
         replaced_facts,
         tables,
+        regenerate: crate::pack_full_text::regeneration_notice(&counts),
     })
 }
 
