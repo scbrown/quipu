@@ -10,6 +10,11 @@ use crate::cli::{chrono_now, flag_value};
 ///
 /// Top-level `pack`, deliberately not `quipu graph pack`: `quipu_graph` is an
 /// MCP tool name and a `graph` subcommand would collide with it.
+/// The `--format` values `pack` accepts. A value outside this set is REFUSED,
+/// never defaulted: see the refusal in [`cmd_pack`] for why a silent fallthrough
+/// publishes the wrong artifact (aegis-jpmgm8).
+const PACK_FORMATS: &[&str] = &["turtle", "text"];
+
 pub fn cmd_pack(args: &[String], db_path: &str) {
     if let Some(path) = flag_value(args, "--verify") {
         // Dispatch on the FORMAT, because the two artifacts hash differently
@@ -90,6 +95,35 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
     // `--format turtle` writes an interop BUNDLE (a directory of plain files)
     // rather than a store. Export-only: nothing unpacks it, because its purpose
     // is to be read by something that is not Quipu.
+    // REFUSE an unrecognized --format rather than falling through to the
+    // default (aegis-jpmgm8). Every branch below tests equality against a value
+    // it knows, so without this a typo — or the documented `--format text` typed
+    // against a CLI older than #244 — silently produces a DIFFERENT ARTIFACT at
+    // the requested path and reports success with a valid content hash.
+    //
+    // Measured on the CLI installed on this host at 27f6d452: `--format text`
+    // wrote a 274 KB binary SQLite whole-store pack where a text DIRECTORY was
+    // asked for. The substitution hands back the artifact with the LARGER
+    // disclosure surface — a binary full pack carries `events` and `vectors`,
+    // which the text pack deliberately does not — under the filename chosen for
+    // the small one.
+    //
+    // `pack_restore::reader_for` already refuses an unknown pack_format on the
+    // READ path for the same reason. Guessing on the WRITE path is the wrong way
+    // round: a bad read is caught, a bad write is published.
+    if let Some(format) = flag_value(args, "--format").filter(|f| !PACK_FORMATS.contains(f)) {
+        eprintln!(
+            "pack error: unknown --format {format:?}. Accepted: {}. \
+             Refusing rather than writing a different artifact than the one \
+             asked for (aegis-jpmgm8).",
+            PACK_FORMATS
+                .iter()
+                .map(|f| format!("{f:?}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        std::process::exit(2);
+    }
     let turtle = flag_value(args, "--format") == Some("turtle");
     // `--format text` is the LOSSLESS text whole-store pack (aegis-9f899e):
     // git-friendly AND reconstructing, which neither the share (text, lossy)

@@ -63,3 +63,121 @@ fn omitted_graph_packs_root_and_verifies() {
         String::from_utf8_lossy(&verify.stderr)
     );
 }
+
+/// An unrecognized `--format` must be REFUSED, not defaulted (aegis-jpmgm8).
+///
+/// The write path used to test `--format` by equality against each value it
+/// knew and fall through otherwise, so a typo — or the documented
+/// `--format text` typed against a CLI predating it — produced a DIFFERENT
+/// ARTIFACT at the requested path and reported success with a valid content
+/// hash. Measured on the CLI installed at 27f6d452: a 274 KB binary SQLite
+/// whole-store pack where a text DIRECTORY was asked for.
+///
+/// The substitution is the dangerous direction: a binary full pack carries
+/// `events` and `vectors`, which the text pack deliberately does not.
+#[test]
+fn an_unknown_pack_format_is_refused_and_writes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("source.db");
+    let out = dir.path().join("refused");
+    let mut store = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    quipu::ingest_rdf(
+        &mut store,
+        &b"<urn:test:s> <urn:test:p> \"content\" ."[..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-09-14T00:00:00Z",
+        None,
+        Some("pack-format-test"),
+    )
+    .unwrap();
+    drop(store);
+
+    let result = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .args([
+            "pack",
+            "--full",
+            "--format",
+            "bogus",
+            "--destination",
+            "internal",
+            "--out",
+            out.to_str().unwrap(),
+            "--db",
+            db.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        result.status.code(),
+        Some(2),
+        "an unknown format must exit 2, got {:?}: {}",
+        result.status.code(),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("unknown --format") && stderr.contains("bogus"),
+        "the refusal must name the offending value: {stderr}"
+    );
+    assert!(
+        stderr.contains("turtle") && stderr.contains("text"),
+        "the refusal must name what IS accepted: {stderr}"
+    );
+    // The point of the bead: a refused pack leaves no artifact behind for
+    // someone to pick up believing it is the one they asked for.
+    assert!(
+        !out.exists(),
+        "a refused --format must write nothing at the requested path"
+    );
+}
+
+/// CONTROL for the test above: the accepted values still reach their dispatch.
+///
+/// Without this, tightening the refusal until it rejects everything would leave
+/// the test above passing.
+#[test]
+fn the_accepted_pack_formats_still_dispatch() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("source.db");
+    let out = dir.path().join("textpack");
+    let mut store = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    quipu::ingest_rdf(
+        &mut store,
+        &b"<urn:test:s> <urn:test:p> \"content\" ."[..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-09-14T00:00:00Z",
+        None,
+        Some("pack-format-control"),
+    )
+    .unwrap();
+    drop(store);
+
+    let result = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .args([
+            "pack",
+            "--full",
+            "--format",
+            "text",
+            "--destination",
+            "internal",
+            "--out",
+            out.to_str().unwrap(),
+            "--db",
+            db.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        result.status.success(),
+        "`--format text` must still work: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        out.is_dir(),
+        "`--format text` must produce a DIRECTORY, not a file"
+    );
+}
