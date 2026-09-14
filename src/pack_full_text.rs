@@ -149,6 +149,52 @@ pub fn pack_full_text(
         }
 
         let recipe = embedding_recipe(store)?;
+
+        // ── THE PRODUCER MUST BE TOLD, NOT THE CONSUMER (aegis-clcgvf) ──────
+        //
+        // `embedding_recipe` is honest: no `model_path` configured means a null
+        // `embedding_model`, reported as null rather than as a string so nobody
+        // mistakes "none configured" for a match. The defect was never that
+        // value; it was WHO FINDS OUT and WHEN.
+        //
+        // The warning this needs already existed — and only on the restore side
+        // (`regeneration_notice`: "NO MODEL RECORDED, so the original vectors
+        // are not reproducible"). So a backup lane exits 0 every night for
+        // months and the bad news arrives at the one moment it cannot be acted
+        // on. MEASURED 2026-09-14 (kelly, aegis-nnudgu lane): a text full pack
+        // with `regeneration_recipe.embedding_model = null` over a store holding
+        // **1.97M vectors**.
+        //
+        // `model_path` defaults to `None` (config.rs) and is set only from
+        // `[quipu.embedding] model_path`. The deployed server has it from
+        // ansible; a CLI invocation from a crew clone does not — which is the
+        // NORMAL way an operator takes a backup. So the silent case is the
+        // common case, not the exotic one.
+        //
+        // This REFUSES rather than warns, and only here. `--full --format text`
+        // is the artifact that claims losslessness while deliberately not
+        // carrying its vectors, so a pack that cannot regenerate what it drops
+        // does not meet its own contract. The binary `--full` pack transports
+        // the vectors and is untouched. A warning would be the minimum; a
+        // refusal is what makes the lane's exit code mean something.
+        let dropped_vectors: i64 = regenerated.iter().map(|(_, n)| *n).sum();
+        let no_model = recipe
+            .get("embedding_model")
+            .is_none_or(serde_json::Value::is_null);
+        if dropped_vectors > 0 && no_model && !opts.allow_missing_embedding_recipe {
+            return Err(Error::PolicyDenied(format!(
+                "pack --full --format text: this store has {dropped_vectors} row(s) in the \
+                 regenerated set, and NO embedding model is configured — so the pack would \
+                 record `regeneration_recipe.embedding_model: null` and those rows could \
+                 never be reproduced from it. A text full pack drops the vectors and promises \
+                 the recipe instead; without the recipe it is not a lossless backup, and the \
+                 only warning today fires at RESTORE, which is too late to act on \
+                 (aegis-clcgvf). Set `[quipu.embedding] model_path` to the model that produced \
+                 these vectors — the deployed server's config already does — or pass \
+                 --allow-missing-embedding-recipe if you genuinely do not want them back."
+            )));
+        }
+
         let mut manifest = manifest_for(&conn, opts, timestamp, &pruned)?;
         manifest.counts = merge_counts(&manifest.counts, &regenerated, &recipe)?;
         drop(present);

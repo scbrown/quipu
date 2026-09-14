@@ -64,11 +64,28 @@ fn tmpdir(name: &str) -> tempfile::TempDir {
         .unwrap()
 }
 
+/// Options that also WAIVE the missing-embedding-recipe refusal.
+///
+/// Every vector-bearing fixture here has no `model_path`, which after
+/// aegis-clcgvf is exactly the condition `pack_full_text` now refuses. The
+/// waiver is spelled out per test rather than defaulted, so a future fixture
+/// that trips the refusal has to say it means to.
+fn internal_waiving_recipe() -> PackOptions {
+    PackOptions {
+        allow_missing_embedding_recipe: true,
+        ..internal()
+    }
+}
+
 /// Pack `store` as text into a fresh directory, returning (dir, pack path).
 fn packed(name: &str, store: &Store) -> (tempfile::TempDir, String) {
+    packed_with(name, store, &internal())
+}
+
+fn packed_with(name: &str, store: &Store, opts: &PackOptions) -> (tempfile::TempDir, String) {
     let dir = tmpdir(name);
     let out = dir.path().join("pack.d").to_string_lossy().into_owned();
-    pack_full_text(store, &out, &internal(), TS).unwrap();
+    pack_full_text(store, &out, opts, TS).unwrap();
     (dir, out)
 }
 
@@ -294,7 +311,7 @@ fn vectors_are_not_transported_and_the_recipe_is() {
         .unwrap();
     assert_eq!(before, 2, "fixture must actually carry vectors");
 
-    let (dir, out) = packed("vectors", &store);
+    let (dir, out) = packed_with("vectors", &store, &internal_waiving_recipe());
 
     let data = std::path::Path::new(&out)
         .join(DATA_DIR)
@@ -337,7 +354,7 @@ fn a_restore_that_must_rebuild_says_so() {
     // The failure this prevents is a store that looks fully restored and
     // silently answers vector search with nothing.
     let store = store_with_vectors();
-    let (_dir, out) = packed("notice", &store);
+    let (_dir, out) = packed_with("notice", &store, &internal_waiving_recipe());
     let manifest = read_manifest_dir(&out).unwrap();
 
     let notice = regeneration_notice(&manifest.counts)
@@ -355,4 +372,125 @@ fn a_pack_with_nothing_to_rebuild_stays_silent() {
     // printed unconditionally is one nobody checks.
     let counts = serde_json::json!({"regenerated": []}).to_string();
     assert!(regeneration_notice(&counts).is_none());
+}
+
+// ── aegis-clcgvf: the PRODUCER must be told, not only the consumer ──────────
+//
+// `regeneration_recipe.embedding_model: null` means the dropped vectors can
+// never be reproduced from this pack. The warning for that already existed and
+// fired only on the RESTORE side, so a backup lane exited 0 every night for
+// months and the bad news arrived at the one moment it could not be acted on.
+// MEASURED 2026-09-14 (kelly): a text full pack with a null recipe over a store
+// holding 1.97M vectors.
+
+/// A `model_path` that EXISTS, so the recipe carries a name *and* a digest.
+fn store_with_vectors_and_a_model(dir: &std::path::Path) -> Store {
+    let model = dir.join("model.onnx");
+    std::fs::write(&model, b"not really an onnx file, but a real file").unwrap();
+    let mut store = store_with_vectors();
+    store.embedding_config.model_path = Some(model);
+    store
+}
+
+#[test]
+fn a_text_full_pack_REFUSES_when_it_would_drop_vectors_it_cannot_regenerate() {
+    let store = store_with_vectors();
+
+    // ANTI-VACUITY: the refusal must be about the DROPPED ROWS, so the fixture
+    // has to have some. A store with no vectors would refuse for no reason, or
+    // pass for no reason, and neither would test this.
+    let before: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM vectors", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(before, 2, "fixture must actually carry vectors");
+    assert!(
+        store.embedding_config().model_path.is_none(),
+        "fixture must have NO model configured — that is the condition under test"
+    );
+
+    let dir = tmpdir("refuse");
+    let out = dir.path().join("pack.d").to_string_lossy().into_owned();
+    let err = pack_full_text(&store, &out, &internal(), TS)
+        .expect_err("a pack that cannot regenerate what it drops must refuse");
+
+    let msg = err.to_string();
+    // The message has to carry the COUNT and the REMEDY. An operator reading a
+    // nightly lane's stderr gets one shot at understanding this.
+    assert!(msg.contains('2'), "name how many rows are at stake: {msg}");
+    assert!(
+        msg.contains("model_path"),
+        "name the setting that fixes it: {msg}"
+    );
+    assert!(
+        msg.contains("--allow-missing-embedding-recipe"),
+        "name the escape: {msg}"
+    );
+    assert!(
+        !std::path::Path::new(&out).exists(),
+        "a refused pack must leave NO artifact behind — a half-written directory \
+         is worse than none, because it looks like a backup"
+    );
+}
+
+#[test]
+fn the_escape_hatch_writes_the_pack_and_the_null_recipe_with_it() {
+    // The waiver must produce exactly what it always produced — a pack whose
+    // recipe is honestly null — not a pack that pretends to have a model.
+    let store = store_with_vectors();
+    let (_dir, out) = packed_with("waived", &store, &internal_waiving_recipe());
+    let manifest = read_manifest_dir(&out).unwrap();
+    let counts: serde_json::Value = serde_json::from_str(&manifest.counts).unwrap();
+    let recipe = counts
+        .get("regeneration_recipe")
+        .expect("the recipe travels even when it is empty");
+    assert!(
+        recipe.get("embedding_model").is_some_and(|m| m.is_null()),
+        "the waived pack must still report a NULL model, not a fabricated one: {recipe}"
+    );
+}
+
+#[test]
+fn a_configured_model_packs_WITHOUT_the_waiver() {
+    // The arm that stops the refusal from being a blanket ban on vector-bearing
+    // stores. Without this, "always refuse" would pass every other arm here.
+    let dir = tmpdir("configured");
+    let store = store_with_vectors_and_a_model(dir.path());
+    let out = dir.path().join("pack.d").to_string_lossy().into_owned();
+    let manifest = pack_full_text(&store, &out, &internal(), TS)
+        .expect("a store WITH an embedding model must pack with no waiver at all");
+
+    let counts: serde_json::Value = serde_json::from_str(&manifest.counts).unwrap();
+    let recipe = counts.get("regeneration_recipe").unwrap();
+    assert_eq!(
+        recipe.get("embedding_model").and_then(|m| m.as_str()),
+        Some("model.onnx"),
+        "the recipe must name the model: {recipe}"
+    );
+    assert!(
+        recipe
+            .get("embedding_model_sha256")
+            .is_some_and(|d| d.is_string()),
+        "a name is a family, not a model — the digest is what makes it checkable: {recipe}"
+    );
+}
+
+#[test]
+fn a_store_with_NO_vectors_packs_without_a_model_and_without_a_waiver() {
+    // The cry-wolf arm. The refusal is about rows that would be LOST; a store
+    // with nothing in the regenerated set loses nothing, so refusing there would
+    // block every ordinary backup on this fixture family and teach operators to
+    // pass the waiver by reflex — which would re-hide the real case.
+    let store = store_with_history_and_a_pipe();
+    let before: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM vectors", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(before, 0, "this fixture must have NO vectors");
+    assert!(store.embedding_config().model_path.is_none());
+
+    let dir = tmpdir("novectors");
+    let out = dir.path().join("pack.d").to_string_lossy().into_owned();
+    pack_full_text(&store, &out, &internal(), TS)
+        .expect("no dropped rows means nothing to regenerate means nothing to refuse");
 }

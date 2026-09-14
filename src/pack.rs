@@ -106,6 +106,14 @@ pub struct PackOptions {
     pub model_id: Option<String>,
     /// Version of the embedding model used to produce repository knowledge.
     pub model_version: Option<String>,
+    /// Write a `--full --format text` pack even though its regenerated rows
+    /// have no embedding recipe to reproduce them from (aegis-clcgvf).
+    ///
+    /// Defaults to `false`, so the refusal is what a caller gets by DEFAULT.
+    /// That direction is the whole fix: the silent case was the common one (a
+    /// CLI run outside the server's config), and the existing warning fires
+    /// only on the restore side, months too late.
+    pub allow_missing_embedding_recipe: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]

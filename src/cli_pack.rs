@@ -86,6 +86,13 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         repository_sha: flag_value(args, "--repo-sha").map(String::from),
         model_id: flag_value(args, "--model-id").map(String::from),
         model_version: flag_value(args, "--model-version").map(String::from),
+        // aegis-clcgvf: the escape from the pack-time refusal when a text full
+        // pack has regenerated rows and no embedding recipe. Named rather than
+        // implied, so "I do not want these vectors back" is a statement in the
+        // command line and not an accident of which shell took the backup.
+        allow_missing_embedding_recipe: args
+            .iter()
+            .any(|a| a == "--allow-missing-embedding-recipe"),
         destination: match flag_value(args, "--destination") {
             Some("internal") => quipu::share::ShareDestination::Internal,
             _ => quipu::share::ShareDestination::Outward,
