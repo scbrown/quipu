@@ -67,9 +67,9 @@ PACKAGED_HASHES="$SCRATCH/packaged-hashes"
 export GEN_FILE PACKAGED_HASHES
 
 # Newest version section = from the first `## [x.y.z]` heading to the next one.
-newest_ver="$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md \
-  | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
-[[ -n "$newest_ver" ]] || { echo "ERROR: no versioned section found in CHANGELOG.md" >&2; exit 2; }
+newest_ver="$(grep -m1 -oE '^## \[(Unreleased|[0-9]+\.[0-9]+\.[0-9]+)\]' CHANGELOG.md \
+  | grep -oE 'Unreleased|[0-9]+\.[0-9]+\.[0-9]+' || true)"
+[[ -n "$newest_ver" ]] || { echo "ERROR: no release or Unreleased section found in CHANGELOG.md" >&2; exit 2; }
 
 # Keep whatever date the section already carries; release-plz sets it and it is not
 # ours to move. Only fall back to today when the heading has no date at all.
@@ -109,6 +109,12 @@ else
   : > "$PACKAGED_HASHES"
 fi
 
+# Bare subjects require explicit coverage even when their files are excluded
+# from the crate. Match the verifier's union of bare and packaged commits, and
+# refuse a generator that lost a repaired entry before replacing the changelog.
+python3 scripts/check-release-window.py --range "$range" --section-stdin \
+  < "$GEN_FILE" >> "$PACKAGED_HASHES"
+
 # Splice: everything before the newest section + regenerated body + everything from
 # the following section onward.
 #
@@ -134,7 +140,8 @@ def is_mechanics(sha):
 
 gen = io.open(os.environ["GEN_FILE"], encoding="utf-8").read()
 body = gen[gen.index("## ["):]
-body = re.sub(r"^## \[[^\]]*\].*", "## [%s] - %s" % (ver, section_date),
+heading = "## [Unreleased]" if ver == "Unreleased" else "## [%s] - %s" % (ver, section_date)
+body = re.sub(r"^## \[[^\]]*\].*", heading,
               body, count=1, flags=re.M)
 
 kept, dropped = [], 0

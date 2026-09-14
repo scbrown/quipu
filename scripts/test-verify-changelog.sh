@@ -268,6 +268,41 @@ else
 fi
 check "regenerated bare-subject correction verifies" 0 "none missing, none extra" "$d"
 
+# Pending coverage must use the latest release as its base and survive the
+# generator even when a repaired bare commit changes excluded documentation.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  echo recipe >> src/lib.rs
+  git commit -qam "Warn when full text backups omit vectors without a recipe"
+  echo refusal >> src/lib.rs
+  git commit -qam "Refuse incomplete text backup recipes unless explicitly waived"
+  echo ledger > docs/ledger.json
+  git add docs/ledger.json
+  git commit -qm "Refresh conformance ledgers for the pack recipe guard"
+  git tag quipu-ai-v1.0.0 HEAD~5
+) >/dev/null 2>&1
+hashes="$(git -C "$d" log -3 --format=%h --abbrev=7)"
+{ echo "# Changelog"; echo; echo "## [Unreleased]"; echo;
+  entry "$b"; entry "$c";
+  for h in $hashes; do entry "$h"; done
+  echo; echo "## [1.0.0] - 2025-12-01"; echo; entry "$a";
+} > "$d/CHANGELOG.md"
+fix_out="$(cd "$d" && ./scripts/fix-changelog.sh 2>&1)"; fix_rc=$?
+retained=0
+for h in $hashes; do
+  if grep -qF "[$h]" "$d/CHANGELOG.md"; then retained=$((retained + 1)); fi
+done
+if [[ "$fix_rc" -eq 0 && "$retained" -eq 3 ]] \
+   && grep -q '^## \[Unreleased\]$' "$d/CHANGELOG.md"; then
+  echo "  PASS  pending bare-subject repairs survive regeneration, including excluded docs"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  pending repairs: fixer exit $fix_rc, retained $retained/3: $fix_out" >&2
+  fail=$((fail + 1))
+fi
+check "unreleased verifies against the latest ancestor release" 0 "none missing, none extra" "$d"
+
 echo
 echo "  ${pass} passed, ${fail} failed"
 [[ "$fail" -eq 0 ]]

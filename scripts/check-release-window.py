@@ -3,7 +3,9 @@
 
 Merge containers are excluded; their constituent commits are checked. Existing
 history is immutable, so a linked entry in the newest section repairs a bare
-subject. The generator must preserve that entry as well.
+subject. Use Unreleased for commits after the latest tag; released sections keep
+their original ranges. The generator must preserve repaired entries as well:
+add reviewed exact-subject corrections to cliff.toml without changing history.
 """
 
 import argparse
