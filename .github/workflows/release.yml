@@ -288,13 +288,24 @@ jobs:
       # that release's assets with main builds AND regenerates their checksums to
       # match, which a downloader's verification then passes. See aegis-dsbt2g.
       #
-      # DISPATCH ONLY, DELIBERATELY. The push path cannot exhibit this: release-plz
-      # tags the very commit this run is building, so tag and HEAD agree by
-      # construction. Asserting it there as well would be strictly stronger IF that
-      # is exactly true — and I could not verify it without cutting a real release,
-      # while getting it wrong would refuse EVERY release. A guard that might break
-      # the lane it protects is not a safety improvement. The hazard lives entirely
-      # in the manual path; that is where the guard goes.
+      # DISPATCH ONLY, DELIBERATELY — and now for a MEASURED reason (aegis-3cxtcn).
+      #
+      # This note used to say the push path "cannot exhibit this: release-plz tags
+      # the very commit this run is building, so tag and HEAD agree by
+      # construction", and said plainly that the claim could not be verified
+      # without cutting a real release. A real release has now been cut and
+      # measured, and the claim is FALSE: on v0.6.0 the tag is 36665008 while this
+      # run built 62e57bf0, the release-PR merge commit. Their TREES are identical
+      # (87f3dea9 both), which is why nothing downstream ever noticed.
+      #
+      # The DECISION was right and only its reason was wrong — and the measurement
+      # vindicates it. Asserting tag-is-head on the push path would have refused
+      # EVERY release, exactly the outcome the original note feared. So the guard
+      # stays on the manual path, where the hazard actually lives.
+      #
+      # The lesson for anything else that binds a tag to a build on the push path:
+      # compare TREES, not commit shas. Comparing shas is what made the repository
+      # share gate below unsatisfiable until aegis-3cxtcn.
       - uses: ./.github/actions/assert-tag-is-head
         if: github.event_name == 'workflow_dispatch'
         with:
@@ -524,13 +535,24 @@ jobs:
       # that release's assets with main builds AND regenerates their checksums to
       # match, which a downloader's verification then passes. See aegis-dsbt2g.
       #
-      # DISPATCH ONLY, DELIBERATELY. The push path cannot exhibit this: release-plz
-      # tags the very commit this run is building, so tag and HEAD agree by
-      # construction. Asserting it there as well would be strictly stronger IF that
-      # is exactly true — and I could not verify it without cutting a real release,
-      # while getting it wrong would refuse EVERY release. A guard that might break
-      # the lane it protects is not a safety improvement. The hazard lives entirely
-      # in the manual path; that is where the guard goes.
+      # DISPATCH ONLY, DELIBERATELY — and now for a MEASURED reason (aegis-3cxtcn).
+      #
+      # This note used to say the push path "cannot exhibit this: release-plz tags
+      # the very commit this run is building, so tag and HEAD agree by
+      # construction", and said plainly that the claim could not be verified
+      # without cutting a real release. A real release has now been cut and
+      # measured, and the claim is FALSE: on v0.6.0 the tag is 36665008 while this
+      # run built 62e57bf0, the release-PR merge commit. Their TREES are identical
+      # (87f3dea9 both), which is why nothing downstream ever noticed.
+      #
+      # The DECISION was right and only its reason was wrong — and the measurement
+      # vindicates it. Asserting tag-is-head on the push path would have refused
+      # EVERY release, exactly the outcome the original note feared. So the guard
+      # stays on the manual path, where the hazard actually lives.
+      #
+      # The lesson for anything else that binds a tag to a build on the push path:
+      # compare TREES, not commit shas. Comparing shas is what made the repository
+      # share gate below unsatisfiable until aegis-3cxtcn.
       - uses: ./.github/actions/assert-tag-is-head
         if: github.event_name == 'workflow_dispatch'
         with:
@@ -616,7 +638,7 @@ jobs:
           echo 'Repository qpack publication is disabled pending trusted producer activation. No new repository qpack was published by this job.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Require the trusted repository share
-        if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED == 'true'
+        if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED == 'true' && matrix.target == 'x86_64-unknown-linux-gnu'
         timeout-minutes: 45
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -643,8 +665,28 @@ jobs:
             exit 1
           fi
           BIN="target/${TARGET}/release/quipu"
+          # THE TAG COMMIT, NOT HEAD (aegis-3cxtcn). The producer refuses to run
+          # unless its checkout HEAD *is* the tag commit, and stamps that sha as
+          # `source_revision`; the verifier compares it by exact equality. On the
+          # push path this run's HEAD is the release-PR MERGE commit, which is a
+          # different sha, so passing HEAD here rejects every correctly-produced
+          # pack. Measured on v0.6.0 against the real published pack: tag
+          # 36665008, run HEAD 62e57bf0, verifier exit 1 on `source_revision`
+          # and exit 0 on the tag commit, with every other field already equal.
+          #
+          # This is also why the comment at the assert-tag-is-head call sites
+          # above no longer claims tag and HEAD agree on the push path: they do
+          # not, and that assumption is what made this gate unsatisfiable.
+          #
+          # The tree check is the real assurance and it stays STRICT. Identical
+          # trees are what make the tag commit a legitimate stand-in for the
+          # build; if they ever diverge the binary was not built from the tagged
+          # source, and that must stop the release loudly rather than be papered
+          # over by relaxing the equality check in verify().
+          git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+          test "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$TAG^{tree}")" || { echo '::error::release tag tree differs from the binary build tree' >&2; exit 1; }
           python3 scripts/verify-repository-share-provenance.py \
-            "$TMP/$PACK" "$BIN" "$(git rev-parse HEAD)" "$TAG"
+            "$TMP/$PACK" "$BIN" "$(git rev-parse "$TAG^{commit}")" "$TAG"
           "$BIN" import "$TMP/$PACK" --db "$TMP/receiver.db"
 
   # THE REAL CRATES LANE (aegis-pb4rzi). It lives HERE, not in crates.yml.
