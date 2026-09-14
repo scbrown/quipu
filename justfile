@@ -166,9 +166,7 @@ ingest-repos +repos="../quipu ../hank ../NeuralAmplifier ../thinker":
 # verbatim, so they land at /quipu/datalinks/. Gitignored — regenerate with
 # this recipe (`just docs build` runs it for you).
 docs-assets:
-    mkdir -p docs/book/src/datalinks/vendor
-    cp ui/datalinks.js ui/graph-canvas.js docs/book/src/datalinks/
-    cp ui/vendor/three.module.min.js docs/book/src/datalinks/vendor/
+    ./scripts/stage-datalinks.sh
 
 # Stage the "Explore this repository's graph" page's artifacts (aegis-tpqccc):
 # just explorer [release|local]
@@ -213,9 +211,13 @@ explorer mode="release":
     fi
     ls -la "$DEST" "$DEST/pkg"
 
-# Regenerate the demo's baked graph payload. Needs a NeuralAmplifier checkout.
-docs-data graph="../NeuralAmplifier/datalinks/thinker/alphax.ttl":
-    ./scripts/export-datalinks.sh {{graph}}
+# Browser acceptance of the built demo, including a damaged-pack control.
+docs-demo-test:
+    node scripts/smoke-datalinks.cjs
+
+# Author a canonical demo share from explicit data, shapes and reviewed policy.
+docs-data graph shapes policy:
+    ./scripts/export-datalinks.sh {{quote(graph)}} {{quote(shapes)}} {{quote(policy)}}
 
 docs cmd="build":
     #!/usr/bin/env bash
