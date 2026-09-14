@@ -69,8 +69,27 @@ jobs:
       # No Rust and no suite checkout: this job only compares the committed
       # page and badges against the committed ledgers, so it finishes in
       # seconds and can run on every touch of benchmark/.
-      - name: Page and badges agree with the ledgers
-        run: python3 benchmark/public/conformance_report.py --check
+      #
+      # TWO STEPS, NOT ONE, and the split is the point (aegis-fn3hdn). These
+      # answer different questions and have different remedies, and fusing them
+      # under one name made the common one unreadable:
+      #
+      #   CONTENT    the published page/badges disagree with the ledgers — an
+      #              OUTCOME moved. A real defect, every time.
+      #   PROVENANCE the ledgers name a revision that is not this HEAD — a stale
+      #              STAMP. Routine, remedied by one re-derive, and it says
+      #              nothing about conformance results.
+      #
+      # Both still BLOCK. What changes is that the check NAME now tells a reader
+      # which they have without opening the log. Measured cost of not doing so:
+      # three quipu PRs in one day (#237, #244, #245) sat red on the provenance
+      # arm looking like broken conformance, while every re-derive changed
+      # nothing but duration_ms and the stamps.
+      - name: Published results match the ledgers
+        run: python3 benchmark/public/conformance_report.py --check --arm content
+
+      - name: Ledgers were derived from the code they ship with
+        run: python3 benchmark/public/conformance_report.py --check --arm provenance
 
       - name: Benchmark unit tests
         run: python3 -m unittest discover -s benchmark/public -p 'test_*.py'
