@@ -47,6 +47,11 @@ trim = true
 # `[] []`. The bracket rules mirror the paren ones, and the run rule comes first so
 # a sequence of bracketed refs collapses in one pass rather than leaving gaps.
 commit_preprocessors = [
+    # Exact repairs for immutable pack-recipe subjects; keep their entries
+    # when release-plz or the changelog corrector regenerates a release.
+    { pattern = '(?m)^Warn when full text backups omit vectors without a recipe$', replace = "fix(pack): apply CLI embedding settings and diagnose incomplete text backup recipes" },
+    { pattern = '(?m)^Refuse incomplete text backup recipes unless explicitly waived$', replace = "fix(pack): refuse incomplete text backup recipes unless explicitly waived" },
+    { pattern = '(?m)^Refresh conformance ledgers for the pack recipe guard$', replace = "docs(conformance): refresh conformance results for the pack recipe guard" },
     # Repair the merged #202 subject without rewriting history. Keep this exact
     # correction so automatic regeneration retains its reviewed release entry.
     { pattern = '(?m)^Support bearer rotation with a restart-safe grace deadline \(#202\)$', replace = "feat(auth): support bearer rotation with a restart-safe grace deadline (#202)" },

@@ -46,8 +46,8 @@ else
 fi
 
 # Newest version section = from the first `## [x]` heading to the next one.
-newest_ver="$(printf '%s\n' "$changelog_content" | grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
-[[ -n "$newest_ver" ]] || { echo "ERROR: no versioned section found in CHANGELOG.md" >&2; exit 2; }
+newest_ver="$(printf '%s\n' "$changelog_content" | grep -m1 -oE '^## \[(Unreleased|[0-9]+\.[0-9]+\.[0-9]+)\]' | grep -oE 'Unreleased|[0-9]+\.[0-9]+\.[0-9]+' || true)"
+[[ -n "$newest_ver" ]] || { echo "ERROR: no release or Unreleased section found in CHANGELOG.md" >&2; exit 2; }
 newest_section="$(printf '%s\n' "$changelog_content" | awk '/^## \[/{n++} n==1' )"
 
 # Range = <prev-tag>..<head-of-release>.
