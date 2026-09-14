@@ -189,6 +189,43 @@ quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
 New repository and release workflows use `share` and `import`; they do not
 publish `.qpack.db` files.
 
+## `quipu pack --full` / `quipu restore` — whole-store packs
+
+A `--full` pack is a different artifact from everything above: not a graph, but
+the **whole store**, carried losslessly for internal backup. `share` carries
+current facts; `--full` carries `facts` as whole rows — `g, tx, valid_from,
+valid_to, op, retracted_tx` — so history, including what was retracted, travels
+with it.
+
+```text
+quipu pack --full [--format text] --destination internal --out <path> [--db <path>]
+quipu restore <file.qpack | text-pack-dir> [--force] [--db <path>]
+```
+
+| Flag | Effect |
+|---|---|
+| `--full` | pack the whole store losslessly, rather than one graph |
+| `--format text` | render that whole-store pack as a git-friendly DIRECTORY of text instead of a SQLite file |
+| `--force` | allow `restore` to replace a destination that still holds live facts |
+
+Both forms refuse an outward destination, and that refusal is atomic — no output
+is left behind. A full pack carries the event log and every operational table
+that is not explicitly excluded, so publishing one is the operator's decision
+rather than something this command may acquire by convenience.
+
+`--format text` writes `manifest.json`, `schema.sql`, and `data/<table>.sql`.
+Rows are emitted one `INSERT` per line, ordered by the row text itself, so a row
+moving on disk produces no diff and a committed pack changes only when its
+contents do. `restore` rebuilds the store, checks referential integrity, and
+**refuses unless the reconstruction hashes identically to what the manifest
+claims** — nothing reaches the destination until that holds, so a dump missing a
+file, a table or a single row is rejected rather than installed as a quietly
+smaller store.
+
+`restore` REPLACES; to merge a published pack into an existing store use
+`unpack`. Each verb refuses the other's format by name rather than reporting an
+intact artifact as corrupt.
+
 ## `quipu knot` — assert facts, including identity across stores
 
 ```text
