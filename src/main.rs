@@ -303,6 +303,9 @@ COMMANDS:
     quipu stats [--db <path>]
     quipu doctor labels [--db <path>]
     quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
+    quipu pack --full --format text --destination internal --out <dir> [--db <path>]
+                                                                     LOSSLESS whole-store pack as TEXT: a git-friendly
+                                                                     directory that reconstructs the store exactly
     quipu pack --verify <file.qpack.db>
     quipu db respace --into <space> --out <file> [--db <path>]
     quipu db attach --list [--db <path>]
@@ -311,7 +314,8 @@ COMMANDS:
     quipu graph import <db> --as <iri> [--db <path>]
     quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
-    quipu restore <file.qpack> [--force] [--db <path>]               REPLACES the store with a --full pack
+    quipu restore <file.qpack | text-pack-dir> [--force] [--db <path>]
+                                                                     REPLACES the store with a --full pack, binary or text
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-share>] [--turtle]
     quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]

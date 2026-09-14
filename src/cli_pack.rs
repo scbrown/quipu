@@ -91,12 +91,25 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
     // rather than a store. Export-only: nothing unpacks it, because its purpose
     // is to be read by something that is not Quipu.
     let turtle = flag_value(args, "--format") == Some("turtle");
+    // `--format text` is the LOSSLESS text whole-store pack (aegis-9f899e):
+    // git-friendly AND reconstructing, which neither the share (text, lossy)
+    // nor `--full` (lossless, a sqlite blob) is on its own.
+    let text = flag_value(args, "--format") == Some("text");
     // `--full` is a DIFFERENT ARTIFACT, not a mode of this one: a lossless
     // whole-store copy for internal backup, which takes no graph and refuses an
     // outward destination. Dispatched here rather than folded into `pack` so the
     // two contracts stay separable (aegis-9f899e).
     let full = args.iter().any(|a| a == "--full");
-    let packed = if full && turtle {
+    let packed = if text && !full {
+        Err(quipu::error::Error::InvalidValue(
+            "pack --format text is a whole-store artifact and needs --full. For a \
+             text artifact of the CURRENT FACTS, which is a different contract, \
+             use `quipu share --output <dir>`."
+                .into(),
+        ))
+    } else if full && text {
+        quipu::pack_full_text::pack_full_text(&store, out, &opts, &chrono_now())
+    } else if full && turtle {
         Err(quipu::error::Error::InvalidValue(
             "pack --full --format turtle: a full pack is a whole-store artifact,              not an interop bundle. Use one or the other."
                 .into(),
@@ -171,10 +184,23 @@ pub fn cmd_restore(args: &[String], db_path: &str) {
     };
     let force = args.iter().any(|a| a == "--force");
     match quipu::pack_restore::restore(pack, db_path, force) {
-        Ok(r) => println!(
-            "restored {pack} -> {}\n  content_hash: {}\n  tables:       {}\n  replaced:     {} live fact(s)",
-            r.destination, r.content_hash, r.tables, r.replaced_facts
-        ),
+        Ok(r) => {
+            println!(
+                "restored {pack} -> {}\n  content_hash: {}\n  tables:       {}\n  replaced:     {} live fact(s)",
+                r.destination, r.content_hash, r.tables, r.replaced_facts
+            );
+            // Printed only when there IS something to rebuild. A restore that
+            // carried everything says nothing here rather than printing a
+            // reassurance, and an incomplete one cannot be mistaken for
+            // complete by an operator reading the success line (aegis-9f899e).
+            if let Some(notice) = r.regenerate {
+                println!("  REGENERATE:   {notice}");
+                println!(
+                    "                facts, history and provenance are complete; \
+                     derived data is NOT, until this is rebuilt."
+                );
+            }
+        }
         Err(e) => {
             eprintln!("restore error: {e}");
             std::process::exit(1);

@@ -39,7 +39,7 @@ use crate::store::Store;
 
 /// What a pack declares about itself. Mirrored as meta-graph facts inside the
 /// pack as well as stored in `pack_manifest`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Manifest {
     /// Format version of the pack itself.
     pub pack_format: String,
@@ -68,6 +68,7 @@ pub struct Manifest {
     /// built with no scrub at all, so rendering it as `Outward` would assert a
     /// guarantee nothing provided. A consumer that needs the assurance must
     /// treat `None` as UNKNOWN and not as clean.
+    #[serde(default)]
     pub destination: Option<crate::share_scrub::ShareDestination>,
 }
 
