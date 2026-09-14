@@ -66,7 +66,11 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
             .collect()
     };
 
-    let store = crate::cli_open::open_store(db_path);
+    let mut store = crate::cli_open::open_store(db_path);
+    // Record the CLI-configured recipe without loading an embedding provider.
+    store
+        .embedding_config_mut()
+        .clone_from(&crate::cli_open::config().embedding);
     // `--space N` ships the pack in term space N (quipu #74), so it attaches
     // to a consumer without id collisions.
     let space = flag_value(args, "--space").map(|s| {
@@ -158,6 +162,11 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
 
     match packed {
         Ok(m) => {
+            if m.pack_format == quipu::pack_full_text::FORMAT_FULL_TEXT
+                && let Some(warning) = quipu::pack_full_text::pack_recipe_warning(&m.counts)
+            {
+                eprintln!("WARNING: {warning}");
+            }
             println!("packed {} -> {out}", m.source_graph);
             println!("  name:         {} {}", m.name, m.version);
             println!("  content_hash: {}", m.content_hash);

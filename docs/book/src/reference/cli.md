@@ -778,7 +778,14 @@ rejected rather than installed as a quietly smaller store.
 A text pack does not carry derived data (`vectors`), because hex-encoded
 embeddings would make it gigabytes. It records the row count and the embedding
 recipe instead, and `restore` prints a `REGENERATE:` line so an incomplete store
-cannot be mistaken for a complete one.
+cannot be mistaken for a complete one. At pack time, omitted vector rows with a
+missing model name or SHA-256 digest produce a `WARNING:` on stderr. The backup
+still succeeds, but the recorded recipe cannot reproduce the original vectors.
+Set `[quipu.embedding] model_path` to the original readable model file and repack
+to record its name, digest, and configured dimension. A recorded recipe identifies
+the configured model; it does not verify that this model produced the source vectors.
+An empty vector table needs no warning. Binary `pack --full` retains vectors and
+does not require a regeneration recipe.
 
 Like `--full`, this refuses an outward destination: it carries the event log and
 every operational table, and publishing one is the operator's decision.
