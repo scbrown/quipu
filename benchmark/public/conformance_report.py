@@ -799,8 +799,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     "Remedy — THREE steps; the dispatch alone does NOT clear this check:\n"
                     "  1. gh workflow run conformance.yml --ref <branch>\n"
-                    "  2. gh run download <run-id> --name conformance-ledgers-<sha>\n"
-                    "  3. commit those .json files into benchmark/public/results/ "
+                    # `--dir` is NOT optional here: with `--name` alone gh
+                    # extracts into the CWD and refuses with "would result in
+                    # path traversal", so the command fails for whoever follows
+                    # it. Measured while writing this very remedy — the defect
+                    # this bead records, reproduced inside its own fix.
+                    "  2. gh run download <run-id> --name conformance-ledgers-<sha> --dir /tmp/led\n"
+                    "  3. commit /tmp/led/*.json into benchmark/public/results/ "
                     "and push, then re-run\n"
                     "     python3 benchmark/public/conformance_report.py   "
                     "(regenerates the page from them)",

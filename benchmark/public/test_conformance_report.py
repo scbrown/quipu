@@ -686,6 +686,10 @@ class RemedyNamesEveryStepTest(unittest.TestCase):
         for needle, why in (
             ("gh workflow run conformance.yml", "step 1: the dispatch"),
             ("conformance-ledgers-", "step 2: the ARTIFACT to download, by name"),
+            # `--dir` is what makes step 2 actually run: `--name` alone extracts
+            # into the CWD and gh refuses with "would result in path traversal".
+            # Pinned because a remedy that fails for its follower IS this bead.
+            ("--dir", "step 2: the --dir that makes the download SUCCEED"),
             ("benchmark/public/results/", "step 3: WHERE the files must be committed"),
         ):
             self.assertIn(
