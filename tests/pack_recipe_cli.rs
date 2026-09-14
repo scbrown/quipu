@@ -17,7 +17,7 @@ fn fixture(dir: &Path, vectors: bool) {
     }
 }
 
-fn pack(dir: &Path, text: bool) -> String {
+fn pack_command(dir: &Path, text: bool, waive: bool) -> std::process::Output {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_quipu"));
     cmd.current_dir(dir).env("HOME", dir).args([
         "pack",
@@ -32,7 +32,14 @@ fn pack(dir: &Path, text: bool) -> String {
     if text {
         cmd.args(["--format", "text"]);
     }
-    let result = cmd.output().unwrap();
+    if waive {
+        cmd.arg("--allow-missing-embedding-recipe");
+    }
+    cmd.output().unwrap()
+}
+
+fn pack(dir: &Path, text: bool) -> String {
+    let result = pack_command(dir, text, false);
     let stderr = String::from_utf8(result.stderr).unwrap();
     assert!(result.status.success(), "{stderr}");
     assert!(dir.join("backup").exists());
@@ -52,17 +59,45 @@ fn configure_model(dir: &Path, exists: bool) {
     }
 }
 
+fn assert_refused(dir: &Path) {
+    let result = pack_command(dir, true, false);
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    assert_eq!(result.status.code(), Some(1), "{stderr}");
+    assert!(!dir.join("backup").exists());
+    assert!(!dir.join("backup.building.db").exists());
+    for message in [
+        "text pack omits 1 vector row(s)",
+        "model_path",
+        "not reproducible",
+        "--allow-missing-embedding-recipe",
+    ] {
+        assert!(stderr.contains(message), "{stderr}");
+    }
+}
+
 #[test]
-fn missing_model_warns_while_still_writing_the_backup() {
+fn missing_model_refuses_without_writing_a_backup() {
     let dir = tempfile::tempdir().unwrap();
     fixture(dir.path(), true);
-    let stderr = pack(dir.path(), true);
+    assert_refused(dir.path());
+}
+
+#[test]
+fn explicit_override_writes_an_honest_null_recipe_and_warns() {
+    let dir = tempfile::tempdir().unwrap();
+    fixture(dir.path(), true);
+    let result = pack_command(dir.path(), true, true);
+    assert!(result.status.success());
     assert!(
-        stderr.contains("WARNING: text pack omits 1 vector row(s)"),
-        "{stderr}"
+        String::from_utf8_lossy(&result.stderr)
+            .contains("WARNING: text pack omits 1 vector row(s)")
     );
-    assert!(stderr.contains("model_path"), "{stderr}");
-    assert!(stderr.contains("not reproducible"), "{stderr}");
+    let manifest =
+        quipu::pack_full_text::read_manifest_dir(dir.path().join("backup").to_str().unwrap())
+            .unwrap();
+    let counts: serde_json::Value = serde_json::from_str(&manifest.counts).unwrap();
+    assert!(counts["regeneration_recipe"]["embedding_model"].is_null());
+    assert!(counts["regeneration_recipe"]["embedding_model_sha256"].is_null());
 }
 
 #[test]
@@ -87,15 +122,11 @@ fn configured_model_records_a_digest_without_warning() {
 }
 
 #[test]
-fn configured_but_missing_model_file_warns() {
+fn configured_but_missing_model_file_refuses() {
     let dir = tempfile::tempdir().unwrap();
     fixture(dir.path(), true);
     configure_model(dir.path(), false);
-    let stderr = pack(dir.path(), true);
-    assert!(
-        stderr.contains("WARNING: text pack omits 1 vector row(s)"),
-        "{stderr}"
-    );
+    assert_refused(dir.path());
 }
 
 #[test]

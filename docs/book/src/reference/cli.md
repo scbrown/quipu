@@ -779,8 +779,10 @@ A text pack does not carry derived data (`vectors`), because hex-encoded
 embeddings would make it gigabytes. It records the row count and the embedding
 recipe instead, and `restore` prints a `REGENERATE:` line so an incomplete store
 cannot be mistaken for a complete one. At pack time, omitted vector rows with a
-missing model name or SHA-256 digest produce a `WARNING:` on stderr. The backup
-still succeeds, but the recorded recipe cannot reproduce the original vectors.
+missing model name or SHA-256 digest make packing refuse with exit code 1 before
+writing the destination. To explicitly accept a backup without reproducible
+vectors, pass `--allow-missing-embedding-recipe`; this succeeds with a `WARNING:`
+on stderr and preserves the incomplete recipe honestly.
 Set `[quipu.embedding] model_path` to the original readable model file and repack
 to record its name, digest, and configured dimension. A recorded recipe identifies
 the configured model; it does not verify that this model produced the source vectors.

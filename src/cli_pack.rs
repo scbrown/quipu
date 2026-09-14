@@ -90,6 +90,9 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         repository_sha: flag_value(args, "--repo-sha").map(String::from),
         model_id: flag_value(args, "--model-id").map(String::from),
         model_version: flag_value(args, "--model-version").map(String::from),
+        allow_missing_embedding_recipe: args
+            .iter()
+            .any(|a| a == "--allow-missing-embedding-recipe"),
         destination: match flag_value(args, "--destination") {
             Some("internal") => quipu::share::ShareDestination::Internal,
             _ => quipu::share::ShareDestination::Outward,

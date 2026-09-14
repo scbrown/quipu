@@ -151,6 +151,16 @@ pub fn pack_full_text(
         let recipe = embedding_recipe(store)?;
         let mut manifest = manifest_for(&conn, opts, timestamp, &pruned)?;
         manifest.counts = merge_counts(&manifest.counts, &regenerated, &recipe)?;
+        // Refuse before writing the destination. A successful exit must not
+        // silently certify a backup whose omitted vectors cannot be rebuilt.
+        if !opts.allow_missing_embedding_recipe
+            && let Some(warning) = pack_recipe_warning(&manifest.counts)
+        {
+            return Err(Error::PolicyDenied(format!(
+                "{warning} Pass --allow-missing-embedding-recipe to explicitly accept \
+                 a backup without reproducible vectors."
+            )));
+        }
         drop(present);
         // The format is what tells `restore` which reader to use, and the gate
         // reads it BEFORE hashing so a wrong-verb artifact is never reported as
