@@ -605,7 +605,35 @@ fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalC
         },
         Err(e) => {
             eprintln!("query error: {e}");
+            std::process::exit(query_error_exit_code(&e));
         }
+    }
+}
+
+/// The exit status for a query that did not produce an answer.
+///
+/// This existed as a bare `eprintln!` and the process then exited **0**, so a
+/// timed-out query was indistinguishable from a successful empty result to
+/// every caller that branches on `$?` -- and an empty result is the input to
+/// every "is this absent?" question. A benchmark, a detector or a patrol sweep
+/// would record a confident zero (aegis-41rc28).
+///
+/// Two codes, because the caller's remedy differs and a single status cannot
+/// express it:
+///
+/// * **2 -- the query did not COMPLETE.** A timeout or a join-complexity
+///   refusal says nothing about whether the query was right: the sensible
+///   responses are to narrow it or widen the budget, and a caller may
+///   legitimately retry. Follows the existing convention for an outcome the
+///   caller is expected to branch on rather than merely report (`share merge`
+///   already exits 2 on conflicts).
+/// * **1 -- the query was REFUSED or FAILED.** Malformed SPARQL, a store
+///   error, anything where retrying the same text changes nothing. Matches
+///   every other error exit in this binary.
+fn query_error_exit_code(error: &quipu::Error) -> i32 {
+    match error {
+        quipu::Error::QueryTimeout { .. } | quipu::Error::QueryComplexity { .. } => 2,
+        _ => 1,
     }
 }
 

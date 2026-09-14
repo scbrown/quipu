@@ -1,9 +1,9 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "286a67ab90a87e295692f014305c35ed23b26345",
-  "quipu_version": "quipu 0.5.1",
-  "generated_at": "2026-09-13T15:46:20Z",
+  "quipu_revision": "3cb5f0c101ca8c4dca3ea454d6267fb7c7a1cd10",
+  "quipu_version": "quipu 0.6.0\ngit_sha: 3cb5f0c101ca8c4dca3ea454d6267fb7c7a1cd10",
+  "generated_at": "2026-09-14T13:42:55Z",
   "generated_by": "local",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {

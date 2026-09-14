@@ -28,6 +28,8 @@ mod auth;
 mod base;
 #[path = "server/entity.rs"]
 mod entity;
+#[path = "server/graph_metrics.rs"]
+mod graph_metrics;
 #[path = "server/graph_store.rs"]
 mod graph_store;
 #[path = "server/handle.rs"]
@@ -306,6 +308,7 @@ async fn main() {
 
     let vector_reads_pooled = store.has_sqlite_vector_backend();
     let state: SharedStore = Arc::new(StoreHandle {
+        graph_metrics: graph_metrics::GraphMetrics::new(&db_path),
         writer: FairMutex::new(store),
         readers: read_pool,
         vector_reads_pooled,
@@ -648,6 +651,7 @@ async fn main() {
     }
 
     wal_maintenance::spawn_periodic_checkpoint(push_store_outer.clone());
+    graph_metrics::spawn_refresh(&push_store_outer);
 
     // Event-log retention (quipu-9z9). Opt-in via `[quipu.events]
     // retention_days`; unset keeps today's keep-forever behaviour and spawns
