@@ -1,0 +1,62 @@
+[
+  {
+    "benchmark": "WatDiv ingest",
+    "scale": "10M",
+    "source": {
+      "url": "https://dsg.uwaterloo.ca/watdiv/watdiv.10M.tar.bz2",
+      "tarball_sha256": "1d0a8a4725c98974eb7347ce3e6d9cab44f9f40389589809674254151b745af6",
+      "nt_sha256": "7cfe0341d578a677d3b5d562eaaf94d67aff8587d9e0ef3d83cc82765b77cddd",
+      "triples_declared": 10916457,
+      "bytes": 1542624409
+    },
+    "quipu": {
+      "version": "0.3.38",
+      "chunk": 50000,
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "host": {
+      "load_avg_1min": 7.89,
+      "ncpu": 20
+    },
+    "valid_result": true,
+    "result": {
+      "exit": 0,
+      "seconds": 3156.11,
+      "live_facts_before": -1,
+      "live_facts_after": 10916460,
+      "live_fact_delta": 10916460,
+      "store_bytes": 3227811840
+    },
+    "at": "2026-09-06T00:21:40Z"
+  },
+  {
+    "benchmark": "WatDiv ingest",
+    "scale": "10M",
+    "source": {
+      "url": "https://dsg.uwaterloo.ca/watdiv/watdiv.10M.tar.bz2",
+      "tarball_sha256": "1d0a8a4725c98974eb7347ce3e6d9cab44f9f40389589809674254151b745af6",
+      "nt_sha256": "7cfe0341d578a677d3b5d562eaaf94d67aff8587d9e0ef3d83cc82765b77cddd",
+      "triples_declared": 10916457,
+      "bytes": 1542624409
+    },
+    "quipu": {
+      "version": "0.3.38",
+      "chunk": 50000,
+      "timestamp": "2026-01-01T00:00:00Z"
+    },
+    "host": {
+      "load_avg_1min": 2.66,
+      "ncpu": 20
+    },
+    "valid_result": true,
+    "result": {
+      "exit": 0,
+      "seconds": 2848.91,
+      "live_facts_before": -1,
+      "live_facts_after": 10916460,
+      "live_fact_delta": 10916460,
+      "store_bytes": 3227811840
+    },
+    "at": "2026-09-06T01:59:03Z"
+  }
+]
