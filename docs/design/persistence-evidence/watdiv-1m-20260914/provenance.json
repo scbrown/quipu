@@ -1,0 +1,63 @@
+{
+  "validity": "CONTROL-INVALID",
+  "dataset": {
+    "name": "watdiv.1M.generated.nt",
+    "sha256": "c158998c66e11b33bc56cf7fa3cbc9e69c1c36bf9bdd1bab447d8a64e2d8da75",
+    "bytes": 152195750,
+    "parsed_triples": 1091718,
+    "generator": "WatDiv v0.6 SF10; unseeded, preserve exact artifact; not reproducible from seed"
+  },
+  "query_archive": {
+    "name": "watdiv_v06.tar",
+    "sha256": "fb8d930b74b3fbc8f948101bfaf658a90d2f74002f1fefda465c45ffd33a71d2",
+    "bytes": 307200,
+    "entries": 77
+  },
+  "binary": {
+    "release": "quipu-ai-v0.6.0",
+    "version": "0.6.0",
+    "git_sha": "62e57bf05045825ffbee60f39933e6041bdf33ff",
+    "git_dirty": false,
+    "target": "x86_64-unknown-linux-gnu",
+    "profile": "release",
+    "requested_features": [
+      "full"
+    ],
+    "build_command": "cargo build --release --locked --features full --target x86_64-unknown-linux-gnu --bin quipu --bin quipu-server",
+    "build_provenance": "https://github.com/scbrown/quipu/blob/quipu-ai-v0.6.0/.github/workflows/release.yml",
+    "archive_sha256": "fb301f261dc695ff1f5702711c30203996482b6634870667ff97f22d2012a7c3",
+    "cli_sha256": "a25a89eb7f83067243a0c9e9c8797907ec3bdc0a2f44c4c77a79856f5c0e178e",
+    "server_sha256": "35dbd7c67475caf153a943fcb784d680835b38e199ecdb3608b1eabe482b76be"
+  },
+  "harness_source_revision": "f1033d736e63bd1f74471d41e27b74b64a7f15cd",
+  "unmeasured_scales": [
+    "10M",
+    "100M",
+    "1B"
+  ],
+  "correctness_oracle": "not run; counts and scalar JSON row digests only",
+  "executed_tmpfs_harness_sha256": "ba26450934263cb660304ec037182ffea5738c2e3e7b18ba8a1b7b11cbf33e3f",
+  "published_harness_sha256": "9b9e77a3242b0904d5d5ade13d89661de69fafad16c81144fddd9b11a8b07937",
+  "query_sha256": {
+    "C1.rq": "92ddd04cd58790af6c696fc3c33f3935e7b53467a0a4c717d4c74ff714ef809f",
+    "C2.rq": "7f0205219f6ba3ef208030145f9ed9d461f32d0926b2aaab8795701ccc6678e3",
+    "C3.rq": "961d07087e4970d75487dfe3c71ec49dd0fa4642f64acedb85af1860819292ca",
+    "F1.rq": "08c115330c49eba2dd314f37003d7bddde369f0725be1c1e9ab2e7f509f4dd23",
+    "F2.rq": "4c037a798a60b4e70bf44df3c2159ce9ae4e9200afab4798467dd0b7fbf63c2f",
+    "F3.rq": "18b2653b1534b8692b652ff9814d85ce058c10f88d27df87cc19498737fe7608",
+    "F4.rq": "da53574f0716d61bf22b8fe331fafa5dcfffb4c9e21b5bad20927fdbfcb444ce",
+    "F5.rq": "ec8186f708d0af470c22d4ab9ac709aa75107193299dd58118d8a72dc4d09571",
+    "L1.rq": "9419b51c65a52d0c8ffc4c5af7795f56a1a3e041cf5821836fa710d210e70fc5",
+    "L2.rq": "13a7f75c6708037f1040d04553f5caea8835451c3fdc30cb1afe0b3eeb20205a",
+    "L3.rq": "0729d41a2119c57d3bbca01b73ec5798e2ba9147ebd5b93eb99ae638abfff947",
+    "L4.rq": "15c9bd9eb213b6d5432e322b690d18603a7171f16963a46882dd4789605dc1e2",
+    "L5.rq": "9506cba59c5747a256b5009d0cdc306255e01daea683cf5acec3a6f371f504bf",
+    "S1.rq": "2ba43b41577e590d88e04e7177b0e86f19c267dfdda9036a0cf34451541c9b19",
+    "S2.rq": "1c3050d83ad0f1f432e82f2b3beaefeed44067ca08c78e177eaa055a23dc6d9f",
+    "S3.rq": "61e3f6e951c3437dc407e1a6276afe5cc3ecfddc81cbb1a3c5af39862028f6db",
+    "S4.rq": "b37392bbb2326962b06bc8fb23ccc47d7155000e6e8f5b3a140aafce254ac81b",
+    "S5.rq": "bcbef7ede81b9c67f92e6bd348a92d01f4e12cfb359fd6f4e8f2cdd57062a308",
+    "S6.rq": "4200d0a0ef3fc5eceebbbd6eec4b545a388dd42d225b408696462252c1b28219",
+    "S7.rq": "766746f8a49c47dace78cfb24c549620b3b6989156273eddff51eb81b52245cf"
+  }
+}

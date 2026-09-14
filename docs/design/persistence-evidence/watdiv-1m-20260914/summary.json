@@ -1,0 +1,83 @@
+{
+  "validity": "CONTROL-INVALID",
+  "arms": {
+    "c1": {
+      "ready_idle_memory": {
+        "time": 1789420475.077717,
+        "pid": 559493,
+        "VmHWM": "15808 kB",
+        "VmRSS": "15808 kB",
+        "RssAnon": "2188 kB",
+        "RssFile": "13076 kB",
+        "VmSwap": "0 kB",
+        "Threads": "4",
+        "Pss": "11303 kB",
+        "Pss_Anon": "2188 kB",
+        "Pss_File": "8955 kB",
+        "Private_Dirty": "2220 kB"
+      },
+      "tail_idle_memory": {
+        "time": 1789420768.6683753,
+        "pid": 559493,
+        "VmHWM": "505624 kB",
+        "VmRSS": "498540 kB",
+        "RssAnon": "224196 kB",
+        "RssFile": "11784 kB",
+        "VmSwap": "0 kB",
+        "Threads": "5",
+        "Pss": "494042 kB",
+        "Pss_Anon": "224196 kB",
+        "Pss_File": "7670 kB",
+        "Private_Dirty": "486244 kB"
+      },
+      "sampled_peak_kib": {
+        "VmRSS": 506848,
+        "VmHWM": 506848,
+        "Pss": 502343,
+        "RssAnon": 232272
+      },
+      "query_receipts": 40,
+      "successful": 34,
+      "dnf": 6
+    },
+    "c4": {
+      "ready_idle_memory": {
+        "time": 1789420793.4581695,
+        "pid": 780313,
+        "VmHWM": "15992 kB",
+        "VmRSS": "15992 kB",
+        "RssAnon": "2192 kB",
+        "RssFile": "13256 kB",
+        "VmSwap": "0 kB",
+        "Threads": "4",
+        "Pss": "11446 kB",
+        "Pss_Anon": "2192 kB",
+        "Pss_File": "9094 kB",
+        "Private_Dirty": "2224 kB"
+      },
+      "tail_idle_memory": {
+        "time": 1789421184.1275246,
+        "pid": 780313,
+        "VmHWM": "1608124 kB",
+        "VmRSS": "1571364 kB",
+        "RssAnon": "510752 kB",
+        "RssFile": "12528 kB",
+        "VmSwap": "0 kB",
+        "Threads": "8",
+        "Pss": "781289 kB",
+        "Pss_Anon": "510752 kB",
+        "Pss_File": "8361 kB",
+        "Private_Dirty": "510784 kB"
+      },
+      "sampled_peak_kib": {
+        "VmRSS": 1611788,
+        "VmHWM": 1611788,
+        "Pss": 821736,
+        "RssAnon": 549140
+      },
+      "query_receipts": 100,
+      "successful": 81,
+      "dnf": 19
+    }
+  }
+}
