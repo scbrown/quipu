@@ -164,6 +164,21 @@ shows a sufficient allocation mechanism, not the cause of every historical
 incident. Neither a short stable tail nor correlation with facts written proves
 or disproves a leak. Preserve process identity, uptime and deployment boundaries.
 
+A separate September 6 incident is a counterexample to explaining outages from
+the RSS curve alone. The observation record (`aegis-raq1ok`, version 0.3.39)
+reports a nine-minute serving outage beginning around 00:05 UTC at 1.42 GiB RSS,
+about 18% of an 8 GiB cap. RSS rose toward 6.8 GiB **after** serving stopped;
+the memory-triggered recycle at 00:13:30 ended the outage. This chronology does
+not support exhaustion of the process memory cap as the initiating cause.
+Backlogged requests, lock contention and deadlock remain hypotheses, not measured
+causes. The later healthy baseline (24,069 request starts versus 24,053 completes
+over 1,215 minutes) cannot diagnose the incident: roughly 20 hours of retained
+request logs no longer covered it when investigators returned days later.
+The root cause is unresolvable from the surviving record. This is a historical
+production serving incident, not WatDiv ingest evidence. Bounded allocation and
+a different persistence engine must therefore be evaluated separately from
+liveness: neither is proven to prevent this class of hang.
+
 ## What actually becomes resident
 
 Line references below refer to the audited revision; comments sometimes describe
@@ -368,6 +383,13 @@ process RSS/HWM/PSS/anonymous memory, cgroup peak, faults, disk bytes and WAL or
 compaction growth. Use a fresh process for each cold-start arm; do not drop the
 host's global page cache. Distinguish process-cold from OS-cache-cold. Baseline,
 warm-up, herd and tail must use the same PID without a deployment in between.
+
+Include a low-memory stall arm: capture request starts/completions, in-flight
+work, pool checkout and lock-wait durations, and bounded stack diagnostics before
+recovery. Check service progress independently of RSS thresholds. Retain these
+records longer than the maximum expected time to investigate (days here, not
+20 hours), and archive the incident window when liveness fails. A healthy
+post-restart baseline is not a substitute for evidence from the failed process.
 
 Proposed acceptance gates, for discussion rather than claimed results:
 
