@@ -17,6 +17,7 @@ because a copied number rots silently while its source moves on.
 | [SPARQL 1.1 conformance](conformance.md) | Quipu's query engine against the W3C RDF Tests at a pinned revision | this repository | **published**, re-derivable |
 | [Extraction → ingress](#extraction--ingress-text2kgbench) | a governed RML write of frozen upstream extractions into a disposable Quipu | [caboodle](https://github.com/scbrown/caboodle) `0a1b169` | **published**, with the boundary below |
 | [Bulk ingest](#bulk-ingest-watdiv) | Quipu's own load rate for a pinned WatDiv dataset | this repository (`benchmark/public/watdiv_ingest.py`) | **published**, re-derivable |
+| [WatDiv 1M diagnostic](#watdiv-1m-diagnostic-checkpoint) | one-off query latency and process memory on a pinned 1M dataset | this repository (`docs/design/persistence-evidence/watdiv-1m-20260914/`) | **MEASURED, CONTROL-INVALID** — diagnostic only |
 | [Performance](#performance-watdivlubm) | WatDiv / LUBM query latency against Oxigraph | — | **NOT RUN** |
 
 ## Extraction → ingress (Text2KGBench)
@@ -193,6 +194,60 @@ Guards that decide whether a row may be quoted, each covered by a test in
 - an archive with **no `.nt` member** is refused rather than silently benchmarking the first file
   it finds.
 
+## WatDiv 1M diagnostic checkpoint
+
+**MEASURED, and CONTROL-INVALID.** This is published because the rule at the top of this
+page applies to invalid results exactly as it applies to unrun ones: a class that was
+attempted and failed its own admission controls is published as such, never quietly
+dropped. **Do not quote any number in this section as a performance result.**
+
+Receipts: [`docs/design/persistence-evidence/watdiv-1m-20260914/`](https://github.com/scbrown/quipu/tree/main/docs/design/persistence-evidence/watdiv-1m-20260914)
+— 140 per-request observations in `verified-requests.json`, plus cgroup, count-validation
+and provenance records.
+
+### Why the controls are invalid
+
+The host was outside the protocol's admission envelope for the whole run: root disk began
+at 94% and rose to 96% against an 80% ceiling, swap was occupied, other workloads were
+active, the ten-minute thermal/frequency admission was not performed, and a temperature
+sensor read 86 °C during two arms. A run that violates a control is **invalid, not
+noisy** — so these figures cannot support a ranking, a throughput claim, or an
+admission-green claim.
+
+The completed ingest also ran on **tmpfs**, after a disk attempt was terminated at 150.386 s
+with 50,000 facts committed. A tmpfs figure is not a persistence figure.
+
+### What was observed
+
+| Concurrency | Requests | HTTP 200 | HTTP 408 | Ready RSS / PSS (KiB) | Sampled peak RSS / PSS (KiB) |
+|---|---|---|---|---|---|
+| 1 | 40 | 34 | 6 | 15,808 / 11,303 | 506,848 / 502,343 |
+| 4 | 100 | 81 | 19 | 15,992 / 11,446 | 1,611,788 / 821,736 |
+
+All 20 top-level WatDiv v0.6 templates were included; C2, C3 and F3 timed out in both arms
+and S7 timed out at concurrency four, leaving 17 templates with any successful result.
+Successful counts and scalar-row hashes were consistent across those 17. The tmpfs ingest
+completed in 26.789 s over 22 transactions, producing a 338,128,896-byte database.
+
+### Scope boundary — read before quoting anything above
+
+- **No comparison was run.** There is no Oxigraph arm and no other engine here. Nothing in
+  this section is a between-engine statement of any kind.
+- **`1M` is a scale name, not a denominator.** The pinned artifact is 152,195,750 bytes,
+  SHA-256 `c158998c66e11b33bc56cf7fa3cbc9e69c1c36bf9bdd1bab447d8a64e2d8da75`, and its
+  1,091,718 parsed triples contain 13,033 identical duplicate lines — 1,078,685 distinct
+  source triples plus three ingest metadata facts give **1,078,688 live facts**.
+- **The generator was unseeded, so the ARTIFACT is the pin, never the process.**
+  Regenerating at the same scale factor does not reproduce this dataset.
+- **RSS includes file mappings** and must not be read as private heap size. Concurrent
+  requests overlap, so their memory samples are aggregate process observations and are not
+  attributable to a single request.
+- **No correctness oracle was run.** Zero-row responses and matching hashes do not
+  establish semantic correctness.
+- **No percentiles, and no long-tail or cache-cold claims.** Each template received one
+  serial warmup and one measured wave; this is not the peer protocol's thousands of warm
+  repetitions.
+
 ## Performance (WatDiv/LUBM)
 
 **NOT RUN.** No WatDiv or LUBM **query latency** figures exist against Oxigraph or
@@ -204,6 +259,17 @@ This row exists so the absence is visible. The rule for this section is that a
 class with no result is published as NOT RUN and kept in the list, because the
 alternative — leaving it out until it looks good — is how a benchmark page stops
 being evidence and becomes marketing.
+
+**A comparison is PENDING, and it is not this row.** A separate-process memory
+comparison against a RocksDB-backed Oxigraph on the same pinned dataset is scoped
+and not yet run. It is a *memory residency* measurement, not query latency, so it
+will not satisfy this row when it lands — it will earn its own. The diagnostic
+checkpoint above is likewise not a substitute: it has no second engine in it at all.
+
+Note also that the in-process `oxi_compare` harness in this repository **cannot**
+fill this row. It deliberately shares the parser and data model between arms, so
+what it measures is storage and evaluation, never engine versus engine — and with
+one process there is no separate resident set to compare.
 
 ## The rules this section is held to
 
