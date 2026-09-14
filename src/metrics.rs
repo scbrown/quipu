@@ -3,8 +3,8 @@
 //! Everything here is a plain in-memory registry rendered in the Prometheus
 //! text exposition format by [`render`]; there is no metrics crate dependency.
 //! Counters are updated from the request middleware and the policy handler;
-//! graph-size gauges are computed by the caller at scrape time (one cheap SQL
-//! COUNT — never the full-scan the /stats endpoint does) and passed in.
+//! graph-size gauges are supplied by the caller. The server refreshes their
+//! expensive aggregate in the background, independently of scrape requests.
 //!
 //! Label vocabulary notes (deliberate, do not "fix"):
 //!   - `quipu_policy_check_total{outcome=...}` uses /policy/check's OWN
@@ -345,12 +345,22 @@ impl Metrics {
     }
 
     /// Render the Prometheus text exposition. Graph-size gauges are computed by
-    /// the caller (cheap SQL count under the store lock) and passed in.
+    /// the caller and passed in.
     pub fn render(
         &self,
         entities: u64,
         facts: u64,
         predicates: u64,
+        wal_bytes: Option<u64>,
+    ) -> String {
+        self.render_with_graph_counts(Some((entities, facts, predicates)), wal_bytes)
+    }
+
+    /// Render with optional graph counts. Before the first successful server
+    /// refresh, omit unknown counts rather than reporting an empty graph.
+    pub fn render_with_graph_counts(
+        &self,
+        graph_counts: Option<(u64, u64, u64)>,
         wal_bytes: Option<u64>,
     ) -> String {
         let mut out = String::new();
@@ -491,21 +501,23 @@ impl Metrics {
             );
         }
 
-        out.push_str(
-            "# HELP quipu_graph_entities Distinct live subjects in the root graph.\n\
+        if let Some((entities, facts, predicates)) = graph_counts {
+            out.push_str(
+                "# HELP quipu_graph_entities Distinct live subjects in the root graph.\n\
              # TYPE quipu_graph_entities gauge\n",
-        );
-        let _ = writeln!(out, "quipu_graph_entities {entities}");
-        out.push_str(
-            "# HELP quipu_graph_facts Live facts in the root graph.\n\
+            );
+            let _ = writeln!(out, "quipu_graph_entities {entities}");
+            out.push_str(
+                "# HELP quipu_graph_facts Live facts in the root graph.\n\
              # TYPE quipu_graph_facts gauge\n",
-        );
-        let _ = writeln!(out, "quipu_graph_facts {facts}");
-        out.push_str(
-            "# HELP quipu_graph_predicates Distinct live predicates in the root graph.\n\
+            );
+            let _ = writeln!(out, "quipu_graph_facts {facts}");
+            out.push_str(
+                "# HELP quipu_graph_predicates Distinct live predicates in the root graph.\n\
              # TYPE quipu_graph_predicates gauge\n",
-        );
-        let _ = writeln!(out, "quipu_graph_predicates {predicates}");
+            );
+            let _ = writeln!(out, "quipu_graph_predicates {predicates}");
+        }
 
         // Memory (memory telemetry): the balloon that OOM-killed the service was
         // invisible because no memory metric existed. RSS/VSZ are read fresh at

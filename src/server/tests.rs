@@ -958,7 +958,7 @@ fn three_js_is_vendored_and_never_fetched() {
 
 /// Build a file-backed handle with a real pool, plus the tempdir that owns the
 /// database file for the test's lifetime.
-fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreHandle) {
+pub(super) fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreHandle) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("pool.db").to_str().unwrap().to_string();
     let store = Store::open(&path).unwrap();
@@ -969,6 +969,7 @@ fn pooled_handle(readers: usize) -> (tempfile::TempDir, super::StoreHandle) {
         conns.push(parking_lot::FairMutex::new(r));
     }
     let handle = super::StoreHandle {
+        graph_metrics: super::graph_metrics::GraphMetrics::new(&path),
         writer: parking_lot::FairMutex::new(store),
         vector_reads_pooled: true,
         federation: quipu::config::FederationConfig::default(),

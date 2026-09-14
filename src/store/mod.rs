@@ -290,11 +290,11 @@ impl Store {
         self.pending_write_events.borrow_mut().clear();
     }
 
-    /// Cheap graph-size counts for the /metrics gauges: (entities, facts,
+    /// Graph-size counts for the /metrics gauges: (entities, facts,
     /// predicates) over LIVE root-graph facts — the same liveness predicate the
     /// query layer uses (`op = 1 AND g = 0 AND valid_to IS NULL`). One SQL
-    /// aggregate pass; deliberately NOT the /stats full result-set scan, which
-    /// is far too expensive to run on every Prometheus scrape.
+    /// aggregate pass, including distinct counts. Its cost grows with the live
+    /// graph; the server refreshes it in the background, never on each scrape.
     pub fn graph_counts(&self) -> Result<(u64, u64, u64)> {
         let mut stmt = self.conn.prepare(
             "SELECT COUNT(DISTINCT e), COUNT(*), COUNT(DISTINCT a) FROM facts \

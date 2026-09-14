@@ -91,26 +91,12 @@ pub(crate) async fn health() -> impl IntoResponse {
 }
 
 /// Prometheus scrape endpoint (usage measurement). Counters come from the
-/// request middleware and the policy handler; graph-size gauges are computed
-/// here with one cheap SQL aggregate — deliberately NOT /stats' full scan,
-/// which must never run on every scrape while holding the store mutex.
+/// request middleware and the policy handler; graph counts come from the
+/// periodic snapshot. A scrape never acquires a store connection or scans facts.
 pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
-    let (entities, facts, predicates, wal_bytes) = blocking(move || {
-        // Metrics is read-only and must not join the writer queue. Prometheus
-        // abandons timed-out responses, but spawn_blocking keeps their queued
-        // work alive; one scrape per interval otherwise consumes task slots
-        // until TasksMax starves unrelated store endpoints (aegis-vimo5).
-        let store = store.read();
-        let (e, f, p) = store.graph_counts()?;
-        // Read on the pooled read connection alongside the counts rather than
-        // in its own handler: one blocking hop, and the WAL number is then
-        // taken at the same instant as the facts it should be read against.
-        Ok((e, f, p, store.wal_bytes()))
-    })
-    .await?;
-    let body = quipu::metrics::metrics().render(entities, facts, predicates, wal_bytes);
+    let body = store.graph_metrics.render();
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
