@@ -151,6 +151,16 @@ pub fn pack_full_text(
         let recipe = embedding_recipe(store)?;
         let mut manifest = manifest_for(&conn, opts, timestamp, &pruned)?;
         manifest.counts = merge_counts(&manifest.counts, &regenerated, &recipe)?;
+        // Refuse before writing the destination. A successful exit must not
+        // silently certify a backup whose omitted vectors cannot be rebuilt.
+        if !opts.allow_missing_embedding_recipe
+            && let Some(warning) = pack_recipe_warning(&manifest.counts)
+        {
+            return Err(Error::PolicyDenied(format!(
+                "{warning} Pass --allow-missing-embedding-recipe to explicitly accept \
+                 a backup without reproducible vectors."
+            )));
+        }
         drop(present);
         // The format is what tells `restore` which reader to use, and the gate
         // reads it BEFORE hashing so a wrong-verb artifact is never reported as
@@ -450,6 +460,29 @@ pub fn read_manifest_dir(dir: &str) -> Result<Manifest> {
             path.display()
         ))
     })
+}
+
+/// Warn at creation when omitted vectors have no complete recorded recipe.
+///
+/// The backup remains useful for facts and history; this diagnostic prevents
+/// its successful creation from implying reproducible vector reconstruction.
+#[must_use]
+pub fn pack_recipe_warning(counts: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(counts).ok()?;
+    let rows = value["regenerated_source_counts"]["vectors"].as_i64()?;
+    let recipe = &value["regeneration_recipe"];
+    let complete = ["embedding_model", "embedding_model_sha256"]
+        .iter()
+        .all(|key| recipe[key].as_str().is_some_and(|s| !s.is_empty()));
+    if rows <= 0 || complete {
+        return None;
+    }
+    Some(format!(
+        "text pack omits {rows} vector row(s), but its embedding recipe lacks a model \
+         name or SHA-256 digest; the original vectors are not reproducible from this \
+         recipe. Configure [quipu.embedding] model_path to the original readable model \
+         file and repack, or use binary pack --full to retain vectors."
+    ))
 }
 
 /// A human-readable statement of what a restored text pack still has to rebuild.

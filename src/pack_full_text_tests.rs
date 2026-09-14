@@ -66,9 +66,17 @@ fn tmpdir(name: &str) -> tempfile::TempDir {
 
 /// Pack `store` as text into a fresh directory, returning (dir, pack path).
 fn packed(name: &str, store: &Store) -> (tempfile::TempDir, String) {
+    packed_with_options(name, store, &internal())
+}
+
+fn packed_with_options(
+    name: &str,
+    store: &Store,
+    opts: &PackOptions,
+) -> (tempfile::TempDir, String) {
     let dir = tmpdir(name);
     let out = dir.path().join("pack.d").to_string_lossy().into_owned();
-    pack_full_text(store, &out, &internal(), TS).unwrap();
+    pack_full_text(store, &out, opts, TS).unwrap();
     (dir, out)
 }
 
@@ -294,7 +302,14 @@ fn vectors_are_not_transported_and_the_recipe_is() {
         .unwrap();
     assert_eq!(before, 2, "fixture must actually carry vectors");
 
-    let (dir, out) = packed("vectors", &store);
+    let (dir, out) = packed_with_options(
+        "vectors",
+        &store,
+        &PackOptions {
+            allow_missing_embedding_recipe: true,
+            ..internal()
+        },
+    );
 
     let data = std::path::Path::new(&out)
         .join(DATA_DIR)
@@ -337,7 +352,14 @@ fn a_restore_that_must_rebuild_says_so() {
     // The failure this prevents is a store that looks fully restored and
     // silently answers vector search with nothing.
     let store = store_with_vectors();
-    let (_dir, out) = packed("notice", &store);
+    let (_dir, out) = packed_with_options(
+        "notice",
+        &store,
+        &PackOptions {
+            allow_missing_embedding_recipe: true,
+            ..internal()
+        },
+    );
     let manifest = read_manifest_dir(&out).unwrap();
 
     let notice = regeneration_notice(&manifest.counts)

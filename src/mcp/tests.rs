@@ -4504,3 +4504,6 @@ fn a_stamp_sqlite_cannot_parse_makes_the_lag_unknown_through_the_store() {
          reassuring answer: {marker}"
     );
 }
+
+#[path = "snapshot_identity_tests.rs"]
+mod snapshot_identity;

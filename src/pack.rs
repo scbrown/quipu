@@ -106,6 +106,9 @@ pub struct PackOptions {
     pub model_id: Option<String>,
     /// Version of the embedding model used to produce repository knowledge.
     pub model_version: Option<String>,
+    /// Permit a full text pack to omit vectors without a complete embedding
+    /// recipe. Defaults to false; binary full packs carry vectors unchanged.
+    pub allow_missing_embedding_recipe: bool,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
