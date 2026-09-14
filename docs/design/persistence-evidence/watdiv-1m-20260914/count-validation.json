@@ -1,0 +1,23 @@
+{
+  "parsed_lines": 1091718,
+  "distinct_line_triples": 1078685,
+  "duplicate_lines": 13033,
+  "live_facts": 1078688,
+  "metadata": [
+    [
+      "http://quipu.invalid/watdiv/1M",
+      "urn:quipu:ingest:declaredTriples",
+      "0286A8100000000000"
+    ],
+    [
+      "http://quipu.invalid/watdiv/1M",
+      "urn:quipu:ingest:sourceSha256",
+      "0163313538393938633636653131623333626335366366376661336362633965363963316333366266396264643162616234343764386136346532643864613735"
+    ],
+    [
+      "http://quipu.invalid/watdiv/1M",
+      "urn:quipu:ingest:complete",
+      "0401"
+    ]
+  ]
+}
