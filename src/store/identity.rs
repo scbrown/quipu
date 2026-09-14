@@ -89,24 +89,35 @@ impl Store {
         Ok(orphans)
     }
 
-    /// Is `entity` the subject or object of an active fact from another source?
+    /// Is `entity` referenced by an active fact from another producer?
+    /// Code snapshots partition one producer by repository and file. Its sibling
+    /// partitions can still contain stale references while a promote replaces
+    /// each key in a separate transaction; they must not retain deleted labels.
     fn has_surviving_reference(&self, entity: i64, source_tag: &str) -> Result<bool> {
         let as_object = Value::Ref(entity).to_bytes();
+        let code_producer = source_tag.strip_prefix("snapshot:code:").and_then(|key| {
+            let repo = key.split(':').next()?;
+            (!repo.is_empty()).then(|| format!("snapshot:code:{repo}"))
+        });
         // Separate probes preserve idx_geav and idx_active_vge; combining them
         // with OR made SQLite full-scan facts once per candidate (aegis-ffeud).
         let mut subject = self.conn.prepare(
             "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
              WHERE f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
-               AND f.e = ?1 AND (t.source IS NULL OR t.source <> ?2) LIMIT 1",
+               AND f.e = ?1 AND (t.source IS NULL OR (t.source <> ?2 \
+                 AND (?3 IS NULL OR (t.source <> ?3 \
+                   AND substr(t.source, 1, length(?3) + 1) <> ?3 || ':')))) LIMIT 1",
         )?;
-        if subject.exists(params![entity, source_tag])? {
+        if subject.exists(params![entity, source_tag, code_producer])? {
             return Ok(true);
         }
         let mut object = self.conn.prepare(
             "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
              WHERE f.op = 1 AND f.valid_to IS NULL AND f.g = 0 \
-               AND f.v = ?1 AND (t.source IS NULL OR t.source <> ?2) LIMIT 1",
+               AND f.v = ?1 AND (t.source IS NULL OR (t.source <> ?2 \
+                 AND (?3 IS NULL OR (t.source <> ?3 \
+                   AND substr(t.source, 1, length(?3) + 1) <> ?3 || ':')))) LIMIT 1",
         )?;
-        Ok(object.exists(params![as_object, source_tag])?)
+        Ok(object.exists(params![as_object, source_tag, code_producer])?)
     }
 }
