@@ -2,6 +2,62 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-09-13
+
+### Added
+
+- *(pack)* Restore, and a format gate that names the right verb([288c638](https://github.com/scbrown/quipu/commit/288c638055d2e119af041c37724d6527544fa771))
+- *(cli)* Expose build SHA after the compatible version banner([3ef5b57](https://github.com/scbrown/quipu/commit/3ef5b579b0669ad88964797e91fbd499dd3906bf))
+
+### Documentation
+
+- *(conformance)* Publish verified ROOT and catalogue results([f1d6f25](https://github.com/scbrown/quipu/commit/f1d6f25c5ed796c3023d1c0594fa458877d5eac8))
+- *(conformance)* Refresh ledgers for build banner compatibility([95d67e9](https://github.com/scbrown/quipu/commit/95d67e95266f11e27ea406295f3b0584cd55d5f2))
+
+### Fixed
+
+- *(pack)* Preserve ROOT scope and verify share catalogues([abb1407](https://github.com/scbrown/quipu/commit/abb1407c5457f49e685fa440078aaea65f883baf))
+- *(examples)* Load policy catalogue before outward sharing([cc8bff9](https://github.com/scbrown/quipu/commit/cc8bff97097d1d9a1f68c5a77836e22b7725c257))
+- *(sharing)* Load smoke catalogues and document outward prerequisites([a6a094a](https://github.com/scbrown/quipu/commit/a6a094ad570e99c147bf8e983d5db1b23523cbd7))
+- *(reasoner)* Satisfy CI's lint and default-feature build([1541f17](https://github.com/scbrown/quipu/commit/1541f172484b60d741e4295e57b133c368c04275))
+- *(pack)* Gate verify_full for wasm32, like the read_manifest it calls([cb463f2](https://github.com/scbrown/quipu/commit/cb463f22320012d9012375248f3bcdcd2ce87fd3))
+- *(episode)* A hash match is not presence([8ae6c7d](https://github.com/scbrown/quipu/commit/8ae6c7d533daa680fb25fd61505949ca5d181fd5))
+- *(ci)* Keep the presence check out of the ratcheted file([14e90d9](https://github.com/scbrown/quipu/commit/14e90d9c7ea1dabdcbd694898b4059fe1a289dd3))
+- *(cli)* Apply [quipu.search] to the store, as the server already does([286a67a](https://github.com/scbrown/quipu/commit/286a67ab90a87e295692f014305c35ed23b26345))
+- *(test)* Gate the CLI test on `shacl`, which builds the binary it spawns([2ad672b](https://github.com/scbrown/quipu/commit/2ad672b1929c72264868d071a55203f7f1c19650))
+- *(cli)* A query that did not answer must not exit 0([0d35f8e](https://github.com/scbrown/quipu/commit/0d35f8e513eca05bd117f54a8cbea97a34951d50))
+- *(test)* Gate the exit-code tests on `shacl` too([75526c9](https://github.com/scbrown/quipu/commit/75526c9a376655d26b98dcee5517e8eb5c86f8c4))
+- *(conformance)* Render the version line from multi-line build banners([ac2d216](https://github.com/scbrown/quipu/commit/ac2d216f98201969a125652cff4c106d8a8c63db))
+
+### Miscellaneous
+
+- *(conformance)* Refresh ledgers after source reconciliation([40e0244](https://github.com/scbrown/quipu/commit/40e0244c1442f23bf92fe2617d3e1b3fc3d7652a))
+- *(conformance)* Re-derive the ledgers on this HEAD([5595cef](https://github.com/scbrown/quipu/commit/5595cef344c71e34ddd7ff8e0f178a76e04946b9))
+- *(conformance)* Re-derive the ledgers after the lint fix([7a1b031](https://github.com/scbrown/quipu/commit/7a1b031d610aab16dbbc109638d3f1c043aa3dda))
+- *(conformance)* Re-derive the ledgers on this HEAD([d8307a2](https://github.com/scbrown/quipu/commit/d8307a29f0e6572e0506d68cf8dc319be0a4a643))
+- *(conformance)* Re-derive the ledgers on this HEAD([5918dfb](https://github.com/scbrown/quipu/commit/5918dfb01390f40abfc7553b94552d2229fbd3ef))
+- *(conformance)* Re-derive the ledgers on the ratchet-fix HEAD([3c6c670](https://github.com/scbrown/quipu/commit/3c6c670fb5a705f2bc4d69ffea8504d103c4cd1e))
+- *(conformance)* Re-derive ledgers and page on the post-#234 head([aae8b28](https://github.com/scbrown/quipu/commit/aae8b28249fe4770f0e095b57264bb0733fddfdc))
+- *(conformance)* Re-derive the ledgers on this branch's head([1f105db](https://github.com/scbrown/quipu/commit/1f105dbbd71f6de959baf159539431f9de6b9472))
+- *(conformance)* Re-derive the ledgers on the test-gate fix([4d91a4d](https://github.com/scbrown/quipu/commit/4d91a4dbfb92dc1142ad7222faf0b4a4661d247c))
+- *(conformance)* Re-derive the ledgers on the rebased head([446979b](https://github.com/scbrown/quipu/commit/446979b6629955681edcd6127296e75424c1033c))
+
+### Testing
+
+- *(pack)* Supply policy for the ROOT name collision fixture([d8dc359](https://github.com/scbrown/quipu/commit/d8dc3592eb4c4d6bd94c7360facf465d739f3754))
+- *(import)* Prepare outward fixtures with an identifier catalogue([4a9f0d1](https://github.com/scbrown/quipu/commit/4a9f0d17df754c2aee9990e94bfa22e7ea65d4f4))
+- *(wasm)* Supply pack policy and refresh reconciled conformance ledgers([fc23aae](https://github.com/scbrown/quipu/commit/fc23aae6be57adf622b20bb71cb4867d8c7077fe))
+- *(cli)* Report what the process said when an exit-code assertion fails([f603e74](https://github.com/scbrown/quipu/commit/f603e7437443daba243e9aa91770785f05982770))
+- Refuse a test that spawns a binary it may not have built([6aad0f7](https://github.com/scbrown/quipu/commit/6aad0f7aafa8dfe7d7955e48fd9b8c9caee7f6da))
+
+
+
+### Perf
+
+- *(store)* Index current facts by attribute — halves an episode write (#229)([4e60844](https://github.com/scbrown/quipu/commit/4e6084480ffe08562ee061dccf2f3814475fcc33))
+- *(reasoner)* Load premises by bound object, not by predicate alone([6ce3e25](https://github.com/scbrown/quipu/commit/6ce3e254d63671437916288d6dd011fd48782b67))
+- *(reasoner)* Wake on the bound object, not the predicate alone([8b0570d](https://github.com/scbrown/quipu/commit/8b0570df5c5546af1124a29c881e148845f71de4))
+
 ## [0.5.1] - 2026-09-12
 
 ### Fixed
