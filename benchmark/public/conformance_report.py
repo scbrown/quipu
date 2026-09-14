@@ -786,9 +786,29 @@ def main(argv: list[str] | None = None) -> int:
                     "check.",
                     file=sys.stderr,
                 )
+                # ALL THREE STEPS, naming the artifact and the commit target
+                # (aegis-j9zw4u). The dispatch alone does NOT clear this check:
+                # the workflow is `contents: read` with upload-artifact as its
+                # only sink, so it produces JSON that nothing is permitted to
+                # write back. A one-line remedy therefore reads as complete,
+                # sends the follower to watch a green run, and leaves them at a
+                # still-red check with no clue which half failed — and because
+                # the gate itself printed it, it is the instruction that gets
+                # trusted. Caught on PR #202 only because gennaro declined to
+                # assume the dispatch had cleared it.
                 print(
-                    "Remedy, one command: gh workflow run conformance.yml --ref <branch>"
-                    " — then commit the artifact it produces.",
+                    "Remedy — THREE steps; the dispatch alone does NOT clear this check:\n"
+                    "  1. gh workflow run conformance.yml --ref <branch>\n"
+                    # `--dir` is NOT optional here: with `--name` alone gh
+                    # extracts into the CWD and refuses with "would result in
+                    # path traversal", so the command fails for whoever follows
+                    # it. Measured while writing this very remedy — the defect
+                    # this bead records, reproduced inside its own fix.
+                    "  2. gh run download <run-id> --name conformance-ledgers-<sha> --dir /tmp/led\n"
+                    "  3. commit /tmp/led/*.json into benchmark/public/results/ "
+                    "and push, then re-run\n"
+                    "     python3 benchmark/public/conformance_report.py   "
+                    "(regenerates the page from them)",
                     file=sys.stderr,
                 )
             return code
