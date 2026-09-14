@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -220,7 +221,16 @@ class PublishedArtifactsTests(unittest.TestCase):
     """The committed page and badges must match the committed ledgers."""
 
     def test_check_mode_passes_against_what_is_committed(self):
-        code = REPORT.main(["--results-dir", str(RESULTS), "--docs-dir", str(DOCS), "--check"])
+        # `--arm content`, deliberately: this class asserts the CONTENT
+        # guarantee its own docstring states. The default arm also asks about
+        # provenance, so with it this test reds whenever the branch's ledger
+        # stamp is stale — a different guarantee, a different remedy, and it
+        # would drag this unit test (which runs in the CONTENT job) red for a
+        # PROVENANCE reason, defeating the whole point of the split
+        # (aegis-fn3hdn). Provenance has its own job and its own test.
+        code = REPORT.main(
+            ["--results-dir", str(RESULTS), "--docs-dir", str(DOCS), "--check", "--arm", "content"]
+        )
         self.assertEqual(code, 0, "run: python3 benchmark/public/conformance_report.py")
 
     def test_the_page_states_the_claim_boundary_and_the_real_numbers(self):
@@ -483,3 +493,129 @@ class SyntaxSuiteRegressionGateTest(unittest.TestCase):
             ["--baseline", str(self.LEDGER), "--candidate", str(self.LEDGER)]
         )
         self.assertEqual(code, 0)
+
+
+class ArmSeparationTest(unittest.TestCase):
+    """`--arm` must split TOIL from REGRESSION (aegis-fn3hdn).
+
+    The two failures under one check name were indistinguishable on a PR page,
+    so the routine one — a stale provenance stamp, remedied by one re-derive —
+    read as broken conformance. Measured cost: three quipu PRs in one day
+    (#237, #244, #245) sat red that way while every re-derive changed nothing
+    but `duration_ms` and the stamps.
+
+    Both arms still BLOCK. What is asserted here is that each fails on its OWN
+    condition and stays green on the other's, because a split that does not
+    separate is worse than no split — it adds a name that means nothing.
+    """
+
+    def _run(self, root, *args):
+        import subprocess
+
+        return subprocess.run(
+            [sys.executable, str(pathlib.Path(REPORT.__file__)), "--check", *args],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_a_stale_stamp_fails_provenance_and_NOT_content(self):
+        # The real toil condition: ledgers and page mutually consistent, the
+        # revision simply older than HEAD. Reproduced faithfully rather than by
+        # editing a stamp in isolation — doing that also desyncs the published
+        # page (which embeds the revision) and reds the content arm for a reason
+        # that never occurs in practice. That false reproduction is exactly what
+        # my first attempt at this test did.
+        root = pathlib.Path(REPORT.__file__).resolve().parents[2]
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD~3"],
+            cwd=root, capture_output=True, text=True, check=False,
+        ).stdout.strip()
+        if not head:
+            self.skipTest("no HEAD~3 in this clone")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = pathlib.Path(tmp) / "repo"
+            subprocess.run(
+                ["git", "worktree", "add", "--detach", str(work), "HEAD"],
+                cwd=root, capture_output=True, check=False,
+            )
+            try:
+                if not (work / "benchmark/public/results").is_dir():
+                    self.skipTest("worktree unavailable")
+                for ledger in (work / "benchmark/public/results").glob("*.json"):
+                    data = json.loads(ledger.read_text())
+                    for key in list(data):
+                        if key.endswith("quipu_revision"):
+                            data[key] = head
+                    ledger.write_text(json.dumps(data, indent=2))
+                # Regenerate the page so content and ledgers AGREE.
+                self._run(work, "--arm", "content")  # no-op; page written below
+                subprocess.run(
+                    [sys.executable, "benchmark/public/conformance_report.py"],
+                    cwd=work, capture_output=True, check=False,
+                )
+
+                content = self._run(work, "--arm", "content")
+                provenance = self._run(work, "--arm", "provenance")
+
+                self.assertEqual(
+                    content.returncode, 0,
+                    "a stale STAMP must not read as a content regression:\n"
+                    + content.stdout + content.stderr,
+                )
+                self.assertEqual(
+                    provenance.returncode, 1,
+                    "a stale stamp must fail the provenance arm:\n"
+                    + provenance.stdout + provenance.stderr,
+                )
+                self.assertIn(
+                    "STALE STAMP", provenance.stderr,
+                    "the toil failure must SAY it is a stale stamp, not a regression",
+                )
+            finally:
+                subprocess.run(
+                    ["git", "worktree", "remove", "--force", str(work)],
+                    cwd=root, capture_output=True, check=False,
+                )
+
+    def test_a_disagreeing_page_fails_content_and_NOT_provenance(self):
+        # The converse, and the reason the split is safe: a real mismatch still
+        # blocks, under the name that means "an outcome moved".
+        root = pathlib.Path(REPORT.__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            work = pathlib.Path(tmp) / "repo"
+            subprocess.run(
+                ["git", "worktree", "add", "--detach", str(work), "HEAD"],
+                cwd=root, capture_output=True, check=False,
+            )
+            try:
+                page = work / "docs/book/src/benchmarks/conformance.md"
+                if not page.is_file():
+                    self.skipTest("page unavailable")
+                # Provenance BEFORE the sabotage, so the claim is about what
+                # the page edit CHANGES rather than about this branch happening
+                # to have fresh stamps. An absolute `== 0` passes only while the
+                # branch's ledgers are current, which on a src-touching PR they
+                # are not — so it would fail for a reason that has nothing to do
+                # with what is being tested.
+                before = self._run(work, "--arm", "provenance").returncode
+                page.write_text(page.read_text() + "\n<!-- disagreement -->\n")
+                content = self._run(work, "--arm", "content")
+                provenance = self._run(work, "--arm", "provenance")
+
+                self.assertEqual(
+                    content.returncode, 1,
+                    "a disagreeing page must still BLOCK on the content arm",
+                )
+                self.assertEqual(
+                    provenance.returncode, before,
+                    "a disagreeing page must not change the provenance verdict:\n"
+                    + provenance.stdout + provenance.stderr,
+                )
+            finally:
+                subprocess.run(
+                    ["git", "worktree", "remove", "--force", str(work)],
+                    cwd=root, capture_output=True, check=False,
+                )

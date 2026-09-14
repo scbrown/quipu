@@ -704,6 +704,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="do not write; exit 1 if the committed files differ from the ledgers",
     )
+    parser.add_argument(
+        "--arm",
+        choices=("both", "content", "provenance"),
+        default="both",
+        help="which question to answer (aegis-fn3hdn). `content` asks whether the "
+             "published page and badges agree with the ledgers — a REGRESSION, and "
+             "always a real defect. `provenance` asks whether the ledgers were "
+             "derived from the code they ship beside — routine TOIL whose remedy is "
+             "one re-derive. Both block, but they are different failures and CI runs "
+             "them as separately-named checks so a reader can tell which they have "
+             "without opening the log. `both` (default) preserves the original "
+             "single-command behaviour for humans and for any existing caller.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -715,7 +728,7 @@ def main(argv: list[str] | None = None) -> int:
     files = artifacts(data, args.docs_dir)
 
     if args.check:
-        stale = [
+        stale = [] if args.arm == "provenance" else [
             path
             for path, content in sorted(files.items())
             if not path.is_file() or path.read_text() != content
@@ -737,6 +750,12 @@ def main(argv: list[str] | None = None) -> int:
         # refinement: the two arms answer different questions, so a bare
         # "provenance ok" would mean two things and a reader could not tell
         # which guarantee they were given.
+        if args.arm == "content":
+            print(
+                f"conformance_report: {len(files)} published artifact(s) match the "
+                "ledgers (CONTENT arm only — provenance is a separate check)"
+            )
+            return 0
         base = None
         if args.pr_base:
             base = args.pr_base if "/" in args.pr_base else f"origin/{args.pr_base}"
@@ -753,8 +772,23 @@ def main(argv: list[str] | None = None) -> int:
             for message in messages:
                 print(f"  {message}", file=sys.stderr)
             if code == 1:
+                # Say plainly what this is. A stale STAMP is not a conformance
+                # regression, and reading it as one is the actual cost of this
+                # gate (aegis-fn3hdn): three quipu PRs in one day sat red here
+                # looking like broken conformance while every re-derive changed
+                # nothing but duration_ms and the stamps. The content arm is the
+                # one that fails when an OUTCOME moves; it is a separate check
+                # and it is green, or you would be reading its name instead.
                 print(
-                    "Re-derive on this HEAD: gh workflow run conformance.yml --ref <branch>",
+                    "This is a STALE STAMP, not a conformance regression: the "
+                    "ledgers' outcomes are not in question here, only the revision "
+                    "they name. The content arm answers that and is a separate "
+                    "check.",
+                    file=sys.stderr,
+                )
+                print(
+                    "Remedy, one command: gh workflow run conformance.yml --ref <branch>"
+                    " — then commit the artifact it produces.",
                     file=sys.stderr,
                 )
             return code
