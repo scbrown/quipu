@@ -1,0 +1,191 @@
+{
+  "emitted": [
+    {
+      "bindings": {},
+      "name": "C1",
+      "template": "C1.txt",
+      "unbound": true
+    },
+    {
+      "bindings": {},
+      "name": "C2",
+      "template": "C2.txt",
+      "unbound": true
+    },
+    {
+      "bindings": {},
+      "name": "C3",
+      "template": "C3.txt",
+      "unbound": true
+    },
+    {
+      "bindings": {
+        "v1": "http://db.uwaterloo.ca/~galuc/wsdbm/Topic69"
+      },
+      "name": "F1",
+      "template": "F1.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v8": "http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre57"
+      },
+      "name": "F2",
+      "template": "F2.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v3": "http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre65"
+      },
+      "name": "F3",
+      "template": "F3.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v3": "http://db.uwaterloo.ca/~galuc/wsdbm/Topic107"
+      },
+      "name": "F4",
+      "template": "F4.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v2": "http://db.uwaterloo.ca/~galuc/wsdbm/Retailer20"
+      },
+      "name": "F5",
+      "template": "F5.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v1": "http://db.uwaterloo.ca/~galuc/wsdbm/Website94"
+      },
+      "name": "L1",
+      "template": "L1.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v0": "http://db.uwaterloo.ca/~galuc/wsdbm/City215"
+      },
+      "name": "L2",
+      "template": "L2.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v2": "http://db.uwaterloo.ca/~galuc/wsdbm/Website321"
+      },
+      "name": "L3",
+      "template": "L3.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v1": "http://db.uwaterloo.ca/~galuc/wsdbm/Topic191"
+      },
+      "name": "L4",
+      "template": "L4.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v2": "http://db.uwaterloo.ca/~galuc/wsdbm/City95"
+      },
+      "name": "L5",
+      "template": "L5.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v2": "http://db.uwaterloo.ca/~galuc/wsdbm/Retailer81"
+      },
+      "name": "S1",
+      "template": "S1.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v2": "http://db.uwaterloo.ca/~galuc/wsdbm/Country17"
+      },
+      "name": "S2",
+      "template": "S2.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v1": "http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory2"
+      },
+      "name": "S3",
+      "template": "S3.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v1": "http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup5"
+      },
+      "name": "S4",
+      "template": "S4.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v1": "http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory4"
+      },
+      "name": "S5",
+      "template": "S5.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v3": "http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre18"
+      },
+      "name": "S6",
+      "template": "S6.txt",
+      "unbound": false
+    },
+    {
+      "bindings": {
+        "v3": "http://db.uwaterloo.ca/~galuc/wsdbm/User844"
+      },
+      "name": "S7",
+      "template": "S7.txt",
+      "unbound": false
+    }
+  ],
+  "graph": "http://quipu.invalid/watdiv/1M",
+  "namespaces": {
+    "dc": "http://purl.org/dc/terms/",
+    "foaf": "http://xmlns.com/foaf/",
+    "gn": "http://www.geonames.org/ontology#",
+    "gr": "http://purl.org/goodrelations/",
+    "mo": "http://purl.org/ontology/mo/",
+    "og": "http://ogp.me/ns#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "rev": "http://purl.org/stuff/rev#",
+    "sorg": "http://schema.org/",
+    "wsdbm": "http://db.uwaterloo.ca/~galuc/wsdbm/"
+  },
+  "not_run": {},
+  "per_template": 1,
+  "pool_sizes": {
+    "AgeGroup": 9,
+    "City": 240,
+    "Country": 25,
+    "ProductCategory": 15,
+    "Retailer": 120,
+    "SubGenre": 145,
+    "Topic": 250,
+    "User": 10000,
+    "Website": 500
+  },
+  "seed": 0,
+  "slice": {
+    "lines": 1091718,
+    "path": "$ARTIFACTS//watdiv.1M.generated.nt",
+    "sha256": "c158998c66e11b33bc56cf7fa3cbc9e69c1c36bf9bdd1bab447d8a64e2d8da75"
+  }
+}

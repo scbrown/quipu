@@ -1,0 +1,52 @@
+{
+  "header": {
+    "validity": "CONTROL-INVALID",
+    "conditions": [
+      "root disk 94% at initial gate, 96% during run (peer <=80% fails)",
+      "host swap occupied/full",
+      "shared host with heavy co-tenants; local quality gate also overlapped part of this diagnostic",
+      "no ten-minute thermal/frequency admission; inspect raw temperatures"
+    ],
+    "scope": "raw diagnostic only; no ranking or admission-green claim",
+    "cpu_quota": "200%",
+    "memory_max": "6G",
+    "memory_swap_max": 0,
+    "os_cache": "not flushed",
+    "query_rounds": "one serial warmup and one measured homogeneous wave per template",
+    "server_timeout_ms": 30000,
+    "client_timeout_s": 40,
+    "read_pool_size": 4,
+    "memory_scope": "RSS/PSS is server or ingest PID only; cgroup includes Python monitor plus workload and charged file cache"
+  },
+  "exit_code": 0,
+  "wall_seconds": 26.78919016296277,
+  "pid": 542937,
+  "files": {
+    "base.db": 338128896
+  },
+  "counts": {
+    "facts_history": 1078688,
+    "facts_live": 1078688,
+    "by_graph": [
+      [
+        2,
+        1078688
+      ]
+    ],
+    "terms": 52955
+  },
+  "storage": "tmpfs",
+  "sample_file": "load-samples.json.gz",
+  "sample_count": 27,
+  "sampled_peak_kib": {
+    "VmRSS": 58404,
+    "VmHWM": 58404,
+    "Pss": 54470,
+    "RssAnon": 48092
+  },
+  "sampled_peak_temperature_millidegrees": 82000,
+  "host_swap_page_delta": {
+    "pswpin": 8,
+    "pswpout": 0
+  }
+}
