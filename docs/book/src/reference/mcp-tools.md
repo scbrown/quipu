@@ -108,6 +108,14 @@ vocabulary gate, the SHACL pass, or any transaction — nothing is written.
 `valid_to` is the transaction stamp, because "these stopped being true in March"
 is a different claim from "we replaced them tonight".
 
+When replacement deletes an entity, a reference from another producer preserves
+its label, but not its stale type membership. Code snapshot keys
+`code:<repo>:<partition>` share a producer boundary with `code:<repo>` and all
+partitions of that repository. Their sibling references do not preserve a deleted
+label: a promote replaces keys in separate transactions, so sibling references
+can still be stale. References from another repository or producer still preserve
+the label. Other snapshot keys retain exact-key ownership semantics.
+
 ### `quipu_cord`
 
 List entities with optional filtering.
