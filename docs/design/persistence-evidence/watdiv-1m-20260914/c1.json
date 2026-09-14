@@ -1,0 +1,1708 @@
+{
+  "header": {
+    "validity": "CONTROL-INVALID",
+    "conditions": [
+      "root disk 94% at initial gate, 96% during run (peer <=80% fails)",
+      "host swap occupied/full",
+      "shared host with heavy co-tenants; local quality gate also overlapped part of this diagnostic",
+      "no ten-minute thermal/frequency admission; inspect raw temperatures"
+    ],
+    "scope": "raw diagnostic only; no ranking or admission-green claim",
+    "cpu_quota": "200%",
+    "memory_max": "6G",
+    "memory_swap_max": 0,
+    "os_cache": "not flushed",
+    "query_rounds": "one serial warmup and one measured homogeneous wave per template",
+    "server_timeout_ms": 30000,
+    "client_timeout_s": 40,
+    "read_pool_size": 4,
+    "memory_scope": "RSS/PSS is server or ingest PID only; cgroup includes Python monitor plus workload and charged file cache"
+  },
+  "concurrency": 1,
+  "pid": 559493,
+  "queries": [
+    {
+      "template": "C1",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420475.09513,
+          "pid": 559493,
+          "VmHWM": "15808 kB",
+          "VmRSS": "15808 kB",
+          "RssAnon": "2188 kB",
+          "RssFile": "13076 kB",
+          "VmSwap": "0 kB",
+          "Threads": "4",
+          "Pss": "11304 kB",
+          "Pss_Anon": "2188 kB",
+          "Pss_File": "8956 kB",
+          "Private_Dirty": "2220 kB"
+        },
+        "status": 200,
+        "count": 5,
+        "truncated": false,
+        "multiset_sha256": "311dbcf2cb54d17ee5e571c3a565623010b85b2f574f7e925e5d5f265020da4c",
+        "response_bytes": 1169,
+        "wall_seconds": 2.7288487409823574,
+        "after": {
+          "time": 1789420477.823979,
+          "pid": 559493,
+          "VmHWM": "308628 kB",
+          "VmRSS": "308628 kB",
+          "RssAnon": "33400 kB",
+          "RssFile": "14844 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "304124 kB",
+          "Pss_Anon": "33400 kB",
+          "Pss_File": "10724 kB",
+          "Private_Dirty": "293272 kB"
+        }
+      }
+    },
+    {
+      "template": "C1",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420477.8312182,
+          "pid": 559493,
+          "VmHWM": "308628 kB",
+          "VmRSS": "308628 kB",
+          "RssAnon": "33400 kB",
+          "RssFile": "14844 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "304124 kB",
+          "Pss_Anon": "33400 kB",
+          "Pss_File": "10724 kB",
+          "Private_Dirty": "293272 kB"
+        },
+        "status": 200,
+        "count": 5,
+        "truncated": false,
+        "multiset_sha256": "311dbcf2cb54d17ee5e571c3a565623010b85b2f574f7e925e5d5f265020da4c",
+        "response_bytes": 1169,
+        "wall_seconds": 2.216899612976704,
+        "after": {
+          "time": 1789420480.0481186,
+          "pid": 559493,
+          "VmHWM": "309916 kB",
+          "VmRSS": "309664 kB",
+          "RssAnon": "34380 kB",
+          "RssFile": "14900 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "305161 kB",
+          "Pss_Anon": "34380 kB",
+          "Pss_File": "10781 kB",
+          "Private_Dirty": "294252 kB"
+        }
+      }
+    },
+    {
+      "template": "C2",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420480.0541992,
+          "pid": 559493,
+          "VmHWM": "309916 kB",
+          "VmRSS": "309664 kB",
+          "RssAnon": "34380 kB",
+          "RssFile": "14900 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "305161 kB",
+          "Pss_Anon": "34380 kB",
+          "Pss_File": "10781 kB",
+          "Private_Dirty": "294252 kB"
+        },
+        "status": "DNF",
+        "error": "HTTP Error 408: Request Timeout",
+        "wall_seconds": 30.00734014098998,
+        "after": {
+          "time": 1789420510.0615401,
+          "pid": 559493,
+          "VmHWM": "342760 kB",
+          "VmRSS": "342760 kB",
+          "RssAnon": "66516 kB",
+          "RssFile": "14900 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "338253 kB",
+          "Pss_Anon": "66516 kB",
+          "Pss_File": "10777 kB",
+          "Private_Dirty": "327348 kB"
+        }
+      }
+    },
+    {
+      "template": "C2",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420510.0696177,
+          "pid": 559493,
+          "VmHWM": "342760 kB",
+          "VmRSS": "342760 kB",
+          "RssAnon": "66516 kB",
+          "RssFile": "14900 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "338253 kB",
+          "Pss_Anon": "66516 kB",
+          "Pss_File": "10777 kB",
+          "Private_Dirty": "327348 kB"
+        },
+        "status": "DNF",
+        "error": "HTTP Error 408: Request Timeout",
+        "wall_seconds": 30.008678657992277,
+        "after": {
+          "time": 1789420540.0782967,
+          "pid": 559493,
+          "VmHWM": "377324 kB",
+          "VmRSS": "377324 kB",
+          "RssAnon": "101092 kB",
+          "RssFile": "14888 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "372816 kB",
+          "Pss_Anon": "101092 kB",
+          "Pss_File": "10764 kB",
+          "Private_Dirty": "361924 kB"
+        }
+      }
+    },
+    {
+      "template": "C3",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420540.0931144,
+          "pid": 559493,
+          "VmHWM": "377324 kB",
+          "VmRSS": "377324 kB",
+          "RssAnon": "101092 kB",
+          "RssFile": "14888 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "372816 kB",
+          "Pss_Anon": "101092 kB",
+          "Pss_File": "10764 kB",
+          "Private_Dirty": "361924 kB"
+        },
+        "status": "DNF",
+        "error": "HTTP Error 408: Request Timeout",
+        "wall_seconds": 30.02508350100834,
+        "after": {
+          "time": 1789420570.1181967,
+          "pid": 559493,
+          "VmHWM": "428424 kB",
+          "VmRSS": "428424 kB",
+          "RssAnon": "152192 kB",
+          "RssFile": "14888 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "423916 kB",
+          "Pss_Anon": "152192 kB",
+          "Pss_File": "10764 kB",
+          "Private_Dirty": "413024 kB"
+        }
+      }
+    },
+    {
+      "template": "C3",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420570.1306534,
+          "pid": 559493,
+          "VmHWM": "428424 kB",
+          "VmRSS": "428424 kB",
+          "RssAnon": "152192 kB",
+          "RssFile": "14888 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "423916 kB",
+          "Pss_Anon": "152192 kB",
+          "Pss_File": "10764 kB",
+          "Private_Dirty": "413024 kB"
+        },
+        "status": "DNF",
+        "error": "HTTP Error 408: Request Timeout",
+        "wall_seconds": 30.024621432996355,
+        "after": {
+          "time": 1789420600.1552753,
+          "pid": 559493,
+          "VmHWM": "456196 kB",
+          "VmRSS": "456196 kB",
+          "RssAnon": "181244 kB",
+          "RssFile": "13608 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "451691 kB",
+          "Pss_Anon": "181244 kB",
+          "Pss_File": "9487 kB",
+          "Private_Dirty": "442076 kB"
+        }
+      }
+    },
+    {
+      "template": "F1",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420600.2094615,
+          "pid": 559493,
+          "VmHWM": "456196 kB",
+          "VmRSS": "456196 kB",
+          "RssAnon": "181244 kB",
+          "RssFile": "13608 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "451693 kB",
+          "Pss_Anon": "181244 kB",
+          "Pss_File": "9489 kB",
+          "Private_Dirty": "442076 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 92,
+        "wall_seconds": 3.342877052957192,
+        "after": {
+          "time": 1789420603.552338,
+          "pid": 559493,
+          "VmHWM": "456264 kB",
+          "VmRSS": "456264 kB",
+          "RssAnon": "181248 kB",
+          "RssFile": "13608 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "451757 kB",
+          "Pss_Anon": "181248 kB",
+          "Pss_File": "9485 kB",
+          "Private_Dirty": "442144 kB"
+        }
+      }
+    },
+    {
+      "template": "F1",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420603.5603995,
+          "pid": 559493,
+          "VmHWM": "456264 kB",
+          "VmRSS": "456264 kB",
+          "RssAnon": "181248 kB",
+          "RssFile": "13608 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "451757 kB",
+          "Pss_Anon": "181248 kB",
+          "Pss_File": "9485 kB",
+          "Private_Dirty": "442144 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 92,
+        "wall_seconds": 2.0051830779993907,
+        "after": {
+          "time": 1789420605.5655835,
+          "pid": 559493,
+          "VmHWM": "456268 kB",
+          "VmRSS": "456268 kB",
+          "RssAnon": "181252 kB",
+          "RssFile": "13608 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "451762 kB",
+          "Pss_Anon": "181252 kB",
+          "Pss_File": "9486 kB",
+          "Private_Dirty": "442148 kB"
+        }
+      }
+    },
+    {
+      "template": "F2",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420605.5825305,
+          "pid": 559493,
+          "VmHWM": "456268 kB",
+          "VmRSS": "456268 kB",
+          "RssAnon": "181252 kB",
+          "RssFile": "13608 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "451762 kB",
+          "Pss_Anon": "181252 kB",
+          "Pss_File": "9486 kB",
+          "Private_Dirty": "442148 kB"
+        },
+        "status": 200,
+        "count": 2,
+        "truncated": false,
+        "multiset_sha256": "619e3514e3a78ed188e9506610480e129e0eff4cf7bdb8c6399e3dafd43c19e1",
+        "response_bytes": 1558,
+        "wall_seconds": 10.123985668004025,
+        "after": {
+          "time": 1789420615.706516,
+          "pid": 559493,
+          "VmHWM": "455908 kB",
+          "VmRSS": "455908 kB",
+          "RssAnon": "181256 kB",
+          "RssFile": "13244 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "451380 kB",
+          "Pss_Anon": "181256 kB",
+          "Pss_File": "9100 kB",
+          "Private_Dirty": "442152 kB"
+        }
+      }
+    },
+    {
+      "template": "F2",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420615.7121067,
+          "pid": 559493,
+          "VmHWM": "455908 kB",
+          "VmRSS": "455908 kB",
+          "RssAnon": "181256 kB",
+          "RssFile": "13244 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "451380 kB",
+          "Pss_Anon": "181256 kB",
+          "Pss_File": "9100 kB",
+          "Private_Dirty": "442152 kB"
+        },
+        "status": 200,
+        "count": 2,
+        "truncated": false,
+        "multiset_sha256": "619e3514e3a78ed188e9506610480e129e0eff4cf7bdb8c6399e3dafd43c19e1",
+        "response_bytes": 1558,
+        "wall_seconds": 15.809826520038769,
+        "after": {
+          "time": 1789420631.521934,
+          "pid": 559493,
+          "VmHWM": "454796 kB",
+          "VmRSS": "454796 kB",
+          "RssAnon": "181260 kB",
+          "RssFile": "12128 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "450293 kB",
+          "Pss_Anon": "181260 kB",
+          "Pss_File": "8009 kB",
+          "Private_Dirty": "442156 kB"
+        }
+      }
+    },
+    {
+      "template": "F3",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420631.5343642,
+          "pid": 559493,
+          "VmHWM": "454796 kB",
+          "VmRSS": "454796 kB",
+          "RssAnon": "181260 kB",
+          "RssFile": "12128 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "450293 kB",
+          "Pss_Anon": "181260 kB",
+          "Pss_File": "8009 kB",
+          "Private_Dirty": "442156 kB"
+        },
+        "status": "DNF",
+        "error": "HTTP Error 408: Request Timeout",
+        "wall_seconds": 30.070835034013726,
+        "after": {
+          "time": 1789420661.6051993,
+          "pid": 559493,
+          "VmHWM": "497864 kB",
+          "VmRSS": "497864 kB",
+          "RssAnon": "223176 kB",
+          "RssFile": "12128 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "493353 kB",
+          "Pss_Anon": "223176 kB",
+          "Pss_File": "8001 kB",
+          "Private_Dirty": "485224 kB"
+        }
+      }
+    },
+    {
+      "template": "F3",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420661.6185584,
+          "pid": 559493,
+          "VmHWM": "497864 kB",
+          "VmRSS": "497864 kB",
+          "RssAnon": "223176 kB",
+          "RssFile": "12128 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "493352 kB",
+          "Pss_Anon": "223176 kB",
+          "Pss_File": "8000 kB",
+          "Private_Dirty": "485224 kB"
+        },
+        "status": "DNF",
+        "error": "HTTP Error 408: Request Timeout",
+        "wall_seconds": 30.034848721988965,
+        "after": {
+          "time": 1789420691.6534076,
+          "pid": 559493,
+          "VmHWM": "506564 kB",
+          "VmRSS": "506564 kB",
+          "RssAnon": "232220 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502060 kB",
+          "Pss_Anon": "232220 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494268 kB"
+        }
+      }
+    },
+    {
+      "template": "F4",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420691.669487,
+          "pid": 559493,
+          "VmHWM": "506564 kB",
+          "VmRSS": "506564 kB",
+          "RssAnon": "232220 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502060 kB",
+          "Pss_Anon": "232220 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494268 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 107,
+        "wall_seconds": 0.503569865017198,
+        "after": {
+          "time": 1789420692.1730576,
+          "pid": 559493,
+          "VmHWM": "506568 kB",
+          "VmRSS": "506568 kB",
+          "RssAnon": "232224 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502064 kB",
+          "Pss_Anon": "232224 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494272 kB"
+        }
+      }
+    },
+    {
+      "template": "F4",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420692.18739,
+          "pid": 559493,
+          "VmHWM": "506568 kB",
+          "VmRSS": "506568 kB",
+          "RssAnon": "232224 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502064 kB",
+          "Pss_Anon": "232224 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494272 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 107,
+        "wall_seconds": 0.5130800429615192,
+        "after": {
+          "time": 1789420692.7004704,
+          "pid": 559493,
+          "VmHWM": "506572 kB",
+          "VmRSS": "506572 kB",
+          "RssAnon": "232228 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502068 kB",
+          "Pss_Anon": "232228 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494276 kB"
+        }
+      }
+    },
+    {
+      "template": "F5",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420692.7127247,
+          "pid": 559493,
+          "VmHWM": "506572 kB",
+          "VmRSS": "506572 kB",
+          "RssAnon": "232228 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502068 kB",
+          "Pss_Anon": "232228 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494276 kB"
+        },
+        "status": 200,
+        "count": 17,
+        "truncated": false,
+        "multiset_sha256": "e8d967a3f611419cd95a3c17a362c0c522ab1acd51616c92626904d1e24b56e4",
+        "response_bytes": 5469,
+        "wall_seconds": 2.5003049910301343,
+        "after": {
+          "time": 1789420695.2130299,
+          "pid": 559493,
+          "VmHWM": "506572 kB",
+          "VmRSS": "506572 kB",
+          "RssAnon": "232228 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502068 kB",
+          "Pss_Anon": "232228 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494276 kB"
+        }
+      }
+    },
+    {
+      "template": "F5",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420695.2262256,
+          "pid": 559493,
+          "VmHWM": "506572 kB",
+          "VmRSS": "506572 kB",
+          "RssAnon": "232228 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502068 kB",
+          "Pss_Anon": "232228 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494276 kB"
+        },
+        "status": 200,
+        "count": 17,
+        "truncated": false,
+        "multiset_sha256": "e8d967a3f611419cd95a3c17a362c0c522ab1acd51616c92626904d1e24b56e4",
+        "response_bytes": 5469,
+        "wall_seconds": 2.2100354689755477,
+        "after": {
+          "time": 1789420697.4362617,
+          "pid": 559493,
+          "VmHWM": "506576 kB",
+          "VmRSS": "506576 kB",
+          "RssAnon": "232232 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502072 kB",
+          "Pss_Anon": "232232 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494280 kB"
+        }
+      }
+    },
+    {
+      "template": "L1",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420697.4529457,
+          "pid": 559493,
+          "VmHWM": "506576 kB",
+          "VmRSS": "506576 kB",
+          "RssAnon": "232232 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502072 kB",
+          "Pss_Anon": "232232 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494280 kB"
+        },
+        "status": 200,
+        "count": 1,
+        "truncated": false,
+        "multiset_sha256": "a214a1c1dad6eee47b9d880f92295f0b0e36407a66e9d81f088130d7a8780395",
+        "response_bytes": 404,
+        "wall_seconds": 0.39239120500860736,
+        "after": {
+          "time": 1789420697.8453364,
+          "pid": 559493,
+          "VmHWM": "506576 kB",
+          "VmRSS": "506576 kB",
+          "RssAnon": "232232 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502072 kB",
+          "Pss_Anon": "232232 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494280 kB"
+        }
+      }
+    },
+    {
+      "template": "L1",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420697.853755,
+          "pid": 559493,
+          "VmHWM": "506576 kB",
+          "VmRSS": "506576 kB",
+          "RssAnon": "232232 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502072 kB",
+          "Pss_Anon": "232232 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494280 kB"
+        },
+        "status": 200,
+        "count": 1,
+        "truncated": false,
+        "multiset_sha256": "a214a1c1dad6eee47b9d880f92295f0b0e36407a66e9d81f088130d7a8780395",
+        "response_bytes": 404,
+        "wall_seconds": 0.3880873779999092,
+        "after": {
+          "time": 1789420698.2418425,
+          "pid": 559493,
+          "VmHWM": "506576 kB",
+          "VmRSS": "506576 kB",
+          "RssAnon": "232232 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502075 kB",
+          "Pss_Anon": "232232 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494280 kB"
+        }
+      }
+    },
+    {
+      "template": "L2",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420698.2512197,
+          "pid": 559493,
+          "VmHWM": "506576 kB",
+          "VmRSS": "506576 kB",
+          "RssAnon": "232232 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502075 kB",
+          "Pss_Anon": "232232 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494280 kB"
+        },
+        "status": 200,
+        "count": 3,
+        "truncated": false,
+        "multiset_sha256": "ca01376d978d86a9cb7c50d6fbc968de52171566226deca6547f02e104d7e286",
+        "response_bytes": 397,
+        "wall_seconds": 0.2839587830239907,
+        "after": {
+          "time": 1789420698.535178,
+          "pid": 559493,
+          "VmHWM": "506580 kB",
+          "VmRSS": "506580 kB",
+          "RssAnon": "232236 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502079 kB",
+          "Pss_Anon": "232236 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494284 kB"
+        }
+      }
+    },
+    {
+      "template": "L2",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420698.5453806,
+          "pid": 559493,
+          "VmHWM": "506580 kB",
+          "VmRSS": "506580 kB",
+          "RssAnon": "232236 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502079 kB",
+          "Pss_Anon": "232236 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494284 kB"
+        },
+        "status": 200,
+        "count": 3,
+        "truncated": false,
+        "multiset_sha256": "ca01376d978d86a9cb7c50d6fbc968de52171566226deca6547f02e104d7e286",
+        "response_bytes": 397,
+        "wall_seconds": 0.3346919629839249,
+        "after": {
+          "time": 1789420698.8800726,
+          "pid": 559493,
+          "VmHWM": "506584 kB",
+          "VmRSS": "506584 kB",
+          "RssAnon": "232240 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502083 kB",
+          "Pss_Anon": "232240 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494288 kB"
+        }
+      }
+    },
+    {
+      "template": "L3",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420698.8914719,
+          "pid": 559493,
+          "VmHWM": "506584 kB",
+          "VmRSS": "506584 kB",
+          "RssAnon": "232240 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502083 kB",
+          "Pss_Anon": "232240 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494288 kB"
+        },
+        "status": 200,
+        "count": 35,
+        "truncated": false,
+        "multiset_sha256": "18e1003decf37263eb714944ce3f06683178203cbc5375f331405794897e067f",
+        "response_bytes": 3842,
+        "wall_seconds": 0.739613419980742,
+        "after": {
+          "time": 1789420699.631085,
+          "pid": 559493,
+          "VmHWM": "506588 kB",
+          "VmRSS": "506588 kB",
+          "RssAnon": "232244 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502086 kB",
+          "Pss_Anon": "232244 kB",
+          "Pss_File": "7666 kB",
+          "Private_Dirty": "494292 kB"
+        }
+      }
+    },
+    {
+      "template": "L3",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420699.6386259,
+          "pid": 559493,
+          "VmHWM": "506588 kB",
+          "VmRSS": "506588 kB",
+          "RssAnon": "232244 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502086 kB",
+          "Pss_Anon": "232244 kB",
+          "Pss_File": "7666 kB",
+          "Private_Dirty": "494292 kB"
+        },
+        "status": 200,
+        "count": 35,
+        "truncated": false,
+        "multiset_sha256": "18e1003decf37263eb714944ce3f06683178203cbc5375f331405794897e067f",
+        "response_bytes": 3842,
+        "wall_seconds": 0.9154685239773244,
+        "after": {
+          "time": 1789420700.5540948,
+          "pid": 559493,
+          "VmHWM": "506588 kB",
+          "VmRSS": "506588 kB",
+          "RssAnon": "232244 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502085 kB",
+          "Pss_Anon": "232244 kB",
+          "Pss_File": "7665 kB",
+          "Private_Dirty": "494292 kB"
+        }
+      }
+    },
+    {
+      "template": "L4",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420700.5703056,
+          "pid": 559493,
+          "VmHWM": "506588 kB",
+          "VmRSS": "506588 kB",
+          "RssAnon": "232244 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502085 kB",
+          "Pss_Anon": "232244 kB",
+          "Pss_File": "7665 kB",
+          "Private_Dirty": "494292 kB"
+        },
+        "status": 200,
+        "count": 5,
+        "truncated": false,
+        "multiset_sha256": "f97d9f77cd5ef5110e357f5479ba64a90c1c15f26761cd732f7dad232c1ce4ec",
+        "response_bytes": 944,
+        "wall_seconds": 0.2571270809858106,
+        "after": {
+          "time": 1789420700.8274329,
+          "pid": 559493,
+          "VmHWM": "506588 kB",
+          "VmRSS": "506588 kB",
+          "RssAnon": "232244 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502085 kB",
+          "Pss_Anon": "232244 kB",
+          "Pss_File": "7665 kB",
+          "Private_Dirty": "494292 kB"
+        }
+      }
+    },
+    {
+      "template": "L4",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420700.841357,
+          "pid": 559493,
+          "VmHWM": "506588 kB",
+          "VmRSS": "506588 kB",
+          "RssAnon": "232244 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502085 kB",
+          "Pss_Anon": "232244 kB",
+          "Pss_File": "7665 kB",
+          "Private_Dirty": "494292 kB"
+        },
+        "status": 200,
+        "count": 5,
+        "truncated": false,
+        "multiset_sha256": "f97d9f77cd5ef5110e357f5479ba64a90c1c15f26761cd732f7dad232c1ce4ec",
+        "response_bytes": 944,
+        "wall_seconds": 0.289250842994079,
+        "after": {
+          "time": 1789420701.1306076,
+          "pid": 559493,
+          "VmHWM": "506596 kB",
+          "VmRSS": "506596 kB",
+          "RssAnon": "232252 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502093 kB",
+          "Pss_Anon": "232252 kB",
+          "Pss_File": "7665 kB",
+          "Private_Dirty": "494300 kB"
+        }
+      }
+    },
+    {
+      "template": "L5",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420701.1468391,
+          "pid": 559493,
+          "VmHWM": "506596 kB",
+          "VmRSS": "506596 kB",
+          "RssAnon": "232252 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502090 kB",
+          "Pss_Anon": "232252 kB",
+          "Pss_File": "7662 kB",
+          "Private_Dirty": "494300 kB"
+        },
+        "status": 200,
+        "count": 33,
+        "truncated": false,
+        "multiset_sha256": "9246d3a1764a647a930caafcc12323e67ca7261351bc5d4f3ad36b3bfeefb833",
+        "response_bytes": 8160,
+        "wall_seconds": 1.3074481069925241,
+        "after": {
+          "time": 1789420702.454287,
+          "pid": 559493,
+          "VmHWM": "506604 kB",
+          "VmRSS": "506604 kB",
+          "RssAnon": "232260 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502099 kB",
+          "Pss_Anon": "232260 kB",
+          "Pss_File": "7663 kB",
+          "Private_Dirty": "494308 kB"
+        }
+      }
+    },
+    {
+      "template": "L5",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420702.4698274,
+          "pid": 559493,
+          "VmHWM": "506604 kB",
+          "VmRSS": "506604 kB",
+          "RssAnon": "232260 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502099 kB",
+          "Pss_Anon": "232260 kB",
+          "Pss_File": "7663 kB",
+          "Private_Dirty": "494308 kB"
+        },
+        "status": 200,
+        "count": 33,
+        "truncated": false,
+        "multiset_sha256": "9246d3a1764a647a930caafcc12323e67ca7261351bc5d4f3ad36b3bfeefb833",
+        "response_bytes": 8160,
+        "wall_seconds": 0.7979226160096005,
+        "after": {
+          "time": 1789420703.26775,
+          "pid": 559493,
+          "VmHWM": "506604 kB",
+          "VmRSS": "506604 kB",
+          "RssAnon": "232260 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502104 kB",
+          "Pss_Anon": "232260 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "494308 kB"
+        }
+      }
+    },
+    {
+      "template": "S1",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420703.2807515,
+          "pid": 559493,
+          "VmHWM": "506604 kB",
+          "VmRSS": "506604 kB",
+          "RssAnon": "232260 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502104 kB",
+          "Pss_Anon": "232260 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "494308 kB"
+        },
+        "status": 200,
+        "count": 5,
+        "truncated": false,
+        "multiset_sha256": "f27505d542b51ecdb1b8dd5996b1106a350dfb7cbbc53c4341ef5e3266568dc7",
+        "response_bytes": 1372,
+        "wall_seconds": 8.144627772970125,
+        "after": {
+          "time": 1789420711.4253788,
+          "pid": 559493,
+          "VmHWM": "506608 kB",
+          "VmRSS": "506608 kB",
+          "RssAnon": "232264 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502104 kB",
+          "Pss_Anon": "232264 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494312 kB"
+        }
+      }
+    },
+    {
+      "template": "S1",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420711.4322891,
+          "pid": 559493,
+          "VmHWM": "506608 kB",
+          "VmRSS": "506608 kB",
+          "RssAnon": "232264 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502104 kB",
+          "Pss_Anon": "232264 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494312 kB"
+        },
+        "status": 200,
+        "count": 5,
+        "truncated": false,
+        "multiset_sha256": "f27505d542b51ecdb1b8dd5996b1106a350dfb7cbbc53c4341ef5e3266568dc7",
+        "response_bytes": 1372,
+        "wall_seconds": 6.358941817015875,
+        "after": {
+          "time": 1789420717.7912312,
+          "pid": 559493,
+          "VmHWM": "506612 kB",
+          "VmRSS": "506612 kB",
+          "RssAnon": "232268 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502108 kB",
+          "Pss_Anon": "232268 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494316 kB"
+        }
+      }
+    },
+    {
+      "template": "S2",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420717.804549,
+          "pid": 559493,
+          "VmHWM": "506612 kB",
+          "VmRSS": "506612 kB",
+          "RssAnon": "232268 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502108 kB",
+          "Pss_Anon": "232268 kB",
+          "Pss_File": "7664 kB",
+          "Private_Dirty": "494316 kB"
+        },
+        "status": 200,
+        "count": 2,
+        "truncated": false,
+        "multiset_sha256": "e05b1912bc260b588fc826b04ba3c5a8977222ea3bc0e88fdb6bbddf4b3c8287",
+        "response_bytes": 389,
+        "wall_seconds": 0.5755122729460709,
+        "after": {
+          "time": 1789420718.3800604,
+          "pid": 559493,
+          "VmHWM": "506612 kB",
+          "VmRSS": "506612 kB",
+          "RssAnon": "232268 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502111 kB",
+          "Pss_Anon": "232268 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494316 kB"
+        }
+      }
+    },
+    {
+      "template": "S2",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420718.3910542,
+          "pid": 559493,
+          "VmHWM": "506612 kB",
+          "VmRSS": "506612 kB",
+          "RssAnon": "232268 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502112 kB",
+          "Pss_Anon": "232268 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "494316 kB"
+        },
+        "status": 200,
+        "count": 2,
+        "truncated": false,
+        "multiset_sha256": "e05b1912bc260b588fc826b04ba3c5a8977222ea3bc0e88fdb6bbddf4b3c8287",
+        "response_bytes": 389,
+        "wall_seconds": 0.5527831310173497,
+        "after": {
+          "time": 1789420718.9438374,
+          "pid": 559493,
+          "VmHWM": "506616 kB",
+          "VmRSS": "506616 kB",
+          "RssAnon": "232272 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502115 kB",
+          "Pss_Anon": "232272 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494320 kB"
+        }
+      }
+    },
+    {
+      "template": "S3",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420718.9545918,
+          "pid": 559493,
+          "VmHWM": "506616 kB",
+          "VmRSS": "506616 kB",
+          "RssAnon": "232272 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502115 kB",
+          "Pss_Anon": "232272 kB",
+          "Pss_File": "7667 kB",
+          "Private_Dirty": "494320 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 87,
+        "wall_seconds": 0.3177243520040065,
+        "after": {
+          "time": 1789420719.2723165,
+          "pid": 559493,
+          "VmHWM": "506616 kB",
+          "VmRSS": "506616 kB",
+          "RssAnon": "232272 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502116 kB",
+          "Pss_Anon": "232272 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "494320 kB"
+        }
+      }
+    },
+    {
+      "template": "S3",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420719.2828262,
+          "pid": 559493,
+          "VmHWM": "506616 kB",
+          "VmRSS": "506616 kB",
+          "RssAnon": "232272 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "502116 kB",
+          "Pss_Anon": "232272 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "494320 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 87,
+        "wall_seconds": 0.20695390203036368,
+        "after": {
+          "time": 1789420719.4897816,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494036 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "486240 kB"
+        }
+      }
+    },
+    {
+      "template": "S4",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420719.503092,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494036 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "486240 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 82,
+        "wall_seconds": 11.839570433017798,
+        "after": {
+          "time": 1789420731.3426628,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494039 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7671 kB",
+          "Private_Dirty": "486240 kB"
+        }
+      }
+    },
+    {
+      "template": "S4",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420731.355454,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494039 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7671 kB",
+          "Private_Dirty": "486240 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 82,
+        "wall_seconds": 10.098155037034303,
+        "after": {
+          "time": 1789420741.453609,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494034 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7666 kB",
+          "Private_Dirty": "486240 kB"
+        }
+      }
+    },
+    {
+      "template": "S5",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420741.4663696,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494034 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7666 kB",
+          "Private_Dirty": "486240 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 82,
+        "wall_seconds": 0.4359666700474918,
+        "after": {
+          "time": 1789420741.9023356,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494036 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "486240 kB"
+        }
+      }
+    },
+    {
+      "template": "S5",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420741.9109514,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494036 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "486240 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 82,
+        "wall_seconds": 0.3015939359902404,
+        "after": {
+          "time": 1789420742.212546,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494036 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "486240 kB"
+        }
+      }
+    },
+    {
+      "template": "S6",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420742.2259915,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494036 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "486240 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 82,
+        "wall_seconds": 0.9042631270131096,
+        "after": {
+          "time": 1789420743.1302545,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494036 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "486240 kB"
+        }
+      }
+    },
+    {
+      "template": "S6",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420743.1401403,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494036 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7668 kB",
+          "Private_Dirty": "486240 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 82,
+        "wall_seconds": 0.7420405519660562,
+        "after": {
+          "time": 1789420743.8821814,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494037 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7669 kB",
+          "Private_Dirty": "486240 kB"
+        }
+      }
+    },
+    {
+      "template": "S7",
+      "phase": "warm",
+      "receipt": {
+        "before": {
+          "time": 1789420743.8941267,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498536 kB",
+          "RssAnon": "224192 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494037 kB",
+          "Pss_Anon": "224192 kB",
+          "Pss_File": "7669 kB",
+          "Private_Dirty": "486240 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 82,
+        "wall_seconds": 12.852392227970995,
+        "after": {
+          "time": 1789420756.7465193,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498540 kB",
+          "RssAnon": "224196 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494041 kB",
+          "Pss_Anon": "224196 kB",
+          "Pss_File": "7669 kB",
+          "Private_Dirty": "486244 kB"
+        }
+      }
+    },
+    {
+      "template": "S7",
+      "phase": "measured",
+      "receipt": {
+        "before": {
+          "time": 1789420756.7562816,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498540 kB",
+          "RssAnon": "224196 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494041 kB",
+          "Pss_Anon": "224196 kB",
+          "Pss_File": "7669 kB",
+          "Private_Dirty": "486244 kB"
+        },
+        "status": 200,
+        "count": 0,
+        "truncated": false,
+        "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "response_bytes": 82,
+        "wall_seconds": 11.901539745973423,
+        "after": {
+          "time": 1789420768.6578214,
+          "pid": 559493,
+          "VmHWM": "505624 kB",
+          "VmRSS": "498540 kB",
+          "RssAnon": "224196 kB",
+          "RssFile": "11784 kB",
+          "VmSwap": "0 kB",
+          "Threads": "5",
+          "Pss": "494042 kB",
+          "Pss_Anon": "224196 kB",
+          "Pss_File": "7670 kB",
+          "Private_Dirty": "486244 kB"
+        }
+      }
+    }
+  ],
+  "ready": {
+    "before": {
+      "time": 1789420474.9386594,
+      "pid": 559493,
+      "VmHWM": "14876 kB",
+      "VmRSS": "14876 kB",
+      "RssAnon": "2012 kB",
+      "RssFile": "12320 kB",
+      "VmSwap": "0 kB",
+      "Threads": "4",
+      "Pss": "10372 kB",
+      "Pss_Anon": "2012 kB",
+      "Pss_File": "8200 kB",
+      "Private_Dirty": "2044 kB"
+    },
+    "status": 200,
+    "count": 0,
+    "truncated": false,
+    "multiset_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "response_bytes": 239,
+    "result": {
+      "features": {
+        "full": true,
+        "lancedb": false,
+        "onnx": true,
+        "owl": true,
+        "oxicompare": false,
+        "reactive-reasoner": true,
+        "remote": true,
+        "server": true,
+        "shacl": true
+      },
+      "git_dirty": false,
+      "git_sha": "62e57bf05045825ffbee60f39933e6041bdf33ff",
+      "version": "0.6.0"
+    },
+    "wall_seconds": 0.1384686710080132,
+    "after": {
+      "time": 1789420475.0771282,
+      "pid": 559493,
+      "VmHWM": "15808 kB",
+      "VmRSS": "15808 kB",
+      "RssAnon": "2188 kB",
+      "RssFile": "13076 kB",
+      "VmSwap": "0 kB",
+      "Threads": "4",
+      "Pss": "11303 kB",
+      "Pss_Anon": "2188 kB",
+      "Pss_File": "8955 kB",
+      "Private_Dirty": "2220 kB"
+    }
+  },
+  "ready_idle_memory": {
+    "time": 1789420475.077717,
+    "pid": 559493,
+    "VmHWM": "15808 kB",
+    "VmRSS": "15808 kB",
+    "RssAnon": "2188 kB",
+    "RssFile": "13076 kB",
+    "VmSwap": "0 kB",
+    "Threads": "4",
+    "Pss": "11303 kB",
+    "Pss_Anon": "2188 kB",
+    "Pss_File": "8955 kB",
+    "Private_Dirty": "2220 kB"
+  },
+  "tail_idle_memory": {
+    "time": 1789420768.6683753,
+    "pid": 559493,
+    "VmHWM": "505624 kB",
+    "VmRSS": "498540 kB",
+    "RssAnon": "224196 kB",
+    "RssFile": "11784 kB",
+    "VmSwap": "0 kB",
+    "Threads": "5",
+    "Pss": "494042 kB",
+    "Pss_Anon": "224196 kB",
+    "Pss_File": "7670 kB",
+    "Private_Dirty": "486244 kB"
+  },
+  "exit_code": -15,
+  "storage": "tmpfs",
+  "sample_file": "c1-samples.json.gz",
+  "sample_count": 288,
+  "sampled_peak_kib": {
+    "VmRSS": 506848,
+    "VmHWM": 506848,
+    "Pss": 502343,
+    "RssAnon": 232272
+  },
+  "sampled_peak_temperature_millidegrees": 82000,
+  "host_swap_page_delta": {
+    "pswpin": 22491,
+    "pswpout": 74059
+  },
+  "store_files_after_stop": {
+    "store.db-shm": 32768,
+    "store.db-wal": 0,
+    "store.db": 338128896
+  },
+  "query_memory_note": "before/after memory and process HWM are aggregate same-PID measurements; concurrent requests overlap, so values are not private allocation per request"
+}

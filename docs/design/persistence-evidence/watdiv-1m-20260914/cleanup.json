@@ -1,0 +1,49 @@
+{
+  "validity": "CONTROL-INVALID",
+  "workload_pids_absent": true,
+  "removed": [
+    {
+      "path": "tmpfs/load/base.db",
+      "bytes": 338128896
+    },
+    {
+      "path": "tmpfs/c1/store.db",
+      "bytes": 338128896
+    },
+    {
+      "path": "tmpfs/c1/store.db-wal",
+      "bytes": 0
+    },
+    {
+      "path": "tmpfs/c1/store.db-shm",
+      "bytes": 32768
+    },
+    {
+      "path": "tmpfs/c4/store.db",
+      "bytes": 338128896
+    },
+    {
+      "path": "tmpfs/c4/store.db-wal",
+      "bytes": 0
+    },
+    {
+      "path": "tmpfs/c4/store.db-shm",
+      "bytes": 32768
+    },
+    {
+      "path": "disk/load/base.db",
+      "bytes": 26144768
+    },
+    {
+      "path": "disk/load/base.db-wal",
+      "bytes": 25964272
+    },
+    {
+      "path": "disk/load/base.db-shm",
+      "bytes": 32768
+    }
+  ],
+  "bytes_removed": 1066594032,
+  "remaining_databases": 0,
+  "retained": "small harnesses/receipts and pinned source artifact; no database retained"
+}
