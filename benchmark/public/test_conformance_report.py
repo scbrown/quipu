@@ -619,3 +619,77 @@ class ArmSeparationTest(unittest.TestCase):
                     ["git", "worktree", "remove", "--force", str(work)],
                     cwd=root, capture_output=True, check=False,
                 )
+
+
+class RemedyNamesEveryStepTest(unittest.TestCase):
+    """The printed remedy must name ALL THREE steps (aegis-j9zw4u).
+
+    The dispatch alone does NOT clear the check: conformance.yml is
+    `contents: read` with upload-artifact as its only sink, so it produces JSON
+    that nothing is permitted to write back. A remedy naming only the dispatch
+    reads as complete, sends the follower to watch a green run, and leaves them
+    at a still-red check with no indication which half failed — and because the
+    gate itself printed it at the moment of failure, it is the instruction that
+    gets trusted over any doc.
+
+    Caught on PR #202 only because gennaro declined to assume the dispatch had
+    cleared the check. This test is so that it cannot silently regress to one
+    step again.
+    """
+
+    def test_the_remedy_names_the_dispatch_the_artifact_and_the_commit_target(self):
+        # Rendered through main() so this asserts what an operator actually
+        # sees, not what a helper returns.
+        import io
+        import contextlib
+
+        # A REAL older commit, not a fabricated sha. `"0" * 40` is not in the
+        # clone, so the gate returns UNVERIFIED (2) rather than DRIFT (1) and
+        # never prints a remedy at all — a different branch, and one that makes
+        # every assertion below vacuous. My first draft of this test did exactly
+        # that, which is the same mistake the sabotage arms on aegis-fn3hdn hit.
+        older = subprocess.run(
+            ["git", "rev-parse", "HEAD~3"],
+            cwd=pathlib.Path(REPORT.__file__).resolve().parents[2],
+            capture_output=True, text=True, check=False,
+        ).stdout.strip()
+        if len(older) != 40:
+            self.skipTest("no HEAD~3 in this clone")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            results = pathlib.Path(tmp) / "results"
+            results.mkdir()
+            for ledger in RESULTS.glob("*.json"):
+                data = json.loads(ledger.read_text())
+                for key in list(data):
+                    if key.endswith("quipu_revision"):
+                        data[key] = older
+                (results / ledger.name).write_text(json.dumps(data))
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                REPORT.main(
+                    ["--results-dir", str(results), "--docs-dir", str(DOCS),
+                     "--check", "--arm", "provenance"]
+                )
+            text = err.getvalue()
+
+        # ANTI-VACUITY, and this one has to be exact: the gate must have taken
+        # the DRIFT branch. An earlier version of this assertion tested
+        # `text.lower() + "ledger"`, which contains "ledger" unconditionally and
+        # so could never fail — a vacuous guard in the test whose whole job is
+        # catching a vacuous remedy.
+        self.assertIn(
+            "was NOT derived from the code it ships with", text,
+            f"the gate must have taken the DRIFT branch, got:\n{text}",
+        )
+
+        for needle, why in (
+            ("gh workflow run conformance.yml", "step 1: the dispatch"),
+            ("conformance-ledgers-", "step 2: the ARTIFACT to download, by name"),
+            ("benchmark/public/results/", "step 3: WHERE the files must be committed"),
+        ):
+            self.assertIn(
+                needle, text,
+                f"the remedy must name {why} — a partial remedy is the defect "
+                f"aegis-j9zw4u records. Got:\n{text}",
+            )
