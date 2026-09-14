@@ -81,6 +81,7 @@ h3 {
   <h1><span>Q</span>UIPU — Datalinks</h1>
   <span class="sub" id="counts"></span>
   <span class="right">
+    <a href="./demo.qpack.tar.gz">Download qpack</a>
     <a href="../">Documentation</a>
     <a href="https://github.com/scbrown/quipu">GitHub</a>
   </span>
@@ -105,13 +106,14 @@ h3 {
       importance. Everything it cannot reach goes grey.</p>
       <p>The graph is Alpha Centauri's technology tree, as
       <a href="https://github.com/scbrown/NeuralAmplifier">Neural Amplifier</a>
-      stores it in Quipu.</p>
+      stores it in Quipu. This snapshot loads from a verified qpack in your browser.</p>
     </div>
   </aside>
 </main>
 
 <script type="module">
 import { Datalinks } from './datalinks.js';
+import { loadDemo } from './load-demo.js';
 
 const DAMPING = 0.85, MAX_ITERS = 100, TOLERANCE = 1e-6;
 const esc = s => String(s).replace(/[&<>"']/g, c =>
@@ -218,7 +220,7 @@ function renderEntry(node) {
 (async function main() {
   const stage = document.getElementById('stage');
   try {
-    const payload = await (await fetch('./graph.json')).json();
+    const payload = await loadDemo();
     const graph = payload.graph;
 
     dl = new Datalinks(stage, { onSelect: renderEntry });

@@ -211,8 +211,8 @@ the tarball directly.
 | `src/server/base.rs` | The two asset handlers |
 | `src/http_auth.rs` | Both paths on the unauthenticated read allowlist |
 | `scripts/ingest-repos.py` | Repo → Turtle for CodeModule / CodeSymbol / Document / Section |
-| `scripts/export-datalinks.sh` | Bakes a graph to static JSON for the Pages demo |
-| `docs/book/src/datalinks/` | The published demo: page + committed `graph.json` |
+| `scripts/export-datalinks.sh` | Produces a canonical outward text share for the Pages demo |
+| `docs/book/src/datalinks/` | The published demo: page + committed text qpack |
 | `justfile` | `just datalinks`, `just ingest-repos`, `just docs-assets`, `just docs-data` |
 
 ## The published demo
@@ -228,26 +228,48 @@ that build rather than a competing `deploy-pages` job fighting for the same
 environment. mdBook copies non-markdown files in `src/` verbatim, which is what
 puts the page at `/quipu/datalinks/`.
 
-Two things differ from the served UI, both forced by there being no Quipu
-behind a static host:
+The demo data is a committed canonical text share in
+`docs/book/src/datalinks/qpack/`: `export.nt`, `shapes.ttl` and the producer's
+manifest. It preserves the original 374-node Alpha Centauri snapshot; it does
+not regenerate the game graph at build time.
 
-- **The graph is baked.** `scripts/export-datalinks.sh` captures `POST /graph`
-  and the enrichment query from a *real* server rather than re-deriving the
-  projection, because `graph_view.rs` owns the predicate filtering, degree
-  ranking and index-addressing, and a hand-rolled copy would drift from what
-  the served UI shows. The result is committed so the Pages build never needs
-  Rust.
-- **PPR runs in the browser.** A direct port of `page_rank` in `src/graph.rs` —
-  same damping (0.85), iteration cap (100), L1 tolerance (1e-6), and
-  dangling-mass redistribution to the restart vector — so the demo lights up
-  the way the real one does. At 374 nodes it converges in well under a frame.
+`just docs-assets` packages those exact text files as `demo.qpack.tar.gz` and
+copies the renderer from `ui/`. It needs neither Rust nor a Quipu server.
+The page loads that archive through the **same WebAssembly Quipu worker as
+[the repository explorer](../book/src/explore/.)**: verify the manifest, adopt
+bundled shapes, import, promote, then query the store. The small display adapter
+assigns node indices and degree counts from the query rows. There is no frozen
+`graph.json` or fallback projection. PPR still runs in the browser using the
+same damping, convergence threshold and dangling-mass redistribution as before.
 
-The renderer's runtime assets are **copied**, not committed twice: `ui/` owns
-them, `just docs-assets` stages them, and they are gitignored under
-`docs/book/src/datalinks/`. CI runs the same copy and then asserts every
-expected file landed in the book output, so the page cannot silently ship
-without its renderer. The docs workflow triggers on `ui/**` as well as
-`docs/**`, or the published demo would go stale whenever the renderer changed.
+To author a replacement snapshot, supply Turtle, its application shapes, and
+a reviewed identifier-policy catalogue (see
+[preparing an outward share](../book/src/sharing/README.md#prepare-an-outward-share)):
+
+```bash
+# Move the existing qpack directory aside before producing a replacement.
+just docs-data graph.ttl shapes.ttl identifier-policy.ttl
+```
+
+This runs `quipu share` with only the demo shapes selected. The policy facts
+stay in a separate graph and do not travel with the public data. Review and
+commit the generated text share together; do not hand-edit its hashed files.
+`pack --full --format text` is the store-backup format, not the portable share
+this demo imports.
+
+For local verification:
+
+```bash
+just explorer release   # stage the released wasm runtime; no Rust build
+just docs build
+just docs-demo-test     # needs Playwright + Chromium
+```
+
+Pages stages that same released runtime and runs the browser check before
+deploying. It fails if the runtime is missing, if any displayed fact changes,
+or if a damaged pack silently renders. The check covers all labels, types,
+edges, degrees and enrichment, plus 374 nodes, 362 edges and 17 ranks.
+The runtime remains a release asset; no binary is committed in this directory.
 
 ## The ingest
 
