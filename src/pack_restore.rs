@@ -93,16 +93,21 @@ fn reader_for(pack_format: &str) -> Result<Option<Verb>> {
     match pack_format {
         FORMAT_PUBLISHED => Ok(Some(Verb::Unpack)),
         FORMAT_FULL => Ok(Some(Verb::Restore)),
+        crate::pack_full_text::FORMAT_FULL_TEXT => Ok(Some(Verb::Restore)),
         FORMAT_TURTLE | FORMAT_FROZEN => Ok(None),
-        other => Err(Error::InvalidValue(format!(
-            "pack_format {other:?} is not a format this build can read. Known \
+        other => {
+            let text_format = crate::pack_full_text::FORMAT_FULL_TEXT;
+            Err(Error::InvalidValue(format!(
+                "pack_format {other:?} is not a format this build can read. Known \
              formats: {FORMAT_PUBLISHED:?} (published pack, `quipu unpack`), \
-             {FORMAT_FULL:?} (full pack, `quipu restore`), {FORMAT_TURTLE:?} \
+             {FORMAT_FULL:?} (full pack, `quipu restore`), {text_format:?} \
+             (full TEXT pack, a DIRECTORY, `quipu restore`), {FORMAT_TURTLE:?} \
              (interop bundle, export-only), {FORMAT_FROZEN:?} (frozen archive, \
              `quipu db attach`). Refusing rather than guessing: a pack from a \
              NEWER quipu may carry tables this build would silently drop \
              (aegis-9f899e)."
-        ))),
+            )))
+        }
     }
 }
 
@@ -176,6 +181,14 @@ pub struct RestoreReport {
 ///   manifest.
 /// - [`Error::Store`] for filesystem and SQLite failures.
 pub fn restore(pack_path: &str, destination: &str, force: bool) -> Result<RestoreReport> {
+    // A text pack is a DIRECTORY, so every sqlite read below would fail on it
+    // with a diagnosis about the file rather than about the format. Dispatch
+    // before that can happen — "I cannot tell what this artifact is" must never
+    // degrade into a more specific-sounding and less true message.
+    if crate::pack_full_text::is_text_pack(pack_path) {
+        return restore_text(pack_path, destination, force);
+    }
+
     // 1. FORMAT. Before the hash, so a published pack handed to `restore` is
     //    told which verb to use rather than being hashed by the wrong function
     //    and reported as a mismatch — which is corruption's message, not this.
@@ -232,6 +245,94 @@ pub fn restore(pack_path: &str, destination: &str, force: bool) -> Result<Restor
         |r| r.get(0),
     )?;
 
+    Ok(RestoreReport {
+        destination: destination.to_string(),
+        content_hash: manifest.content_hash,
+        replaced_facts,
+        tables,
+    })
+}
+
+/// `quipu restore <dir>` for a TEXT pack (aegis-9f899e).
+///
+/// Same contract as the binary path and in the same ORDER, which is the part
+/// that matters: format gate first, then the hash, then the destination
+/// emptiness check, and only then a write. The hash here is not a formality —
+/// it is the whole acceptance criterion for this format. A text pack is
+/// replayed rather than copied, so "did every row survive the round trip"
+/// cannot be assumed the way it can for a `VACUUM INTO`, and a dump missing a
+/// file, a table, or a single row would otherwise install a quietly smaller
+/// store that looks perfectly healthy.
+fn restore_text(dir: &str, destination: &str, force: bool) -> Result<RestoreReport> {
+    let manifest = crate::pack_full_text::read_manifest_dir(dir)?;
+    require_format(&manifest, Verb::Restore)?;
+
+    let build_path = format!("{destination}.rebuilding");
+    let rebuilt = crate::pack_full_text::rebuild(dir, &build_path);
+    let cleanup = || {
+        for suffix in ["", "-wal", "-shm"] {
+            let p = format!("{build_path}{suffix}");
+            if Path::new(&p).exists() {
+                let _ = std::fs::remove_file(&p);
+            }
+        }
+    };
+    let (manifest, recomputed) = match rebuilt {
+        Ok(v) => v,
+        Err(e) => {
+            cleanup();
+            return Err(e);
+        }
+    };
+    if recomputed != manifest.content_hash {
+        cleanup();
+        return Err(Error::InvalidValue(format!(
+            "quipu restore: HASH MISMATCH after reconstructing {dir}: manifest {}, \
+             rebuilt {recomputed}. The text pack does not reconstruct the store it \
+             claims to; a file, a table, or a row is missing or altered. Nothing \
+             was written (aegis-9f899e).",
+            manifest.content_hash
+        )));
+    }
+
+    let replaced_facts = match live_fact_count(destination) {
+        Ok(n) => n,
+        Err(e) => {
+            cleanup();
+            return Err(e);
+        }
+    };
+    if replaced_facts > 0 && !force {
+        cleanup();
+        return Err(Error::PolicyDenied(format!(
+            "quipu restore refuses to replace {destination}: it holds {replaced_facts} \
+             live fact(s), and a restore REPLACES the whole store rather than \
+             merging into it. Move it aside, point --db at a fresh path, or pass \
+             --force if destroying it is what you mean (aegis-9f899e)."
+        )));
+    }
+
+    for suffix in ["", "-wal", "-shm"] {
+        let p = format!("{destination}{suffix}");
+        if Path::new(&p).exists() {
+            std::fs::remove_file(&p)
+                .map_err(|e| Error::Store(format!("quipu restore: cannot replace {p}: {e}")))?;
+        }
+    }
+    let conn = Connection::open(&build_path)?;
+    conn.execute(
+        &format!("VACUUM INTO '{}'", destination.replace('\'', "''")),
+        [],
+    )?;
+    drop(conn);
+    cleanup();
+
+    let restored = Connection::open(destination)?;
+    let tables: i64 = restored.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+        [],
+        |r| r.get(0),
+    )?;
     Ok(RestoreReport {
         destination: destination.to_string(),
         content_hash: manifest.content_hash,

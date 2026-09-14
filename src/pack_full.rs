@@ -169,7 +169,7 @@ pub fn verify_full(pack_path: &str) -> Result<(String, String, bool)> {
 }
 
 /// Every non-internal table in an open connection.
-fn live_tables(conn: &Connection) -> Result<Vec<String>> {
+pub(crate) fn live_tables(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' \
          AND name NOT LIKE 'sqlite_%' ORDER BY name",
@@ -193,7 +193,7 @@ fn row_counts(conn: &Connection) -> Result<Vec<(String, i64)>> {
     Ok(out)
 }
 
-fn manifest_for(
+pub(crate) fn manifest_for(
     out: &Connection,
     opts: &PackOptions,
     timestamp: &str,
@@ -235,7 +235,7 @@ fn manifest_for(
 /// projection of CURRENT facts, which is precisely the lossy view this artifact
 /// exists to replace. Hashing it here would make the full pack's identity blind
 /// to the history it carries.
-fn content_hash_of(conn: &Connection) -> Result<String> {
+pub(crate) fn content_hash_of(conn: &Connection) -> Result<String> {
     let mut ctx = ring::digest::Context::new(&ring::digest::SHA256);
     for name in live_tables(conn)? {
         if name == "pack_manifest" {

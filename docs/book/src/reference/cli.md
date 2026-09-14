@@ -729,6 +729,8 @@ quipu unpack repo.qpack.db --expect-repo scbrown/example --head-sha "$(git rev-p
 | `--shapes <S>` / `--queries <Q>` | Ship shape sets / stored queries (repeatable) |
 | `--with-vectors` | Include embeddings (refused unless the SQLite vector backend is active) |
 | `--format turtle` | Also embed a Turtle serialization |
+| `--full` | A LOSSLESS whole-store pack for internal backup, read by `quipu restore`. Carries every carried table with its full history, so it refuses an outward destination |
+| `--full --format text` | The same lossless whole-store pack **as text** — a git-friendly directory rather than a SQLite file |
 | `--verify <file>` | Recompute and check the pack's content hash |
 | `--into <graph-iri>` | Unpack target graph (default: the pack's own graph IRI) |
 | `--repo` / `--repo-sha` / `--model-id` / `--model-version` | All-or-none provenance for a repository pack. The manifest also carries the Quipu version, build SHA, and pack schema version. |
@@ -741,6 +743,40 @@ destination. `quipu unpack` repeats verification before every load. After a
 successful load, ingest repository changes over `repository_sha..head_sha`;
 future setup runs are incremental because the destination records the verified
 content hash and returns `unchanged` for the same asset.
+
+### `quipu pack --full --format text`
+
+A lossless whole-store pack rendered as **text**. `--full` on its own is
+lossless but binary (a `VACUUM INTO` copy); `quipu share` is text but carries
+only current facts. This is the artifact that is both: git-friendly *and*
+reconstructing.
+
+```bash
+quipu pack --full --format text --destination internal --out store-pack/ --db my.db
+quipu restore store-pack/ --db restored.db
+```
+
+It writes a directory, not a file:
+
+```text
+store-pack/
+  manifest.json     what the pack claims, including its content hash
+  schema.sql        DDL for every object, applied before any row
+  data/<table>.sql  canonical INSERTs, one file per table
+```
+
+Rows are emitted as one `INSERT` each, ordered by the row text itself. That
+ordering is what makes the format git-friendly: a row moving on disk produces no
+diff, so a pack committed to a repository only changes when its *contents* do.
+
+`restore` accepts either form. For a text pack it rebuilds the store, checks
+referential integrity, and then **refuses unless the reconstruction hashes
+identically to what the manifest claims** — nothing is written to the
+destination until that holds. A dump missing a file, a table, or a single row is
+rejected rather than installed as a quietly smaller store.
+
+Like `--full`, this refuses an outward destination: it carries the event log and
+every operational table, and publishing one is the operator's decision.
 
 ### `quipu graph`
 
