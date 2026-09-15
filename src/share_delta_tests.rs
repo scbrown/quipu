@@ -515,3 +515,63 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
         "shapes.ttl must be scrubbed on its own account: {error}"
     );
 }
+
+#[test]
+fn large_parent_with_small_changes_is_bounded_by_delta_not_full_result() {
+    let mut child = store(&"x".repeat(crate::share::SHARE_PAYLOAD_MAX_BYTES));
+    let root = tempfile::tempdir().unwrap();
+    let parent_dir = root.path().join("parent");
+    crate::share::share(&child, parent_dir.to_str().unwrap(), &opts()).unwrap();
+    let parent = crate::share_transport::read_reference(parent_dir.to_str().unwrap()).unwrap();
+    assert!(parent.export_ntriples.len() > crate::share::SHARE_PAYLOAD_MAX_BYTES);
+
+    let unchanged = build_delta(
+        &child,
+        &parent.manifest.share_id,
+        &parent.manifest.graph_hash,
+        &parent.export_ntriples,
+        &opts(),
+    )
+    .unwrap();
+    assert!(unchanged.update.is_empty());
+
+    crate::rdf::ingest_rdf(
+        &mut child,
+        &b"<urn:new> <urn:p> \"small edit\" ."[..],
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-09-04",
+        None,
+        None,
+    )
+    .unwrap();
+    let out = root.path().join("delta");
+    let manifest = write_delta(
+        &child,
+        parent_dir.to_str().unwrap(),
+        out.to_str().unwrap(),
+        &opts(),
+    )
+    .unwrap();
+    assert!(std::fs::metadata(out.join("delta.ru")).unwrap().len() < 1024);
+    let materialized = materialize(parent_dir.to_str().unwrap(), out.to_str().unwrap()).unwrap();
+    let full = crate::share::share_payload(&child, &opts(), usize::MAX).unwrap();
+    assert_eq!(materialized.export_ntriples, full.files["export.nt"]);
+    assert_eq!(manifest.result.graph_hash, full.manifest.graph_hash);
+
+    // A tiny result can still require an oversized DELETE document. The
+    // unchanged result must pass above; the actual large delta must fail here.
+    let deleted = build_delta(
+        &store("small"),
+        &parent.manifest.share_id,
+        &parent.manifest.graph_hash,
+        &parent.export_ntriples,
+        &opts(),
+    );
+    assert!(
+        deleted
+            .unwrap_err()
+            .to_string()
+            .contains("exceeding max_bytes")
+    );
+}

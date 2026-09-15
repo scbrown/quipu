@@ -394,7 +394,7 @@ fn shapes_bytes(store: &Store, names: &[String], no_shapes: bool) -> Result<Vec<
     Ok(out.into_bytes())
 }
 
-fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
+pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
     let graph = canonicalize_ntriples(&export_scope(
         store,
         &opts.scope,

@@ -316,7 +316,7 @@ COMMANDS:
     quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
     quipu restore <file.qpack | text-pack-dir> [--force] [--db <path>]
                                                                      REPLACES the store with a --full pack, binary or text
-    quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-share>] [--turtle]
+    quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]

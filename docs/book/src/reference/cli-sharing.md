@@ -22,7 +22,7 @@ exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this chec
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
             [--shapes NAME]... [--no-shapes] [--parent-share ID]
-            [--since <parent-share>] [--turtle] [--destination internal]
+            [--since <parent-reference>] [--turtle] [--destination internal]
 ```
 
 Writes a deterministic, git-native share into `<dir>`: RDFC-1.0 canonical
@@ -38,7 +38,7 @@ against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 | `--shapes <NAME>` | include a named shape set; repeatable |
 | `--no-shapes` | omit `shapes.ttl` — the receiver then has no constraints to validate against, so prefer not to |
 | `--parent-share <ID>` | record lineage: the share this one descends from |
-| `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL |
+| `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL, not a `share_id` |
 | `--turtle` | additionally write a Turtle view for humans |
 | `--destination internal` | skip the outward scrub and stamp the manifest `destination: internal`. LAN-internal destinations only — see below |
 
@@ -90,6 +90,14 @@ today's delta — and the parent is usually the very internal share that was
 allowed to carry it. A full outward share of the same store passes cleanly while
 that delta does not, which is exactly why the delta document gets its own check
 rather than riding on the result share's.
+
+`--since` compares the current share with the referenced parent. Its default
+8 MiB limit applies to the serialized delta file map (update, shapes and
+manifests), not to the full result graph. A large unchanged graph can therefore
+produce a small delta; a large insertion or deletion can still exceed the limit.
+The producer still materializes the full result internally, so this transport
+limit is not a memory bound. Use `--parent-share` to record an identity without
+computing a delta.
 
 `--parent-share` is what makes `quipu merge` possible later. A share without a
 parent cannot be three-way merged — `merge` refuses with *"incoming share has no
