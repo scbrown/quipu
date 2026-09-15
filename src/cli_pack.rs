@@ -260,7 +260,7 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         eprintln!(
             "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
              --construct <query>] [--shapes <name>]... [--no-shapes] \
-             [--parent-share <sha256:id>] [--turtle] [--destination internal]"
+             [--parent-share <sha256:id>] [--since <parent-reference>] [--turtle] [--destination internal]"
         );
         std::process::exit(1);
     });

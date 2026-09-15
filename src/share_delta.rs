@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use spargebra::GraphUpdateOperation;
 
 use crate::error::{Error, Result};
-use crate::share::{ShareManifest, ShareOptions, sha256, share_payload};
+use crate::share::{ShareManifest, ShareOptions, build_share_payload, sha256};
 use crate::share_import::ShareImportRequest;
 
 const SCHEMA: &str = "https://github.com/scbrown/quipu/share-delta/v1";
@@ -208,7 +208,7 @@ pub fn build_delta(
 /// should use [`build_delta`], which keeps the fixed server budget.
 ///
 /// # Errors
-/// The materialized share exceeds `max_bytes`, cannot be built, or produces
+/// The serialized delta file map exceeds `max_bytes`, cannot be built, or produces
 /// an invalid SPARQL update.
 pub fn build_delta_with_limit(
     store: &crate::Store,
@@ -220,7 +220,9 @@ pub fn build_delta_with_limit(
 ) -> Result<DeltaPayload> {
     let mut opts = opts.clone();
     opts.parent_share = Some(parent_share_id.to_string());
-    let result = share_payload(store, &opts, max_bytes)?;
+    // The full result is needed for canonical identity and comparison, but
+    // it is not the transported delta. Cap the delta files after diffing.
+    let result = build_share_payload(store, &opts)?;
     let update = update_text(parent_export_ntriples, &result.files["export.nt"]);
     if !update.is_empty() {
         spargebra::SparqlParser::new()
@@ -244,7 +246,7 @@ pub fn build_delta_with_limit(
     };
     manifest.delta_id = sha256(&manifest_bytes(&manifest, false)?);
     // THE DELTA DOCUMENT IS SCRUBBED SEPARATELY, and it has to be (aegis-auw0o7).
-    // `share_payload` above scrubbed the RESULT share — the store as it is now.
+    // `build_share_payload` above scrubbed the RESULT share — the store as it is now.
     // `delta.ru` is not built from the store: its DELETE clause is lifted from
     // the PARENT's `export.nt`, so a triple that has since been retracted is
     // still quoted verbatim in the document. An internal identifier removed
@@ -253,11 +255,21 @@ pub fn build_delta_with_limit(
     // usually the very share that was allowed to carry it.
     let files = BTreeMap::from([("delta.ru".to_string(), update.clone())]);
     crate::share_scrub::enforce_destination(store, &files, opts.destination, "delta scrub")?;
-    Ok(DeltaPayload {
+    let payload = DeltaPayload {
         manifest,
         update,
         shapes,
-    })
+    };
+    let files: BTreeMap<_, _> = payload.files()?.into_iter().collect();
+    let encoded_len = serde_json::to_vec(&files)
+        .map_err(|e| Error::Serialization(format!("delta response: {e}")))?
+        .len();
+    if encoded_len > max_bytes {
+        return Err(Error::InvalidValue(format!(
+            "share delta: response is {encoded_len} bytes, exceeding max_bytes {max_bytes}"
+        )));
+    }
+    Ok(payload)
 }
 
 /// Write a delta share against a verified local parent directory.
