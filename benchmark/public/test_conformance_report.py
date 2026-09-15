@@ -1,7 +1,9 @@
+import contextlib
 import importlib.util
 import io
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -495,6 +497,46 @@ class SyntaxSuiteRegressionGateTest(unittest.TestCase):
         self.assertEqual(code, 0)
 
 
+@contextlib.contextmanager
+def head_tree_fixture(*, stale=True):
+    """Own the ledger/source drift; never inherit the enclosing PR's diff."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        public = root / "benchmark/public"
+        public.mkdir(parents=True)
+        for source in (REPO / "benchmark/public").glob("*.py"):
+            shutil.copy2(source, public / source.name)
+        shutil.copytree(RESULTS, public / "results")
+        run = lambda *args: subprocess.run(  # noqa: E731
+            ["git", *args], cwd=root, check=True, capture_output=True, text=True
+        )
+        run("init", "-q", "-b", "main")
+        run("config", "user.email", "fixture@example.com")
+        run("config", "user.name", "Fixture")
+        run("config", "core.hooksPath", "/dev/null")
+        (root / "src").mkdir()
+        source = root / "src/fixture.rs"
+        source.write_text("// measured source\n")
+        run("add", "-A")
+        run("commit", "-qm", "measured tree")
+        measured = run("rev-parse", "HEAD").stdout.strip()
+        source.write_text("// changed source\n")
+        run("add", "src/fixture.rs")
+        run("commit", "-qm", "change conformance source")
+        revision = measured if stale else run("rev-parse", "HEAD").stdout.strip()
+        for ledger_path in (public / "results").glob("*.json"):
+            data = json.loads(ledger_path.read_text())
+            for key in data:
+                if key.endswith("quipu_revision"):
+                    data[key] = revision
+            ledger_path.write_text(json.dumps(data))
+        subprocess.run(
+            [sys.executable, str(public / "conformance_report.py")],
+            cwd=root, capture_output=True, text=True, check=True,
+        )
+        yield root
+
+
 class ArmSeparationTest(unittest.TestCase):
     """`--arm` must split TOIL from REGRESSION (aegis-fn3hdn).
 
@@ -513,7 +555,8 @@ class ArmSeparationTest(unittest.TestCase):
         import subprocess
 
         return subprocess.run(
-            [sys.executable, str(pathlib.Path(REPORT.__file__)), "--check", *args],
+            [sys.executable, str(root / "benchmark/public/conformance_report.py"),
+             "--check", "--pr-base", "", *args],
             cwd=root,
             capture_output=True,
             text=True,
@@ -521,64 +564,47 @@ class ArmSeparationTest(unittest.TestCase):
         )
 
     def test_a_stale_stamp_fails_provenance_and_NOT_content(self):
-        # The real toil condition: ledgers and page mutually consistent, the
-        # revision simply older than HEAD. Reproduced faithfully rather than by
-        # editing a stamp in isolation — doing that also desyncs the published
-        # page (which embeds the revision) and reds the content arm for a reason
-        # that never occurs in practice. That false reproduction is exactly what
-        # my first attempt at this test did.
-        root = pathlib.Path(REPORT.__file__).resolve().parents[2]
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD~3"],
-            cwd=root, capture_output=True, text=True, check=False,
-        ).stdout.strip()
-        if not head:
-            self.skipTest("no HEAD~3 in this clone")
-
-        with tempfile.TemporaryDirectory() as tmp:
-            work = pathlib.Path(tmp) / "repo"
-            subprocess.run(
-                ["git", "worktree", "add", "--detach", str(work), "HEAD"],
-                cwd=root, capture_output=True, check=False,
+        with head_tree_fixture() as work:
+            content = self._run(work, "--arm", "content")
+            provenance = self._run(work, "--arm", "provenance")
+            self.assertEqual(content.returncode, 0, content.stdout + content.stderr)
+            self.assertEqual(
+                provenance.returncode, 1,
+                "a stale stamp must fail the provenance arm:\n"
+                + provenance.stdout + provenance.stderr,
             )
-            try:
-                if not (work / "benchmark/public/results").is_dir():
-                    self.skipTest("worktree unavailable")
-                for ledger in (work / "benchmark/public/results").glob("*.json"):
-                    data = json.loads(ledger.read_text())
-                    for key in list(data):
-                        if key.endswith("quipu_revision"):
-                            data[key] = head
-                    ledger.write_text(json.dumps(data, indent=2))
-                # Regenerate the page so content and ledgers AGREE.
-                self._run(work, "--arm", "content")  # no-op; page written below
-                subprocess.run(
-                    [sys.executable, "benchmark/public/conformance_report.py"],
-                    cwd=work, capture_output=True, check=False,
-                )
+            self.assertIn("STALE STAMP", provenance.stderr)
 
-                content = self._run(work, "--arm", "content")
-                provenance = self._run(work, "--arm", "provenance")
+    def test_head_tree_drift_is_independent_of_the_pr_change_shape(self):
+        import os
+        from unittest.mock import patch
 
-                self.assertEqual(
-                    content.returncode, 0,
-                    "a stale STAMP must not read as a content regression:\n"
-                    + content.stdout + content.stderr,
-                )
-                self.assertEqual(
-                    provenance.returncode, 1,
-                    "a stale stamp must fail the provenance arm:\n"
-                    + provenance.stdout + provenance.stderr,
-                )
-                self.assertIn(
-                    "STALE STAMP", provenance.stderr,
-                    "the toil failure must SAY it is a stale stamp, not a regression",
-                )
-            finally:
-                subprocess.run(
-                    ["git", "worktree", "remove", "--force", str(work)],
-                    cwd=root, capture_output=True, check=False,
-                )
+        for shape in ("docs-only", "ledger-changing"):
+            with self.subTest(shape=shape), head_tree_fixture() as work:
+                def git(*args):
+                    return subprocess.run(
+                        ["git", *args], cwd=work, check=True, capture_output=True,
+                    )
+                git("add", "-A")
+                git("commit", "-qm", "publish stale but consistent ledgers")
+                git("update-ref", "refs/remotes/origin/fixture-base", "HEAD")
+                git("checkout", "-qb", shape)
+                if shape == "docs-only":
+                    (work / "README.md").write_text("documentation only\n")
+                else:
+                    ledger_path = next((work / "benchmark/public/results").glob("*.json"))
+                    ledger_path.write_text(ledger_path.read_text() + "\n")
+                git("add", "-A")
+                git("commit", "-qm", shape)
+                with patch.dict(os.environ, {"GITHUB_BASE_REF": "fixture-base"}):
+                    result = self._run(work, "--arm", "provenance")
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn("STALE STAMP", result.stderr)
+
+    def test_a_current_stamp_passes_the_head_tree_check(self):
+        with head_tree_fixture(stale=False) as work:
+            result = self._run(work, "--arm", "provenance")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_a_disagreeing_page_fails_content_and_NOT_provenance(self):
         # The converse, and the reason the split is safe: a real mismatch still
@@ -638,40 +664,16 @@ class RemedyNamesEveryStepTest(unittest.TestCase):
     """
 
     def test_the_remedy_names_the_dispatch_the_artifact_and_the_commit_target(self):
-        # Rendered through main() so this asserts what an operator actually
-        # sees, not what a helper returns.
-        import io
-        import contextlib
-
-        # A REAL older commit, not a fabricated sha. `"0" * 40` is not in the
-        # clone, so the gate returns UNVERIFIED (2) rather than DRIFT (1) and
-        # never prints a remedy at all — a different branch, and one that makes
-        # every assertion below vacuous. My first draft of this test did exactly
-        # that, which is the same mistake the sabotage arms on aegis-fn3hdn hit.
-        older = subprocess.run(
-            ["git", "rev-parse", "HEAD~3"],
-            cwd=pathlib.Path(REPORT.__file__).resolve().parents[2],
-            capture_output=True, text=True, check=False,
-        ).stdout.strip()
-        if len(older) != 40:
-            self.skipTest("no HEAD~3 in this clone")
-
-        with tempfile.TemporaryDirectory() as tmp:
-            results = pathlib.Path(tmp) / "results"
-            results.mkdir()
-            for ledger in RESULTS.glob("*.json"):
-                data = json.loads(ledger.read_text())
-                for key in list(data):
-                    if key.endswith("quipu_revision"):
-                        data[key] = older
-                (results / ledger.name).write_text(json.dumps(data))
-            err = io.StringIO()
-            with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
-                REPORT.main(
-                    ["--results-dir", str(results), "--docs-dir", str(DOCS),
-                     "--check", "--arm", "provenance"]
-                )
-            text = err.getvalue()
+        # Run the real CLI against owned drift, in strict HEAD-tree mode even
+        # when CI supplies GITHUB_BASE_REF for a docs-only PR.
+        with head_tree_fixture() as root:
+            result = subprocess.run(
+                [sys.executable, str(root / "benchmark/public/conformance_report.py"),
+                 "--check", "--arm", "provenance", "--pr-base", ""],
+                cwd=root, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            text = result.stderr
 
         # ANTI-VACUITY, and this one has to be exact: the gate must have taken
         # the DRIFT branch. An earlier version of this assertion tested
