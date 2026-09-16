@@ -75,7 +75,7 @@ before anyone checked anything else.
 | rate | 3,831.8 live facts/s |
 | store | 3,227,811,840 B = 295.7 B/fact |
 | build | release |
-| storage | ext4 (a tmpfs store is ~45x faster; see below) |
+| storage | ext4 on a **shared** device (see *The device this was measured on*, below) |
 
 **Why the fact count exceeds the triple count by exactly 3:** a declared ingest writes three
 completion markers (declared count, source digest, completion) into the graph. That identity is
@@ -93,6 +93,35 @@ identical content parses everything and writes nothing.
 - **It is not a comparison.** Quipu and Oxigraph share the SPARQL parser and RDF data model
   (`spargebra`, `oxrdf`), so any future comparison measures storage and evaluation layers, never
   independent engines, and must say so.
+
+### The device this was measured on, and why load average could not see it
+
+The rate above is an **ext4-on-a-shared-device** number. The store lived on the host's root
+filesystem, which is also the working disk for roughly twenty concurrent agent sessions. Measured
+2026-09-16 on the same host, same binary, same pinned 1M artifact, changing **only the store's
+device**:
+
+| store device | device busy (3h baseline, `node_disk_io_time_seconds_total`) | ingest |
+|---|---|---|
+| dedicated measurement volume | **0.4 %** | 1,078,688 facts in **94.1 s** |
+| root filesystem (shared) | **20.8 %** | **667 facts/s** sustained — ~27 min for the same load |
+
+That is a **21.6x** difference from the device alone, with the engine, the dataset and the host
+held fixed. So the published figure characterises *Quipu ingesting while sharing a disk*, not
+Quipu's ingest ceiling, and a reader reproducing it on a quiet volume should expect to beat it
+substantially.
+
+**Why the contention check below does not cover this.** The next section correlates rate against
+**host load average** and finds essentially none (-0.09). That result stands — and it cannot speak
+to this, because load average measures **CPU runnable work, not disk saturation**. The two come
+apart routinely: during the measurement above the host sat at a load average around 4 while the
+root device was 78 % busy. A store starved for I/O on an otherwise unbusy machine is invisible to
+the instrument that section used.
+
+This does not explain the within-run variation described below, and it is not offered as an
+explanation — it is an untested candidate that the published correlation was structurally unable to
+detect. Stated so that the absence of a load-average correlation is not read as the absence of
+contention.
 
 ### Rate is NOT constant within a load, and the obvious explanation is wrong
 
