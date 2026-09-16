@@ -120,5 +120,101 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(MODULE.executable_path(pathlib.Path("quipu")), pathlib.Path("/opt/bin/quipu"))
 
 
+class NonCompletionIsNotAnEmptyResultTests(unittest.TestCase):
+    """A query that did not COMPLETE must never be scored as a passing case.
+
+    The published ledgers are produced by run_case, and the worst case is a
+    case whose expected result is EMPTY: there, "the engine returned nothing"
+    and "the engine never answered" compare equal unless the runner
+    distinguishes them. aegis-41rc28.
+
+    Measured 2026-09-16 against the installed CLI (quipu 0.6.0), so these
+    stubs reproduce a real shape rather than an imagined one: a timed-out
+    `quipu read` writes **0 bytes** to stdout (no partial table at 1/50/200 ms
+    budgets), puts its message on stderr, and exits **2** -- 2 for did-not-
+    complete, 1 for refused/malformed.
+    """
+
+    TIMEOUT_STDERR = (
+        "query error: query timeout: exceeded 1ms (ran 1ms) - narrow the query "
+        "or raise [quipu.search] query_timeout_ms"
+    )
+    # The SAME failure with the `query error:` literal absent. The runner's
+    # protection must not rest on the wording of a message: rewording it is a
+    # one-line change nobody would flag in review.
+    REWORDED_STDERR = "the query budget was exhausted before the engine answered"
+
+    def _case_expecting_no_rows(self, root):
+        query = root / "q.rq"
+        query.write_text("SELECT ?s WHERE { ?s ?p ?o }")
+        result = root / "r.srj"
+        result.write_text('{"head":{"vars":["s"]},"results":{"bindings":[]}}')
+        return MODULE.Case(
+            "evaluation", root / "manifest.ttl", ":timeout-case", "timeout case",
+            "QueryEvaluationTest", query, (), (), result,
+        )
+
+    def _stub_quipu(self, root, stderr_text):
+        """A stub CLI: `knot` succeeds, `read` does not complete.
+
+        Written as a real file, never a symlink to the real binary -- a stub
+        installed over a symlink writes THROUGH it and destroys the tool
+        (aegis-ydrml).
+        """
+        stub = root / "quipu-stub"
+        stub.write_text(
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            "if sys.argv[1] == 'read':\n"
+            f"    sys.stderr.write({stderr_text!r})\n"
+            "    sys.exit(2)\n"
+            "sys.exit(0)\n"
+        )
+        stub.chmod(0o755)
+        return stub
+
+    def _run(self, stderr_text):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            return MODULE.run_case(
+                self._case_expecting_no_rows(root),
+                self._stub_quipu(root, stderr_text),
+                root / "quipu-server-unused",
+            )
+
+    def test_a_timeout_is_not_scored_as_a_passing_empty_result(self):
+        outcome = self._run(self.TIMEOUT_STDERR)
+        self.assertNotEqual(outcome["status"], "passed")
+        self.assertEqual(outcome["status"], "failed")
+
+    def test_detection_does_not_depend_on_the_error_message_wording(self):
+        # The pin. Without a returncode check this is scored from whatever the
+        # stdout parser happens to do with 0 bytes, which is an accident rather
+        # than a decision -- and an accident that changes if the renderer ever
+        # emits an empty table instead of nothing.
+        outcome = self._run(self.REWORDED_STDERR)
+        self.assertNotEqual(outcome["status"], "passed")
+        self.assertEqual(outcome["status"], "failed")
+
+    def test_a_completing_query_is_still_judged_on_its_results(self):
+        # The negative control. A guard that refused everything would satisfy
+        # both assertions above while making the whole suite unfalsifiable.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            stub = root / "quipu-stub"
+            stub.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "if sys.argv[1] == 'read':\n"
+                "    sys.stdout.write('s\\n---\\n0 results\\n')\n"
+                "sys.exit(0)\n"
+            )
+            stub.chmod(0o755)
+            outcome = MODULE.run_case(
+                self._case_expecting_no_rows(root), stub, root / "unused"
+            )
+        self.assertEqual(outcome["status"], "passed")
+
+
 if __name__ == "__main__":
     unittest.main()
