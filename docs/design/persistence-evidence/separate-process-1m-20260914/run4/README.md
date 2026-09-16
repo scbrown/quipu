@@ -84,9 +84,9 @@ directory is empty afterwards — verified for both arms.
 
 ## Limitations
 
-* One dataset (WatDiv 1M), one machine, one run per engine.
-* Concurrency tested at 1 and 4 readers only.
-* Timing is not comparable (above).
-* Store-device effects are **not** controlled here beyond both arms sharing one device. A separate
+- One dataset (WatDiv 1M), one machine, one run per engine.
+- Concurrency tested at 1 and 4 readers only.
+- Timing is not comparable (above).
+- Store-device effects are **not** controlled here beyond both arms sharing one device. A separate
   measurement found ingest throughput varying by more than an order of magnitude with the store's
   device under I/O contention, so any future timing arm must pin and state the device.
