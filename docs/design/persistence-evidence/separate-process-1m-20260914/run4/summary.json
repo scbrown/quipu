@@ -1,0 +1,592 @@
+{
+  "arms": {
+    "quipu": {
+      "pid": 3171244,
+      "counts": {
+        "live_facts": 1078688,
+        "vectors": 0
+      },
+      "query_waves": 140,
+      "successful_requests": 272,
+      "did_not_finish_requests": 48,
+      "success_by_query": {
+        "C1": 16,
+        "F1": 16,
+        "F2": 16,
+        "F4": 16,
+        "F5": 16,
+        "L1": 16,
+        "L2": 16,
+        "L3": 16,
+        "L4": 16,
+        "L5": 16,
+        "S1": 16,
+        "S2": 16,
+        "S3": 16,
+        "S4": 16,
+        "S5": 16,
+        "S6": 16,
+        "S7": 16
+      },
+      "dnf_by_query": {
+        "C2": 16,
+        "C3": 16,
+        "F3": 16
+      },
+      "synchronous_phases": {
+        "ready_empty": {
+          "pid": 3171244,
+          "time_ns": 1789535331753828728,
+          "VmHWM_kib": 17364,
+          "VmRSS_kib": 17364,
+          "RssAnon_kib": 1844,
+          "RssFile_kib": 15520,
+          "VmSwap_kib": 0,
+          "Threads": 1,
+          "Pss_kib": 13596,
+          "Pss_Anon_kib": 1844,
+          "Pss_File_kib": 11752,
+          "Private_Dirty_kib": 1876
+        },
+        "ready_loaded": {
+          "pid": 3171244,
+          "time_ns": 1789535433101878485,
+          "VmHWM_kib": 62880,
+          "VmRSS_kib": 58980,
+          "RssAnon_kib": 42400,
+          "RssFile_kib": 16580,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 54828,
+          "Pss_Anon_kib": 42400,
+          "Pss_File_kib": 12428,
+          "Private_Dirty_kib": 42624
+        },
+        "warmup_before": {
+          "pid": 3171244,
+          "time_ns": 1789535433129051329,
+          "VmHWM_kib": 62880,
+          "VmRSS_kib": 58980,
+          "RssAnon_kib": 42400,
+          "RssFile_kib": 16580,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 54812,
+          "Pss_Anon_kib": 42400,
+          "Pss_File_kib": 12412,
+          "Private_Dirty_kib": 42592
+        },
+        "warmup_after": {
+          "pid": 3171244,
+          "time_ns": 1789535560884635184,
+          "VmHWM_kib": 454388,
+          "VmRSS_kib": 454388,
+          "RssAnon_kib": 175056,
+          "RssFile_kib": 279332,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 450242,
+          "Pss_Anon_kib": 175056,
+          "Pss_File_kib": 275186,
+          "Private_Dirty_kib": 175056
+        },
+        "c1_before": {
+          "pid": 3171244,
+          "time_ns": 1789535560889509839,
+          "VmHWM_kib": 454388,
+          "VmRSS_kib": 454388,
+          "RssAnon_kib": 175056,
+          "RssFile_kib": 279332,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 450242,
+          "Pss_Anon_kib": 175056,
+          "Pss_File_kib": 275186,
+          "Private_Dirty_kib": 175056
+        },
+        "c1_after": {
+          "pid": 3171244,
+          "time_ns": 1789536018700746163,
+          "VmHWM_kib": 487480,
+          "VmRSS_kib": 456716,
+          "RssAnon_kib": 180904,
+          "RssFile_kib": 275812,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 452370,
+          "Pss_Anon_kib": 180904,
+          "Pss_File_kib": 271466,
+          "Private_Dirty_kib": 180904
+        },
+        "c4_before": {
+          "pid": 3171244,
+          "time_ns": 1789536018705787270,
+          "VmHWM_kib": 487480,
+          "VmRSS_kib": 456716,
+          "RssAnon_kib": 180904,
+          "RssFile_kib": 275812,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 452370,
+          "Pss_Anon_kib": 180904,
+          "Pss_File_kib": 271466,
+          "Private_Dirty_kib": 180904
+        },
+        "c4_after": {
+          "pid": 3171244,
+          "time_ns": 1789536627126730606,
+          "VmHWM_kib": 1641580,
+          "VmRSS_kib": 1641580,
+          "RssAnon_kib": 582664,
+          "RssFile_kib": 1058916,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 856317,
+          "Pss_Anon_kib": 582664,
+          "Pss_File_kib": 273653,
+          "Private_Dirty_kib": 582664
+        },
+        "idle_tail": {
+          "pid": 3171244,
+          "time_ns": 1789536632139638858,
+          "VmHWM_kib": 1641580,
+          "VmRSS_kib": 1641580,
+          "RssAnon_kib": 582664,
+          "RssFile_kib": 1058916,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 856316,
+          "Pss_Anon_kib": 582664,
+          "Pss_File_kib": 273652,
+          "Private_Dirty_kib": 582664
+        }
+      },
+      "sampled_phases": {
+        "ingest": {
+          "sample_count": 1003,
+          "sampled_max_rss_kib": 64672,
+          "sampled_max_pss_kib": 61021
+        },
+        "ready_loaded": {
+          "sample_count": 0,
+          "sampled_max_rss_kib": null,
+          "sampled_max_pss_kib": null
+        },
+        "warmup": {
+          "sample_count": 1203,
+          "sampled_max_rss_kib": 454388,
+          "sampled_max_pss_kib": 450244
+        },
+        "c1": {
+          "sample_count": 4198,
+          "sampled_max_rss_kib": 489412,
+          "sampled_max_pss_kib": 485270
+        },
+        "c4": {
+          "sample_count": 4932,
+          "sampled_max_rss_kib": 1641692,
+          "sampled_max_pss_kib": 856432
+        },
+        "idle_tail": {
+          "sample_count": 40,
+          "sampled_max_rss_kib": 1641580,
+          "sampled_max_pss_kib": 856317
+        }
+      },
+      "ingest_wall_seconds_control_invalid": 101.346440662,
+      "bytes_after_load": {
+        "logical": 442009264,
+        "allocated": 442019840,
+        "files": 3
+      },
+      "bytes_after_queries": {
+        "logical": 442009264,
+        "allocated": 442019840,
+        "files": 3
+      },
+      "root_disk_admission": true,
+      "store_removed": true
+    },
+    "oxigraph": {
+      "pid": 4113732,
+      "counts": {
+        "quads": 1078685,
+        "vectors": "not supported"
+      },
+      "query_waves": 140,
+      "successful_requests": 320,
+      "did_not_finish_requests": 0,
+      "success_by_query": {
+        "C1": 16,
+        "C2": 16,
+        "C3": 16,
+        "F1": 16,
+        "F2": 16,
+        "F3": 16,
+        "F4": 16,
+        "F5": 16,
+        "L1": 16,
+        "L2": 16,
+        "L3": 16,
+        "L4": 16,
+        "L5": 16,
+        "S1": 16,
+        "S2": 16,
+        "S3": 16,
+        "S4": 16,
+        "S5": 16,
+        "S6": 16,
+        "S7": 16
+      },
+      "dnf_by_query": {},
+      "synchronous_phases": {
+        "ready_empty": {
+          "pid": 4113732,
+          "time_ns": 1789536632469783677,
+          "VmHWM_kib": 20208,
+          "VmRSS_kib": 20208,
+          "RssAnon_kib": 5604,
+          "RssFile_kib": 14604,
+          "VmSwap_kib": 0,
+          "Threads": 5,
+          "Pss_kib": 16082,
+          "Pss_Anon_kib": 5604,
+          "Pss_File_kib": 10478,
+          "Private_Dirty_kib": 5604
+        },
+        "ready_loaded": {
+          "pid": 4113732,
+          "time_ns": 1789536652680959802,
+          "VmHWM_kib": 1766116,
+          "VmRSS_kib": 1037916,
+          "RssAnon_kib": 1022788,
+          "RssFile_kib": 15128,
+          "VmSwap_kib": 0,
+          "Threads": 9,
+          "Pss_kib": 1033691,
+          "Pss_Anon_kib": 1022836,
+          "Pss_File_kib": 10855,
+          "Private_Dirty_kib": 1022836
+        },
+        "warmup_before": {
+          "pid": 4113732,
+          "time_ns": 1789536652695983679,
+          "VmHWM_kib": 1766116,
+          "VmRSS_kib": 1038112,
+          "RssAnon_kib": 1022984,
+          "RssFile_kib": 15128,
+          "VmSwap_kib": 0,
+          "Threads": 9,
+          "Pss_kib": 1033949,
+          "Pss_Anon_kib": 1023144,
+          "Pss_File_kib": 10805,
+          "Private_Dirty_kib": 1023144
+        },
+        "warmup_after": {
+          "pid": 4113732,
+          "time_ns": 1789536654948297590,
+          "VmHWM_kib": 1766116,
+          "VmRSS_kib": 1070296,
+          "RssAnon_kib": 1053584,
+          "RssFile_kib": 16712,
+          "VmSwap_kib": 0,
+          "Threads": 9,
+          "Pss_kib": 1065973,
+          "Pss_Anon_kib": 1053584,
+          "Pss_File_kib": 12389,
+          "Private_Dirty_kib": 1053584
+        },
+        "c1_before": {
+          "pid": 4113732,
+          "time_ns": 1789536654966478348,
+          "VmHWM_kib": 1766116,
+          "VmRSS_kib": 1070296,
+          "RssAnon_kib": 1053584,
+          "RssFile_kib": 16712,
+          "VmSwap_kib": 0,
+          "Threads": 9,
+          "Pss_kib": 1066023,
+          "Pss_Anon_kib": 1053584,
+          "Pss_File_kib": 12439,
+          "Private_Dirty_kib": 1053584
+        },
+        "c1_after": {
+          "pid": 4113732,
+          "time_ns": 1789536661834192795,
+          "VmHWM_kib": 1766116,
+          "VmRSS_kib": 1080248,
+          "RssAnon_kib": 1063536,
+          "RssFile_kib": 16712,
+          "VmSwap_kib": 0,
+          "Threads": 9,
+          "Pss_kib": 1075973,
+          "Pss_Anon_kib": 1063536,
+          "Pss_File_kib": 12437,
+          "Private_Dirty_kib": 1063536
+        },
+        "c4_before": {
+          "pid": 4113732,
+          "time_ns": 1789536661850251206,
+          "VmHWM_kib": 1766116,
+          "VmRSS_kib": 1080248,
+          "RssAnon_kib": 1063536,
+          "RssFile_kib": 16712,
+          "VmSwap_kib": 0,
+          "Threads": 9,
+          "Pss_kib": 1075973,
+          "Pss_Anon_kib": 1063536,
+          "Pss_File_kib": 12437,
+          "Private_Dirty_kib": 1063536
+        },
+        "c4_after": {
+          "pid": 4113732,
+          "time_ns": 1789536675294190600,
+          "VmHWM_kib": 1766116,
+          "VmRSS_kib": 1103592,
+          "RssAnon_kib": 1086952,
+          "RssFile_kib": 16640,
+          "VmSwap_kib": 0,
+          "Threads": 9,
+          "Pss_kib": 1099468,
+          "Pss_Anon_kib": 1086952,
+          "Pss_File_kib": 12516,
+          "Private_Dirty_kib": 1086952
+        },
+        "idle_tail": {
+          "pid": 4113732,
+          "time_ns": 1789536680304404953,
+          "VmHWM_kib": 1766116,
+          "VmRSS_kib": 1103592,
+          "RssAnon_kib": 1086952,
+          "RssFile_kib": 16640,
+          "VmSwap_kib": 0,
+          "Threads": 9,
+          "Pss_kib": 1099241,
+          "Pss_Anon_kib": 1086952,
+          "Pss_File_kib": 12289,
+          "Private_Dirty_kib": 1086952
+        }
+      },
+      "sampled_phases": {
+        "ingest": {
+          "sample_count": 175,
+          "sampled_max_rss_kib": 1764564,
+          "sampled_max_pss_kib": 1760727
+        },
+        "ready_loaded": {
+          "sample_count": 0,
+          "sampled_max_rss_kib": null,
+          "sampled_max_pss_kib": null
+        },
+        "warmup": {
+          "sample_count": 20,
+          "sampled_max_rss_kib": 1070288,
+          "sampled_max_pss_kib": 1066016
+        },
+        "c1": {
+          "sample_count": 61,
+          "sampled_max_rss_kib": 1080248,
+          "sampled_max_pss_kib": 1075976
+        },
+        "c4": {
+          "sample_count": 117,
+          "sampled_max_rss_kib": 1103592,
+          "sampled_max_pss_kib": 1099468
+        },
+        "idle_tail": {
+          "sample_count": 45,
+          "sampled_max_rss_kib": 1103592,
+          "sampled_max_pss_kib": 1099469
+        }
+      },
+      "ingest_wall_seconds_control_invalid": 20.091856214,
+      "bytes_after_load": {
+        "logical": 1063391557,
+        "allocated": 1063428096,
+        "files": 18
+      },
+      "bytes_after_queries": {
+        "logical": 1063392982,
+        "allocated": 1063432192,
+        "files": 17
+      },
+      "root_disk_admission": true,
+      "store_removed": true
+    }
+  },
+  "completed_common_queries": [
+    "C1",
+    "F1",
+    "F2",
+    "F4",
+    "F5",
+    "L1",
+    "L2",
+    "L3",
+    "L4",
+    "L5",
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7"
+  ],
+  "common_result_mismatches": [],
+  "signatures": {
+    "quipu": {
+      "C1": [
+        5,
+        "dcd313ab4ed51d76797c8c5df240ee3c265bc5a7d64e44f745fc7ccb2b79929a"
+      ],
+      "F1": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "F2": [
+        2,
+        "923cfe7d694f33016f551acb75d1a37a5baf40b816eeac98b734fa934f8d6fbf"
+      ],
+      "F4": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "F5": [
+        17,
+        "e45294ceb90ea33d566e63922a09ae75ac7ce569ccd83c5f9fc099dfb92f9081"
+      ],
+      "L1": [
+        1,
+        "7fc948ff66889b8f80bbc15a1241cca0fd00018733f3736e7867a51e689dfdb5"
+      ],
+      "L2": [
+        3,
+        "0505df3ecaa249f91f52cd1d2b0ebfb8035cde45ccc8744adc64f6e1d3614112"
+      ],
+      "L3": [
+        35,
+        "6a7712b89f4cd0717fc3c01a2a60a5e3d4d46031c7736162a6c1690b54787498"
+      ],
+      "L4": [
+        5,
+        "10059b2dae9ad4615acca620b0f06bcb2fc325d5c66b6d99a680626e6ef1adfc"
+      ],
+      "L5": [
+        33,
+        "5d5be3a580c67916a1741428ba08565c5db770033d8908413295276aa51aa00b"
+      ],
+      "S1": [
+        5,
+        "73f2ad62edfa278094cacf068537b82f72dbea87c37230b2702cf9c418b58386"
+      ],
+      "S2": [
+        2,
+        "b140170a4df704c06f70fd8c4de4fcd3e72981463fb5d7fa6f3e31de724d04f1"
+      ],
+      "S3": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "S4": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "S5": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "S6": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "S7": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ]
+    },
+    "oxigraph": {
+      "C1": [
+        5,
+        "dcd313ab4ed51d76797c8c5df240ee3c265bc5a7d64e44f745fc7ccb2b79929a"
+      ],
+      "C2": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "C3": [
+        38287,
+        "8bf354fbeb9ea67b625248bd6d32d6a65616c0589878afbbef2ae2bcc05134aa"
+      ],
+      "F1": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "F2": [
+        2,
+        "923cfe7d694f33016f551acb75d1a37a5baf40b816eeac98b734fa934f8d6fbf"
+      ],
+      "F3": [
+        1,
+        "6f74250acfb73ed71244d76956b941334deea67eed5edaf0fcdefdedc457b045"
+      ],
+      "F4": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "F5": [
+        17,
+        "e45294ceb90ea33d566e63922a09ae75ac7ce569ccd83c5f9fc099dfb92f9081"
+      ],
+      "L1": [
+        1,
+        "7fc948ff66889b8f80bbc15a1241cca0fd00018733f3736e7867a51e689dfdb5"
+      ],
+      "L2": [
+        3,
+        "0505df3ecaa249f91f52cd1d2b0ebfb8035cde45ccc8744adc64f6e1d3614112"
+      ],
+      "L3": [
+        35,
+        "6a7712b89f4cd0717fc3c01a2a60a5e3d4d46031c7736162a6c1690b54787498"
+      ],
+      "L4": [
+        5,
+        "10059b2dae9ad4615acca620b0f06bcb2fc325d5c66b6d99a680626e6ef1adfc"
+      ],
+      "L5": [
+        33,
+        "5d5be3a580c67916a1741428ba08565c5db770033d8908413295276aa51aa00b"
+      ],
+      "S1": [
+        5,
+        "73f2ad62edfa278094cacf068537b82f72dbea87c37230b2702cf9c418b58386"
+      ],
+      "S2": [
+        2,
+        "b140170a4df704c06f70fd8c4de4fcd3e72981463fb5d7fa6f3e31de724d04f1"
+      ],
+      "S3": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "S4": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "S5": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "S6": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "S7": [
+        0,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ]
+    }
+  },
+  "scope": "separate-process memory observations; not a latency or overall engine ranking"
+}

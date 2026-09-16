@@ -1,0 +1,10 @@
+# Invoke from this directory: just build; the target remains the host shared cache.
+set working-directory := "../../../.."
+build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    probe=examples/memory_engine_probe.rs
+    test ! -e "$probe"
+    cp docs/design/persistence-evidence/separate-process-1m-20260914/engine.rs "$probe"
+    trap 'rm -f "$probe"' EXIT
+    cargo build --release --locked --features full,oxicompare --bin quipu-oxi-compare --example memory_engine_probe

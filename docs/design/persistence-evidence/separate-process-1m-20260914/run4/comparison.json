@@ -1,0 +1,180 @@
+{
+  "completed_common_queries": [
+    "C1",
+    "F1",
+    "F2",
+    "F4",
+    "F5",
+    "L1",
+    "L2",
+    "L3",
+    "L4",
+    "L5",
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7"
+  ],
+  "common_query_multisets_equal": true,
+  "quipu_no_success": [
+    "C2",
+    "C3",
+    "F3"
+  ],
+  "oxigraph_no_success": [],
+  "quipu": {
+    "C1": [
+      5,
+      "dcd313ab4ed51d76797c8c5df240ee3c265bc5a7d64e44f745fc7ccb2b79929a"
+    ],
+    "F1": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "F2": [
+      2,
+      "923cfe7d694f33016f551acb75d1a37a5baf40b816eeac98b734fa934f8d6fbf"
+    ],
+    "F4": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "F5": [
+      17,
+      "e45294ceb90ea33d566e63922a09ae75ac7ce569ccd83c5f9fc099dfb92f9081"
+    ],
+    "L1": [
+      1,
+      "7fc948ff66889b8f80bbc15a1241cca0fd00018733f3736e7867a51e689dfdb5"
+    ],
+    "L2": [
+      3,
+      "0505df3ecaa249f91f52cd1d2b0ebfb8035cde45ccc8744adc64f6e1d3614112"
+    ],
+    "L3": [
+      35,
+      "6a7712b89f4cd0717fc3c01a2a60a5e3d4d46031c7736162a6c1690b54787498"
+    ],
+    "L4": [
+      5,
+      "10059b2dae9ad4615acca620b0f06bcb2fc325d5c66b6d99a680626e6ef1adfc"
+    ],
+    "L5": [
+      33,
+      "5d5be3a580c67916a1741428ba08565c5db770033d8908413295276aa51aa00b"
+    ],
+    "S1": [
+      5,
+      "73f2ad62edfa278094cacf068537b82f72dbea87c37230b2702cf9c418b58386"
+    ],
+    "S2": [
+      2,
+      "b140170a4df704c06f70fd8c4de4fcd3e72981463fb5d7fa6f3e31de724d04f1"
+    ],
+    "S3": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "S4": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "S5": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "S6": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "S7": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ]
+  },
+  "oxigraph": {
+    "C1": [
+      5,
+      "dcd313ab4ed51d76797c8c5df240ee3c265bc5a7d64e44f745fc7ccb2b79929a"
+    ],
+    "C2": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "C3": [
+      38287,
+      "8bf354fbeb9ea67b625248bd6d32d6a65616c0589878afbbef2ae2bcc05134aa"
+    ],
+    "F1": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "F2": [
+      2,
+      "923cfe7d694f33016f551acb75d1a37a5baf40b816eeac98b734fa934f8d6fbf"
+    ],
+    "F3": [
+      1,
+      "6f74250acfb73ed71244d76956b941334deea67eed5edaf0fcdefdedc457b045"
+    ],
+    "F4": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "F5": [
+      17,
+      "e45294ceb90ea33d566e63922a09ae75ac7ce569ccd83c5f9fc099dfb92f9081"
+    ],
+    "L1": [
+      1,
+      "7fc948ff66889b8f80bbc15a1241cca0fd00018733f3736e7867a51e689dfdb5"
+    ],
+    "L2": [
+      3,
+      "0505df3ecaa249f91f52cd1d2b0ebfb8035cde45ccc8744adc64f6e1d3614112"
+    ],
+    "L3": [
+      35,
+      "6a7712b89f4cd0717fc3c01a2a60a5e3d4d46031c7736162a6c1690b54787498"
+    ],
+    "L4": [
+      5,
+      "10059b2dae9ad4615acca620b0f06bcb2fc325d5c66b6d99a680626e6ef1adfc"
+    ],
+    "L5": [
+      33,
+      "5d5be3a580c67916a1741428ba08565c5db770033d8908413295276aa51aa00b"
+    ],
+    "S1": [
+      5,
+      "73f2ad62edfa278094cacf068537b82f72dbea87c37230b2702cf9c418b58386"
+    ],
+    "S2": [
+      2,
+      "b140170a4df704c06f70fd8c4de4fcd3e72981463fb5d7fa6f3e31de724d04f1"
+    ],
+    "S3": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "S4": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "S5": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "S6": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "S7": [
+      0,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ]
+  }
+}
