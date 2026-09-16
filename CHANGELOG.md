@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 ### Documentation
 
 - *(conformance)* Refresh conformance results for the pack recipe guard([69257b4](https://github.com/scbrown/quipu/commit/69257b433ac98a3f09c3f5decc8fdddacab46e3a))
+- *(gitattributes)* Name the real beads merge driver, not the retired tool([e6840f3](https://github.com/scbrown/quipu/commit/e6840f38307d4ff311bf1b2e4c4c4a82cbf64842))
 
 ### Fixed
 
@@ -28,6 +29,9 @@ All notable changes to this project will be documented in this file.
 - *(snapshot)* Retract labels referenced only by sibling code partitions([7da86f4](https://github.com/scbrown/quipu/commit/7da86f4340124c3c9438175c5c019deef63a5a46))
 - *(pack)* Apply CLI embedding settings and diagnose incomplete text backup recipes([76a5d99](https://github.com/scbrown/quipu/commit/76a5d991eca0e5301c145e1801eda29fa8621727))
 - *(pack)* Refuse incomplete text backup recipes unless explicitly waived([4963dec](https://github.com/scbrown/quipu/commit/4963dec1ef9989c066640010b55db470425fe319))
+- *(share)* Apply delta byte cap after computing changes([c9aec53](https://github.com/scbrown/quipu/commit/c9aec53292209469f58320e0b480d67fd5d6e75d))
+- *(beads)* Scrub internal hostname and operator home path([76242e2](https://github.com/scbrown/quipu/commit/76242e2769fdbaedade1967f638b929f786806e3))
+- *(conformance)* A query that did not answer is not an empty result([fa6e2a0](https://github.com/scbrown/quipu/commit/fa6e2a06ebe06f581b1e9db2f666a3bb8bb21191))
 
 ### Miscellaneous
 
@@ -42,6 +46,14 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Re-derive the ledgers on the corrected-remedy head([9cb4341](https://github.com/scbrown/quipu/commit/9cb4341588af69a81c2c7a19b474696614a504b5))
 - *(conformance)* Refresh ledgers for snapshot identity fix([ebe2f68](https://github.com/scbrown/quipu/commit/ebe2f68ef336254f6eaaba127553195003db7c39))
 - *(conformance)* Re-derive the ledgers on the conflict-resolved head([26b95ee](https://github.com/scbrown/quipu/commit/26b95ee77edda15a5c886ab59334f579f59c898b))
+- *(conformance)* Re-derive the ledgers for the head-tree fixture change([07c474d](https://github.com/scbrown/quipu/commit/07c474d9f6ac263f6efdbec329c2fd2e879f4de2))
+- *(conformance)* Refresh ledgers for delta budget fix([77f94bb](https://github.com/scbrown/quipu/commit/77f94bba308c8b38a3a51b5b47485724b9ecc49f))
+- *(beads)* Record SPARQL performance findings from live query session([d0d129d](https://github.com/scbrown/quipu/commit/d0d129dd529ba030a2adb180f76f49fcfa7596f4))
+- *(conformance)* Re-derive ledgers on the runner change([27a20d6](https://github.com/scbrown/quipu/commit/27a20d67acb373f78070820bb73e0c430bc784f4))
+
+### Testing
+
+- Isolate conformance provenance checks from ambient PR diffs([893d8c8](https://github.com/scbrown/quipu/commit/893d8c8a779e6449f72ad41ae0fd1ee1aeb823f3))
 
 ### Perf
 
