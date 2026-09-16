@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-16
+
+### Added
+
+- *(pack)* A LOSSLESS whole-store pack as TEXT([20af322](https://github.com/scbrown/quipu/commit/20af3227e3df9b4a63ad62ff49ef6a042142b788))
+- *(pack)* The text pack regenerates vectors rather than transporting them([330eb7a](https://github.com/scbrown/quipu/commit/330eb7aad71aedaf313423018ce5fd5912dd7215))
+
+### CI/CD
+
+- *(conformance)* Split the ledger gate into CONTENT and PROVENANCE arms([0d3c983](https://github.com/scbrown/quipu/commit/0d3c9838386f3f22b81f033432e466088e43170f))
+
+### Documentation
+
+- *(gitattributes)* Name the real beads merge driver, not the retired tool([e6840f3](https://github.com/scbrown/quipu/commit/e6840f38307d4ff311bf1b2e4c4c4a82cbf64842))
+
+### Fixed
+
+- *(ci)* The arm split must be two JOBS — steps share one check name([15e1759](https://github.com/scbrown/quipu/commit/15e175934e1ebd8150a3142c7aa5a45219516f77))
+- *(conformance)* The printed remedy must name ALL THREE steps([1d43e20](https://github.com/scbrown/quipu/commit/1d43e201477ddab57b61872be9056afcac501608))
+- *(conformance)* The remedy's own step 2 did not work — add --dir([ad3a2fc](https://github.com/scbrown/quipu/commit/ad3a2fcc60ca3e91543b4ffc0309d56895f34dd6))
+- *(share)* Apply delta byte cap after computing changes([c9aec53](https://github.com/scbrown/quipu/commit/c9aec53292209469f58320e0b480d67fd5d6e75d))
+- *(beads)* Scrub internal hostname and operator home path([76242e2](https://github.com/scbrown/quipu/commit/76242e2769fdbaedade1967f638b929f786806e3))
+- *(conformance)* A query that did not answer is not an empty result([fa6e2a0](https://github.com/scbrown/quipu/commit/fa6e2a06ebe06f581b1e9db2f666a3bb8bb21191))
+
+### Miscellaneous
+
+- *(conformance)* Derive ledgers for metrics snapshot change([bb333e9](https://github.com/scbrown/quipu/commit/bb333e906056edb802d2f300e938d76f377946d4))
+- *(conformance)* Re-derive the ledgers for the text-pack head([4e34271](https://github.com/scbrown/quipu/commit/4e342713132d9aa0cf30ae4aa7bdbae553a812f5))
+- *(conformance)* Re-derive the ledgers for the vectors-regeneration head([8d11265](https://github.com/scbrown/quipu/commit/8d11265338fddd0a1b7184cf708f20dc4d21a519))
+- *(conformance)* Re-derive the ledgers for the arm-split head([7e40943](https://github.com/scbrown/quipu/commit/7e40943e363895169cf3de4c51e638b636f78917))
+- *(conformance)* Re-derive the ledgers for the remedy-steps head([91c76b2](https://github.com/scbrown/quipu/commit/91c76b280ce25f325e38307191a1031f49bd81df))
+- *(conformance)* Re-derive the ledgers on the corrected-remedy head([9cb4341](https://github.com/scbrown/quipu/commit/9cb4341588af69a81c2c7a19b474696614a504b5))
+- *(conformance)* Re-derive the ledgers on the conflict-resolved head([26b95ee](https://github.com/scbrown/quipu/commit/26b95ee77edda15a5c886ab59334f579f59c898b))
+- *(conformance)* Refresh ledgers for delta budget fix([77f94bb](https://github.com/scbrown/quipu/commit/77f94bba308c8b38a3a51b5b47485724b9ecc49f))
+- *(beads)* Record SPARQL performance findings from live query session([d0d129d](https://github.com/scbrown/quipu/commit/d0d129dd529ba030a2adb180f76f49fcfa7596f4))
+- *(conformance)* Re-derive ledgers on the runner change([27a20d6](https://github.com/scbrown/quipu/commit/27a20d67acb373f78070820bb73e0c430bc784f4))
+
+### Perf
+
+- *(metrics)* Refresh graph counts independently of scrapes([3cb5f0c](https://github.com/scbrown/quipu/commit/3cb5f0c101ca8c4dca3ea454d6267fb7c7a1cd10))
+
 ### Added
 
 - *(pack)* A LOSSLESS whole-store pack as TEXT([20af322](https://github.com/scbrown/quipu/commit/20af3227e3df9b4a63ad62ff49ef6a042142b788))
