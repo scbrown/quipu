@@ -952,7 +952,16 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
                     text=True,
                     capture_output=True,
                 )
-                if "query error:" in observed.stderr:
+                # NON-COMPLETION IS A RESULT ABOUT THE ENGINE, NOT THE DATA.
+                # Judge the exit status first and the message second. The CLI
+                # exits 2 when a query did not COMPLETE (timeout, join-
+                # complexity refusal) and 1 when it was refused or failed;
+                # both mean this case has no answer to compare. Relying on the
+                # `query error:` literal alone made a one-line reword of an
+                # error message silently change how every case is scored, and
+                # this is the one call site whose verdict reaches a published
+                # ledger (aegis-41rc28).
+                if observed.returncode or "query error:" in observed.stderr:
                     return {**base, "status": "failed", "diagnostic": observed.stderr.strip()}
                 if case.result.suffix in {".ttl", ".nt"}:
                     actual = actual_graph(observed.stdout)
