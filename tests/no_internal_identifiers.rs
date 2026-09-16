@@ -28,8 +28,11 @@ use std::process::Command;
 
 /// Conventional placeholder accounts. These are the documented FIX, so flagging
 /// them would make the guard fire on its own advice — and a guard that does that
-/// is one the next person deletes.
-const PLACEHOLDER_ACCOUNTS: &[&str] = &["user", "you", "alice", "bob", "example", "someone"];
+/// is one the next person deletes. `shared`/`public` are macOS system directories
+/// under /Users that name no operator at all.
+const PLACEHOLDER_ACCOUNTS: &[&str] = &[
+    "user", "you", "alice", "bob", "example", "someone", "shared", "public",
+];
 
 fn patterns() -> Vec<(&'static str, regex::Regex)> {
     vec![
@@ -48,6 +51,16 @@ fn patterns() -> Vec<(&'static str, regex::Regex)> {
             "operator home path",
             regex::Regex::new(r"/home/([a-z][a-z0-9_-]*)/").unwrap(),
         ),
+        // macOS. Added after d0d129dd landed `/Users/<account>/workspace/quipu`
+        // in .beads/issues.jsonl from a laptop clone: the ratchet caught the
+        // hostname on the same line and was structurally blind to the account
+        // name beside it, because it only knew Linux home paths (aegis-8hb0me).
+        // Accounts here are case-preserving, so the capture is compared
+        // lowercased against the same placeholder list.
+        (
+            "operator home path",
+            regex::Regex::new(r"/Users/([A-Za-z][A-Za-z0-9_.-]*)/").unwrap(),
+        ),
     ]
 }
 
@@ -55,8 +68,8 @@ fn patterns() -> Vec<(&'static str, regex::Regex)> {
 /// its controls apply the identical rule.
 fn is_real_hit(label: &str, caps: &regex::Captures) -> bool {
     if label == "operator home path" {
-        let account = caps.get(1).map_or("", |m| m.as_str());
-        return !PLACEHOLDER_ACCOUNTS.contains(&account);
+        let account = caps.get(1).map_or("", |m| m.as_str()).to_ascii_lowercase();
+        return !PLACEHOLDER_ACCOUNTS.contains(&account.as_str());
     }
     true
 }
@@ -124,6 +137,8 @@ fn the_ratchet_catches_each_class() {
         ("internal hostname", "http://thing.svc/mcp"),
         ("private address", "addr 192.168.7.212"),
         ("operator home path", "/home/jsmith/src/x"),
+        ("operator home path", "/Users/jsmith/workspace/x"),
+        ("operator home path", "/Users/JSmith/workspace/x"),
     ] {
         let caught = pats.iter().any(|(label, rx)| {
             *label == expect && rx.captures_iter(sample).any(|c| is_real_hit(label, &c))
@@ -139,6 +154,8 @@ fn placeholders_and_public_addresses_are_allowed() {
     for ok in [
         "/home/user/src/x",
         "/home/alice/src/x",
+        "/Users/user/src/x",
+        "/Users/Shared/src/x",
         "host.example",
         "8.8.8.8",
     ] {
