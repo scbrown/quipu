@@ -257,7 +257,30 @@ pub struct Metrics {
     /// High-water-mark RSS in bytes, sampled after each write and at scrape.
     /// A 15s scrape can miss the peak of a burst export; this catches it.
     peak_rss_bytes: AtomicU64,
+    /// client -> requests the admission deadline INTERRUPTED (aegis-raq1ok).
+    ///
+    /// The admission budget shipped with no way to observe it firing. Response
+    /// status cannot stand in: an interrupted request whose client has already
+    /// disconnected records no status at all, so an all-200 scrape is exactly
+    /// what BOTH "never fired" and "fired constantly" look like. This counter is
+    /// incremented inside the blocking closure, which runs to completion even
+    /// when the HTTP future was dropped — that is the only place an abandoned
+    /// request is still observable.
+    deadline_interrupts: Mutex<BTreeMap<String, u64>>,
+    /// client -> (bucket counts, observation count) for store-held seconds.
+    ///
+    /// A TOTAL divided by a request count cannot show a per-request BOUND,
+    /// because the count excludes the abandoned requests that the total
+    /// includes — which is precisely how a held/e2e ratio became
+    /// uninterpretable. The 30s bucket boundary is the admission budget: if the
+    /// budget binds, observations stop crossing it.
+    held_hist: Mutex<BTreeMap<String, (Vec<u64>, u64)>>,
 }
+
+/// Upper bounds for [`Metrics::observe_store_time`]'s held histogram. `30` is
+/// the admission budget's default and is the boundary that answers whether the
+/// budget is the binding constraint at all.
+pub(crate) const HELD_BUCKETS: [f64; 7] = [0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0];
 
 /// The process-wide registry.
 pub fn metrics() -> &'static Metrics {
@@ -314,11 +337,33 @@ impl Metrics {
     /// Same [`MAX_CLIENTS`] fold as [`observe_client`], for the same reason — the
     /// label comes from a caller-controlled header.
     pub fn observe_store_time(&self, client: &str, endpoint: &str, wait: f64, held: f64) {
+        {
+            let mut hist = self.held_hist.lock().unwrap();
+            let e = hist
+                .entry(client.to_string())
+                .or_insert_with(|| (vec![0; HELD_BUCKETS.len()], 0));
+            for (i, bound) in HELD_BUCKETS.iter().enumerate() {
+                if held <= *bound {
+                    e.0[i] += 1;
+                }
+            }
+            e.1 += 1;
+        }
         let mut map = self.store_time.lock().unwrap();
         let key = client_key(&map, client, endpoint);
         let e = map.entry(key).or_insert((0.0, 0.0));
         e.0 += wait;
         e.1 += held;
+    }
+
+    /// Count one request interrupted by the admission deadline (aegis-raq1ok).
+    pub fn observe_deadline_interrupt(&self, client: &str) {
+        *self
+            .deadline_interrupts
+            .lock()
+            .unwrap()
+            .entry(client.to_string())
+            .or_insert(0) += 1;
     }
 
     /// Record `n` datums committed, and sample RSS into the high-water mark so
@@ -472,6 +517,58 @@ impl Metrics {
                 esc(client),
                 esc(ep)
             );
+        }
+
+        out.push_str(
+            "# HELP quipu_query_deadline_interrupts_total Requests the admission deadline interrupted, by caller (aegis-raq1ok).\n\
+             # TYPE quipu_query_deadline_interrupts_total counter\n",
+        );
+        for (client, n) in self.deadline_interrupts.lock().unwrap().iter() {
+            let _ = writeln!(
+                out,
+                "quipu_query_deadline_interrupts_total{{client=\"{}\"}} {n}",
+                esc(client)
+            );
+        }
+
+        out.push_str(
+            "# HELP quipu_store_held_seconds Distribution of per-request store-held seconds, by caller. The 30s bucket is the admission budget (aegis-raq1ok).\n\
+             # TYPE quipu_store_held_seconds histogram\n",
+        );
+        {
+            let hist = self.held_hist.lock().unwrap();
+            // Sum per client, from the same source as the _total counter so the
+            // two can never disagree about the same seconds.
+            let mut sums: BTreeMap<String, f64> = BTreeMap::new();
+            for ((client, _ep), (_wait, held)) in self.store_time.lock().unwrap().iter() {
+                *sums.entry(client.clone()).or_insert(0.0) += held;
+            }
+            for (client, (buckets, count)) in hist.iter() {
+                for (i, bound) in HELD_BUCKETS.iter().enumerate() {
+                    let _ = writeln!(
+                        out,
+                        "quipu_store_held_seconds_bucket{{client=\"{}\",le=\"{bound}\"}} {}",
+                        esc(client),
+                        buckets[i]
+                    );
+                }
+                let _ = writeln!(
+                    out,
+                    "quipu_store_held_seconds_bucket{{client=\"{}\",le=\"+Inf\"}} {count}",
+                    esc(client)
+                );
+                let _ = writeln!(
+                    out,
+                    "quipu_store_held_seconds_count{{client=\"{}\"}} {count}",
+                    esc(client)
+                );
+                let _ = writeln!(
+                    out,
+                    "quipu_store_held_seconds_sum{{client=\"{}\"}} {}",
+                    esc(client),
+                    sums.get(client).copied().unwrap_or(0.0)
+                );
+            }
         }
 
         // Restart detection. quipu exported NO process start time, which is why

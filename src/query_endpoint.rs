@@ -411,6 +411,19 @@ async fn query_core(
             wait_secs,
             started.elapsed().as_secs_f64(),
         );
+        // Count an admission-deadline interruption HERE, inside the blocking
+        // closure, for the same reason `held` is recorded here: this runs to
+        // completion even when the HTTP future was dropped. Counting it after
+        // the await would miss exactly the abandoned requests the budget exists
+        // to bound, and would report 0 while the budget fired constantly
+        // (aegis-raq1ok).
+        if result
+            .as_ref()
+            .err()
+            .is_some_and(AppError::is_query_timeout)
+        {
+            quipu::metrics::metrics().observe_deadline_interrupt(&client);
+        }
         // The request line above has method+status+duration; only a slow or
         // failed query earns its TEXT in the log — that is the one thing the
         // next wedge RCA needs and the one thing the middleware cannot
