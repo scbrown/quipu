@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-09-20
+
+### Added
+
+- *(server)* Stamp the request deadline at ADMISSION so queue time counts([c96932f](https://github.com/scbrown/quipu/commit/c96932fdde375b36bd47f89bf3a7d64153e1b729))
+- *(metrics)* Make the admission deadline OBSERVABLE([173d8ad](https://github.com/scbrown/quipu/commit/173d8ad11f11ae3064f7dd0df7e1b51df1029abf))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at c96932fd([f70c0b2](https://github.com/scbrown/quipu/commit/f70c0b24607680be694b4d5ebabf4eb05702ed7d))
+- *(conformance)* Re-derive ledgers at 30d068cd([9206efc](https://github.com/scbrown/quipu/commit/9206efc4cc9d244f7482da6aead7a0788a65ce97))
+- *(conformance)* Re-derive ledgers at 173d8ad([72dbfa7](https://github.com/scbrown/quipu/commit/72dbfa781bd18f86624d93eb11b4dc8e682dfeab))
+
+### Testing
+
+- *(config)* Prove request_timeout_ms reaches SearchConfig from the TOML([30d068c](https://github.com/scbrown/quipu/commit/30d068cd6040e8276e7ff30a6082a127cffcd1db))
+
 ## [0.7.0] - 2026-09-16
 
 ### Added
