@@ -422,3 +422,25 @@ path = "packs/tenant-a.db"
         "silence must mount nothing — the pre-existing behaviour exactly"
     );
 }
+
+#[test]
+fn request_timeout_ms_parses_from_the_config_file() {
+    // Starts from the CONFIG FILE, not from SearchConfig directly. A key can be
+    // declared, defaulted and used in code while being unreachable from the TOML
+    // a deployment actually ships — and every behaviour test in this PR would
+    // still pass, because they set the deadline in-process. This is the only
+    // arm that fails if the key is inert (aegis-raq1ok).
+    let toml_str = r#"
+[quipu]
+store_path = "/data/quipu.db"
+
+[quipu.search]
+request_timeout_ms = 30000
+"#;
+    let file: ConfigFile = toml::from_str(toml_str).unwrap();
+    assert_eq!(file.quipu.search.request_timeout_ms, 30000);
+    // CONTROL: absent from the TOML must mean disabled, which is what lets the
+    // feature ship inert on an auto-deploying store.
+    let bare: ConfigFile = toml::from_str("[quipu]\nstore_path = \"/d\"\n").unwrap();
+    assert_eq!(bare.quipu.search.request_timeout_ms, 0);
+}
