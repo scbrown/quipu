@@ -262,6 +262,20 @@ pub(crate) async fn stats(
 #[derive(Debug)]
 pub(crate) struct AppError(quipu::Error);
 
+impl AppError {
+    /// Is this the admission/query deadline having interrupted the request?
+    ///
+    /// Exposed so the query handler can COUNT interruptions
+    /// (`quipu_query_deadline_interrupts_total`, aegis-raq1ok) without matching
+    /// on error text. The budget shipped with no observable at all, and HTTP
+    /// status cannot substitute: an interrupted request whose client already
+    /// disconnected records no status, so an all-200 scrape looks identical
+    /// whether the deadline fired constantly or never.
+    pub(crate) fn is_query_timeout(&self) -> bool {
+        matches!(self.0, quipu::Error::QueryTimeout { .. })
+    }
+}
+
 impl From<quipu::Error> for AppError {
     fn from(e: quipu::Error) -> Self {
         AppError(e)

@@ -256,3 +256,57 @@ fn memory_metrics_render_and_count_writes() {
         );
     }
 }
+
+#[test]
+fn deadline_interrupts_are_counted_per_client() {
+    // The whole point of this counter (aegis-raq1ok): the admission budget
+    // shipped with nothing able to observe it firing, and HTTP status cannot
+    // substitute because an interrupted request whose client already
+    // disconnected records no status at all.
+    let m = Metrics::default();
+    let text = m.render(0, 0, 0, None);
+    assert!(
+        text.contains("quipu_query_deadline_interrupts_total"),
+        "the family must be present even at zero, or a scrape cannot tell \
+         'never fired' from 'metric absent'"
+    );
+
+    m.observe_deadline_interrupt("yupana-hook");
+    m.observe_deadline_interrupt("yupana-hook");
+    m.observe_deadline_interrupt("agent-adhoc");
+    let text = m.render(0, 0, 0, None);
+    assert!(text.contains("quipu_query_deadline_interrupts_total{client=\"yupana-hook\"} 2"));
+    assert!(text.contains("quipu_query_deadline_interrupts_total{client=\"agent-adhoc\"} 1"));
+}
+
+#[test]
+fn held_histogram_shows_a_per_request_bound_a_total_cannot() {
+    // THE DISCRIMINATING ARM. Two callers with the SAME held TOTAL (30s) but
+    // opposite distributions: one made 300 cheap requests, the other made one
+    // request that held the store for 30s. `quipu_store_held_seconds_total` is
+    // identical for both and therefore cannot answer "is any single request
+    // exceeding the budget" — which is the only question the admission deadline
+    // is about.
+    let m = Metrics::default();
+    for _ in 0..300 {
+        m.observe_store_time("many-cheap", "/query", 0.0, 0.1);
+    }
+    m.observe_store_time("one-expensive", "/query", 0.0, 30.0);
+
+    let text = m.render(0, 0, 0, None);
+    // Same total, as the premise requires.
+    assert!(
+        text.contains(
+            "quipu_store_held_seconds_total{client=\"many-cheap\",endpoint=\"/query\"} 30"
+        )
+    );
+    assert!(text.contains(
+        "quipu_store_held_seconds_total{client=\"one-expensive\",endpoint=\"/query\"} 30"
+    ));
+    // The histogram separates them: every cheap observation is under 0.5s,
+    // while the expensive one sits AT the 30s budget boundary and none below it.
+    assert!(text.contains("quipu_store_held_seconds_bucket{client=\"many-cheap\",le=\"0.5\"} 300"));
+    assert!(text.contains("quipu_store_held_seconds_bucket{client=\"one-expensive\",le=\"10\"} 0"));
+    assert!(text.contains("quipu_store_held_seconds_bucket{client=\"one-expensive\",le=\"30\"} 1"));
+    assert!(text.contains("quipu_store_held_seconds_count{client=\"one-expensive\"} 1"));
+}
