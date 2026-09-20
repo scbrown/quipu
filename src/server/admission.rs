@@ -48,6 +48,11 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
+    // Stamped BEFORE the permit is acquired, which is the whole point: the
+    // budget has to cover the queue, because the queue is where a wedged store
+    // spends a request's life (aegis-raq1ok). Stamping it after `acquire()`
+    // would reproduce the per-query default's blind spot one layer up.
+    let deadline = request_budget();
     let permit = admission.acquire().await.map_err(|_| {
         AppError::from(quipu::Error::InvalidValue(format!(
             "{kind} admission is closed"
@@ -55,9 +60,38 @@ where
     })?;
     blocking(move || {
         let _permit = permit;
+        // Held across `f()` and restored on drop: blocking threads are pooled
+        // and reused, so a leaked deadline would be inherited by an unrelated
+        // later request on the same thread.
+        let _deadline = quipu::time::set_request_deadline(deadline);
         f()
     })
     .await
+}
+
+/// Wall-clock budget covering queue time AND execution, in milliseconds.
+/// `0` disables admission-time stamping, which is the default: the per-query
+/// budget then behaves exactly as it did before this existed.
+static REQUEST_BUDGET_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Set the admission-time request budget. Called once, from `serve`.
+///
+/// DISABLED BY DEFAULT, deliberately. Arming this narrows the effective budget
+/// for any request that queues — that is exactly what it is for, and it is also
+/// a behaviour change on a store that auto-deploys from `main` within 15
+/// minutes of a merge. Landing it inert means the code ships and is exercised
+/// by its tests, and arming it stays a separate, observable act with a number
+/// behind it rather than a side effect of a merge.
+pub(crate) fn init_request_budget_ms(ms: u64) {
+    REQUEST_BUDGET_MS.store(ms, std::sync::atomic::Ordering::Relaxed);
+    if ms > 0 {
+        eprintln!("request budget: {ms}ms from admission (covers queue + execution)");
+    }
+}
+
+fn request_budget() -> Option<quipu::time::Deadline> {
+    let ms = REQUEST_BUDGET_MS.load(std::sync::atomic::Ordering::Relaxed);
+    (ms > 0).then(|| quipu::time::Deadline::after_millis(ms))
 }
 
 /// Cancellable admission for synchronous READ handlers (aegis-raq1ok).

@@ -1595,6 +1595,71 @@ fn query_timeout_generous_budget_still_answers_and_clears_handler() {
 }
 
 #[test]
+fn an_admission_stamped_deadline_is_spent_by_queue_time_alone() {
+    // THE aegis-raq1ok PROPERTY. A request that used its whole budget queueing
+    // must be interrupted, not handed a fresh clock at evaluation. The store's
+    // own per-query budget is left GENEROUS on purpose: if the ambient deadline
+    // were ignored, this query answers comfortably and the test passes for the
+    // wrong reason, so the generous budget is what makes the assertion sharp.
+    let mut store = test_store_with_data();
+    store.search_config_mut().query_timeout_ms = 30_000;
+
+    // Stamped in the past: this is the request that queued too long.
+    let _ambient = crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(0)));
+
+    match query(
+        &store,
+        "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+    ) {
+        Err(crate::error::Error::QueryTimeout { .. }) => {}
+        Ok(_) => panic!(
+            "a request whose admission deadline had already passed was given a \
+             fresh 30s budget at evaluation — queue time is still invisible"
+        ),
+        Err(e) => panic!("unexpected error: {e}"),
+    }
+}
+
+#[test]
+fn an_explicit_caller_deadline_still_outranks_the_ambient_one() {
+    // Precedence, asserted in the direction that could regress silently: the
+    // ambient deadline must FILL a gap, never override a caller that decided.
+    let mut store = test_store_with_data();
+    store.search_config_mut().query_timeout_ms = 0;
+    let _ambient = crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(0)));
+    let ctx = TemporalContext {
+        deadline: Some(crate::time::Deadline::after_millis(30_000)),
+        ..Default::default()
+    };
+    let result = query_temporal(
+        &store,
+        "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+        &ctx,
+    )
+    .expect("an explicit generous caller deadline must win over a passed ambient one");
+    assert!(!result.rows().is_empty());
+}
+
+#[test]
+fn no_ambient_deadline_leaves_the_per_query_budget_untouched() {
+    // The inert default. With nothing stamped, behaviour is exactly what it was
+    // before the ambient deadline existed — this is the arm that lets the change
+    // ship disabled.
+    let mut store = test_store_with_data();
+    store.search_config_mut().query_timeout_ms = 30_000;
+    assert!(
+        crate::time::request_deadline().is_none(),
+        "a previous test leaked its ambient deadline into this thread"
+    );
+    let result = query(
+        &store,
+        "SELECT ?name WHERE { ?s <http://example.org/name> ?name }",
+    )
+    .expect("no ambient deadline must mean the ordinary per-query budget");
+    assert!(!result.rows().is_empty());
+}
+
+#[test]
 fn join_row_cap_aborts_exploding_cross_join() {
     let mut store = test_store_with_data();
     // Disable the wall clock so the cap is what fires: the point of the cap

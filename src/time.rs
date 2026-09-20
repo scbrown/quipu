@@ -307,6 +307,64 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// The deadline for the request currently running on this thread, if one was
+/// stamped when the request was ADMITTED rather than when its query began.
+///
+/// # Why this is ambient rather than a parameter (aegis-raq1ok)
+///
+/// [`Deadline`] already bounds a SPARQL query, but the default one is built
+/// inside `query_temporal` — i.e. at the moment evaluation STARTS. Everything
+/// a request spent waiting to get there is therefore invisible to it: a reader
+/// that queued 300 s behind a busy store and then ran a 5 s query was inside a
+/// 30 s budget the whole time, because the clock started after the queue.
+///
+/// That is the gap that took the server down for 9 minutes on 2026-09-06. Read
+/// admission (see the server's `admission` module) bounds how MANY readers are
+/// in flight, which stops the thread-growth ratchet; it does nothing about how
+/// LONG an admitted reader may sit. Stamping the deadline at admission and
+/// carrying it here makes queue time and execution time share one budget, so a
+/// request that has already spent its budget waiting is interrupted instead of
+/// starting fresh work nobody is still waiting for.
+///
+/// It is ambient because the store call path from admission down to
+/// `query_temporal` crosses a bin/lib boundary and 26 `read()` call sites;
+/// threading a parameter through all of them would touch every read in the
+/// server to deliver a value that is a property of the REQUEST, not of any
+/// individual call. `TemporalContext::deadline` still wins when a caller sets
+/// one explicitly, so this only fills the case that previously defaulted.
+#[must_use]
+pub fn request_deadline() -> Option<Deadline> {
+    REQUEST_DEADLINE.with(std::cell::Cell::get)
+}
+
+/// Set the ambient request deadline for this thread, restoring the previous
+/// value when the returned guard drops.
+///
+/// Returns a guard rather than setting unconditionally so that a blocking
+/// thread — which is pooled and reused by Tokio — cannot leak one request's
+/// deadline into the next request that happens to land on it. That failure
+/// would be silent and intermittent: the next query would inherit an already
+/// passed deadline and be interrupted immediately, on a thread chosen by the
+/// runtime rather than by anything in the request.
+pub fn set_request_deadline(deadline: Option<Deadline>) -> RequestDeadlineGuard {
+    RequestDeadlineGuard(REQUEST_DEADLINE.with(|slot| slot.replace(deadline)))
+}
+
+/// Restores the previous ambient deadline on drop. See [`set_request_deadline`].
+#[must_use = "dropping the guard immediately clears the deadline it just set"]
+pub struct RequestDeadlineGuard(Option<Deadline>);
+
+impl Drop for RequestDeadlineGuard {
+    fn drop(&mut self) {
+        REQUEST_DEADLINE.with(|slot| slot.set(self.0));
+    }
+}
+
+thread_local! {
+    static REQUEST_DEADLINE: std::cell::Cell<Option<Deadline>> =
+        const { std::cell::Cell::new(None) };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -455,6 +513,36 @@ mod tests {
             let (y, m, d) = civil_from_days(days);
             assert_eq!(days_from_civil(y, m, d), days, "at day {days}");
         }
+    }
+
+    #[test]
+    fn the_ambient_deadline_is_absent_until_stamped_and_restored_on_drop() {
+        assert_eq!(request_deadline(), None, "should start clean");
+        let dl = Deadline::after_millis(10_000);
+        {
+            let _g = set_request_deadline(Some(dl));
+            assert_eq!(request_deadline(), Some(dl));
+        }
+        assert_eq!(
+            request_deadline(),
+            None,
+            "a pooled blocking thread must not inherit the previous request's deadline"
+        );
+    }
+
+    #[test]
+    fn nested_stamps_restore_the_outer_deadline_not_none() {
+        // The failure this guards is specific: a naive implementation that
+        // clears to None on drop would silently strip the OUTER request's
+        // budget the moment any inner scope stamped its own.
+        let outer = Deadline::after_millis(10_000);
+        let inner = Deadline::after_millis(20_000);
+        let _o = set_request_deadline(Some(outer));
+        {
+            let _i = set_request_deadline(Some(inner));
+            assert_eq!(request_deadline(), Some(inner));
+        }
+        assert_eq!(request_deadline(), Some(outer), "outer stamp was lost");
     }
 
     #[test]

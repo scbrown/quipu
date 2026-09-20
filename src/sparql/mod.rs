@@ -499,10 +499,17 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 
     let started = crate::time::Stopwatch::start();
-    let deadline = ctx.deadline.or_else(|| {
-        let limit_ms = store.search_config().query_timeout_ms;
-        (limit_ms > 0).then(|| crate::time::Deadline::after_millis(limit_ms))
-    });
+    // Precedence, widest-scope last: an explicit caller deadline wins; then the
+    // request deadline stamped at ADMISSION, which already includes whatever
+    // this request spent queueing (aegis-raq1ok); then the per-query default,
+    // whose clock starts here and so cannot see queue time at all.
+    let deadline = ctx
+        .deadline
+        .or_else(crate::time::request_deadline)
+        .or_else(|| {
+            let limit_ms = store.search_config().query_timeout_ms;
+            (limit_ms > 0).then(|| crate::time::Deadline::after_millis(limit_ms))
+        });
     let row_cap = ctx.row_cap.or_else(|| {
         let cap = store.search_config().max_join_rows;
         (cap > 0).then_some(cap)
