@@ -109,6 +109,20 @@ pub struct SearchConfig {
     /// serialized behind it).
     pub query_timeout_ms: u64,
 
+    /// Wall-clock budget for a whole request measured from ADMISSION, in
+    /// milliseconds (default: 0 = disabled).
+    ///
+    /// `query_timeout_ms` above starts its clock when evaluation begins, so a
+    /// request that queued for minutes behind a busy store arrived at a full
+    /// budget (aegis-raq1ok: reads reached EXACTLY 0 completions for 9 minutes
+    /// while each individual query was comfortably inside its limit). When this
+    /// is non-zero the deadline is stamped as the request is admitted instead,
+    /// so queue time and execution time share one budget and a request whose
+    /// budget expired while waiting is interrupted rather than started.
+    ///
+    /// Left at 0 the server behaves exactly as it did before this key existed.
+    pub request_timeout_ms: u64,
+
     /// Ceiling on INTERMEDIATE binding rows during SPARQL evaluation
     /// (default: 1,000,000; 0 disables). The wall-clock budget alone is not
     /// enough: an exploding join burns its whole timeout at 100% CPU while
@@ -127,6 +141,7 @@ impl Default for SearchConfig {
             oversample_factor: DEFAULT_OVERSAMPLE_FACTOR,
             max_sparql_rows: 10_000,
             query_timeout_ms: 30_000,
+            request_timeout_ms: 0,
             max_join_rows: 1_000_000,
         }
     }

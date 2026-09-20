@@ -305,6 +305,7 @@ async fn main() {
     }
 
     admission::init_read_admission_for_pool(read_pool.len());
+    admission::init_request_budget_ms(store.search_config().request_timeout_ms);
 
     let vector_reads_pooled = store.has_sqlite_vector_backend();
     let state: SharedStore = Arc::new(StoreHandle {
