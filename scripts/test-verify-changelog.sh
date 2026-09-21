@@ -40,6 +40,7 @@ make_repo() {
     cp "$REPO_ROOT/scripts/fix-changelog.sh" scripts/
     cp "$REPO_ROOT/scripts/filter-packaged-commits.py" scripts/
     cp "$REPO_ROOT/scripts/check-release-window.py" scripts/
+    cp "$REPO_ROOT/scripts/changelog-duplicates.py" scripts/
     printf '[package]\nname="probe"\nversion="1.0.0"\nedition="2021"\nexclude=["docs/"]\n' > Cargo.toml
     echo a > src/lib.rs; git add -A; git commit -qm "feat: the released thing"
     git tag v1.0.0
@@ -302,6 +303,68 @@ else
   fail=$((fail + 1))
 fi
 check "unreleased verifies against the latest ancestor release" 0 "none missing, none extra" "$d"
+
+# --- DUPLICATION (aegis-fbekec) ---------------------------------------------
+# quipu 0.7.0 shipped 55 bullets of 34 distinct — 21 duplicated, every category
+# heading twice — to the release page and crates.io with this guard exiting 0.
+# Membership (missing/extra) cannot count, so no refinement of the existing
+# comparison reaches this; it needs its own check and its own cases.
+read -r d a b c < <(make_repo)
+{ echo "# Changelog"; echo; echo "## [Unreleased]"; echo;
+  echo "### Added"; echo; entry "$b"; entry "$c";
+  echo; echo "### Added"; echo; entry "$b"; entry "$c";
+  echo; echo "## [1.0.0] - 2025-12-01"; echo; entry "$a";
+} > "$d/CHANGELOG.md"
+check "duplicated bullets fail even though nothing is missing or extra" \
+  1 "documents the same entries more than once" "$d"
+
+# The 0.7.0 shape exactly: the duplication is NOT in the first `## [` heading.
+# Both tools resolve "newest section" as that first heading, so a duplicate check
+# scoped to it would certify the section ABOVE the broken one — which is what
+# actually happened. This case fails if anyone re-scopes the check.
+read -r d a b c < <(make_repo)
+{ echo "# Changelog"; echo; echo "## [Unreleased]"; echo; entry "$c";
+  echo; echo "## [1.0.0] - 2025-12-01"; echo;
+  echo "### Added"; echo; entry "$a"; entry "$a";
+} > "$d/CHANGELOG.md"
+check "duplication BELOW a populated Unreleased is still caught" \
+  1 "the [1.0.0] section documents the same entries more than once" "$d"
+
+# NEGATIVE CONTROL: a populated Unreleased above a release is legitimate here and
+# must stay passing. Without this arm the guard above could be "fixed" into
+# rejecting the repo's normal between-releases state.
+read -r d a b c < <(make_repo)
+{ echo "# Changelog"; echo; echo "## [Unreleased]"; echo; entry "$b"; entry "$c";
+  echo; echo "## [1.0.0] - 2025-12-01"; echo; entry "$a";
+} > "$d/CHANGELOG.md"
+check "populated Unreleased above a release still verifies" \
+  0 "none missing, none extra" "$d"
+
+# The corrector must REFUSE to leave a duplicated file behind, not just the
+# verifier refuse to pass one.
+read -r d a b c < <(make_repo)
+{ echo "# Changelog"; echo; echo "## [Unreleased]"; echo; entry "$b"; entry "$c";
+  echo; echo "## [1.0.0] - 2025-12-01"; echo;
+  echo "### Added"; echo; entry "$a"; entry "$a";
+} > "$d/CHANGELOG.md"
+fix_out="$(cd "$d" && ./scripts/fix-changelog.sh 2>&1)"; fix_rc=$?
+if [[ "$fix_rc" -ne 0 ]] && grep -qF "duplicated" <<<"$fix_out"; then
+  echo "  PASS  fixer refuses to write a duplicated changelog (exit $fix_rc)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  fixer accepted duplication: exit $fix_rc: $fix_out" >&2
+  fail=$((fail + 1))
+fi
+rm -rf "$d"
+
+# The detector's own arms, including its parse-error cases.
+if python3 "$REPO_ROOT/scripts/changelog-duplicates.py" --selftest >/dev/null 2>&1; then
+  echo "  PASS  changelog-duplicates.py selftest (all arms)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  changelog-duplicates.py selftest" >&2
+  fail=$((fail + 1))
+fi
 
 echo
 echo "  ${pass} passed, ${fail} failed"
