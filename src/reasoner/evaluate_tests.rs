@@ -868,3 +868,155 @@ ex:r a rule:Rule ; rule:id "R" ;
         "a variable object must still load the whole predicate, got {unbound} type-facts"
     );
 }
+
+/// Live copies of one (entity, attribute, value) triple, grouped by graph.
+///
+/// Deliberately does NOT filter on source: the whole question this answers is
+/// whether the same triple is standing in two planes at two trust levels, and
+/// a source filter would hide exactly that.
+fn live_copies_by_graph(store: &Store, s: &str, p: &str, o: &str) -> Vec<(i64, String)> {
+    let e = store.lookup(s).unwrap().expect("subject interned");
+    let a = store.lookup(p).unwrap().expect("predicate interned");
+    let v = store.lookup(o).unwrap().expect("object interned");
+    let bytes = Value::Ref(v).to_bytes();
+    let mut stmt = store
+        .conn
+        .prepare(
+            "SELECT f.g, t.source FROM facts f \
+             JOIN transactions t ON f.tx = t.id \
+             WHERE f.e = ?1 AND f.a = ?2 AND f.v = ?3 \
+               AND f.op = 1 AND f.valid_to IS NULL \
+             ORDER BY f.g",
+        )
+        .unwrap();
+    let rows = stmt
+        .query_map(rusqlite::params![e, a, bytes], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
+        .unwrap();
+    rows.map(std::result::Result::unwrap).collect()
+}
+
+#[test]
+fn promoted_derivation_is_not_restated_into_the_companion() {
+    // REGRESSION GUARD, formerly `probe_promoted_derivation_is_re_asserted_
+    // into_the_companion` — a probe that PINNED the hazard
+    // `docs/design/entailment-regime.md` §3 names as the reason the promotion
+    // mechanism could not be built (aegis-f8efkn). The probe PASSED against
+    // the unfixed engine, which is what made this a measured prerequisite
+    // rather than an argued one; its assertions are inverted here.
+    //
+    // §3's implementation note, in the code's own terms:
+    //
+    //   `write_rule_delta` computes `old_tuples` with
+    //   `load_existing_derivations_in_graph(.., graph)` where `graph` is the
+    //   COMPANION. A promoted fact has left the companion, so it is absent
+    //   from `old_tuples` while still present in `new_tuples`, and
+    //   `new_tuples.difference(&old_tuples)` RE-ASSERTED it into the
+    //   companion on the very next evaluation — the
+    //   two-copies-at-two-trust-levels state the quarantine decision exists
+    //   to prevent.
+    //
+    // `write_rule_delta` now also loads the premise graph's derivations under
+    // this rule's own `reasoner:<id>` source and skips those. The
+    // discriminator is the SOURCE and not mere presence: skipping on presence
+    // breaks `mutual_class_equivalence_converges_under_retraction`, which
+    // pins that the companion holds base-duplicating entailments too. That
+    // neighbour is the control for this guard — measured, by sabotage, in
+    // both directions.
+    //
+    // Nothing here simulates a fix. The "promotion" below is exactly the
+    // retract-from-companion + assert-into-premise move §3 specifies, with
+    // the derivation marker retained (§3: "the promoted fact [must] keep a
+    // derivation marker"), so the probe measures the engine, not a mock.
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:lift a rule:Rule ;
+    rule:id "LIFT" ;
+    rule:head "<{RDF_TYPE}>(?x, <{COMMIT}>)" ;
+    rule:body "<{RDF_TYPE}>(?x, <{GIT_COMMIT}>)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    // `ex:seed` exists only to intern <Commit>: a rule head naming an IRI the
+    // store has never seen is Unsupported. It is not a GitCommit, so it
+    // derives nothing and cannot contribute to the counts below.
+    assert_triple(&mut store, "ex:seed", RDF_TYPE, COMMIT);
+    assert_triple(&mut store, "ex:a", RDF_TYPE, GIT_COMMIT);
+
+    let report = evaluate(&mut store, &rs, TS).expect("first evaluation");
+    assert_eq!(report.asserted, 1, "one derivation: ex:a is a Commit");
+
+    let root = crate::schema::ROOT_GRAPH;
+    let companion_iri = store.companion_inferred_iri(root).unwrap();
+    let companion = store.lookup(&companion_iri).unwrap().expect("companion");
+
+    let before = live_copies_by_graph(&store, "ex:a", RDF_TYPE, COMMIT);
+    assert_eq!(
+        before,
+        vec![(companion, "reasoner:LIFT".to_string())],
+        "precondition: the derivation lives in the companion and nowhere else"
+    );
+
+    // ── the promotion §3 specifies: a MOVE, not a copy ──────────────────
+    let e = store.lookup("ex:a").unwrap().unwrap();
+    let a = store.lookup(RDF_TYPE).unwrap().unwrap();
+    let v = store.lookup(COMMIT).unwrap().unwrap();
+    let promoted_at = "2026-04-07T00:00:01Z";
+    store
+        .transact_to_graph(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Ref(v),
+                valid_from: promoted_at.to_string(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            promoted_at,
+            Some("promote"),
+            Some("reasoner:LIFT"),
+            companion,
+        )
+        .expect("retract from the companion");
+    store
+        .transact_to_graph(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Ref(v),
+                valid_from: promoted_at.to_string(),
+                valid_to: None,
+                op: Op::Assert,
+            }],
+            promoted_at,
+            Some("promote"),
+            Some("reasoner:LIFT"),
+            root,
+        )
+        .expect("assert into the premise graph");
+
+    let moved = live_copies_by_graph(&store, "ex:a", RDF_TYPE, COMMIT);
+    assert_eq!(
+        moved,
+        vec![(root, "reasoner:LIFT".to_string())],
+        "the move must leave exactly one copy, in the premise graph"
+    );
+
+    // ── one more evaluation, nothing else changed ───────────────────────
+    evaluate(&mut store, &rs, "2026-04-07T00:00:02Z").expect("second evaluation");
+
+    let after = live_copies_by_graph(&store, "ex:a", RDF_TYPE, COMMIT);
+    assert_eq!(
+        after,
+        vec![(root, "reasoner:LIFT".to_string())],
+        "a promoted derivation must survive re-evaluation as ONE first-class \
+         fact in the premise graph. A second copy in the companion is the \
+         entailment-regime.md §3 hazard: the same triple standing in two \
+         planes at two trust levels. Got {after:?}"
+    );
+}

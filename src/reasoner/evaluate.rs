@@ -97,8 +97,15 @@ pub fn evaluate_in_graph(
     // Write the delta back through the store, per rule, into the companion.
     for (rule_idx, new_tuples) in &derived_by_rule {
         let rule = &ruleset.rules[*rule_idx];
-        let (asserted, retracted) =
-            write_rule_delta(store, rule, new_tuples, timestamp, companion, &mut world)?;
+        let (asserted, retracted) = write_rule_delta(
+            store,
+            rule,
+            new_tuples,
+            timestamp,
+            graph,
+            companion,
+            &mut world,
+        )?;
         report.asserted += asserted;
         report.retracted += retracted;
         report.per_rule.push((rule.id.clone(), asserted));
@@ -535,6 +542,7 @@ fn write_rule_delta(
     rule: &super::ast::Rule,
     new_tuples: &BTreeSet<(i64, i64)>,
     timestamp: &str,
+    premise: i64,
     graph: i64,
     world: &mut World,
 ) -> Result<(usize, usize)> {
@@ -542,6 +550,26 @@ fn write_rule_delta(
     let source = format!("reasoner:{}", rule.id);
 
     let old_tuples = load_existing_derivations_in_graph(store, attr_id, &source, graph)?;
+
+    // PROMOTED derivations (aegis-f8efkn, entailment-regime.md §3).
+    //
+    // `old_tuples` is the companion's own state, so a derivation that has
+    // been PROMOTED out of the companion into the premise graph is absent
+    // from it while still present in `new_tuples` — and the assert loop
+    // below would restate it into the companion on every evaluation,
+    // recreating exactly the two-copies-at-two-trust-levels state the
+    // quarantine decision exists to prevent. §3 names this as the reason the
+    // promotion mechanism could not be built: "the Datalog `write_rule_delta`
+    // ... must learn to skip tuples already current in the premise graph".
+    //
+    // The discriminator is the SOURCE, not mere presence. A base fact that
+    // happens to duplicate an entailment carries its own source and must
+    // still be restated into the companion — the companion holds the full
+    // closure, base-duplicating entailments included, which
+    // `mutual_class_equivalence_converges_under_retraction` pins. Only a
+    // tuple standing in the premise graph under THIS RULE'S OWN
+    // `reasoner:<id>` source is a promoted derivation.
+    let promoted = load_existing_derivations_in_graph(store, attr_id, &source, premise)?;
 
     let mut datums: Vec<Datum> = Vec::new();
     // Retract anything that used to hold and no longer does.
@@ -555,8 +583,18 @@ fn write_rule_delta(
             op: Op::Retract,
         });
     }
-    // Assert anything new.
+    // Assert anything new, except what a promotion already made first-class.
+    //
+    // Deliberately the ASSERT side only. A companion copy that is ALREADY
+    // doubled with a promoted one is left alone: repairing a store that is
+    // in that state is a data-touching act with its own audit trail, not a
+    // side effect of the next evaluation. The retraction half (premise
+    // retracted -> promoted fact retracted) is likewise still unbuilt and
+    // named in §3.
     for tuple in new_tuples.difference(&old_tuples) {
+        if promoted.contains(tuple) {
+            continue;
+        }
         datums.push(Datum {
             entity: tuple.0,
             attribute: attr_id,
