@@ -172,6 +172,24 @@ if [[ "$ext_n" -gt 0 ]]; then
   fi
   rc=1
 fi
+# DUPLICATION — a THIRD direction, and the one that actually shipped (aegis-fbekec).
+#
+# Everything above is set membership: missing = expected\documented, extra =
+# documented\expected. Membership cannot count. A section documenting every
+# expected commit TWICE has nothing missing and nothing extra and passes clean.
+# quipu 0.7.0 shipped exactly that — 55 bullets of 34 distinct, 21 duplicated,
+# every category heading twice — to the GitHub release page and the crates.io
+# description, with this script exiting 0 on it (reproduced at head 793c960e).
+#
+# Checked over EVERY section, not just "$newest_ver". The same incident had a
+# second blind spot: `newest_ver` resolves to the first `## [` heading, which was
+# a populated `## [Unreleased]`, so this script corrected and certified the
+# section ABOVE the broken one. Scoping the duplicate check to `newest_ver` would
+# inherit that blind spot exactly and report 0.7.0 clean again.
+if ! printf '%s\n' "$changelog_content" | python3 scripts/changelog-duplicates.py --stdin; then
+  rc=1
+fi
+
 if [[ "$rc" -ne 0 ]]; then
   echo "" >&2
   echo "Fix: regenerate with the tool that is correct here —" >&2

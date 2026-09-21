@@ -194,6 +194,16 @@ if (( new_lines * 2 < old_lines )); then
   echo "ERROR: regenerated changelog is ${new_lines} lines vs ${old_lines}; refusing to write" >&2
   exit 2
 fi
+# Never WRITE a file this repo's verifier would reject for duplication, and never
+# leave one in place either (aegis-fbekec). Checked across every section for the
+# same reason verify-changelog.sh does: `newest_ver` here is the first `## [`
+# heading, which in the 0.7.0 incident was a populated `## [Unreleased]` — so this
+# script rewrote and declared OK the section ABOVE the one carrying 21 duplicated
+# bullets. A gate scoped to `newest_ver` reproduces that precisely.
+if ! python3 scripts/changelog-duplicates.py --file "$NEW_FILE"; then
+  echo "ERROR: the regenerated changelog contains duplicated entries; refusing to write" >&2
+  exit 2
+fi
 
 if cmp -s "$NEW_FILE" CHANGELOG.md; then
   echo "OK — the ${newest_ver} section already matches git-cliff; nothing to do."
