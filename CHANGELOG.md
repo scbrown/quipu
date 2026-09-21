@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-09-21
+
+### Fixed
+
+- *(reasoner)* A promoted derivation was restated into the companion on the next evaluation([804a69e](https://github.com/scbrown/quipu/commit/804a69e1c8fc64fafe67abfd6b31e595f0a98e7e))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive the ledgers at this branch's HEAD, and fix MD004([8e5344f](https://github.com/scbrown/quipu/commit/8e5344f694745ea751e739536136c1edcd715dd3))
+
+### Style
+
+- Cargo fmt([68d7208](https://github.com/scbrown/quipu/commit/68d7208b12f215ce4dcf67eeff9632a4d63bf06e))
+
 ## [0.8.0] - 2026-09-20
 
 ### Added
