@@ -112,27 +112,27 @@ that must be visible to SHACL/policy evaluation.
 > **Status 2026-09-21 (aegis-f8efkn) — the re-derive half is MEASURED and
 > CLOSED; the retraction half is not.**
 >
-> * The Datalog hazard was real and is now pinned by
+> - The Datalog hazard was real and is now pinned by
 >   `promoted_derivation_is_not_restated_into_the_companion`
 >   (`src/reasoner/evaluate_tests.rs`). It began as a probe that PASSED
 >   against the unfixed engine — 1 copy in the premise graph, 1 in the
 >   companion, both live — so this note's warning is a measurement rather
 >   than an inference.
-> * `write_rule_delta` now loads the premise graph's derivations under the
+> - `write_rule_delta` now loads the premise graph's derivations under the
 >   rule's own `reasoner:<id>` source and skips them. **The discriminator is
 >   the SOURCE, not presence.** A base fact that duplicates an entailment
 >   must still be restated into the companion, which holds the full closure;
 >   skipping on presence breaks
 >   `mutual_class_equivalence_converges_under_retraction`, verified by
 >   sabotage.
-> * The claim that the OWL materializer already absorbs this was INHERITED,
+> - The claim that the OWL materializer already absorbs this was INHERITED,
 >   so it was measured too:
 >   `promoted_owl_materialization_is_not_restated_into_the_companion`
 >   (`src/owl_tests.rs`, `--features owl`) confirms it, with a control that
 >   retracts the promoted copy and shows the fact does come back — otherwise
 >   the assertion would be satisfied by a materializer that merely does
 >   nothing on a second call.
-> * **Still unbuilt, deliberately:** the retraction half, and repair of a
+> - **Still unbuilt, deliberately:** the retraction half, and repair of a
 >   store already holding both copies. The skip is on the ASSERT side only —
 >   an existing doubled pair is left alone, because repairing it is a
 >   data-touching act that belongs to the promotion mechanism with its own
