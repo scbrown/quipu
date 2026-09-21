@@ -1920,3 +1920,161 @@ fn materialize_action_is_reachable_by_name_from_the_dispatch_table() {
         "the literal action string a scheduler sends must be handled, not merely mentioned"
     );
 }
+
+/// Live copies of one (entity, attribute, value) triple, grouped by graph.
+/// No source filter — the question is whether one triple stands in two planes.
+fn owl_live_copies_by_graph(
+    store: &crate::store::Store,
+    s: &str,
+    p: &str,
+    o: &str,
+) -> Vec<(i64, String)> {
+    let e = store.lookup(s).unwrap().expect("subject interned");
+    let a = store.lookup(p).unwrap().expect("predicate interned");
+    let v = store.lookup(o).unwrap().expect("object interned");
+    let bytes = crate::types::Value::Ref(v).to_bytes();
+    let mut stmt = store
+        .conn
+        .prepare(
+            "SELECT f.g, t.source FROM facts f \
+             JOIN transactions t ON f.tx = t.id \
+             WHERE f.e = ?1 AND f.a = ?2 AND f.v = ?3 \
+               AND f.op = 1 AND f.valid_to IS NULL \
+             ORDER BY f.g",
+        )
+        .unwrap();
+    let rows = stmt
+        .query_map(rusqlite::params![e, a, bytes], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
+        .unwrap();
+    rows.map(std::result::Result::unwrap).collect()
+}
+
+#[test]
+fn promoted_owl_materialization_is_not_restated_into_the_companion() {
+    // `docs/design/entailment-regime.md` §3 asserts, without a test, that
+    // "the OWL materializer's seen-set already absorbs this (premises include
+    // the promoted fact)" — i.e. that the re-derive hazard fixed for the
+    // Datalog engine (aegis-f8efkn) does not exist on the OWL path.
+    //
+    // That claim is inherited, so it is MEASURED here rather than trusted.
+    // The two engines write into the same companion, so if the claim were
+    // wrong, promotion would double OWL-derived facts while looking fixed on
+    // the Datalog side — the adjacent, obviously-relevant, passing test
+    // standing in for one that was never run.
+    const FIDO: &str = "http://example.org/fido";
+    const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    const ANIMAL: &str = "http://example.org/Animal";
+
+    let ont = Ontology::from_turtle(TEST_ONTOLOGY).unwrap();
+    let mut store = crate::store::Store::open_in_memory().unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        b"@prefix ex: <http://example.org/> .\nex:fido a ex:Dog .\n".as_ref(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    ont.materialize(&mut store, "2026-01-01T00:00:00Z").unwrap();
+
+    let root = crate::schema::ROOT_GRAPH;
+    let companion_iri = store.companion_inferred_iri(root).unwrap();
+    let companion = store.lookup(&companion_iri).unwrap().expect("companion");
+
+    let before = owl_live_copies_by_graph(&store, FIDO, RDF_TYPE, ANIMAL);
+    assert_eq!(
+        before,
+        vec![(companion, "owl:materialize".to_string())],
+        "precondition: fido's derived Animal type lives only in the companion"
+    );
+
+    // The promotion §3 specifies: a MOVE out of the companion into the
+    // premise graph, keeping the derivation marker.
+    let e = store.lookup(FIDO).unwrap().unwrap();
+    let a = store.lookup(RDF_TYPE).unwrap().unwrap();
+    let v = store.lookup(ANIMAL).unwrap().unwrap();
+    let ts = "2026-01-01T00:00:01Z";
+    for (op, g) in [
+        (crate::types::Op::Retract, companion),
+        (crate::types::Op::Assert, root),
+    ] {
+        store
+            .transact_to_graph(
+                &[crate::store::Datum {
+                    entity: e,
+                    attribute: a,
+                    value: crate::types::Value::Ref(v),
+                    valid_from: ts.to_string(),
+                    valid_to: None,
+                    op,
+                }],
+                ts,
+                Some("promote"),
+                Some("owl:materialize"),
+                g,
+            )
+            .expect("promotion move");
+    }
+    assert_eq!(
+        owl_live_copies_by_graph(&store, FIDO, RDF_TYPE, ANIMAL),
+        vec![(root, "owl:materialize".to_string())],
+        "the move must leave exactly one copy, in the premise graph"
+    );
+
+    ont.materialize(&mut store, "2026-01-01T00:00:02Z").unwrap();
+
+    let after = owl_live_copies_by_graph(&store, FIDO, RDF_TYPE, ANIMAL);
+    assert_eq!(
+        after,
+        vec![(root, "owl:materialize".to_string())],
+        "re-materialization must not restate a promoted fact into the \
+         companion. Two copies here would mean §3's claim about the \
+         seen-set is wrong and the OWL path needs the same premise-graph \
+         skip the Datalog path just got. Got {after:?}"
+    );
+
+    // CONTROL — without it the assertion above is satisfiable by a
+    // materializer that simply does nothing on a second call, which would
+    // pass in both worlds and prove nothing about the seen-set.
+    //
+    // Retract the promoted copy so the triple is live in NO graph, then
+    // materialize again at the same later timestamp. It must come BACK, in
+    // the companion. That is the derivation the previous step declined to
+    // restate, so the decline was the seen-set absorbing a promoted premise
+    // and not an inert engine.
+    let ts3 = "2026-01-01T00:00:03Z";
+    store
+        .transact_to_graph(
+            &[crate::store::Datum {
+                entity: e,
+                attribute: a,
+                value: crate::types::Value::Ref(v),
+                valid_from: ts3.to_string(),
+                valid_to: None,
+                op: crate::types::Op::Retract,
+            }],
+            ts3,
+            Some("promote"),
+            Some("owl:materialize"),
+            root,
+        )
+        .expect("retract the promoted copy");
+    assert!(
+        owl_live_copies_by_graph(&store, FIDO, RDF_TYPE, ANIMAL).is_empty(),
+        "control precondition: the triple must be live nowhere"
+    );
+
+    ont.materialize(&mut store, "2026-01-01T00:00:04Z").unwrap();
+    let control = owl_live_copies_by_graph(&store, FIDO, RDF_TYPE, ANIMAL);
+    assert_eq!(
+        control,
+        vec![(companion, "owl:materialize".to_string())],
+        "CONTROL FAILED: the materializer derives nothing on a later call \
+         even with the fact absent, so the non-restatement above says \
+         nothing about the seen-set. Got {control:?}"
+    );
+}
