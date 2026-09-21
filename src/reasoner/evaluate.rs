@@ -98,13 +98,7 @@ pub fn evaluate_in_graph(
     for (rule_idx, new_tuples) in &derived_by_rule {
         let rule = &ruleset.rules[*rule_idx];
         let (asserted, retracted) = write_rule_delta(
-            store,
-            rule,
-            new_tuples,
-            timestamp,
-            graph,
-            companion,
-            &mut world,
+            store, rule, new_tuples, timestamp, graph, companion, &mut world,
         )?;
         report.asserted += asserted;
         report.retracted += retracted;
