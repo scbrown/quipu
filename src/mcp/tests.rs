@@ -4037,6 +4037,67 @@ fn entailment_fixture() -> Store {
     store
 }
 
+/// aegis-56bvs2 / W3C `owlds02`: a blank node that is the OBJECT of one pattern
+/// and the SUBJECT of the next must join. In the composed (graph + companion)
+/// scope the subject side used to bind as a string and the object side as a
+/// Ref, so the blank-node row silently vanished under entailment only.
+fn bnode_join_fixture() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    for (s, p, o) in [
+        ("http://ex/x", "http://ex/p", "http://ex/y"),
+        ("http://ex/y", crate::namespace::RDF_TYPE, "http://ex/c"),
+        ("http://ex/x", "http://ex/p", "_:y"),
+        ("_:y", crate::namespace::RDF_TYPE, "http://ex/c"),
+    ] {
+        let (e, a) = (store.intern(s).unwrap(), store.intern(p).unwrap());
+        let v = store.intern(o).unwrap();
+        let g = store.intern(ENT_G).unwrap();
+        store
+            .transact_to_graph(
+                &[crate::store::Datum {
+                    entity: e,
+                    attribute: a,
+                    value: crate::types::Value::Ref(v),
+                    valid_from: ENT_TS.into(),
+                    valid_to: None,
+                    op: crate::types::Op::Assert,
+                }],
+                ENT_TS,
+                None,
+                None,
+                g,
+            )
+            .unwrap();
+    }
+    store
+}
+
+const BNODE_JOIN_QUERY: &str = "SELECT ?x ?y WHERE { ?x <http://ex/p> ?y . ?y a <http://ex/c> }";
+
+#[test]
+fn a_blank_node_joins_across_subject_and_object_with_and_without_entailment() {
+    let mut store = bnode_join_fixture();
+    let g = store.lookup(ENT_G).unwrap().unwrap();
+    crate::sparql::rdfs_closure::materialise(&mut store, g, ENT_TS).unwrap();
+    // CONTROL: the asserted-only answer has both rows, blank node included.
+    let plain = tool_query(
+        &store,
+        &serde_json::json!({"query": BNODE_JOIN_QUERY, "graph": ENT_G}),
+    )
+    .unwrap();
+    assert_eq!(plain["count"], 2, "control: {plain}");
+    // The entailed answer is a SUPERSET: it must not lose the blank-node row.
+    let entailed = tool_query(
+        &store,
+        &serde_json::json!({"query": BNODE_JOIN_QUERY, "graph": ENT_G, "entailment": "rdfs"}),
+    )
+    .unwrap();
+    assert_eq!(
+        entailed["count"], 2,
+        "entailment dropped the blank-node join: {entailed}"
+    );
+}
+
 const ENT_QUERY: &str = "SELECT ?x WHERE { <http://ex/a> ?x <http://ex/c> }";
 
 #[test]
