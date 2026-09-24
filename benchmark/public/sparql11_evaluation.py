@@ -26,9 +26,28 @@ from conformance_provenance import provenance
 
 PINNED_SUITE_REVISION = "369a90d1a60c021b746df2e411da0ff36258a758"
 APPROVED = "dawgt:approval dawgt:Approved"
+# `rdf:type` OR Turtle's `a`. The delete / delete-data / delete-insert /
+# delete-where / clear / drop manifests (and part of basic-update) declare their
+# tests with `a`, and matching only `rdf:type` silently dropped 56 of the 93
+# approved update tests (aegis-nges80, found by counting the manifests with an
+# independent RDF parser). The runner reported 37/37 and nothing failed.
 TYPE = re.compile(
-    r"rdf:type\s+mf:(QueryEvaluationTest|UpdateEvaluationTest|ProtocolTest|CSVResultFormatTest)"
+    r"(?:rdf:type|\ba)\s+mf:(QueryEvaluationTest|UpdateEvaluationTest|ProtocolTest|CSVResultFormatTest)"
 )
+
+#: Approved cases per class at PINNED_SUITE_REVISION, counted by parsing every
+#: included manifest as RDF (rdflib), NOT by this module's own regex parser. A
+#: full run at the pinned revision must discover exactly these, so a parser
+#: that silently drops a manifest refuses to publish instead of reporting a
+#: clean smaller number. Query evaluation lists 225 tests: 168 Approved, 17
+#: Proposed, 40 with no approval status. Update lists 94: 93 Approved.
+APPROVED_INVENTORY = {
+    "query-evaluation": 168,
+    "update": 93,
+    "protocol": 34,
+    "result-format": 10,
+    "entailment": 70,
+}
 NAME = re.compile(r'mf:name\s+"((?:[^"\\]|\\.)*)"', re.S)
 QUERY = re.compile(r"qt:query\s+<([^>]+)>")
 DATA = re.compile(r"qt:data\s+<([^>]+)>")
@@ -1029,6 +1048,12 @@ def main() -> int:
         cases = cases[: args.limit]
     if not cases:
         parser.error("selected manifests produced zero approved cases")
+    if args.limit is None and revision == PINNED_SUITE_REVISION:
+        found = {cls: sum(1 for c in cases if c.test_class == cls) for cls in APPROVED_INVENTORY}
+        short = {cls: (found[cls], want) for cls, want in APPROVED_INVENTORY.items()
+                 if (not args.classes or cls in args.classes) and found[cls] != want}
+        if short:
+            parser.error(f"approved-case inventory mismatch (found, expected): {short}")
 
     version = subprocess.run(
         [str(args.quipu), "--version"], check=True, text=True, capture_output=True

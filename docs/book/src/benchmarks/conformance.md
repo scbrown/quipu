@@ -10,6 +10,12 @@
 > Exceptions, each named below: federated query (`SERVICE`) passes 6/7, with 1 refused by policy (variable
 > endpoints); entailment regimes are scored separately (29/70 passed, 6 failing, 35 declared non-goals);
 > SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.
+> **What these counts are.** Working Group–approved tests only. The query-evaluation
+> manifests list 225 tests, and the 168 approved ones are scored; the 57 Proposed or unclassified are not run.
+> The update-syntax suites are not run yet.
+> **This score is fitted to this suite.** Quipu's failures here were found by running this suite
+> and fixed against it, case by case, so a perfect score is partly a record of that work rather
+> than an independent sample. Other stores measured with the same harness were not tuned to it.
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
 > that are not implemented at all.

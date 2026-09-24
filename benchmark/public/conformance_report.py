@@ -209,6 +209,11 @@ def _table(header: list[str], rows: list[list[str]], right: set[int] | None = No
 #: The classes a "passes every approved test" claim is about. Entailment and
 #: federated query are NOT in it: they carry declared non-goals and a policy
 #: deviation, and are named as exceptions instead (aegis-zmln5e).
+#: Tests the pinned suite's manifests LIST per class, approved or not, counted
+#: by parsing them as RDF (rdflib), so the page can say what the scored subset
+#: is a subset of. Query evaluation: 168 Approved, 17 Proposed, 40 unclassified.
+LISTED = {"query-evaluation": 225, "update": 94}
+
 CORE_CLAIM_CLASSES = ("syntax", "query-evaluation", "update", "protocol", "result-format")
 
 
@@ -251,6 +256,13 @@ def claim_boundary(data: dict) -> list[str]:
         f" ({ent['passed']}/{ent['cases']} passed, {ent['failed']} failing,"
         f" {ent['unsupported']} declared non-goals);",
         "> SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.",
+        "> **What these counts are.** Working Group–approved tests only. The query-evaluation",
+        f"> manifests list {LISTED['query-evaluation']} tests, and the {core['query-evaluation']['cases']} approved ones are scored;"
+        f" the {LISTED['query-evaluation'] - core['query-evaluation']['cases']} Proposed or unclassified are not run.",
+        "> The update-syntax suites are not run yet.",
+        "> **This score is fitted to this suite.** Quipu's failures here were found by running this suite",
+        "> and fixed against it, case by case, so a perfect score is partly a record of that work rather",
+        "> than an independent sample. Other stores measured with the same harness were not tuned to it.",
         "> Every class below is scored separately and is never combined into a single",
         "> compliance percentage, because a blended figure would hide exactly the classes",
         "> that are not implemented at all.",
