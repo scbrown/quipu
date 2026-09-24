@@ -17,10 +17,14 @@ pub fn apply(args: &[String], store: &mut Store, graph: GraphScope) -> GraphScop
     let Some(regime) = crate::cli::flag_value(args, "--entailment") else {
         return graph;
     };
-    if !regime.eq_ignore_ascii_case("rdfs") {
-        eprintln!("error: unknown entailment regime {regime:?}; expected \"rdfs\"");
+    let closure_regime = if regime.eq_ignore_ascii_case("rdfs") {
+        quipu::sparql::rdfs_closure::Regime::Rdfs
+    } else if regime.eq_ignore_ascii_case("rdf") {
+        quipu::sparql::rdfs_closure::Regime::Rdf
+    } else {
+        eprintln!("error: unknown entailment regime {regime:?}; expected \"rdf\" or \"rdfs\"");
         std::process::exit(1);
-    }
+    };
 
     let base = match &graph {
         GraphScope::Default(ids) if !ids.is_empty() => ids[0],
@@ -28,8 +32,10 @@ pub fn apply(args: &[String], store: &mut Store, graph: GraphScope) -> GraphScop
     };
 
     let timestamp = crate::cli::chrono_now();
-    if let Err(e) = quipu::sparql::rdfs_closure::materialise(store, base, &timestamp) {
-        eprintln!("error materialising RDFS closure: {e}");
+    if let Err(e) =
+        quipu::sparql::rdfs_closure::materialise_regime(store, base, &timestamp, closure_regime)
+    {
+        eprintln!("error materialising {regime} closure: {e}");
         std::process::exit(1);
     }
 

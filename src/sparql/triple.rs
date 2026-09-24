@@ -382,9 +382,14 @@ fn bind_row(
     match &tp.subject {
         TermPattern::Variable(var) => {
             let e_iri = store.resolve(e_id)?;
-            let e_val = if e_iri.starts_with("_:") {
-                Value::Str(e_iri)
-            } else if let Some(term_id) = store.lookup(&e_iri)? {
+            // A blank-node subject binds as the SAME kind of value the object
+            // position gives it (a Ref), so `?x :p ?y . ?y a :c` joins when ?y
+            // is a blank node. It used to bind as Value::Str("_:y") here while
+            // the object binding was Value::Ref, so the two never compared
+            // equal and every such join silently dropped its blank-node rows
+            // (W3C entailment `owlds02`, aegis-56bvs2). Hidden until now
+            // because the root-default `rdf:type <C>` path binds Ref itself.
+            let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
                 Value::Ref(term_id)
             } else {
                 Value::Str(e_iri)
