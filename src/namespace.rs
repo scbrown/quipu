@@ -183,6 +183,10 @@ pub const RDFS_SUBPROPERTY_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subP
 pub const RDFS_DOMAIN: &str = "http://www.w3.org/2000/01/rdf-schema#domain";
 /// `rdfs:range` — the premise of RDFS rule 3.
 pub const RDFS_RANGE: &str = "http://www.w3.org/2000/01/rdf-schema#range";
+/// `rdf:Property` — what RDF rule rdf1 types every used predicate as.
+pub const RDF_PROPERTY: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#Property";
+/// `rdfs:Class` — the class of classes; rdfs10's premise.
+pub const RDFS_CLASS: &str = "http://www.w3.org/2000/01/rdf-schema#Class";
 
 // ── Bobbin property IRIs ──────────────────────────────────────
 // Under the aegis base, matching what the live lane emits.

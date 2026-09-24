@@ -269,5 +269,5 @@ match feeds a hard stage-2 rule.
 Related: `shapes/policies/treesitter.ttl` (the v1 pair this supersedes),
 `docs/design/policy-edit-hooks.md` (the hook seam), camayoc
 `docs/design/ingress.md` (the quarantine the semantic tier lands in),
-camayoc `docs/patents/provisional-grounding-cluster.md` § 9 (the
+camayoc's provisional grounding filing § 9 (the
 edit-boundary enforcement disclosure this embodiment extends).
