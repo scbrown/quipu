@@ -20,6 +20,8 @@ pub enum AuthOutcome {
     AuthenticatedCurrent,
     /// The temporary previous bearer authenticated during its grace window.
     AuthenticatedPrevious,
+    /// An additive named credential authenticated the write.
+    AuthenticatedNamed,
     /// The write lacked the configured bearer or supplied the wrong one.
     Unauthorized,
     /// Server read-only mode refused the write regardless of credentials.
@@ -36,6 +38,7 @@ impl AuthOutcome {
             Self::OpenWrite => "open_write",
             Self::AuthenticatedCurrent => "authenticated_current",
             Self::AuthenticatedPrevious => "authenticated_previous",
+            Self::AuthenticatedNamed => "authenticated_named",
             Self::Unauthorized => "unauthorized",
             Self::ReadOnly => "read_only",
         }
