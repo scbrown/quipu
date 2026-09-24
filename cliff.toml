@@ -78,6 +78,9 @@ tag_pattern = "v[0-9].*"
 sort_commits = "oldest"
 
 commit_parsers = [
+    # Patent filing work is private (kept out of the public tree since #272);
+    # never publish its commits, application numbers or dates in the changelog.
+    { message = "^[a-z]+\\(patents\\)", skip = true },
     { message = "^feat", group = "Added" },
     { message = "^fix", group = "Fixed" },
     { message = "^refactor", group = "Changed" },
