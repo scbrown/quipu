@@ -235,7 +235,8 @@ def load(quipu: Path, source: Path, database: Path) -> subprocess.CompletedProce
 
 def run_case(case: dict, suite: str, directory: Path, base: str, quipu: Path, work: Path) -> dict:
     config = SUITES[suite]
-    outcome = {"test": f"{suite}/{case['name']}", "kind": case["kind"], "approval": case["approval"]}
+    outcome = {"class": "rdf11-syntax", "manifest": f"rdf/rdf11/{suite}/manifest.ttl", "id": case["name"],
+               "test": f"{suite}/{case['name']}", "kind": case["kind"], "approval": case["approval"]}
     if config["loader"] is None:
         return {**outcome, "observed": "unsupported", "passed": False, "diagnostic": config["reason"]}
     source = directory / case["action"]
