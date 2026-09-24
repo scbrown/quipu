@@ -121,6 +121,10 @@ aegis:ToolClass rdfs:subClassOf obo:BFO_0000002 .
 aegis:TraefikRoute rdfs:subClassOf obo:BFO_0000002 .
 aegis:TraitValue rdfs:subClassOf obo:BFO_0000002 .
 aegis:Transition rdfs:subClassOf obo:BFO_0000002 .
+# A Verification node is the RECORD of one credential check (result, verifiedAt,
+# falsifier), not the act of checking, so it is a continuant like aegis:Observation
+# (aegis-zjpqjr). A run of the check would be an occurrent.
+aegis:Verification rdfs:subClassOf obo:BFO_0000002 .
 aegis:VerifierRegistration rdfs:subClassOf obo:BFO_0000002 .
 aegis:Watchlist rdfs:subClassOf obo:BFO_0000002 .
 # WorkItem is the tracker-agnostic sibling of aegis:Bead, which is already a
