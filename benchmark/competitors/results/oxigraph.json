@@ -4,7 +4,7 @@
   "system_version": "0.5.11",
   "artifact_sha256": "66df9e704fbd26cd943757c8c62698505a1193954f86651bb0bb4abf941a917b",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "generated_at": "2026-09-24T00:49:47Z",
+  "generated_at": "2026-09-24T01:09:07Z",
   "timeout_s": 30,
   "classes": {
     "query-evaluation": {

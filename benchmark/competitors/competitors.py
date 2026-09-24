@@ -78,6 +78,40 @@ PINS: dict[str, dict] = {
         "sha256": "66df9e704fbd26cd943757c8c62698505a1193954f86651bb0bb4abf941a917b",
         "file": "oxigraph",
     },
+    # ONE JVM for both Java stores: RDF4J 6.1 is compiled for Java 25 (class
+    # file 69), and Jena 6 runs on it too.
+    "jdk": {
+        "version": "25.0.4.1+1",
+        "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/"
+               "OpenJDK25U-jdk_x64_linux_hotspot_25.0.4.1_1.tar.gz",
+        "sha256": "dbb698396d478e7fa2b1e50f4103324b2a99b90569ee27c33f2261f9215cf41e",
+        "file": "jdk.tar.gz", "unpack": "tar",
+    },
+    "fuseki": {
+        "version": "6.2.0",
+        "url": "https://archive.apache.org/dist/jena/binaries/apache-jena-fuseki-6.2.0.zip",
+        "sha256": "0c3e2dc55037ced325e3716bf86e91fdf20fb96e595fc3530232c05fae789a9e",
+        "file": "fuseki.zip", "unpack": "zip",
+    },
+    "jena": {
+        "version": "6.2.0",
+        "url": "https://archive.apache.org/dist/jena/binaries/apache-jena-6.2.0.zip",
+        "sha256": "d2a6dadc586282f5be7d15010793a336eb8fac4db68eb49209ca5a5656e620b0",
+        "file": "jena.zip", "unpack": "zip",
+    },
+    "tomcat": {
+        "version": "11.0.26",
+        "url": "https://archive.apache.org/dist/tomcat/tomcat-11/v11.0.26/bin/apache-tomcat-11.0.26.tar.gz",
+        "sha256": "6b6ac79c15707d1d2bf54c698b1a19c046c21a56fc8ddf82a0845cc54df68324",
+        "file": "tomcat.tar.gz", "unpack": "tar",
+    },
+    "rdf4j": {
+        "version": "6.1.0",
+        "url": "https://repo1.maven.org/maven2/org/eclipse/rdf4j/rdf4j-http-server/6.1.0/"
+               "rdf4j-http-server-6.1.0.war",
+        "sha256": "161ade6c89c91f30be1c57a1c9d43246b90967d56f63449b7b37b9db59787e23",
+        "file": "rdf4j-server.war",
+    },
     # rdflib is pinned by the `uv run --with rdflib==<version>` invocation and
     # its version is recorded in the ledger from rdflib.__version__.
 }
@@ -86,6 +120,32 @@ JSON_RESULTS = "application/sparql-results+json"
 
 
 # -- provisioning --------------------------------------------------------------
+
+def provision_dir(name: str) -> Path:
+    """An ARCHIVE pin, verified, then unpacked once; returns its top directory."""
+    archive = provision(name)
+    root = archive.parent / "unpacked"
+    if not root.exists():
+        staging = archive.parent / "unpacking"
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir()
+        if PINS[name]["unpack"] == "tar":
+            subprocess.run(["tar", "-xzf", str(archive), "-C", str(staging)], check=True)
+        else:
+            # shutil/zipfile drop the unix mode bits, which leaves launch scripts
+            # (jena's bin/riot) unexecutable. Restore them from the entries.
+            import zipfile
+
+            with zipfile.ZipFile(archive) as zf:
+                for info in zf.infolist():
+                    extracted = Path(zf.extract(info, staging))
+                    mode = info.external_attr >> 16
+                    if mode and not info.is_dir():
+                        extracted.chmod(mode & 0o777)
+        staging.rename(root)
+    (top,) = [p for p in root.iterdir() if p.is_dir()]
+    return top
+
 
 def provision(name: str) -> Path:
     pin = PINS[name]
@@ -228,7 +288,7 @@ class OxigraphDriver(HttpDriver):
         # found on :subquery06).
         converted = subprocess.run(
             [str(provision("oxigraph")), "convert", "--from-file", str(path),
-             "--from-base", path.resolve().as_uri(), "--to-format", "nt"],
+             "--from-base", iri_for(path), "--to-format", "nt"],
             capture_output=True)
         if converted.returncode:
             raise ValueError(f"oxigraph could not parse {path.name}: {converted.stderr.decode()[:300]}")
@@ -259,7 +319,7 @@ class RdflibDriver(Driver):
     def load(self, path: Path, graph: str | None) -> None:
         fmt = {".ttl": "turtle", ".nt": "nt", ".rdf": "xml", ".nq": "nquads", ".trig": "trig"}.get(path.suffix, "turtle")
         target = self.ds.default_context if graph is None else self.ds.graph(self.rdflib.URIRef(graph))
-        target.parse(str(path), format=fmt, publicID=path.resolve().as_uri())
+        target.parse(str(path), format=fmt, publicID=iri_for(path))
 
     def select(self, query: str):
         return parse_json_results(self.ds.query(query).serialize(format="json"))
@@ -271,10 +331,165 @@ class RdflibDriver(Driver):
         self.ds.update(request)
 
 
-DRIVERS = {"oxigraph": OxigraphDriver, "rdflib": RdflibDriver}
+class WarmHttpDriver(HttpDriver):
+    """A JVM store kept WARM: one server per role (the store under test, and
+    the scratch store the expected graph is loaded into), reset to EMPTY
+    before every case with `DROP ALL`. That is the same fresh-empty-store
+    guarantee as a new process, without paying a JVM start per case."""
+
+    _pool: dict[tuple[str, int], "WarmHttpDriver"] = {}
+    _depth: dict[str, int] = {}
+
+    def __new__(cls, *args, **kwargs):
+        depth = cls._depth.get(cls.name, 0)
+        key = (cls.name, depth)
+        if key not in cls._pool:
+            inst = super().__new__(cls)
+            inst._warm = False
+            cls._pool[key] = inst
+        return cls._pool[key]
+
+    def __init__(self) -> None:
+        if not self._warm:
+            HttpDriver.__init__(self)
+            self._warm = True
+            __import__("atexit").register(HttpDriver.close, self)
+
+    def __enter__(self):
+        type(self)._depth[self.name] = type(self)._depth.get(self.name, 0) + 1
+        self.update("DROP ALL")
+        return self
+
+    def __exit__(self, *exc) -> None:
+        type(self)._depth[self.name] -= 1
+
+    def close(self) -> None:  # kept warm; stopped at exit
+        pass
+
+
+_RIOT_CACHE: dict[Path, bytes] = {}
+
+
+class FusekiDriver(WarmHttpDriver):
+    name = "fuseki"
+    version = PINS["fuseki"]["version"]
+    query_path = "/ds/query"
+    update_path = "/ds/update"
+    store_path = "/ds/data"
+
+    def start(self) -> subprocess.Popen:
+        java = provision_dir("jdk") / "bin" / "java"
+        jar = provision_dir("fuseki") / "fuseki-server.jar"
+        return subprocess.Popen([str(java), "-Xmx2g", "-jar", str(jar), "--mem", "--update",
+                                 "--port", str(self.port), "/ds"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+
+    def load(self, path: Path, graph: str | None) -> None:
+        # Jena's OWN parser, with the fixture's file URI as base, to N-Triples
+        # (same rule as every driver: quipu parses fixtures with that base).
+        if path not in _RIOT_CACHE:
+            riot = provision_dir("jena") / "bin" / "riot"
+            env = {**os.environ, "JAVA_HOME": str(provision_dir("jdk"))}
+            out = subprocess.run([str(riot), f"--base={iri_for(path)}", "--output=nt",
+                                  str(path)], capture_output=True, env=env)
+            if out.returncode:
+                raise ValueError(f"jena could not parse {path.name}: {out.stderr.decode()[:300]}")
+            _RIOT_CACHE[path] = out.stdout
+        target = f"{self.store_path}?" + ("default" if graph is None else
+                                          "graph=" + urllib.parse.quote(graph, safe=""))
+        self._request(target, _RIOT_CACHE[path], {"Content-Type": "application/n-triples"})
+
+
+REPO_CONFIG = """@prefix config: <tag:rdf4j.org,2023:config/> .
+[] a config:Repository ; config:rep.id "w3c" ;
+   config:rep.impl [ config:rep.type "openrdf:SailRepository" ;
+                     config:sail.impl [ config:sail.type "openrdf:MemoryStore" ] ] .
+"""
+
+
+class Rdf4jDriver(WarmHttpDriver):
+    """RDF4J Server (the published WAR) in a pinned Tomcat, one MemoryStore
+    repository created over REST. Fixtures are parsed by RDF4J's own parser,
+    with the file URI passed as `baseURI`."""
+
+    name = "rdf4j"
+    version = PINS["rdf4j"]["version"]
+    query_path = "/rdf4j-server/repositories/w3c"
+    update_path = "/rdf4j-server/repositories/w3c/statements"
+    store_path = "/rdf4j-server/repositories/w3c/statements"
+
+    def start(self) -> subprocess.Popen:
+        base = Path(tempfile.mkdtemp(prefix="rdf4j-tomcat-"))
+        shutil.copytree(provision_dir("tomcat"), base, dirs_exist_ok=True)
+        for script in (base / "bin").glob("*.sh"):
+            script.chmod(0o755)
+        server_xml = base / "conf" / "server.xml"
+        server_xml.write_text(server_xml.read_text()
+                              .replace('port="8080"', f'port="{self.port}"')
+                              .replace('port="8005"', 'port="-1"'))
+        shutil.copy(provision("rdf4j"), base / "webapps" / "rdf4j-server.war")
+        env = {**os.environ, "JAVA_HOME": str(provision_dir("jdk")), "CATALINA_BASE": str(base),
+               "CATALINA_OPTS": f"-Xmx2g -Dorg.eclipse.rdf4j.appdata.basedir={base / 'appdata'}"}
+        self._tomcat = base
+        return subprocess.Popen([str(base / "bin" / "catalina.sh"), "run"], env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+
+    def __init__(self) -> None:
+        if not getattr(self, "_warm", False):
+            HttpDriver.__init__(self)
+            deadline = time.monotonic() + 120
+            while True:  # the port opens before the webapp is deployed
+                try:
+                    self._request("/rdf4j-server/protocol", None, {}, method="GET")
+                    break
+                except (ValueError, OSError):
+                    if time.monotonic() > deadline:
+                        raise RuntimeError("rdf4j-server did not deploy")
+                    time.sleep(0.5)
+            self._request("/rdf4j-server/repositories/w3c", REPO_CONFIG.encode(),
+                          {"Content-Type": "text/turtle"}, method="PUT")
+            self._warm = True
+            __import__("atexit").register(self._shutdown)
+
+    def _shutdown(self) -> None:
+        HttpDriver.close(self)
+        shutil.rmtree(self._tomcat, ignore_errors=True)
+
+    def load(self, path: Path, graph: str | None) -> None:
+        # The RDF4J protocol takes baseURI (like context) as an N-Triples IRI.
+        params = {"baseURI": f"<{iri_for(path)}>"}
+        if graph is not None:
+            params["context"] = f"<{graph}>"
+        self._request(f"{self.store_path}?{urllib.parse.urlencode(params)}", path.read_bytes(),
+                      {"Content-Type": rdf_content_type(path)})
+
+
+DRIVERS = {"oxigraph": OxigraphDriver, "rdflib": RdflibDriver, "fuseki": FusekiDriver,
+           "rdf4j": Rdf4jDriver}
 
 
 # -- scoring -------------------------------------------------------------------
+
+#: The base IRI every fixture, graph name and query is resolved against: one
+#: NEUTRAL http IRI per file, derived from its path inside the suite. It used to
+#: be the file:// URI (as the quipu runner uses), but `file:///x` meets stores
+#: that normalise it to `file:/x` in one position and not another (RDF4J, found
+#: on :subquery02), which scores an IRI-resolution quirk as a SPARQL failure.
+#: Parsing is measured by the syntax suites; this table measures SPARQL.
+TEST_BASE = "http://rdf-tests.invalid/"
+_SUITE_ROOT: list[Path] = []
+
+
+def iri_for(path: Path) -> str:
+    """The neutral base for a suite file. A file outside the suite (a store's own
+    CONSTRUCT output, written to a temp file) holds only absolute IRIs, so any
+    base serves; it gets its file URI."""
+    root = _SUITE_ROOT[0] if _SUITE_ROOT else None
+    try:
+        return TEST_BASE + path.resolve().relative_to(root.resolve()).as_posix()
+    except (ValueError, AttributeError):
+        return path.resolve().as_uri()
+
 
 def dump(driver: Driver, graph: str | None) -> list[tuple[str, ...]]:
     query = ("SELECT ?s ?p ?o WHERE { ?s ?p ?o }" if graph is None
@@ -367,7 +582,7 @@ def run_case(case: "ev.Case", factory) -> dict:
             for path in case.data:
                 store.load(path, None)
             for path in case.graph_data:
-                store.load(path, path.resolve().as_uri())
+                store.load(path, iri_for(path))
             for path, graph in case.update_graph_data:
                 store.load(path, graph)
             if case.test_class == "update":
@@ -382,7 +597,13 @@ def run_case(case: "ev.Case", factory) -> dict:
                                 "diagnostic": f"post-update graph differs: {graph or 'default'}"}
                 return {**base, "status": "passed"}
             assert case.query and case.result
-            query = f"BASE <{case.query.resolve().as_uri()}>\n{case.query.read_text()}"
+            text = case.query.read_text()
+            # The file URI is the base ONLY when the query declares none: a query
+            # with its own BASE must not get a second, earlier one in front of it
+            # (harness fix, found on :iri01; spec says the later BASE wins, and a
+            # store that reads the first should not be scored on our prefix).
+            has_base = __import__("re").search(r"^\s*BASE\s*<", text, __import__("re").I | __import__("re").M)
+            query = text if has_base else f"BASE <{iri_for(case.query)}>\n{text}"
             if case.result.suffix in {".ttl", ".nt"}:
                 with tempfile.TemporaryDirectory() as tmp:
                     got = Path(tmp) / "actual.nt"
@@ -432,6 +653,7 @@ def main(argv: list[str] | None = None) -> int:
     dirty = bool(ev.git_output(args.suite, "status", "--porcelain"))
     if not args.allow_unpinned_suite and (revision != ev.PINNED_SUITE_REVISION or dirty):
         parser.error(f"suite must be clean at {ev.PINNED_SUITE_REVISION}; got {revision}")
+    _SUITE_ROOT[:] = [args.suite]
     classes = args.classes or list(CLASSES)
     cases = [c for c in ev.discover_cases(args.suite) if c.test_class in classes]
     if args.limit:

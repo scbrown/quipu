@@ -63,12 +63,25 @@ class BlankNodes(unittest.TestCase):
         self.assertFalse(c.same_rows([("_:foo",), ("_:foo",)], [("_:b1",), ("_:b2",)]))
 
 
+class NeutralBase(unittest.TestCase):
+    def test_suite_files_get_a_neutral_http_base(self):
+        root = Path("/suite")
+        c._SUITE_ROOT[:] = [root]
+        try:
+            self.assertEqual(c.iri_for(root / "subquery" / "sq01.rdf"),
+                             "http://rdf-tests.invalid/subquery/sq01.rdf")
+            # outside the suite (a store's own CONSTRUCT output): its file URI
+            self.assertTrue(c.iri_for(Path("/tmp/x/actual.nt")).startswith("file:///"))
+        finally:
+            c._SUITE_ROOT[:] = []
+
+
 class Pins(unittest.TestCase):
     def test_every_binary_pin_names_a_sha256(self):
         for name, pin in c.PINS.items():
             with self.subTest(name=name):
                 self.assertRegex(pin["sha256"], r"^[0-9a-f]{64}$")
-                self.assertIn(pin["version"], pin["url"])
+                self.assertIn(pin["version"], __import__("urllib.parse").parse.unquote(pin["url"]))
 
 
 if __name__ == "__main__":
