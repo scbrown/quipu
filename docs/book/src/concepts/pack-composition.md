@@ -56,7 +56,8 @@ conflicting constraints or installs foreign shapes as global policy.
 Validation examines the union: another pack can supply a required field. A
 nonconforming union stays in the named inspection dataset and is never promoted to
 ROOT. The report preserves violation counts and counts by source shape, with at
-most 40 individual diagnostics.
+most 40 individual diagnostics. Types outside the selected authority are reported
+separately as `off_vocabulary` and also quarantine the union.
 
 The snapshot vector remains visible. Different source stores' transaction anchors
 are incomparable. Mixed dates are permitted and reported; composition does not
@@ -66,7 +67,8 @@ different snapshot names another composition without replacing an earlier datase
 
 ## Retractions and replay
 
-Reloading a share reuses its source graph rather than refilling it. A local
+Reloading a share reuses its source graph rather than refilling it. Attested shares
+still obey the ordinary signature and nonce-replay checks. A local
 retraction in that graph survives reload of the same snapshot. Validation on replay
 examines the current local union, so removing a required field changes the outcome
 to quarantine. Source graph edits affect every dataset that includes that graph.

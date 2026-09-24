@@ -66,6 +66,14 @@ fn validate(shapes: &str, data: &str) -> Result<serde_json::Value> {
         let feedback = crate::shacl::validate_shapes(shapes, data)?;
         let mut report =
             serde_json::to_value(feedback).map_err(|e| Error::Serialization(e.to_string()))?;
+        let authority = Store::open_in_memory()?;
+        authority.load_shapes("composition-authority", shapes, "1970-01-01T00:00:00Z")?;
+        let vocabulary = crate::vocabulary::sanctioned(&authority)?;
+        let off_vocabulary = crate::vocabulary::ungoverned_types_in_turtle(data, &vocabulary);
+        if !off_vocabulary.is_empty() {
+            report["conforms"] = serde_json::Value::Bool(false);
+        }
+        report["off_vocabulary"] = serde_json::to_value(off_vocabulary).unwrap();
         let mut counts = BTreeMap::<String, usize>::new();
         if let Some(results) = report["results"].as_array() {
             for result in results {

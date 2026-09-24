@@ -201,3 +201,16 @@ fn late_graph_conflict_rolls_back_the_first_pack() {
     assert!(store.dataset_list().unwrap().is_empty());
     assert!(store.current_facts().unwrap().is_empty());
 }
+
+#[test]
+fn an_authority_that_omits_a_class_does_not_silently_admit_it() {
+    let a = pack("<urn:unknown> a <urn:Unknown> .", SHAPES);
+    let mut store = Store::open_in_memory().unwrap();
+    let result = compose(&mut store, &[a], None, TS, None).unwrap();
+    assert_eq!(result.outcome, "quarantined");
+    assert_eq!(
+        result.validation["off_vocabulary"],
+        serde_json::json!(["urn:Unknown"])
+    );
+    assert_eq!(result.validation["violations"], 0);
+}
