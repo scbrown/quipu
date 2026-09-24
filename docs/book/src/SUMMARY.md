@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](README.md)
+[Why Quipu](why-quipu.md)
 
 # Getting Started
 
@@ -80,3 +81,7 @@
 
 - [CI/CD and Releases](architecture/ci-cd.md)
 - [Contributing](reference/contributing.md)
+
+# Map
+
+- [Docs map](docs-map.md)

@@ -1988,9 +1988,12 @@ fn readme_mcp_tool_counts_match_the_manifest() {
     // primary count is 25 and the parenthetical is "(N with owl)" = 26.
     let base = tool_definitions().len();
     let with_owl = base + 2; // quipu_load_ontology + quipu_explain are the owl-gated tools.
-    let readme =
-        std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"))
-            .unwrap();
+    // The README and the book page its long form moved to (aegis-exvvic): every
+    // count mention on either surface stays pinned to the manifest.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let readme = std::fs::read_to_string(root.join("README.md")).unwrap()
+        + "\n"
+        + &std::fs::read_to_string(root.join("docs/book/src/why-quipu.md")).unwrap();
 
     // "(<N> tools)" — the architecture diagram.
     for cap in counts_before(&readme, " tools)") {
