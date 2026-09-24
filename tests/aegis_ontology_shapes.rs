@@ -254,3 +254,40 @@ fn desired_crew_shape_refuses_bad_floor_and_unknown_harness() {
     assert!(!report.conforms);
     assert!(report.violations >= 2);
 }
+
+const CRED_PREFIXES: &str = r#"
+    @prefix aegis: <http://aegis.gastown.local/ontology/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    aegis:h1 a aegis:Host ; rdfs:label "h1" .
+"#;
+
+#[test]
+fn credential_inventory_fields_are_optional_and_constrained_when_present() {
+    // aegis-zjpqjr: legacy Credential nodes carry none of these; the seeded ones carry all.
+    let valid = format!(
+        "{CRED_PREFIXES}
+        aegis:legacy a aegis:Credential ; rdfs:label \"legacy\" .
+        aegis:seeded a aegis:Credential ; rdfs:label \"seeded\" ; aegis:status \"retired\" ;
+            aegis:expiresAt \"unknown\" ; aegis:keeper \"dearing\" ; aegis:probe \"none\" ;
+            aegis:heldOn aegis:h1 .
+        aegis:dated a aegis:Credential ; rdfs:label \"dated\" ;
+            aegis:expiresAt \"2026-10-01T00:00:00-04:00\" .
+        aegis:v1 a aegis:Verification ; rdfs:label \"v1\" ; aegis:result \"works\" ;
+            aegis:verifiedAt \"2026-09-23T21:30:00-04:00\" ."
+    );
+    assert!(quipu::validate_shapes(SHAPES, &valid).unwrap().conforms);
+
+    for bad in [
+        "aegis:c a aegis:Credential ; rdfs:label \"c\" ; aegis:status \"deleted\" .",
+        "aegis:c a aegis:Credential ; rdfs:label \"c\" ; aegis:expiresAt \"next tuesday\" .",
+        "aegis:c a aegis:Credential ; rdfs:label \"c\" ; aegis:heldOn aegis:not-a-host .",
+        "aegis:v a aegis:Verification ; rdfs:label \"v\" ; aegis:result \"probably\" .",
+        "aegis:v a aegis:Verification ; rdfs:label \"v\" ; aegis:verifiedAt \"yesterday\" .",
+    ] {
+        let data = format!("{CRED_PREFIXES}\n{bad}");
+        assert!(
+            !quipu::validate_shapes(SHAPES, &data).unwrap().conforms,
+            "should be refused: {bad}"
+        );
+    }
+}
