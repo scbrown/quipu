@@ -1552,7 +1552,23 @@ aegis:ComponentShape a sh:NodeShape ;
 
 aegis:CredentialShape a sh:NodeShape ;
     sh:targetClass aegis:Credential ;
-    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    # aegis-zjpqjr: every property below is OPTIONAL (legacy Credential nodes carry none) and
+    # constrained only when present. LOCATIONS AND METADATA ONLY — never a value.
+    sh:property [ sh:path aegis:status ; sh:maxCount 1 ; sh:in ( "active" "retired" ) ; ] ;
+    sh:property [ sh:path aegis:expiresAt ; sh:maxCount 1 ;
+                  sh:pattern "^(none|unknown|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2}))$" ; ] ;
+    sh:property [ sh:path aegis:keeper ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:probe ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:heldOn ; sh:class aegis:Host ; ] .
+
+aegis:VerificationShape a sh:NodeShape ;
+    sh:targetClass aegis:Verification ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    # Optional, constrained when present: most Verification nodes are prose-only.
+    sh:property [ sh:path aegis:result ; sh:maxCount 1 ; sh:in ( "works" "dead" "unknown" ) ; ] ;
+    sh:property [ sh:path aegis:verifiedAt ; sh:maxCount 1 ;
+                  sh:pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$" ; ] .
 
 aegis:SSHKeyShape a sh:NodeShape ;
     sh:targetClass aegis:SSHKey ;
