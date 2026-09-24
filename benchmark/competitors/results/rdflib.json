@@ -1,0 +1,1493 @@
+{
+  "benchmark": "w3c-sparql11-competitor",
+  "system": "rdflib",
+  "system_version": "7.6.0",
+  "artifact_sha256": null,
+  "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
+  "generated_at": "2026-09-24T00:49:31Z",
+  "timeout_s": 30,
+  "classes": {
+    "query-evaluation": {
+      "passed": 154,
+      "failed": 14,
+      "cases": 168,
+      "lexical_form_only": 9
+    },
+    "update": {
+      "failed": 10,
+      "passed": 27,
+      "cases": 37,
+      "lexical_form_only": 0
+    }
+  },
+  "results": [
+    {
+      "id": ":agg01",
+      "name": "COUNT 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg02",
+      "name": "COUNT 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg03",
+      "name": "COUNT 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg04",
+      "name": "COUNT 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg05",
+      "name": "COUNT 5",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg06",
+      "name": "COUNT 6",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg07",
+      "name": "COUNT 7",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg08b",
+      "name": "COUNT 8b",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-groupconcat-01",
+      "name": "GROUP_CONCAT 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-groupconcat-02",
+      "name": "GROUP_CONCAT 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-groupconcat-03",
+      "name": "GROUP_CONCAT with SEPARATOR",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-avg-01",
+      "name": "AVG",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-avg-02",
+      "name": "AVG with GROUP BY",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-min-01",
+      "name": "MIN",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-min-02",
+      "name": "MIN with GROUP BY",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-max-01",
+      "name": "MAX",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-max-02",
+      "name": "MAX with GROUP BY",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-sum-01",
+      "name": "SUM",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-sum-02",
+      "name": "SUM with GROUP BY",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-sample-01",
+      "name": "SAMPLE",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-err-01",
+      "name": "Error in AVG",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":agg-err-02",
+      "name": "Protect from error in AVG",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/aggregates/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind01",
+      "name": "bind01 - BIND",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind02",
+      "name": "bind02 - BIND",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind03",
+      "name": "bind03 - BIND",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind04",
+      "name": "bind04 - BIND",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind05",
+      "name": "bind05 - BIND",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind06",
+      "name": "bind06 - BIND",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind07",
+      "name": "bind07 - BIND",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind08",
+      "name": "bind08 - BIND",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind10",
+      "name": "bind10 - BIND scoping - Variable in filter not in scope",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bind11",
+      "name": "bind11 - BIND scoping - Variable in filter in scope",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bind/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":values1",
+      "name": "Post-query VALUES with subj-var, 1 row",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":values2",
+      "name": "Post-query VALUES with obj-var, 1 row",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":values3",
+      "name": "Post-query VALUES with 2 obj-vars, 1 row",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":values4",
+      "name": "Post-query VALUES with 2 obj-vars, 1 row with UNDEF",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":values5",
+      "name": "Post-query VALUES with 2 obj-vars, 2 rows with UNDEF",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":values6",
+      "name": "Post-query VALUES with pred-var, 1 row",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":values7",
+      "name": "Post-query VALUES with (OPTIONAL) obj-var, 1 row",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":values8",
+      "name": "Post-query VALUES with subj/obj-vars, 2 rows with UNDEF",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":inline1",
+      "name": "Inline VALUES graph pattern",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":inline2",
+      "name": "Post-subquery VALUES",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/bindings/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":constructwhere01",
+      "name": "constructwhere01 - CONSTRUCT WHERE",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/construct/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":constructwhere02",
+      "name": "constructwhere02 - CONSTRUCT WHERE",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/construct/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":constructwhere03",
+      "name": "constructwhere03 - CONSTRUCT WHERE",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/construct/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":constructwhere04",
+      "name": "constructwhere04 - CONSTRUCT WHERE",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/construct/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":exists01",
+      "name": "Exists with one constant",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/exists/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":exists02",
+      "name": "Exists with ground triple",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/exists/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":exists03",
+      "name": "Exists within graph pattern",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/exists/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":exists04",
+      "name": "Nested positive exists",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/exists/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":exists05",
+      "name": "Nested negative exists in positive exists",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/exists/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":strdt01",
+      "name": "STRDT()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":strdt02",
+      "name": "STRDT(STR())",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":strlang01",
+      "name": "STRLANG()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":strlang02",
+      "name": "STRLANG(STR())",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":isnumeric01",
+      "name": "isNumeric()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":abs01",
+      "name": "ABS()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":ceil01",
+      "name": "CEIL()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":floor01",
+      "name": "FLOOR()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":round01",
+      "name": "ROUND()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":concat01",
+      "name": "CONCAT()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":concat02",
+      "name": "CONCAT() 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":substring01",
+      "name": "SUBSTR() (3-argument)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":substring02",
+      "name": "SUBSTR() (2-argument)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":length01",
+      "name": "STRLEN()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":ucase01",
+      "name": "UCASE()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":lcase01",
+      "name": "LCASE()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":encode01",
+      "name": "ENCODE_FOR_URI()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":contains01",
+      "name": "CONTAINS()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":starts01",
+      "name": "STRSTARTS()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":ends01",
+      "name": "STRENDS()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":md5-01",
+      "name": "MD5()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":md5-02",
+      "name": "MD5() over Unicode data",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":sha1-01",
+      "name": "SHA1()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":sha1-02",
+      "name": "SHA1() on Unicode data",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":sha256-01",
+      "name": "SHA256()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":sha256-02",
+      "name": "SHA256() on Unicode data",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":sha512-01",
+      "name": "SHA512()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":sha512-02",
+      "name": "SHA512() on Unicode data",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":hours",
+      "name": "HOURS()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":minutes",
+      "name": "MINUTES()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":seconds",
+      "name": "SECONDS()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":year",
+      "name": "YEAR()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":month",
+      "name": "MONTH()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":day",
+      "name": "DAY()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":timezone",
+      "name": "TIMEZONE()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":tz",
+      "name": "TZ()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bnode01",
+      "name": "BNODE(str)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":in01",
+      "name": "IN 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":in02",
+      "name": "IN 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":notin01",
+      "name": "NOT IN 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":notin02",
+      "name": "NOT IN 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":now01",
+      "name": "NOW()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":rand01",
+      "name": "RAND()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":bnode02",
+      "name": "BNODE()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":iri01",
+      "name": "IRI()/URI()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":if01",
+      "name": "IF()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":if02",
+      "name": "IF() error propogation",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":coalesce01",
+      "name": "COALESCE()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":strbefore01a",
+      "name": "STRBEFORE()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":strbefore02",
+      "name": "STRBEFORE() datatyping",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":strafter01a",
+      "name": "STRAFTER()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":strafter02",
+      "name": "STRAFTER() datatyping",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":replace01",
+      "name": "REPLACE()",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":replace02",
+      "name": "REPLACE() with overlapping pattern",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":replace03",
+      "name": "REPLACE() with captured substring",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":uuid01",
+      "name": "UUID() pattern match",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":struuid01",
+      "name": "STRUUID() pattern match",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/functions/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":group01",
+      "name": "Group-1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/grouping/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":group03",
+      "name": "Group-3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/grouping/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":group04",
+      "name": "Group-4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/grouping/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":group05",
+      "name": "Group-5",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/grouping/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subset-by-exclusion-nex-1",
+      "name": "Subsets by exclusion (NOT EXISTS)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subset-by-exclusion-minus-1",
+      "name": "Subsets by exclusion (MINUS)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":temporal-proximity-by-exclusion-nex-1",
+      "name": "Medical, temporal proximity by exclusion (NOT EXISTS)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subset-01",
+      "name": "Calculate which sets are subsets of others (include A subsetOf A)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subset-02",
+      "name": "Calculate which sets are subsets of others (exclude A subsetOf A)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":set-equals-1",
+      "name": "Calculate which sets have the same elements",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subset-03",
+      "name": "Calculate proper subset",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":exists-01",
+      "name": "Positive EXISTS 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":exists-02",
+      "name": "Positive EXISTS 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":full-minuend",
+      "name": "Subtraction with MINUS from a fully bound minuend",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":partial-minuend",
+      "name": "Subtraction with MINUS from a partially bound minuend",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/negation/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":projexp01",
+      "name": "Expression is equality",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/project-expression/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":projexp02",
+      "name": "Expression raise an error",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/project-expression/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":projexp03",
+      "name": "Reuse a project expression variable in select",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/project-expression/manifest.ttl",
+      "status": "failed",
+      "lexical_form_only": true,
+      "diagnostic": "same values, different numeric lexical form (fails RDF term equality)",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":projexp04",
+      "name": "Reuse a project expression variable in order by",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/project-expression/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":projexp05",
+      "name": "Expression may return no value",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/project-expression/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":projexp06",
+      "name": "Expression has undefined variable",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/project-expression/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":projexp07",
+      "name": "Expression has variable that may be unbound",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/project-expression/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp01",
+      "name": "(pp01) Simple path",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp02",
+      "name": "(pp02) Star path",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp03",
+      "name": "(pp03) Simple path with loop",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp06",
+      "name": "(pp06) Path with two graphs",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp07",
+      "name": "(pp07) Path with one graph",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp08",
+      "name": "(pp08) Reverse path",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp09",
+      "name": "(pp09) Reverse sequence path",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp10",
+      "name": "(pp10) Path with negation",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp11",
+      "name": "(pp11) Simple path and two paths to same target node",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp12",
+      "name": "(pp12) Variable length path and two paths to same target node",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp14",
+      "name": "(pp14) Star path over foaf:knows",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp16",
+      "name": "(pp16) Duplicate paths and cycles through foaf:knows*",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp21",
+      "name": "(pp21) Diamond -- :p+",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp23",
+      "name": "(pp23) Diamond, with tail -- :p+",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp25",
+      "name": "(pp25) Diamond, with loop -- :p+",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp28a",
+      "name": "(pp28a) Diamond, with loop -- (:p/:p)?",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp30",
+      "name": "(pp30) Operator precedence 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp31",
+      "name": "(pp31) Operator precedence 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp32",
+      "name": "(pp32) Operator precedence 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp33",
+      "name": "(pp33) Operator precedence 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp34",
+      "name": "(pp34) Named Graph 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp35",
+      "name": "(pp35) Named Graph 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp36",
+      "name": "(pp36) Arbitrary path with bound endpoints",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":pp37",
+      "name": "(pp37) Nested (*)*",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/property-path/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery01",
+      "name": "sq01 - Subquery within graph pattern",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery02",
+      "name": "sq02 - Subquery within graph pattern, graph variable is bound",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery03",
+      "name": "sq03 - Subquery within graph pattern, graph variable is not bound",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery04",
+      "name": "sq04 - Subquery within graph pattern, default graph does not apply",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery05",
+      "name": "sq05 - Subquery within graph pattern, from named applies",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery06",
+      "name": "sq06 - Subquery with graph pattern, from named applies",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery07",
+      "name": "sq07 - Subquery with from ",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery08",
+      "name": "sq08 - Subquery with aggregate",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery09",
+      "name": "sq09 - Nested Subqueries",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery10",
+      "name": "sq10 - Subquery with exists",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery11",
+      "name": "sq11 - Subquery limit per resource",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery12",
+      "name": "sq12 - Subquery in CONSTRUCT with built-ins",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery13",
+      "name": "sq13 - Subqueries don't inject bindings",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":subquery14",
+      "name": "sq14 - limit by resource",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/subquery/manifest.ttl",
+      "status": "passed",
+      "class": "query-evaluation"
+    },
+    {
+      "id": ":add01",
+      "name": "ADD 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/add/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "too many values to unpack (expected 3)",
+      "class": "update"
+    },
+    {
+      "id": ":add02",
+      "name": "ADD 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/add/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "too many values to unpack (expected 3)",
+      "class": "update"
+    },
+    {
+      "id": ":add03",
+      "name": "ADD 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/add/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":add04",
+      "name": "ADD 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/add/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":add05",
+      "name": "ADD 5",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/add/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":add06",
+      "name": "ADD 6",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/add/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":add07",
+      "name": "ADD 7",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/add/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "not enough values to unpack (expected 4, got 3)",
+      "class": "update"
+    },
+    {
+      "id": ":add08",
+      "name": "ADD 8",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/add/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-data-spo1",
+      "name": "Simple insert data 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "not enough values to unpack (expected 4, got 3)",
+      "class": "update"
+    },
+    {
+      "id": ":insert-data-spo-named1",
+      "name": "Simple insert data named 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-data-spo-named2",
+      "name": "Simple insert data named 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-data-spo-named3",
+      "name": "Simple insert data named 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":copy01",
+      "name": "COPY 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/copy/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "too many values to unpack (expected 3)",
+      "class": "update"
+    },
+    {
+      "id": ":copy02",
+      "name": "COPY 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/copy/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "too many values to unpack (expected 3)",
+      "class": "update"
+    },
+    {
+      "id": ":copy03",
+      "name": "COPY 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/copy/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":copy04",
+      "name": "COPY 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/copy/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":copy06",
+      "name": "COPY 6",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/copy/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "post-update graph differs: default",
+      "class": "update"
+    },
+    {
+      "id": ":copy07",
+      "name": "COPY 7",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/copy/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":move01",
+      "name": "MOVE 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/move/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "too many values to unpack (expected 3)",
+      "class": "update"
+    },
+    {
+      "id": ":move02",
+      "name": "MOVE 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/move/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "too many values to unpack (expected 3)",
+      "class": "update"
+    },
+    {
+      "id": ":move03",
+      "name": "MOVE 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/move/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":move04",
+      "name": "MOVE 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/move/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":move06",
+      "name": "MOVE 6",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/move/manifest.ttl",
+      "status": "failed",
+      "diagnostic": "post-update graph differs: default",
+      "class": "update"
+    },
+    {
+      "id": ":move07",
+      "name": "MOVE 7",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/move/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":load-silent",
+      "name": "LOAD SILENT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":load-into-silent",
+      "name": "LOAD SILENT INTO",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":clear-silent",
+      "name": "CLEAR SILENT GRAPH iri",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":clear-default-silent",
+      "name": "CLEAR SILENT DEFAULT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":create-silent",
+      "name": "CREATE SILENT iri",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":drop-silent",
+      "name": "DROP SILENT GRAPH iri",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":drop-default-silent",
+      "name": "DROP SILENT DEFAULT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":copy-silent",
+      "name": "COPY SILENT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":copy-to-default-silent",
+      "name": "COPY SILENT TO DEFAULT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":move-silent",
+      "name": "MOVE SILENT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":move-to-default-silent",
+      "name": "MOVE SILENT TO DEFAULT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":add-silent",
+      "name": "ADD SILENT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":add-to-default-silent",
+      "name": "ADD SILENT TO DEFAULT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/update-silent/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    }
+  ]
+}
