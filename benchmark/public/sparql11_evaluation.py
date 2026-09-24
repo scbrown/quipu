@@ -26,9 +26,28 @@ from conformance_provenance import provenance
 
 PINNED_SUITE_REVISION = "369a90d1a60c021b746df2e411da0ff36258a758"
 APPROVED = "dawgt:approval dawgt:Approved"
+# `rdf:type` OR Turtle's `a`. The delete / delete-data / delete-insert /
+# delete-where / clear / drop manifests (and part of basic-update) declare their
+# tests with `a`, and matching only `rdf:type` silently dropped 56 of the 93
+# approved update tests (aegis-nges80, found by counting the manifests with an
+# independent RDF parser). The runner reported 37/37 and nothing failed.
 TYPE = re.compile(
-    r"rdf:type\s+mf:(QueryEvaluationTest|UpdateEvaluationTest|ProtocolTest|CSVResultFormatTest)"
+    r"(?:rdf:type|\ba)\s+mf:(QueryEvaluationTest|UpdateEvaluationTest|ProtocolTest|CSVResultFormatTest)"
 )
+
+#: Approved cases per class at PINNED_SUITE_REVISION, counted by parsing every
+#: included manifest as RDF (rdflib), NOT by this module's own regex parser. A
+#: full run at the pinned revision must discover exactly these, so a parser
+#: that silently drops a manifest refuses to publish instead of reporting a
+#: clean smaller number. Query evaluation lists 225 tests: 168 Approved, 17
+#: Proposed, 40 with no approval status. Update lists 94: 93 Approved.
+APPROVED_INVENTORY = {
+    "query-evaluation": 168,
+    "update": 93,
+    "protocol": 34,
+    "result-format": 10,
+    "entailment": 70,
+}
 NAME = re.compile(r'mf:name\s+"((?:[^"\\]|\\.)*)"', re.S)
 QUERY = re.compile(r"qt:query\s+<([^>]+)>")
 DATA = re.compile(r"qt:data\s+<([^>]+)>")
@@ -127,16 +146,24 @@ assert set(ENTAILMENT_REASON) == {
 # regime name that selects it.
 #
 # Separate from ENTAILMENT_COMMITMENT on purpose: a bucket can be a `goal` and
-# still belong here only when a closure exists for it. RDF is a goal and is
-# deliberately ABSENT — applying the RDFS closure to RDF-regime cases broke
-# `owlds02` (15/16 -> 14/16) while fixing six RDFS ones, measured. A stronger
+# still belong here only when a closure exists for it. Each goal regime gets
+# ITS OWN closure: RDF gets rdf1 only, RDFS gets the RDFS rules. A stronger
 # regime is not a safer default.
+#
+# CORRECTION (aegis-56bvs2): this comment used to say RDF was left out because
+# "applying the RDFS closure to RDF-regime cases broke `owlds02`". The
+# measurement was real; the cause it named was wrong. `owlds02` also broke
+# under an rdf1-ONLY closure, which derives nothing that could remove a row.
+# The actual cause was an engine bug: in the composed (base + companion)
+# scope, a blank-node SUBJECT bound as a string while the same node bound as a
+# Ref in object position, so `?x :p ?y . ?y a :c` dropped its blank-node row.
+# With that fixed, RDF closes at 16/16.
 #
 # Adding a regime is a change to this dict. It used to be a bare `== "RDFS"`
 # literal beside a `== "goal"` lookup, which meant a third goal regime would
 # have been silently answered under simple entailment — a wrong number, not an
 # error (wu, review of #150).
-CLOSURE_REGIME = {"RDFS": "rdfs"}
+CLOSURE_REGIME = {"RDF": "rdf", "RDFS": "rdfs"}
 
 
 @dataclass(frozen=True)
@@ -933,12 +960,11 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
                 # make the published number describe a query the suite never
                 # asked (aegis-1gp76j).
                 read_argv = [str(quipu), "read", query, "--db", str(database)]
-                # RDFS closure applies to the RDFS REGIME ONLY. RDF entailment
-                # does not include the rdfs2/3/7/9 rules, so applying them to an
-                # RDF-regime case OVER-entails: measured, it broke `owlds02`
-                # (RDF bucket, 15/16 -> 14/16) while fixing six RDFS cases. The
-                # regime names which closure is licensed, and a stronger one is
-                # not a safer default.
+                # Each goal regime is answered under ITS OWN closure (see
+                # CLOSURE_REGIME): RDF entailment has no rdfs2/3/7/9 rules, so
+                # the RDF bucket gets `--entailment rdf` (rdf1 only). The regime
+                # names which closure is licensed, and a stronger one is not a
+                # safer default.
                 bucket = ENTAILMENT_BUCKET.get(case.identifier, "")
                 regime = CLOSURE_REGIME.get(bucket)
                 if (
@@ -1029,6 +1055,12 @@ def main() -> int:
         cases = cases[: args.limit]
     if not cases:
         parser.error("selected manifests produced zero approved cases")
+    if args.limit is None and revision == PINNED_SUITE_REVISION:
+        found = {cls: sum(1 for c in cases if c.test_class == cls) for cls in APPROVED_INVENTORY}
+        short = {cls: (found[cls], want) for cls, want in APPROVED_INVENTORY.items()
+                 if (not args.classes or cls in args.classes) and found[cls] != want}
+        if short:
+            parser.error(f"approved-case inventory mismatch (found, expected): {short}")
 
     version = subprocess.run(
         [str(args.quipu), "--version"], check=True, text=True, capture_output=True
