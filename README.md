@@ -10,7 +10,7 @@
 
 <p align="center">
     <a href="https://doi.org/10.5281/zenodo.21878428"><img src="https://zenodo.org/badge/1201016929.svg" alt="DOI"/></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache-2.0"/></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-1.85+-orange.svg" alt="Rust 1.85+"/></a>
   <a href="https://scbrown.github.io/quipu/"><img src="https://img.shields.io/badge/docs-mdbook-green.svg" alt="Documentation"/></a>
   <a href="https://scbrown.github.io/quipu/benchmarks/conformance.html"><img src="https://img.shields.io/endpoint?url=https://scbrown.github.io/quipu/benchmarks/badges/sparql11-syntax.json" alt="SPARQL 1.1 query syntax conformance"/></a>
@@ -514,4 +514,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## 📄 License
 
-[MIT](LICENSE)
+Licensed under the Apache License, Version 2.0 (see [LICENSE](LICENSE)). Releases before 2026-09-24 were MIT-licensed.
