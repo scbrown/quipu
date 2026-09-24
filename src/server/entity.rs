@@ -92,7 +92,11 @@ pub(crate) async fn changes_get(
     Query(p): Query<ChangeParams>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let store = store.lock();
+        // READ POOL, not the writer (aegis-4cfnck). Every call below is a
+        // SELECT; on the writer mutex each poll of the feed serialised against
+        // every write in the store, and a reactor polling it is the heaviest
+        // steady reader it has.
+        let store = store.read();
         let capture = match p.capture.as_deref() {
             None => quipu::store::changes::Capture::NewValues,
             Some(name) => quipu::store::changes::Capture::parse(name).ok_or_else(|| {
@@ -123,7 +127,11 @@ pub(crate) async fn events_get(
     Query(p): Query<EventParams>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let store = store.lock();
+        // READ POOL (aegis-4cfnck). events_after and latest_event_offset are
+        // two statements on a pooled reader, so a write committing between
+        // them can make `lag` read slightly HIGH for one poll. `next_offset`,
+        // the cursor, is unaffected, and lag is a gauge, not an ordering promise.
+        let store = store.read();
         let committed: Option<i64> = match (&p.since, &p.consumer) {
             (None, Some(c)) => Some(store.consumer_committed(c)?),
             _ => None,
@@ -200,7 +208,8 @@ pub(crate) async fn transactions(
     Query(p): Query<TransactionParams>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let store = store.lock();
+        // READ POOL (aegis-4cfnck): list_transactions* is SELECT-only.
+        let store = store.read();
         // Cursor for pollers (Shantytown's event subscription): `?since=<tx>`
         // returns only newer transactions so a watermarked poll is O(new), not
         // O(whole log). No params -> the full log, preserving prior behaviour.
