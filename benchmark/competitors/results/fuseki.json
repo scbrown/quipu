@@ -4,7 +4,7 @@
   "system_version": "6.2.0",
   "artifact_sha256": "0c3e2dc55037ced325e3716bf86e91fdf20fb96e595fc3530232c05fae789a9e",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "generated_at": "2026-09-24T01:09:58Z",
+  "generated_at": "2026-09-24T01:30:04Z",
   "timeout_s": 30,
   "classes": {
     "query-evaluation": {
@@ -14,8 +14,8 @@
       "lexical_form_only": 12
     },
     "update": {
-      "passed": 37,
-      "cases": 37,
+      "passed": 93,
+      "cases": 93,
       "lexical_form_only": 0
     }
   },
@@ -1306,6 +1306,97 @@
       "class": "update"
     },
     {
+      "id": ":insert-where-01",
+      "name": "INSERT 01",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-where-02",
+      "name": "INSERT 02",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-where-03",
+      "name": "INSERT 03",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-where-04",
+      "name": "INSERT 04",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-using-01",
+      "name": "INSERT USING 01",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-05a",
+      "name": "INSERT same bnode twice",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-data-same-bnode",
+      "name": "INSERTing the same bnode with INSERT DATA into two different Graphs is the same bnode",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-where-same-bnode",
+      "name": "INSERTing the same bnode with two INSERT WHERE statement within one request is NOT the same bnode",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":insert-where-same-bnode2",
+      "name": "INSERTing the same bnode with two INSERT WHERE statement within one request is NOT the same bnode even if both WHERE clauses have the empty solution mapping as the only solution.",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/basic-update/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-clear-default-01",
+      "name": "CLEAR DEFAULT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/clear/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-clear-graph-01",
+      "name": "CLEAR GRAPH",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/clear/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-clear-named-01",
+      "name": "CLEAR NAMED",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/clear/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-clear-all-01",
+      "name": "CLEAR ALL",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/clear/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
       "id": ":copy01",
       "name": "COPY 1",
       "manifest": "/tmp/rdf-tests/sparql/sparql11/copy/manifest.ttl",
@@ -1344,6 +1435,307 @@
       "id": ":copy07",
       "name": "COPY 7",
       "manifest": "/tmp/rdf-tests/sparql/sparql11/copy/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-data-01",
+      "name": "Simple DELETE DATA 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-data/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-data-02",
+      "name": "Simple DELETE DATA 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-data/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-data-03",
+      "name": "Simple DELETE DATA 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-data/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-data-04",
+      "name": "Simple DELETE DATA 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-data/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-data-05",
+      "name": "Graph-specific DELETE DATA 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-data/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-data-06",
+      "name": "Graph-specific DELETE DATA 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-data/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-insert-01",
+      "name": "DELETE INSERT 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-insert/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-insert-01b",
+      "name": "DELETE INSERT 1b",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-insert/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-insert-01c",
+      "name": "DELETE INSERT 1c",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-insert/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-insert-02",
+      "name": "DELETE INSERT 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-insert/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-insert-04",
+      "name": "DELETE INSERT 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-insert/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-insert-04b",
+      "name": "DELETE INSERT 4b",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-insert/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-insert-05b",
+      "name": "DELETE INSERT 5b",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-insert/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-insert-06b",
+      "name": "DELETE INSERT 6b",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-insert/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-where-01",
+      "name": "Simple DELETE WHERE 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-where/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-where-02",
+      "name": "Simple DELETE WHERE 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-where/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-where-03",
+      "name": "Simple DELETE WHERE 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-where/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-where-04",
+      "name": "Simple DELETE WHERE 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-where/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-where-05",
+      "name": "Graph-specific DELETE WHERE 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-where/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-where-06",
+      "name": "Graph-specific DELETE WHERE 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete-where/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-01",
+      "name": "Simple DELETE 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-02",
+      "name": "Simple DELETE 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-03",
+      "name": "Simple DELETE 3",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-04",
+      "name": "Simple DELETE 4",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-05",
+      "name": "Graph-specific DELETE 1",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-06",
+      "name": "Graph-specific DELETE 2",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-07",
+      "name": "Simple DELETE 7",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-with-01",
+      "name": "Simple DELETE 1 (WITH)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-with-02",
+      "name": "Simple DELETE 2 (WITH)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-with-03",
+      "name": "Simple DELETE 3 (WITH)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-with-04",
+      "name": "Simple DELETE 4 (WITH)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-with-05",
+      "name": "Graph-specific DELETE 1 (WITH)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-with-06",
+      "name": "Graph-specific DELETE 2 (WITH)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-using-01",
+      "name": "Simple DELETE 1 (USING)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-using-02a",
+      "name": "Simple DELETE 2 (USING)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-using-03",
+      "name": "Simple DELETE 3 (USING)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-using-04",
+      "name": "Simple DELETE 4 (USING)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-using-05",
+      "name": "Graph-specific DELETE 1 (USING)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-delete-using-06a",
+      "name": "Graph-specific DELETE 2 (USING)",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/delete/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-drop-default-01",
+      "name": "DROP DEFAULT",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/drop/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-drop-graph-01",
+      "name": "DROP GRAPH",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/drop/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-drop-named-01",
+      "name": "DROP NAMED",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/drop/manifest.ttl",
+      "status": "passed",
+      "class": "update"
+    },
+    {
+      "id": ":dawg-drop-all-01",
+      "name": "DROP ALL",
+      "manifest": "/tmp/rdf-tests/sparql/sparql11/drop/manifest.ttl",
       "status": "passed",
       "class": "update"
     },

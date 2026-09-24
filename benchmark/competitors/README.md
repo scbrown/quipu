@@ -16,11 +16,11 @@ presented as a wrong answer.
 
 | system | version | query evaluation | of those failures, same value | update |
 |---|---|---:|---:|---:|
-| quipu | 0.8.0 | 168/168 | 0 | 37/37 |
-| RDF4J | 6.1.0 (MemoryStore, Tomcat 11.0.26, JDK 25) | 162/168 | 5 | 37/37 |
-| Oxigraph | 0.5.11 (in-memory) | 159/168 | 8 | 37/37 |
-| Jena Fuseki | 6.2.0 (`--mem`, JDK 25) | 155/168 | 12 | 37/37 |
-| rdflib | 7.6.0 (`Dataset`, in-process) | 154/168 | 9 | 27/37 |
+| quipu | 0.8.0 | 168/168 | 0 | 93/93 |
+| RDF4J | 6.1.0 (MemoryStore, Tomcat 11.0.26, JDK 25) | 162/168 | 5 | 87/93 |
+| Oxigraph | 0.5.11 (in-memory) | 159/168 | 8 | 93/93 |
+| Jena Fuseki | 6.2.0 (`--mem`, JDK 25) | 155/168 | 12 | 93/93 |
+| rdflib | 7.6.0 (`Dataset`, in-process) | 154/168 | 9 | 69/93 |
 
 Once same-value failures are set aside, the remaining deviations, each checked by hand
 against the expected result and the spec:
@@ -28,10 +28,11 @@ against the expected result and the spec:
 | system | case | what it does |
 |---|---|---|
 | RDF4J | `:subquery03` | correlates a subquery's unprojected `?g` with the outer `GRAPH ?g` |
+| RDF4J | 6 update cases (`:dawg-delete-05` …) | an unscoped `DELETE … WHERE` also deletes from named graphs, because RDF4J's default dataset is the union of all graphs |
 | Oxigraph | `:bnode01` | `BNODE(str)` returns the same blank node across solutions |
 | Fuseki | `:bnode01` | `BNODE(str)` returns different blank nodes within one solution |
 | rdflib | `:bnode01`, `:agg-err-01`, `:strdt01`, `:pp37`, `:subquery13` | blank nodes; AVG over an error; `STRDT` on a language-tagged literal; a duplicate path row; missing subquery rows |
-| rdflib | 10 update cases | `ADD`/`COPY`/`MOVE`/`INSERT DATA` raise inside rdflib's `Dataset` |
+| rdflib | 24 update cases | `ADD`/`COPY`/`MOVE`/`INSERT DATA` raise inside rdflib's `Dataset`; `USING <g>` tries to fetch `g` over HTTP instead of using the dataset's graph; graph-state differences after `CLEAR`/`DELETE DATA` |
 
 The quipu row is quipu's own published ledger, produced by the quipu runner through its CLI
 rather than by a driver here. It uses the same discovery, selection and comparison code, but the
@@ -41,6 +42,22 @@ Per-case ledgers: [`results/`](results/).
 **Disclosure.** Quipu parses SPARQL with `spargebra` and models RDF with
 `oxrdf`, both from the Oxigraph project. Where the two agree on syntax, part
 of that agreement is shared code.
+
+**What the counts cover.** Working Group–approved tests only. The query-evaluation
+manifests list 225 tests, and the 168 approved ones are scored. Update lists 94, of
+which 93 are approved and scored. The update-syntax suites are not run yet.
+
+**A correction, kept visible.** Until 2026-09-24 the quipu runner discovered only
+**37 of the 93** approved update tests. The `delete`, `delete-data`, `delete-insert`,
+`delete-where`, `clear` and `drop` manifests declare their tests with Turtle's `a`
+rather than `rdf:type`, and the parser matched only the latter. Every update number
+here, quipu's included, was over that 37. On the full 93, quipu passes 93/93, and
+RDF4J and rdflib gain failures the 37 never exercised. The runner now pins the
+approved count per class and refuses a run that discovers a different number.
+
+**Quipu's score is fitted to this suite.** Its failures were found by running this
+suite and fixed against it, case by case, so its 168/168 and 93/93 are partly a
+record of that work. The other stores were not tuned to this harness.
 
 ## How it stays fair
 
@@ -70,6 +87,10 @@ of that agreement is shared code.
     normalise it to `file:/` in one position only (`:subquery02`). That is an
     IRI-resolution quirk, which belongs to the parsing suites, not this table.
     Oxigraph and rdflib were unchanged case for case by this move.
+  - the post-update default graph is read the way each store names it (RDF4J:
+    `rdf4j:nil`), because RDF4J's default dataset is the union of all graphs and a
+    plain dump reads named graphs too (6 update cases). The UPDATE itself runs with
+    each store's native semantics, which is where RDF4J's real deviation shows.
 
 ## Run it
 

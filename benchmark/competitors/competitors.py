@@ -176,6 +176,10 @@ class Driver:
 
     name = "?"
     version = "?"
+    #: How THIS store names its default graph in a dump. Harness machinery, not
+    #: the test: RDF4J's default dataset is the union of all graphs, so a plain
+    #: `?s ?p ?o` there reads named graphs too (found on 6 update cases).
+    default_graph_from = ""
 
     def __enter__(self) -> "Driver":
         return self
@@ -414,6 +418,7 @@ class Rdf4jDriver(WarmHttpDriver):
 
     name = "rdf4j"
     version = PINS["rdf4j"]["version"]
+    default_graph_from = "FROM <http://rdf4j.org/schema/rdf4j#nil>"
     query_path = "/rdf4j-server/repositories/w3c"
     update_path = "/rdf4j-server/repositories/w3c/statements"
     store_path = "/rdf4j-server/repositories/w3c/statements"
@@ -492,7 +497,7 @@ def iri_for(path: Path) -> str:
 
 
 def dump(driver: Driver, graph: str | None) -> list[tuple[str, ...]]:
-    query = ("SELECT ?s ?p ?o WHERE { ?s ?p ?o }" if graph is None
+    query = (f"SELECT ?s ?p ?o {driver.default_graph_from} WHERE {{ ?s ?p ?o }}" if graph is None
              else f"SELECT ?s ?p ?o WHERE {{ GRAPH <{graph}> {{ ?s ?p ?o }} }}")
     variables, rows = driver.select(query)
     aligned = ev.reorder_rows(variables, rows, ["s", "p", "o"])
