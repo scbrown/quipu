@@ -1562,10 +1562,10 @@ aegis:CredentialShape a sh:NodeShape ;
     sh:property [ sh:path aegis:probe ; sh:maxCount 1 ; ] ;
     sh:property [ sh:path aegis:heldOn ; sh:class aegis:Host ; ] .
 
+# Adds ONLY result/verifiedAt. camayoc-core's CamayocVerificationShape already requires
+# rdfs:label, sourceKind and falsifier on every aegis:Verification; both shapes apply.
 aegis:VerificationShape a sh:NodeShape ;
     sh:targetClass aegis:Verification ;
-    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
-    # Optional, constrained when present: most Verification nodes are prose-only.
     sh:property [ sh:path aegis:result ; sh:maxCount 1 ; sh:in ( "works" "dead" "unknown" ) ; ] ;
     sh:property [ sh:path aegis:verifiedAt ; sh:maxCount 1 ;
                   sh:pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$" ; ] .
