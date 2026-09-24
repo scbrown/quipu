@@ -206,20 +206,63 @@ def _table(header: list[str], rows: list[list[str]], right: set[int] | None = No
     return lines
 
 
+#: The classes a "passes every approved test" claim is about. Entailment and
+#: federated query are NOT in it: they carry declared non-goals and a policy
+#: deviation, and are named as exceptions instead (aegis-zmln5e).
+CORE_CLAIM_CLASSES = ("syntax", "query-evaluation", "update", "protocol", "result-format")
+
+
+def claim_boundary(data: dict) -> list[str]:
+    """The claim-boundary block, DERIVED from the ledgers (aegis-zmln5e).
+
+    The old text said "Quipu is not a conformant SPARQL 1.1 implementation"
+    beside 100% on every core class: true of the whole spec, and it
+    undersold what the ledgers show. The strong sentence ("passes all
+    approved ...") is emitted ONLY while every core class is fully passing; the
+    moment one is not, the page falls back to per-class counts with no "all",
+    so the claim cannot outlive the numbers that justify it. Exceptions are
+    counted from the rows, not hand-written.
+    """
+    classes = data["classes"]
+    core = {name: classes[name]["counts"] for name in CORE_CLAIM_CLASSES}
+    all_pass = all(c["cases"] and c["passed"] == c["cases"] for c in core.values())
+    counts = ", ".join(
+        f"{CLASS_LABELS.get(name, name)} **{c['passed']}/{c['cases']}**" for name, c in core.items()
+    )
+    rev = data["suite_revision"][:7]
+    if all_pass:
+        head = [
+            "> Quipu passes **all** Working Group–approved W3C SPARQL 1.1 Query, Update,",
+            f"> Protocol and Results tests at rdf-tests `{rev}`: {counts}.",
+        ]
+    else:
+        head = [
+            "> Quipu does **not** pass every approved W3C SPARQL 1.1 Query, Update, Protocol",
+            f"> and Results test at rdf-tests `{rev}`: {counts}.",
+        ]
+    fed = classes["federated-query"]["counts"]
+    ent = classes["entailment"]["counts"]
+    return [
+        "> **Claim boundary — read this before quoting any number on this page.**",
+        *head,
+        "> Exceptions, each named below: federated query (`SERVICE`) passes"
+        f" {fed['passed']}/{fed['cases']}, with {fed['unsupported']} refused by policy (variable",
+        "> endpoints); entailment regimes are scored separately"
+        f" ({ent['passed']}/{ent['cases']} passed, {ent['failed']} failing,"
+        f" {ent['unsupported']} declared non-goals);",
+        "> SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.",
+        "> Every class below is scored separately and is never combined into a single",
+        "> compliance percentage, because a blended figure would hide exactly the classes",
+        "> that are not implemented at all.",
+    ]
+
+
 def render_markdown(data: dict) -> str:
     classes = data["classes"]
     out: list[str] = [GENERATED_HEADER, "# SPARQL 1.1 conformance", ""]
 
-    syntax = classes["syntax"]["counts"]
-    evaluation = classes["query-evaluation"]["counts"]
+    out += claim_boundary(data)
     out += [
-        "> **Claim boundary — read this before quoting any number on this page.**",
-        f"> Quipu passes **{syntax['passed']}/{syntax['cases']}** approved SPARQL 1.1",
-        f"> *query-syntax* tests and **{evaluation['passed']}/{evaluation['cases']}** approved",
-        "> *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**",
-        "> Every class below is scored separately and is never combined into a single",
-        "> compliance percentage, because a blended figure would hide exactly the classes",
-        "> that are not implemented at all.",
         "",
         "These results come from the [W3C RDF Tests](https://github.com/w3c/rdf-tests)",
         "suite at a pinned revision, run against throwaway stores by a checked-in runner.",

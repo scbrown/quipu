@@ -5,9 +5,11 @@
 # SPARQL 1.1 conformance
 
 > **Claim boundary — read this before quoting any number on this page.**
-> Quipu passes **86/86** approved SPARQL 1.1
-> *query-syntax* tests and **168/168** approved
-> *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**
+> Quipu passes **all** Working Group–approved W3C SPARQL 1.1 Query, Update,
+> Protocol and Results tests at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **168/168**, update **37/37**, protocol **34/34**, result format **10/10**.
+> Exceptions, each named below: federated query (`SERVICE`) passes 6/7, with 1 refused by policy (variable
+> endpoints); entailment regimes are scored separately (29/70 passed, 6 failing, 35 declared non-goals);
+> SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.
 > Every class below is scored separately and is never combined into a single
 > compliance percentage, because a blended figure would hide exactly the classes
 > that are not implemented at all.
