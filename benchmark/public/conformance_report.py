@@ -206,20 +206,75 @@ def _table(header: list[str], rows: list[list[str]], right: set[int] | None = No
     return lines
 
 
+#: The classes a "passes every approved test" claim is about. Entailment and
+#: federated query are NOT in it: they carry declared non-goals and a policy
+#: deviation, and are named as exceptions instead (aegis-zmln5e).
+#: Tests the pinned suite's manifests LIST per class, approved or not, counted
+#: by parsing them as RDF (rdflib), so the page can say what the scored subset
+#: is a subset of. Query evaluation: 168 Approved, 17 Proposed, 40 unclassified.
+LISTED = {"query-evaluation": 225, "update": 94}
+
+CORE_CLAIM_CLASSES = ("syntax", "query-evaluation", "update", "protocol", "result-format")
+
+
+def claim_boundary(data: dict) -> list[str]:
+    """The claim-boundary block, DERIVED from the ledgers (aegis-zmln5e).
+
+    The old text said "Quipu is not a conformant SPARQL 1.1 implementation"
+    beside 100% on every core class: true of the whole spec, and it
+    undersold what the ledgers show. The strong sentence ("passes all
+    approved ...") is emitted ONLY while every core class is fully passing; the
+    moment one is not, the page falls back to per-class counts with no "all",
+    so the claim cannot outlive the numbers that justify it. Exceptions are
+    counted from the rows, not hand-written.
+    """
+    classes = data["classes"]
+    core = {name: classes[name]["counts"] for name in CORE_CLAIM_CLASSES}
+    all_pass = all(c["cases"] and c["passed"] == c["cases"] for c in core.values())
+    counts = ", ".join(
+        f"{CLASS_LABELS.get(name, name)} **{c['passed']}/{c['cases']}**" for name, c in core.items()
+    )
+    rev = data["suite_revision"][:7]
+    if all_pass:
+        head = [
+            "> Quipu passes **all** Working Group–approved W3C SPARQL 1.1 Query, Update,",
+            f"> Protocol and Results tests at rdf-tests `{rev}`: {counts}.",
+        ]
+    else:
+        head = [
+            "> Quipu does **not** pass every approved W3C SPARQL 1.1 Query, Update, Protocol",
+            f"> and Results test at rdf-tests `{rev}`: {counts}.",
+        ]
+    fed = classes["federated-query"]["counts"]
+    ent = classes["entailment"]["counts"]
+    return [
+        "> **Claim boundary — read this before quoting any number on this page.**",
+        *head,
+        "> Exceptions, each named below: federated query (`SERVICE`) passes"
+        f" {fed['passed']}/{fed['cases']}, with {fed['unsupported']} refused by policy (variable",
+        "> endpoints); entailment regimes are scored separately"
+        f" ({ent['passed']}/{ent['cases']} passed, {ent['failed']} failing,"
+        f" {ent['unsupported']} declared non-goals);",
+        "> SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.",
+        "> **What these counts are.** Working Group–approved tests only. The query-evaluation",
+        f"> manifests list {LISTED['query-evaluation']} tests, and the {core['query-evaluation']['cases']} approved ones are scored;"
+        f" the {LISTED['query-evaluation'] - core['query-evaluation']['cases']} Proposed or unclassified are not run.",
+        "> The update-syntax suites are not run yet.",
+        "> **This score is fitted to this suite.** Quipu's failures here were found by running this suite",
+        "> and fixed against it, case by case, so a perfect score is partly a record of that work rather",
+        "> than an independent sample. Other stores measured with the same harness were not tuned to it.",
+        "> Every class below is scored separately and is never combined into a single",
+        "> compliance percentage, because a blended figure would hide exactly the classes",
+        "> that are not implemented at all.",
+    ]
+
+
 def render_markdown(data: dict) -> str:
     classes = data["classes"]
     out: list[str] = [GENERATED_HEADER, "# SPARQL 1.1 conformance", ""]
 
-    syntax = classes["syntax"]["counts"]
-    evaluation = classes["query-evaluation"]["counts"]
+    out += claim_boundary(data)
     out += [
-        "> **Claim boundary — read this before quoting any number on this page.**",
-        f"> Quipu passes **{syntax['passed']}/{syntax['cases']}** approved SPARQL 1.1",
-        f"> *query-syntax* tests and **{evaluation['passed']}/{evaluation['cases']}** approved",
-        "> *query-evaluation* tests. **Quipu is not a conformant SPARQL 1.1 implementation.**",
-        "> Every class below is scored separately and is never combined into a single",
-        "> compliance percentage, because a blended figure would hide exactly the classes",
-        "> that are not implemented at all.",
         "",
         "These results come from the [W3C RDF Tests](https://github.com/w3c/rdf-tests)",
         "suite at a pinned revision, run against throwaway stores by a checked-in runner.",
@@ -384,6 +439,20 @@ def render_markdown(data: dict) -> str:
     # rewritten to stop.
     out += _table(["Why it is unsupported", "Cases", "Classes"], reason_rows, right={1})
 
+    out += [
+        "",
+        "## Corrections",
+        "",
+        "Kept on the page so a changed number never changes silently.",
+        "",
+        "- **2026-09-24: update was 37 of 93.** Until this date the page reported update",
+        "  **37/37**. The runner discovered only 37 of the 93 approved update tests: the",
+        "  `delete`, `delete-data`, `delete-insert`, `delete-where`, `clear` and `drop`",
+        "  manifests declare their tests with Turtle's `a` rather than `rdf:type`, and the",
+        "  parser matched only the latter. On the full 93, quipu passes 93/93. The runner",
+        "  now pins the approved count per class at the pinned suite revision and refuses",
+        "  a run that discovers a different number.",
+    ]
     out += ["", "## Re-derive these numbers", "", "```sh"]
     reproduce = data["reproduce"]
     out += [

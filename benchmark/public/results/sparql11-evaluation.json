@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "68d7208b12f215ce4dcf67eeff9632a4d63bf06e",
-  "quipu_version": "quipu 0.8.0\ngit_sha: 68d7208b12f215ce4dcf67eeff9632a4d63bf06e",
-  "generated_at": "2026-09-21T00:59:40Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/35549194430",
+  "quipu_revision": "7579e7edc23b2cb15a0076f522358513839cf1cc",
+  "quipu_version": "quipu 0.8.1\ngit_sha: 7579e7edc23b2cb15a0076f522358513839cf1cc",
+  "generated_at": "2026-09-24T01:46:24Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/35943572657",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -31,8 +31,8 @@
       "passed": 34
     },
     "update": {
-      "cases": 37,
-      "passed": 37
+      "cases": 93,
+      "passed": 93
     },
     "entailment": {
       "cases": 70,
@@ -2150,6 +2150,123 @@
     },
     {
       "class": "update",
+      "id": ":insert-where-01",
+      "name": "INSERT 01",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":insert-where-02",
+      "name": "INSERT 02",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":insert-where-03",
+      "name": "INSERT 03",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":insert-where-04",
+      "name": "INSERT 04",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":insert-using-01",
+      "name": "INSERT USING 01",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":insert-05a",
+      "name": "INSERT same bnode twice",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":insert-data-same-bnode",
+      "name": "INSERTing the same bnode with INSERT DATA into two different Graphs is the same bnode",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":insert-where-same-bnode",
+      "name": "INSERTing the same bnode with two INSERT WHERE statement within one request is NOT the same bnode",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":insert-where-same-bnode2",
+      "name": "INSERTing the same bnode with two INSERT WHERE statement within one request is NOT the same bnode even if both WHERE clauses have the empty solution mapping as the only solution.",
+      "manifest": "basic-update/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-clear-default-01",
+      "name": "CLEAR DEFAULT",
+      "manifest": "clear/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-clear-graph-01",
+      "name": "CLEAR GRAPH",
+      "manifest": "clear/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-clear-named-01",
+      "name": "CLEAR NAMED",
+      "manifest": "clear/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-clear-all-01",
+      "name": "CLEAR ALL",
+      "manifest": "clear/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
       "id": ":copy01",
       "name": "COPY 1",
       "manifest": "copy/manifest.ttl",
@@ -2198,6 +2315,393 @@
       "id": ":copy07",
       "name": "COPY 7",
       "manifest": "copy/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-data-01",
+      "name": "Simple DELETE DATA 1",
+      "manifest": "delete-data/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-data-02",
+      "name": "Simple DELETE DATA 2",
+      "manifest": "delete-data/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-data-03",
+      "name": "Simple DELETE DATA 3",
+      "manifest": "delete-data/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-data-04",
+      "name": "Simple DELETE DATA 4",
+      "manifest": "delete-data/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-data-05",
+      "name": "Graph-specific DELETE DATA 1",
+      "manifest": "delete-data/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-data-06",
+      "name": "Graph-specific DELETE DATA 2",
+      "manifest": "delete-data/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-insert-01",
+      "name": "DELETE INSERT 1",
+      "manifest": "delete-insert/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-insert-01b",
+      "name": "DELETE INSERT 1b",
+      "manifest": "delete-insert/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-insert-01c",
+      "name": "DELETE INSERT 1c",
+      "manifest": "delete-insert/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-insert-02",
+      "name": "DELETE INSERT 2",
+      "manifest": "delete-insert/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-insert-04",
+      "name": "DELETE INSERT 4",
+      "manifest": "delete-insert/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-insert-04b",
+      "name": "DELETE INSERT 4b",
+      "manifest": "delete-insert/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-insert-05b",
+      "name": "DELETE INSERT 5b",
+      "manifest": "delete-insert/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-insert-06b",
+      "name": "DELETE INSERT 6b",
+      "manifest": "delete-insert/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-where-01",
+      "name": "Simple DELETE WHERE 1",
+      "manifest": "delete-where/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-where-02",
+      "name": "Simple DELETE WHERE 2",
+      "manifest": "delete-where/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-where-03",
+      "name": "Simple DELETE WHERE 3",
+      "manifest": "delete-where/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-where-04",
+      "name": "Simple DELETE WHERE 4",
+      "manifest": "delete-where/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-where-05",
+      "name": "Graph-specific DELETE WHERE 1",
+      "manifest": "delete-where/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-where-06",
+      "name": "Graph-specific DELETE WHERE 2",
+      "manifest": "delete-where/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-01",
+      "name": "Simple DELETE 1",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-02",
+      "name": "Simple DELETE 2",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-03",
+      "name": "Simple DELETE 3",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-04",
+      "name": "Simple DELETE 4",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-05",
+      "name": "Graph-specific DELETE 1",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-06",
+      "name": "Graph-specific DELETE 2",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-07",
+      "name": "Simple DELETE 7",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-with-01",
+      "name": "Simple DELETE 1 (WITH)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-with-02",
+      "name": "Simple DELETE 2 (WITH)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-with-03",
+      "name": "Simple DELETE 3 (WITH)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-with-04",
+      "name": "Simple DELETE 4 (WITH)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-with-05",
+      "name": "Graph-specific DELETE 1 (WITH)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-with-06",
+      "name": "Graph-specific DELETE 2 (WITH)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-using-01",
+      "name": "Simple DELETE 1 (USING)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-using-02a",
+      "name": "Simple DELETE 2 (USING)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-using-03",
+      "name": "Simple DELETE 3 (USING)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-using-04",
+      "name": "Simple DELETE 4 (USING)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-using-05",
+      "name": "Graph-specific DELETE 1 (USING)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-delete-using-06a",
+      "name": "Graph-specific DELETE 2 (USING)",
+      "manifest": "delete/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-drop-default-01",
+      "name": "DROP DEFAULT",
+      "manifest": "drop/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-drop-graph-01",
+      "name": "DROP GRAPH",
+      "manifest": "drop/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-drop-named-01",
+      "name": "DROP NAMED",
+      "manifest": "drop/manifest.ttl",
+      "query": null,
+      "result": null,
+      "status": "passed"
+    },
+    {
+      "class": "update",
+      "id": ":dawg-drop-all-01",
+      "name": "DROP ALL",
+      "manifest": "drop/manifest.ttl",
       "query": null,
       "result": null,
       "status": "passed"

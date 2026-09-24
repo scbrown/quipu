@@ -239,9 +239,31 @@ class PublishedArtifactsTests(unittest.TestCase):
         data = REPORT.load(RESULTS)
         page = REPORT.render_markdown(data)
         evaluation = data["classes"]["query-evaluation"]["counts"]
-        self.assertIn("not a conformant SPARQL 1.1 implementation", page)
+        self.assertIn("Claim boundary", page)
         self.assertIn(f"{evaluation['passed']}/{evaluation['cases']}", page)
+        self.assertIn("declared non-goals", page)
         self.assertNotIn("%", page.split("## Full ledgers")[0])
+
+    def test_all_approved_claim_is_derived_and_withdrawn_on_one_failure(self):
+        # aegis-zmln5e: the strong sentence must not outlive the numbers.
+        import copy
+        data = REPORT.load(RESULTS)
+        core_all_pass = all(
+            data["classes"][n]["counts"]["passed"] == data["classes"][n]["counts"]["cases"]
+            for n in REPORT.CORE_CLAIM_CLASSES
+        )
+        block = "\n".join(REPORT.claim_boundary(data))
+        self.assertEqual("passes **all**" in block, core_all_pass)
+        # Break exactly one core row: the claim must fall back, with no "all".
+        broken = copy.deepcopy(data)
+        rows = broken["classes"]["update"]["rows"]
+        rows[0] = {**rows[0], "status": "failed"}
+        broken["classes"]["update"]["counts"] = REPORT.tally(rows)
+        fallback = "\n".join(REPORT.claim_boundary(broken))
+        self.assertNotIn("passes **all**", fallback)
+        self.assertIn("does **not** pass every approved", fallback)
+        n = broken["classes"]["update"]["counts"]
+        self.assertIn(f"update **{n['passed']}/{n['cases']}**", fallback)
 
 
 if __name__ == "__main__":
