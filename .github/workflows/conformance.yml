@@ -242,6 +242,19 @@ jobs:
             --baseline benchmark/public/results/shacl-core.json \
             --candidate /tmp/shacl-core.json
 
+      # RDF 1.1 syntax suites (aegis-mhee08). The runner exits 0 whenever it
+      # could measure; N-Quads and TriG are scored unsupported, so the gate is
+      # check_regression against the committed ledger, like every other class.
+      - name: RDF 1.1 syntax suites (Turtle, N-Triples, N-Quads, TriG)
+        run: |
+          python3 benchmark/public/rdf11_syntax.py \
+            --suite /tmp/rdf-tests \
+            --quipu "${{ steps.bin.outputs.path }}" \
+            --output /tmp/rdf11-syntax.json
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/rdf11-syntax.json \
+            --candidate /tmp/rdf11-syntax.json
+
       - name: Re-derive entailment decision ledger
         run: |
           python3 benchmark/public/sparql11_evaluation.py \
@@ -263,5 +276,6 @@ jobs:
             /tmp/sparql11-entailment.json
             /tmp/sparql11-federated-query.json
             /tmp/shacl-core.json
+            /tmp/rdf11-syntax.json
           if-no-files-found: warn
           retention-days: 90
