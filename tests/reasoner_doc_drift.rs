@@ -10,7 +10,9 @@ fn read(path: &str) -> String {
 
 #[test]
 fn negation_support_is_documented_on_every_summary_surface() {
-    let readme = read("README.md");
+    // The feature summaries moved out of the README with the stack README
+    // standard (aegis-exvvic); the pins moved with them.
+    let readme = read("docs/book/src/why-quipu.md");
     for prefix in [
         "- **Datalog over EAVT**",
         "- **Datalog rule engine**",
