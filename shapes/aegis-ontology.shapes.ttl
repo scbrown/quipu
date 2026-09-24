@@ -1583,7 +1583,11 @@ aegis:TextRuleShape a sh:NodeShape ;
     # Optional text-only examples; readiness requires both polarities to pass.
     sh:property [ sh:path aegis:mustMatch ; sh:datatype xsd:string ; ] ;
     sh:property [ sh:path aegis:mustNotMatch ; sh:datatype xsd:string ; ] ;
-    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    # Optional exemptions (aegis-40j2pq / jdl6lr): additive, so existing rules conform.
+    sh:property [ sh:path aegis:exemptPathRegex ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:exemptRepo ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:exemptLineMarker ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .
 
 aegis:InternalIdentifierPatternShape a sh:NodeShape ;
     sh:targetClass aegis:InternalIdentifierPattern ;
