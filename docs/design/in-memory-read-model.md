@@ -343,6 +343,13 @@ checked with a `COUNT` so an oversized store never pays a build to discover it
 is oversized. Past the ceiling queries keep the SQL path — slower on joins, but
 the behaviour they already had.
 
+The count uses `idx_current_g`, a partial index on the graph ID containing only
+current assertions (`op = 1 AND valid_to IS NULL`). It visits current facts in
+the requested graph without reading historical rows or other graphs. Writable
+open adds this index after the named-graph migration, including on existing
+stores; the first open pays the index build cost. The count remains linear in
+the graph's current facts, even when it declines to build a read model.
+
 Binding is shared with the SQL path through one extracted `bind_row`, so the two
 cannot drift on the subtle part: a subject resolving to a blank node binds as
 `Value::Str`, everything else re-looks-up its IRI to choose between `Ref` and
