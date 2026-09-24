@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache-2.0"/></a>
   <a href="https://github.com/scbrown/quipu/actions/workflows/ci.yml"><img src="https://github.com/scbrown/quipu/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://github.com/scbrown/caboodle"><img src="https://img.shields.io/badge/stack-quipu-8B5E3C.svg" alt="Part of the caboodle stack"/></a>
   <a href="https://doi.org/10.5281/zenodo.21878428"><img src="https://zenodo.org/badge/1201016929.svg" alt="DOI"/></a>
@@ -205,4 +205,4 @@ See [RELEASING.md](docs/RELEASING.md) for how a release is cut.
 
 ## 📜 License
 
-[MIT](LICENSE)
+Licensed under the Apache License, Version 2.0 (see [LICENSE](LICENSE)). Releases up to and including quipu-ai v0.11.0 were MIT-licensed and remain available under MIT.
