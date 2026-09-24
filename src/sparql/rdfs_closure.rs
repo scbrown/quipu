@@ -43,6 +43,28 @@
 //! | rdfs7  | `?s ?p ?o` + `?p rdfs:subPropertyOf ?q`  -> `?s ?q ?o` |
 //! | rdfs9  | `?s rdf:type ?c1` + `?c1 subClassOf ?c2` -> `?s rdf:type ?c2` |
 //! | rdfs11 | `?c1 subClassOf ?c2` + `?c2 subClassOf ?c3` -> `?c1 subClassOf ?c3` |
+//! | rdf1   | `?s ?p ?o`                               -> `?p rdf:type rdf:Property` |
+//! | rdfs6  | `?p rdf:type rdf:Property`               -> `?p subPropertyOf ?p` |
+//! | rdfs10 | `?c rdf:type rdfs:Class`                 -> `?c subClassOf ?c` |
+//!
+//! ## The axiomatic schema, as PREMISES only (aegis-56bvs2)
+//!
+//! rdfs6 and rdfs10 need to know what is a property and what is a class. RDFS
+//! answers that with axiomatic triples (`rdf:type rdfs:range rdfs:Class`,
+//! `rdfs:subClassOf rdfs:domain rdfs:Class`, ...). They are added to the
+//! in-memory domain/range slices, so the EXISTING rdfs2/rdfs3 derive the
+//! typing, and they are NEVER written: the store holds only what was derived
+//! from the caller's data, with each triple tagged by the rule that produced it.
+//! Five W3C RDFS cases failed for exactly this (rdfs05, rdfs11,
+//! paper-sparqldl-Q1-rdfs, sparqldl-02, sparqldl-03): each needed `:c
+//! subClassOf :c` or `:p subPropertyOf :p`.
+//!
+//! ## Two regimes
+//!
+//! [`Regime::Rdfs`] is everything above. [`Regime::Rdf`] is rdf1 ONLY: RDF
+//! entailment has no rdfs2/3/7/9 rules, and applying them to an RDF-regime case
+//! OVER-entails (measured: it broke W3C `owlds02`). rdf1 is what W3C `rdf01`
+//! asks for.
 //!
 //! Iterated to a fixed point, because rdfs2/rdfs3 produce types that rdfs9 then
 //! closes, and rdfs7 produces triples that rdfs2/rdfs3 then read.
@@ -96,7 +118,19 @@
 use std::collections::BTreeSet;
 
 use crate::error::Result;
-use crate::namespace::{RDF_TYPE, RDFS_DOMAIN, RDFS_RANGE, RDFS_SUBCLASS_OF, RDFS_SUBPROPERTY_OF};
+use crate::namespace::{
+    RDF_PROPERTY, RDF_TYPE, RDFS_CLASS, RDFS_DOMAIN, RDFS_RANGE, RDFS_SUBCLASS_OF,
+    RDFS_SUBPROPERTY_OF,
+};
+
+/// Which entailment regime to close under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Regime {
+    /// RDF entailment: rdf1 only.
+    Rdf,
+    /// RDFS entailment: rdf1 plus every rule in the table above.
+    Rdfs,
+}
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -107,6 +141,10 @@ pub struct ClosureReport {
     pub asserted: usize,
     /// Fixed-point iterations actually executed.
     pub rounds: usize,
+    /// Triples written, per rule (`reasoner:<rule>`). Since the vocabulary
+    /// rules (rdf1, rdfs6, rdfs10, the axiomatic typing) fire on almost every
+    /// graph, a test about ONE rule has to count that rule, not the total.
+    pub by_rule: std::collections::BTreeMap<&'static str, usize>,
 }
 
 impl ClosureReport {
@@ -182,6 +220,12 @@ enum Rule {
     Rdfs9,
     /// subClassOf transitivity
     Rdfs11,
+    /// every used predicate is an rdf:Property
+    Rdf1,
+    /// subPropertyOf reflexivity
+    Rdfs6,
+    /// subClassOf reflexivity
+    Rdfs10,
 }
 
 impl Rule {
@@ -193,6 +237,9 @@ impl Rule {
             Self::Rdfs7 => "reasoner:rdfs7",
             Self::Rdfs9 => "reasoner:rdfs9",
             Self::Rdfs11 => "reasoner:rdfs11",
+            Self::Rdf1 => "reasoner:rdf1",
+            Self::Rdfs6 => "reasoner:rdfs6",
+            Self::Rdfs10 => "reasoner:rdfs10",
         }
     }
 }
@@ -244,7 +291,25 @@ fn load(store: &Store, graphs: &[i64]) -> Result<BTreeSet<Triple>> {
 ///
 /// Propagates store errors.
 pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<ClosureReport> {
+    materialise_regime(store, graph, timestamp, Regime::Rdfs)
+}
+
+/// Materialise the closure of `graph` under `regime` into its companion
+/// inferred graph.
+///
+/// # Errors
+///
+/// Propagates store errors.
+pub fn materialise_regime(
+    store: &mut Store,
+    graph: i64,
+    timestamp: &str,
+    regime: Regime,
+) -> Result<ClosureReport> {
+    let rdfs = regime == Regime::Rdfs;
     let type_id = store.intern(RDF_TYPE)?;
+    let property = store.intern(RDF_PROPERTY)?;
+    let class = store.intern(RDFS_CLASS)?;
     let sub_class = store.intern(RDFS_SUBCLASS_OF)?;
     let sub_prop = store.intern(RDFS_SUBPROPERTY_OF)?;
     let domain = store.intern(RDFS_DOMAIN)?;
@@ -283,14 +348,58 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
             .filter_map(|(s, _, o)| o.as_ref_id().map(|id| (*s, id)))
             .collect();
 
-        let derive = |rule: Rule, t: Triple, fresh: &mut BTreeSet<(Rule, Triple)>| {
-            if !known.contains(&t) {
+        // The RDFS axiomatic domain/range triples, as premises only (see the
+        // module docs). They type the terms of the schema vocabulary itself.
+        let (mut domains, mut ranges) = (domains, ranges);
+        if rdfs {
+            domains.extend([
+                (sub_class, class),
+                (sub_prop, property),
+                (domain, property),
+                (range, property),
+            ]);
+            ranges.extend([
+                (type_id, class),
+                (sub_class, class),
+                (sub_prop, property),
+                (domain, class),
+                (range, class),
+            ]);
+        }
+        let (sub_prop_of, sub_class_of) = if rdfs {
+            (sub_prop_of, sub_class_of)
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        if !rdfs {
+            domains.clear();
+            ranges.clear();
+        }
+
+        // One triple is written ONCE, whichever rule reaches it first. Since the
+        // vocabulary rules landed, two rules routinely derive the same triple in
+        // the same round (rdf1 and the axiomatic rdfs2 both give `p rdf:type
+        // rdf:Property`); keyed on (rule, triple) alone it would be written twice.
+        let mut claimed: BTreeSet<Triple> = BTreeSet::new();
+        let mut derive = |rule: Rule, t: Triple, fresh: &mut BTreeSet<(Rule, Triple)>| {
+            if !known.contains(&t) && claimed.insert(t.clone()) {
                 fresh.insert((rule, t));
             }
         };
 
         for (s, p, o) in &known {
             let (s, p) = (*s, *p);
+            // rdf1 — every predicate in use is a property. Both regimes.
+            derive(Rule::Rdf1, (p, type_id, Obj::Ref(property)), &mut fresh);
+            // rdfs6 / rdfs10 — reflexivity, over what is TYPED property / class.
+            if rdfs && p == type_id {
+                if *o == Obj::Ref(property) {
+                    derive(Rule::Rdfs6, (s, sub_prop, Obj::Ref(s)), &mut fresh);
+                }
+                if *o == Obj::Ref(class) {
+                    derive(Rule::Rdfs10, (s, sub_class, Obj::Ref(s)), &mut fresh);
+                }
+            }
             // rdfs7 — the rule neither existing mechanism can express. Its
             // conclusion COPIES the object, so it is the one rule that carries a
             // literal through, and the reason `Obj` exists.
@@ -361,6 +470,7 @@ pub fn materialise(store: &mut Store, graph: i64, timestamp: &str) -> Result<Clo
     // into a companion, which is what makes "who derived this" answerable.
     for (rule, datums) in &pending {
         report.asserted += datums.len();
+        report.by_rule.insert(rule.source(), datums.len());
         store.transact_to_graph(datums, timestamp, None, Some(rule.source()), companion)?;
     }
     Ok(report)

@@ -8,7 +8,7 @@
 > Quipu passes **all** Working Group–approved W3C SPARQL 1.1 Query, Update,
 > Protocol and Results tests at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **168/168**, update **93/93**, protocol **34/34**, result format **10/10**.
 > Exceptions, each named below: federated query (`SERVICE`) passes 6/7, with 1 refused by policy (variable
-> endpoints); entailment regimes are scored separately (29/70 passed, 6 failing, 35 declared non-goals);
+> endpoints); entailment regimes are scored separately (35/70 passed, 0 failing, 35 declared non-goals);
 > SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.
 > **What these counts are.** Working Group–approved tests only. The query-evaluation
 > manifests list 225 tests, and the 168 approved ones are scored; the 57 Proposed or unclassified are not run.
@@ -34,8 +34,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `7579e7edc23b2cb15a0076f522358513839cf1cc` |
-| Quipu revision (syntax) | `7579e7edc23b2cb15a0076f522358513839cf1cc` |
+| Quipu revision (evaluation) | `fdd9d3f84ade34b69ee73610aa3153f12eae838f` |
+| Quipu revision (syntax) | `fdd9d3f84ade34b69ee73610aa3153f12eae838f` |
 | Quipu version | `quipu 0.8.1` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -54,8 +54,8 @@ carries a named reason further down this page.
 | result format | 10 | 0 | 0 | 0 | 10 |
 | protocol | 34 | 0 | 0 | 0 | 34 |
 | update | 93 | 0 | 0 | 0 | 93 |
-| entailment | 29 | 6 | 0 | 35 | 70 |
-| **all classes** | **426** | **6** | **0** | **36** | **468** |
+| entailment | 35 | 0 | 0 | 35 | 70 |
+| **all classes** | **432** | **0** | **0** | **36** | **468** |
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
@@ -196,8 +196,8 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 
 ## Entailment-regime commitments
 
-2 of 6 regimes are goals (RDF, RDFS): **29/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-24T01:46:29Z by [CI run](https://github.com/scbrown/quipu/actions/runs/35943572657), from quipu `7579e7edc23b`.
+2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
+Ledger re-derived 2026-09-24T01:59:23Z by [CI run](https://github.com/scbrown/quipu/actions/runs/35944468358), from quipu `fdd9d3f84ade`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
@@ -207,8 +207,8 @@ Local RDFS and OWL extensions beyond a goal regime are not standards-regime clai
 | D | 2 | 0 | deliberate non-goal |
 | OWL-Direct | 18 | 0 | deliberate non-goal |
 | OWL-RDF-Based | 11 | 0 | deliberate non-goal |
-| RDF | 16 | 15 | goal |
-| RDFS | 19 | 14 | goal |
+| RDF | 16 | 16 | goal |
+| RDFS | 19 | 19 | goal |
 | RIF | 4 | 0 | deliberate non-goal |
 
 Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).

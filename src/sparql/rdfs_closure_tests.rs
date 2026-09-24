@@ -3,8 +3,11 @@
 //! Each rule is pinned by the W3C case that needs it, so a reader can trace a
 //! test back to the thing it makes pass rather than to a rule number.
 
-use super::rdfs_closure::materialise;
-use crate::namespace::{RDF_TYPE, RDFS_DOMAIN, RDFS_RANGE, RDFS_SUBCLASS_OF, RDFS_SUBPROPERTY_OF};
+use super::rdfs_closure::{Regime, materialise, materialise_regime};
+use crate::namespace::{
+    RDF_PROPERTY, RDF_TYPE, RDFS_CLASS, RDFS_DOMAIN, RDFS_RANGE, RDFS_SUBCLASS_OF,
+    RDFS_SUBPROPERTY_OF,
+};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -288,14 +291,147 @@ fn derivations_land_in_the_companion_and_never_beside_their_premises() {
 }
 
 #[test]
-fn a_graph_with_no_schema_closes_to_itself_and_asserts_nothing() {
+fn a_graph_with_no_schema_entails_only_the_vocabulary_typing() {
+    // It used to assert NOTHING here. Under RDFS that was wrong: every used
+    // predicate is an rdf:Property (rdf1) and so a subproperty of itself
+    // (rdfs6), even with no schema at all (aegis-56bvs2). What it must still
+    // never do is say anything about the DATA's subject or object.
     let mut store = Store::open_in_memory().unwrap();
     triple(&mut store, G, "http://ex/a", "http://ex/p", "http://ex/o");
     let g = store.lookup(G).unwrap().unwrap();
     let report = materialise(&mut store, g, TS).unwrap();
-    // Not a failure: nothing was entailed because nothing entails anything.
-    assert!(!report.derived_anything());
-    assert_eq!(report.asserted, 0);
+    assert!(report.derived_anything());
+    let c = closure_of(&mut store, G);
+    assert!(has(&c, "http://ex/p", RDF_TYPE, RDF_PROPERTY));
+    assert!(has(&c, "http://ex/p", RDFS_SUBPROPERTY_OF, "http://ex/p"));
+    for (s, _, o) in &c {
+        if s == "http://ex/a" || s == "http://ex/o" {
+            assert_eq!(
+                (s.as_str(), o.as_str()),
+                ("http://ex/a", "http://ex/o"),
+                "only the premise may mention the data's resources: {c:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn rdf1_types_every_used_predicate_as_a_property() {
+    let mut store = Store::open_in_memory().unwrap();
+    triple(&mut store, G, "http://ex/a", "http://ex/b", "http://ex/c");
+    let g = store.lookup(G).unwrap().unwrap();
+    materialise_regime(&mut store, g, TS, Regime::Rdf).unwrap();
+    assert!(has(
+        &closure_of(&mut store, G),
+        "http://ex/b",
+        RDF_TYPE,
+        RDF_PROPERTY
+    ));
+}
+
+#[test]
+fn the_rdf_regime_applies_rdf1_and_nothing_else() {
+    // RDF entailment has no rdfs2/3/7/9: a subClassOf in the data must NOT lift
+    // a type under the RDF regime (that would over-entail an RDF-regime answer).
+    let mut store = Store::open_in_memory().unwrap();
+    triple(&mut store, G, "http://ex/x", RDF_TYPE, "http://ex/C");
+    triple(
+        &mut store,
+        G,
+        "http://ex/C",
+        RDFS_SUBCLASS_OF,
+        "http://ex/D",
+    );
+    let g = store.lookup(G).unwrap().unwrap();
+    materialise_regime(&mut store, g, TS, Regime::Rdf).unwrap();
+    let c = closure_of(&mut store, G);
+    assert!(
+        !has(&c, "http://ex/x", RDF_TYPE, "http://ex/D"),
+        "rdfs9 fired under RDF"
+    );
+    assert!(
+        !has(&c, "http://ex/C", RDFS_SUBCLASS_OF, "http://ex/C"),
+        "rdfs10 fired under RDF"
+    );
+    assert!(has(&c, RDFS_SUBCLASS_OF, RDF_TYPE, RDF_PROPERTY));
+}
+
+#[test]
+fn rdfs10_every_class_is_a_subclass_of_itself() {
+    // W3C rdfs05 / sparqldl-02: `?x a ?c . ?c rdfs:subClassOf :c` needs `:c
+    // subClassOf :c`, and `:c` is a class because it is the object of rdf:type
+    // (the axiomatic `rdf:type rdfs:range rdfs:Class`).
+    let mut store = Store::open_in_memory().unwrap();
+    triple(&mut store, G, "http://ex/x", RDF_TYPE, "http://ex/c");
+    let g = store.lookup(G).unwrap().unwrap();
+    materialise(&mut store, g, TS).unwrap();
+    let c = closure_of(&mut store, G);
+    assert!(has(&c, "http://ex/c", RDF_TYPE, RDFS_CLASS));
+    assert!(has(&c, "http://ex/c", RDFS_SUBCLASS_OF, "http://ex/c"));
+}
+
+#[test]
+fn rdfs6_every_property_is_a_subproperty_of_itself() {
+    // W3C rdfs11: `ex:a ?x ex:c . ?x rdfs:subPropertyOf ex:p` needs `ex:p
+    // subPropertyOf ex:p` as well as the rdfs7 lift.
+    let mut store = Store::open_in_memory().unwrap();
+    triple(&mut store, G, "http://ex/a", "http://ex/b", "http://ex/c");
+    triple(
+        &mut store,
+        G,
+        "http://ex/b",
+        RDFS_SUBPROPERTY_OF,
+        "http://ex/p",
+    );
+    let g = store.lookup(G).unwrap().unwrap();
+    materialise(&mut store, g, TS).unwrap();
+    let c = closure_of(&mut store, G);
+    assert!(has(&c, "http://ex/p", RDFS_SUBPROPERTY_OF, "http://ex/p"));
+    assert!(has(&c, "http://ex/b", RDFS_SUBPROPERTY_OF, "http://ex/b"));
+    assert!(has(&c, "http://ex/a", "http://ex/p", "http://ex/c"));
+}
+
+#[test]
+fn a_triple_two_rules_reach_is_written_once() {
+    use std::collections::HashSet;
+    let mut store = Store::open_in_memory().unwrap();
+    triple(&mut store, G, "http://ex/a", "http://ex/b", "http://ex/c");
+    triple(
+        &mut store,
+        G,
+        "http://ex/b",
+        RDFS_SUBPROPERTY_OF,
+        "http://ex/p",
+    );
+    let g = store.lookup(G).unwrap().unwrap();
+    let report = materialise(&mut store, g, TS).unwrap();
+    let c = closure_of(&mut store, G);
+    let distinct: HashSet<_> = c.iter().collect();
+    assert_eq!(
+        distinct.len(),
+        c.len(),
+        "a derived triple was written twice"
+    );
+    assert_eq!(
+        report.asserted,
+        c.len() - 2,
+        "asserted must count distinct derivations"
+    );
+}
+
+#[test]
+fn the_axiomatic_schema_is_a_premise_and_is_never_written() {
+    let mut store = Store::open_in_memory().unwrap();
+    triple(&mut store, G, "http://ex/x", RDF_TYPE, "http://ex/c");
+    let g = store.lookup(G).unwrap().unwrap();
+    materialise(&mut store, g, TS).unwrap();
+    let c = closure_of(&mut store, G);
+    for p in [RDFS_DOMAIN, RDFS_RANGE] {
+        assert!(
+            !c.iter().any(|(_, a, _)| a == p),
+            "an axiomatic {p} triple was written: {c:?}"
+        );
+    }
 }
 
 #[test]
@@ -469,8 +605,12 @@ fn rdfs3_still_does_not_type_a_literal_object() {
             .any(|(_, p, o)| p == RDF_TYPE && o == "http://example.org/Name"),
         "a literal object must never be typed by rdfs3"
     );
+    // Every derived triple must be an IRI-object triple `closure_of` can read:
+    // one derived from the literal would be the "unreadable triple" this guards.
+    // (The total is no longer 0: the vocabulary rules type ex:name etc.)
     assert_eq!(
-        report.asserted, 0,
+        report.asserted,
+        c.len() - 1,
         "rdfs3 over a literal object must derive NOTHING, not an unreadable triple"
     );
 }
@@ -515,10 +655,16 @@ fn a_literal_premise_derives_both_rdfs2_and_rdfs7() {
     let g = store.lookup(G).unwrap().unwrap();
     let report = materialise(&mut store, g, TS).unwrap();
 
+    // Counted PER RULE: the total now also carries the vocabulary typing.
     assert_eq!(
-        report.asserted, 2,
-        "expected the rdfs2 type AND the rdfs7 copy. 1 means rdfs7 stopped carrying \
-         literals; 0 means rdfs2 regressed too"
+        report.by_rule.get("reasoner:rdfs7"),
+        Some(&1),
+        "expected exactly the rdfs7 literal copy; None means rdfs7 stopped carrying literals"
+    );
+    assert!(
+        report.by_rule.get("reasoner:rdfs2").copied().unwrap_or(0) >= 1,
+        "rdfs2 regressed: {:?}",
+        report.by_rule
     );
     let c = closure_of(&mut store, G);
     assert!(
