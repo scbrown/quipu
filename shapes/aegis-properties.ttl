@@ -648,3 +648,27 @@ aegis:untrustedOrigin a owl:DatatypeProperty ;
     rdfs:domain aegis:ToolClass ;
     rdfs:range xsd:string ;
     rdfs:comment "Where the imported state comes from, in prose, for a reader deciding how much to worry. Free text rather than an enum: an enum would go stale the first time a new integration lands, and a wrong enum value is worse than a sentence." .
+
+# ═══════════════════════════════════════════════════════════════════
+# Text-rule exemptions (aegis-40j2pq, proposal #19; tracked on aegis-jdl6lr).
+# All optional and additive: a text rule applies everywhere EXCEPT what its
+# exemptions name. yupana evaluates them (TextRule::applies_in, yupana #91).
+# ═══════════════════════════════════════════════════════════════════
+
+aegis:exemptPathRegex a owl:DatatypeProperty ;
+    rdfs:domain aegis:TextRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "exempt path regex" ;
+    rdfs:comment "A regex over the edited file's REPO-RELATIVE path; a match exempts that edit from the rule (e.g. the ratchet tests that must name a forbidden token to forbid it). Already used by live rule data; declared here so it is governed." .
+
+aegis:exemptRepo a owl:DatatypeProperty ;
+    rdfs:domain aegis:TextRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "exempt repo" ;
+    rdfs:comment "A repository, by its canonical repo name (e.g. an infrastructure repo), in which this text rule does NOT apply. Repeatable. Matched against the repo identity the evaluator resolves for the edited file (its origin repo name), never a directory name, so every worktree of that repo is exempt. An edit whose repo cannot be resolved is NOT exempt." .
+
+aegis:exemptLineMarker a owl:DatatypeProperty ;
+    rdfs:domain aegis:TextRule ;
+    rdfs:range xsd:string ;
+    rdfs:label "exempt line marker" ;
+    rdfs:comment "A literal marker which, present on the same introduced line as a match, exempts that match, for text that names a pattern on purpose such as an incident runbook. Literal rather than a regex so the exemption stays explicit and greppable; RE2 has no lookaround to fold it into aegis:regex." .

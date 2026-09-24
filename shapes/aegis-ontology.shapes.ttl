@@ -1479,7 +1479,11 @@ aegis:TextRuleShape a sh:NodeShape ;
     sh:targetClass aegis:TextRule ;
     sh:property [ sh:path aegis:regex ; sh:minCount 1 ; ] ;
     sh:property [ sh:path aegis:enforcementTier ; sh:minCount 1 ; ] ;
-    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    # Optional exemptions (aegis-40j2pq / jdl6lr): additive, so existing rules conform.
+    sh:property [ sh:path aegis:exemptPathRegex ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:exemptRepo ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:exemptLineMarker ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .
 
 aegis:InternalIdentifierPatternShape a sh:NodeShape ;
     sh:targetClass aegis:InternalIdentifierPattern ;
