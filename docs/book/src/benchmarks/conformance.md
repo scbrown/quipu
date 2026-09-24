@@ -114,6 +114,18 @@ Grouped by the reason the runner recorded.
 | D entailment (datatype entailment) is a deliberate non-goal: no consumer asks for datatype entailment beyond simple and RDFS | 2 | entailment |
 | variable SERVICE endpoints are deliberately refused; endpoints must be operator-configured | 1 | federated query (`SERVICE`) |
 
+## Corrections
+
+Kept on the page so a changed number never changes silently.
+
+- **2026-09-24: update was 37 of 93.** Until this date the page reported update
+  **37/37**. The runner discovered only 37 of the 93 approved update tests: the
+  `delete`, `delete-data`, `delete-insert`, `delete-where`, `clear` and `drop`
+  manifests declare their tests with Turtle's `a` rather than `rdf:type`, and the
+  parser matched only the latter. On the full 93, quipu passes 93/93. The runner
+  now pins the approved count per class at the pinned suite revision and refuses
+  a run that discovers a different number.
+
 ## Re-derive these numbers
 
 ```sh
