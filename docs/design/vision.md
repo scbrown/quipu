@@ -421,9 +421,11 @@ Bobbin already exposes MCP + REST + CLI. Quipu adds knowledge graph tools
 to the same surfaces. Agents interact with one MCP server (Bobbin) that
 serves both code context and knowledge graph context.
 
-### Decision 7: License ✅ RESOLVED → MIT
+### Decision 7: License ✅ RESOLVED → Apache-2.0
 
-Non-negotiable per the bead description. Aligns with all key dependencies:
+Originally MIT. Relicensed to Apache-2.0 on 2026-09-24 for its express
+patent grant; releases before that date remain MIT-licensed. Compatible
+with all key dependencies:
 Oxigraph (MIT/Apache-2.0), rudof (MIT/Apache-2.0), horned-owl (MIT),
 LanceDB (Apache 2.0), rusqlite (MIT).
 

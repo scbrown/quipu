@@ -7,7 +7,7 @@ name = "quipu-client"
 version = "0.1.0"
 description = "Thin, typed Python client for the Quipu REST API (stdlib only)"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
 requires-python = ">=3.11"
 # Zero runtime dependencies is a design constraint, not an accident: the
 # client is stdlib urllib all the way down, so installing it can never fail
