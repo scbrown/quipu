@@ -35,6 +35,51 @@ fn internal_identifier_patterns_are_declared_as_text_rules() {
     assert!(SHAPES.contains("aegis:InternalIdentifierPattern rdfs:subClassOf aegis:TextRule ."));
 }
 
+fn text_rule_case_fixture(kind: &str, cases: &str) -> String {
+    format!(
+        r#"
+            @prefix aegis: <http://aegis.gastown.local/ontology/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+            aegis:test-rule a aegis:{kind} ;
+                rdfs:label "Example rule" ;
+                aegis:regex "example" ;
+                aegis:enforcementTier "advise" .
+            {cases}
+        "#
+    )
+}
+
+#[test]
+fn text_rule_cases_are_optional_and_allow_multiple_strings() {
+    for kind in ["TextRule", "InternalIdentifierPattern"] {
+        for cases in [
+            "",
+            r#"aegis:test-rule aegis:mustMatch "example", "another example" ;
+                aegis:mustNotMatch "near miss", ""^^xsd:string ."#,
+        ] {
+            let data = text_rule_case_fixture(kind, cases);
+            assert!(quipu::validate_shapes(SHAPES, &data).unwrap().conforms);
+        }
+    }
+}
+
+#[test]
+fn text_rule_cases_reject_non_string_values_for_both_polarities() {
+    for kind in ["TextRule", "InternalIdentifierPattern"] {
+        for predicate in ["mustMatch", "mustNotMatch"] {
+            for value in ["42", "aegis:example", r#""example"@en"#] {
+                let cases = format!("aegis:test-rule aegis:{predicate} {value} .");
+                let data = text_rule_case_fixture(kind, &cases);
+                assert!(
+                    !quipu::validate_shapes(SHAPES, &data).unwrap().conforms,
+                    "{kind}.{predicate} must reject {value}"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn directive_issuer_accepts_legacy_text_and_an_entity_iri() {
     let fixture = |issuer: &str| {

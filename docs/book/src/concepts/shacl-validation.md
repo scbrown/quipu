@@ -83,6 +83,23 @@ before writing its instances. Unknown types continue to be refused.
 
 ## Validation in Action
 
+### Recorded text-rule cases
+
+The bundled `aegis-ontology` shapes allow `aegis:mustMatch` and
+`aegis:mustNotMatch` on `TextRule` and `InternalIdentifierPattern`. Each property
+accepts zero or more `xsd:string` values: example text that should trigger the
+rule, or should stay silent, respectively. Existing rules without cases remain
+valid. IRIs, language-tagged strings and numeric literals are not case text.
+
+Schema validity does not establish enforcement readiness. A readiness checker
+must require at least one case of each polarity and execute every case through
+the rule engine against a current projection. Missing cases or indeterminate
+execution must not pass. These text-only examples do not prove path or repository
+exemptions; contextual cases require a separate model. Recording cases does not
+change a rule's enforcement tier.
+
+### Rejected writes
+
 Try to add a Host without a hostname:
 
 ```bash
