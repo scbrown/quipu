@@ -76,11 +76,12 @@ use tools::*;
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
-
     // Asking the binary who it is must NOT touch disk (aegis-j0nq). These are
     // pure reads of compiled-in constants and must stay above Store::open.
     if args.iter().any(|a| a == "--version" || a == "-V") {
         println!("quipu-server {}", env!("CARGO_PKG_VERSION"));
+        println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
+        println!("git_dirty: {}", env!("QUIPU_GIT_DIRTY"));
         return;
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
@@ -125,7 +126,6 @@ async fn main() {
     if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
         eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
     }
-
     // Apply the entity-resolution policy so episode ingest actually dedups
     // (hq-uye) — without this, `[quipu.resolution] enabled = true` is inert.
     store.resolution_config_mut().clone_from(&config.resolution);

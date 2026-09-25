@@ -49,6 +49,12 @@ want the CLI, `cargo build --release` is enough. Verify the server built:
 ls target/release/quipu-server
 ```
 
+Keep the CLI and server from the same build beside each other for `quipu mcp`.
+Both `quipu --version` and `quipu-server --version` report `git_sha` and
+`git_dirty` without opening a database or loading configuration. A source archive
+without Git metadata reports `git_sha: unknown`; a dirty build reports
+`git_dirty: true`. The HTTP `/version` response retains its existing format.
+
 ## The Full Stack (caboodle)
 
 To install Quipu as part of the whole knowledge stack —
