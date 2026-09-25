@@ -38,6 +38,23 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(cases[0].query, manifest.parent / "a.rq")
             self.assertEqual(cases[0].data, (manifest.parent / "data.ttl",))
 
+    def test_parse_manifest_accepts_the_turtle_a_shorthand(self):
+        # 56 approved update tests are declared with `a`, not `rdf:type`.
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = pathlib.Path(directory) / "manifest.ttl"
+            manifest.write_text('''
+:d a mf:UpdateEvaluationTest ; mf:name "D" ; dawgt:approval dawgt:Approved;
+    mf:action [ ut:request <d.ru> ; ut:data <pre.ttl> ] ; mf:result [ ut:data <post.ttl> ] .
+:e rdf:type mf:UpdateEvaluationTest ; mf:name "E" ; dawgt:approval dawgt:Approved ;
+    mf:action [ ut:request <e.ru> ] ; mf:result [ ] .
+''')
+            cases = MODULE.parse_manifest("update", manifest)
+            self.assertEqual(sorted(c.identifier for c in cases), [":d", ":e"])
+
+    def test_the_approved_inventory_is_pinned_per_class(self):
+        self.assertEqual(MODULE.APPROVED_INVENTORY["update"], 93)
+        self.assertEqual(set(MODULE.APPROVED_INVENTORY), set(MODULE.CLASS_MANIFESTS))
+
     def test_parse_manifest_includes_csv_result_format_cases(self):
         with tempfile.TemporaryDirectory() as directory:
             manifest = pathlib.Path(directory) / "manifest.ttl"

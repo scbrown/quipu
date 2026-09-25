@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "68d7208b12f215ce4dcf67eeff9632a4d63bf06e",
-  "quipu_version": "quipu 0.8.0\ngit_sha: 68d7208b12f215ce4dcf67eeff9632a4d63bf06e",
-  "generated_at": "2026-09-21T00:59:43Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/35549194430",
+  "quipu_revision": "36a73772ad6bf3e01303f9801c026d775bee2463",
+  "quipu_version": "quipu 0.8.1\ngit_sha: 36a73772ad6bf3e01303f9801c026d775bee2463",
+  "generated_at": "2026-09-24T13:29:46Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36005465181",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -24,8 +24,7 @@
   "classes": {
     "entailment": {
       "cases": 70,
-      "failed": 6,
-      "passed": 29,
+      "passed": 35,
       "unsupported": 35,
       "decision_buckets": {
         "D": 2,
@@ -363,8 +362,8 @@
       "entailment_profiles": [],
       "decision_bucket": "RDFS",
       "commitment": "goal",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -607,8 +606,8 @@
       "entailment_profiles": [],
       "decision_bucket": "RDF",
       "commitment": "goal",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -773,8 +772,8 @@
       ],
       "decision_bucket": "RDFS",
       "commitment": "goal",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -903,8 +902,8 @@
       "entailment_profiles": [],
       "decision_bucket": "RDFS",
       "commitment": "goal",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -1165,8 +1164,8 @@
       ],
       "decision_bucket": "RDFS",
       "commitment": "goal",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
@@ -1188,8 +1187,8 @@
       ],
       "decision_bucket": "RDFS",
       "commitment": "goal",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "entailment",
