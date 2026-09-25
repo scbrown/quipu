@@ -5,9 +5,58 @@ integration. These tools are available when Quipu runs as a Bobbin subsystem
 or standalone MCP server.
 
 The registry (`tool_definitions()`) exposes **46 tools** in a default build, or
-**47** when built with the `owl` feature (which adds `quipu_load_ontology`).
+**48** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
+
+## Connect directly
+
+The server includes the native `mcp` feature. Build the CLI and its companion:
+
+```sh
+cargo build --release --features full --bin quipu --bin quipu-server
+claude mcp add quipu -- /absolute/path/to/target/release/quipu mcp --db /absolute/path/to/store.db
+```
+
+`quipu mcp` starts the sibling `quipu-server --mcp-stdio` with the same configuration
+and store initialization as HTTP mode. It opens no network listener. On Unix it
+replaces the CLI process, so signals and EOF reach the server directly. Install
+both binaries together. Protocol output uses stdout; diagnostics use stderr.
+
+For an already running server, register its `/mcp` URL as streamable HTTP. Calls
+are stateless: a server restart does not leave stale MCP sessions. The HTTP caller
+supplies the same service-specific bearer used for REST writes. For stdio with
+protected writes, pass `--mcp-token-file /absolute/path/to/private-token`; the file
+must be regular, at most 4096 bytes, and private (0600 or 0400 on Unix). Credentials
+are never accepted in tool arguments or forwarded from a claimed actor field.
+Unconfigured local stores retain the CLI's existing local authority; configuring
+write authentication applies to stdio too. Read-only mode refuses writes even
+with a valid credential. No existing shared credential or open REST read changes.
+
+Every tool dispatches through the existing REST application **in process**, sharing
+its authentication, dataset selection, read pools, validation, and committed
+transaction attribution. The schemas come from `tool_definitions()`; the native
+transport does not maintain a second schema catalogue. `quipu_graph_list` preserves
+its query filters. Tool failures are MCP error results with the REST error body.
+Natural-language `quipu_search` still requires the configured embedding provider;
+a precomputed `embedding` works without one. The transport does not download models.
+
+Browser MCP requests require an Origin explicitly present in
+`quipu.server.cors_allowed_origins`; no Origin is normal for native agent clients.
+The REST origin policy remains unchanged. Tool requests are limited to 64 MiB.
+
+Bobbin's `knowledge_*` tools and existing Homelab `quipu_*` proxies remain supported
+compatibility surfaces. Native MCP lets an installation use Quipu without either
+proxy. The Homelab proxy continues to call REST; Bobbin keeps its existing library
+integration. Register the intended server explicitly to avoid ambiguous names;
+this addition does not remove an existing MCP entry or its credentials.
+
+Run `just mcp test` for HTTP and stdio protocol acceptance against isolated stores,
+including concurrent named/shared credentials and read-only refusal. Set
+`QUIPU_MCP_TEST_MODEL_DIR` to a model directory containing `onnx/model.onnx` and
+`tokenizer.json`, plus `ORT_DYLIB_PATH` as needed, to test natural-language search
+with a real local embedding provider. Otherwise the test checks vector search and
+the explicit missing-provider error separately.
 
 ## Tool Reference
 

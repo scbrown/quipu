@@ -215,9 +215,12 @@ pub(crate) async fn transactions(
         let entries: Vec<JsonValue> = txns
             .iter()
             .map(|t| {
-                json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor, "source": t.source })
+                Ok(
+                    json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor,
+                    "source": t.source, "authenticated": store.transaction_auth(t.id)? }),
+                )
             })
-            .collect();
+            .collect::<quipu::Result<_>>()?;
         Ok(axum::Json(
             json!({ "transactions": entries, "count": entries.len() }),
         ))

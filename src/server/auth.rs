@@ -1,5 +1,13 @@
 //! Startup validation and diagnostics for write authentication.
 
+tokio::task_local! {
+    static REQUEST_IDENTITY: Option<quipu::transaction_auth::Identity>;
+}
+
+pub(super) fn request_identity() -> Option<quipu::transaction_auth::Identity> {
+    REQUEST_IDENTITY.try_with(Clone::clone).ok().flatten()
+}
+
 pub(super) fn bearer_policy(
     config: &quipu::config::ServerConfig,
 ) -> quipu::http_auth::BearerPolicy {
@@ -71,7 +79,15 @@ pub(super) async fn run_authorized(
             .expect("named authorization has a principal");
         run_named(req, next, principal).await
     } else {
-        next.run(req).await
+        let identity = req
+            .extensions()
+            .get::<quipu::http_auth::AuthenticatedPrincipal>()
+            .map(|p| quipu::transaction_auth::Identity {
+                principal: p.as_str().to_owned(),
+                credential_id: None,
+                auth_class: "legacy_shared_bearer".to_owned(),
+            });
+        REQUEST_IDENTITY.scope(identity, next.run(req)).await
     }
 }
 
@@ -103,7 +119,12 @@ pub(super) async fn run_named(
             &principal,
         ));
     req.extensions_mut().insert(principal.clone());
-    let response = next.run(req).await;
+    let identity = quipu::transaction_auth::Identity {
+        principal: principal.iri.clone(),
+        credential_id: Some(principal.credential_id.clone()),
+        auth_class: "named_bearer".to_owned(),
+    };
+    let response = REQUEST_IDENTITY.scope(Some(identity), next.run(req)).await;
     eprintln!(
         "{}",
         event(
@@ -187,3 +208,7 @@ mod registry_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "transaction_auth_tests.rs"]
+mod transaction_auth_tests;

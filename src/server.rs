@@ -688,19 +688,5 @@ async fn main() {
         });
     }
 
-    eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
-
-    let listener = tokio::net::TcpListener::bind(&bind_addr)
-        .await
-        .unwrap_or_else(|e| {
-            eprintln!("error binding {bind_addr}: {e}");
-            std::process::exit(1);
-        });
-
-    // AFTER the bind succeeds, so the recorded start time is when this process
-    // began SERVING, not when it began trying. A failed bind exits above; a
-    // start time recorded before it would describe a process that never served.
-    quipu::metrics::init_start_time();
-
-    axum::serve(listener, app).await.unwrap();
+    quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
 }

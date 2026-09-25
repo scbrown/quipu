@@ -172,7 +172,10 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
-    match tokio::task::spawn_blocking(f).await {
+    let identity = super::auth::request_identity();
+    match tokio::task::spawn_blocking(move || quipu::transaction_auth::with_identity(identity, f))
+        .await
+    {
         Ok(result) => result,
         // Only reachable if the handler panicked; the mutex is then poisoned and
         // the process is not going to recover on its own either way.
@@ -315,6 +318,8 @@ OPTIONS:
     --db <path>       Store file (default: from .bobbin/config.toml)
     --bind <addr>     Listen address (default: from .bobbin/config.toml)
     --embed-backfill  Backfill embeddings for all entities on startup
+    --mcp-stdio       Serve MCP on stdin/stdout instead of binding HTTP
+    --mcp-token-file <path>  Private bearer file for stdio tool writes
     -V, --version     Print version and exit
     -h, --help        Print this help and exit",
         env!("CARGO_PKG_VERSION")

@@ -222,6 +222,7 @@ impl Store {
                 params![timestamp, actor, format!("fork:{name}")],
             )?;
             let mat_tx = self.conn.last_insert_rowid();
+            crate::transaction_auth::record(&self.conn, mat_tx)?;
             self.conn.execute(
                 "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
                  SELECT e, a, v, ?1, ?2, MIN(valid_from), NULL, 1 FROM facts \
