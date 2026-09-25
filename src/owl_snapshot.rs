@@ -16,8 +16,8 @@ use crate::{Datum, MaterializeReport, Op, Store, Value};
 /// Maximum number of proposed assertions applied by one writer acquisition.
 pub const APPLY_BATCH: usize = 64;
 /// Refuse oversized inputs instead of copying the entire historical database.
-const MAX_PREMISES: usize = 2_000_000;
-const MAX_PROPOSALS: usize = 100_000;
+const MAX_PREMISES: usize = 3_000_000;
+const MAX_PROPOSALS: usize = 200_000;
 
 /// Private derivation state. Its term ids are never used directly in the live store.
 pub struct Snapshot {

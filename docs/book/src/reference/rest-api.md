@@ -1248,8 +1248,8 @@ entailments after an error or interruption, but no new freshness marker is
 published. Retry on the next scheduled run. Consumers must inspect freshness;
 the companion graph does not automatically hide historical entailments.
 
-Input snapshots are limited to two million current facts, and derivation is
-limited to 100,000 new assertions and 64 passes. Exhausting a budget is an error,
+Input snapshots are limited to three million current facts, and derivation is
+limited to 200,000 new assertions and 64 passes. Exhausting a budget is an error,
 not successful partial materialisation. These are work-size limits, not a hard
 wall-clock or memory guarantee: choose the cadence and service resource limits
 from a rehearsal of the actual ontology and workload. The retraction fence uses

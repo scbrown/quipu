@@ -312,6 +312,12 @@ fn scheduled_snapshot_corpus_rehearsal() {
     let path = std::env::var("OWL_REHEARSAL_COPY").expect("disposable COPY required");
     let started = std::time::Instant::now();
     let mut source = Store::open(&path).unwrap();
+    #[cfg(feature = "reactive-reasoner")]
+    if let Some(ttl) = source.get_combined_shapes().unwrap() {
+        let rules = crate::reasoner::parse_rules(&ttl, None).unwrap();
+        eprintln!("OWL_CORPUS reactive_rules={}", rules.len());
+        source.add_observer(std::sync::Arc::new(crate::ReactiveReasoner::new(rules)));
+    }
     eprintln!("OWL_CORPUS open_ms={}", started.elapsed().as_millis());
     let t = std::time::Instant::now();
     let mut plan = Snapshot::capture(&source, Store::open_in_memory().unwrap(), TS).unwrap();
