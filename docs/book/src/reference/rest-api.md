@@ -1174,6 +1174,12 @@ authenticated write endpoint.
 Explicitly copy an eligible staging graph into ROOT. The body is
 `{"share_id":"sha256:...","actor":"optional"}`. Quarantined shares have no
 eligible staging graph and are refused. Importing never promotes implicitly.
+Promotion preserves exact-fact ROOT retractions: replaying a snapshot cannot
+restore a locally removed fact. `suppressed_retractions` reports withheld facts;
+`triples` counts eligible snapshot facts, including already-present duplicates.
+An explicit local reassertion can restore a fact. Source-graph membership remains
+available as provenance even when a ROOT fact was removed. Foreign transaction
+anchors are never compared with local transaction IDs.
 
 ## Registries
 

@@ -81,6 +81,7 @@ pub mod share_import;
 pub mod share_merge;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_mint;
+mod share_promotion;
 pub mod share_scrub;
 pub mod share_transport;
 pub mod signing;
