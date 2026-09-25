@@ -79,42 +79,39 @@ jobs:
       - name: Install protobuf compiler for semver checks
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      # DO NOT split this into ordered `command: release` / `command: release-pr`
-      # steps to fix the full-history changelog dump. That was tried on 2026-08-02
-      # and MEASURED NOT TO WORK — recorded here so the next person does not spend
-      # the afternoon rediscovering it.
-      #
-      # The plausible story was: the action (given no `command`) runs `release-pr`
-      # before `release`, so on a release-merge push the just-bumped version has no
-      # tag yet and `release-pr` has no baseline. Splitting so the tag lands first
-      # should fix it. It did not. With the split live, v0.3.17 was tagged at
-      # 15:07:28Z and the next release PR (#61) was opened at 15:10:00Z — two and a
-      # half minutes AFTER the tag existed — and it was still a 259-line dump of the
-      # entire project history. Tag presence is not the variable.
-      #
-      # What the run log actually shows is `downloading packages from cargo registry
-      # crates.io` followed by `determining next version for quipu 0.3.17`:
-      # release-plz takes its baseline from the PUBLISHED CRATE, not from git. The
-      # `quipu` name on crates.io belongs to an unrelated post-quantum crypto library
-      # (11 versions, max 0.10.0, different author), so nothing it downloads matches
-      # this source and it walks back to the root commit. `publish = false` in
-      # release-plz.toml stops us publishing; it does not stop that lookup.
-      #
-      # So the real fix is to stop release-plz resolving its baseline against a
-      # stranger's crate. Until then the `verify-changelog` job below is what keeps a
-      # bad section from being merged, and it is the part that is proven to work.
-      #
-      # ⚠ EXPECT `Verify changelog` TO BE RED, AND DO NOT "FIX" IT BY LOOSENING IT.
-      # EVERY release PR release-plz generates here is defective — measured on four in
-      # a row (#59 full-history dump, #60 missing 1 commit, #61 dump then missing 1,
-      # #62 missing 2). The red is that known defect, not a new regression, and it
-      # clears only when the section is corrected by hand or the cause above is fixed.
-      # `Release-plz` and `Verify changelog` are deliberately separate jobs so this
-      # failure cannot be misread as the release itself having failed.
+      # Separate credentials by operation: release events retain GITHUB_TOKEN
+      # and the inline artifact/publish jobs; PR events use a scoped PAT.
+      # This split is not a changelog-baseline fix (see docs/release-token.md).
+      - name: Require the release PR credential
+        env:
+          RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_PLZ_TOKEN" ]; then
+            echo "::error::Configure RELEASE_PLZ_TOKEN; see docs/release-token.md"
+            exit 1
+          fi
+
       - uses: MarcoIeni/release-plz-action@v0.5
         id: release
+        with:
+          command: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      # Replace checkout's git credential too: the correction below uses git
+      # push, which does not read the release-plz step's GITHUB_TOKEN variable.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          persist-credentials: true
+
+      - uses: MarcoIeni/release-plz-action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - uses: taiki-e/install-action@v2
@@ -130,18 +127,13 @@ jobs:
       #   seconds after the next push to main and a fresh PR opened carrying the
       #   defect again (see the note at the top of changelog-check.yml).
       #
-      #   A separate workflow triggered on `push` to `release-plz-**` would never
-      #   fire. release-plz pushes with GITHUB_TOKEN, and GitHub deliberately does
-      #   not re-trigger workflows from token-authored pushes — the same reason the
-      #   `artifacts` job below is a job here rather than a `release: published`
-      #   trigger.
-      #
-      # So it runs inline, right after the PR is (re)generated. fix-changelog.sh is
-      # idempotent and drops release-mechanics commits from the body, so its own
-      # correction commit does not become a new entry needing another correction.
+      # Correct inline after generation so the final PR head includes the fix.
+      # Both release-plz and the correction push now use RELEASE_PLZ_TOKEN;
+      # required checks must report on the final corrected head, not an earlier
+      # generated commit. fix-changelog.sh remains the baseline correction.
       - name: Correct the release PR's changelog section
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
         run: |
           set -euo pipefail
           BR="$(gh pr list --state open --json headRefName \
@@ -172,18 +164,9 @@ jobs:
           # no corrector, because the red check that used to catch it is gone.
           ./scripts/verify-changelog.sh
 
-  # The changelog guard, on a trigger that actually fires.
-  #
-  # `changelog-check.yml` runs this same script on `pull_request`, and it has NEVER
-  # EXECUTED: all 33 of its runs, every one on a `release-plz-*` branch, are
-  # `action_required` with 0s duration. Release PRs are authored by
-  # `app/github-actions`, and workflow runs on bot-authored PRs sit unapproved until
-  # a human clicks. So the guard reported nothing, was never green or red, and the
-  # bug it was written for shipped three times underneath it.
-  #
-  # `push` to main is not gated that way, so this copy runs. Keep the pull_request
-  # one — it covers human PRs that touch CHANGELOG.md — but this is the one that
-  # actually protects releases.
+  # Keep the push-side guard as well as the PR guard. A credential change is
+  # accepted only after checks report on the final release PR head; an old
+  # approval or an earlier head's green checks are not that proof.
   verify-changelog:
     name: Verify changelog
     needs: release-plz
