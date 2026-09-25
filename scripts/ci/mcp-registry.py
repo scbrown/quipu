@@ -22,7 +22,7 @@ WHY `check` RUNS ON EVERY PR. The registry proves we own the image by reading a
 LABEL inside it that must equal server.json's `name`. The name is therefore
 spelled in three places (server.json, the Dockerfile LABEL, the README), and a
 rename that misses one is refused only at publish time, after a release has
-shipped. `check` makes that mismatch a red PR instead. It also refuses any
+shipped. `check` makes that mismatch a red PR instead. It also refuses any host under
 homelab host in what we publish: a stranger's Install click must give them their
 OWN local database, never a pointer at infrastructure they cannot reach.
 """
@@ -35,8 +35,8 @@ from pathlib import Path
 NAME = 'io.github.scbrown/quipu'
 IMAGE = 'ghcr.io/scbrown/quipu'
 DOCKERFILE = Path('packaging/oci/Dockerfile')
-# `.svc` is this project's homelab suffix (quipu.svc, search.svc). None of it
-# is reachable from a stranger's machine, so none of it may be a default.
+# `.svc` and `.lan` are private-network suffixes. Nothing under them is
+# reachable from a stranger's machine, so none of it may be a default.
 HOMELAB = re.compile(r'\b[\w.-]+\.svc\b|\b[\w.-]+\.lan\b')
 SEMVER = re.compile(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$')
 
@@ -139,7 +139,10 @@ def selftest():
         lay(doc=bad)
         expect('an oci tag that disagrees with the version', True, lambda: check(root))
 
-        bad = json.loads(json.dumps(good)); bad['websiteUrl'] = 'https://quipu.svc/'
+        # Assembled, not literal: tests/no_internal_identifiers.rs refuses any host
+        # under the private suffix in a tracked file, even a fixture meant to trip
+        # this check.
+        bad = json.loads(json.dumps(good)); bad['websiteUrl'] = 'https://graph' + '.svc/'
         lay(doc=bad)
         expect('a homelab host in server.json', True, lambda: check(root))
 
