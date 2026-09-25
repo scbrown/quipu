@@ -8,6 +8,7 @@ pub mod compact;
 pub mod config;
 mod config_load;
 pub mod context;
+pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
 pub mod episode;
