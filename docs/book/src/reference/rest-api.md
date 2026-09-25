@@ -127,9 +127,18 @@ Named writes produce `authenticated_request_start` and
 method, route, and a process-local correlation ID. Missing completion is
 indeterminate. The credential principal is independent of declared actor, task,
 and source values. Import/promotion and RDF graph-store transactions use the
-registry principal through their existing authenticated-actor paths. Generic
-write handlers currently have request-level attribution only; do not treat their
-caller-supplied transaction actor as authenticated. End-to-end MCP attribution
+registry principal through their existing authenticated-actor paths. Locally
+created fact transactions also retain separate authenticated evidence, exposed
+as `authenticated` by `/transactions`. Generic handlers preserve caller-declared
+`actor` and `source`; neither can replace this credential evidence.
+
+The evidence is inserted inside the fact transaction's savepoint, including fork
+materialization and overlay tombstones. Rollback removes it. Owned request
+context crosses blocking dispatch and deferred snapshot promotion, and is
+restored before a worker thread is reused. Schema/registry operations without a
+fact transaction retain request-level audit only. Library/CLI writes without an
+HTTP identity and copied historical transactions have null local authentication
+evidence; a foreign actor is not proof of possession of a local credential. End-to-end MCP attribution
 requires the proxy to select the corresponding downstream Quipu credential.
 The shared bearer remains `legacy-shared-bearer`, including if a registry entry
 accidentally duplicates its verifier.
@@ -1037,11 +1046,14 @@ There is no `offset`. Passing `limit` alone therefore returns the *oldest* N —
 38k-transaction store, `?limit=40000` hands back transactions 1–10000 and nothing
 recent. To look up a specific transaction, use `?since=<tx-1>&limit=1`.
 
-Each entry is `{id, timestamp, actor, source}`. `source` identifies the write path:
+Each entry is `{id, timestamp, actor, source, authenticated}`. `authenticated`
+is null when local credential evidence is absent; otherwise it contains
+`principal`, `credential_id` (null for a shared bearer), and `auth_class`
+(`named_bearer` or `legacy_shared_bearer`). It is separate from declared fields. `source` identifies the write path:
 `episode:<name>` (`/episode`), `set` (`/set`), `retract` (`/retract`,
 `/episode/retract`), or caller-supplied free text (`/knot`). `actor` and `source` are
-both optional on `/knot`, and a call that omits them lands facts with **no audit
-trail at all** — `{"actor": null, "source": null}`. Pass them.
+both optional on `/knot`. Supply them for source provenance; authenticated
+credential evidence does not reconstruct a missing source or historical actor.
 
 ### `POST /embed_backfill`
 
