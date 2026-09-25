@@ -60,6 +60,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // restored this table would grant exactly that, arriving labelled as
     // completeness rather than as an attestation.
     ("attestation_bindings", Disposition::Excluded),
+    // Local evidence of possession of THIS server's credential. A foreign pack
+    // must never install such claims as locally authenticated transactions.
+    // Historical actor/source remain content, independently of this evidence.
+    ("transaction_auth", Disposition::Excluded),
     // REPLAY STATE, and wrong in BOTH directions: carry spent nonces and a
     // legitimate re-import is refused as a replay; omit them silently and a
     // replay the origin had already spent is accepted on the copy. Excluding it

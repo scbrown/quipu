@@ -172,7 +172,10 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
-    match tokio::task::spawn_blocking(f).await {
+    let identity = super::auth::request_identity();
+    match tokio::task::spawn_blocking(move || quipu::transaction_auth::with_identity(identity, f))
+        .await
+    {
         Ok(result) => result,
         // Only reachable if the handler panicked; the mutex is then poisoned and
         // the process is not going to recover on its own either way.
