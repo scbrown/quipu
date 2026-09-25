@@ -204,11 +204,7 @@ impl Store {
         source: Option<&str>,
         graph: i64,
     ) -> Result<Staged> {
-        self.conn.execute(
-            "INSERT INTO transactions (timestamp, actor, source) VALUES (?1, ?2, ?3)",
-            params![timestamp, actor, source],
-        )?;
-        let tx_id = self.conn.last_insert_rowid();
+        let tx_id = crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?;
 
         // Domain/range axioms are not merely a one-time migration at ontology
         // load. Apply them to every newly asserted edge so a range such as

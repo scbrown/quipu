@@ -136,6 +136,8 @@ pub struct PromoteImportResult {
     pub staging_graph: String,
     pub tx_id: i64,
     pub triples: usize,
+    /// Snapshot facts withheld because ROOT has a local retraction for them.
+    pub suppressed_retractions: usize,
 }
 
 fn hash_suffix(value: &str) -> Result<&str> {
@@ -502,20 +504,16 @@ pub fn promote_import(
             "staging graph is not committed: {graph_iri}"
         )));
     }
-    let (bytes, count) =
-        crate::rdf::export_rdf_subset(store, RdfFormat::NTriples, Some(&graph_iri))?;
-    let (tx_id, _) = crate::rdf::ingest_rdf(
+    let (tx_id, count, suppressed) = crate::share_promotion::promote_snapshot(
         store,
-        bytes.as_slice(),
-        RdfFormat::NTriples,
-        None,
+        graph,
         timestamp,
         authenticated_actor,
-        Some(&provenance_source(
+        &provenance_source(
             "share-promotion",
             &request.share_id,
             request.actor.as_deref(),
-        )),
+        ),
     )?;
     Ok(PromoteImportResult {
         outcome: "promoted".into(),
@@ -523,6 +521,7 @@ pub fn promote_import(
         staging_graph: graph_iri,
         tx_id,
         triples: count,
+        suppressed_retractions: suppressed,
     })
 }
 

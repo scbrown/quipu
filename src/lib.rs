@@ -8,6 +8,7 @@ pub mod compact;
 pub mod config;
 mod config_load;
 pub mod context;
+pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
 pub mod episode;
@@ -27,6 +28,7 @@ pub mod migration;
 pub mod namespace;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+pub mod transaction_auth;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
 // share the feature gate.
 #[cfg(feature = "owl")]
@@ -74,12 +76,15 @@ pub mod pack_restore;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
 pub mod share_completeness;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod share_compose;
 pub mod share_delta;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_mint;
+mod share_promotion;
 pub mod share_scrub;
 pub mod share_transport;
 pub mod signing;
@@ -206,3 +211,7 @@ pub use vector::{KnowledgeVectorStore, VectorMatch};
 pub use vector_delegate::VectorSearchDelegate;
 #[cfg(feature = "lancedb")]
 pub use vector_lance::LanceVectorStore;
+
+/// Native MCP protocol adapters over the governed HTTP application.
+#[cfg(feature = "mcp")]
+pub mod mcp_transport;

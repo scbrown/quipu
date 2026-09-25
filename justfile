@@ -272,3 +272,13 @@ contributor cmd="generate" output="/tmp/contributor-knowledge.ttl":
         pack) scripts/build-repository-share.sh "${QUIPU_BIN:?}" "$(command -v bobbin)" "$PWD" "{{output}}" "$(git rev-parse HEAD)" ;;
         *) echo "unknown contributor command" >&2; exit 2 ;;
     esac
+
+# Native protocol acceptance on temporary stores (no production configuration).
+mcp action="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    test "{{action}}" = test || { echo 'usage: just mcp test' >&2; exit 2; }
+    cargo build --features full --bin quipu --bin quipu-server
+    cargo test --features full --lib mcp_transport
+    target=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
+    timeout 120 python3 scripts/test-native-mcp.py "$target/debug/quipu-server"

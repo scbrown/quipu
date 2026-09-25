@@ -211,6 +211,7 @@ impl Store {
                     params![timestamp, Option::<&str>::None, Some("overlay-tombstone")],
                 )?;
                 let tx_id = sp.last_insert_rowid();
+                crate::transaction_auth::record(&sp, tx_id)?;
                 // Idempotent: one active tombstone per (e,a,v) in this overlay.
                 let exists: bool = sp
                     .query_row(
