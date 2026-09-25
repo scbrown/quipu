@@ -211,6 +211,12 @@ impl Store {
         if !present {
             conn.execute_batch("ALTER TABLE facts ADD COLUMN retracted_tx INTEGER;")?;
         }
+        // Snapshot publication checks only retractions since its premise head.
+        // Without this index, every small apply batch would scan the whole log.
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_retracted_tx ON facts(retracted_tx) \
+             WHERE retracted_tx IS NOT NULL;",
+        )?;
         Ok(())
     }
 

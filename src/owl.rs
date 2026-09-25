@@ -13,6 +13,9 @@ mod owl_parse;
 #[path = "owl_materialize.rs"]
 mod owl_materialize;
 
+#[path = "owl_snapshot.rs"]
+pub mod snapshot;
+
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::Read;
 

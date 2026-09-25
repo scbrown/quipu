@@ -227,7 +227,18 @@ rw_handler!(queries, quipu::tool_queries);
 // /shapes, whose triples never reach the queryable store). So this is
 // rw_handler! and /ontology is in WRITE_ENDPOINTS.
 #[cfg(feature = "owl")]
-rw_handler!(ontology, quipu::tool_load_ontology);
+pub(crate) async fn ontology(
+    State(s): State<SharedStore>,
+    axum::Json(i): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    if i.get("action").and_then(JsonValue::as_str) == Some("materialize") {
+        return super::owl_materialize::materialize(s, i).await;
+    }
+    ontology_locked(State(s), axum::Json(i)).await
+}
+
+#[cfg(feature = "owl")]
+rw_handler!(ontology_locked, quipu::tool_load_ontology);
 
 // Registered even without the `owl` feature, and deliberately NOT left to 404.
 // The parent bead (aegis-1xb10) was slowed by exactly this ambiguity: /ontology

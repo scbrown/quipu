@@ -294,6 +294,10 @@ fn routes_in_server_source() -> Vec<String> {
         ("server/align.rs", include_str!("../server/align.rs")),
         ("server/assets.rs", include_str!("../server/assets.rs")),
         (
+            "server/owl_materialize.rs",
+            include_str!("../server/owl_materialize.rs"),
+        ),
+        (
             "server/graph_store.rs",
             include_str!("../server/graph_store.rs"),
         ),
