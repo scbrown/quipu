@@ -15,7 +15,7 @@ was diffed against it.
 
 ---
 
-## 1. The one decision that is not a form field
+## 1. Public-history decision — resolved 2026-09-24
 
 `8b369b2:benchmark/replay/corpus/corpus.json` is on the public GitHub remote and
 is **still fully reversible** — the labels were `sha256(salt + iri)[:10]` with
@@ -27,12 +27,15 @@ The current tree is clean (resealed from a CSPRNG, map discarded, gate PASS).
 **A later scrub commit does not fix history**: a push publishes every object, and
 the blob stays reachable by sha.
 
-Rewriting public history on Stiwi's repo is his call. Recommendation:
-**do it before the paper points readers at the repository** — the window is small
-and it is the cheapest it will ever be. If instead we accept it, that should be a
-recorded decision rather than something that happens by default.
+The repository owner decided on 2026-09-24: **do not rewrite this history**.
+Exposure of internal hostnames and crew or agent names is accepted and is not
+a publication blocker. Secrets, credentials and personal data still require
+scrubbing. This decision resolves the history question; it does not authorize
+an agent to submit the paper or choose the publication licence.
 
-This does not block submission. It is only cheap *before* it.
+Rechecked on 2026-09-25: GitHub still resolves commit `8b369b2`; the accepted
+historical exposure has not been mistaken for a removed object. The current
+artifact passes the full scrub gate at repository revision `f15b28d`.
 
 ---
 
@@ -94,6 +97,14 @@ takes one or the other.
 ---
 
 ## 4. Verification state at hand-off
+
+Latest artifact check, 2026-09-25 at `f15b28d`:
+`scripts/arxiv-scrub-gate.sh` passed across all seven declared components.
+Both pattern controls fired, governed-path findings were zero, and the
+reversibility control detected its known-leaking fixture while the current
+corpus confirmed zero of 27 candidate names. This is an artifact check, not
+a fresh reproduction of the evaluation or a new PDF build. The build and
+bibliography results below remain the 2026-08-30 verification record.
 
 | check | result |
 |---|---|
