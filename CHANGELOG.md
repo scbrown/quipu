@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.9.0] - 2026-09-25
 
 ### Added
 
@@ -55,6 +55,7 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Refresh reconciled identity ledgers([328a3a7](https://github.com/scbrown/quipu/commit/328a3a7154bc9f9ed6be6247c14cc6e6ef00e412))
 - *(conformance)* Record measured composition ledgers([f93f915](https://github.com/scbrown/quipu/commit/f93f9151d154943147b04b5164e49df6be835a0b))
 - *(beads)* Ignore br's SQLite store file .beads/dolt and its WAL sidecars([75a605f](https://github.com/scbrown/quipu/commit/75a605f929636251ad0930357ab93f0ffa62e7cb))
+- Release v0.9.0([e48cfd0](https://github.com/scbrown/quipu/commit/e48cfd0a932466f7ce188e87c55206c8483aa632))
 
 ### Testing
 
