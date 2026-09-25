@@ -36,6 +36,9 @@ mod graph_store;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[cfg(feature = "owl")]
+#[path = "server/owl_materialize.rs"]
+mod owl_materialize;
 #[path = "server/publication.rs"]
 mod publication;
 mod query_endpoint;

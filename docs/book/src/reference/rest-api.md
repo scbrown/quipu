@@ -1230,11 +1230,33 @@ invisible to either alone. A store with nothing loaded answers `"ontologies":
 run of zero — a scheduler has to be able to tell "ran, derived nothing" from
 "there was nothing to derive from".
 
-Cadence must exceed the scan cost: the full pass re-reads every current fact,
-measured at ~2.3 s against 641,803 facts. That cost per WRITE is what made the
-reactive observer an OOM (aegis-2s6xpb); the same work on a timer is the same
-closure without the per-write scan. Entailments land in the companion inferred
-graph, so a wrong `owl:sameAs` pair stays quarantined and re-derivable.
+The REST materialisation action copies current ROOT and companion facts through
+a read-pool connection, then derives on a private snapshot. It does not hold
+ordinary write admission or the live writer during that work. Publication takes
+write admission in batches of at most 64 assertions, allowing other writes
+between batches. A server without a read pool refuses this action rather than
+falling back to a full scan under the writer lock. Concurrent materialisation
+requests are rejected; a disconnected client cannot admit another derivation
+while its blocking work is still running.
+
+Successful responses include `complete: true`, `snapshot_tx`, `elapsed_ms`, and
+`applied_proposals`. Completion means the captured snapshot was closed, **not**
+that facts arriving afterward have been processed. Concurrent additions are
+allowed; a retraction of a premise or a change to the loaded ontologies aborts
+publication. Earlier committed batches can remain as partial historical
+entailments after an error or interruption, but no new freshness marker is
+published. Retry on the next scheduled run. Consumers must inspect freshness;
+the companion graph does not automatically hide historical entailments.
+
+Input snapshots are limited to two million current facts, and derivation is
+limited to 100,000 new assertions and 64 passes. Exhausting a budget is an error,
+not successful partial materialisation. These are work-size limits, not a hard
+wall-clock or memory guarantee: choose the cadence and service resource limits
+from a rehearsal of the actual ontology and workload. The retraction fence uses
+an index created at store startup; allow for its initial build on existing stores.
+Entailments remain in the companion inferred graph, never ROOT. The synchronous
+library/CLI materialiser is unchanged; this lock discipline belongs to the REST
+scheduling path.
 
 ### `POST /subscriptions`
 

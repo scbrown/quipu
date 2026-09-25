@@ -14,7 +14,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::store::{Datum, Store};
 use crate::types::{Fact, Op, Value};
 
@@ -28,10 +28,12 @@ struct Pass<'a> {
     seen: HashSet<(i64, i64, Vec<u8>)>,
     datums: Vec<Datum>,
     timestamp: &'a str,
+    limit: Option<usize>,
+    exhausted: bool,
 }
 
 impl<'a> Pass<'a> {
-    fn from_facts(facts: &[Fact], timestamp: &'a str) -> Self {
+    fn from_facts(facts: &[Fact], timestamp: &'a str, limit: Option<usize>) -> Self {
         let mut seen = HashSet::new();
         for f in facts {
             seen.insert((f.entity, f.attribute, f.value.to_bytes()));
@@ -40,11 +42,21 @@ impl<'a> Pass<'a> {
             seen,
             datums: Vec::new(),
             timestamp,
+            limit,
+            exhausted: false,
         }
     }
 
     fn push(&mut self, entity: i64, attribute: i64, value: Value, counter: &mut usize) {
-        if self.seen.insert((entity, attribute, value.to_bytes())) {
+        let key = (entity, attribute, value.to_bytes());
+        if self.seen.contains(&key) {
+            return;
+        }
+        if self.limit.is_some_and(|limit| self.datums.len() >= limit) {
+            self.exhausted = true;
+            return;
+        }
+        if self.seen.insert(key) {
             self.datums.push(Datum {
                 entity,
                 attribute,
@@ -136,7 +148,18 @@ impl Ontology {
     /// until one derives nothing new, so axiom families compose: a type
     /// introduced by `rdfs:range` feeds the subclass closure of the next pass.
     pub fn materialize(&self, store: &mut Store, timestamp: &str) -> Result<MaterializeReport> {
-        self.materialize_from(store, timestamp, None)
+        self.materialize_from(store, timestamp, None, None)
+    }
+
+    /// Derive on a private snapshot with a limit on newly staged assertions.
+    /// Budget exhaustion is an error, never a successful partial closure.
+    pub fn materialize_limited(
+        &self,
+        store: &mut Store,
+        timestamp: &str,
+        max_inferences: usize,
+    ) -> Result<MaterializeReport> {
+        self.materialize_from(store, timestamp, None, Some(max_inferences))
     }
 
     /// Materialize SEMI-NAIVELY from a committed delta (aegis-2dp8e2).
@@ -159,7 +182,7 @@ impl Ontology {
         timestamp: &str,
         seed: &[Fact],
     ) -> Result<MaterializeReport> {
-        self.materialize_from(store, timestamp, Some(seed))
+        self.materialize_from(store, timestamp, Some(seed), None)
     }
 
     fn materialize_from(
@@ -167,6 +190,7 @@ impl Ontology {
         store: &mut Store,
         timestamp: &str,
         seed: Option<&[Fact]>,
+        max_inferences: Option<usize>,
     ) -> Result<MaterializeReport> {
         // Placement (quipu-0b6): premises are ROOT plus its companion inferred
         // graph; every entailment is written to the companion. The freshness
@@ -192,12 +216,14 @@ impl Ontology {
                 break;
             }
             passes += 1;
+            let remaining = max_inferences.map(|limit| limit.saturating_sub(report.total));
             let datums = self.derive_pass(
                 store,
                 companion,
                 timestamp,
                 &mut report,
                 frontier.as_deref(),
+                remaining,
             )?;
             if datums.is_empty() {
                 break;
@@ -262,6 +288,7 @@ impl Ontology {
         timestamp: &str,
         report: &mut MaterializeReport,
         seed: Option<&[Fact]>,
+        limit: Option<usize>,
     ) -> Result<Vec<Datum>> {
         let graphs = [crate::schema::ROOT_GRAPH, companion];
         let rdf_type_id = store.intern(RDF_TYPE)?;
@@ -300,7 +327,7 @@ impl Ontology {
             }
         };
         report.premise_facts_read += premises.len() + dedup.len();
-        let mut pass = Pass::from_facts(&dedup, timestamp);
+        let mut pass = Pass::from_facts(&dedup, timestamp, limit);
         let type_facts = collect_type_facts(&premises, rdf_type_id);
 
         // 1. Subclass transitive closure: if x : A and A ⊑ B, then x : B.
@@ -673,6 +700,9 @@ impl Ontology {
                 .retain(|d| !present.contains(&(d.entity, d.attribute, d.value.to_bytes())));
         }
 
+        if pass.exhausted {
+            return Err(Error::InvalidValue("OWL inference budget exceeded".into()));
+        }
         Ok(pass.datums)
     }
 }
