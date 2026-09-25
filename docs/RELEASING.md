@@ -120,3 +120,27 @@ curl -s -H 'User-Agent: your-name (contact)' \
 
 The crate is published as `quipu-ai`. The `quipu` name on crates.io belongs to an unrelated
 post-quantum cryptography library.
+
+## The MCP Registry listing
+
+The last job of a release, `mcp-registry`, calls `.github/workflows/mcp-registry.yml`. It builds
+`ghcr.io/scbrown/quipu:<version>` from the release tarball, runs it the way VS Code does after an
+Install click, pushes it, then stamps `server.json` with the released version and validates it.
+It **publishes** to the [official MCP Registry](https://registry.modelcontextprotocol.io) only when
+the repository variable `MCP_REGISTRY_PUBLISH` is `true`. The registry reads the image's ownership
+LABEL with an anonymous pull and refuses a private image, so the variable waits until the
+ghcr.io package is public.
+
+Nobody edits the version in `server.json`: the job stamps it from the tag. For a first publish or a
+retry against an existing release, dispatch from `main`:
+
+```bash
+gh workflow run mcp-registry.yml --ref main -f tag=quipu-ai-v<version> -f publish=true
+```
+
+Verify by the registry, not by the workflow:
+
+```bash
+curl -s 'https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.scbrown/quipu' \
+  | jq -r '.servers[].server.version'
+```
