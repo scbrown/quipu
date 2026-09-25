@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-25
+
+### Documentation
+
+- *(conformance)* State the claim boundary that is true, derived from the ledgers([c3b25f7](https://github.com/scbrown/quipu/commit/c3b25f7edeeed34959a9fe0120993ccdbe939ef4))
+- *(conformance)* Keep the "update was 37 of 93" correction visible on the page([7579e7e](https://github.com/scbrown/quipu/commit/7579e7edc23b2cb15a0076f522358513839cf1cc))
+- *(conformance)* Refresh composition ledgers at reconciled source([ab2fb12](https://github.com/scbrown/quipu/commit/ab2fb12a118b265110652dbfb4ee51075bcc4b0c))
+
+### Fixed
+
+- *(conformance)* Discover all 93 approved update tests, pin the inventory, disclose the subset([1cf6e22](https://github.com/scbrown/quipu/commit/1cf6e22569de781a8294ffab06117d9a86834c03))
+- *(entailment)* RDF and RDFS goal regimes at 100% (16/16, 19/19)([fdd9d3f](https://github.com/scbrown/quipu/commit/fdd9d3f84ade34b69ee73610aa3153f12eae838f))
+- *(import)* Preserve local retractions during snapshot promotion([36a7377](https://github.com/scbrown/quipu/commit/36a73772ad6bf3e01303f9801c026d775bee2463))
+
+### Miscellaneous
+
+- *(conformance)* Ledgers re-derived at c3b25f7e by conformance.yml run 35937950301([b4a85f9](https://github.com/scbrown/quipu/commit/b4a85f9aeb4576efa6e1a81c3277361c9a548fec))
+- *(conformance)* Ledgers re-derived at 1cf6e22 by conformance.yml run 35942211015([2c850d5](https://github.com/scbrown/quipu/commit/2c850d51f48ff6cb3a5af68248811e5cc48f7ed0))
+- *(conformance)* Ledgers re-derived at 7579e7e by conformance.yml run 35943572657([c137525](https://github.com/scbrown/quipu/commit/c13752503365d00bfc9d7b0f8d0cfc7198d260e8))
+- *(conformance)* Ledgers re-derived at fdd9d3f by conformance.yml run 35944468358([11ef9ca](https://github.com/scbrown/quipu/commit/11ef9ca66e91b12e14759467d15b8a8fb8d45973))
+- *(conformance)* Refresh ledgers for README test relocation([903e9be](https://github.com/scbrown/quipu/commit/903e9bef8193418b8a4ba841e7b73e1bd365b398))
+- *(conformance)* Refresh measured syntax ledgers on current base([9eb007f](https://github.com/scbrown/quipu/commit/9eb007ff30846508eff97c40b7acb46c865fbeae))
+- *(conformance)* Record measured snapshot-promotion ledgers([1b076b5](https://github.com/scbrown/quipu/commit/1b076b57bb1c709d4a89f0c292355e2781d2d962))
+- *(conformance)* Refresh reconciled identity ledgers([328a3a7](https://github.com/scbrown/quipu/commit/328a3a7154bc9f9ed6be6247c14cc6e6ef00e412))
+
+### Testing
+
+- Refresh conformance for current graph count index([ddbd94d](https://github.com/scbrown/quipu/commit/ddbd94d1c4343ff8c705080af4dd4cad42190aad))
+
+### Merge
+
+- Reconcile credential identity with current main([5c4590d](https://github.com/scbrown/quipu/commit/5c4590d360ccd5aec29195c138173ce83fe7924a))
+- Reconcile pack composition with transaction attribution([a1fd835](https://github.com/scbrown/quipu/commit/a1fd8350418e26176dc4749d17b89f970264729f))
+
 ### Added
 
 - *(bench)* The W3C SPARQL 1.1 harness against Oxigraph and rdflib([80653bb](https://github.com/scbrown/quipu/commit/80653bba329eb61b7a3cd17d1adef457e8c68e28))
