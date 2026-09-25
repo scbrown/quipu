@@ -71,6 +71,50 @@ class LedgerError(RuntimeError):
     """The ledgers on disk are missing or do not have the expected shape."""
 
 
+# Other stores measured by benchmark/competitors/competitors.py with the same
+# discovery, selection and comparison code. Order is the page order, fixed so a
+# re-derive cannot reshuffle the table into a ranking nobody chose.
+COMPETITORS = (
+    ("rdf4j", "RDF4J"),
+    ("oxigraph", "Oxigraph"),
+    ("fuseki", "Jena Fuseki"),
+    ("rdflib", "rdflib"),
+)
+COMPETITOR_CLASSES = ("query-evaluation", "update")
+
+
+def load_competitors(competitors_dir: Path, suite_revision: str) -> list[dict]:
+    """The competitor ledgers, refused unless every one ran at quipu's suite revision.
+
+    A row measured against a different rdf-tests commit would sit in the same
+    table as quipu's and read as the same test, so a mismatch is an error, not a
+    footnote.
+    """
+    rows = []
+    for key, label in COMPETITORS:
+        path = competitors_dir / f"{key}.json"
+        if not path.is_file():
+            raise LedgerError(f"missing competitor ledger: {path}")
+        ledger = json.loads(path.read_text())
+        if ledger.get("suite_revision") != suite_revision:
+            raise LedgerError(
+                f"{path} ran at rdf-tests {str(ledger.get('suite_revision'))[:8]}, "
+                f"quipu's ledgers at {suite_revision[:8]}; re-run it at the same revision"
+            )
+        classes = {}
+        for name in COMPETITOR_CLASSES:
+            counts = ledger.get("classes", {}).get(name)
+            if not counts or "cases" not in counts:
+                raise LedgerError(f"{path} carries no {name!r} class")
+            classes[name] = {
+                "passed": counts.get("passed", 0),
+                "cases": counts["cases"],
+                "lexical_form_only": counts.get("lexical_form_only", 0),
+            }
+        rows.append({"key": key, "label": label, "version": ledger["system_version"], "classes": classes})
+    return rows
+
+
 def reason_of(row: dict) -> str:
     """Unsupported rows carry ``reason``; executed rows carry ``diagnostic``."""
     return (row.get("reason") or row.get("diagnostic") or "").strip()
@@ -99,7 +143,7 @@ def tally(rows: list[dict]) -> dict[str, int]:
     return counts
 
 
-def load(results_dir: Path) -> dict:
+def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
     """Normalise both ledger shapes into one per-class view."""
     syntax_path = results_dir / SYNTAX_LEDGER
     evaluation_path = results_dir / EVALUATION_LEDGER
@@ -167,6 +211,10 @@ def load(results_dir: Path) -> dict:
         "reproduce": evaluation.get("reproduce", {}),
         "entailment": entailment,
         "shacl": shacl,
+        "competitors": (
+            load_competitors(competitors_dir, evaluation["suite_revision"])
+            if competitors_dir is not None else []
+        ),
     }
 
 
@@ -269,6 +317,61 @@ def claim_boundary(data: dict) -> list[str]:
     ]
 
 
+def render_competitors(data: dict) -> list[str]:
+    """Other stores on the same harness, at the same suite revision."""
+    competitors = data.get("competitors") or []
+    if not competitors:
+        return []
+    classes = data["classes"]
+
+    def score(counts: dict) -> str:
+        return f"{counts['passed']}/{counts['cases']}"
+
+    rows = [[
+        "quipu", f"`{data['quipu_version']}`",
+        score(classes["query-evaluation"]["counts"]), "—", score(classes["update"]["counts"]),
+    ]]
+    for system in competitors:
+        query, update = system["classes"]["query-evaluation"], system["classes"]["update"]
+        rows.append([
+            system["label"], f"`{system['version']}`",
+            score(query), str(query["lexical_form_only"]), score(update),
+        ])
+    out = [
+        "## Other stores, same harness",
+        "",
+        "The same discovery, test selection and result comparison, run against other",
+        f"stores at the same rdf-tests revision (`{data['suite_revision'][:8]}`). Scores use RDF",
+        "term equality, the rule quipu is held to. \"Same value\" counts failures whose answer",
+        "had the right values in a different lexical form; they stay failures and are",
+        "shown separately, so a design choice is not presented as a wrong answer.",
+        "",
+    ]
+    out += _table(
+        ["System", "Version", "Query evaluation", "Of those failures, same value", "Update"],
+        rows,
+        right={2, 3, 4},
+    )
+    out += [
+        "",
+        "The quipu row is this page's own ledger. Quipu's runner compares exact labels and has",
+        "no same-value tag, so that cell is empty rather than zero.",
+        "",
+        "**Disclosure.** Quipu parses SPARQL with `spargebra` and models RDF with `oxrdf`, both",
+        "from the Oxigraph project. Where the two agree, part of that agreement is shared code.",
+        "",
+        "**Quipu's score is fitted to this suite.** Its failures were found by running this",
+        "suite and fixed against it, case by case. The other stores were not tuned to this",
+        "harness.",
+        "",
+        "Pinned versions, the fairness rules, every competitor deviation checked by hand, and",
+        "the per-case ledgers are in",
+        "[`benchmark/competitors`](https://github.com/scbrown/quipu/tree/main/benchmark/competitors).",
+        "",
+    ]
+    return out
+
+
 def render_markdown(data: dict) -> str:
     classes = data["classes"]
     out: list[str] = [GENERATED_HEADER, "# SPARQL 1.1 conformance", ""]
@@ -345,6 +448,9 @@ def render_markdown(data: dict) -> str:
         "The final row is an arithmetic total, not a score. It is here so the class rows",
         "can be checked against the ledgers, not so it can be quoted as a percentage.",
         "",
+    ]
+    out += render_competitors(data)
+    out += [
         "## Query evaluation, by feature family",
         "",
         "The family is the pinned suite's own directory for each manifest, so this",
@@ -760,6 +866,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--results-dir", type=Path, default=Path("benchmark/public/results"))
     parser.add_argument("--docs-dir", type=Path, default=Path("docs/book/src/benchmarks"))
     parser.add_argument(
+        "--competitors-dir", type=Path,
+        default=Path(__file__).resolve().parents[2] / "benchmark" / "competitors" / "results",
+        help="competitor ledgers from benchmark/competitors/competitors.py; each must "
+             "have run at the same rdf-tests revision as quipu's",
+    )
+    parser.add_argument(
         "--pr-base",
         default=os.environ.get("GITHUB_BASE_REF") or None,
         help="base ref of the PR under test; enables PR mode, where only THIS "
@@ -789,7 +901,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        data = load(args.results_dir)
+        data = load(args.results_dir, args.competitors_dir)
     except (LedgerError, KeyError, json.JSONDecodeError) as error:
         print(f"conformance_report: {error}", file=sys.stderr)
         return 2

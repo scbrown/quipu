@@ -266,6 +266,43 @@ class PublishedArtifactsTests(unittest.TestCase):
         self.assertIn(f"update **{n['passed']}/{n['cases']}**", fallback)
 
 
+class CompetitorTableTests(unittest.TestCase):
+    """aegis-hit21a: other stores sit on the generated page, from their ledgers."""
+
+    COMPETITORS = REPO / "benchmark" / "competitors" / "results"
+
+    def test_the_page_carries_every_competitor_from_its_ledger(self):
+        data = REPORT.load(RESULTS, self.COMPETITORS)
+        page = REPORT.render_markdown(data)
+        self.assertIn("## Other stores, same harness", page)
+        for system in data["competitors"]:
+            query = system["classes"]["query-evaluation"]
+            self.assertIn(system["label"], page)
+            self.assertIn(f"{query['passed']}/{query['cases']}", page)
+        self.assertIn("spargebra", page)  # the shared-parser disclosure stays with the table
+
+    def test_a_ledger_from_another_suite_revision_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            for path in self.COMPETITORS.glob("*.json"):
+                shutil.copy(path, tmp / path.name)
+            stale = json.loads((tmp / "rdflib.json").read_text())
+            stale["suite_revision"] = "0" * 40
+            (tmp / "rdflib.json").write_text(json.dumps(stale))
+            with self.assertRaises(REPORT.LedgerError) as caught:
+                REPORT.load(RESULTS, tmp)
+            self.assertIn("same revision", str(caught.exception))
+
+    def test_a_missing_competitor_ledger_is_refused_not_dropped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            for path in self.COMPETITORS.glob("*.json"):
+                if path.name != "fuseki.json":
+                    shutil.copy(path, tmp / path.name)
+            with self.assertRaises(REPORT.LedgerError):
+                REPORT.load(RESULTS, tmp)
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -529,6 +566,11 @@ def head_tree_fixture(*, stale=True):
         for source in (REPO / "benchmark/public").glob("*.py"):
             shutil.copy2(source, public / source.name)
         shutil.copytree(RESULTS, public / "results")
+        # The page also renders the competitor table (aegis-hit21a), which refuses
+        # to render without its ledgers.
+        shutil.copytree(
+            REPO / "benchmark/competitors/results", root / "benchmark/competitors/results"
+        )
         run = lambda *args: subprocess.run(  # noqa: E731
             ["git", *args], cwd=root, check=True, capture_output=True, text=True
         )

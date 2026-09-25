@@ -60,6 +60,36 @@ carries a named reason further down this page.
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
 
+## Other stores, same harness
+
+The same discovery, test selection and result comparison, run against other
+stores at the same rdf-tests revision (`369a90d1`). Scores use RDF
+term equality, the rule quipu is held to. "Same value" counts failures whose answer
+had the right values in a different lexical form; they stay failures and are
+shown separately, so a design choice is not presented as a wrong answer.
+
+| System | Version | Query evaluation | Of those failures, same value | Update |
+|---|---|---:|---:|---:|
+| quipu | `quipu 0.8.1` | 168/168 | — | 93/93 |
+| RDF4J | `6.1.0` | 162/168 | 5 | 87/93 |
+| Oxigraph | `0.5.11` | 159/168 | 8 | 93/93 |
+| Jena Fuseki | `6.2.0` | 155/168 | 12 | 93/93 |
+| rdflib | `7.6.0` | 154/168 | 9 | 69/93 |
+
+The quipu row is this page's own ledger. Quipu's runner compares exact labels and has
+no same-value tag, so that cell is empty rather than zero.
+
+**Disclosure.** Quipu parses SPARQL with `spargebra` and models RDF with `oxrdf`, both
+from the Oxigraph project. Where the two agree, part of that agreement is shared code.
+
+**Quipu's score is fitted to this suite.** Its failures were found by running this
+suite and fixed against it, case by case. The other stores were not tuned to this
+harness.
+
+Pinned versions, the fairness rules, every competitor deviation checked by hand, and
+the per-case ledgers are in
+[`benchmark/competitors`](https://github.com/scbrown/quipu/tree/main/benchmark/competitors).
+
 ## Query evaluation, by feature family
 
 The family is the pinned suite's own directory for each manifest, so this
