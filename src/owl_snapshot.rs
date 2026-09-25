@@ -36,6 +36,19 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// Private temporary SQLite store, deleted when its connection closes.
+    /// SQLite's empty filename creates an anonymous disk-backed database rather
+    /// than retaining the snapshot in RAM. Cache limits concern this private
+    /// store only; derivation still allocates premise and proposal vectors.
+    pub fn temporary_store() -> Result<Store> {
+        let scratch = Store::open("")?;
+        scratch.conn.execute_batch(
+            "PRAGMA cache_size=-8192; PRAGMA mmap_size=0; PRAGMA temp_store=FILE;",
+        )?;
+        scratch.set_term_cache_limit(32_768);
+        Ok(scratch)
+    }
+
     /// Copy only current ROOT and its inferred companion from a consistent read
     /// transaction. `scratch` must be an empty, private store owned by the caller.
     /// No live writes or derivation occur here.

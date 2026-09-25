@@ -293,11 +293,8 @@ impl Ontology {
         let graphs = [crate::schema::ROOT_GRAPH, companion];
         let rdf_type_id = store.intern(RDF_TYPE)?;
 
-        let (premises, dedup): (Vec<Fact>, Vec<Fact>) = match seed {
-            None => {
-                let all = store.current_facts_in_graphs(&graphs)?;
-                (all.clone(), all)
-            }
+        let premises: Vec<Fact> = match seed {
+            None => store.current_facts_in_graphs(&graphs)?,
             Some(delta) => {
                 // Dedup scoped by ENTITY, not by attribute. Attribute scoping
                 // looked right and was not: `rdf:type` sits on nearly every
@@ -323,11 +320,18 @@ impl Ontology {
                 // correctness guarantee and is scoped to the candidates. A
                 // preload can only ever be an optimisation, and this one cost
                 // more than it saved.
-                (delta.to_vec(), Vec::new())
+                delta.to_vec()
             }
         };
-        report.premise_facts_read += premises.len() + dedup.len();
-        let mut pass = Pass::from_facts(&dedup, timestamp, limit);
+        report.premise_facts_read += premises.len();
+        // Borrow the same premise vector for deduplication; cloning every fact
+        // retained a second full corpus solely to build this key set.
+        let dedup = if seed.is_none() {
+            premises.as_slice()
+        } else {
+            &[]
+        };
+        let mut pass = Pass::from_facts(dedup, timestamp, limit);
         let type_facts = collect_type_facts(&premises, rdf_type_id);
 
         // 1. Subclass transitive closure: if x : A and A ⊑ B, then x : B.
@@ -538,7 +542,11 @@ impl Ontology {
             // that `semi_naive_reaches_the_same_fixpoint_as_naive` PASSES against
             // it — that fixture seeds the delta with every asserted fact, so the
             // identity is always present and the divergence is invisible to it.
-            let identity_facts = store.current_facts_in_graphs(&graphs)?;
+            let mut identity_facts = Vec::new();
+            for graph in graphs {
+                identity_facts
+                    .extend(store.current_facts_for_attributes_in_graph(&[same_as_id], graph)?);
+            }
             let mut classes = UnionFind::default();
             for f in &identity_facts {
                 if f.attribute == same_as_id

@@ -27,7 +27,7 @@ fn seed(count: usize) -> Store {
 }
 
 fn snapshot(store: &Store) -> Snapshot {
-    let mut s = Snapshot::capture(store, Store::open_in_memory().unwrap(), TS).unwrap();
+    let mut s = Snapshot::capture(store, Snapshot::temporary_store().unwrap(), TS).unwrap();
     s.derive().unwrap();
     s
 }
@@ -320,7 +320,7 @@ fn scheduled_snapshot_corpus_rehearsal() {
     }
     eprintln!("OWL_CORPUS open_ms={}", started.elapsed().as_millis());
     let t = std::time::Instant::now();
-    let mut plan = Snapshot::capture(&source, Store::open_in_memory().unwrap(), TS).unwrap();
+    let mut plan = Snapshot::capture(&source, Snapshot::temporary_store().unwrap(), TS).unwrap();
     eprintln!(
         "OWL_CORPUS capture_ms={} head={} ontologies={}",
         t.elapsed().as_millis(),
@@ -355,4 +355,19 @@ fn scheduled_snapshot_corpus_rehearsal() {
             eprintln!("OWL_CORPUS {line}");
         }
     }
+}
+
+#[test]
+fn temporary_snapshot_uses_disk_and_a_bounded_page_cache() {
+    let scratch = Snapshot::temporary_store().unwrap();
+    let mode: String = scratch
+        .conn
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .unwrap();
+    assert_ne!(mode, "memory");
+    let cache: i64 = scratch
+        .conn
+        .query_row("PRAGMA cache_size", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(cache, -8192);
 }

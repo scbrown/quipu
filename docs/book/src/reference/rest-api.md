@@ -1231,7 +1231,12 @@ run of zero — a scheduler has to be able to tell "ran, derived nothing" from
 "there was nothing to derive from".
 
 The REST materialisation action copies current ROOT and companion facts through
-a read-pool connection, then derives on a private snapshot. It does not hold
+a read-pool connection, then derives on a private temporary SQLite database.
+SQLite removes this database when its connection closes; its page cache is
+limited to 8 MiB and its term cache to 32,768 entries. Provide a writable,
+disk-backed SQLite temporary directory with enough space for the current facts
+and indexes; a RAM-backed temporary filesystem defeats the memory saving.
+Derivation still allocates premise and proposal vectors. It does not hold
 ordinary write admission or the live writer during that work. Publication takes
 write admission in batches of at most 64 assertions, allowing other writes
 between batches. A server without a read pool refuses this action rather than

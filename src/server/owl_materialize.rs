@@ -36,7 +36,7 @@ pub(crate) async fn materialize(
     let (mut snapshot, mut permit) = blocking(move || {
         let mut snapshot = {
             let source = reader.read();
-            Snapshot::capture(&source, quipu::Store::open_in_memory()?, &timestamp)?
+            Snapshot::capture(&source, Snapshot::temporary_store()?, &timestamp)?
         };
         snapshot.derive()?;
         Ok((snapshot, permit))
