@@ -2,6 +2,67 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- *(bench)* The W3C SPARQL 1.1 harness against Oxigraph and rdflib([80653bb](https://github.com/scbrown/quipu/commit/80653bba329eb61b7a3cd17d1adef457e8c68e28))
+- *(bench)* Jena Fuseki and RDF4J join the competitor table([4552171](https://github.com/scbrown/quipu/commit/4552171c59f2b898a1f30f3407eeb7c4a83c3f9b))
+- *(conformance)* W3C RDF 1.1 syntax suites harness — Turtle, N-Triples, N-Quads, TriG([db487c3](https://github.com/scbrown/quipu/commit/db487c35355d36335ff5b4cc8c7c9f099c292897))
+- *(auth)* Add audience-bound crew credential attribution([2df184b](https://github.com/scbrown/quipu/commit/2df184b130293649018d455f9d9b8feaf41fa0ea))
+- Bind local transaction audit to request credentials([7414915](https://github.com/scbrown/quipu/commit/74149156bcf805bc54694688e57401df638a0126))
+- *(mcp)* Serve native HTTP and stdio through guarded REST handlers([2a40d52](https://github.com/scbrown/quipu/commit/2a40d52d40f4f9ee9d81ffe32024c9a3243f016a))
+- *(compose)* Inspect verified pack unions with explicit shape authority([51094ef](https://github.com/scbrown/quipu/commit/51094ef909b5a648ff61bd12e4f669f0549758b4))
+- *(mcp)* List quipu in the official MCP Registry as a ghcr.io image([059bc88](https://github.com/scbrown/quipu/commit/059bc881f7f468a1e804d02195a709f540180c09))
+
+
+
+### Documentation
+
+- *(conformance)* State the claim boundary that is true, derived from the ledgers([c3b25f7](https://github.com/scbrown/quipu/commit/c3b25f7edeeed34959a9fe0120993ccdbe939ef4))
+- *(conformance)* Keep the "update was 37 of 93" correction visible on the page([7579e7e](https://github.com/scbrown/quipu/commit/7579e7edc23b2cb15a0076f522358513839cf1cc))
+- *(readme)* The caboodle-stack README standard; the long form moves to the book([ffbb079](https://github.com/scbrown/quipu/commit/ffbb0793f694a07dee96ac0e9d2d0a9da7e21360))
+- Refresh conformance ledgers for transaction identity([05fa637](https://github.com/scbrown/quipu/commit/05fa637adf4eb53546ee8b15ceac211f79ea54b5))
+- *(conformance)* Derive ledgers for native MCP transports([1e16812](https://github.com/scbrown/quipu/commit/1e16812799da3aa77587fd0c8f5f61bb73352278))
+- *(conformance)* Refresh composition ledgers at reconciled source([ab2fb12](https://github.com/scbrown/quipu/commit/ab2fb12a118b265110652dbfb4ee51075bcc4b0c))
+- *(conformance)* Verify MCP on the composed store baseline([4d8b4a4](https://github.com/scbrown/quipu/commit/4d8b4a4d0be0f09a85a48ca5fad55a4977a684c3))
+
+### Fixed
+
+- *(conformance)* Discover all 93 approved update tests, pin the inventory, disclose the subset([1cf6e22](https://github.com/scbrown/quipu/commit/1cf6e22569de781a8294ffab06117d9a86834c03))
+- *(bench)* The competitor update column over all 93 approved tests; RDF4J default-graph lens([94b1579](https://github.com/scbrown/quipu/commit/94b15795a6cbf751d0fab8ae31a7736681807172))
+- *(entailment)* RDF and RDFS goal regimes at 100% (16/16, 19/19)([fdd9d3f](https://github.com/scbrown/quipu/commit/fdd9d3f84ade34b69ee73610aa3153f12eae838f))
+- *(conformance)* Rdf11 rows carry class/manifest/id so the regression gate names them correctly([ff13660](https://github.com/scbrown/quipu/commit/ff13660ce2721e8baa8f8780ebd81a2c2d67670e))
+- *(import)* Preserve local retractions during snapshot promotion([36a7377](https://github.com/scbrown/quipu/commit/36a73772ad6bf3e01303f9801c026d775bee2463))
+- *(mcp)* Align feature counts and isolate transport startup([c267c72](https://github.com/scbrown/quipu/commit/c267c725f8181ef46506b43893ac1134ea9318fc))
+- *(compose)* Quarantine types outside the selected vocabulary([ad31f9e](https://github.com/scbrown/quipu/commit/ad31f9e66f773437970678891a99db9dd2b2a98d))
+- *(store)* Index current graph counts before read-model admission([81a8c3d](https://github.com/scbrown/quipu/commit/81a8c3da861fff8193a374fb22e7b2aaf6b9c221))
+
+### Miscellaneous
+
+- *(conformance)* Ledgers re-derived at c3b25f7e by conformance.yml run 35937950301([b4a85f9](https://github.com/scbrown/quipu/commit/b4a85f9aeb4576efa6e1a81c3277361c9a548fec))
+- *(conformance)* Ledgers re-derived at 1cf6e22 by conformance.yml run 35942211015([2c850d5](https://github.com/scbrown/quipu/commit/2c850d51f48ff6cb3a5af68248811e5cc48f7ed0))
+- *(conformance)* Ledgers re-derived at 7579e7e by conformance.yml run 35943572657([c137525](https://github.com/scbrown/quipu/commit/c13752503365d00bfc9d7b0f8d0cfc7198d260e8))
+- *(conformance)* Ledgers re-derived at fdd9d3f by conformance.yml run 35944468358([11ef9ca](https://github.com/scbrown/quipu/commit/11ef9ca66e91b12e14759467d15b8a8fb8d45973))
+- *(beads)* Regenerate export with redacted owners([d62aa9f](https://github.com/scbrown/quipu/commit/d62aa9fb3d2258e42bcfb0164ac5c6af44912ec1))
+- *(conformance)* Refresh ledgers for README test relocation([903e9be](https://github.com/scbrown/quipu/commit/903e9bef8193418b8a4ba841e7b73e1bd365b398))
+- *(conformance)* Refresh measured syntax ledgers on current base([9eb007f](https://github.com/scbrown/quipu/commit/9eb007ff30846508eff97c40b7acb46c865fbeae))
+- *(conformance)* Record named credential regression ledgers([48223e7](https://github.com/scbrown/quipu/commit/48223e785e7b350ee313ae6ed9a290f604787661))
+- *(conformance)* Record measured snapshot-promotion ledgers([1b076b5](https://github.com/scbrown/quipu/commit/1b076b57bb1c709d4a89f0c292355e2781d2d962))
+- *(conformance)* Refresh reconciled identity ledgers([328a3a7](https://github.com/scbrown/quipu/commit/328a3a7154bc9f9ed6be6247c14cc6e6ef00e412))
+- *(conformance)* Record measured composition ledgers([f93f915](https://github.com/scbrown/quipu/commit/f93f9151d154943147b04b5164e49df6be835a0b))
+- *(beads)* Ignore br's SQLite store file .beads/dolt and its WAL sidecars([75a605f](https://github.com/scbrown/quipu/commit/75a605f929636251ad0930357ab93f0ffa62e7cb))
+
+### Testing
+
+- Refresh conformance for current graph count index([ddbd94d](https://github.com/scbrown/quipu/commit/ddbd94d1c4343ff8c705080af4dd4cad42190aad))
+
+
+
+### Results
+
+- RDF 1.1 syntax ledger — Turtle 306/313, N-Triples 70/70, N-Quads 0/87 and TriG 0/357 unsupported([8f94139](https://github.com/scbrown/quipu/commit/8f941397b7652a2582f5f542d33f9f5412108bdb))
+
 ## [0.8.1] - 2026-09-21
 
 ### Fixed
