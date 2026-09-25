@@ -688,7 +688,27 @@ async fn main() {
         });
     }
 
-    eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
+    if args.iter().any(|a| a == "--mcp-stdio") {
+        let token_file = args
+            .windows(2)
+            .find(|w| w[0] == "--mcp-token-file")
+            .map(|w| std::path::Path::new(&w[1]));
+        if args.last().is_some_and(|a| a == "--mcp-token-file") {
+            eprintln!("error: --mcp-token-file requires a path");
+            std::process::exit(2);
+        }
+        if let Err(error) = quipu::mcp_transport::McpServer::new(app)
+            .stdio(token_file)
+            .await
+        {
+            eprintln!("MCP stdio stopped: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    let native_mcp = quipu::mcp_transport::http_router(app.clone(), cors_origins);
+    let app = app.merge(native_mcp);
+    eprintln!("quipu-server listening on {bind_addr} (db: {db_path}); MCP at /mcp");
 
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await

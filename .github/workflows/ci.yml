@@ -148,6 +148,11 @@ jobs:
             ${{ runner.os }}-cargo-extended-
             ${{ runner.os }}-cargo-
       - run: cargo clippy --features full --all-targets -- -D warnings -A missing-docs
+      - name: Native MCP protocol and credential boundaries
+        run: |
+          cargo build --features full --bin quipu --bin quipu-server
+          cargo test --features full --lib mcp_transport
+          timeout 120 python3 scripts/test-native-mcp.py target/debug/quipu-server
       - run: cargo clippy --no-default-features --features remote --all-targets -- -D warnings -A missing-docs
       - run: cargo clippy --features shacl,lancedb --all-targets -- -D warnings -A missing-docs
       - run: cargo test --no-default-features --features remote

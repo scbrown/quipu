@@ -318,6 +318,8 @@ OPTIONS:
     --db <path>       Store file (default: from .bobbin/config.toml)
     --bind <addr>     Listen address (default: from .bobbin/config.toml)
     --embed-backfill  Backfill embeddings for all entities on startup
+    --mcp-stdio       Serve MCP on stdin/stdout instead of binding HTTP
+    --mcp-token-file <path>  Private bearer file for stdio tool writes
     -V, --version     Print version and exit
     -h, --help        Print this help and exit",
         env!("CARGO_PKG_VERSION")

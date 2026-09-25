@@ -42,6 +42,7 @@ mod cli_export;
 mod cli_fork;
 mod cli_graph;
 mod cli_ingest;
+mod cli_mcp;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
@@ -89,6 +90,7 @@ fn main() {
 
     let cmd = args[1].as_str();
     match cmd {
+        "mcp" => cli_mcp::run(&args[2..]),
         "knot" | "load" => cli::cmd_knot(&args, db_path),
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "attest" => cli_attest::cmd_attest(&args, db_path),
@@ -300,6 +302,7 @@ COMMANDS:
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
     quipu repl [--db <path>]
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
+    quipu mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     quipu stats [--db <path>]
     quipu doctor labels [--db <path>]
     quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
