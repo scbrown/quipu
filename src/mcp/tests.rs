@@ -2038,7 +2038,7 @@ fn readme_mcp_tool_counts_match_the_manifest() {
 #[test]
 fn book_mcp_reference_matches_the_manifest() {
     let base = tool_definitions().len();
-    let with_owl = base + 1;
+    let with_owl = base + 2; // load_ontology and explain
     let page = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("docs/book/src/reference/mcp-tools.md"),

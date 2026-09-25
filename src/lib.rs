@@ -211,3 +211,7 @@ pub use vector::{KnowledgeVectorStore, VectorMatch};
 pub use vector_delegate::VectorSearchDelegate;
 #[cfg(feature = "lancedb")]
 pub use vector_lance::LanceVectorStore;
+
+/// Native MCP protocol adapters over the governed HTTP application.
+#[cfg(feature = "mcp")]
+pub mod mcp_transport;
