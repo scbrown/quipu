@@ -90,6 +90,28 @@ Pinned versions, the fairness rules, every competitor deviation checked by hand,
 the per-case ledgers are in
 [`benchmark/competitors`](https://github.com/scbrown/quipu/tree/main/benchmark/competitors).
 
+## RDF syntax
+
+The W3C RDF 1.1 and RDF 1.2 syntax suites at the same rdf-tests revision
+(`369a90d1`). Every manifest case is counted, including cases
+the manifests have not marked approved.
+
+| Format | RDF 1.1 | RDF 1.2 |
+|---|---:|---:|
+| Turtle | 306/313 | not supported (0/106) |
+| N-Triples | 70/70 | not supported (0/70) |
+| N-Quads | 0/87 (87 unsupported) | not supported (0/68) |
+| TriG | 0/357 (357 unsupported) | not supported (0/61) |
+
+**RDF 1.2 is measured and not supported.** Quipu is built without RDF 1.2, so it
+cannot parse a triple term. The RDF 1.2 cases are enumerated from the pinned
+manifests and not run: a loader that rejects all RDF 1.2 input would "pass" every
+negative-syntax case, and those passes would read as partial support. No RDF 1.2
+case is scored as a pass until the support exists.
+
+Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)
+and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).
+
 ## Query evaluation, by feature family
 
 The family is the pinned suite's own directory for each manifest, so this

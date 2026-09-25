@@ -30,6 +30,14 @@ EVALUATION_LEDGER = "sparql11-evaluation.json"
 ENTAILMENT_LEDGER = "sparql11-entailment.json"
 SHACL_LEDGER = "shacl-core.json"
 FEDERATED_LEDGER = "sparql11-federated-query.json"
+RDF11_SYNTAX_LEDGER = "rdf11-syntax.json"
+RDF12_SYNTAX_LEDGER = "rdf12-syntax.json"
+RDF_SYNTAX_SUITES = (
+    ("rdf-turtle", "Turtle"),
+    ("rdf-n-triples", "N-Triples"),
+    ("rdf-n-quads", "N-Quads"),
+    ("rdf-trig", "TriG"),
+)
 
 CLASS_LABELS = {
     "syntax": "query syntax",
@@ -143,6 +151,33 @@ def tally(rows: list[dict]) -> dict[str, int]:
     return counts
 
 
+def load_rdf_syntax(results_dir: Path, suite_revision: str) -> dict:
+    """The RDF 1.1 and RDF 1.2 syntax ledgers, per suite (aegis-mhee08).
+
+    RDF 1.2 is enumerated, never run: Quipu has no rdf-12 feature, and a loader
+    that rejects everything would "pass" every negative case. So a 1.2 ledger
+    row that claims a pass is refused, not published.
+    """
+    out = {}
+    for version, name in (("1.1", RDF11_SYNTAX_LEDGER), ("1.2", RDF12_SYNTAX_LEDGER)):
+        path = results_dir / name
+        if not path.is_file():
+            raise LedgerError(f"missing ledger: {path}")
+        ledger = json.loads(path.read_text())
+        if ledger.get("suite_revision") != suite_revision:
+            raise LedgerError(f"{path} ran at rdf-tests {str(ledger.get('suite_revision'))[:8]}, "
+                              f"not {suite_revision[:8]}")
+        if version == "1.2" and any(row.get("passed") for row in ledger.get("results", [])):
+            raise LedgerError(f"{path} scores an RDF 1.2 case as passed, but Quipu has no RDF 1.2 "
+                              "support; a rejected negative case is not a pass")
+        suites = ledger.get("totals", {}).get("suites", {})
+        missing = [key for key, _ in RDF_SYNTAX_SUITES if key not in suites]
+        if missing:
+            raise LedgerError(f"{path} lacks suite(s) {missing}")
+        out[version] = {"suites": suites, "reason": ledger.get("reason", "")}
+    return out
+
+
 def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
     """Normalise both ledger shapes into one per-class view."""
     syntax_path = results_dir / SYNTAX_LEDGER
@@ -211,6 +246,7 @@ def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
         "reproduce": evaluation.get("reproduce", {}),
         "entailment": entailment,
         "shacl": shacl,
+        "rdf_syntax": load_rdf_syntax(results_dir, evaluation["suite_revision"]),
         "competitors": (
             load_competitors(competitors_dir, evaluation["suite_revision"])
             if competitors_dir is not None else []
@@ -372,6 +408,41 @@ def render_competitors(data: dict) -> list[str]:
     return out
 
 
+def render_rdf_syntax(data: dict) -> list[str]:
+    """RDF 1.1 syntax scores, and RDF 1.2 as measured-not-supported (aegis-mhee08)."""
+    syntax = data["rdf_syntax"]
+    rows = []
+    for key, label in RDF_SYNTAX_SUITES:
+        one = syntax["1.1"]["suites"][key]
+        two = syntax["1.2"]["suites"][key]
+        rdf11 = f"{one['passed']}/{one['cases']}"
+        if one.get("unsupported"):
+            rdf11 += f" ({one['unsupported']} unsupported)"
+        rows.append([label, rdf11, f"not supported (0/{two['cases']})"])
+    out = [
+        "## RDF syntax",
+        "",
+        "The W3C RDF 1.1 and RDF 1.2 syntax suites at the same rdf-tests revision",
+        f"(`{data['suite_revision'][:8]}`). Every manifest case is counted, including cases",
+        "the manifests have not marked approved.",
+        "",
+    ]
+    out += _table(["Format", "RDF 1.1", "RDF 1.2"], rows, right={1, 2})
+    out += [
+        "",
+        "**RDF 1.2 is measured and not supported.** Quipu is built without RDF 1.2, so it",
+        "cannot parse a triple term. The RDF 1.2 cases are enumerated from the pinned",
+        "manifests and not run: a loader that rejects all RDF 1.2 input would \"pass\" every",
+        "negative-syntax case, and those passes would read as partial support. No RDF 1.2",
+        "case is scored as a pass until the support exists.",
+        "",
+        "Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)",
+        "and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).",
+        "",
+    ]
+    return out
+
+
 def render_markdown(data: dict) -> str:
     classes = data["classes"]
     out: list[str] = [GENERATED_HEADER, "# SPARQL 1.1 conformance", ""]
@@ -450,6 +521,7 @@ def render_markdown(data: dict) -> str:
         "",
     ]
     out += render_competitors(data)
+    out += render_rdf_syntax(data)
     out += [
         "## Query evaluation, by feature family",
         "",

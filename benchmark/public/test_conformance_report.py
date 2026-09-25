@@ -303,6 +303,29 @@ class CompetitorTableTests(unittest.TestCase):
                 REPORT.load(RESULTS, tmp)
 
 
+class RdfSyntaxTableTests(unittest.TestCase):
+    """aegis-mhee08: RDF 1.1 scored, RDF 1.2 published as measured-not-supported."""
+
+    def test_the_page_carries_both_versions_and_never_scores_rdf12(self):
+        page = REPORT.render_markdown(REPORT.load(RESULTS))
+        self.assertIn("## RDF syntax", page)
+        self.assertIn("RDF 1.2 is measured and not supported", page)
+        section = page.split("## RDF syntax")[1].split("\n## ")[0]
+        self.assertNotRegex(section, r"not supported \([1-9]")
+
+    def test_an_rdf12_row_that_claims_a_pass_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            shutil.copytree(RESULTS, tmp / "results")
+            path = tmp / "results" / "rdf12-syntax.json"
+            ledger = json.loads(path.read_text())
+            ledger["results"][0]["passed"] = True
+            path.write_text(json.dumps(ledger))
+            with self.assertRaises(REPORT.LedgerError) as caught:
+                REPORT.load(tmp / "results")
+            self.assertIn("not a pass", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
 
