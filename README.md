@@ -133,13 +133,16 @@ endpoints: [REST API](docs/book/src/reference/rest-api.md).
 
 ## Wire it into your agent
 
-Agents reach Quipu through [bobbin](https://github.com/scbrown/bobbin), whose MCP
-server carries the knowledge tools (`knowledge_context`, `knowledge_query`, and
-the rest) next to its code search. Quipu itself defines 46 MCP tools (48 with the
-`owl` feature). Set up bobbin with the knowledge layer, then register it:
+Agents can connect directly: `quipu-server` serves streamable HTTP at `/mcp`, and
+`quipu mcp --db store.db` provides stdio using the companion server binary.
+Build both with `cargo build --release --features full`. Protected stdio writes use
+`--mcp-token-file /path/to/private-token`; HTTP writes use the existing bearer policy.
+Quipu defines 46 MCP tools (48 with `owl`), from one shared schema manifest.
+Bobbin's `knowledge_*` tools and existing REST-backed proxies remain compatible.
+See the [connection and authentication guide](docs/book/src/reference/mcp-tools.md#connect-directly).
 
 ```bash
-claude mcp add bobbin -- bobbin serve
+claude mcp add quipu -- /absolute/path/to/quipu mcp --db /absolute/path/to/store.db
 ```
 
 Setup and every tool: [bobbin's Quipu integration guide](https://github.com/scbrown/bobbin/blob/main/docs/book/src/guides/quipu-integration.md)

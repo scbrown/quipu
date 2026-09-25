@@ -78,12 +78,16 @@ pub(crate) async fn import_share(
     principal: Option<axum::Extension<quipu::http_auth::AuthenticatedPrincipal>>,
     axum::Json(input): axum::Json<quipu::share_import::ShareImportRequest>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let actor = principal.map(|axum::Extension(value)| value.as_str());
+    let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
     blocking(move || {
         let (result, work) = {
             let mut st = store.lock();
-            let result =
-                quipu::share_import::import_share(&mut st, &input, &quipu::time::now_iso(), actor)?;
+            let result = quipu::share_import::import_share(
+                &mut st,
+                &input,
+                &quipu::time::now_iso(),
+                actor.as_deref(),
+            )?;
             (result, st.take_deferred_embed())
         };
         if let Some(work) = work {
@@ -101,7 +105,7 @@ pub(crate) async fn promote_import(
     principal: Option<axum::Extension<quipu::http_auth::AuthenticatedPrincipal>>,
     axum::Json(input): axum::Json<quipu::share_import::PromoteImportRequest>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    let actor = principal.map(|axum::Extension(value)| value.as_str());
+    let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
     blocking(move || {
         let (result, work) = {
             let mut st = store.lock();
@@ -109,7 +113,7 @@ pub(crate) async fn promote_import(
                 &mut st,
                 &input,
                 &quipu::time::now_iso(),
-                actor,
+                actor.as_deref(),
             )?;
             (result, st.take_deferred_embed())
         };

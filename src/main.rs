@@ -35,6 +35,7 @@ mod cli_attest;
 mod cli_audit;
 mod cli_changes;
 mod cli_commands;
+mod cli_compose;
 mod cli_db;
 mod cli_entailment;
 mod cli_explain;
@@ -42,6 +43,7 @@ mod cli_export;
 mod cli_fork;
 mod cli_graph;
 mod cli_ingest;
+mod cli_mcp;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
@@ -89,6 +91,7 @@ fn main() {
 
     let cmd = args[1].as_str();
     match cmd {
+        "mcp" => cli_mcp::run(&args[2..]),
         "knot" | "load" => cli::cmd_knot(&args, db_path),
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "attest" => cli_attest::cmd_attest(&args, db_path),
@@ -119,6 +122,7 @@ fn main() {
         "status" => cli_pack::cmd_status(&args, db_path),
         "merge" => cli_pack::cmd_merge(&args, db_path),
         "import" => cli_pack::cmd_import(&args, db_path),
+        "compose" => cli_compose::cmd_compose(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
         "changes" => cli_changes::cmd_changes(&args, db_path),
@@ -300,6 +304,7 @@ COMMANDS:
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
     quipu repl [--db <path>]
     quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
+    quipu mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     quipu stats [--db <path>]
     quipu doctor labels [--db <path>]
     quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
@@ -323,6 +328,7 @@ COMMANDS:
     quipu attest list [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
     quipu import delta <parent-share> <delta-share> [--actor <id>]
+    quipu compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
     quipu align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
     quipu align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]

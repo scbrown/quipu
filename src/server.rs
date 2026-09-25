@@ -498,7 +498,9 @@ async fn main() {
                                     quipu::http_auth::AuthenticatedPrincipal::LEGACY_SHARED_BEARER,
                                 );
                             }
-                            let mut response = next.run(req).await;
+                            let mut response = auth::run_authorized(
+                                req, next, &auth_policy, authorization, auth_header.as_deref(),
+                            ).await;
                             let outcome = match authorization.generation {
                                 Some(quipu::http_auth::AuthGeneration::NotRequired) => {
                                     quipu::request_usage::AuthOutcome::NotRequired
@@ -511,6 +513,9 @@ async fn main() {
                                 }
                                 Some(quipu::http_auth::AuthGeneration::Previous) => {
                                     quipu::request_usage::AuthOutcome::AuthenticatedPrevious
+                                }
+                                Some(quipu::http_auth::AuthGeneration::Named) => {
+                                    quipu::request_usage::AuthOutcome::AuthenticatedNamed
                                 }
                                 None => quipu::request_usage::AuthOutcome::Pending,
                             };
@@ -683,19 +688,5 @@ async fn main() {
         });
     }
 
-    eprintln!("quipu-server listening on {bind_addr} (db: {db_path})");
-
-    let listener = tokio::net::TcpListener::bind(&bind_addr)
-        .await
-        .unwrap_or_else(|e| {
-            eprintln!("error binding {bind_addr}: {e}");
-            std::process::exit(1);
-        });
-
-    // AFTER the bind succeeds, so the recorded start time is when this process
-    // began SERVING, not when it began trying. A failed bind exits above; a
-    // start time recorded before it would describe a process that never served.
-    quipu::metrics::init_start_time();
-
-    axum::serve(listener, app).await.unwrap();
+    quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
 }

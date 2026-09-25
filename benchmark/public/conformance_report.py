@@ -30,6 +30,14 @@ EVALUATION_LEDGER = "sparql11-evaluation.json"
 ENTAILMENT_LEDGER = "sparql11-entailment.json"
 SHACL_LEDGER = "shacl-core.json"
 FEDERATED_LEDGER = "sparql11-federated-query.json"
+RDF11_SYNTAX_LEDGER = "rdf11-syntax.json"
+RDF12_SYNTAX_LEDGER = "rdf12-syntax.json"
+RDF_SYNTAX_SUITES = (
+    ("rdf-turtle", "Turtle"),
+    ("rdf-n-triples", "N-Triples"),
+    ("rdf-n-quads", "N-Quads"),
+    ("rdf-trig", "TriG"),
+)
 
 CLASS_LABELS = {
     "syntax": "query syntax",
@@ -71,6 +79,50 @@ class LedgerError(RuntimeError):
     """The ledgers on disk are missing or do not have the expected shape."""
 
 
+# Other stores measured by benchmark/competitors/competitors.py with the same
+# discovery, selection and comparison code. Order is the page order, fixed so a
+# re-derive cannot reshuffle the table into a ranking nobody chose.
+COMPETITORS = (
+    ("rdf4j", "RDF4J"),
+    ("oxigraph", "Oxigraph"),
+    ("fuseki", "Jena Fuseki"),
+    ("rdflib", "rdflib"),
+)
+COMPETITOR_CLASSES = ("query-evaluation", "update")
+
+
+def load_competitors(competitors_dir: Path, suite_revision: str) -> list[dict]:
+    """The competitor ledgers, refused unless every one ran at quipu's suite revision.
+
+    A row measured against a different rdf-tests commit would sit in the same
+    table as quipu's and read as the same test, so a mismatch is an error, not a
+    footnote.
+    """
+    rows = []
+    for key, label in COMPETITORS:
+        path = competitors_dir / f"{key}.json"
+        if not path.is_file():
+            raise LedgerError(f"missing competitor ledger: {path}")
+        ledger = json.loads(path.read_text())
+        if ledger.get("suite_revision") != suite_revision:
+            raise LedgerError(
+                f"{path} ran at rdf-tests {str(ledger.get('suite_revision'))[:8]}, "
+                f"quipu's ledgers at {suite_revision[:8]}; re-run it at the same revision"
+            )
+        classes = {}
+        for name in COMPETITOR_CLASSES:
+            counts = ledger.get("classes", {}).get(name)
+            if not counts or "cases" not in counts:
+                raise LedgerError(f"{path} carries no {name!r} class")
+            classes[name] = {
+                "passed": counts.get("passed", 0),
+                "cases": counts["cases"],
+                "lexical_form_only": counts.get("lexical_form_only", 0),
+            }
+        rows.append({"key": key, "label": label, "version": ledger["system_version"], "classes": classes})
+    return rows
+
+
 def reason_of(row: dict) -> str:
     """Unsupported rows carry ``reason``; executed rows carry ``diagnostic``."""
     return (row.get("reason") or row.get("diagnostic") or "").strip()
@@ -99,7 +151,34 @@ def tally(rows: list[dict]) -> dict[str, int]:
     return counts
 
 
-def load(results_dir: Path) -> dict:
+def load_rdf_syntax(results_dir: Path, suite_revision: str) -> dict:
+    """The RDF 1.1 and RDF 1.2 syntax ledgers, per suite (aegis-mhee08).
+
+    RDF 1.2 is enumerated, never run: Quipu has no rdf-12 feature, and a loader
+    that rejects everything would "pass" every negative case. So a 1.2 ledger
+    row that claims a pass is refused, not published.
+    """
+    out = {}
+    for version, name in (("1.1", RDF11_SYNTAX_LEDGER), ("1.2", RDF12_SYNTAX_LEDGER)):
+        path = results_dir / name
+        if not path.is_file():
+            raise LedgerError(f"missing ledger: {path}")
+        ledger = json.loads(path.read_text())
+        if ledger.get("suite_revision") != suite_revision:
+            raise LedgerError(f"{path} ran at rdf-tests {str(ledger.get('suite_revision'))[:8]}, "
+                              f"not {suite_revision[:8]}")
+        if version == "1.2" and any(row.get("passed") for row in ledger.get("results", [])):
+            raise LedgerError(f"{path} scores an RDF 1.2 case as passed, but Quipu has no RDF 1.2 "
+                              "support; a rejected negative case is not a pass")
+        suites = ledger.get("totals", {}).get("suites", {})
+        missing = [key for key, _ in RDF_SYNTAX_SUITES if key not in suites]
+        if missing:
+            raise LedgerError(f"{path} lacks suite(s) {missing}")
+        out[version] = {"suites": suites, "reason": ledger.get("reason", "")}
+    return out
+
+
+def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
     """Normalise both ledger shapes into one per-class view."""
     syntax_path = results_dir / SYNTAX_LEDGER
     evaluation_path = results_dir / EVALUATION_LEDGER
@@ -167,6 +246,11 @@ def load(results_dir: Path) -> dict:
         "reproduce": evaluation.get("reproduce", {}),
         "entailment": entailment,
         "shacl": shacl,
+        "rdf_syntax": load_rdf_syntax(results_dir, evaluation["suite_revision"]),
+        "competitors": (
+            load_competitors(competitors_dir, evaluation["suite_revision"])
+            if competitors_dir is not None else []
+        ),
     }
 
 
@@ -269,6 +353,96 @@ def claim_boundary(data: dict) -> list[str]:
     ]
 
 
+def render_competitors(data: dict) -> list[str]:
+    """Other stores on the same harness, at the same suite revision."""
+    competitors = data.get("competitors") or []
+    if not competitors:
+        return []
+    classes = data["classes"]
+
+    def score(counts: dict) -> str:
+        return f"{counts['passed']}/{counts['cases']}"
+
+    rows = [[
+        "quipu", f"`{data['quipu_version']}`",
+        score(classes["query-evaluation"]["counts"]), "—", score(classes["update"]["counts"]),
+    ]]
+    for system in competitors:
+        query, update = system["classes"]["query-evaluation"], system["classes"]["update"]
+        rows.append([
+            system["label"], f"`{system['version']}`",
+            score(query), str(query["lexical_form_only"]), score(update),
+        ])
+    out = [
+        "## Other stores, same harness",
+        "",
+        "The same discovery, test selection and result comparison, run against other",
+        f"stores at the same rdf-tests revision (`{data['suite_revision'][:8]}`). Scores use RDF",
+        "term equality, the rule quipu is held to. \"Same value\" counts failures whose answer",
+        "had the right values in a different lexical form; they stay failures and are",
+        "shown separately, so a design choice is not presented as a wrong answer.",
+        "",
+    ]
+    out += _table(
+        ["System", "Version", "Query evaluation", "Of those failures, same value", "Update"],
+        rows,
+        right={2, 3, 4},
+    )
+    out += [
+        "",
+        "The quipu row is this page's own ledger. Quipu's runner compares exact labels and has",
+        "no same-value tag, so that cell is empty rather than zero.",
+        "",
+        "**Disclosure.** Quipu parses SPARQL with `spargebra` and models RDF with `oxrdf`, both",
+        "from the Oxigraph project. Where the two agree, part of that agreement is shared code.",
+        "",
+        "**Quipu's score is fitted to this suite.** Its failures were found by running this",
+        "suite and fixed against it, case by case. The other stores were not tuned to this",
+        "harness.",
+        "",
+        "Pinned versions, the fairness rules, every competitor deviation checked by hand, and",
+        "the per-case ledgers are in",
+        "[`benchmark/competitors`](https://github.com/scbrown/quipu/tree/main/benchmark/competitors).",
+        "",
+    ]
+    return out
+
+
+def render_rdf_syntax(data: dict) -> list[str]:
+    """RDF 1.1 syntax scores, and RDF 1.2 as measured-not-supported (aegis-mhee08)."""
+    syntax = data["rdf_syntax"]
+    rows = []
+    for key, label in RDF_SYNTAX_SUITES:
+        one = syntax["1.1"]["suites"][key]
+        two = syntax["1.2"]["suites"][key]
+        rdf11 = f"{one['passed']}/{one['cases']}"
+        if one.get("unsupported"):
+            rdf11 += f" ({one['unsupported']} unsupported)"
+        rows.append([label, rdf11, f"not supported (0/{two['cases']})"])
+    out = [
+        "## RDF syntax",
+        "",
+        "The W3C RDF 1.1 and RDF 1.2 syntax suites at the same rdf-tests revision",
+        f"(`{data['suite_revision'][:8]}`). Every manifest case is counted, including cases",
+        "the manifests have not marked approved.",
+        "",
+    ]
+    out += _table(["Format", "RDF 1.1", "RDF 1.2"], rows, right={1, 2})
+    out += [
+        "",
+        "**RDF 1.2 is measured and not supported.** Quipu is built without RDF 1.2, so it",
+        "cannot parse a triple term. The RDF 1.2 cases are enumerated from the pinned",
+        "manifests and not run: a loader that rejects all RDF 1.2 input would \"pass\" every",
+        "negative-syntax case, and those passes would read as partial support. No RDF 1.2",
+        "case is scored as a pass until the support exists.",
+        "",
+        "Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)",
+        "and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).",
+        "",
+    ]
+    return out
+
+
 def render_markdown(data: dict) -> str:
     classes = data["classes"]
     out: list[str] = [GENERATED_HEADER, "# SPARQL 1.1 conformance", ""]
@@ -345,6 +519,10 @@ def render_markdown(data: dict) -> str:
         "The final row is an arithmetic total, not a score. It is here so the class rows",
         "can be checked against the ledgers, not so it can be quoted as a percentage.",
         "",
+    ]
+    out += render_competitors(data)
+    out += render_rdf_syntax(data)
+    out += [
         "## Query evaluation, by feature family",
         "",
         "The family is the pinned suite's own directory for each manifest, so this",
@@ -760,6 +938,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--results-dir", type=Path, default=Path("benchmark/public/results"))
     parser.add_argument("--docs-dir", type=Path, default=Path("docs/book/src/benchmarks"))
     parser.add_argument(
+        "--competitors-dir", type=Path,
+        default=Path(__file__).resolve().parents[2] / "benchmark" / "competitors" / "results",
+        help="competitor ledgers from benchmark/competitors/competitors.py; each must "
+             "have run at the same rdf-tests revision as quipu's",
+    )
+    parser.add_argument(
         "--pr-base",
         default=os.environ.get("GITHUB_BASE_REF") or None,
         help="base ref of the PR under test; enables PR mode, where only THIS "
@@ -789,7 +973,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        data = load(args.results_dir)
+        data = load(args.results_dir, args.competitors_dir)
     except (LedgerError, KeyError, json.JSONDecodeError) as error:
         print(f"conformance_report: {error}", file=sys.stderr)
         return 2

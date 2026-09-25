@@ -98,6 +98,51 @@ Authorization: Bearer <token>
 Reads — `/query`, `/search`, entity lookups, `/health`, `/version` — need no
 credential and answer normally.
 
+### Additive named credentials
+
+`[quipu.server].crew_credentials_file` optionally points to a local JSON registry
+of SHA-256 verifiers for administrator-issued, high-entropy bearer tokens. Keep
+`auth_token` in place: named credentials are additional identities and do not
+replace the current or previous shared bearer. Public reads and read-only mode
+retain their behavior. An unconfigured registry changes nothing.
+
+The file has `version: 1` and a `credentials` array. Each entry contains
+`credential_id` (a unique non-secret identifier), `principal` (an absolute crew
+IRI), `audience` (exactly `quipu`), and `token_sha256` (64 lowercase hex digits,
+the SHA-256 of the presented token string). Issue at least 32 cryptographically
+random bytes per credential and encode them for transport; this fast verifier
+is not suitable for human passwords. The issuer must verify that the principal
+is an existing crew identity. Parsing a registry checks syntax, not graph membership.
+No bearer plaintext belongs in this file or in the graph.
+
+Loading captures an immutable policy at startup. Invalid optional registries are
+reported without their contents; shared authentication remains available. Validate
+and atomically install a complete registry before provisioning clients. A restart
+with an invalid registry will not activate its named credentials; preserve the
+last validated file and verify candidate configuration before a rollout. This
+initial implementation provides no issuance, rotation, revocation, or hot reload.
+
+Named writes produce `authenticated_request_start` and
+`authenticated_request_complete` JSON audit events with credential ID, principal,
+method, route, and a process-local correlation ID. Missing completion is
+indeterminate. The credential principal is independent of declared actor, task,
+and source values. Import/promotion and RDF graph-store transactions use the
+registry principal through their existing authenticated-actor paths. Locally
+created fact transactions also retain separate authenticated evidence, exposed
+as `authenticated` by `/transactions`. Generic handlers preserve caller-declared
+`actor` and `source`; neither can replace this credential evidence.
+
+The evidence is inserted inside the fact transaction's savepoint, including fork
+materialization and overlay tombstones. Rollback removes it. Owned request
+context crosses blocking dispatch and deferred snapshot promotion, and is
+restored before a worker thread is reused. Schema/registry operations without a
+fact transaction retain request-level audit only. Library/CLI writes without an
+HTTP identity and copied historical transactions have null local authentication
+evidence; a foreign actor is not proof of possession of a local credential. End-to-end MCP attribution
+requires the proxy to select the corresponding downstream Quipu credential.
+The shared bearer remains `legacy-shared-bearer`, including if a registry entry
+accidentally duplicates its verifier.
+
 `POST /share` is also read-only. It returns the canonical Git-share manifest and
 exact file contents in one JSON response, allowing a proxy on another host to
 forward Quipu's own canonicalization, hashes, and share ID instead of reproducing
@@ -1001,11 +1046,14 @@ There is no `offset`. Passing `limit` alone therefore returns the *oldest* N —
 38k-transaction store, `?limit=40000` hands back transactions 1–10000 and nothing
 recent. To look up a specific transaction, use `?since=<tx-1>&limit=1`.
 
-Each entry is `{id, timestamp, actor, source}`. `source` identifies the write path:
+Each entry is `{id, timestamp, actor, source, authenticated}`. `authenticated`
+is null when local credential evidence is absent; otherwise it contains
+`principal`, `credential_id` (null for a shared bearer), and `auth_class`
+(`named_bearer` or `legacy_shared_bearer`). It is separate from declared fields. `source` identifies the write path:
 `episode:<name>` (`/episode`), `set` (`/set`), `retract` (`/retract`,
 `/episode/retract`), or caller-supplied free text (`/knot`). `actor` and `source` are
-both optional on `/knot`, and a call that omits them lands facts with **no audit
-trail at all** — `{"actor": null, "source": null}`. Pass them.
+both optional on `/knot`. Supply them for source provenance; authenticated
+credential evidence does not reconstruct a missing source or historical actor.
 
 ### `POST /embed_backfill`
 
