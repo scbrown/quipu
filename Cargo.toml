@@ -32,6 +32,9 @@ exclude = [
     "release-plz.toml",
     "scripts/",
     "wasm/",
+    # MCP Registry packaging: it ships an image, not the crate (aegis-gys8sx).
+    "server.json",
+    "packaging/",
 ]
 
 [lib]
