@@ -483,6 +483,32 @@ jobs:
             # fails at exec with a GLIBC_2.xx error. Build against the oldest
             # image still supported so the artifact runs in more places.
             runner: ubuntu-22.04
+          # Same glibc reasoning as above, on GitHub's native arm64 image rather
+          # than a cross toolchain, so the smoke test below runs the artifact
+          # we ship instead of trusting a linker we never executed.
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04-arm
+          # macOS had NO release asset at all until aegis-oifbu9, and a missing
+          # checksummed asset for the host triple ABORTED the whole caboodle
+          # install run, not just the quipu step. macOS has no glibc-style floor
+          # tied to the build image: rustc stamps its own minimum OS version
+          # (11.0 on arm64, 10.12 on x86_64) whatever image links the binary, so
+          # the runner only has to be current, not old. Pinned rather than
+          # `macos-latest` so a label move cannot change the build under a
+          # release without a diff here.
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          # NATIVE Intel, not cross-compiled from arm64. A cross build links
+          # fine, but its smoke test would then run under Rosetta, which is not
+          # something to rely on being present on the arm64 image -- and an
+          # untested binary is exactly what the smoke step exists to prevent.
+          # Pinned to the same macOS generation as the arm64 entry. GitHub's x64
+          # macOS images are on a sunset path; when the Intel labels go, move
+          # this entry to the arm64 runner as a cross build (the target already
+          # links there -- checked for aegis-oifbu9) and make its smoke test
+          # explicitly depend on Rosetta, rather than dropping Intel silently.
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -504,6 +530,12 @@ jobs:
       # --locked so the artifact is built from the committed lockfile, not
       # whatever resolves that morning. seed-fixtures is a dev tool and is
       # deliberately not shipped.
+      #
+      # No protoc install, on ANY runner, on purpose: protoc is needed only by
+      # the lancedb tree, which `full` excludes. Verified on macOS with Homebrew
+      # stripped from PATH (aegis-oifbu9). If a build here starts failing on a
+      # missing protoc, a feature change dragged lancedb into `full` -- fix that,
+      # do not paper over it with an install step.
       - name: Build (full feature bundle)
         run: |
           cargo build --release --locked --features full \
@@ -566,8 +598,16 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
+          # The asset name is the tag plus the RUST TARGET TRIPLE, unchanged,
+          # on every OS: installers compute it from the triple they resolve for
+          # the host, so any per-OS spelling (darwin vs macos, arm64 vs aarch64)
+          # would be an asset that exists and is never found.
           NAME="quipu-${TAG}-${TARGET}"
           mkdir -p "dist/${NAME}"
+          # BOTH binaries, side by side, in one directory: `quipu mcp` execs
+          # quipu-server from quipu's OWN directory with no PATH search
+          # (src/cli_mcp.rs), so an archive missing either one, or nesting them
+          # differently, ships an `mcp` subcommand that cannot start.
           cp "target/${TARGET}/release/quipu" "dist/${NAME}/"
           cp "target/${TARGET}/release/quipu-server" "dist/${NAME}/"
           cp README.md LICENSE "dist/${NAME}/"
@@ -576,7 +616,15 @@ jobs:
           # requirements the archive itself cannot satisfy. Saying so here is
           # the difference between "semantic search is off" and a silent empty
           # result (cf. quipu #53).
-          cat > "dist/${NAME}/FEATURES.txt" <<'EOF'
+          #
+          # The onnx note names the runtime library for THIS platform. It said
+          # libonnxruntime.so unconditionally when Linux was the only target,
+          # which on macOS points the reader at a file that cannot exist there.
+          case "${RUNNER_OS}" in
+            macOS) ORT_LIB="libonnxruntime.dylib" ;;
+            *)     ORT_LIB="libonnxruntime.so" ;;
+          esac
+          sed "s/@ORT_LIB@/${ORT_LIB}/" > "dist/${NAME}/FEATURES.txt" <<'EOF'
           Built with the `full` feature bundle:
             shacl, owl, onnx, reactive-reasoner
 
@@ -588,19 +636,36 @@ jobs:
           One feature needs something at RUNTIME that this archive cannot ship:
 
             onnx - links the ONNX Runtime dynamically (ort "load-dynamic"), so
-                   libonnxruntime.so must be on the loader path before any
-                   embedding or semantic search works. Without it everything else
-                   runs normally and embeddings report that no provider is
-                   configured. You also need model files plus a
-                   [quipu.embedding] block in .bobbin/config.toml -- see
+                   @ORT_LIB@ must be on the loader path (or named by
+                   ORT_DYLIB_PATH) before any embedding or semantic search
+                   works. Without it everything else runs normally and
+                   embeddings report that no provider is configured. You
+                   also need model files plus a [quipu.embedding] block in
+                   .bobbin/config.toml -- see
                    docs/book/src/concepts/embeddings.md.
 
           Everything else -- SPARQL, SHACL, the reasoner, the REST API and the
           web UI -- works from these binaries with no extra runtime deps.
           EOF
 
-          tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
-          ( cd dist && sha256sum "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256" )
+          # COPYFILE_DISABLE: macOS bsdtar otherwise adds AppleDouble `._*`
+          # entries for any file carrying extended attributes, which unpack on
+          # Linux as stray junk beside the binaries. GNU tar ignores it.
+          COPYFILE_DISABLE=1 tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
+          # `shasum -a 256`, NOT sha256sum: sha256sum is GNU coreutils and is
+          # not guaranteed on macOS images, while shasum ships with both. The
+          # output line (`<hex>  <name>`) is byte-identical to sha256sum's, so
+          # every OS produces a .sha256 that `sha256sum -c` and `shasum -a 256
+          # -c` both accept -- one checksum format for installers, whatever
+          # built the asset.
+          ( cd dist && shasum -a 256 "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256" )
+          # Prove the layout we just promised rather than trusting cp: both
+          # binaries at the top of the archive's one directory. Listed to a
+          # variable first: `tar | grep -q` under pipefail can fail on SIGPIPE
+          # when grep exits early, turning a correct archive into a red job.
+          LISTING="$(tar -tzf "dist/${NAME}.tar.gz")"
+          grep -qx "${NAME}/quipu" <<<"${LISTING}"
+          grep -qx "${NAME}/quipu-server" <<<"${LISTING}"
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           ls -la dist
 
@@ -617,6 +682,10 @@ jobs:
           printf '@prefix ex: <http://example.org/> .\nex:a a ex:T ; ex:rel ex:b .\n' > "${TMP}/t.ttl"
           "${BIN}/quipu" knot "${TMP}/t.ttl" --db "${TMP}/smoke.db"
           "${BIN}/quipu" stats --db "${TMP}/smoke.db"
+          # The companion lookup (see Package): `quipu mcp` must find
+          # quipu-server beside itself. --help exits before any transport opens,
+          # so this proves the exec path resolves without serving anything.
+          "${BIN}/quipu" mcp --help >/dev/null
 
       - name: Upload native binaries to the GitHub release
         env:
