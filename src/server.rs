@@ -688,39 +688,5 @@ async fn main() {
         });
     }
 
-    if args.iter().any(|a| a == "--mcp-stdio") {
-        let token_file = args
-            .windows(2)
-            .find(|w| w[0] == "--mcp-token-file")
-            .map(|w| std::path::Path::new(&w[1]));
-        if args.last().is_some_and(|a| a == "--mcp-token-file") {
-            eprintln!("error: --mcp-token-file requires a path");
-            std::process::exit(2);
-        }
-        if let Err(error) = quipu::mcp_transport::McpServer::new(app)
-            .stdio(token_file)
-            .await
-        {
-            eprintln!("MCP stdio stopped: {error}");
-            std::process::exit(1);
-        }
-        return;
-    }
-    let native_mcp = quipu::mcp_transport::http_router(app.clone(), cors_origins);
-    let app = app.merge(native_mcp);
-    eprintln!("quipu-server listening on {bind_addr} (db: {db_path}); MCP at /mcp");
-
-    let listener = tokio::net::TcpListener::bind(&bind_addr)
-        .await
-        .unwrap_or_else(|e| {
-            eprintln!("error binding {bind_addr}: {e}");
-            std::process::exit(1);
-        });
-
-    // AFTER the bind succeeds, so the recorded start time is when this process
-    // began SERVING, not when it began trying. A failed bind exits above; a
-    // start time recorded before it would describe a process that never served.
-    quipu::metrics::init_start_time();
-
-    axum::serve(listener, app).await.unwrap();
+    quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
 }

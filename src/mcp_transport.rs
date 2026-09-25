@@ -229,6 +229,41 @@ impl ServerHandler for McpServer {
     }
 }
 
+/// Serve local stdio or HTTP using the server's guarded application.
+/// Stdio returns after EOF without ever binding a listener.
+pub async fn serve(app: Router, args: &[String], origins: Vec<String>, bind: &str, db: &str) {
+    if args.iter().any(|a| a == "--mcp-stdio") {
+        serve_stdio(app, args).await;
+    } else {
+        let native = http_router(app.clone(), origins);
+        let listener = tokio::net::TcpListener::bind(bind)
+            .await
+            .unwrap_or_else(|error| {
+                eprintln!("error binding {bind}: {error}");
+                std::process::exit(1);
+            });
+        // A failed bind must never record the process as serving.
+        crate::metrics::init_start_time();
+        eprintln!("quipu-server listening on {bind} (db: {db}); MCP at /mcp");
+        axum::serve(listener, app.merge(native)).await.unwrap();
+    }
+}
+
+async fn serve_stdio(app: Router, args: &[String]) {
+    let token_file = args
+        .windows(2)
+        .find(|w| w[0] == "--mcp-token-file")
+        .map(|w| std::path::Path::new(&w[1]));
+    if args.last().is_some_and(|a| a == "--mcp-token-file") {
+        eprintln!("error: --mcp-token-file requires a path");
+        std::process::exit(2);
+    }
+    if let Err(error) = McpServer::new(app).stdio(token_file).await {
+        eprintln!("MCP stdio stopped: {error}");
+        std::process::exit(1);
+    }
+}
+
 /// Mount stateless HTTP: restarts cannot orphan MCP sessions. Browser requests
 /// must carry an explicitly allowed Origin; absent Origin is normal for agents.
 pub fn http_router(app: Router, allowed_origins: Vec<String>) -> Router {
