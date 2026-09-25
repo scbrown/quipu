@@ -35,6 +35,7 @@ mod cli_attest;
 mod cli_audit;
 mod cli_changes;
 mod cli_commands;
+mod cli_compose;
 mod cli_db;
 mod cli_entailment;
 mod cli_explain;
@@ -121,6 +122,7 @@ fn main() {
         "status" => cli_pack::cmd_status(&args, db_path),
         "merge" => cli_pack::cmd_merge(&args, db_path),
         "import" => cli_pack::cmd_import(&args, db_path),
+        "compose" => cli_compose::cmd_compose(&args, db_path),
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
         "changes" => cli_changes::cmd_changes(&args, db_path),
@@ -326,6 +328,7 @@ COMMANDS:
     quipu attest list [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
     quipu import delta <parent-share> <delta-share> [--actor <id>]
+    quipu compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
     quipu align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
     quipu align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]

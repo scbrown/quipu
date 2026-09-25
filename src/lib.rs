@@ -76,6 +76,8 @@ pub mod pack_restore;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
 pub mod share_completeness;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod share_compose;
 pub mod share_delta;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]

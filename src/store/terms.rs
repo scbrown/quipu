@@ -24,7 +24,9 @@ use crate::error::{Error, Result};
 /// operation that rewrites `terms.id` is `respace_file`, and it `VACUUM INTO`s
 /// a **copy** and rewrites the destination; the source database is never
 /// touched (`src/store/respace.rs`). So a mapping this cache has already
-/// observed cannot become wrong while the store is open.
+/// observed stays valid after commit. An outer savepoint that rolls back term
+/// creation must call `clear_persistent`: cached provisional IDs otherwise
+/// outlive their database rows.
 ///
 /// That is the whole safety argument, and it is why this is a memo rather than
 /// a coherence problem. If a future change makes `terms` mutable in place, this
@@ -90,6 +92,13 @@ impl Default for TermCache {
 }
 
 impl TermCache {
+    /// Discard persistent mappings after an outer transaction rollback.
+    /// The admission limit and transient remote terms are unaffected.
+    pub(crate) fn clear_persistent(&mut self) {
+        self.id_to_iri.clear();
+        self.iri_to_id.clear();
+    }
+
     /// Record a mapping in both directions, unless the cache is at its cap.
     fn insert(&mut self, id: i64, iri: &str) {
         // Re-recording an id already held is not growth, so let it through —
