@@ -1479,10 +1479,15 @@ aegis:TextRuleShape a sh:NodeShape ;
     sh:targetClass aegis:TextRule ;
     sh:property [ sh:path aegis:regex ; sh:minCount 1 ; ] ;
     sh:property [ sh:path aegis:enforcementTier ; sh:minCount 1 ; ] ;
+    # Optional text-only examples; readiness requires both polarities to pass.
+    sh:property [ sh:path aegis:mustMatch ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:mustNotMatch ; sh:datatype xsd:string ; ] ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
 
 aegis:InternalIdentifierPatternShape a sh:NodeShape ;
     sh:targetClass aegis:InternalIdentifierPattern ;
+    sh:property [ sh:path aegis:mustMatch ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:mustNotMatch ; sh:datatype xsd:string ; ] ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
 
 aegis:ConfigSettingShape a sh:NodeShape ;
