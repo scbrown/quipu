@@ -794,6 +794,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    # The version this release shipped, resolved from the TAG below. The MCP
+    # Registry job names its image after it.
+    outputs:
+      version: ${{ steps.want.outputs.want }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -851,3 +855,33 @@ jobs:
         with:
           expected-version: ${{ steps.want.outputs.want }}
           dry-run: 'false'
+
+  # The official MCP Registry listing, which is what VS Code's `@mcp` gallery
+  # shows (aegis-gys8sx). The steps live in mcp-registry.yml so a human can
+  # re-run them for an existing tag; see its header for why the listing is an
+  # OCI image and nothing else.
+  #
+  # LAST, after crates.io: a release that failed partway must not be announced
+  # to a gallery where strangers click Install.
+  #
+  # The image is pushed on every release. The registry PUBLISH waits for the
+  # repository variable MCP_REGISTRY_PUBLISH=true, so merging this cannot list
+  # quipu before the ghcr.io package is public (the registry pulls the image
+  # anonymously to read its ownership LABEL, and refuses a private one).
+  mcp-registry:
+    name: MCP Registry
+    needs: [release-plz, artifacts, crates]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      needs.release-plz.outputs.releases_created == 'true' &&
+      needs.artifacts.result == 'success' &&
+      needs.crates.result == 'success'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/mcp-registry.yml
+    with:
+      tag: quipu-ai-v${{ needs.crates.outputs.version }}
+      publish: ${{ vars.MCP_REGISTRY_PUBLISH == 'true' }}
