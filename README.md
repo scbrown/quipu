@@ -145,6 +145,21 @@ See the [connection and authentication guide](docs/book/src/reference/mcp-tools.
 claude mcp add quipu -- /absolute/path/to/quipu mcp --db /absolute/path/to/store.db
 ```
 
+No binaries? Quipu is in the [MCP Registry](https://registry.modelcontextprotocol.io),
+so VS Code's `@mcp` Extensions search (and other registry-aware clients) can
+install it in one click. That runs the published image, which needs Docker and
+nothing else:
+
+```bash
+docker run -i --rm -v quipu-data:/data ghcr.io/scbrown/quipu:latest
+```
+
+The graph lives at `/data/quipu.db` in the `quipu-data` volume, so it survives
+restarts and starts empty. Change the volume name in your client's MCP config to
+keep one graph per project.
+
+- MCP Registry name: `mcp-name: io.github.scbrown/quipu`
+
 Setup and every tool: [bobbin's Quipu integration guide](https://github.com/scbrown/bobbin/blob/main/docs/book/src/guides/quipu-integration.md)
 and [Quipu's MCP tools reference](docs/book/src/reference/mcp-tools.md). Any other
 client can use the [REST API](docs/book/src/reference/rest-api.md) directly.

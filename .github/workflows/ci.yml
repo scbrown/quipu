@@ -153,6 +153,19 @@ jobs:
           cargo build --features full --bin quipu --bin quipu-server
           cargo test --features full --lib mcp_transport
           timeout 120 python3 scripts/test-native-mcp.py target/debug/quipu-server
+      # The MCP Registry image otherwise runs only at release time, which is
+      # when a broken Dockerfile would first be seen: after the release shipped.
+      # Same Dockerfile, same smoke as mcp-registry.yml, on the binaries just
+      # built, so a PR that breaks the one-click Install goes red here.
+      - name: MCP Registry image starts and persists
+        run: |
+          set -euo pipefail
+          mkdir -p oci-context
+          cp target/debug/quipu target/debug/quipu-server oci-context/
+          docker build -f packaging/oci/Dockerfile -t quipu-mcp:ci oci-context
+          trap 'docker volume rm -f quipu-ci >/dev/null' EXIT
+          timeout 180 python3 scripts/ci/mcp-stdio-smoke.py -- \
+            docker run -i --rm -v quipu-ci:/data quipu-mcp:ci
       - run: cargo clippy --no-default-features --features remote --all-targets -- -D warnings -A missing-docs
       - run: cargo clippy --features shacl,lancedb --all-targets -- -D warnings -A missing-docs
       - run: cargo test --no-default-features --features remote
@@ -342,6 +355,14 @@ jobs:
       # Two failures wearing one symptom (aegis-fxpkt2).
       - name: Prove the release-tag resolver handles a merge-commit release
         run: .github/scripts/resolve-release-tag.sh --selftest
+
+      # The registry reads the image LABEL and refuses a publish whose name
+      # differs from server.json; the publish job is skipped on ordinary pushes,
+      # so without this a rename that misses one copy is first seen at release.
+      - name: Check server.json against the Dockerfile and README
+        run: |
+          python3 scripts/ci/mcp-registry.py check
+          python3 scripts/ci/mcp-registry.py --selftest
 
   source-size:
     name: Source size ratchet
