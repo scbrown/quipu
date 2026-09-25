@@ -498,7 +498,9 @@ async fn main() {
                                     quipu::http_auth::AuthenticatedPrincipal::LEGACY_SHARED_BEARER,
                                 );
                             }
-                            let mut response = next.run(req).await;
+                            let mut response = auth::run_authorized(
+                                req, next, &auth_policy, authorization, auth_header.as_deref(),
+                            ).await;
                             let outcome = match authorization.generation {
                                 Some(quipu::http_auth::AuthGeneration::NotRequired) => {
                                     quipu::request_usage::AuthOutcome::NotRequired
@@ -511,6 +513,9 @@ async fn main() {
                                 }
                                 Some(quipu::http_auth::AuthGeneration::Previous) => {
                                     quipu::request_usage::AuthOutcome::AuthenticatedPrevious
+                                }
+                                Some(quipu::http_auth::AuthGeneration::Named) => {
+                                    quipu::request_usage::AuthOutcome::AuthenticatedNamed
                                 }
                                 None => quipu::request_usage::AuthOutcome::Pending,
                             };
