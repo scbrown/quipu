@@ -48,10 +48,16 @@ struct Staged {
 /// are needed: on a 1.5M-fact copy of the live schema the index alone left the
 /// plan unchanged (885ms), `+f.g` alone scanned the table (972ms), and together
 /// they took 0.05ms, returning identical rows in identical order.
+///
+/// `f.v` in the `ORDER BY` keeps that order EXACT. The old plan read facts in
+/// `idx_geav (g, e, a, v)` order, so rows sharing `(e, a)` came out by `v`
+/// without the statement saying so; on a production copy 19,867 of 29,349 rows
+/// for one repo's source share their `(e, a)`. Without `f.v` the new plan
+/// returns the same rows with those ties in a different order.
 pub(crate) const SOURCE_RETRACTION_SQL: &str = "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
      FROM facts f JOIN transactions t ON f.tx = t.id \
      WHERE t.source = ?1 AND +f.g = ?2 AND f.op = 1 AND f.valid_to IS NULL \
-     ORDER BY f.e, f.a";
+     ORDER BY f.e, f.a, f.v";
 
 impl Store {
     // -- Write path --
