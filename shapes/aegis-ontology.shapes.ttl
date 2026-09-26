@@ -2044,3 +2044,59 @@ aegis:ModifiesShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
     sh:targetSubjectsOf aegis:modifies ;
     sh:property [ sh:path aegis:modifies ; sh:nodeKind sh:IRI ; ] .
+
+# chaski (aegis-1mqrob) — a Reaction is a governed, bitemporal rule that chaski
+# evaluates post-commit (triggerKind "event", over GET /events) or on a schedule
+# (triggerKind "schedule", over POST /query). A ReactionFiring records one
+# TRANSITION of a (reaction, focus) pair — never an evaluation — so steady state
+# writes nothing. Reuses the existing string predicates aegis:severity,
+# aegis:owner and aegis:schedule rather than minting near-duplicates.
+
+aegis:ReactionShape a sh:NodeShape ;
+    sh:targetClass aegis:Reaction ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    sh:property [
+        sh:path aegis:triggerKind ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "event" "schedule" ) ;
+    ] ;
+    sh:property [
+        # event triggers only: comma-separated quipu.event/v1 types
+        # (entity.added, entity.updated, edge.added, edge.retracted, ...)
+        sh:path aegis:eventTypes ; sh:datatype xsd:string ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # schedule triggers only: an ISO-8601 duration, e.g. "PT5M"
+        sh:path aegis:schedule ; sh:datatype xsd:string ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        # SPARQL SELECT ?focus — the nodes for which the reaction is FIRING now.
+        # Absent from the result = resolved. A timeout/error is UNKNOWN, never resolved.
+        sh:path aegis:condition ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:severity ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "info" "warning" "critical" "page" ) ;
+    ] ;
+    sh:property [
+        # what happens on a false->true transition, beyond the metric every
+        # reaction exports; "page" never dedupes (escalate-verified semantics)
+        sh:path aegis:action ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:in ( "alert" "page" "bead" "webhook" ) ;
+    ] ;
+    sh:property [ sh:path aegis:owner ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:enabled ; sh:datatype xsd:boolean ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path rdfs:comment ; sh:maxCount 1 ; ] .
+
+aegis:ReactionFiringShape a sh:NodeShape ;
+    sh:targetClass aegis:ReactionFiring ;
+    sh:property [ sh:path aegis:firedBy ; sh:class aegis:Reaction ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    # the focus node the condition returned; any IRI
+    sh:property [ sh:path aegis:focus ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:startedAt ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ; ] ;
+    # absent while firing; set once (via /set) on the true->false transition
+    sh:property [ sh:path aegis:resolvedAt ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; ] ;
+    # Optional delivery identity. The producer derives the firing IRI from
+    # (reaction label, eventId) and freezes the payload before its first send.
+    # SHACL does not prove deterministic identity or receiver idempotence.
+    sh:property [ sh:path aegis:eventId ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .

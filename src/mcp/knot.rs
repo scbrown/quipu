@@ -251,7 +251,14 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             })
         });
         datums.append(&mut assertions);
-        let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_tag), graph)?;
+        let tx_id = store.transact_to_graph_scoped(
+            &datums,
+            timestamp,
+            actor,
+            Some(&source_tag),
+            graph,
+            Some(&source_tag),
+        )?;
         (tx_id, count)
     } else {
         // aegis-byn4fn: the append arm passed the caller's `source` straight

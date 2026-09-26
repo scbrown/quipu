@@ -563,6 +563,14 @@ The response reports `planned`, the affected `entities` count, a bounded `sample
 `sample_truncated`, and `repair_source`. A preview has `applied: false` and null
 `tx_id`/`retracted`; an applied result reports the actual retraction transaction.
 
+Source cleanup removes only that source's ownership claims. A statement remains
+visible while another recorded claim survives. **This protection is forward-only
+for newly recorded claims.** Older versions skipped identical assertions from
+later producers, leaving no recoverable claim. Reassert the relevant producer
+snapshots before cleaning up old shared data; this release does not backfill it.
+The `retracted` count reports source-owned statements processed, not necessarily
+statements removed from the visible graph.
+
 ### `POST /episode/retract`
 
 Episode-scoped **logical** retraction. Retracts the facts an episode's ingest

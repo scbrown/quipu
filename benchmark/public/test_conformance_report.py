@@ -303,6 +303,16 @@ class CompetitorTableTests(unittest.TestCase):
                 REPORT.load(RESULTS, tmp)
 
 
+class Sparql10DisclosureTests(unittest.TestCase):
+    """aegis-soqv1r: the 1.1 manifests are the 1.1 ADDITIONS; the 1.0 suite is not scored."""
+
+    def test_the_claim_boundary_says_the_sparql10_suite_is_not_run(self):
+        page = REPORT.render_markdown(REPORT.load(RESULTS))
+        boundary = page.split("**Claim boundary")[1].split("\n\n")[0]
+        self.assertIn("The SPARQL 1.0 suite is not run.", boundary)
+        self.assertIn("sparql/sparql10", boundary)
+
+
 class RdfSyntaxTableTests(unittest.TestCase):
     """aegis-mhee08: RDF 1.1 scored, RDF 1.2 published as measured-not-supported."""
 
