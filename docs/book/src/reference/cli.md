@@ -502,6 +502,44 @@ the action was legitimate, and no record carries that judgement. And it bounds n
 false negatives at all: actions a rule let through without firing look exactly
 like actions it correctly approved.
 
+### `quipu audit replay <verdict>`
+
+Re-derive one recorded gate decision against the store as of its
+transaction. When the argument is not a file, it is a verdict IRI (or its
+local `verdict_…` name).
+
+```bash
+quipu audit replay verdict_3f9a… --db my.db
+quipu audit replay verdict_3f9a… --delta attempt.json --json --db my.db
+```
+
+A refused write replays from its quarantine entry: the store is rebuilt as
+of the refusal in memory, the attempt applied, and the gate re-run. It
+**re-derives** when the write is refused again with the same outcome, the
+same rule-set digest and the same post-state digest. Under digest-only
+retention, present the attempt with `--delta` (a `quipu-refused-delta/v1`
+JSON document); a delta whose canonical hash matches no quarantined attempt
+is refused as not the delta the gate judged. A verdict whose write committed
+replays from that write's transaction.
+
+Exits `1` only when a replay **contradicts** the record — a different
+outcome, rule set or post-state, or a broken seal. "Attestation only"
+(content purged, or digest-only with nothing presented) exits `0`: it is
+incomplete evidence, not contrary evidence.
+
+### `quipu audit quarantine`
+
+```bash
+quipu audit quarantine --db my.db                          # list entries
+quipu audit quarantine list --verdict <iri> --json --db my.db
+quipu audit quarantine purge --graph urn:quipu:graph:root --db my.db
+quipu audit quarantine purge --older-than 90 --db my.db
+```
+
+`purge` erases the sealed attempts matching `--graph`, `--before <ts>` or
+`--older-than <days>` (or `--all`, which must be named) and keeps each
+entry's digests and seal, and the verdict facts untouched.
+
 ### `quipu audit tree <trace.jsonl>`
 
 Reassemble the dispatch forest from the principal chains a trace carries.
