@@ -27,9 +27,9 @@ impl Store {
         &self,
         datum: &super::Datum,
         graph: i64,
-        source: &str,
+        source: Option<&str>,
     ) -> Result<bool> {
-        let mut stmt = self.prepare("SELECT 1 FROM facts f JOIN transactions t ON t.id=f.tx WHERE f.e=?1 AND f.a=?2 AND f.v=?3 AND f.g=?4 AND f.op=1 AND f.valid_to IS NULL AND t.source=?5 LIMIT 1")?;
+        let mut stmt = self.prepare("SELECT 1 FROM facts f JOIN transactions t ON t.id=f.tx WHERE f.e=?1 AND f.a=?2 AND f.v=?3 AND f.g=?4 AND f.op=1 AND f.valid_to IS NULL AND t.source IS ?5 LIMIT 1")?;
         Ok(stmt.exists(params![
             datum.entity,
             datum.attribute,
@@ -64,10 +64,7 @@ impl Store {
             let present =
                 self.has_fact_claim(datum.entity, datum.attribute, &datum.value, graph)?;
             let new_claim = if present && datum.op == Op::Assert {
-                match source.as_deref() {
-                    Some(source) => !self.source_has_fact_claim(datum, graph, source)?,
-                    None => false,
-                }
+                !self.source_has_fact_claim(datum, graph, source.as_deref())?
             } else {
                 false
             };
@@ -137,5 +134,19 @@ impl Store {
             }
         }
         Ok((asserts, retracts))
+    }
+}
+
+impl Store {
+    /// Project physical claims to RDF statements after applying scope/time/source filters.
+    /// History and retraction planners deliberately keep using `collect_facts`.
+    pub(crate) fn collect_visible_facts(
+        stmt: &mut rusqlite::Statement<'_>,
+        params: impl rusqlite::Params,
+    ) -> Result<Vec<crate::Fact>> {
+        let mut facts = Self::collect_facts(stmt, params)?;
+        let mut seen = std::collections::HashSet::new();
+        facts.retain(|f| seen.insert((f.entity, f.attribute, f.value.to_bytes())));
+        Ok(facts)
     }
 }

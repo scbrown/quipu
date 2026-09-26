@@ -38,10 +38,7 @@ impl Store {
              WHERE op = 1 AND valid_to IS NULL AND g = ?1 \
              ORDER BY e, a, tx",
         )?;
-        let mut facts = Self::collect_facts(&mut stmt, params![g])?;
-        let mut seen = std::collections::HashSet::new();
-        facts.retain(|f| seen.insert((f.entity, f.attribute, f.value.to_bytes())));
-        Ok(facts)
+        Self::collect_visible_facts(&mut stmt, params![g])
     }
 
     /// Current asserted facts across a SET of graphs, unioned. The read the
@@ -161,7 +158,7 @@ impl Store {
         let mut values = attributes.to_vec();
         values.push(g);
         let mut stmt = self.conn.prepare(&sql)?;
-        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+        Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
     /// Current facts matching BOTH an attribute in `attributes` and a subject in
@@ -204,7 +201,7 @@ impl Store {
         values.extend_from_slice(entities);
         values.extend_from_slice(graphs);
         let mut stmt = self.conn.prepare(&sql)?;
-        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+        Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
     /// Current facts whose SUBJECT is one of `entities`, across `graphs`.
@@ -238,7 +235,7 @@ impl Store {
         let mut values = entities.to_vec();
         values.extend_from_slice(graphs);
         let mut stmt = self.conn.prepare(&sql)?;
-        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+        Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
     /// Like [`Store::current_facts_for_attributes_in_graph`], but excluding
@@ -353,7 +350,7 @@ impl Store {
             values.push(rusqlite::types::Value::Text(s.clone()));
         }
         let mut stmt = self.conn.prepare(&sql)?;
-        Self::collect_facts(&mut stmt, rusqlite::params_from_iter(values))
+        Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
     /// Return ROOT's facts for a specific entity (current state).
@@ -379,7 +376,7 @@ impl Store {
              WHERE e = ?1 AND op = 1 AND valid_to IS NULL AND g = ?2 \
              ORDER BY a",
         )?;
-        Self::collect_facts(&mut stmt, params![entity, g])
+        Self::collect_visible_facts(&mut stmt, params![entity, g])
     }
 
     /// Time-travel query: return ROOT's facts as they were at a given point.
@@ -394,6 +391,9 @@ impl Store {
         );
         if as_of.tx.is_some() {
             sql.push_str(" AND tx <= ?1");
+            if as_of.valid_at.is_none() {
+                sql.push_str(" AND (retracted_tx IS NULL OR retracted_tx > ?1)");
+            }
         }
         if as_of.valid_at.is_some() {
             let param_idx = if as_of.tx.is_some() { "?2" } else { "?1" };
@@ -405,10 +405,10 @@ impl Store {
 
         let mut stmt = self.conn.prepare(&sql)?;
         match (&as_of.tx, &as_of.valid_at) {
-            (Some(tx), Some(vt)) => Self::collect_facts(&mut stmt, params![tx, vt]),
-            (Some(tx), None) => Self::collect_facts(&mut stmt, params![tx]),
-            (None, Some(vt)) => Self::collect_facts(&mut stmt, params![vt]),
-            (None, None) => Self::collect_facts(&mut stmt, params![]),
+            (Some(tx), Some(vt)) => Self::collect_visible_facts(&mut stmt, params![tx, vt]),
+            (Some(tx), None) => Self::collect_visible_facts(&mut stmt, params![tx]),
+            (None, Some(vt)) => Self::collect_visible_facts(&mut stmt, params![vt]),
+            (None, None) => Self::collect_visible_facts(&mut stmt, params![]),
         }
     }
 

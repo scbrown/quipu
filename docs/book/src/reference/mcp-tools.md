@@ -271,8 +271,10 @@ the same source is idempotent. The reported `retracted` count is the number of
 source-owned statements processed, not the number that disappeared from the
 logical graph. Historical assertions remain in the audit log.
 
-This does not reconstruct claims suppressed by older versions. Producers must
-reassert their snapshots before relying on independent ownership for those facts.
+**The ownership fix is forward-only for newly recorded claims.** Older versions
+skipped identical assertions from later producers, so those historical claims
+cannot be reconstructed. Reassert all relevant producer snapshots before
+retracting old shared facts; this release does not backfill ownership.
 
 Retract-only repair of facts owned by a **legacy transaction source**
 (`POST /retract/source`).
