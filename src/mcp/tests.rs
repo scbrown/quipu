@@ -4571,3 +4571,129 @@ fn a_stamp_sqlite_cannot_parse_makes_the_lag_unknown_through_the_store() {
 
 #[path = "snapshot_identity_tests.rs"]
 mod snapshot_identity;
+
+// Explicit vocabulary alternatives must cover each edge independently: one
+// commit can use the old modifies predicate and the new implements predicate.
+fn assert_namespace_reader(name: &str, params: &serde_json::Value, expected_count: u64) {
+    let old = crate::namespace::DEFAULT_BASE_NS;
+    let new = "https://scbrown.github.io/quechua/ns#";
+    let facts = [
+        ("workA", "identifier", "\"ITEM-A\""),
+        ("workB", "identifier", "\"ITEM-B\""),
+        ("commitA", "implements", "<urn:reader:workA>"),
+        ("commitA", "modifies", "<urn:reader:e1>"),
+        ("commitA", "modifies", "<urn:reader:e2>"),
+        ("commitB", "implements", "<urn:reader:workB>"),
+        ("commitB", "modifies", "<urn:reader:e1>"),
+        ("e1", "filePath", "\"src/one.rs\""),
+        ("e2", "filePath", "\"src/two.rs\""),
+    ];
+    for mode in ["old", "new", "mixed", "both"] {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut turtle = String::new();
+        for (i, (subject, predicate, object)) in facts.iter().enumerate() {
+            let namespaces: Vec<&str> = match mode {
+                "old" => vec![old],
+                "new" => vec![new],
+                "mixed" => vec![if i % 2 == 0 { old } else { new }],
+                "both" => vec![old, new],
+                _ => unreachable!(),
+            };
+            for ns in namespaces {
+                turtle.push_str(&format!(
+                    "<urn:reader:{subject}> <{ns}{predicate}> {object} .\n"
+                ));
+            }
+            // Same local names in an unrelated namespace must never join.
+            turtle.push_str(&format!(
+                "<urn:other:{subject}> <https://example.org/foreign#{predicate}> {object} .\n"
+            ));
+        }
+        crate::rdf::ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let out =
+            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":params})).unwrap();
+        assert_eq!(out["count"], expected_count, "{name}/{mode}: {out}");
+        match name {
+            "brief_ground" => {
+                let paths: std::collections::BTreeSet<_> = out["rows"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r["path"].as_str().unwrap())
+                    .collect();
+                assert_eq!(paths, ["src/one.rs", "src/two.rs"].into_iter().collect());
+            }
+            "brief_related" => {
+                assert_eq!(out["rows"][0]["other"], "ITEM-B");
+                assert_eq!(out["rows"][0]["shared_entities"], 1);
+            }
+            "cochanged_with" => {
+                assert_eq!(out["rows"][0]["other"], "urn:reader:e2");
+                assert_eq!(out["rows"][0]["shared_workitems"], 1);
+            }
+            "entity_work" => {
+                let commits: std::collections::BTreeSet<_> = out["rows"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r["commit"].as_str().unwrap())
+                    .collect();
+                assert_eq!(
+                    commits,
+                    ["urn:reader:commitA", "urn:reader:commitB"]
+                        .into_iter()
+                        .collect()
+                );
+            }
+            _ => unreachable!(),
+        }
+        let missing = if params.get("item").is_some() {
+            serde_json::json!({"item":"ABSENT"})
+        } else {
+            serde_json::json!({"entity":"urn:reader:absent"})
+        };
+        let control =
+            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":missing})).unwrap();
+        assert_eq!(
+            control["count"], 0,
+            "{name}/{mode} negative control: {control}"
+        );
+    }
+}
+
+#[test]
+fn brief_ground_dual_namespace_reader() {
+    assert_namespace_reader("brief_ground", &serde_json::json!({"item":"ITEM-A"}), 2);
+}
+
+#[test]
+fn brief_related_dual_namespace_reader() {
+    assert_namespace_reader("brief_related", &serde_json::json!({"item":"ITEM-A"}), 1);
+}
+
+#[test]
+fn entity_work_dual_namespace_reader() {
+    assert_namespace_reader(
+        "entity_work",
+        &serde_json::json!({"entity":"urn:reader:e1"}),
+        2,
+    );
+}
+
+#[test]
+fn cochanged_with_dual_namespace_reader() {
+    assert_namespace_reader(
+        "cochanged_with",
+        &serde_json::json!({"entity":"urn:reader:e1"}),
+        1,
+    );
+}

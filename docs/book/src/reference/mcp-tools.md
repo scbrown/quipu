@@ -659,6 +659,13 @@ to list every query, its parameters, and their types.
 | `entities_of_type` | `type` (iri), `limit` (int, 100) | All entities of a given `rdf:type` |
 | `labeled_like` | `text` (text), `limit` (int, 50) | Entities whose `rdfs:label` contains `text` (case-insensitive) |
 
+The provenance queries `brief_ground`, `brief_related`, `entity_work`, and
+`cochanged_with` read both legacy vocabulary predicates and their Quechua
+counterparts under `https://scbrown.github.io/quechua/ns#`. Each edge can use
+either spelling independently. Duplicate aliases do not inflate returned paths
+or shared-item counts. Entity IRIs and dataset selection stay unchanged; these
+queries do not require an equivalence reasoner.
+
 Parameters are validated and escaped by type before substitution, so values are
 safe against SPARQL injection. The response includes the resolved `sparql`, the
 result `columns`, and `rows`.
