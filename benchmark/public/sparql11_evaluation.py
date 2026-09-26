@@ -47,6 +47,7 @@ APPROVED_INVENTORY = {
     "protocol": 34,
     "result-format": 10,
     "entailment": 70,
+    "sparql10-query": 242,
 }
 NAME = re.compile(r'mf:name\s+"((?:[^"\\]|\\.)*)"', re.S)
 QUERY = re.compile(r"qt:query\s+<([^>]+)>")
@@ -62,7 +63,14 @@ CLASS_MANIFESTS = {
     "update": "manifest-sparql11-update.ttl",
     "entailment": "entailment/manifest.ttl",
     "result-format": "manifest-sparql11-results.ttl",
+    # The SPARQL 1.0 query tests (aegis-soqv1r). The sparql11 manifests hold
+    # only what 1.1 ADDED, so without this class the 1.0 core (sameTerm, EBV,
+    # OPTIONAL, ORDER BY ...) was never scored. Its answers are mostly
+    # rs:ResultSet graphs; see expected_result_set_graph. Opt-in: it writes
+    # its own ledger and never changes the default 1.1 run.
+    "sparql10-query": "../sparql10/manifest-evaluation.ttl",
 }
+DEFAULT_CLASSES = tuple(c for c in CLASS_MANIFESTS if c != "sparql10-query")
 
 ENTAILMENT_BUCKET_IDS = {
     "RDF": "bind01 bind02 bind03 bind04 bind05 bind06 bind07 bind08 owlds02 paper-sparqldl-Q5 rdf01 rdf02 rdf03 rdf04 sparqldl-01 sparqldl-04".split(),
@@ -393,7 +401,10 @@ def parse_manifest(test_class: str, manifest: Path) -> list[Case]:
         kind = TYPE.search(statement)
         if not kind or APPROVED not in statement:
             continue
-        subject = statement.lstrip().split(None, 1)[0]
+        # A comment above a case is part of its statement text, so skip
+        # comment lines or the subject reads as "#" (sparql10 date-2).
+        code = "\n".join(line for line in statement.splitlines() if not line.lstrip().startswith("#"))
+        subject = code.lstrip().split(None, 1)[0]
         name = NAME.search(statement)
         graph_data = tuple(manifest.parent / item for item in GRAPH_DATA.findall(statement))
         protocol_requests, protocol_graph_data = parse_protocol(statement, manifest.parent)
@@ -722,7 +733,66 @@ def run_update_case(case: Case, quipu: Path, server: Path, database: Path, tempo
             process.kill(); process.wait()
 
 
+RS = "http://www.w3.org/2001/sw/DataAccess/tests/result-set#"
+
+
+def is_result_set_graph(path: Path) -> bool:
+    """A SPARQL 1.0 answer written as an rs:ResultSet graph, not a CONSTRUCT graph."""
+    return path.suffix == ".ttl" and ("rs:ResultSet" in (text := path.read_text()) or f"<{RS}ResultSet>" in text)
+
+
+def expected_result_set_graph(
+    path: Path,
+) -> tuple[list[str], list[tuple[str, ...]], bool] | bool:
+    """Read an rs:ResultSet graph into (variables, rows, ordered).
+
+    Needs rdflib, pinned by the caller's `uv run --with rdflib==<version>`. It
+    is only a PARSER for the expected side, and literal normalisation is OFF,
+    so "01"^^xsd:integer stays "01" and a lexical-form difference is still a
+    failure. Quipu is not used to read its own expected answers.
+    """
+    try:
+        import rdflib
+    except ImportError as error:
+        raise ValueError("rs:ResultSet expected result needs rdflib (uv run --with rdflib==7.6.0)") from error
+    rdflib.NORMALIZE_LITERALS = False
+    graph = rdflib.Graph()
+    graph.parse(path, format="turtle", publicID=path.resolve().as_uri())
+    rs = rdflib.Namespace(RS)
+    sets = list(graph.subjects(rdflib.RDF.type, rs.ResultSet))
+    if len(sets) != 1:
+        raise ValueError(f"expected one rs:ResultSet, found {len(sets)}")
+    result_set = sets[0]
+    boolean = graph.value(result_set, rs.boolean)
+    if boolean is not None:
+        return str(boolean).lower() == "true"
+    variables = sorted(str(v) for v in graph.objects(result_set, rs.resultVariable))
+
+    def encode(node) -> str:
+        if isinstance(node, rdflib.BNode):
+            return term("bnode", str(node))
+        if isinstance(node, rdflib.Literal):
+            return term("literal", str(node), str(node.datatype) if node.datatype else None, node.language)
+        return term("uri", str(node))
+
+    solutions = []
+    for solution in graph.objects(result_set, rs.solution):
+        bound = {str(graph.value(b, rs.variable)): graph.value(b, rs.value)
+                 for b in graph.objects(solution, rs.binding)}
+        # rs["index"], never rs.index: Namespace is a str, so .index is str.index.
+        index = graph.value(solution, rs["index"])
+        row = tuple(encode(bound[v]) if v in bound else "(unbound)" for v in variables)
+        solutions.append((int(index) if index is not None else None, row))
+    ordered = bool(solutions) and all(index is not None for index, _ in solutions)
+    if ordered:
+        solutions.sort(key=lambda item: item[0])
+    return variables, [row for _, row in solutions], ordered
+
+
 def expected_result(path: Path) -> tuple[list[str], list[tuple[str, ...]]] | bool:
+    if is_result_set_graph(path):
+        parsed = expected_result_set_graph(path)
+        return parsed if isinstance(parsed, bool) else parsed[:2]
     if path.suffix == ".srj":
         return expected_json(path)
     if path.suffix == ".srx":
@@ -989,7 +1059,7 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
                 # ledger (aegis-41rc28).
                 if observed.returncode or "query error:" in observed.stderr:
                     return {**base, "status": "failed", "diagnostic": observed.stderr.strip()}
-                if case.result.suffix in {".ttl", ".nt"}:
+                if case.result.suffix in {".ttl", ".nt"} and not is_result_set_graph(case.result):
                     actual = actual_graph(observed.stdout)
                     expected = expected_graph(
                         case.result, quipu, Path(temporary) / "expected.db"
@@ -1016,11 +1086,18 @@ def run_case(case: Case, quipu: Path, server: Path) -> dict[str, object]:
                     tuple(normalize_delimited_numeric(value) for value in row)
                     for row in expected_rows
                 ]
+            has_blank = any(value.startswith("_:") for row in expected_rows for value in row)
             passed = aligned_rows is not None and (
                 rows_equal_with_blank_nodes(aligned_rows, expected_rows)
-                if any(value.startswith("_:") for row in expected_rows for value in row)
+                if has_blank
                 else Counter(aligned_rows) == Counter(expected_rows)
             )
+            # An rs:index on every solution means the answer is ORDERED (ORDER
+            # BY tests). A multiset match is then necessary, not sufficient.
+            if passed and not has_blank and is_result_set_graph(case.result):
+                parsed = expected_result_set_graph(case.result)
+                if not isinstance(parsed, bool) and parsed[2]:
+                    passed = aligned_rows == expected_rows
         return {
             **base,
             "status": "passed" if passed else "failed",
@@ -1049,8 +1126,7 @@ def main() -> int:
     if not args.allow_unpinned_suite and (revision != PINNED_SUITE_REVISION or dirty):
         parser.error(f"suite must be clean at {PINNED_SUITE_REVISION}; got {revision}")
     cases = discover_cases(args.suite)
-    if args.classes:
-        cases = [case for case in cases if case.test_class in args.classes]
+    cases = [case for case in cases if case.test_class in (args.classes or DEFAULT_CLASSES)]
     if args.limit is not None:
         cases = cases[: args.limit]
     if not cases:
@@ -1111,7 +1187,8 @@ def main() -> int:
                     "--suite \"$SUITE\" --quipu \"$QUIPU_BIN\" "
                     f"--class {test_class} --output /tmp/sparql11-{test_class}.json"
                 )
-                for test_class in CLASS_MANIFESTS
+                for test_class in DEFAULT_CLASSES
+                + (("sparql10-query",) if "sparql10-query" in (args.classes or ()) else ())
             },
         },
         "classes": classes,
