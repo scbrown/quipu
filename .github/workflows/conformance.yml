@@ -265,6 +265,28 @@ jobs:
             --baseline benchmark/public/results/sparql11-entailment.json \
             --candidate /tmp/sparql11-entailment.json
 
+      # SPARQL 1.0 query tests (aegis-soqv1r). The sparql11 manifests hold only
+      # what 1.1 added, so the 1.0 core was never scored. Most 1.0 answers are
+      # rs:ResultSet graphs, read with a pinned rdflib (literal normalisation
+      # off). rdflib lives in its own venv so no other step's Python changes.
+      - name: SPARQL 1.0 query evaluation
+        continue-on-error: true
+        run: |
+          python3 -m venv /tmp/rdflib-venv
+          /tmp/rdflib-venv/bin/pip install --quiet rdflib==7.6.0
+          /tmp/rdflib-venv/bin/python benchmark/public/sparql11_evaluation.py \
+            --suite /tmp/rdf-tests/sparql/sparql11 \
+            --quipu "${{ steps.bin.outputs.path }}" \
+            --class sparql10-query --output /tmp/sparql10-evaluation.json
+
+      - name: Fail only on SPARQL 1.0 regression
+        run: |
+          test -s /tmp/sparql10-evaluation.json \
+            || { echo "the SPARQL 1.0 runner produced no ledger" >&2; exit 2; }
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/sparql10-evaluation.json \
+            --candidate /tmp/sparql10-evaluation.json
+
       - name: Publish the re-derived ledgers
         if: always()
         uses: actions/upload-artifact@v4
@@ -277,5 +299,6 @@ jobs:
             /tmp/sparql11-federated-query.json
             /tmp/shacl-core.json
             /tmp/rdf11-syntax.json
+            /tmp/sparql10-evaluation.json
           if-no-files-found: warn
           retention-days: 90

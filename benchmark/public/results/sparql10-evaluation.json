@@ -1,0 +1,2456 @@
+{
+  "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
+  "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
+  "quipu_revision": "4e009891518859fb2046e86e1953d080cb83f03b",
+  "quipu_version": "quipu 0.9.0\ngit_sha: 4e009891518859fb2046e86e1953d080cb83f03b",
+  "generated_at": "2026-09-26T03:37:45Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36215046471",
+  "isolation": "one temporary SQLite store per executable test",
+  "reproduce": {
+    "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
+    "runner": "python3 benchmark/public/sparql11_evaluation.py",
+    "environment": {
+      "SUITE": "/tmp/rdf-tests/sparql/sparql11",
+      "QUIPU_BIN": "$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"target_directory\"])')/release/quipu"
+    },
+    "per_class": {
+      "query-evaluation": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class query-evaluation --output /tmp/sparql11-query-evaluation.json",
+      "protocol": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class protocol --output /tmp/sparql11-protocol.json",
+      "update": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class update --output /tmp/sparql11-update.json",
+      "entailment": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class entailment --output /tmp/sparql11-entailment.json",
+      "result-format": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class result-format --output /tmp/sparql11-result-format.json",
+      "sparql10-query": "python3 benchmark/public/sparql11_evaluation.py --suite \"$SUITE\" --quipu \"$QUIPU_BIN\" --class sparql10-query --output /tmp/sparql11-sparql10-query.json"
+    }
+  },
+  "classes": {
+    "sparql10-query": {
+      "cases": 242,
+      "error": 6,
+      "failed": 73,
+      "passed": 153,
+      "unsupported": 10
+    }
+  },
+  "results": [
+    {
+      "class": "sparql10-query",
+      "id": ":bgp-no-match",
+      "name": "Non-matching triple pattern",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/bgp-no-match.rq",
+      "result": "../sparql10/basic/bgp-no-match.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":prefix-name-1",
+      "name": "Prefix name 1",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/prefix-name-1.rq",
+      "result": "../sparql10/basic/prefix-name-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":spoo-1",
+      "name": "Basic graph pattern - spoo",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/spoo-1.rq",
+      "result": "../sparql10/basic/spoo-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":base-prefix-1",
+      "name": "Basic - Prefix/Base 1",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/base-prefix-1.rq",
+      "result": "../sparql10/basic/base-prefix-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":base-prefix-2",
+      "name": "Basic - Prefix/Base 2",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/base-prefix-2.rq",
+      "result": "../sparql10/basic/base-prefix-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":base-prefix-3",
+      "name": "Basic - Prefix/Base 3",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/base-prefix-3.rq",
+      "result": "../sparql10/basic/base-prefix-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":base-prefix-4",
+      "name": "Basic - Prefix/Base 4",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/base-prefix-4.rq",
+      "result": "../sparql10/basic/base-prefix-4.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":base-prefix-5",
+      "name": "Basic - Prefix/Base 5",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/base-prefix-5.rq",
+      "result": "../sparql10/basic/base-prefix-5.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":list-1",
+      "name": "Basic - List 1",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/list-1.rq",
+      "result": "../sparql10/basic/list-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":list-2",
+      "name": "Basic - List 2",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/list-2.rq",
+      "result": "../sparql10/basic/list-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":list-3",
+      "name": "Basic - List 3",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/list-3.rq",
+      "result": "../sparql10/basic/list-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":list-4",
+      "name": "Basic - List 4",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/list-4.rq",
+      "result": "../sparql10/basic/list-4.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":quotes-1",
+      "name": "Basic - Quotes 1",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/quotes-1.rq",
+      "result": "../sparql10/basic/quotes-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":quotes-2",
+      "name": "Basic - Quotes 2",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/quotes-2.rq",
+      "result": "../sparql10/basic/quotes-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":quotes-3",
+      "name": "Basic - Quotes 3",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/quotes-3.rq",
+      "result": "../sparql10/basic/quotes-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":quotes-4",
+      "name": "Basic - Quotes 4",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/quotes-4.rq",
+      "result": "../sparql10/basic/quotes-4.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-1",
+      "name": "Basic - Term 1",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-1.rq",
+      "result": "../sparql10/basic/term-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-2",
+      "name": "Basic - Term 2",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-2.rq",
+      "result": "../sparql10/basic/term-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-3",
+      "name": "Basic - Term 3",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-3.rq",
+      "result": "../sparql10/basic/term-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-4",
+      "name": "Basic - Term 4",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-4.rq",
+      "result": "../sparql10/basic/term-4.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-5",
+      "name": "Basic - Term 5",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-5.rq",
+      "result": "../sparql10/basic/term-5.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-6",
+      "name": "Basic - Term 6",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-6.rq",
+      "result": "../sparql10/basic/term-6.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-7",
+      "name": "Basic - Term 7",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-7.rq",
+      "result": "../sparql10/basic/term-7.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-8",
+      "name": "Basic - Term 8",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-8.rq",
+      "result": "../sparql10/basic/term-8.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":term-9",
+      "name": "Basic - Term 9",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/term-9.rq",
+      "result": "../sparql10/basic/term-9.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":var-1",
+      "name": "Basic - Var 1",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/var-1.rq",
+      "result": "../sparql10/basic/var-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":var-2",
+      "name": "Basic - Var 2",
+      "manifest": "../sparql10/basic/manifest.ttl",
+      "query": "../sparql10/basic/var-2.rq",
+      "result": "../sparql10/basic/var-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-triple-pattern-001",
+      "name": "dawg-triple-pattern-001",
+      "manifest": "../sparql10/triple-match/manifest.ttl",
+      "query": "../sparql10/triple-match/dawg-tp-01.rq",
+      "result": "../sparql10/triple-match/result-tp-01.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-triple-pattern-002",
+      "name": "dawg-triple-pattern-002",
+      "manifest": "../sparql10/triple-match/manifest.ttl",
+      "query": "../sparql10/triple-match/dawg-tp-02.rq",
+      "result": "../sparql10/triple-match/result-tp-02.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-triple-pattern-003",
+      "name": "dawg-triple-pattern-003",
+      "manifest": "../sparql10/triple-match/manifest.ttl",
+      "query": "../sparql10/triple-match/dawg-tp-03.rq",
+      "result": "../sparql10/triple-match/result-tp-03.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-triple-pattern-004",
+      "name": "dawg-triple-pattern-004",
+      "manifest": "../sparql10/triple-match/manifest.ttl",
+      "query": "../sparql10/triple-match/dawg-tp-04.rq",
+      "result": "../sparql10/triple-match/result-tp-04.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-01",
+      "name": "open-eq-01",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-01.rq",
+      "result": "../sparql10/open-world/open-eq-01-result.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-02",
+      "name": "open-eq-02",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-02.rq",
+      "result": "../sparql10/open-world/open-eq-02-result.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-03",
+      "name": "open-eq-03",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-03.rq",
+      "result": "../sparql10/open-world/open-eq-03-result.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-04",
+      "name": "open-eq-04",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-04.rq",
+      "result": "../sparql10/open-world/open-eq-04-result.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-05",
+      "name": "open-eq-05",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-05.rq",
+      "result": "../sparql10/open-world/open-eq-05-result.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-06",
+      "name": "open-eq-06",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-06.rq",
+      "result": "../sparql10/open-world/open-eq-06-result.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-07",
+      "name": "open-eq-07",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-07.rq",
+      "result": "../sparql10/open-world/open-eq-07-result.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: bad integer literal: invalid digit found in string"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-08",
+      "name": "open-eq-08",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-08.rq",
+      "result": "../sparql10/open-world/open-eq-08-result.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: bad integer literal: invalid digit found in string"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-09",
+      "name": "open-eq-09",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-09.rq",
+      "result": "../sparql10/open-world/open-eq-09-result.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: bad integer literal: invalid digit found in string"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-10",
+      "name": "open-eq-10",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-10.rq",
+      "result": "../sparql10/open-world/open-eq-10-result.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: bad integer literal: invalid digit found in string"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-11",
+      "name": "open-eq-11",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-11.rq",
+      "result": "../sparql10/open-world/open-eq-11-result.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: bad integer literal: invalid digit found in string"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-eq-12",
+      "name": "open-eq-12",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-eq-12.rq",
+      "result": "../sparql10/open-world/open-eq-12-result.srx",
+      "status": "error",
+      "diagnostic": "error ingesting: bad integer literal: invalid digit found in string"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":date-2",
+      "name": "date-2",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/date-2.rq",
+      "result": "../sparql10/open-world/date-2-result.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":date-3",
+      "name": "date-3",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/date-3.rq",
+      "result": "../sparql10/open-world/date-3-result.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":date-4",
+      "name": "date-4",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/date-4.rq",
+      "result": "../sparql10/open-world/date-4-result.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-cmp-01",
+      "name": "open-cmp-01",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-cmp-01.rq",
+      "result": "../sparql10/open-world/open-cmp-01-result.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":open-cmp-02",
+      "name": "open-cmp-02",
+      "manifest": "../sparql10/open-world/manifest.ttl",
+      "query": "../sparql10/open-world/open-cmp-02.rq",
+      "result": "../sparql10/open-world/open-cmp-02-result.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":join-combo-1",
+      "name": "Join operator with OPTs, BGPs, and UNIONs",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/join-combo-1.rq",
+      "result": "../sparql10/algebra/join-combo-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":join-combo-2",
+      "name": "Join operator with Graph and Union",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/join-combo-2.rq",
+      "result": "../sparql10/algebra/join-combo-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":nested-opt-1",
+      "name": "Nested Optionals - 1",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/two-nested-opt.rq",
+      "result": "../sparql10/algebra/two-nested-opt.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":nested-opt-2",
+      "name": "Nested Optionals - 2",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/two-nested-opt-alt.rq",
+      "result": "../sparql10/algebra/two-nested-opt-alt.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":opt-filter-1",
+      "name": "Optional-filter - 1",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/opt-filter-1.rq",
+      "result": "../sparql10/algebra/opt-filter-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":opt-filter-2",
+      "name": "Optional-filter - 2 filters",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/opt-filter-2.rq",
+      "result": "../sparql10/algebra/opt-filter-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":opt-filter-3",
+      "name": "Optional-filter - scope of variable",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/opt-filter-3.rq",
+      "result": "../sparql10/algebra/opt-filter-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":filter-place-1",
+      "name": "Filter-placement - 1",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/filter-placement-1.rq",
+      "result": "../sparql10/algebra/filter-placement-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":filter-place-2",
+      "name": "Filter-placement - 2",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/filter-placement-2.rq",
+      "result": "../sparql10/algebra/filter-placement-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":filter-place-3",
+      "name": "Filter-placement - 3",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/filter-placement-3.rq",
+      "result": "../sparql10/algebra/filter-placement-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":filter-nested-1",
+      "name": "Filter-nested - 1",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/filter-nested-1.rq",
+      "result": "../sparql10/algebra/filter-nested-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":filter-nested-2",
+      "name": "Filter-nested - 2",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/filter-nested-2.rq",
+      "result": "../sparql10/algebra/filter-nested-2.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":filter-scope-1",
+      "name": "Filter-scope - 1",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/filter-scope-1.rq",
+      "result": "../sparql10/algebra/filter-scope-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":join-scope-1",
+      "name": "Join scope - 1",
+      "manifest": "../sparql10/algebra/manifest.ttl",
+      "query": "../sparql10/algebra/var-scope-join-1.rq",
+      "result": "../sparql10/algebra/var-scope-join-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-bnode-coref-001",
+      "name": "dawg-bnode-coreference",
+      "manifest": "../sparql10/bnode-coreference/manifest.ttl",
+      "query": "../sparql10/bnode-coreference/query.rq",
+      "result": "../sparql10/bnode-coreference/result.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-complex-1",
+      "name": "Complex optional semantics: 1",
+      "manifest": "../sparql10/optional/manifest.ttl",
+      "query": "../sparql10/optional/q-opt-complex-1.rq",
+      "result": "../sparql10/optional/result-opt-complex-1.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-complex-2",
+      "name": "Complex optional semantics: 2",
+      "manifest": "../sparql10/optional/manifest.ttl",
+      "query": "../sparql10/optional/q-opt-complex-2.rq",
+      "result": "../sparql10/optional/result-opt-complex-2.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-complex-3",
+      "name": "Complex optional semantics: 3",
+      "manifest": "../sparql10/optional/manifest.ttl",
+      "query": "../sparql10/optional/q-opt-complex-3.rq",
+      "result": "../sparql10/optional/result-opt-complex-3.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-complex-4",
+      "name": "Complex optional semantics: 4",
+      "manifest": "../sparql10/optional/manifest.ttl",
+      "query": "../sparql10/optional/q-opt-complex-4.rq",
+      "result": "../sparql10/optional/result-opt-complex-4.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-001",
+      "name": "One optional clause",
+      "manifest": "../sparql10/optional/manifest.ttl",
+      "query": "../sparql10/optional/q-opt-1.rq",
+      "result": "../sparql10/optional/result-opt-1.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-002",
+      "name": "Two optional clauses",
+      "manifest": "../sparql10/optional/manifest.ttl",
+      "query": "../sparql10/optional/q-opt-2.rq",
+      "result": "../sparql10/optional/result-opt-2.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-union-001",
+      "name": "Union is not optional",
+      "manifest": "../sparql10/optional/manifest.ttl",
+      "query": "../sparql10/optional/q-opt-3.rq",
+      "result": "../sparql10/optional/result-opt-3.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-filter-001",
+      "name": "OPTIONAL-FILTER",
+      "manifest": "../sparql10/optional-filter/manifest.ttl",
+      "query": "../sparql10/optional-filter/expr-1.rq",
+      "result": "../sparql10/optional-filter/expr-1-result.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-filter-002",
+      "name": "OPTIONAL - Outer FILTER",
+      "manifest": "../sparql10/optional-filter/manifest.ttl",
+      "query": "../sparql10/optional-filter/expr-2.rq",
+      "result": "../sparql10/optional-filter/expr-2-result.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-filter-003",
+      "name": "OPTIONAL - Outer FILTER with BOUND",
+      "manifest": "../sparql10/optional-filter/manifest.ttl",
+      "query": "../sparql10/optional-filter/expr-3.rq",
+      "result": "../sparql10/optional-filter/expr-3-result.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-optional-filter-004",
+      "name": "OPTIONAL - Inner FILTER with negative EBV for outer variables",
+      "manifest": "../sparql10/optional-filter/manifest.ttl",
+      "query": "../sparql10/optional-filter/expr-4.rq",
+      "result": "../sparql10/optional-filter/expr-4-result.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-01",
+      "name": "graph-01",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-01.rq",
+      "result": "../sparql10/graph/graph-01.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-02",
+      "name": "graph-02",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-02.rq",
+      "result": "../sparql10/graph/graph-02.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-03",
+      "name": "graph-03",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-03.rq",
+      "result": "../sparql10/graph/graph-03.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-04",
+      "name": "graph-04",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-04.rq",
+      "result": "../sparql10/graph/graph-04.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-05",
+      "name": "graph-05",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-05.rq",
+      "result": "../sparql10/graph/graph-05.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-06",
+      "name": "graph-06",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-06.rq",
+      "result": "../sparql10/graph/graph-06.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-07",
+      "name": "graph-07",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-07.rq",
+      "result": "../sparql10/graph/graph-07.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-08",
+      "name": "graph-08",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-08.rq",
+      "result": "../sparql10/graph/graph-08.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-09",
+      "name": "graph-09",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-09.rq",
+      "result": "../sparql10/graph/graph-09.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-10b",
+      "name": "graph-10b",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-10.rq",
+      "result": "../sparql10/graph/graph-10.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-graph-11",
+      "name": "graph-11",
+      "manifest": "../sparql10/graph/manifest.ttl",
+      "query": "../sparql10/graph/graph-11.rq",
+      "result": "../sparql10/graph/graph-11.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-01",
+      "name": "dataset-01",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-01.rq",
+      "result": "../sparql10/dataset/dataset-01.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-02",
+      "name": "dataset-02",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-02.rq",
+      "result": "../sparql10/dataset/dataset-02.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-03",
+      "name": "dataset-03",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-03.rq",
+      "result": "../sparql10/dataset/dataset-03.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-04",
+      "name": "dataset-04",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-04.rq",
+      "result": "../sparql10/dataset/dataset-04.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-05",
+      "name": "dataset-05",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-05.rq",
+      "result": "../sparql10/dataset/dataset-05.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-06",
+      "name": "dataset-06",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-06.rq",
+      "result": "../sparql10/dataset/dataset-06.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-07",
+      "name": "dataset-07",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-07.rq",
+      "result": "../sparql10/dataset/dataset-07.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-08",
+      "name": "dataset-08",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-08.rq",
+      "result": "../sparql10/dataset/dataset-08.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-09b",
+      "name": "dataset-09b",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-09b.rq",
+      "result": "../sparql10/dataset/dataset-09.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-10b",
+      "name": "dataset-10b",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-10b.rq",
+      "result": "../sparql10/dataset/dataset-10.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-11",
+      "name": "dataset-11",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-11.rq",
+      "result": "../sparql10/dataset/dataset-11.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-dataset-12b",
+      "name": "dataset-12b",
+      "manifest": "../sparql10/dataset/manifest.ttl",
+      "query": "../sparql10/dataset/dataset-12b.rq",
+      "result": "../sparql10/dataset/dataset-12.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-01",
+      "name": "tP-double-double",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-double-double.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-02",
+      "name": "tP-double-float",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-double-float.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-03",
+      "name": "tP-double-decimal",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-double-decimal.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-04",
+      "name": "tP-float-float",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-float-float.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-05",
+      "name": "tP-float-decimal",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-float-decimal.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-06",
+      "name": "tP-decimal-decimal",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-decimal-decimal.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-07",
+      "name": "tP-integer-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-integer-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-08",
+      "name": "tP-nonPositiveInteger-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-nonPositiveInteger-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-09",
+      "name": "tP-negativeInteger-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-negativeInteger-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-10",
+      "name": "tP-long-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-long-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-11",
+      "name": "tP-int-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-int-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-12",
+      "name": "tP-short-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-short-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-13",
+      "name": "tP-byte-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-byte-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-14",
+      "name": "tP-nonNegativeInteger-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-nonNegativeInteger-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-15",
+      "name": "tP-unsignedLong-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-unsignedLong-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-16",
+      "name": "tP-unsignedInt-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-unsignedInt-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-17",
+      "name": "tP-unsignedShort-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-unsignedShort-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-18",
+      "name": "tP-unsignedByte-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-unsignedByte-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-19",
+      "name": "tP-positiveInteger-short",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-positiveInteger-short.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-20",
+      "name": "tP-short-double",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-short-double.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-21",
+      "name": "tP-short-float",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-short-float.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-22",
+      "name": "tP-short-decimal",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-short-decimal.rq",
+      "result": "../sparql10/type-promotion/true.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-23",
+      "name": "tP-short-short-fail",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-short-short-fail.rq",
+      "result": "../sparql10/type-promotion/false.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-24",
+      "name": "tP-byte-short-fail",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-byte-short-fail.rq",
+      "result": "../sparql10/type-promotion/false.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-25",
+      "name": "tP-short-long-fail",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-short-long-fail.rq",
+      "result": "../sparql10/type-promotion/false.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-26",
+      "name": "tP-short-int-fail",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-short-int-fail.rq",
+      "result": "../sparql10/type-promotion/false.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-27",
+      "name": "tP-short-byte-fail",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-short-byte-fail.rq",
+      "result": "../sparql10/type-promotion/false.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-28",
+      "name": "tP-double-float-fail",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-double-float-fail.rq",
+      "result": "../sparql10/type-promotion/false.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-29",
+      "name": "tP-double-decimal-fail",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-double-decimal-fail.rq",
+      "result": "../sparql10/type-promotion/false.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":type-promotion-30",
+      "name": "tP-float-decimal-fail",
+      "manifest": "../sparql10/type-promotion/manifest.ttl",
+      "query": "../sparql10/type-promotion/tP-float-decimal-fail.rq",
+      "result": "../sparql10/type-promotion/false.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":cast-str",
+      "name": "Cast to xsd:string",
+      "manifest": "../sparql10/cast/manifest.ttl",
+      "query": "../sparql10/cast/cast-str.rq",
+      "result": "../sparql10/cast/cast-str.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":cast-flt",
+      "name": "Cast to xsd:float",
+      "manifest": "../sparql10/cast/manifest.ttl",
+      "query": "../sparql10/cast/cast-flt.rq",
+      "result": "../sparql10/cast/cast-flt.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":cast-dbl",
+      "name": "Cast to xsd:double",
+      "manifest": "../sparql10/cast/manifest.ttl",
+      "query": "../sparql10/cast/cast-dbl.rq",
+      "result": "../sparql10/cast/cast-dbl.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":cast-dec",
+      "name": "Cast to xsd:decimal",
+      "manifest": "../sparql10/cast/manifest.ttl",
+      "query": "../sparql10/cast/cast-dec.rq",
+      "result": "../sparql10/cast/cast-dec.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":cast-int",
+      "name": "Cast to xsd:integer",
+      "manifest": "../sparql10/cast/manifest.ttl",
+      "query": "../sparql10/cast/cast-int.rq",
+      "result": "../sparql10/cast/cast-int.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":cast-dT",
+      "name": "Cast to xsd:dateTime",
+      "manifest": "../sparql10/cast/manifest.ttl",
+      "query": "../sparql10/cast/cast-dT.rq",
+      "result": "../sparql10/cast/cast-dT.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":cast-bool",
+      "name": "Cast to xsd:boolean",
+      "manifest": "../sparql10/cast/manifest.ttl",
+      "query": "../sparql10/cast/cast-bool.rq",
+      "result": "../sparql10/cast/cast-bool.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-boolean-literal",
+      "name": "Test literal 'true'",
+      "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
+      "query": "../sparql10/boolean-effective-value/query-boolean-literal.rq",
+      "result": "../sparql10/boolean-effective-value/result-boolean-literal.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-bev-1",
+      "name": "Test 'boolean effective value' - true",
+      "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
+      "query": "../sparql10/boolean-effective-value/query-bev-1.rq",
+      "result": "../sparql10/boolean-effective-value/result-bev-1.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-bev-2",
+      "name": "Test 'boolean effective value' - false",
+      "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
+      "query": "../sparql10/boolean-effective-value/query-bev-2.rq",
+      "result": "../sparql10/boolean-effective-value/result-bev-2.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-bev-3",
+      "name": "Test 'boolean effective value' - &&",
+      "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
+      "query": "../sparql10/boolean-effective-value/query-bev-3.rq",
+      "result": "../sparql10/boolean-effective-value/result-bev-3.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-bev-4",
+      "name": "Test 'boolean effective value' - ||",
+      "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
+      "query": "../sparql10/boolean-effective-value/query-bev-4.rq",
+      "result": "../sparql10/boolean-effective-value/result-bev-4.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-bev-5",
+      "name": "Test 'boolean effective value' - optional",
+      "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
+      "query": "../sparql10/boolean-effective-value/query-bev-5.rq",
+      "result": "../sparql10/boolean-effective-value/result-bev-5.ttl",
+      "status": "failed",
+      "diagnostic": "query error: FILTER expression has no effective boolean value: Variable(Variable { name: \"w\" })"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-bev-6",
+      "name": "Test 'boolean effective value' - unknown types",
+      "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
+      "query": "../sparql10/boolean-effective-value/query-bev-6.rq",
+      "result": "../sparql10/boolean-effective-value/result-bev-6.ttl",
+      "status": "failed",
+      "diagnostic": "query error: FILTER expression has no effective boolean value: Variable(Variable { name: \"w\" })"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-bound-query-001",
+      "name": "dawg-bound-query-001",
+      "manifest": "../sparql10/bound/manifest.ttl",
+      "query": "../sparql10/bound/bound1.rq",
+      "result": "../sparql10/bound/bound1-result.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-isLiteral-1",
+      "name": "isLiteral",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-isliteral-1.rq",
+      "result": "../sparql10/expr-builtin/result-isliteral-1.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-str-1",
+      "name": "str-1",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-str-1.rq",
+      "result": "../sparql10/expr-builtin/result-str-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-str-2",
+      "name": "str-2",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-str-2.rq",
+      "result": "../sparql10/expr-builtin/result-str-2.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-str-3",
+      "name": "str-3",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-str-3.rq",
+      "result": "../sparql10/expr-builtin/result-str-3.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-str-4",
+      "name": "str-4",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-str-4.rq",
+      "result": "../sparql10/expr-builtin/result-str-4.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-isBlank-1",
+      "name": "isBlank-1",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-blank-1.rq",
+      "result": "../sparql10/expr-builtin/result-blank-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-datatype-1",
+      "name": "datatype-1",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-datatype-1.rq",
+      "result": "../sparql10/expr-builtin/result-datatype-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-datatype-2",
+      "name": "datatype-2 : Literals with a datatype",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-datatype-2.rq",
+      "result": "../sparql10/expr-builtin/result-datatype-2.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-datatype-3",
+      "name": "datatype-3 : Literals with a datatype of xsd:string",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-datatype-3.rq",
+      "result": "../sparql10/expr-builtin/result-datatype-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-lang-1",
+      "name": "lang-1 : Literals with a lang tag of some kind",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-lang-1.rq",
+      "result": "../sparql10/expr-builtin/result-lang-1.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-lang-2",
+      "name": "lang-2 : Literals with a lang tag of ''",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-lang-2.rq",
+      "result": "../sparql10/expr-builtin/result-lang-2.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-lang-3",
+      "name": "lang-3 : Graph matching with lang tag being a different case",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-lang-3.rq",
+      "result": "../sparql10/expr-builtin/result-lang-3.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-isURI-1",
+      "name": "isURI-1",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-uri-1.rq",
+      "result": "../sparql10/expr-builtin/result-uri-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-isIRI-1",
+      "name": "isIRI-1",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-iri-1.rq",
+      "result": "../sparql10/expr-builtin/result-iri-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-langMatches-1",
+      "name": "LangMatches-1",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-langMatches-1.rq",
+      "result": "../sparql10/expr-builtin/result-langMatches-1.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-langMatches-2",
+      "name": "LangMatches-2",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-langMatches-2.rq",
+      "result": "../sparql10/expr-builtin/result-langMatches-2.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-langMatches-3",
+      "name": "LangMatches-3",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-langMatches-3.rq",
+      "result": "../sparql10/expr-builtin/result-langMatches-3.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-langMatches-4",
+      "name": "LangMatches-4",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-langMatches-4.rq",
+      "result": "../sparql10/expr-builtin/result-langMatches-4.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-langMatches-basic",
+      "name": "LangMatches-basic",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/q-langMatches-de-de.rq",
+      "result": "../sparql10/expr-builtin/result-langMatches-de.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":lang-case-insensitive-eq",
+      "name": "lang-case-insensitive-eq",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/lang-case-sensitivity-eq.rq",
+      "result": "../sparql10/expr-builtin/lang-case-insensitive-eq.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":lang-case-insensitive-ne",
+      "name": "lang-case-insensitive-ne",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/lang-case-sensitivity-ne.rq",
+      "result": "../sparql10/expr-builtin/lang-case-insensitive-ne.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":sameTerm-simple",
+      "name": "sameTerm-simple",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/sameTerm.rq",
+      "result": "../sparql10/expr-builtin/result-sameTerm.ttl",
+      "status": "failed",
+      "diagnostic": "query error: unsupported FILTER expression: SameTerm(Variable(Variable { name: \"v1\" }), Variable(Variable { name: \"v2\" }))"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":sameTerm-eq",
+      "name": "sameTerm-eq",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/sameTerm-eq.rq",
+      "result": "../sparql10/expr-builtin/result-sameTerm-eq.ttl",
+      "status": "failed",
+      "diagnostic": "query error: unsupported FILTER expression: SameTerm(Variable(Variable { name: \"v1\" }), Variable(Variable { name: \"v2\" }))"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":sameTerm-not-eq",
+      "name": "sameTerm-not-eq",
+      "manifest": "../sparql10/expr-builtin/manifest.ttl",
+      "query": "../sparql10/expr-builtin/sameTerm-not-eq.rq",
+      "result": "../sparql10/expr-builtin/result-sameTerm-not-eq.ttl",
+      "status": "failed",
+      "diagnostic": "query error: unsupported FILTER expression: SameTerm(Variable(Variable { name: \"v1\" }), Variable(Variable { name: \"v2\" }))"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":unplus-1",
+      "name": "Unary Plusn",
+      "manifest": "../sparql10/expr-ops/manifest.ttl",
+      "query": "../sparql10/expr-ops/query-unplus-1.rq",
+      "result": "../sparql10/expr-ops/result-unplus-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":unminus-1",
+      "name": "Unary Minus",
+      "manifest": "../sparql10/expr-ops/manifest.ttl",
+      "query": "../sparql10/expr-ops/query-unminus-1.rq",
+      "result": "../sparql10/expr-ops/result-unminus-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":plus-1",
+      "name": "Addition",
+      "manifest": "../sparql10/expr-ops/manifest.ttl",
+      "query": "../sparql10/expr-ops/query-plus-1.rq",
+      "result": "../sparql10/expr-ops/result-plus-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":minus-1",
+      "name": "Subtraction",
+      "manifest": "../sparql10/expr-ops/manifest.ttl",
+      "query": "../sparql10/expr-ops/query-minus-1.rq",
+      "result": "../sparql10/expr-ops/result-minus-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":mul-1",
+      "name": "Multiplication",
+      "manifest": "../sparql10/expr-ops/manifest.ttl",
+      "query": "../sparql10/expr-ops/query-mul-1.rq",
+      "result": "../sparql10/expr-ops/result-mul-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":ge-1",
+      "name": "Greater-than or equals",
+      "manifest": "../sparql10/expr-ops/manifest.ttl",
+      "query": "../sparql10/expr-ops/query-ge-1.rq",
+      "result": "../sparql10/expr-ops/result-ge-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":le-1",
+      "name": "Less-than or equals",
+      "manifest": "../sparql10/expr-ops/manifest.ttl",
+      "query": "../sparql10/expr-ops/query-le-1.rq",
+      "result": "../sparql10/expr-ops/result-le-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-1",
+      "name": "Equality 1-1",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-1.rq",
+      "result": "../sparql10/expr-equals/result-eq-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-2",
+      "name": "Equality 1-2",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-2.rq",
+      "result": "../sparql10/expr-equals/result-eq-2.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-3",
+      "name": "Equality 1-3",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-3.rq",
+      "result": "../sparql10/expr-equals/result-eq-3.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-4",
+      "name": "Equality 1-4",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-4.rq",
+      "result": "../sparql10/expr-equals/result-eq-4.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-5",
+      "name": "Equality 1-5",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-5.rq",
+      "result": "../sparql10/expr-equals/result-eq-5.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-2-1",
+      "name": "Equality - 2 var - test equals",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq2-1.rq",
+      "result": "../sparql10/expr-equals/result-eq2-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-2-2",
+      "name": "Equality - 2 var - test not equals ",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq2-1.rq",
+      "result": "../sparql10/expr-equals/result-eq2-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-graph-1",
+      "name": "Equality 1-1 -- graph",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-graph-1.rq",
+      "result": "../sparql10/expr-equals/result-eq-graph-1.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-graph-2",
+      "name": "Equality 1-2 -- graph",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-graph-2.rq",
+      "result": "../sparql10/expr-equals/result-eq-graph-2.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-graph-3",
+      "name": "Equality 1-3 -- graph",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-graph-3.rq",
+      "result": "../sparql10/expr-equals/result-eq-graph-3.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-graph-4",
+      "name": "Equality 1-4 -- graph",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-graph-4.rq",
+      "result": "../sparql10/expr-equals/result-eq-graph-4.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":eq-graph-5",
+      "name": "Equality 1-5 -- graph",
+      "manifest": "../sparql10/expr-equals/manifest.ttl",
+      "query": "../sparql10/expr-equals/query-eq-graph-5.rq",
+      "result": "../sparql10/expr-equals/result-eq-graph-5.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-regex-001",
+      "name": "regex-query-001",
+      "manifest": "../sparql10/regex/manifest.ttl",
+      "query": "../sparql10/regex/regex-query-001.rq",
+      "result": "../sparql10/regex/regex-result-001.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-regex-002",
+      "name": "regex-query-002",
+      "manifest": "../sparql10/regex/manifest.ttl",
+      "query": "../sparql10/regex/regex-query-002.rq",
+      "result": "../sparql10/regex/regex-result-002.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-regex-003",
+      "name": "regex-query-003",
+      "manifest": "../sparql10/regex/manifest.ttl",
+      "query": "../sparql10/regex/regex-query-003.rq",
+      "result": "../sparql10/regex/regex-result-003.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-regex-004",
+      "name": "regex-query-004",
+      "manifest": "../sparql10/regex/manifest.ttl",
+      "query": "../sparql10/regex/regex-query-004.rq",
+      "result": "../sparql10/regex/regex-result-004.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":kanji-1",
+      "name": "kanji-01",
+      "manifest": "../sparql10/i18n/manifest.ttl",
+      "query": "../sparql10/i18n/kanji-01.rq",
+      "result": "../sparql10/i18n/kanji-01-results.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":kanji-2",
+      "name": "kanji-02",
+      "manifest": "../sparql10/i18n/manifest.ttl",
+      "query": "../sparql10/i18n/kanji-02.rq",
+      "result": "../sparql10/i18n/kanji-02-results.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":normalization-1",
+      "name": "normalization-01",
+      "manifest": "../sparql10/i18n/manifest.ttl",
+      "query": "../sparql10/i18n/normalization-01.rq",
+      "result": "../sparql10/i18n/normalization-01-results.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":normalization-2",
+      "name": "normalization-02",
+      "manifest": "../sparql10/i18n/manifest.ttl",
+      "query": "../sparql10/i18n/normalization-02.rq",
+      "result": "../sparql10/i18n/normalization-02-results.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":normalization-3",
+      "name": "normalization-03",
+      "manifest": "../sparql10/i18n/manifest.ttl",
+      "query": "../sparql10/i18n/normalization-03.rq",
+      "result": "../sparql10/i18n/normalization-03-results.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":construct-1",
+      "name": "dawg-construct-identity",
+      "manifest": "../sparql10/construct/manifest.ttl",
+      "query": "../sparql10/construct/query-ident.rq",
+      "result": "../sparql10/construct/result-ident.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":construct-2",
+      "name": "dawg-construct-subgraph",
+      "manifest": "../sparql10/construct/manifest.ttl",
+      "query": "../sparql10/construct/query-subgraph.rq",
+      "result": "../sparql10/construct/result-subgraph.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":construct-3",
+      "name": "dawg-construct-reification-1",
+      "manifest": "../sparql10/construct/manifest.ttl",
+      "query": "../sparql10/construct/query-reif-1.rq",
+      "result": "../sparql10/construct/result-reif.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":construct-4",
+      "name": "dawg-construct-reification-2",
+      "manifest": "../sparql10/construct/manifest.ttl",
+      "query": "../sparql10/construct/query-reif-2.rq",
+      "result": "../sparql10/construct/result-reif.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":construct-5",
+      "name": "dawg-construct-optional",
+      "manifest": "../sparql10/construct/manifest.ttl",
+      "query": "../sparql10/construct/query-construct-optional.rq",
+      "result": "../sparql10/construct/result-construct-optional.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":ask-1",
+      "name": "ASK-1 (SPARQL XML results)",
+      "manifest": "../sparql10/ask/manifest.ttl",
+      "query": "../sparql10/ask/ask-1.rq",
+      "result": "../sparql10/ask/ask-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":ask-4",
+      "name": "ASK-4 (SPARQL XML results)",
+      "manifest": "../sparql10/ask/manifest.ttl",
+      "query": "../sparql10/ask/ask-4.rq",
+      "result": "../sparql10/ask/ask-4.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":ask-7",
+      "name": "ASK-7 (SPARQL XML results)",
+      "manifest": "../sparql10/ask/manifest.ttl",
+      "query": "../sparql10/ask/ask-7.rq",
+      "result": "../sparql10/ask/ask-7.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":ask-8",
+      "name": "ASK-8 (SPARQL XML results)",
+      "manifest": "../sparql10/ask/manifest.ttl",
+      "query": "../sparql10/ask/ask-8.rq",
+      "result": "../sparql10/ask/ask-8.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":distinct-star-1",
+      "name": "SELECT DISTINCT *",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/distinct-star-1.rq",
+      "result": "../sparql10/distinct/distinct-star-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":no-distinct-1",
+      "name": "Numbers: No distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/no-distinct-1.rq",
+      "result": "../sparql10/distinct/no-distinct-num.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":distinct-1",
+      "name": "Numbers: Distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/distinct-1.rq",
+      "result": "../sparql10/distinct/distinct-num.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":no-distinct-2",
+      "name": "Strings: No distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/no-distinct-1.rq",
+      "result": "../sparql10/distinct/no-distinct-str.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":distinct-2",
+      "name": "Strings: Distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/distinct-1.rq",
+      "result": "../sparql10/distinct/distinct-str.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":no-distinct-3",
+      "name": "Nodes: No distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/no-distinct-1.rq",
+      "result": "../sparql10/distinct/no-distinct-node.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":distinct-3",
+      "name": "Nodes: Distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/distinct-1.rq",
+      "result": "../sparql10/distinct/distinct-node.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":no-distinct-4",
+      "name": "Opt: No distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/no-distinct-2.rq",
+      "result": "../sparql10/distinct/no-distinct-opt.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":distinct-4",
+      "name": "Opt: Distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/distinct-2.rq",
+      "result": "../sparql10/distinct/distinct-opt.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":no-distinct-9",
+      "name": "All: No distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/no-distinct-1.rq",
+      "result": "../sparql10/distinct/no-distinct-all.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":distinct-9",
+      "name": "All: Distinct",
+      "manifest": "../sparql10/distinct/manifest.ttl",
+      "query": "../sparql10/distinct/distinct-1.rq",
+      "result": "../sparql10/distinct/distinct-all.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-1",
+      "name": "sort-1",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-1.rq",
+      "result": "../sparql10/sort/result-sort-1.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-2",
+      "name": "sort-2",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-2.rq",
+      "result": "../sparql10/sort/result-sort-2.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-3",
+      "name": "sort-3",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-3.rq",
+      "result": "../sparql10/sort/result-sort-3.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-4",
+      "name": "sort-4",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-4.rq",
+      "result": "../sparql10/sort/result-sort-4.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-5",
+      "name": "sort-5",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-5.rq",
+      "result": "../sparql10/sort/result-sort-5.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-6",
+      "name": "sort-6",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-6.rq",
+      "result": "../sparql10/sort/result-sort-6.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-7",
+      "name": "sort-7",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-4.rq",
+      "result": "../sparql10/sort/result-sort-7.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-8",
+      "name": "sort-8",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-4.rq",
+      "result": "../sparql10/sort/result-sort-8.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-9",
+      "name": "sort-9",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-9.rq",
+      "result": "../sparql10/sort/result-sort-9.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-10",
+      "name": "sort-10",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-10.rq",
+      "result": "../sparql10/sort/result-sort-10.rdf",
+      "status": "unsupported",
+      "reason": "expected result format .rdf is not comparable"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-numbers",
+      "name": "Expression sort",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-numbers.rq",
+      "result": "../sparql10/sort/result-sort-numbers.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-builtin",
+      "name": "Builtin sort",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-builtin.rq",
+      "result": "../sparql10/sort/result-sort-builtin.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":dawg-sort-function",
+      "name": "Function sort",
+      "manifest": "../sparql10/sort/manifest.ttl",
+      "query": "../sparql10/sort/query-sort-function.rq",
+      "result": "../sparql10/sort/result-sort-function.ttl",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":limit-1",
+      "name": "Limit 1",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-01.rq",
+      "result": "../sparql10/solution-seq/slice-results-01.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":limit-2",
+      "name": "Limit 2",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-02.rq",
+      "result": "../sparql10/solution-seq/slice-results-02.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":limit-3",
+      "name": "Limit 3",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-03.rq",
+      "result": "../sparql10/solution-seq/slice-results-03.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":limit-4",
+      "name": "Limit 4",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-04.rq",
+      "result": "../sparql10/solution-seq/slice-results-04.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":offset-1",
+      "name": "Offset 1",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-10.rq",
+      "result": "../sparql10/solution-seq/slice-results-10.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":offset-2",
+      "name": "Offset 2",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-11.rq",
+      "result": "../sparql10/solution-seq/slice-results-11.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":offset-3",
+      "name": "Offset 3",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-12.rq",
+      "result": "../sparql10/solution-seq/slice-results-12.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":offset-4",
+      "name": "Offset 4",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-13.rq",
+      "result": "../sparql10/solution-seq/slice-results-13.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":slice-1",
+      "name": "Slice 1",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-20.rq",
+      "result": "../sparql10/solution-seq/slice-results-20.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":slice-2",
+      "name": "Slice 2",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-21.rq",
+      "result": "../sparql10/solution-seq/slice-results-21.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":slice-3",
+      "name": "Slice 3",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-22.rq",
+      "result": "../sparql10/solution-seq/slice-results-22.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":slice-4",
+      "name": "Slice 4",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-23.rq",
+      "result": "../sparql10/solution-seq/slice-results-23.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":slice-5",
+      "name": "Slice 5",
+      "manifest": "../sparql10/solution-seq/manifest.ttl",
+      "query": "../sparql10/solution-seq/slice-24.rq",
+      "result": "../sparql10/solution-seq/slice-results-24.ttl",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":reduced-1",
+      "name": "SELECT REDUCED *",
+      "manifest": "../sparql10/reduced/manifest.ttl",
+      "query": "../sparql10/reduced/reduced-1.rq",
+      "result": "../sparql10/reduced/reduced-1.srx",
+      "status": "passed",
+      "diagnostic": ""
+    },
+    {
+      "class": "sparql10-query",
+      "id": ":reduced-2",
+      "name": "SELECT REDUCED ?x with strings",
+      "manifest": "../sparql10/reduced/manifest.ttl",
+      "query": "../sparql10/reduced/reduced-2.rq",
+      "result": "../sparql10/reduced/reduced-2.srx",
+      "status": "failed",
+      "diagnostic": "actual result differs from expected multiset"
+    }
+  ]
+}
