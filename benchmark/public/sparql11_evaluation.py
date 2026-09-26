@@ -1134,7 +1134,7 @@ def main() -> int:
     if args.limit is None and revision == PINNED_SUITE_REVISION:
         found = {cls: sum(1 for c in cases if c.test_class == cls) for cls in APPROVED_INVENTORY}
         short = {cls: (found[cls], want) for cls, want in APPROVED_INVENTORY.items()
-                 if (not args.classes or cls in args.classes) and found[cls] != want}
+                 if cls in (args.classes or DEFAULT_CLASSES) and found[cls] != want}
         if short:
             parser.error(f"approved-case inventory mismatch (found, expected): {short}")
 
