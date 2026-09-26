@@ -41,16 +41,16 @@ pub fn eval_filter(
     ctx: &TemporalContext,
 ) -> Result<bool> {
     match expr {
-        Expression::Equal(left, right) => Ok(expr_eq(store, left, right, row)),
+        Expression::Equal(left, right) => Ok(sparql_eq(store, left, right, row)),
         // quipu #52: `?x IN (a, b)` is defined by SPARQL 1.1 as the disjunction
         // `?x = a || ?x = b`, so it desugars here rather than needing its own
-        // comparison logic — it shares `expr_eq` with the `=` arm above so the
+        // comparison logic — it shares `sparql_eq` with the `=` arm above so the
         // two can never drift. `NOT IN` is parsed as `Not(In(…))`, which the
         // `Not` arm below already handles. An EMPTY candidate list is `false`
         // (and `NOT IN ()` therefore `true`), per spec.
         Expression::In(lhs, candidates) => Ok(candidates
             .iter()
-            .any(|candidate| expr_eq(store, lhs, candidate, row))),
+            .any(|candidate| sparql_eq(store, lhs, candidate, row))),
         Expression::Greater(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Greater
         })),
@@ -115,6 +115,22 @@ pub fn eval_filter(
 /// Term equality for `=` and `IN`. An operand that cannot be evaluated (an
 /// unbound variable, an IRI absent from the dictionary) is not equal to
 /// anything rather than an error — matching what `=` has always done.
+/// SPARQL `=`: numbers compare by VALUE across datatypes, so `1 = 1.0` holds
+/// (aegis-soqv1r). Everything else falls back to term identity (`expr_eq`),
+/// which is what `sameTerm` uses; the two differ only for numerics.
+fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
+    let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
+        return false;
+    };
+    if let (Value::Int(x), Value::Int(y)) = (&a, &b) {
+        return x == y;
+    }
+    match (a.as_f64(), b.as_f64()) {
+        (Some(x), Some(y)) => x == y,
+        _ => a == b,
+    }
+}
+
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
     match (eval_expr(store, left, row), eval_expr(store, right, row)) {
         (Some(l), Some(r)) => l == r,

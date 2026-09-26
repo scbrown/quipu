@@ -3711,3 +3711,49 @@ fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
         "ASK over a non-empty store must still be true"
     );
 }
+
+// ── `=` compares numbers by value across datatypes (aegis-soqv1r) ────────────
+// `1 = 1.0` was false: `=` shared sameTerm's term identity. Ordering already
+// promoted numerics (`1 <= 1.0` was true), so `=` disagreed with `<=` and `>=`.
+
+fn bind_bool(expr: &str) -> Option<Value> {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        &format!("SELECT ?r WHERE {{ BIND(({expr}) AS ?r) }}"),
+    )
+    .unwrap();
+    result.rows().first().and_then(|r| r.get("r").cloned())
+}
+
+#[test]
+fn equals_promotes_numerics_across_datatypes() {
+    assert_eq!(bind_bool("1 = 1.0"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 = 1.0e0"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 != 1.0"), Some(Value::Bool(false)));
+    assert_eq!(bind_bool("1 = 2"), Some(Value::Bool(false)));
+}
+
+#[test]
+fn equals_does_not_coerce_strings_to_numbers() {
+    assert_eq!(bind_bool(r#""1" = 1"#), Some(Value::Bool(false)));
+}
+
+#[test]
+fn filter_equals_promotes_numerics() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n ; ex:age ?a . FILTER(?a = 30.0) }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Alice".to_string()]);
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n ; ex:age ?a . FILTER(?a IN (1, 25.0)) }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Bob".to_string()]);
+}
