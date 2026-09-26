@@ -1020,3 +1020,186 @@ ex:lift a rule:Rule ;
          planes at two trust levels. Got {after:?}"
     );
 }
+
+#[test]
+fn probe_retracting_the_premise_leaves_a_promoted_fact_standing() {
+    // PROBE — measures the OTHER half `docs/design/entailment-regime.md` §3
+    // names as a prerequisite for promotion (aegis-f8efkn): "the retraction
+    // half (premise retracted -> promoted fact retracted) needs the promoted
+    // fact to keep a derivation marker, or a sweep that re-checks promoted
+    // facts against `explain`-style re-matching."
+    //
+    // An unpromoted derivation retracts correctly — that is
+    // `retracted_base_fact_triggers_retraction_of_derived_fact`. The question
+    // here is what happens to a fact that has been promoted OUT of the
+    // companion when its only support goes away. It pins today's answer so
+    // the mechanism, when built, has something to invert.
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+
+ex:lift a rule:Rule ;
+    rule:id "LIFT2" ;
+    rule:head "<{RDF_TYPE}>(?x, <{COMMIT}>)" ;
+    rule:body "<{RDF_TYPE}>(?x, <{GIT_COMMIT}>)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:seed", RDF_TYPE, COMMIT);
+    assert_triple(&mut store, "ex:a", RDF_TYPE, GIT_COMMIT);
+    evaluate(&mut store, &rs, TS).expect("first evaluation");
+
+    let root = crate::schema::ROOT_GRAPH;
+    let companion_iri = store.companion_inferred_iri(root).unwrap();
+    let companion = store.lookup(&companion_iri).unwrap().expect("companion");
+
+    // promote (the §3 move), then remove the ONLY support for it.
+    let e = store.lookup("ex:a").unwrap().unwrap();
+    let a = store.lookup(RDF_TYPE).unwrap().unwrap();
+    let v = store.lookup(COMMIT).unwrap().unwrap();
+    let gc = store.lookup(GIT_COMMIT).unwrap().unwrap();
+    let t1 = "2026-04-07T00:00:01Z";
+    for (op, g) in [(Op::Retract, companion), (Op::Assert, root)] {
+        store
+            .transact_to_graph(
+                &[Datum {
+                    entity: e,
+                    attribute: a,
+                    value: Value::Ref(v),
+                    valid_from: t1.to_string(),
+                    valid_to: None,
+                    op,
+                }],
+                t1,
+                Some("promote"),
+                Some("reasoner:LIFT2"),
+                g,
+            )
+            .expect("promotion move");
+    }
+
+    let t2 = "2026-04-07T00:00:02Z";
+    store
+        .transact(
+            &[Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Ref(gc),
+                valid_from: t2.to_string(),
+                valid_to: None,
+                op: Op::Retract,
+            }],
+            t2,
+            Some("test"),
+            Some("base"),
+        )
+        .expect("retract the premise");
+
+    evaluate(&mut store, &rs, "2026-04-07T00:00:03Z").expect("evaluation after retraction");
+
+    let after = live_copies_by_graph(&store, "ex:a", RDF_TYPE, COMMIT);
+    assert_eq!(
+        after,
+        vec![(root, "reasoner:LIFT2".to_string())],
+        "TODAY: the premise is gone and the promoted fact STANDS, unsupported. \
+         An unpromoted derivation would have been retracted by the same \
+         evaluation (see retracted_base_fact_triggers_retraction_of_derived_fact), \
+         so promotion as a bare move silently converts a maintained fact into an \
+         unmaintained one. §3's retraction half is what must invert this. Got {after:?}"
+    );
+
+    // CONTROL, same rule and same fixture, WITHOUT the promotion — otherwise
+    // "it stands" is equally explained by a fixture in which retraction never
+    // propagates at all. `retracted_base_fact_triggers_retraction_of_derived_fact`
+    // shows that on a DIFFERENT fixture; this shows it on THIS one, so the
+    // promotion is the only difference between the two outcomes.
+    let mut ctl = Store::open_in_memory().unwrap();
+    assert_triple(&mut ctl, "ex:seed", RDF_TYPE, COMMIT);
+    assert_triple(&mut ctl, "ex:a", RDF_TYPE, GIT_COMMIT);
+    evaluate(&mut ctl, &rs, TS).expect("control: first evaluation");
+    let ctl_companion = {
+        let iri = ctl.companion_inferred_iri(root).unwrap();
+        ctl.lookup(&iri).unwrap().expect("control companion")
+    };
+    assert_eq!(
+        live_copies_by_graph(&ctl, "ex:a", RDF_TYPE, COMMIT),
+        vec![(ctl_companion, "reasoner:LIFT2".to_string())],
+        "control precondition: the derivation exists, unpromoted"
+    );
+    let ce = ctl.lookup("ex:a").unwrap().unwrap();
+    let ca = ctl.lookup(RDF_TYPE).unwrap().unwrap();
+    let cgc = ctl.lookup(GIT_COMMIT).unwrap().unwrap();
+    ctl.transact(
+        &[Datum {
+            entity: ce,
+            attribute: ca,
+            value: Value::Ref(cgc),
+            valid_from: t2.to_string(),
+            valid_to: None,
+            op: Op::Retract,
+        }],
+        t2,
+        Some("test"),
+        Some("base"),
+    )
+    .expect("control: retract the premise");
+    evaluate(&mut ctl, &rs, "2026-04-07T00:00:03Z").expect("control: evaluation");
+    let ctl_after = live_copies_by_graph(&ctl, "ex:a", RDF_TYPE, COMMIT);
+    assert!(
+        ctl_after.is_empty(),
+        "CONTROL FAILED: an UNPROMOTED derivation must be retracted when its \
+         only premise goes, on this very fixture. If it survives here too, the \
+         probe above measures a broken fixture and not promotion. Got {ctl_after:?}"
+    );
+}
+
+#[test]
+fn probe_a_demotion_source_does_not_quarantine_an_unsupported_triple() {
+    // A source label alone cannot distinguish preserved evidence from a
+    // supported premise. Control: without that triple, COPY derives nothing.
+    let flag = "http://example.org/rules/Flag";
+    let ttl = format!(
+        r#"
+@prefix rule: <{RULE_NS}> .
+@prefix ex: <http://example.org/rules/> .
+ex:copy a rule:Rule ;
+    rule:id "COPY" ;
+    rule:head "<{RDF_TYPE}>(?x, <{flag}>)" ;
+    rule:body "<{RDF_TYPE}>(?x, <{COMMIT}>)" .
+"#
+    );
+    let rs = parse_rules(&ttl, Some(PFX)).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_triple(&mut store, "ex:seed", RDF_TYPE, flag);
+    store.intern(COMMIT).unwrap();
+    let control = evaluate(&mut store, &rs, TS).unwrap();
+    assert_eq!(control.asserted, 0, "control has no matching premise");
+    let root = crate::schema::ROOT_GRAPH;
+    let companion = store.ensure_companion_inferred_graph(root, TS).unwrap();
+    let datum = Datum {
+        entity: store.intern("ex:a").unwrap(),
+        attribute: store.intern(RDF_TYPE).unwrap(),
+        value: Value::Ref(store.intern(COMMIT).unwrap()),
+        valid_from: TS.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store
+        .transact_to_graph(
+            &[datum],
+            TS,
+            Some("reasoner"),
+            Some("reasoner:demoted:LIFT2"),
+            companion,
+        )
+        .unwrap();
+    evaluate(&mut store, &rs, "2026-04-07T00:00:03Z").unwrap();
+    assert_eq!(
+        live_copies_by_graph(&store, "ex:a", RDF_TYPE, flag),
+        vec![(companion, "reasoner:COPY".to_string())],
+        "TODAY: a demotion source label does not stop another rule from \
+         treating an unsupported companion triple as a premise"
+    );
+}
