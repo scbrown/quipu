@@ -1143,6 +1143,44 @@ fn active_object_reference_probe_uses_the_reverse_value_index() {
 }
 
 #[test]
+fn source_retraction_starts_from_the_source_not_the_whole_graph() {
+    // aegis-m6agjy: planned from `facts` via `idx_geav (g=?)`, every snapshot
+    // replacement walked the whole graph under the writer lock (~4s per `/knot`
+    // replace on production). Pin the PLAN of the exact statement that runs: an
+    // index-existence check would stay green if `+f.g` were dropped, and that is
+    // the regression that puts the floor back.
+    let store = Store::open_in_memory().unwrap();
+    let details: Vec<String> = store
+        .conn
+        .prepare(&format!(
+            "EXPLAIN QUERY PLAN {}",
+            ops::SOURCE_RETRACTION_SQL
+        ))
+        .unwrap()
+        .query_map(
+            params!["snapshot:probe", crate::schema::ROOT_GRAPH],
+            |row| row.get(3),
+        )
+        .unwrap()
+        .map(|row| row.unwrap())
+        .collect();
+    assert!(
+        details.iter().any(|d| d.contains("idx_tx_source")),
+        "source retraction must seek transactions by source, plan={details:?}"
+    );
+    assert!(
+        details.iter().any(|d| d.contains("idx_tx ")),
+        "source retraction must reach facts through idx_tx, plan={details:?}"
+    );
+    assert!(
+        !details
+            .iter()
+            .any(|d| d.contains("idx_geav") || d.contains("SCAN f")),
+        "source retraction must not walk the graph, plan={details:?}"
+    );
+}
+
+#[test]
 fn identity_orphan_planning_obeys_the_store_query_budget() {
     let store = Store::open_in_memory().unwrap();
     let err = store

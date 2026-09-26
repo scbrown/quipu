@@ -34,6 +34,25 @@ struct Staged {
     retracts: Vec<Datum>,
 }
 
+/// Every current fact one producer's source tag owns in one graph.
+///
+/// `+f.g` is deliberate (aegis-m6agjy). Written as a plain `f.g = ?2`, SQLite
+/// drives the join from `facts` through `idx_geav (g, ...)`, because that index
+/// also satisfies the `ORDER BY` and the store keeps no `sqlite_stat1` to say
+/// the source is selective. That visits every fact in the graph and looks up each
+/// one's transaction, so every snapshot replacement paid for a whole-graph walk
+/// however small the snapshot: a ~4s floor on each `/knot` replace, measured on
+/// both yupana-promote and camayoc-producer, while holding the single writer.
+/// The unary `+` takes `g` out of index selection, so the plan becomes
+/// `idx_tx_source (source=?)` then `idx_tx (tx=?)` plus a small sort. Both halves
+/// are needed: on a 1.5M-fact copy of the live schema the index alone left the
+/// plan unchanged (885ms), `+f.g` alone scanned the table (972ms), and together
+/// they took 0.05ms, returning identical rows in identical order.
+pub(crate) const SOURCE_RETRACTION_SQL: &str = "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
+     FROM facts f JOIN transactions t ON f.tx = t.id \
+     WHERE t.source = ?1 AND +f.g = ?2 AND f.op = 1 AND f.valid_to IS NULL \
+     ORDER BY f.e, f.a";
+
 impl Store {
     // -- Write path --
 
@@ -770,12 +789,7 @@ impl Store {
         graph: i64,
     ) -> Result<Vec<Datum>> {
         let facts = {
-            let mut stmt = self.conn.prepare(
-                "SELECT f.e, f.a, f.v, f.tx, f.valid_from, f.valid_to, f.op \
-                 FROM facts f JOIN transactions t ON f.tx = t.id \
-                 WHERE t.source = ?1 AND f.g = ?2 AND f.op = 1 AND f.valid_to IS NULL \
-                 ORDER BY f.e, f.a",
-            )?;
+            let mut stmt = self.conn.prepare(SOURCE_RETRACTION_SQL)?;
             Self::collect_facts(&mut stmt, params![source_tag, graph])?
         };
         // Keep a label for nodes still referenced by another producer, so a
