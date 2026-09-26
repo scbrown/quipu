@@ -3711,3 +3711,52 @@ fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
         "ASK over a non-empty store must still be true"
     );
 }
+
+// ── FILTER type errors eliminate the row (aegis-soqv1r, W3C dawg-bev-5/-6) ──
+// An unbound variable has no effective boolean value. That is a SPARQL type
+// error: the row is dropped and the query still answers. It used to fail the
+// whole query. The error propagates through `!` and follows the SPARQL
+// truth tables for `&&` and `||`.
+
+fn bev_query(filter: &str) -> Vec<String> {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE {{ ?s ex:name ?n . OPTIONAL {{ ?s ex:missing ?w }} FILTER({filter}) }}"
+    );
+    names(&query(&store, &q).unwrap())
+}
+
+fn all_names() -> Vec<String> {
+    vec!["Alice".to_string(), "Bob".to_string(), "Carol".to_string()]
+}
+
+#[test]
+fn filter_unbound_ebv_drops_the_row_instead_of_failing() {
+    assert!(bev_query("?w").is_empty());
+}
+
+#[test]
+fn filter_not_of_a_type_error_is_still_an_error() {
+    assert!(bev_query("!?w").is_empty());
+}
+
+#[test]
+fn filter_or_true_rescues_a_type_error() {
+    assert_eq!(bev_query("?w || true"), all_names());
+    assert_eq!(bev_query("true || ?w"), all_names());
+}
+
+#[test]
+fn filter_and_false_absorbs_a_type_error() {
+    // F && E = F, so !(F && E) is true and every row survives.
+    assert_eq!(bev_query("!(?w && false)"), all_names());
+    assert_eq!(bev_query("!(false && ?w)"), all_names());
+}
+
+#[test]
+fn filter_type_error_with_true_stays_an_error() {
+    // T && E = E and F || E = E, and negating an error is still an error.
+    assert!(bev_query("!(?w && true)").is_empty());
+    assert!(bev_query("!(false || ?w)").is_empty());
+}
