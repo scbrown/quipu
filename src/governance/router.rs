@@ -58,7 +58,7 @@
 
 use crate::error::Result;
 use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
-use crate::sparql::{self, QueryResult};
+use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -151,6 +151,27 @@ pub fn resolve(
     target_iri: &str,
     now: i64,
 ) -> Result<Option<Ruling>> {
+    resolve_at(
+        store,
+        policy_iri,
+        target_iri,
+        now,
+        &TemporalContext::default(),
+    )
+}
+
+/// [`resolve`] as the store stood at `at`: the request, the decision and the
+/// decider registration are all read through the same temporal context, so a
+/// ruling or a key recorded later cannot backdate an approval. The shadow gate
+/// (aegis-xfuch4.2) reads history through this; the live gate passes the
+/// default context and gets exactly [`resolve`].
+pub(crate) fn resolve_at(
+    store: &Store,
+    policy_iri: &str,
+    target_iri: &str,
+    now: i64,
+    at: &TemporalContext,
+) -> Result<Option<Ruling>> {
     let hash = evidence_hash(policy_iri, target_iri);
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
@@ -161,7 +182,7 @@ pub fn resolve(
         policy = escape(policy_iri),
         target = escape(target_iri),
     );
-    let QueryResult::Select { rows, .. } = sparql::query(store, &q)? else {
+    let QueryResult::Select { rows, .. } = sparql::query_temporal(store, &q, at)? else {
         return Ok(None);
     };
     // No request => nothing has been escalated yet.
@@ -182,7 +203,7 @@ pub fn resolve(
          }}",
         hash = escape(&hash),
     );
-    if let QueryResult::Select { rows, .. } = sparql::query(store, &dq)? {
+    if let QueryResult::Select { rows, .. } = sparql::query_temporal(store, &dq, at)? {
         // A rejection outranks an approval when both exist. Two humans
         // disagreeing is not a state to resolve by row order, and the safe
         // reading of a disagreement about whether to permit something is "no".
@@ -195,7 +216,7 @@ pub fn resolve(
             let Some(sig) = str_of(row.get("sig")) else {
                 continue;
             };
-            if !decision_verifies(store, policy_iri, &hash, &outcome, &by, &sig)? {
+            if !decision_verifies_at(store, policy_iri, &hash, &outcome, &by, &sig, at)? {
                 continue;
             }
             match outcome.as_str() {
@@ -317,6 +338,27 @@ pub(crate) fn decision_verifies(
     by: &str,
     signature: &str,
 ) -> Result<bool> {
+    decision_verifies_at(
+        store,
+        policy_iri,
+        evidence_hash,
+        outcome,
+        by,
+        signature,
+        &TemporalContext::default(),
+    )
+}
+
+/// [`decision_verifies`] against the registrations as they stood at `at`.
+fn decision_verifies_at(
+    store: &Store,
+    policy_iri: &str,
+    evidence_hash: &str,
+    outcome: &str,
+    by: &str,
+    signature: &str,
+    at: &TemporalContext,
+) -> Result<bool> {
     let kq = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
          SELECT ?k WHERE {{ \
@@ -326,7 +368,7 @@ pub(crate) fn decision_verifies(
         by = escape(by),
         policy = escape(policy_iri),
     );
-    let QueryResult::Select { rows, .. } = sparql::query(store, &kq)? else {
+    let QueryResult::Select { rows, .. } = sparql::query_temporal(store, &kq, at)? else {
         return Ok(false);
     };
     let message = decision_message(evidence_hash, outcome, by);
