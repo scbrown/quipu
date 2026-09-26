@@ -417,14 +417,15 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             store.intern(&iri).ok().map(Value::Ref)
         }
         Expression::FunctionCall(Function::Custom(function), args)
-            if function.as_str() == namespace::XSD_DOUBLE =>
+            if super::casts::is_cast(function.as_str()) =>
         {
-            let lexical = value_to_string(store, &eval_expr(store, args.first()?, row)?);
-            let value = lexical.parse::<f64>().ok()?;
-            Some(Value::Typed {
-                lexical: canonical_double(value),
-                datatype: namespace::XSD_DOUBLE.to_string(),
-            })
+            super::casts::cast(
+                store,
+                function.as_str(),
+                eval_expr(store, args.first()?, row)?,
+                canonical_double,
+                format_decimal,
+            )
         }
         Expression::FunctionCall(Function::StrLang, args) => {
             let lexical = simple_string_literal(eval_expr(store, args.first()?, row)?)?;

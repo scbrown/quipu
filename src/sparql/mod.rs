@@ -6,6 +6,7 @@
 //! EXTEND, RDFS subclass inference, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
+mod casts;
 pub mod exists;
 pub mod filter;
 pub mod pattern;
