@@ -143,6 +143,14 @@ impl SigningIdentity {
         public_key_hex(&self.keypair)
     }
 
+    /// Sign an arbitrary canonical message (hex signature). For records whose
+    /// message is defined next to the record — the denial quarantine's seal —
+    /// rather than here; a verdict signs through [`Self::sign_verdict`].
+    #[must_use]
+    pub fn sign(&self, message: &[u8]) -> String {
+        sign_hex(&self.keypair, message)
+    }
+
     /// Sign a verdict, returning its hex signature over the canonical message.
     #[must_use]
     pub fn sign_verdict(

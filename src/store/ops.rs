@@ -335,7 +335,9 @@ impl Store {
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.
-        self.enforce_write_policies(&staged_datums, graph)
+        // `datums.len()` marks where the caller's datums end and OWL inference
+        // begins: the quarantine hashes the attempt as the WRITER made it.
+        self.enforce_write_policies(&staged_datums, datums.len(), graph)
             .map_err(|e| self.stash_refusal("policy", e, staged_datums.len()))?;
 
         // OWL write-time constraints (aegis-bmqup): disjointWith and

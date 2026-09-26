@@ -341,6 +341,10 @@ fn phase1_founding(ctx: &mut Ctx, out_dir: &str) -> CensusIris {
         ctx.store.governance_config_mut().enforce_on_write = true;
         ctx.store.governance_config_mut().enforce_authority = true;
         ctx.store.shacl_config_mut().validate_on_write = true;
+        // Keep every refused attempt in full, sealed, in the denial quarantine
+        // (outside the governed graph): phase 6 re-derives the denials from it
+        // rather than only checking the rules they cite were in force.
+        ctx.store.governance_config_mut().quarantine.retain_full = vec!["*".into()];
         let key = std::path::Path::new(out_dir).join("census-signing.pk8");
         let identity = quipu::signing::SigningIdentity::load(&key, "urn:census:verifier:keeper")
             .expect("signing identity loads");

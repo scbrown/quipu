@@ -81,6 +81,8 @@ stops being read.
 | `governance.validate_placement` | `false` | Check SARC class↔placement rules when a write defines/amends a policy |
 | `governance.verify_transitions` | `false` | Refuse a write landing an `aegis:TransitionEvent` whose signature is missing or does not verify under a registered key |
 | `governance.enforce_authority` | `false` | Make a supplied principal chain binding for graph writes |
+| `governance.quarantine.enabled` | `true` | Record a sealed, digest-only quarantine entry for each verdict of a refused write, outside the governed graph, so `quipu audit replay <verdict>` can re-derive the refusal |
+| `governance.quarantine.retain_full` | `[]` | Graph IRIs (or `"*"`) whose refused attempts are also kept in full, sealed; purge with `quipu audit quarantine purge` |
 | `resolution.enabled` | `false` | Entity resolution (dedup) on the episode write path |
 | `resolution.threshold` / `top_k` / `strict_mode` | `0.85` / `3` / `false` | Match threshold, candidate count, refuse-on-ambiguity |
 | `embedding.auto_embed` | `false` | Auto-embed entities on write (needs model/tokenizer paths) |

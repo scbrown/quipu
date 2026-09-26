@@ -60,6 +60,22 @@ cause was found, and the fixed hashes above are post-fix.
 - **Timestamps in `sarc-export` traces** are logical indices, not wall
   time — that is why the export IS byte-stable.
 
+## Re-measured 2026-09-26 (denial quarantine, aegis-xfuch4)
+
+CEN-M2's `observed` string gained the quarantine re-derivation count,
+so the gated manifest hash above no longer applies. Three seed-42 gated
+runs, built `--no-default-features` (the default `shacl` build did not
+fit the measuring host's disk — so these are NOT comparable to the
+hashes above, which were `shacl` builds):
+
+```text
+b30dbd5956f5852b4942d924a5e7be8eab1931a7a063b494c1d016785b727504  ×3   manifest-gated.json
+9bb68e29e85cb44938da28dc12fed6f5c097ff0316fe7fb13bcb2b3f1459647b  ×3   metrics/gated/rq5.json
+```
+
+The three sarc-export hashes are unchanged (×3 each). The default-build
+gated and control hashes still need re-measuring on a host with room.
+
 ## How to re-measure
 
 ```bash

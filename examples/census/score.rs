@@ -163,9 +163,12 @@ fn rq5(ctx: &Ctx, dir: &str) {
             "arm": ctx.arm.as_str(),
             "amendment_at": ctx.amendment_at,
             "summary": summary,
-            "note": "satisfied verdicts re-derive fully (data + rules as-of); denials verify \
-                     rules-in-force only - the staged delta was rolled back by design (GS2 \
-                     keeps the verdict, not the attempt). See BUILD_REPORT.md.",
+            "note": "satisfied verdicts re-derive fully (data + rules as-of). Denials: from \
+                     the governed graph alone they verify rules-in-force only - the staged \
+                     delta was rolled back by design (GS2 keeps the verdict, not the \
+                     attempt); from the denial quarantine, which keeps the attempt sealed \
+                     outside the graph, they re-derive (refused again, same rule-set and \
+                     post-state digests). See BUILD_REPORT.md.",
         }),
         None => serde_json::json!({
             "rq": "rq5",

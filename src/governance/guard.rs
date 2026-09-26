@@ -128,6 +128,73 @@ impl PolicyRegistry {
         Ok(Self { by_type })
     }
 
+    /// A digest of the compiled rule set: `sha256:<hex>` over every policy's
+    /// canonical line, sorted, so it names WHAT was in force rather than when
+    /// it was built. The denial quarantine records it at the gate and a replay
+    /// recomputes it over the store as of the same transaction — equal digests
+    /// are the evidence that the replay judged by the same rules.
+    #[must_use]
+    pub fn digest(&self) -> String {
+        let mut lines: Vec<String> = self
+            .by_type
+            .values()
+            .flatten()
+            .map(|p| {
+                format!(
+                    "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
+                    p.policy_iri,
+                    p.target_type_iri,
+                    p.claim,
+                    p.effect,
+                    p.evidence_probe.as_deref().unwrap_or(""),
+                    p.reversibility_window
+                        .map_or(String::new(), |w| w.to_string()),
+                    p.exemplar.as_deref().unwrap_or(""),
+                )
+            })
+            .collect();
+        lines.sort();
+        let digest = ring::digest::digest(&ring::digest::SHA256, lines.join("\n").as_bytes());
+        format!("sha256:{}", hex::encode(digest.as_ref()))
+    }
+
+    /// Whether a blocking action-boundary policy by this IRI is in the
+    /// registry — over an as-of store, whether it was in force then.
+    #[must_use]
+    pub fn in_force(&self, policy_iri: &str) -> bool {
+        self.by_type
+            .values()
+            .flatten()
+            .any(|p| p.policy_iri == policy_iri && effect_blocks(&p.effect))
+    }
+
+    /// What the gate would record for `policy_iri` judging `target_iri` against
+    /// the store as it stands: `satisfied`, `unsatisfied` or `unknown`, or
+    /// `None` when no blocking action-boundary policy by that IRI is in the
+    /// registry at all — which, over an as-of store, means the rule was not in
+    /// force then. Runs the same probe-then-claim the write gate runs, and
+    /// never consults the router: the router decides whether an unsatisfied
+    /// escalation BLOCKS, not what the verdict says.
+    pub fn judge(
+        &self,
+        store: &Store,
+        policy_iri: &str,
+        target_iri: &str,
+    ) -> Result<Option<String>> {
+        let Some(policy) = self
+            .by_type
+            .values()
+            .flatten()
+            .find(|p| p.policy_iri == policy_iri && effect_blocks(&p.effect))
+        else {
+            return Ok(None);
+        };
+        guard_iri(target_iri)?;
+        Ok(Some(
+            judge_one(store, &format!("<{target_iri}>"), policy)?.to_string(),
+        ))
+    }
+
     /// Evaluate the applicable action-boundary policies for a write. Returns
     /// `Err(PolicyDenied)` on the first blocking policy whose claim is
     /// unsatisfied for a touched target; otherwise `Ok(())`.
@@ -240,40 +307,22 @@ fn evaluate_one(
     guard_iri(entity_iri)?;
     let target = format!("<{entity_iri}>");
 
-    let mut stage = |outcome: &str| {
-        verdicts.push(super::verdict_facts::PendingVerdict {
-            predicate_id: policy.policy_iri.clone(),
-            target_ref: entity_iri.to_string(),
-            outcome: outcome.to_string(),
-        });
-    };
-
-    // Evidence probe: if the evidence does not exist yet the outcome is
-    // `unknown` (distinct from unsatisfied) and the write is NOT blocked.
-    if let Some(probe) = &policy.evidence_probe {
-        let bound_probe = probe.replace("$target", &target);
-        if !run_ask(store, &bound_probe)? {
-            // Recorded as `unknown`, not skipped. "No evidence yet" and "never
-            // evaluated" are different facts, and an absent verdict makes the
-            // gate look as though the policy did not apply.
-            stage("unknown");
-            return Ok(());
-        }
-    }
-
-    let bound_claim = policy.claim.replace("$target", &target);
-    if run_ask(store, &bound_claim)? {
-        stage("satisfied");
+    let outcome = judge_one(store, &target, policy)?;
+    verdicts.push(super::verdict_facts::PendingVerdict {
+        predicate_id: policy.policy_iri.clone(),
+        target_ref: entity_iri.to_string(),
+        outcome: outcome.to_string(),
+    });
+    if outcome != "unsatisfied" {
         return Ok(());
     }
-    stage("unsatisfied");
 
     // An escalating effect consults the router before refusing. A standing
     // approval bound to this evidence lets the write through — that is the
     // channel `require-approval` never had, and the reason it is no longer a
     // dead end.
     if effect_escalates(&policy.effect) {
-        let now = now_secs();
+        let now = now_secs(store);
         if let Some(ruling) = super::router::resolve(store, &policy.policy_iri, entity_iri, now)? {
             if ruling.permits() {
                 return Ok(());
@@ -338,11 +387,41 @@ fn evaluate_one(
     )))
 }
 
-/// Unix seconds, or 0 before the epoch.
-fn now_secs() -> i64 {
+/// The outcome of one policy over one bound target: the evidence probe, then
+/// the claim. Shared by the write gate and by replay's [`PolicyRegistry::judge`]
+/// so the two cannot drift apart — a replay that judged differently from the
+/// gate would re-derive nothing.
+fn judge_one(store: &Store, target: &str, policy: &CompiledPolicy) -> Result<&'static str> {
+    // Evidence probe: if the evidence does not exist yet the outcome is
+    // `unknown` (distinct from unsatisfied) and the write is NOT blocked.
+    if let Some(probe) = &policy.evidence_probe {
+        let bound_probe = probe.replace("$target", target);
+        if !run_ask(store, &bound_probe)? {
+            // Recorded as `unknown`, not skipped. "No evidence yet" and "never
+            // evaluated" are different facts, and an absent verdict makes the
+            // gate look as though the policy did not apply.
+            return Ok("unknown");
+        }
+    }
+    let bound_claim = policy.claim.replace("$target", target);
+    Ok(if run_ask(store, &bound_claim)? {
+        "satisfied"
+    } else {
+        "unsatisfied"
+    })
+}
+
+/// The gate's clock in Unix seconds, or 0 before the epoch.
+///
+/// Pinned on the store for the duration of one evaluation
+/// (`Store::enforce_write_policies`), so escalation expiry is judged at one
+/// instant per write and a denial's replay can re-run it at THAT instant.
+fn now_secs(store: &Store) -> i64 {
     // Through the wasm-safe clock shim (quipu-gsg): SystemTime panics on
     // wasm32, and the guard sits on the write path a wasm store still runs.
-    i64::try_from(crate::time::epoch_secs()).unwrap_or(i64::MAX)
+    store
+        .gate_clock
+        .unwrap_or_else(|| i64::try_from(crate::time::epoch_secs()).unwrap_or(i64::MAX))
 }
 
 /// Run a SPARQL ASK and return its boolean, erroring if the query is not an ASK.

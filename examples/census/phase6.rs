@@ -3,10 +3,15 @@
 //! Replay semantics, stated honestly: a SATISFIED verdict re-derives fully
 //! — its evidence (the facts) persisted, and both the data and the rules
 //! are bitemporal, so `query_temporal` reproduces the decision. A DENIED
-//! verdict cannot be re-derived from the store alone: the staged delta was
-//! rolled back — GS2 keeps the verdict, deliberately not the attempt — so
-//! replay for denials verifies the rules in force at the time instead.
-//! That asymmetry is a finding, not a bug (`BUILD_REPORT.md`).
+//! verdict's staged delta was rolled back — GS2 keeps the verdict,
+//! deliberately not the attempt — so from the governed graph alone a denial
+//! verifies only the rules in force at the time. The denial quarantine
+//! (`src/governance/quarantine.rs`) closes that: the gated arm keeps each
+//! refused attempt sealed OUTSIDE the graph, and replay rebuilds the store as
+//! of the refusal, applies the attempt, and re-runs the gate. Both numbers are
+//! reported — rules-in-force (what the graph alone supports) and re-derived
+//! from the quarantine — so the change is visible rather than a silent
+//! upgrade of the old one (`BUILD_REPORT.md`).
 
 use quipu::sparql::{self, QueryResult, TemporalContext};
 use quipu::{Value, governance};
@@ -193,6 +198,7 @@ fn cen_m2_replay(ctx: &mut Ctx) {
     let mut satisfied_faithful = 0usize;
     let mut drifted = 0usize;
     let mut denials_rules_verified = 0usize;
+    let mut denials_rederived = 0usize;
     let mut denials = 0usize;
     for item in &items {
         let claim_then = claim_of(ctx, &item.policy, Some(&item.at));
@@ -221,6 +227,10 @@ fn cen_m2_replay(ctx: &mut Ctx) {
             if claim_then.is_some() {
                 denials_rules_verified += 1;
             }
+            // What the quarantine adds: the refusal itself, re-derived.
+            if denial_rederives(ctx, item) {
+                denials_rederived += 1;
+            }
         }
     }
     let summary = serde_json::json!({
@@ -230,12 +240,14 @@ fn cen_m2_replay(ctx: &mut Ctx) {
         "satisfied_that_would_misreport_under_latest_only_sigma": drifted,
         "denials": denials,
         "denials_rules_in_force_verified": denials_rules_verified,
+        "denials_rederived_from_quarantine": denials_rederived,
     });
     let observed = format!(
         "{satisfied_faithful}/{satisfied_replayed} satisfied verdicts re-derived faithfully \
          as-of; {drifted} would misreport under latest-only Sigma; \
          {denials_rules_verified}/{denials} denials verified against rules-in-force (delta \
-         rolled back by design)"
+         rolled back by design); {denials_rederived}/{denials} denials re-derived from the \
+         quarantine (sealed attempt, same rules, same post-state)"
     );
     ctx.replay_summary = Some(summary);
     ctx.probe(
@@ -245,6 +257,37 @@ fn cen_m2_replay(ctx: &mut Ctx) {
         &observed,
         "RQ5",
     );
+}
+
+/// Whether a denial re-derives from the quarantine: every quarantined attempt
+/// behind the verdict(s) this item names is refused again with the same
+/// outcome, under the same rule-set digest, over the same post-state digest.
+fn denial_rederives(ctx: &Ctx, item: &crate::phases::ReplayItem) -> bool {
+    let q = format!(
+        "SELECT ?v WHERE {{ ?v a <{AEGIS}Verdict> ; <{AEGIS}predicateId> \"{p}\" ; \
+         <{AEGIS}targetRef> \"{t}\" ; <{AEGIS}outcome> \"{o}\" }}",
+        p = item.policy,
+        t = item.target,
+        o = item.outcome
+    );
+    let Ok(QueryResult::Select { rows, .. }) = sparql::query(&ctx.store, &q) else {
+        return false;
+    };
+    let verdicts: Vec<String> = rows
+        .iter()
+        .filter_map(|r| match r.get("v") {
+            Some(Value::Ref(id)) => ctx.store.resolve(*id).ok(),
+            _ => None,
+        })
+        .collect();
+    !verdicts.is_empty()
+        && verdicts.iter().all(|v| {
+            governance::denial_replay::replay_verdict(&ctx.store, v, None).is_ok_and(|replays| {
+                replays
+                    .iter()
+                    .all(governance::denial_replay::VerdictReplay::rederived)
+            })
+        })
 }
 
 /// CEN-G1 / CEN-G2 — the dispatch inventory's two severities.

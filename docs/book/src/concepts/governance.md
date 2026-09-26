@@ -140,6 +140,54 @@ attribution: `sha256` over `predicate|target|outcome|writer|chain`, binding the
 `aegis:attributedWriter` and `aegis:principalChain` into the signed seal. It is
 deliberately *not* a hash of graph state, which has no stable serialisation.
 
+## Replaying a refusal: the denial quarantine
+
+A denied write is rolled back, so its verdict survives and the evidence
+behind it does not. From the governed graph alone a refusal can only be
+*attested* — the rules it cites were in force at the instant — never
+*re-derived*, because the post-state the gate judged is gone. The denial
+quarantine (`src/governance/quarantine.rs`) keeps that evidence **outside**
+the governed graph: two plain tables, not facts, that no SPARQL pattern,
+search, or fact read can reach. Refused content still never enters the
+graph.
+
+For each verdict of a refused write, the gate records — while its
+savepoint still holds the post-state — a hash of the attempted delta (the
+writer's datums, canonical, IRIs rather than term ids), a digest of the
+post-state it evaluated, a digest of the rule set in force, and the
+transaction the pre-state ended at. The entry is keyed by the verdict and
+sealed with the store's signing key. That is the default, **digest-only**:
+nothing refused is retained. A graph opted into **full retention** also
+keeps the attempted delta itself, sealed.
+
+```toml
+[quipu.governance.quarantine]
+enabled = true                                   # the default
+retain_full = ["urn:quipu:graph:root"]          # or ["*"]; default []
+```
+
+`quipu audit replay <verdict>` rebuilds the store as of the refusal in a
+throwaway in-memory copy, applies the attempt — the sealed one, or one
+presented with `--delta` and checked against the digest first — and runs
+the real write path with the gate on. A refusal **re-derives** when the
+write is refused again with the same outcome, under the same rule-set
+digest, over the same post-state digest. A later rule change does not move
+the answer: the replay reads the rules as of the refusal, not today's. A
+verdict whose write committed replays from that write's transaction.
+
+`quipu audit quarantine purge` erases sealed deltas by graph or by age and
+keeps each entry's digests and seal, so the audit can still say "refused,
+content purged" and can still verify a delta someone presents. Full packs
+carry the digests (they back verdicts that travel) and never the sealed
+deltas.
+
+**Limits, stated.** The post-state digest is over this store's term ids,
+so a respaced copy replays its refusals as "post-state differs". A refusal
+inside a multi-graph batch judged a post-state that held the batch's
+earlier graphs, which no entry carries; its replay reports the divergence.
+The digest costs one scan of the live facts per *denial* (never per
+write) — about 2.4 s per million facts in a debug build.
+
 ## The Phase-0 root of trust
 
 Trust concentrates in a small, human-owned surface: `aegis:VerifierRegistration`
@@ -188,7 +236,8 @@ it is not a read-side confidentiality boundary.
 The rest of `src/governance/` closes the loop after the fact:
 `quipu_audit_check` (`audit.rs`) mechanically checks a recorded trace against
 the policy spec — coverage, class↔placement, outcome consistency, attribution —
-deterministically, never an LLM call. `replay.rs` measures whether an advisory
+deterministically, never an LLM call. `denial_replay.rs` re-derives one recorded
+gate decision as of its transaction (see the quarantine above). `replay.rs` measures whether an advisory
 rule is ready for promotion to enforcement (liveness, both outcomes,
 recoverability). `router.rs` queues `require-approval` escalations as
 `DecisionRequest`s with expiry (only an approval permits; a rejection outranks
