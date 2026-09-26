@@ -11,7 +11,7 @@ categories = ["database", "data-structures"]
 # The published book. `repository` already carries the GitHub URL, so pointing
 # homepage at it too wasted one of the two links crates.io shows.
 homepage = "https://scbrown.github.io/quipu/"
-documentation = "https://docs.rs/quipu"
+documentation = "https://docs.rs/quipu-ai"
 exclude = [
     ".github/",
     ".githooks/",
