@@ -3711,3 +3711,46 @@ fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
         "ASK over a non-empty store must still be true"
     );
 }
+
+// ── sameTerm in FILTER (aegis-soqv1r) ────────────────────────────────────────
+// Every FILTER(sameTerm(...)) used to error "unsupported FILTER expression"
+// while the same call in BIND answered; the W3C sparql10 sameTerm cases caught it.
+
+#[test]
+fn filter_same_term_variable_and_literal() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER(sameTerm(?n, "Alice")) }"#,
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Alice".to_string()]);
+}
+
+#[test]
+fn filter_same_term_two_variables() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . ?t ex:name ?m . FILTER(sameTerm(?s, ?t) && sameTerm(?n, ?m)) }",
+    )
+    .unwrap();
+    assert_eq!(
+        names(&result),
+        vec!["Alice".to_string(), "Bob".to_string(), "Carol".to_string()]
+    );
+}
+
+#[test]
+fn filter_not_same_term_excludes_the_match() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n . FILTER(!sameTerm(?n, "Alice")) }"#,
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Bob".to_string(), "Carol".to_string()]);
+}
