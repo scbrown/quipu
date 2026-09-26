@@ -23,7 +23,7 @@ use crate::types::Value;
 
 /// A governance policy compiled into the registry for fast write-time checks.
 #[derive(Debug, Clone)]
-struct CompiledPolicy {
+pub(crate) struct CompiledPolicy {
     /// The policy's IRI (for diagnostics).
     policy_iri: String,
     /// The target entity type IRI (the string carried by `aegis:targets`).
@@ -152,8 +152,9 @@ impl PolicyRegistry {
         touched.sort_unstable();
         touched.dedup();
 
+        let ctx = EvalCtx::live(store);
         for e in touched {
-            let type_iris = entity_type_iris(store, e, rdf_type_id, graph)?;
+            let type_iris = entity_type_iris(&ctx, e, rdf_type_id, graph)?;
             let mut entity_iri: Option<String> = None;
             for tiri in &type_iris {
                 let Some(policies) = self.by_type.get(tiri.as_str()) else {
@@ -169,7 +170,7 @@ impl PolicyRegistry {
                     }
                 };
                 for policy in policies {
-                    evaluate_one(store, &eiri, policy, verdicts, requests)?;
+                    evaluate_one(&ctx, &eiri, policy, verdicts, requests)?;
                 }
             }
         }
@@ -178,24 +179,38 @@ impl PolicyRegistry {
 }
 
 /// The active `rdf:type` IRIs of `entity` in its own graph or ROOT, read from
-/// the pending post-state (same connection sees the open savepoint).
-fn entity_type_iris(
-    store: &Store,
+/// the pending post-state (same connection sees the open savepoint). Under an
+/// as-of context the same graph-scope rule applies to the rows live at that
+/// transaction (the SPARQL as-of predicate, quipu #83).
+pub(crate) fn entity_type_iris(
+    ctx: &EvalCtx<'_>,
     entity: i64,
     rdf_type_id: i64,
     graph: i64,
 ) -> Result<Vec<String>> {
-    let mut stmt = store.prepare(
-        "SELECT DISTINCT v FROM facts \
-             WHERE e = ?1 AND a = ?2 AND op = 1 AND valid_to IS NULL AND (g = ?3 OR g = 0)",
-    )?;
-    let rows = stmt.query_map(params![entity, rdf_type_id, graph], |row| {
-        let v: Vec<u8> = row.get(0)?;
-        Ok(v)
-    })?;
+    let store = ctx.store;
+    let raw: Vec<Vec<u8>> = match ctx.at.as_of_tx {
+        None => {
+            let mut stmt = store.prepare(
+                "SELECT DISTINCT v FROM facts \
+                     WHERE e = ?1 AND a = ?2 AND op = 1 AND valid_to IS NULL AND (g = ?3 OR g = 0)",
+            )?;
+            stmt.query_map(params![entity, rdf_type_id, graph], |row| row.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        }
+        Some(tx) => {
+            let mut stmt = store.prepare(
+                "SELECT DISTINCT v FROM facts \
+                     WHERE e = ?1 AND a = ?2 AND op = 1 AND tx <= ?4 \
+                     AND (valid_to IS NULL OR retracted_tx > ?4) AND (g = ?3 OR g = 0)",
+            )?;
+            stmt.query_map(params![entity, rdf_type_id, graph, tx], |row| row.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        }
+    };
     let mut out = Vec::new();
-    for r in rows {
-        if let Value::Ref(type_id) = Value::from_bytes(&r?)?
+    for v in raw {
+        if let Value::Ref(type_id) = Value::from_bytes(&v)?
             && let Ok(iri) = store.resolve(type_id)
         {
             out.push(iri);
@@ -225,117 +240,222 @@ fn effect_escalates(effect: &str) -> bool {
     matches!(effect, "require-approval" | "escalate")
 }
 
-/// Evaluate a single policy against a single target entity. A non-blocking
-/// effect runs no ASK (nothing to enforce at the write gate).
-fn evaluate_one(
-    store: &Store,
+/// Where and when a policy is judged: the store, the temporal context its
+/// ASKs read through, and the clock the router compares expiry against.
+///
+/// The live gate judges the pending post-state now ([`EvalCtx::live`]). The
+/// shadow gate judges history ([`EvalCtx::as_of`]): the post-state of
+/// transaction N, and that transaction's own time. ONE evaluator serves both,
+/// so the shadow cannot drift from the gate it models (aegis-xfuch4.2).
+pub(crate) struct EvalCtx<'a> {
+    pub(crate) store: &'a Store,
+    pub(crate) at: TemporalContext,
+    /// `None` = the wall clock, read at the moment the router needs it.
+    pub(crate) now: Option<i64>,
+}
+
+impl<'a> EvalCtx<'a> {
+    /// The live gate: current (pending) state, wall-clock time.
+    pub(crate) fn live(store: &'a Store) -> Self {
+        Self {
+            store,
+            at: TemporalContext::default(),
+            now: None,
+        }
+    }
+
+    fn now(&self) -> i64 {
+        self.now.unwrap_or_else(now_secs)
+    }
+
+    fn ask(&self, ask: &str) -> Result<bool> {
+        match sparql::query_temporal(self.store, ask, &self.at)? {
+            QueryResult::Ask(b) => Ok(b),
+            _ => Err(Error::InvalidValue(
+                "policy claim/probe must be a SPARQL ASK query".into(),
+            )),
+        }
+    }
+}
+
+/// What a policy's claim concluded about one target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ClaimOutcome {
+    /// A non-blocking effect: the gate runs no ASK and stages no verdict.
+    NotEnforced,
+    /// The evidence probe found nothing to judge. Never blocks.
+    Unknown,
+    /// The claim held.
+    Satisfied,
+    /// The claim failed. Whether the write is refused depends on the effect
+    /// and, for an escalating effect, on [`escalation`].
+    Unsatisfied,
+}
+
+impl ClaimOutcome {
+    /// The verdict outcome the gate stages, or `None` for no verdict.
+    pub(crate) fn verdict(self) -> Option<&'static str> {
+        match self {
+            Self::NotEnforced => None,
+            Self::Unknown => Some("unknown"),
+            Self::Satisfied => Some("satisfied"),
+            Self::Unsatisfied => Some("unsatisfied"),
+        }
+    }
+}
+
+/// How an unsatisfied claim resolves at the gate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Escalation {
+    /// `deny`: refused outright.
+    Refused,
+    /// An escalating effect with an existing request: the router's ruling.
+    Ruled {
+        ruling: super::router::Ruling,
+        now: i64,
+    },
+    /// An escalating effect and no request yet: refused, and a request opens.
+    Unrequested { now: i64 },
+}
+
+/// Judge one policy's claim for one target. The shared core of the live gate,
+/// the backtest and the shadow gate: it reads, and never stages or writes.
+pub(crate) fn judge_claim(
+    ctx: &EvalCtx<'_>,
     entity_iri: &str,
     policy: &CompiledPolicy,
-    verdicts: &mut Vec<super::verdict_facts::PendingVerdict>,
-    requests: &mut Vec<super::router::PendingRequest>,
-) -> Result<()> {
+) -> Result<ClaimOutcome> {
     if !effect_blocks(&policy.effect) {
-        return Ok(());
+        return Ok(ClaimOutcome::NotEnforced);
     }
     guard_iri(entity_iri)?;
     let target = format!("<{entity_iri}>");
-
-    let mut stage = |outcome: &str| {
-        verdicts.push(super::verdict_facts::PendingVerdict {
-            predicate_id: policy.policy_iri.clone(),
-            target_ref: entity_iri.to_string(),
-            outcome: outcome.to_string(),
-        });
-    };
 
     // Evidence probe: if the evidence does not exist yet the outcome is
     // `unknown` (distinct from unsatisfied) and the write is NOT blocked.
     if let Some(probe) = &policy.evidence_probe {
         let bound_probe = probe.replace("$target", &target);
-        if !run_ask(store, &bound_probe)? {
+        if !ctx.ask(&bound_probe)? {
             // Recorded as `unknown`, not skipped. "No evidence yet" and "never
             // evaluated" are different facts, and an absent verdict makes the
             // gate look as though the policy did not apply.
-            stage("unknown");
-            return Ok(());
+            return Ok(ClaimOutcome::Unknown);
         }
     }
 
     let bound_claim = policy.claim.replace("$target", &target);
-    if run_ask(store, &bound_claim)? {
-        stage("satisfied");
+    if ctx.ask(&bound_claim)? {
+        return Ok(ClaimOutcome::Satisfied);
+    }
+    Ok(ClaimOutcome::Unsatisfied)
+}
+
+/// How an unsatisfied claim under `policy` resolves: refused outright, or
+/// routed through the escalation router as it stood in `ctx`.
+pub(crate) fn escalation(
+    ctx: &EvalCtx<'_>,
+    entity_iri: &str,
+    policy: &CompiledPolicy,
+) -> Result<Escalation> {
+    if !effect_escalates(&policy.effect) {
+        return Ok(Escalation::Refused);
+    }
+    let now = ctx.now();
+    Ok(
+        match super::router::resolve_at(ctx.store, &policy.policy_iri, entity_iri, now, &ctx.at)? {
+            Some(ruling) => Escalation::Ruled { ruling, now },
+            None => Escalation::Unrequested { now },
+        },
+    )
+}
+
+/// Evaluate a single policy against a single target entity, as the live gate:
+/// judge it, stage its verdict and any request, and refuse when it blocks. A
+/// non-blocking effect runs no ASK (nothing to enforce at the write gate).
+fn evaluate_one(
+    ctx: &EvalCtx<'_>,
+    entity_iri: &str,
+    policy: &CompiledPolicy,
+    verdicts: &mut Vec<super::verdict_facts::PendingVerdict>,
+    requests: &mut Vec<super::router::PendingRequest>,
+) -> Result<()> {
+    let outcome = judge_claim(ctx, entity_iri, policy)?;
+    if let Some(v) = outcome.verdict() {
+        verdicts.push(super::verdict_facts::PendingVerdict {
+            predicate_id: policy.policy_iri.clone(),
+            target_ref: entity_iri.to_string(),
+            outcome: v.to_string(),
+        });
+    }
+    if outcome != ClaimOutcome::Unsatisfied {
         return Ok(());
     }
-    stage("unsatisfied");
 
     // An escalating effect consults the router before refusing. A standing
     // approval bound to this evidence lets the write through — that is the
     // channel `require-approval` never had, and the reason it is no longer a
     // dead end.
-    if effect_escalates(&policy.effect) {
-        let now = now_secs();
-        if let Some(ruling) = super::router::resolve(store, &policy.policy_iri, entity_iri, now)? {
-            if ruling.permits() {
-                return Ok(());
-            }
-            // An expired request is a DENIAL of that request, not a permanent
-            // dead end for the (policy, target) pair: this attempt re-mints,
-            // superseding the expired request with a fresh window a human can
-            // still act in. Without this, resolve returns Expired forever and
-            // no retry ever reopens the channel (quipu-fu0). A recorded
-            // rejection is different — that is an answer, and it stands.
-            if matches!(ruling, super::router::Ruling::Expired) {
-                requests.push(super::router::PendingRequest {
-                    policy_iri: policy.policy_iri.clone(),
-                    target_iri: entity_iri.to_string(),
-                    window_secs: policy.reversibility_window.unwrap_or(0),
-                    now,
-                });
-                return Err(Error::PolicyDenied(format!(
-                    "'{entity_iri}' blocked by policy '{}': the previous \
-                     DecisionRequest expired with no ruling and was denied \
-                     (declared default-deny). This attempt has opened a fresh \
-                     request; have an authorized operator record a signed \
-                     aegis:Decision with outcome \"approve\" bound to its \
-                     evidenceHash, then retry.{}",
-                    policy.policy_iri,
-                    policy.exemplar_citation()
-                )));
-            }
-            return Err(Error::PolicyDenied(format!(
-                "'{entity_iri}' blocked by policy '{}': {}{}",
-                policy.policy_iri,
-                ruling.reason(&policy.policy_iri, entity_iri),
-                policy.exemplar_citation()
-            )));
-        }
-        // No request yet: this attempt is what opens one. The request itself is
-        // staged rather than written here — the gate runs inside the savepoint
-        // this refusal is about to roll back, so a request written now would
-        // vanish with it. Same ordering problem, same answer, as the verdicts.
+    let open_request = |requests: &mut Vec<super::router::PendingRequest>, now: i64| {
         requests.push(super::router::PendingRequest {
             policy_iri: policy.policy_iri.clone(),
             target_iri: entity_iri.to_string(),
             window_secs: policy.reversibility_window.unwrap_or(0),
             now,
         });
-        return Err(Error::PolicyDenied(format!(
-            "'{entity_iri}' needs a human decision under policy '{}'. A \
-             DecisionRequest has been opened; have a registered decider record \
-             a signed aegis:Decision with outcome \"approve\" bound to its \
-             evidenceHash, then retry.{}",
+    };
+    match escalation(ctx, entity_iri, policy)? {
+        Escalation::Ruled { ruling, .. } if ruling.permits() => Ok(()),
+        // An expired request is a DENIAL of that request, not a permanent
+        // dead end for the (policy, target) pair: this attempt re-mints,
+        // superseding the expired request with a fresh window a human can
+        // still act in. Without this, resolve returns Expired forever and
+        // no retry ever reopens the channel (quipu-fu0). A recorded
+        // rejection is different — that is an answer, and it stands.
+        Escalation::Ruled {
+            ruling: super::router::Ruling::Expired,
+            now,
+        } => {
+            open_request(requests, now);
+            Err(Error::PolicyDenied(format!(
+                "'{entity_iri}' blocked by policy '{}': the previous \
+                 DecisionRequest expired with no ruling and was denied \
+                 (declared default-deny). This attempt has opened a fresh \
+                 request; have an authorized operator record a signed \
+                 aegis:Decision with outcome \"approve\" bound to its \
+                 evidenceHash, then retry.{}",
+                policy.policy_iri,
+                policy.exemplar_citation()
+            )))
+        }
+        Escalation::Ruled { ruling, .. } => Err(Error::PolicyDenied(format!(
+            "'{entity_iri}' blocked by policy '{}': {}{}",
             policy.policy_iri,
+            ruling.reason(&policy.policy_iri, entity_iri),
             policy.exemplar_citation()
-        )));
+        ))),
+        // No request yet: this attempt is what opens one. The request itself is
+        // staged rather than written here — the gate runs inside the savepoint
+        // this refusal is about to roll back, so a request written now would
+        // vanish with it. Same ordering problem, same answer, as the verdicts.
+        Escalation::Unrequested { now } => {
+            open_request(requests, now);
+            Err(Error::PolicyDenied(format!(
+                "'{entity_iri}' needs a human decision under policy '{}'. A \
+                 DecisionRequest has been opened; have a registered decider record \
+                 a signed aegis:Decision with outcome \"approve\" bound to its \
+                 evidenceHash, then retry.{}",
+                policy.policy_iri,
+                policy.exemplar_citation()
+            )))
+        }
+        Escalation::Refused => Err(Error::PolicyDenied(format!(
+            "'{entity_iri}' blocked by policy '{}' (effect '{}', target type '{}'): claim unsatisfied.{}",
+            policy.policy_iri,
+            policy.effect,
+            policy.target_type_iri,
+            policy.exemplar_citation()
+        ))),
     }
-
-    Err(Error::PolicyDenied(format!(
-        "'{entity_iri}' blocked by policy '{}' (effect '{}', target type '{}'): claim unsatisfied.{}",
-        policy.policy_iri,
-        policy.effect,
-        policy.target_type_iri,
-        policy.exemplar_citation()
-    )))
 }
 
 /// Unix seconds, or 0 before the epoch.
@@ -343,16 +463,6 @@ fn now_secs() -> i64 {
     // Through the wasm-safe clock shim (quipu-gsg): SystemTime panics on
     // wasm32, and the guard sits on the write path a wasm store still runs.
     i64::try_from(crate::time::epoch_secs()).unwrap_or(i64::MAX)
-}
-
-/// Run a SPARQL ASK and return its boolean, erroring if the query is not an ASK.
-fn run_ask(store: &Store, ask: &str) -> Result<bool> {
-    match sparql::query_temporal(store, ask, &TemporalContext::default())? {
-        QueryResult::Ask(b) => Ok(b),
-        _ => Err(Error::InvalidValue(
-            "policy claim/probe must be a SPARQL ASK query".into(),
-        )),
-    }
 }
 
 /// Reject an IRI that could break out of an inlined `<...>` and inject SPARQL.
