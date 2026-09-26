@@ -1022,18 +1022,8 @@ ex:lift a rule:Rule ;
 }
 
 #[test]
-fn probe_retracting_the_premise_leaves_a_promoted_fact_standing() {
-    // PROBE — measures the OTHER half `docs/design/entailment-regime.md` §3
-    // names as a prerequisite for promotion (aegis-f8efkn): "the retraction
-    // half (premise retracted -> promoted fact retracted) needs the promoted
-    // fact to keep a derivation marker, or a sweep that re-checks promoted
-    // facts against `explain`-style re-matching."
-    //
-    // An unpromoted derivation retracts correctly — that is
-    // `retracted_base_fact_triggers_retraction_of_derived_fact`. The question
-    // here is what happens to a fact that has been promoted OUT of the
-    // companion when its only support goes away. It pins today's answer so
-    // the mechanism, when built, has something to invert.
+fn unsupported_promoted_fact_is_demoted_and_resolved_without_repromotion() {
+    // Support loss withdraws first-class standing and retains queryable evidence.
     let ttl = format!(
         r#"
 @prefix rule: <{RULE_NS}> .
@@ -1097,18 +1087,42 @@ ex:lift a rule:Rule ;
         )
         .expect("retract the premise");
 
-    evaluate(&mut store, &rs, "2026-04-07T00:00:03Z").expect("evaluation after retraction");
+    let report =
+        evaluate(&mut store, &rs, "2026-04-07T00:00:03Z").expect("evaluation after retraction");
+    assert_eq!(
+        report.retracted, 1,
+        "report includes the withdrawn first-class fact"
+    );
 
     let after = live_copies_by_graph(&store, "ex:a", RDF_TYPE, COMMIT);
-    assert_eq!(
-        after,
-        vec![(root, "reasoner:LIFT2".to_string())],
-        "TODAY: the premise is gone and the promoted fact STANDS, unsupported. \
-         An unpromoted derivation would have been retracted by the same \
-         evaluation (see retracted_base_fact_triggers_retraction_of_derived_fact), \
-         so promotion as a bare move silently converts a maintained fact into an \
-         unmaintained one. §3's retraction half is what must invert this. Got {after:?}"
+    assert!(
+        after.is_empty(),
+        "unsupported triple must not stand in either graph"
     );
+    let input = serde_json::json!({"name": "unsupported_demotions"});
+    let listed = crate::tool_ask(&store, &input).unwrap();
+    assert_eq!(listed["count"], 1, "{listed}");
+    evaluate(&mut store, &rs, "2026-04-07T00:00:04Z").unwrap();
+    let again = crate::tool_ask(&store, &input).unwrap();
+    assert_eq!(
+        again["rows"], listed["rows"],
+        "retry keeps exactly one identical record"
+    );
+    assert_triple(&mut store, "ex:a", RDF_TYPE, GIT_COMMIT);
+    evaluate(&mut store, &rs, "2026-04-07T00:00:05Z").unwrap();
+    assert_eq!(
+        live_copies_by_graph(&store, "ex:a", RDF_TYPE, COMMIT),
+        vec![(companion, "reasoner:LIFT2".to_string())]
+    );
+    assert_eq!(crate::tool_ask(&store, &input).unwrap()["count"], 0);
+    let states = store.current_facts_in_graph(companion).unwrap();
+    let state = store
+        .lookup(crate::store::demotions::STATE)
+        .unwrap()
+        .unwrap();
+    let resolved: Vec<_> = states.iter().filter(|f| f.attribute == state).collect();
+    assert_eq!(resolved.len(), 1);
+    assert_eq!(resolved[0].value, Value::Str("resolved".into()));
 
     // CONTROL, same rule and same fixture, WITHOUT the promotion — otherwise
     // "it stands" is equally explained by a fixture in which retraction never

@@ -243,6 +243,39 @@ with `source = "reasoner:<rule-id>"` provenance.
 See [Reasoner Reference](reasoner.md) for full details on rule syntax and
 the evaluation model.
 
+### `quipu demotions`
+
+List unsupported Datalog demotions in a premise graph's companion:
+
+```bash
+quipu demotions --db my.db
+quipu demotions --graph urn:example:premises --db my.db
+```
+
+The JSON rows identify the retained record, subject, predicate, object, premise
+graph, deriver source, promotion transaction and invalidation transaction.
+`--graph` defaults to ROOT. The command installs the shipped
+`unsupported_demotions` stored query if missing; a fresh store returns no rows.
+After the companion is initialized, HTTP clients can call
+`POST /ask` with `{"name":"unsupported_demotions"}`; for a named companion, add
+`"params":{"graph":"urn:example:premises#inferred"}`.
+
+Support loss removes the original triple from first-class standing and retains
+one `quipu:DemotedDerivation` reification record. Datalog, OWL and RDFS
+materializers exclude plane bookkeeping from premises. Ordinary graph queries
+can still inspect the record; it does not assert the reified triple. Restored
+support marks it `resolved` and recreates the derivation only in the companion.
+Resolved records remain available through graph queries but leave this list.
+This is truth maintenance, not a promotion or automatic-promotion API.
+Load the product evidence schema alongside the application's other shapes:
+
+```bash
+quipu shapes load demoted-derivations shapes/demoted-derivation.ttl --db my.db
+```
+
+Demotion does not load shapes automatically: installing the first shape set
+would activate the vocabulary gate for unrelated writes in an ungoverned store.
+
 ### `quipu impact <entity-IRI>`
 
 Bounded BFS over entity edges: what is downstream of this entity? With

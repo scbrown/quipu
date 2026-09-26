@@ -528,3 +528,99 @@ ex:r1 a rule:Rule ; rule:id "R1" ;
         "after reload the rule must re-derive over base facts (both writes)"
     );
 }
+
+#[test]
+fn reactive_demotion_retains_evidence_and_does_not_repromote() {
+    let ttl = format!(
+        r#"
+        @prefix rule: <{RULE_NS}> .
+        <urn:test:lift> a rule:Rule ; rule:id "LIFT" ;
+        rule:head "h(?x, ?y)" ; rule:body "p(?x, ?y)" .
+    "#
+    );
+    let mut store = setup_store_with_observer(&ttl);
+    let s = store.intern("urn:test:s").unwrap();
+    let p = store.intern(&format!("{PFX}p")).unwrap();
+    let h = store.intern(&format!("{PFX}h")).unwrap();
+    let o = store.intern("urn:test:o").unwrap();
+    let mut d = Datum {
+        entity: s,
+        attribute: p,
+        value: Value::Ref(o),
+        valid_from: TS.into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store
+        .transact(std::slice::from_ref(&d), TS, None, Some("base"))
+        .unwrap();
+    let c = store.ensure_companion_inferred_graph(0, TS).unwrap();
+    let promoted = Datum {
+        attribute: h,
+        ..d.clone()
+    };
+    store
+        .transact_to_graph(
+            &[Datum {
+                op: Op::Retract,
+                ..promoted.clone()
+            }],
+            TS,
+            None,
+            Some("reasoner:LIFT"),
+            c,
+        )
+        .unwrap();
+    store
+        .transact(&[promoted], TS, Some("promoter"), Some("reasoner:LIFT"))
+        .unwrap();
+    // A matching insert must not restate the already promoted fact.
+    store
+        .transact(
+            &[Datum {
+                entity: store.intern("urn:test:second").unwrap(),
+                ..d.clone()
+            }],
+            TS,
+            None,
+            Some("base"),
+        )
+        .unwrap();
+    assert!(
+        !store
+            .current_facts_in_graph(c)
+            .unwrap()
+            .iter()
+            .any(|f| f.entity == s && f.attribute == h)
+    );
+    d.op = Op::Retract;
+    store
+        .transact(std::slice::from_ref(&d), TS, None, Some("base"))
+        .unwrap();
+    assert!(
+        !store
+            .current_facts()
+            .unwrap()
+            .iter()
+            .any(|f| f.entity == s && f.attribute == h)
+    );
+    let input = serde_json::json!({"name":"unsupported_demotions"});
+    assert_eq!(crate::tool_ask(&store, &input).unwrap()["count"], 1);
+    d.op = Op::Assert;
+    store.transact(&[d], TS, None, Some("base")).unwrap();
+    assert_eq!(crate::tool_ask(&store, &input).unwrap()["count"], 0);
+    assert!(
+        !store
+            .current_facts()
+            .unwrap()
+            .iter()
+            .any(|f| f.entity == s && f.attribute == h)
+    );
+    assert!(
+        store
+            .current_facts_in_graph(c)
+            .unwrap()
+            .iter()
+            .any(|f| f.entity == s && f.attribute == h)
+    );
+}
