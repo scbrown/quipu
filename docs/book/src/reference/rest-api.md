@@ -1083,6 +1083,12 @@ background task scans the live root graph at startup and again five minutes
 after each refresh completes. Scrapes neither acquire database connections nor
 trigger scans. WAL size still comes from a current filesystem metadata read.
 
+`quipu_http_requests_started_total` counts HTTP arrivals before handler dispatch,
+including pending requests, cancelled requests and metrics scrapes. It has no
+labels and resets when the process restarts. Use it to measure arrival rate:
+`quipu_http_requests_total` and `quipu_http_client_requests_total` count completed
+responses, so low completion rates alone do not establish low traffic.
+
 Before the first successful refresh, graph-size gauges are omitted and
 `quipu_graph_counts_ready` is zero. A failed refresh retains the last successful
 snapshot and increments `quipu_graph_counts_refresh_failures_total`; it never

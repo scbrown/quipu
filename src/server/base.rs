@@ -96,7 +96,8 @@ pub(crate) async fn health() -> impl IntoResponse {
 pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
-    let body = store.graph_metrics.render();
+    let mut body = store.graph_metrics.render();
+    super::request_middleware::render_request_starts(&mut body);
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
