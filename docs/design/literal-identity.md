@@ -43,6 +43,13 @@ in the selected graph. Audit retraction rows retain each original encoding.
 Source and episode cleanup explicitly restrict closure to the owning source;
 the source restriction is passed separately from the new transaction's provenance.
 Replacing one snapshot cannot retract another producer's equivalent encoding.
+A named producer asserting an already-visible term retains its own physical claim;
+idempotence is per source across compatible encodings. The second claim produces
+no logical assertion event, and removing the first produces no logical retraction.
+Anonymous assertions retain global idempotence because they name no cleanup owner.
+History and source-claim queries expose the separate provenance rows. Current
+graph facts, SPARQL and the resident model project RDF term identity; a current
+fact carries representative provenance, not the full list of owners.
 
 The event log, reactive observer delta and resident maintenance receive a logical
 retraction only when the last active encoding disappears. Repeated operations on
