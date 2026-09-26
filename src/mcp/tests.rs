@@ -4697,3 +4697,83 @@ fn cochanged_with_dual_namespace_reader() {
         1,
     );
 }
+
+fn assert_group_namespace_reader(reader: &str) {
+    let old = crate::namespace::DEFAULT_BASE_NS;
+    let new = "https://scbrown.github.io/quechua/ns#";
+    for namespaces in [vec![old], vec![new], vec![old, new]] {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut turtle = String::from(
+            "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+             @prefix prov: <http://www.w3.org/ns/prov#> .\n\
+             <urn:group-reader:hit> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:hit> .\n\
+             <urn:group-reader:other> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:other> .\n\
+             <urn:group-reader:foreign> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:foreign> .\n\
+             <urn:group-reader:ungrouped> rdfs:label \"needle\" .\n\
+             <urn:episode:foreign> <https://example.org/foreign#groupId> \"wanted\" .\n",
+        );
+        for ns in &namespaces {
+            turtle.push_str(&format!(
+                "<urn:episode:hit> <{ns}groupId> \"wanted\" .\n\
+                 <urn:episode:other> <{ns}groupId> \"different\" .\n"
+            ));
+        }
+        crate::rdf::ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let embedding = vec![0.5_f32; 8];
+        for name in ["hit", "other", "foreign", "ungrouped"] {
+            let id = store.intern(&format!("urn:group-reader:{name}")).unwrap();
+            store
+                .embed_entity(id, "needle", &embedding, "2026-01-01T00:00:00Z")
+                .unwrap();
+        }
+        for (group, count) in [("wanted", 1), ("absent", 0)] {
+            let input = serde_json::json!({"query":"needle", "embedding":embedding,
+                "group_ids":[group], "max_results":20, "limit":20, "verbose":true});
+            let (out, field, entity_field) = match reader {
+                "nodes" => (
+                    super::search::tool_search_nodes(&store, &input).unwrap(),
+                    "nodes",
+                    "iri",
+                ),
+                "facts" => (
+                    super::search::tool_search_facts(&store, &input).unwrap(),
+                    "facts",
+                    "source",
+                ),
+                "semantic" => (tool_search(&store, &input).unwrap(), "results", "entity"),
+                _ => unreachable!(),
+            };
+            assert_eq!(
+                out["count"], count,
+                "{reader}/{namespaces:?}/{group}: {out}"
+            );
+            if count == 1 {
+                assert_eq!(out[field][0][entity_field], "urn:group-reader:hit");
+            }
+        }
+    }
+}
+
+#[test]
+fn search_nodes_dual_namespace_group_reader() {
+    assert_group_namespace_reader("nodes");
+}
+
+#[test]
+fn search_facts_dual_namespace_group_reader() {
+    assert_group_namespace_reader("facts");
+}
+
+#[test]
+fn semantic_search_dual_namespace_group_reader() {
+    assert_group_namespace_reader("semantic");
+}

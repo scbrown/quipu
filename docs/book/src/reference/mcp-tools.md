@@ -666,6 +666,12 @@ either spelling independently. Duplicate aliases do not inflate returned paths
 or shared-item counts. Entity IRIs and dataset selection stay unchanged; these
 queries do not require an equivalence reasoner.
 
+The group scope in `quipu_search`, `quipu_search_nodes`, and
+`quipu_search_facts` accepts either vocabulary's `groupId` predicate on the
+provenance episode. Duplicate aliases do not duplicate search results. Other
+groups, unrelated predicates with the same local name, and nodes without an
+episode remain outside a requested group scope.
+
 Parameters are validated and escaped by type before substitution, so values are
 safe against SPARQL injection. The response includes the resolved `sparql`, the
 result `columns`, and `rows`.
