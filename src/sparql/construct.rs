@@ -16,7 +16,15 @@ pub(super) fn eval_construct(
 
     let mut triples = Vec::new();
 
-    for row in rows {
+    // A blank node in the template is a FRESH node for each solution (SPARQL
+    // 1.1 section 16.2.1). Reusing the template label for every row fused all
+    // solutions into one node: CONSTRUCT { [ rdf:subject ?s ] } collapsed
+    // eight reified statements into one (W3C sparql10 construct-3/-4,
+    // aegis-soqv1r). The `c<row>-` prefix keeps them apart from data blank
+    // nodes too.
+    let fresh = |index: usize, label: &str| format!("_:c{index}-{label}");
+
+    for (index, row) in rows.iter().enumerate() {
         for tp in template {
             let subject = match &tp.subject {
                 TermPattern::NamedNode(n) => n.as_str().to_string(),
@@ -25,7 +33,7 @@ pub(super) fn eval_construct(
                     Some(Value::Str(s)) => s.clone(),
                     _ => continue,
                 },
-                TermPattern::BlankNode(b) => format!("_:{}", b.as_str()),
+                TermPattern::BlankNode(b) => fresh(index, b.as_str()),
                 TermPattern::Literal(_) => continue,
                 #[cfg(feature = "shacl")]
                 TermPattern::Triple(_) => continue,
@@ -53,7 +61,7 @@ pub(super) fn eval_construct(
                     Some(val) => val.clone(),
                     None => continue,
                 },
-                TermPattern::BlankNode(b) => Value::Str(format!("_:{}", b.as_str())),
+                TermPattern::BlankNode(b) => Value::Str(fresh(index, b.as_str())),
                 #[cfg(feature = "shacl")]
                 TermPattern::Triple(_) => continue,
             };
