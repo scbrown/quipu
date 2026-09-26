@@ -49,6 +49,7 @@ pub mod provider;
 pub mod rdf;
 mod rdf_export;
 mod rdf_graph_store;
+mod rdf_scope;
 pub mod reasoner;
 pub mod reconcile;
 pub mod report;

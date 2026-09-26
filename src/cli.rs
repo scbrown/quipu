@@ -132,15 +132,17 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
     let base_iri = std::fs::canonicalize(file_path)
         .ok()
         .map(|path| format!("file://{}", path.display()));
-    match quipu::rdf::ingest_rdf_to_graph(
+    match quipu::rdf::ingest_rdf_bitemporal_with_scope(
         &mut store,
         data.as_bytes(),
         format,
         base_iri.as_deref(),
         &now,
+        &now,
         None,
         Some(file_path),
         graph,
+        flag_value(args, "--blank-node-scope"),
     ) {
         Ok((tx_id, count)) => {
             println!("knotted {count} facts from {file_path} (tx {tx_id})");
