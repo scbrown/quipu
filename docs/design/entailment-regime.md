@@ -109,42 +109,37 @@ that must be visible to SHACL/policy evaluation.
 > marker, or a sweep that re-checks promoted facts against `explain`-style
 > re-matching. Design these two together before building either.
 >
-> **Status 2026-09-21 (aegis-f8efkn) — the re-derive half is MEASURED and
-> CLOSED; the retraction half is not.**
+> **Status 2026-09-26:** Datalog full and reactive evaluation now retain
+> unsupported promotions as reified evidence. A tuple carrying the evaluated
+> rule's own `reasoner:<id>` source loses first-class standing when that rule
+> no longer derives it. The close and evidence write share a savepoint.
+> Records have deterministic identities derived from the original RDF terms,
+> premise graph, deriver source and promotion transaction; retries do not append
+> records. Re-derivation changes the retained state to `resolved`, without
+> restoring first-class standing.
 >
-> - The Datalog hazard was real and is now pinned by
->   `promoted_derivation_is_not_restated_into_the_companion`
->   (`src/reasoner/evaluate_tests.rs`). It began as a probe that PASSED
->   against the unfixed engine — 1 copy in the premise graph, 1 in the
->   companion, both live — so this note's warning is a measurement rather
->   than an inference.
-> - `write_rule_delta` now loads the premise graph's derivations under the
->   rule's own `reasoner:<id>` source and skips them. **The discriminator is
->   the SOURCE, not presence.** A base fact that duplicates an entailment
->   must still be restated into the companion, which holds the full closure;
->   skipping on presence breaks
->   `mutual_class_equivalence_converges_under_retraction`, verified by
->   sabotage.
-> - The claim that the OWL materializer already absorbs this was INHERITED,
->   so it was measured too:
->   `promoted_owl_materialization_is_not_restated_into_the_companion`
->   (`src/owl_tests.rs`, `--features owl`) confirms it, with a control that
->   retracts the promoted copy and shows the fact does come back — otherwise
->   the assertion would be satisfied by a materializer that merely does
->   nothing on a second call.
-> - **Still unbuilt, deliberately:** the retraction half, and repair of a
->   store already holding both copies. The skip is on the ASSERT side only —
->   an existing doubled pair is left alone, because repairing it is a
->   data-touching act that belongs to the promotion mechanism with its own
->   audit trail, not a side effect of the next evaluation.
+> The companion holds `quipu:DemotedDerivation`, a subclass of `rdf:Statement`,
+> with `unsupported|resolved` state, premise/source and promotion/invalidation
+> transaction provenance. Datalog, OWL and RDFS exclude these bookkeeping
+> transactions from their premise sets. The unsupported triple itself is not
+> asserted in the companion: a source label on an ordinary triple would still
+> let other rules consume it.
+>
+> `quipu demotions` and the stored `unsupported_demotions` query enumerate the
+> unsupported records. The release ships `shapes/demoted-derivation.ttl` for
+> explicit loading into the application vocabulary; demotion does not change
+> the vocabulary gate of a standalone store. Re-promotion still requires a
+> separate authority act.
+> The promotion authority API, standing policy, OWL support-loss maintenance,
+> and repair of already-doubled stores remain unbuilt.
 
 - Authority-gated graph move, following camayoc's implemented pattern
   (`scripts/promote_plane.py`, `config/plane-authority.json`, fail-closed) and
   quipu's existing governance surface (`src/governance/authority.rs`,
   `placement.rs`). Promotion includes the retraction half: the fact leaves the
   inferred graph as it enters the target, and a later retraction of a premise
-  retracts the promoted fact too (this is where Phase 3 source-aware truth
-  maintenance is load-bearing).
+  withdraws its first-class standing while preserving demotion evidence.
+  Quipu owns the authority model; consumers may adapt their policies to it.
 - Deterministic closure may get a standing promotion policy (auto-promote
   subclass closure whose premises are all `declared`); model-inferred facts
   never do. The policy is data (a governance policy), not code.

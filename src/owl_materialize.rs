@@ -268,7 +268,7 @@ impl Ontology {
 
         let (premises, dedup): (Vec<Fact>, Vec<Fact>) = match seed {
             None => {
-                let all = store.current_facts_in_graphs(&graphs)?;
+                let all = store.without_plane_metadata(store.current_facts_in_graphs(&graphs)?)?;
                 (all.clone(), all)
             }
             Some(delta) => {
@@ -296,7 +296,7 @@ impl Ontology {
                 // correctness guarantee and is scoped to the candidates. A
                 // preload can only ever be an optimisation, and this one cost
                 // more than it saved.
-                (delta.to_vec(), Vec::new())
+                (store.without_plane_metadata(delta.to_vec())?, Vec::new())
             }
         };
         report.premise_facts_read += premises.len() + dedup.len();
@@ -414,7 +414,7 @@ impl Ontology {
                 store.current_facts_for_attributes_in_graphs_excluding_sources(
                     &[prop_id],
                     &graphs,
-                    &[],
+                    &[crate::store::inferred::PLANE_SOURCE.to_string()],
                 )?
             } else {
                 Vec::new()
@@ -511,7 +511,8 @@ impl Ontology {
             // that `semi_naive_reaches_the_same_fixpoint_as_naive` PASSES against
             // it — that fixture seeds the delta with every asserted fact, so the
             // identity is always present and the divergence is invisible to it.
-            let identity_facts = store.current_facts_in_graphs(&graphs)?;
+            let identity_facts =
+                store.without_plane_metadata(store.current_facts_in_graphs(&graphs)?)?;
             let mut classes = UnionFind::default();
             for f in &identity_facts {
                 if f.attribute == same_as_id
@@ -550,7 +551,9 @@ impl Ontology {
             let extra_facts = if newly_identified.is_empty() {
                 Vec::new()
             } else {
-                store.current_facts_for_entities_in_graphs(&newly_identified, &graphs)?
+                store.without_plane_metadata(
+                    store.current_facts_for_entities_in_graphs(&newly_identified, &graphs)?,
+                )?
             };
 
             // eq-sym + eq-trans together: every ordered pair within a class.

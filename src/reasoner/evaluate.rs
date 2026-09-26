@@ -449,6 +449,9 @@ impl World {
         let excluded_sources: Vec<String> = rule_indices
             .iter()
             .map(|&i| format!("reasoner:{}", ruleset.rules[i].id))
+            .chain(std::iter::once(
+                crate::store::inferred::PLANE_SOURCE.to_string(),
+            ))
             .collect();
         // Carry each attribute's bound-object restriction into the query. An
         // IRI that is not interned yields an EMPTY set, which matches nothing —
@@ -531,7 +534,7 @@ impl World {
 
 // ── Write-back: diff against stored reasoner output, transact ──
 
-fn write_rule_delta(
+pub(crate) fn write_rule_delta(
     store: &mut Store,
     rule: &super::ast::Rule,
     new_tuples: &BTreeSet<(i64, i64)>,
@@ -542,6 +545,8 @@ fn write_rule_delta(
 ) -> Result<(usize, usize)> {
     let attr_id = world.ensure_attr(store, &rule.head.predicate)?;
     let source = format!("reasoner:{}", rule.id);
+    let demoted = store
+        .reconcile_promoted_derivations(attr_id, &source, premise, graph, new_tuples, timestamp)?;
 
     let old_tuples = load_existing_derivations_in_graph(store, attr_id, &source, graph)?;
 
@@ -582,9 +587,8 @@ fn write_rule_delta(
     // Deliberately the ASSERT side only. A companion copy that is ALREADY
     // doubled with a promoted one is left alone: repairing a store that is
     // in that state is a data-touching act with its own audit trail, not a
-    // side effect of the next evaluation. The retraction half (premise
-    // retracted -> promoted fact retracted) is likewise still unbuilt and
-    // named in §3.
+    // side effect of the next evaluation. Unsupported promoted tuples are
+    // demoted to reified evidence by reconciliation above.
     for tuple in new_tuples.difference(&old_tuples) {
         if promoted.contains(tuple) {
             continue;
@@ -600,13 +604,13 @@ fn write_rule_delta(
     }
 
     if datums.is_empty() {
-        return Ok((0, 0));
+        return Ok((0, demoted));
     }
 
     let asserted = datums.iter().filter(|d| d.op == Op::Assert).count();
     let retracted = datums.iter().filter(|d| d.op == Op::Retract).count();
     store.transact_to_graph(&datums, timestamp, Some("reasoner"), Some(&source), graph)?;
-    Ok((asserted, retracted))
+    Ok((asserted, retracted + demoted))
 }
 
 /// Load the currently-asserted tuples derived by `source` (typically

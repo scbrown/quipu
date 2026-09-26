@@ -19,7 +19,7 @@ use std::sync::RwLock;
 use super::evaluate;
 use super::parse::RuleSet;
 use super::stratify;
-use crate::store::{Datum, Delta, Store, TransactObserver};
+use crate::store::{Delta, Store, TransactObserver};
 
 /// A reactive reasoner that re-derives affected rules when base facts change.
 ///
@@ -300,8 +300,6 @@ fn evaluate_affected(
     ruleset: &RuleSet,
     affected: &BTreeSet<usize>,
 ) -> crate::error::Result<ReactiveReport> {
-    use crate::types::{Op, Value};
-
     let strata = stratify::stratify(ruleset).map_err(|e| crate::Error::Store(e.to_string()))?;
 
     // Determine which strata contain affected rules.
@@ -324,7 +322,8 @@ fn evaluate_affected(
 
     let mut total_asserted = 0_usize;
     let mut total_retracted = 0_usize;
-    let timestamp = "reactive";
+    let now = crate::time::now_iso();
+    let timestamp = now.as_str();
 
     // Placement (quipu-0b6): reactive derivation reads premises from ROOT
     // plus its companion inferred graph and writes derivations to the
@@ -343,7 +342,7 @@ fn evaluate_affected(
             .copied()
             .filter(|idx| affected.contains(idx))
             .collect();
-        let world = evaluate::World::load_graphs_rule_indices(
+        let mut world = evaluate::World::load_graphs_rule_indices(
             store,
             ruleset,
             &[crate::schema::ROOT_GRAPH, companion],
@@ -357,49 +356,16 @@ fn evaluate_affected(
             // Compute what the rule derives from the current world.
             let new_tuples = evaluate::project_rule_from_world(rule, &world);
 
-            // Ensure the head predicate attribute id exists.
-            let attr_id = store.intern(&rule.head.predicate)?;
-            let source = format!("reasoner:{}", rule.id);
-            let old_tuples =
-                evaluate::load_existing_derivations_in_graph(store, attr_id, &source, companion)
-                    .map_err(|e| crate::Error::Store(e.to_string()))?;
-
-            // Build the diff datums for this rule.
-            let mut datums = Vec::new();
-            for &(e, v) in old_tuples.difference(&new_tuples) {
-                datums.push(Datum {
-                    entity: e,
-                    attribute: attr_id,
-                    value: Value::Ref(v),
-                    valid_from: timestamp.to_string(),
-                    valid_to: None,
-                    op: Op::Retract,
-                });
-            }
-            for &(e, v) in new_tuples.difference(&old_tuples) {
-                datums.push(Datum {
-                    entity: e,
-                    attribute: attr_id,
-                    value: Value::Ref(v),
-                    valid_from: timestamp.to_string(),
-                    valid_to: None,
-                    op: Op::Assert,
-                });
-            }
-
-            if datums.is_empty() {
-                continue;
-            }
-
-            let asserted = datums.iter().filter(|d| d.op == Op::Assert).count();
-            let retracted = datums.iter().filter(|d| d.op == Op::Retract).count();
-            store.transact_to_graph(
-                &datums,
+            let (asserted, retracted) = evaluate::write_rule_delta(
+                store,
+                rule,
+                &new_tuples,
                 timestamp,
-                Some("reasoner"),
-                Some(&source),
+                crate::schema::ROOT_GRAPH,
                 companion,
-            )?;
+                &mut world,
+            )
+            .map_err(|e| crate::Error::Store(e.to_string()))?;
             total_asserted += asserted;
             total_retracted += retracted;
         }
