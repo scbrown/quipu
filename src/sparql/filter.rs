@@ -310,29 +310,12 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             if divisor == 0.0 {
                 return None;
             }
-            let quotient = dividend.as_f64()? / divisor;
-            if matches!(dividend, Value::Int(_)) && matches!(divisor_value, Value::Int(_)) {
-                Some(Value::Typed {
-                    lexical: format_decimal(quotient),
-                    datatype: namespace::XSD_DECIMAL.to_string(),
-                })
-            } else if dividend.datatype() == Some(namespace::XSD_DOUBLE)
-                || divisor_value.datatype() == Some(namespace::XSD_DOUBLE)
-            {
-                Some(Value::Typed {
-                    lexical: canonical_double(quotient),
-                    datatype: namespace::XSD_DOUBLE.to_string(),
-                })
-            } else if dividend.datatype() == Some(namespace::XSD_DECIMAL)
-                || divisor_value.datatype() == Some(namespace::XSD_DECIMAL)
-            {
-                Some(Value::Typed {
-                    lexical: format_decimal(quotient),
-                    datatype: namespace::XSD_DECIMAL.to_string(),
-                })
-            } else {
-                Some(Value::Float(quotient))
-            }
+            // Division promotes like the other operators, except that two
+            // integers divide as xsd:decimal (SPARQL op:numeric-divide).
+            let rank = numeric_rank(&dividend)?
+                .max(numeric_rank(&divisor_value)?)
+                .max(NumericRank::Decimal);
+            Some(typed_numeric(rank, dividend.as_f64()? / divisor))
         }
         Expression::UnaryPlus(inner) => eval_expr(store, inner, row),
         Expression::UnaryMinus(inner) => match eval_expr(store, inner, row)? {

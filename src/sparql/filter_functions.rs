@@ -356,28 +356,55 @@ fn numeric_binary(
 ) -> Option<Value> {
     let left = eval_expr(store, left, row)?;
     let right = eval_expr(store, right, row)?;
-    match (&left, &right) {
-        (Value::Int(left), Value::Int(right)) => integer(*left, *right).map(Value::Int),
-        _ => {
-            let value = float(left.as_f64()?, right.as_f64()?);
-            if left.datatype() == Some(namespace::XSD_DOUBLE)
-                || right.datatype() == Some(namespace::XSD_DOUBLE)
-            {
-                Some(Value::Typed {
-                    lexical: canonical_double(value),
-                    datatype: namespace::XSD_DOUBLE.to_string(),
-                })
-            } else if left.datatype() == Some(namespace::XSD_DECIMAL)
-                || right.datatype() == Some(namespace::XSD_DECIMAL)
-            {
-                Some(Value::Typed {
-                    lexical: format_decimal(value),
-                    datatype: namespace::XSD_DECIMAL.to_string(),
-                })
-            } else {
-                Some(Value::Float(value))
-            }
-        }
+    match numeric_rank(&left)?.max(numeric_rank(&right)?) {
+        NumericRank::Integer => integer(integral(&left)?, integral(&right)?).map(Value::Int),
+        rank => Some(typed_numeric(rank, float(left.as_f64()?, right.as_f64()?))),
+    }
+}
+
+/// `XPath` numeric type promotion, lowest first (SPARQL 1.1 section 17.3,
+/// W3C sparql10 type-promotion). An operation's result takes the higher
+/// operand rank, and every type derived from `xsd:integer` ranks as integer.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum NumericRank {
+    Integer,
+    Decimal,
+    Float,
+    Double,
+}
+
+fn numeric_rank(value: &Value) -> Option<NumericRank> {
+    match value {
+        Value::Int(_) => Some(NumericRank::Integer),
+        Value::Float(_) => Some(NumericRank::Double),
+        Value::Typed { datatype, .. } => match datatype.as_str() {
+            namespace::XSD_DOUBLE => Some(NumericRank::Double),
+            namespace::XSD_FLOAT => Some(NumericRank::Float),
+            namespace::XSD_DECIMAL => Some(NumericRank::Decimal),
+            other if namespace::is_integer_datatype(other) => Some(NumericRank::Integer),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn integral(value: &Value) -> Option<i64> {
+    match value {
+        Value::Int(n) => Some(*n),
+        Value::Typed { lexical, .. } => lexical.trim().trim_start_matches('+').parse().ok(),
+        _ => None,
+    }
+}
+
+fn typed_numeric(rank: NumericRank, value: f64) -> Value {
+    let (lexical, datatype) = match rank {
+        NumericRank::Integer | NumericRank::Decimal => (format_decimal(value), namespace::XSD_DECIMAL),
+        NumericRank::Float => (canonical_double(f64::from(value as f32)), namespace::XSD_FLOAT),
+        NumericRank::Double => (canonical_double(value), namespace::XSD_DOUBLE),
+    };
+    Value::Typed {
+        lexical,
+        datatype: datatype.to_string(),
     }
 }
 

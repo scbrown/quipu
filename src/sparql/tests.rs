@@ -3711,3 +3711,41 @@ fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
         "ASK over a non-empty store must still be true"
     );
 }
+
+// ── numeric type promotion (aegis-soqv1r, W3C sparql10 type-promotion) ──────
+// integer (and every type derived from it) < decimal < float < double; the
+// result takes the higher operand type. float + float used to come back as
+// xsd:double, and short + short as a double rather than an integer.
+
+fn result_datatype(expr: &str) -> String {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?d WHERE {{ BIND(datatype({expr}) AS ?d) }}"
+    );
+    let result = query(&store, &q).unwrap();
+    match result.rows().first().and_then(|r| r.get("d")) {
+        Some(Value::Ref(id)) => store.resolve(*id).unwrap(),
+        other => panic!("no datatype for {expr}: {other:?}"),
+    }
+}
+
+#[test]
+fn arithmetic_promotes_to_the_higher_operand_type() {
+    let xsd = |t: &str| format!("http://www.w3.org/2001/XMLSchema#{t}");
+    let cases = [
+        (r#""1"^^xsd:float + "1"^^xsd:float"#, "float"),
+        (r#""1"^^xsd:float + "1"^^xsd:decimal"#, "float"),
+        (r#""1"^^xsd:double + "1"^^xsd:float"#, "double"),
+        (r#""1"^^xsd:short + "1"^^xsd:short"#, "integer"),
+        (r#""1"^^xsd:unsignedByte + "1"^^xsd:short"#, "integer"),
+        (r#""1"^^xsd:short + "1"^^xsd:decimal"#, "decimal"),
+        (r#""1"^^xsd:short + "1"^^xsd:float"#, "float"),
+        ("1 + 1", "integer"),
+        ("1 / 2", "decimal"),
+        (r#""4"^^xsd:float / "2"^^xsd:float"#, "float"),
+    ];
+    for (expr, want) in cases {
+        assert_eq!(result_datatype(expr), xsd(want), "{expr}");
+    }
+}
