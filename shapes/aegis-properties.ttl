@@ -357,6 +357,11 @@ aegis:predicateId a owl:DatatypeProperty ;
     rdfs:range xsd:string ;
     rdfs:comment "Which predicate this verdict is about, by id. The verdict names the check rather than embedding it, so a re-run against a changed predicate is visibly a different verdict." .
 
+aegis:gatedTx a owl:DatatypeProperty ;
+    rdfs:label "gated transaction" ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "The committed transaction whose delta a verdict judged, not the transaction persisting that verdict. Optional and positive; refused or rolled-back attempts and historical verdicts omit it. Never predict an attempted id or guess a backfill. IDs are local to the originating store. A producer must bind the link into signed evidence and verdict identity. No domain: another audit record may also name a judged transaction without becoming a Verdict." .
+
 aegis:targetRef a owl:DatatypeProperty ;
     rdfs:label "target ref" ;
     rdfs:domain aegis:Verdict ;
