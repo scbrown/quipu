@@ -142,6 +142,21 @@ pub fn iso_days_ago(days: u64) -> String {
     format_iso(epoch_secs().saturating_sub(days.saturating_mul(86_400)))
 }
 
+/// The instant `secs` seconds before now, as `YYYY-MM-DDTHH:MM:SSZ`.
+pub fn iso_secs_ago(secs: u64) -> String {
+    format_iso(epoch_secs().saturating_sub(secs))
+}
+
+/// Unix seconds of an RFC 3339 timestamp, or `None` when it does not parse.
+/// Goes through [`normalize_rfc3339_utc`], so an offset is honoured.
+#[must_use]
+pub fn epoch_of_rfc3339(s: &str) -> Option<i64> {
+    let n = normalize_rfc3339_utc(s)?;
+    let num = |from: usize, to: usize| n.get(from..to)?.parse::<i64>().ok();
+    let days = days_from_civil(num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    Some(days * 86_400 + num(11, 13)? * 3_600 + num(14, 16)? * 60 + num(17, 19)?)
+}
+
 /// Format Unix-epoch seconds as an ISO-8601 UTC timestamp.
 fn format_iso(secs: u64) -> String {
     let days = (secs / 86_400) as i64;
@@ -503,6 +518,18 @@ mod tests {
             normalize_rfc3339_utc("1900-02-28T12:00:00Z").as_deref(),
             Some("1900-02-28T12:00:00Z")
         );
+    }
+
+    #[test]
+    fn epoch_of_rfc3339_inverts_format_iso() {
+        for secs in [0_u64, 86_399, 1_700_000_000, 1_790_000_123] {
+            assert_eq!(epoch_of_rfc3339(&format_iso(secs)), Some(secs as i64));
+        }
+        assert_eq!(
+            epoch_of_rfc3339("2026-01-01T01:00:00+01:00"),
+            epoch_of_rfc3339("2026-01-01T00:00:00Z")
+        );
+        assert_eq!(epoch_of_rfc3339("reactive"), None);
     }
 
     #[test]

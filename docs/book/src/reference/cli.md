@@ -646,6 +646,47 @@ Output is one line per hit (`tx <id> (<timestamp>): would have fired on
 so a script that knots on success cannot read an unevaluable candidate as
 clean.
 
+### `quipu gate shadow`
+
+Judge a **candidate policy set** over recorded history before any of it is
+created, and report which committed writes it would refuse that the governing
+set admitted (and the reverse). Never writes.
+
+```bash
+sqlite3 live.db ".backup copy.db"      # a quiescent copy, never the live store
+quipu gate shadow --rules candidate.ttl --db copy.db --since 7d
+quipu gate shadow --rules candidate.ttl --db copy.db --from-tx 1000 --to-tx 2000 --json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--rules <file.ttl>` | Candidate policies: action-boundary `aegis:Policy` nodes with `aegis:targets` and `aegis:claim` (required) |
+| `--db <copy.db>` | A quiescent copy of the store (required; see refusals below) |
+| `--since <dur>` | Window: transactions stamped within `90m`, `24h`, `7d`, … |
+| `--from-tx <A> --to-tx <B>` | Explicit window; both together |
+| `--last-txs <N>` | The last N transactions (default: the whole log) |
+| `--max-txs <N>` | Stop after judging N; the report says where it stopped |
+| `--mode add\|replace` | `add` (default) layers the candidate over the governing set, same IRI replacing; `replace` makes the candidate the whole set |
+| `--json` | Machine-readable report |
+
+Each transaction is judged by the **write gate's own evaluator** against the
+post-state it saw, with the router read as of that transaction's time. The
+baseline is the policy set **in force at that transaction**, so a policy change
+inside the window is reported as a boundary and never attributed to the
+candidate.
+
+**Refusals, not advice.** The command refuses the configured live store and any
+path with a `-wal`, `-shm` or `-journal` sidecar (an open connection, or a copy
+taken mid-write): it reads with SQLite `immutable=1`, which ignores locks and
+the WAL and could see torn state on a live file.
+
+**Limits it reports rather than hides:** refused writes are rolled back and
+cannot be replayed, so they are counted, not judged; recorded verdicts are
+joined by `aegis:gatedTx` when present and otherwise by the next-transaction
+convention, with the match rate printed (and `UNMEASURED` when nothing joined);
+and a baseline that would refuse a committed write is counted as the fidelity
+signal (enforcement off then, an approval, or a reconstruction gap).
+
 ### `quipu path`
 
 Golden-path analysis over recorded trajectories: the provenance cone, the

@@ -22,7 +22,7 @@ use crate::store::{Datum, Store};
 use crate::types::Value;
 
 /// A governance policy compiled into the registry for fast write-time checks.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CompiledPolicy {
     /// The policy's IRI (for diagnostics).
     policy_iri: String,
@@ -53,6 +53,16 @@ pub(crate) struct CompiledPolicy {
 }
 
 impl CompiledPolicy {
+    /// The policy's IRI.
+    pub(crate) fn iri(&self) -> &str {
+        &self.policy_iri
+    }
+
+    /// Whether the effect blocks at the write gate.
+    pub(crate) fn blocks(&self) -> bool {
+        effect_blocks(&self.effect)
+    }
+
     /// The exemplar citation appended to this policy's refusals, or `""`.
     ///
     /// A refusal under a drafted rule arrives EXPLAINED BY EXAMPLE — the case
@@ -84,6 +94,12 @@ impl PolicyRegistry {
     /// target-type IRI. Metadata (claim/effect/probe) is captured here so the
     /// per-edit path never re-`SELECT`s it.
     pub fn build(store: &Store) -> Result<Self> {
+        Self::build_at(store, &TemporalContext::default())
+    }
+
+    /// [`Self::build`] as the store stood at `at`: the policy set that governed
+    /// a historical transaction, read through the same compile path.
+    pub(crate) fn build_at(store: &Store, at: &TemporalContext) -> Result<Self> {
         let q = format!(
             "PREFIX a: <{DEFAULT_BASE_NS}> \
              SELECT ?p ?t ?c ?e ?probe ?window ?exemplar WHERE {{ \
@@ -95,7 +111,7 @@ impl PolicyRegistry {
              }}"
         );
         let mut by_type: HashMap<String, Vec<CompiledPolicy>> = HashMap::new();
-        if let QueryResult::Select { rows, .. } = sparql::query(store, &q)? {
+        if let QueryResult::Select { rows, .. } = sparql::query_temporal(store, &q, at)? {
             for row in rows {
                 let policy_iri = iri_of(store, row.get("p"))?;
                 let (Some(target_type_iri), Some(claim)) =
@@ -126,6 +142,49 @@ impl PolicyRegistry {
             }
         }
         Ok(Self { by_type })
+    }
+
+    /// The policies targeting `type_iri`, in compile order.
+    pub(crate) fn policies_for(&self, type_iri: &str) -> &[CompiledPolicy] {
+        self.by_type.get(type_iri).map_or(&[], Vec::as_slice)
+    }
+
+    /// Every compiled policy, sorted by (IRI, target type) so two registries
+    /// compare by content rather than by hash-map order.
+    pub(crate) fn sorted(&self) -> Vec<&CompiledPolicy> {
+        let mut all: Vec<&CompiledPolicy> = self.by_type.values().flatten().collect();
+        all.sort_by(|a, b| {
+            (a.policy_iri.as_str(), a.target_type_iri.as_str())
+                .cmp(&(b.policy_iri.as_str(), b.target_type_iri.as_str()))
+        });
+        all
+    }
+
+    /// `self` with `overlay` layered on top: a policy IRI present in `overlay`
+    /// replaces every entry of that IRI in `self`.
+    pub(crate) fn overlaid(&self, overlay: &Self) -> Self {
+        let replaced: std::collections::HashSet<&str> = overlay
+            .by_type
+            .values()
+            .flatten()
+            .map(|p| p.policy_iri.as_str())
+            .collect();
+        let mut by_type: HashMap<String, Vec<CompiledPolicy>> = HashMap::new();
+        for (t, ps) in &self.by_type {
+            for p in ps
+                .iter()
+                .filter(|p| !replaced.contains(p.policy_iri.as_str()))
+            {
+                by_type.entry(t.clone()).or_default().push(p.clone());
+            }
+        }
+        for (t, ps) in &overlay.by_type {
+            by_type
+                .entry(t.clone())
+                .or_default()
+                .extend(ps.iter().cloned());
+        }
+        Self { by_type }
     }
 
     /// Evaluate the applicable action-boundary policies for a write. Returns
@@ -264,6 +323,18 @@ impl<'a> EvalCtx<'a> {
         }
     }
 
+    /// History: the post-state of transaction `tx`, judged at `now`.
+    pub(crate) fn as_of(store: &'a Store, tx: i64, now: i64) -> Self {
+        Self {
+            store,
+            at: TemporalContext {
+                as_of_tx: Some(tx),
+                ..TemporalContext::default()
+            },
+            now: Some(now),
+        }
+    }
+
     fn now(&self) -> i64 {
         self.now.unwrap_or_else(now_secs)
     }
@@ -318,6 +389,13 @@ pub(crate) enum Escalation {
     Unrequested { now: i64 },
 }
 
+impl Escalation {
+    /// Whether the write is admitted despite the unsatisfied claim.
+    pub(crate) fn admits(&self) -> bool {
+        matches!(self, Self::Ruled { ruling, .. } if ruling.permits())
+    }
+}
+
 /// Judge one policy's claim for one target. The shared core of the live gate,
 /// the backtest and the shadow gate: it reads, and never stages or writes.
 pub(crate) fn judge_claim(
@@ -328,6 +406,18 @@ pub(crate) fn judge_claim(
     if !effect_blocks(&policy.effect) {
         return Ok(ClaimOutcome::NotEnforced);
     }
+    judge_claim_as_enforced(ctx, entity_iri, policy)
+}
+
+/// [`judge_claim`] without the effect filter: what the claim concludes as if
+/// the policy were enforced. The backtest and the shadow gate ask this of an
+/// advisory rule, because "would it fire?" is their question, not "does the
+/// gate check it?".
+pub(crate) fn judge_claim_as_enforced(
+    ctx: &EvalCtx<'_>,
+    entity_iri: &str,
+    policy: &CompiledPolicy,
+) -> Result<ClaimOutcome> {
     guard_iri(entity_iri)?;
     let target = format!("<{entity_iri}>");
 
@@ -344,7 +434,12 @@ pub(crate) fn judge_claim(
     }
 
     let bound_claim = policy.claim.replace("$target", &target);
-    if ctx.ask(&bound_claim)? {
+    let held = ctx.ask(&bound_claim)?;
+    // Test-only evaluator mutation: the shadow gate's sabotage arm proves a
+    // wrong evaluator SURFACES against recorded verdicts (aegis-xfuch4.2).
+    #[cfg(test)]
+    let held = held != sabotage::inverted(&policy.policy_iri);
+    if held {
         return Ok(ClaimOutcome::Satisfied);
     }
     Ok(ClaimOutcome::Unsatisfied)
@@ -535,6 +630,25 @@ pub fn is_governance_write(store: &Store, datums: &[Datum]) -> Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// Test-only evaluator mutation (see [`judge_claim_as_enforced`]).
+#[cfg(test)]
+pub(crate) mod sabotage {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static INVERT: RefCell<Option<String>> = const { RefCell::new(None) };
+    }
+
+    /// Invert the claim result of `policy` on this thread until reset.
+    pub(crate) fn invert(policy: Option<&str>) {
+        INVERT.with(|s| *s.borrow_mut() = policy.map(str::to_string));
+    }
+
+    pub(super) fn inverted(policy: &str) -> bool {
+        INVERT.with(|s| s.borrow().as_deref() == Some(policy))
+    }
 }
 
 #[cfg(test)]

@@ -19,6 +19,7 @@
 //!   quipu import promote <share-id> [--actor <id>]  Promote a staged share
 //!   quipu stats [--db <path>]            Show store statistics
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
+//!   quipu gate shadow ...                 Judge a candidate policy set over recorded history (never writes)
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu audit namespace                                   Report base-namespace drift
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
@@ -41,6 +42,7 @@ mod cli_entailment;
 mod cli_explain;
 mod cli_export;
 mod cli_fork;
+mod cli_gate;
 mod cli_graph;
 mod cli_ingest;
 mod cli_mcp;
@@ -107,6 +109,14 @@ fn main() {
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
         "policy" => cli_policy::cmd_policy(&args, db_path),
+        // The CONFIGURED store, resolved without the --db override: the shadow
+        // gate refuses to replay against it (aegis-xfuch4.2).
+        "gate" => cli_gate::cmd_gate(
+            &args,
+            &quipu::QuipuConfig::load(std::path::Path::new("."))
+                .store_path
+                .to_string_lossy(),
+        ),
         "align" => cli_align::cmd_align(&args, db_path),
         "path" => cli_path::cmd_path(&args, db_path, &config.base_ns),
         "propose" => cli_propose::cmd_propose(&args, db_path),
@@ -299,6 +309,7 @@ COMMANDS:
     quipu shapes load|list|remove [--db <path>]
     quipu policy draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-IRI> --claim <ask> [--out <file.ttl>]
     quipu policy backtest <candidate.ttl> [--last-txs N] [--from-tx A --to-tx B] [--db <path>]
+    quipu gate shadow --rules <candidate.ttl> --db <quiescent-copy.db> [--since 7d | --from-tx A --to-tx B] [--mode add|replace] [--json]
     quipu propose list|submit|accept|reject [--status pending] [--db <path>]
     quipu ontology load|list|remove [--db <path>]
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
