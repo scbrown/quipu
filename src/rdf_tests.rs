@@ -60,7 +60,7 @@ ex:bob a ex:Person ;
         assert_eq!(
             height_fact.value,
             Value::Typed {
-                lexical: "1.65E0".into(),
+                lexical: "1.65".into(),
                 datatype: namespace::XSD_DOUBLE.into(),
             }
         );
@@ -169,7 +169,7 @@ ex:bob a ex:Person ;
                     NamedNode::new_unchecked(format!("{xsd}double")),
                 ),
                 Value::Typed {
-                    lexical: "3.25E0".into(),
+                    lexical: "3.25".into(),
                     datatype: format!("{xsd}double"),
                 },
             ),

@@ -263,7 +263,14 @@ pub fn tool_retract_source(store: &mut Store, input: &JsonValue) -> Result<JsonV
         )));
     }
 
-    let tx_id = store.transact_to_graph(&plan, timestamp, actor, Some(&repair_source), graph)?;
+    let tx_id = store.transact_to_graph_scoped(
+        &plan,
+        timestamp,
+        actor,
+        Some(&repair_source),
+        graph,
+        Some(source),
+    )?;
 
     // Measure the POST-STATE rather than echoing the request (aegis-rz75m6:
     // `/knot` answers `replaced: true, count: 0` for a retraction that removed

@@ -105,7 +105,7 @@ impl Store {
                 proposed
                     .entry((d.entity, d.attribute))
                     .or_default()
-                    .push(d.value.to_bytes());
+                    .push(d.value.term_key());
             }
         }
 
@@ -116,7 +116,7 @@ impl Store {
         // way the whole defect describes.
         let mut close_other = self.conn.prepare(
             "UPDATE facts SET valid_to = ?1, retracted_tx = ?6 \
-             WHERE e = ?2 AND a = ?3 AND v != ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
+             WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
         )?;
         for ((entity, attribute), values) in &proposed {
             // AMBIGUOUS BATCH: two distinct values for one functional property in
@@ -130,9 +130,15 @@ impl Store {
             let Some(new_value) = values.first() else {
                 continue;
             };
-            closed += close_other.execute(params![
-                timestamp, entity, attribute, new_value, graph, tx_id
-            ])?;
+            let existing: Vec<Vec<u8>> = self.conn.prepare(
+                "SELECT DISTINCT v FROM facts WHERE e=?1 AND a=?2 AND g=?3 AND op=1 AND valid_to IS NULL"
+            )?.query_map(params![entity, attribute, graph], |row| row.get(0))?.collect::<std::result::Result<_,_>>()?;
+            for bytes in existing {
+                if crate::Value::from_bytes(&bytes)?.term_key() != *new_value {
+                    closed += close_other
+                        .execute(params![timestamp, entity, attribute, bytes, graph, tx_id])?;
+                }
+            }
         }
         Ok(closed)
     }

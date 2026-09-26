@@ -115,7 +115,19 @@ impl Store {
             }
         }
         events.sort_by_key(|(tx, _)| *tx);
-        Ok(events.into_iter().map(|(_, d)| d).collect())
+        let mut seen = std::collections::HashSet::new();
+        let mut changes = Vec::new();
+        for (_, mut datum) in events.into_iter().rev() {
+            if seen.insert((datum.entity, datum.attribute, datum.value.term_key())) {
+                datum.op = if self.has_literal(datum.entity, datum.attribute, &datum.value, g)? {
+                    Op::Assert
+                } else {
+                    Op::Retract
+                };
+                changes.push(datum);
+            }
+        }
+        Ok(changes)
     }
 
     /// Return current facts for only the requested attributes in one graph.

@@ -51,65 +51,7 @@ pub fn term_to_value(store: &Store, term: &OxTerm) -> Result<Value> {
 
 /// Map an RDF literal to a typed `Value` based on its XSD datatype.
 fn literal_to_value(lit: &Literal) -> Result<Value> {
-    // Language tags are checked first (their datatype is rdf:langString) and
-    // are stored SEPARATELY from the lexical form. Concatenating them, as this
-    // did, is irreversible corruption — aegis-fmyi.
-    if let Some(lang) = lit.language() {
-        return Ok(Value::Lang {
-            lexical: lit.value().to_string(),
-            lang: lang.to_string(),
-        });
-    }
-    let dt = lit.datatype().as_str();
-    match dt {
-        namespace::XSD_INTEGER => {
-            let n: i64 = lit
-                .value()
-                .parse()
-                .map_err(|e| Error::InvalidValue(format!("bad integer literal: {e}")))?;
-            Ok(Value::Int(n))
-        }
-        namespace::XSD_DOUBLE => {
-            let value = lit
-                .value()
-                .parse::<f64>()
-                .map_err(|e| Error::InvalidValue(format!("bad float literal: {e}")))?;
-            Ok(Value::Typed {
-                lexical: canonical_double(value),
-                datatype: dt.to_string(),
-            })
-        }
-        namespace::XSD_BOOLEAN => {
-            let b = matches!(lit.value(), "true" | "1");
-            Ok(Value::Bool(b))
-        }
-        namespace::XSD_STRING => Ok(Value::Str(lit.value().to_string())),
-        _ => {
-            // Numeric subtypes still have to parse — a malformed xsd:long is an
-            // ingest error, not a string — but they keep their datatype IRI so
-            // xsd:long/xsd:decimal/xsd:double stay distinguishable.
-            if namespace::is_numeric_datatype(dt) {
-                lit.value()
-                    .parse::<f64>()
-                    .map_err(|e| Error::InvalidValue(format!("bad numeric literal <{dt}>: {e}")))?;
-            }
-            Ok(Value::Typed {
-                lexical: lit.value().to_string(),
-                datatype: dt.to_string(),
-            })
-        }
-    }
-}
-
-fn canonical_double(value: f64) -> String {
-    let rendered = format!("{value:E}");
-    let (mantissa, exponent) = rendered.split_once('E').unwrap_or((&rendered, "0"));
-    let mantissa = if mantissa.contains('.') {
-        mantissa.to_string()
-    } else {
-        format!("{mantissa}.0")
-    };
-    format!("{mantissa}E{}", exponent.parse::<i32>().unwrap_or(0))
+    Ok(crate::literal_identity::literal_to_value(lit))
 }
 
 /// Convert a `Value` back to an oxrdf `Term` for serialization.

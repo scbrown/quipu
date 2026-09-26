@@ -78,18 +78,24 @@ impl ReadModel {
              GROUP BY e, a, v ORDER BY e, a",
         )?;
         let mut rows = stmt.query(params![graph])?;
+        let mut seen = std::collections::HashSet::new();
         while let Some(row) = rows.next()? {
             let rowid: i64 = row.get(0)?;
             let entity: i64 = row.get(1)?;
             let attribute: i64 = row.get(2)?;
             let bytes: Vec<u8> = row.get(3)?;
             let value = Value::from_bytes(&bytes)?;
+            let key = value.term_key();
+            let fp = fingerprint(&key);
+            if !seen.insert((entity, attribute, key)) {
+                continue;
+            }
             let slot = if resident(&value) {
                 ValueSlot::Inline(value)
             } else {
                 ValueSlot::LazyRow(rowid)
             };
-            model.insert_pointer(entity, attribute, fingerprint(&bytes), slot);
+            model.insert_pointer(entity, attribute, fp, slot);
         }
         Ok(model)
     }
@@ -164,7 +170,7 @@ impl ReadModel {
         attribute: i64,
         value: &Value,
     ) -> Result<Vec<i64>> {
-        let fp = fingerprint(&value.to_bytes());
+        let fp = fingerprint(&value.term_key());
         self.pos.get(&(attribute, fp)).map_or_else(
             || Ok(Vec::new()),
             |ids| {
@@ -180,7 +186,7 @@ impl ReadModel {
     }
 
     pub fn by_object(&self, store: &Store, value: &Value) -> Result<Vec<(i64, i64)>> {
-        let fp = fingerprint(&value.to_bytes());
+        let fp = fingerprint(&value.term_key());
         self.osp.get(&fp).map_or_else(
             || Ok(Vec::new()),
             |ids| {
@@ -231,7 +237,7 @@ impl ReadModel {
 
     fn insert(&mut self, store: &Store, datum: &Datum) {
         let bytes = datum.value.to_bytes();
-        let fp = fingerprint(&bytes);
+        let fp = fingerprint(&datum.value.term_key());
         if self.pos.get(&(datum.attribute, fp)).is_some_and(|ids| {
             ids.iter().any(|id| {
                 let fact = self.fact(*id);
@@ -285,7 +291,7 @@ impl ReadModel {
     }
 
     fn remove(&mut self, store: &Store, datum: &Datum) {
-        let fp = fingerprint(&datum.value.to_bytes());
+        let fp = fingerprint(&datum.value.term_key());
         let Some(id) = self.pos.get(&(datum.attribute, fp)).and_then(|ids| {
             ids.iter().copied().find(|id| {
                 let fact = self.fact(*id);

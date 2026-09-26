@@ -452,7 +452,7 @@ pub fn ingest_episode_outcome(
             })
         });
         datums.append(&mut assertions);
-        let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_str), graph)?;
+        let tx_id = store.transact_snapshot(&datums, timestamp, actor, &source_str, graph)?;
         (tx_id, count)
     } else {
         descriptions::ingest_reconciled(store, episode, &turtle, timestamp, base_ns, actor, graph)?

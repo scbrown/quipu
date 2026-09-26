@@ -18,6 +18,8 @@ pub mod import;
 pub mod inferred;
 pub mod labels;
 pub mod labels_advisory;
+mod literal_identity;
+mod literal_overlay;
 mod migrate;
 mod open;
 pub mod ops;

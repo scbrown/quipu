@@ -21,11 +21,13 @@ pub mod impact;
 pub mod lattice;
 pub mod lattice_fold;
 pub mod lattice_kind;
+mod literal_identity;
 pub mod mcp;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
 pub mod namespace;
+mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
 pub mod transaction_auth;
