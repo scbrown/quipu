@@ -53,6 +53,26 @@ pub(crate) struct CompiledPolicy {
 }
 
 impl CompiledPolicy {
+    /// A draft policy for the backtest, compiled from the fields a draft can
+    /// carry. Its effect is irrelevant there: the backtest asks the claim "as
+    /// enforced" (see [`judge_claim_as_enforced`]).
+    pub(crate) fn candidate(
+        policy_iri: &str,
+        target_type_iri: &str,
+        claim: &str,
+        evidence_probe: Option<&str>,
+    ) -> Self {
+        Self {
+            policy_iri: policy_iri.to_string(),
+            target_type_iri: target_type_iri.to_string(),
+            claim: claim.to_string(),
+            effect: "warn".to_string(),
+            evidence_probe: evidence_probe.map(str::to_string),
+            reversibility_window: None,
+            exemplar: None,
+        }
+    }
+
     /// The policy's IRI.
     pub(crate) fn iri(&self) -> &str {
         &self.policy_iri

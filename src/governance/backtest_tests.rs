@@ -35,6 +35,7 @@ fn candidate() -> Candidate {
         policy_iri: "http://ex/candidate".into(),
         target_type_iri: Some(DOC_TYPE.into()),
         claim: Some(REQUIRE_LABEL.into()),
+        evidence_probe: None,
     }
 }
 
@@ -289,4 +290,77 @@ fn turtle_with_zero_or_two_policies_is_refused() {
         err.is_err(),
         "two policies in one candidate file must be refused: {err:?}"
     );
+}
+
+/// Before/after probe for aegis-xfuch4.6: the three places backtest drifted
+/// from the write gate. Prints one line per case; the assertions live in the
+/// named tests below.
+fn drift_cases() -> Vec<(&'static str, BacktestReport)> {
+    let mut out = Vec::new();
+    // 1. PROBE: a candidate with an evidence probe that is false for the target.
+    {
+        let mut store = Store::open_in_memory().unwrap();
+        let d = vec![typed(&store, "http://ex/p1", DOC_TYPE)];
+        store.transact(&d, TS, None, None).unwrap();
+        let ttl = format!(
+            "@prefix a: <{DEFAULT_BASE_NS}> .\n<http://ex/cand> a a:Policy ; a:targets \"{DOC_TYPE}\" ; \
+             a:claim \"{REQUIRE_LABEL}\" ; a:evidenceProbe \"ASK {{ $target <http://ex/evidence> ?e }}\" ."
+        );
+        let c = Candidate::from_turtle(&ttl).unwrap();
+        out.push((
+            "probe-false",
+            backtest(&store, &c, &Window::last(&store, 10).unwrap()).unwrap(),
+        ));
+    }
+    // 2. GRAPH SCOPE: an entity typed only in the overlay graph it was written to.
+    {
+        let mut store = Store::open_in_memory().unwrap();
+        let d = vec![typed(&store, "http://ex/o1", DOC_TYPE)];
+        store.transact_to_graph(&d, TS, None, None, 9).unwrap();
+        out.push((
+            "overlay-typed",
+            backtest(&store, &candidate(), &Window::last(&store, 10).unwrap()).unwrap(),
+        ));
+    }
+    // 3. CONTROL: an ordinary ROOT-typed, label-less entity.
+    {
+        let mut store = Store::open_in_memory().unwrap();
+        let d = vec![typed(&store, "http://ex/r1", DOC_TYPE)];
+        store.transact(&d, TS, None, None).unwrap();
+        out.push((
+            "root-control",
+            backtest(&store, &candidate(), &Window::last(&store, 10).unwrap()).unwrap(),
+        ));
+    }
+    out
+}
+
+/// aegis-xfuch4.6 BEHAVIOUR CHANGE, one assertion per drift the backtest had
+/// from the write gate. Before this change the numbers were:
+///   probe-false    1 evaluation, 1 hit   (the gate records unknown, never refuses)
+///   overlay-typed  0 evaluations         (the gate evaluates it, and refuses)
+///   root-control   1 evaluation, 1 hit   (unchanged)
+#[test]
+fn the_backtest_now_agrees_with_the_gate_on_each_former_drift() {
+    let cases: std::collections::BTreeMap<_, _> = drift_cases().into_iter().collect();
+    let probe = &cases["probe-false"];
+    assert_eq!(
+        (probe.evaluations, probe.hits.len(), probe.unknown),
+        (1, 0, 1)
+    );
+    let overlay = &cases["overlay-typed"];
+    assert_eq!((overlay.evaluations, overlay.hits.len()), (1, 1));
+    let control = &cases["root-control"];
+    assert_eq!(
+        (control.evaluations, control.hits.len(), control.unknown),
+        (1, 1, 0)
+    );
+    assert!(cases.values().all(|r| r.unevaluable.is_none()));
+}
+
+#[test]
+fn an_unknown_is_reported_in_the_summary_not_hidden() {
+    let cases: std::collections::BTreeMap<_, _> = drift_cases().into_iter().collect();
+    let summary = cases["probe-false"].summary();
+    assert!(summary.contains("1 unknown"), "{summary}");
 }

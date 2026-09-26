@@ -41,7 +41,6 @@
 
 use crate::error::{Error, Result};
 use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
-use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::Store;
 
 /// A candidate policy as the backtest needs it — the fields the write gate
@@ -55,6 +54,9 @@ pub struct Candidate {
     /// `aegis:claim` — the compliant condition, `None` when the draft carries
     /// none (which makes it unevaluable here, not silently clean).
     pub claim: Option<String>,
+    /// `aegis:evidenceProbe` — when present and false for a target, the gate
+    /// records `unknown` and does not refuse, so neither does the backtest.
+    pub evidence_probe: Option<String>,
 }
 
 impl Candidate {
@@ -74,6 +76,7 @@ impl Candidate {
         let policy_type = format!("{DEFAULT_BASE_NS}Policy");
         let targets_p = format!("{DEFAULT_BASE_NS}targets");
         let claim_p = format!("{DEFAULT_BASE_NS}claim");
+        let probe_p = format!("{DEFAULT_BASE_NS}evidenceProbe");
 
         let mut policies: Vec<String> = Vec::new();
         let mut triples: Vec<(String, String, String)> = Vec::new();
@@ -117,6 +120,7 @@ impl Candidate {
             policy_iri: policy_iri.clone(),
             target_type_iri: field(&targets_p),
             claim: field(&claim_p),
+            evidence_probe: field(&probe_p),
         })
     }
 }
@@ -183,6 +187,9 @@ pub struct BacktestReport {
     /// Every firing, in tx order. THIS is the false-positive surface: each
     /// entry is a candidate FP until a human judges it.
     pub hits: Vec<Hit>,
+    /// Evaluations whose evidence probe found nothing to judge: the gate's
+    /// `unknown`. Neither a hit nor compliance, so counted on its own.
+    pub unknown: usize,
     /// `Some(reason)` when the candidate could not be evaluated at all.
     /// Checked before `hits` by every honest reader: an unevaluable candidate
     /// has an empty hit list that means NOTHING WAS MEASURED, not "clean".
@@ -207,15 +214,18 @@ impl BacktestReport {
         format!(
             "backtest of '{policy}' over tx {from}..={to}: this rule would have \
              fired {hits} time(s) across {evals} evaluation(s) in {txs} \
-             transaction(s). Born advisory, each firing is a warn; every hit is \
-             a false-positive CANDIDATE until a human judges it. Measures only \
-             writes that happened — a quiet window bounds no false negatives.",
+             transaction(s), with {unknown} unknown (its evidence probe found \
+             nothing to judge, which the gate records and never refuses). Born \
+             advisory, each firing is a warn; every hit is a false-positive \
+             CANDIDATE until a human judges it. Measures only writes that \
+             happened — a quiet window bounds no false negatives.",
             policy = self.policy_iri,
             from = self.window.from_tx,
             to = self.window.to_tx,
             hits = self.hits.len(),
             evals = self.evaluations,
             txs = self.transactions,
+            unknown = self.unknown,
         )
     }
 }
@@ -239,6 +249,7 @@ pub fn backtest(store: &Store, candidate: &Candidate, window: &Window) -> Result
         transactions: 0,
         evaluations: 0,
         hits: Vec::new(),
+        unknown: 0,
         unevaluable: None,
     };
     let refuse = |mut report: BacktestReport, reason: String| {
@@ -285,36 +296,47 @@ pub fn backtest(store: &Store, candidate: &Candidate, window: &Window) -> Result
         );
     }
 
+    // The gate's OWN evaluator (aegis-xfuch4.6): the claim and probe through
+    // guard::judge_claim_as_enforced, types resolved per (entity, graph) as the
+    // gate resolves them, all as of the transaction. "As enforced" because a
+    // draft is born advisory and the backtest's question is "would it fire?".
+    let policy = super::guard::CompiledPolicy::candidate(
+        &candidate.policy_iri,
+        target_type,
+        claim,
+        candidate.evidence_probe.as_deref(),
+    );
+    let Some(rdf_type_id) = store.lookup(RDF_TYPE)? else {
+        return Ok(report); // no type was ever interned: nothing can be a target
+    };
     for tx in window.from_tx..=window.to_tx {
         let Some(meta) = store.get_transaction(tx)? else {
             continue; // ids are dense in practice, but a gap is not a finding
         };
         report.transactions += 1;
-        for entity_iri in touched_entities(store, tx)? {
+        let ctx = super::guard::EvalCtx::as_of(store, tx, 0);
+        for (entity, graph) in touched_entities(store, tx)? {
+            let types = super::guard::entity_type_iris(&ctx, entity, rdf_type_id, graph)?;
+            if !types.iter().any(|t| t == target_type) {
+                continue;
+            }
+            let Ok(entity_iri) = store.resolve(entity) else {
+                continue;
+            };
             // Same injection guard as the gate; an IRI the gate could never
             // bind is one the policy could never fire on.
             if super::guard::guard_iri(&entity_iri).is_err() {
                 continue;
             }
-            let at = TemporalContext {
-                as_of_tx: Some(tx),
-                ..TemporalContext::default()
-            };
-            // Was it a target AS OF this tx? Judged temporally, like the claim:
-            // an entity typed later must not backdate firings.
-            let typed = format!("ASK {{ <{entity_iri}> <{RDF_TYPE}> <{target_type}> }}");
-            if !ask_at(store, &typed, &at)? {
-                continue;
-            }
             report.evaluations += 1;
-            let bound = claim.replace("$target", &format!("<{entity_iri}>"));
-            match ask_at(store, &bound, &at) {
-                Ok(true) => {} // compliant then; the gate would have stayed silent
-                Ok(false) => report.hits.push(Hit {
+            match super::guard::judge_claim_as_enforced(&ctx, &entity_iri, &policy) {
+                Ok(super::guard::ClaimOutcome::Unsatisfied) => report.hits.push(Hit {
                     tx,
                     timestamp: meta.timestamp.clone(),
                     target_iri: entity_iri,
                 }),
+                Ok(super::guard::ClaimOutcome::Unknown) => report.unknown += 1,
+                Ok(_) => {} // compliant then; the gate would have stayed silent
                 Err(e) => {
                     return refuse(
                         report,
@@ -330,30 +352,16 @@ pub fn backtest(store: &Store, candidate: &Candidate, window: &Window) -> Result
     Ok(report)
 }
 
-/// The entities transaction `tx` wrote (assert or retract) — the population
-/// the gate evaluates, deduplicated, resolved to IRIs.
-fn touched_entities(store: &Store, tx: i64) -> Result<Vec<String>> {
-    let mut stmt = store.prepare("SELECT DISTINCT e FROM facts WHERE tx = ?1")?;
-    let ids = stmt
-        .query_map(rusqlite::params![tx], |row| row.get::<_, i64>(0))?
-        .collect::<std::result::Result<Vec<i64>, _>>()?;
-    let mut out = Vec::with_capacity(ids.len());
-    for id in ids {
-        if let Ok(iri) = store.resolve(id) {
-            out.push(iri);
-        }
-    }
-    Ok(out)
-}
-
-/// Run an ASK at a temporal context, erroring on anything that is not an ASK.
-fn ask_at(store: &Store, query: &str, at: &TemporalContext) -> Result<bool> {
-    match sparql::query_temporal(store, query, at)? {
-        QueryResult::Ask(b) => Ok(b),
-        _ => Err(Error::InvalidValue(
-            "candidate claim must be a SPARQL ASK query".into(),
-        )),
-    }
+/// The (entity, graph) pairs transaction `tx` wrote (assert or retract): the
+/// population the gate evaluates, with the graph the gate scopes types to.
+fn touched_entities(store: &Store, tx: i64) -> Result<Vec<(i64, i64)>> {
+    let mut stmt = store.prepare("SELECT DISTINCT e, g FROM facts WHERE tx = ?1 ORDER BY e, g")?;
+    let rows = stmt
+        .query_map(rusqlite::params![tx], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
 }
 
 #[cfg(test)]
