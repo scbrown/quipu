@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-09-26
+
+### Documentation
+
+- *(conformance)* Say the SPARQL 1.0 suite is not run([60f4e9b](https://github.com/scbrown/quipu/commit/60f4e9b6b5a2451f6363a9da3ab4ea1bcbe3f40b))
+
+### Fixed
+
+- *(store)* Preserve independent source claims during cleanup([1241696](https://github.com/scbrown/quipu/commit/1241696efa875d4d534f1c2a4aecb261656a5a7f))
+- *(store)* Project co-owned claims consistently across readers([34414b3](https://github.com/scbrown/quipu/commit/34414b31025a466d871c1ac5dea4c5a30e34134c))
+
+### Miscellaneous
+
+- *(conformance)* Re-derived ledgers at 60f4e9b6([e751be5](https://github.com/scbrown/quipu/commit/e751be5f5d93b2c716d665d73bb3623068527626))
+
+### Testing
+
+- *(conformance)* Record source ownership regression ledgers([fd1d255](https://github.com/scbrown/quipu/commit/fd1d25576a1cdb4df5c14b0dfc63a2137114f5ee))
+
+### Perf
+
+- *(store)* Plan source-scoped retraction from the source, not the whole graph([05e0eb8](https://github.com/scbrown/quipu/commit/05e0eb87f309326f81a6560d59f0887671b96084))
+- *(store)* Keep the retraction order exact with an explicit f.v tie-break([c86ce79](https://github.com/scbrown/quipu/commit/c86ce79703e40b12ef147d6cfe062ad624a383d5))
+
 ## [0.9.0] - 2026-09-25
 
 ### Added
