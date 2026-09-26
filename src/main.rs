@@ -63,11 +63,11 @@ mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
+mod cli_quarantine;
 mod cli_search;
 mod cli_share_diff;
 mod hook_session_capture;
 mod hooks_install;
-mod cli_quarantine;
 
 fn main() {
     quipu::write_kind::set_cli();
