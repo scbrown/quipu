@@ -51,14 +51,23 @@ fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
     }
 }
 
-/// Fetch a single string-literal value of `<subject> <predicate> ?o` from the
+/// Fetch one string value across the two spellings of a vocabulary property from the
 /// committed graph (used to read a Policy's stored claim / evidence probe).
-fn fetch_scalar(store: &Store, subject: &str, predicate: &str) -> Result<Option<String>> {
+fn fetch_scalar(store: &Store, subject: &str, local_name: &str) -> Result<Option<String>> {
     guard_iri(subject)?;
-    guard_iri(predicate)?;
-    let q = format!("SELECT ?o WHERE {{ <{subject}> <{predicate}> ?o }} LIMIT 1");
+    guard_iri(local_name)?;
+    let old = crate::namespace::DEFAULT_BASE_NS;
+    let public = "https://scbrown.github.io/quechua/ns#";
+    let q = format!(
+        "SELECT DISTINCT ?o WHERE {{ VALUES ?predicate {{ <{old}{local_name}> <{public}{local_name}> }} <{subject}> ?predicate ?o }} LIMIT 2"
+    );
     match sparql::query_temporal(store, &q, &TemporalContext::default())? {
         QueryResult::Select { rows, .. } => {
+            if rows.len() > 1 {
+                return Err(Error::InvalidValue(format!(
+                    "conflicting values for {local_name} on {subject}"
+                )));
+            }
             Ok(rows.first().and_then(|r| r.get("o")).and_then(|v| match v {
                 crate::types::Value::Str(s) => Some(s.clone()),
                 _ => None,
@@ -87,7 +96,7 @@ fn is_registered_verifier(store: &Store, verifier: &str, predicate_id: &str) -> 
     let p = sparql_string_literal(predicate_id)?;
     let ask = format!(
         "PREFIX a: <http://aegis.gastown.local/ontology/> \
-         ASK {{ ?r a a:VerifierRegistration ; a:verifier {v} ; a:attests {p} }}"
+         PREFIX q: <https://scbrown.github.io/quechua/ns#> ASK {{ {{ ?r a a:VerifierRegistration }} UNION {{ ?r a q:VerifierRegistration }} VALUES ?verifier {{ a:verifier q:verifier }} VALUES ?attests {{ a:attests q:attests }} ?r ?verifier {v} ; ?attests {p} }}"
     );
     run_ask(store, &ask, &TemporalContext::default())
 }
@@ -98,10 +107,15 @@ fn registered_public_key(store: &Store, verifier: &str) -> Result<Option<String>
     let v = sparql_string_literal(verifier)?;
     let q = format!(
         "PREFIX a: <http://aegis.gastown.local/ontology/> \
-         SELECT ?k WHERE {{ ?r a a:VerifierRegistration ; a:verifier {v} ; a:publicKey ?k }} LIMIT 1"
+         PREFIX q: <https://scbrown.github.io/quechua/ns#> SELECT DISTINCT ?k WHERE {{ {{ ?r a a:VerifierRegistration }} UNION {{ ?r a q:VerifierRegistration }} VALUES ?verifier {{ a:verifier q:verifier }} VALUES ?key {{ a:publicKey q:publicKey }} ?r ?verifier {v} ; ?key ?k }} LIMIT 2"
     );
     match sparql::query_temporal(store, &q, &TemporalContext::default())? {
         QueryResult::Select { rows, .. } => {
+            if rows.len() > 1 {
+                return Err(Error::InvalidValue(format!(
+                    "conflicting public keys for verifier {verifier}"
+                )));
+            }
             Ok(rows.first().and_then(|r| r.get("k")).and_then(|v| match v {
                 crate::types::Value::Str(s) => Some(s.clone()),
                 _ => None,
@@ -221,13 +235,9 @@ pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> 
                 .map(std::string::ToString::to_string),
         )
     } else if let Some(policy) = input.get("policy").and_then(JsonValue::as_str) {
-        let claim = fetch_scalar(store, policy, "http://aegis.gastown.local/ontology/claim")?
+        let claim = fetch_scalar(store, policy, "claim")?
             .ok_or_else(|| Error::InvalidValue(format!("policy '{policy}' has no aegis:claim")))?;
-        let probe = fetch_scalar(
-            store,
-            policy,
-            "http://aegis.gastown.local/ontology/evidenceProbe",
-        )?;
+        let probe = fetch_scalar(store, policy, "evidenceProbe")?;
         (claim, policy.to_string(), probe)
     } else {
         return Err(Error::InvalidValue(
@@ -341,9 +351,9 @@ pub fn tool_cooccurrence(store: &Store, input: &JsonValue) -> Result<JsonValue> 
 
     let query = format!(
         "PREFIX a: <http://aegis.gastown.local/ontology/> \
-         SELECT ?other (COUNT(DISTINCT ?e) AS ?shared) WHERE {{ \
-           ?cA a:implements <{item}> . ?cA a:modifies ?e . \
-           ?cB a:modifies ?e . ?cB a:implements ?other FILTER(?other != <{item}>) \
+         PREFIX q: <https://scbrown.github.io/quechua/ns#> SELECT ?other (COUNT(DISTINCT ?e) AS ?shared) WHERE {{ \
+           VALUES ?ipA {{ a:implements q:implements }} VALUES ?mpA {{ a:modifies q:modifies }} ?cA ?ipA <{item}> . ?cA ?mpA ?e . \
+           VALUES ?mpB {{ a:modifies q:modifies }} VALUES ?ipB {{ a:implements q:implements }} ?cB ?mpB ?e . ?cB ?ipB ?other FILTER(?other != <{item}>) \
          }} GROUP BY ?other ORDER BY DESC(?shared)"
     );
 
@@ -726,3 +736,7 @@ mod graph_registry_tool_tests {
         assert!(err.is_err(), "a label declaring no axis must be refused");
     }
 }
+
+#[cfg(test)]
+#[path = "governance_namespace_tests.rs"]
+mod namespace_tests;

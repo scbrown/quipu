@@ -170,7 +170,7 @@ fn scoped_entity_iris(
     let mut filters = String::new();
     if has_group {
         patterns.push_str(
-            "?_episode <http://aegis.gastown.local/ontology/groupId> ?_gid . \
+            "VALUES ?_groupPredicate { <http://aegis.gastown.local/ontology/groupId> <https://scbrown.github.io/quechua/ns#groupId> } ?_episode ?_groupPredicate ?_gid . \
              ?s <http://www.w3.org/ns/prov#wasGeneratedBy> ?_episode . ",
         );
         let gid_filters: Vec<String> = group_ids

@@ -4571,3 +4571,232 @@ fn a_stamp_sqlite_cannot_parse_makes_the_lag_unknown_through_the_store() {
 
 #[path = "snapshot_identity_tests.rs"]
 mod snapshot_identity;
+
+// Explicit vocabulary alternatives must cover each edge independently: one
+// commit can use the old modifies predicate and the new implements predicate.
+fn assert_namespace_reader(name: &str, params: &serde_json::Value, expected_count: u64) {
+    let old = crate::namespace::DEFAULT_BASE_NS;
+    let new = "https://scbrown.github.io/quechua/ns#";
+    let facts = [
+        ("workA", "identifier", "\"ITEM-A\""),
+        ("workB", "identifier", "\"ITEM-B\""),
+        ("commitA", "implements", "<urn:reader:workA>"),
+        ("commitA", "modifies", "<urn:reader:e1>"),
+        ("commitA", "modifies", "<urn:reader:e2>"),
+        ("commitB", "implements", "<urn:reader:workB>"),
+        ("commitB", "modifies", "<urn:reader:e1>"),
+        ("e1", "filePath", "\"src/one.rs\""),
+        ("e2", "filePath", "\"src/two.rs\""),
+    ];
+    for mode in ["old", "new", "mixed", "both"] {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut turtle = String::new();
+        for (i, (subject, predicate, object)) in facts.iter().enumerate() {
+            let namespaces: Vec<&str> = match mode {
+                "old" => vec![old],
+                "new" => vec![new],
+                "mixed" => vec![if i % 2 == 0 { old } else { new }],
+                "both" => vec![old, new],
+                _ => unreachable!(),
+            };
+            for ns in namespaces {
+                turtle.push_str(&format!(
+                    "<urn:reader:{subject}> <{ns}{predicate}> {object} .\n"
+                ));
+            }
+            // Same local names in an unrelated namespace must never join.
+            turtle.push_str(&format!(
+                "<urn:other:{subject}> <https://example.org/foreign#{predicate}> {object} .\n"
+            ));
+        }
+        crate::rdf::ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let out = if name == "cooccurrence" {
+            super::governance::tool_cooccurrence(&store, params)
+        } else {
+            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":params}))
+        }
+        .unwrap();
+        assert_eq!(out["count"], expected_count, "{name}/{mode}: {out}");
+        match name {
+            "brief_ground" => {
+                let paths: std::collections::BTreeSet<_> = out["rows"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r["path"].as_str().unwrap())
+                    .collect();
+                assert_eq!(paths, ["src/one.rs", "src/two.rs"].into_iter().collect());
+            }
+            "brief_related" => {
+                assert_eq!(out["rows"][0]["other"], "ITEM-B");
+                assert_eq!(out["rows"][0]["shared_entities"], 1);
+            }
+            "cochanged_with" => {
+                assert_eq!(out["rows"][0]["other"], "urn:reader:e2");
+                assert_eq!(out["rows"][0]["shared_workitems"], 1);
+            }
+            "cooccurrence" => {
+                assert_eq!(out["cooccurring"][0]["work_item"], "urn:reader:workB");
+                assert_eq!(out["cooccurring"][0]["shared_entities"], 1);
+            }
+            "entity_work" => {
+                let commits: std::collections::BTreeSet<_> = out["rows"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r["commit"].as_str().unwrap())
+                    .collect();
+                assert_eq!(
+                    commits,
+                    ["urn:reader:commitA", "urn:reader:commitB"]
+                        .into_iter()
+                        .collect()
+                );
+            }
+            _ => unreachable!(),
+        }
+        let missing = if params.get("item").is_some() {
+            serde_json::json!({"item":"ABSENT"})
+        } else if name == "cooccurrence" {
+            serde_json::json!({"work_item":"urn:reader:absent"})
+        } else {
+            serde_json::json!({"entity":"urn:reader:absent"})
+        };
+        let control = if name == "cooccurrence" {
+            super::governance::tool_cooccurrence(&store, &missing)
+        } else {
+            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":missing}))
+        }
+        .unwrap();
+        assert_eq!(
+            control["count"], 0,
+            "{name}/{mode} negative control: {control}"
+        );
+    }
+}
+
+#[test]
+fn brief_ground_dual_namespace_reader() {
+    assert_namespace_reader("brief_ground", &serde_json::json!({"item":"ITEM-A"}), 2);
+}
+
+#[test]
+fn brief_related_dual_namespace_reader() {
+    assert_namespace_reader("brief_related", &serde_json::json!({"item":"ITEM-A"}), 1);
+}
+
+#[test]
+fn entity_work_dual_namespace_reader() {
+    assert_namespace_reader(
+        "entity_work",
+        &serde_json::json!({"entity":"urn:reader:e1"}),
+        2,
+    );
+}
+
+#[test]
+fn cochanged_with_dual_namespace_reader() {
+    assert_namespace_reader(
+        "cochanged_with",
+        &serde_json::json!({"entity":"urn:reader:e1"}),
+        1,
+    );
+}
+
+#[test]
+fn cooccurrence_dual_namespace_reader() {
+    assert_namespace_reader(
+        "cooccurrence",
+        &serde_json::json!({"work_item":"urn:reader:workA"}),
+        1,
+    );
+}
+
+fn assert_group_namespace_reader(reader: &str) {
+    let old = crate::namespace::DEFAULT_BASE_NS;
+    let new = "https://scbrown.github.io/quechua/ns#";
+    for namespaces in [vec![old], vec![new], vec![old, new]] {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut turtle = String::from(
+            "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+             @prefix prov: <http://www.w3.org/ns/prov#> .\n\
+             <urn:group-reader:hit> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:hit> .\n\
+             <urn:group-reader:other> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:other> .\n\
+             <urn:group-reader:foreign> rdfs:label \"needle\" ; prov:wasGeneratedBy <urn:episode:foreign> .\n\
+             <urn:group-reader:ungrouped> rdfs:label \"needle\" .\n\
+             <urn:episode:foreign> <https://example.org/foreign#groupId> \"wanted\" .\n",
+        );
+        for ns in &namespaces {
+            turtle.push_str(&format!(
+                "<urn:episode:hit> <{ns}groupId> \"wanted\" .\n\
+                 <urn:episode:other> <{ns}groupId> \"different\" .\n"
+            ));
+        }
+        crate::rdf::ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let embedding = vec![0.5_f32; 8];
+        for name in ["hit", "other", "foreign", "ungrouped"] {
+            let id = store.intern(&format!("urn:group-reader:{name}")).unwrap();
+            store
+                .embed_entity(id, "needle", &embedding, "2026-01-01T00:00:00Z")
+                .unwrap();
+        }
+        for (group, count) in [("wanted", 1), ("absent", 0)] {
+            let input = serde_json::json!({"query":"needle", "embedding":embedding,
+                "group_ids":[group], "max_results":20, "limit":20, "verbose":true});
+            let (out, field, entity_field) = match reader {
+                "nodes" => (
+                    super::search::tool_search_nodes(&store, &input).unwrap(),
+                    "nodes",
+                    "iri",
+                ),
+                "facts" => (
+                    super::search::tool_search_facts(&store, &input).unwrap(),
+                    "facts",
+                    "source",
+                ),
+                "semantic" => (tool_search(&store, &input).unwrap(), "results", "entity"),
+                _ => unreachable!(),
+            };
+            assert_eq!(
+                out["count"], count,
+                "{reader}/{namespaces:?}/{group}: {out}"
+            );
+            if count == 1 {
+                assert_eq!(out[field][0][entity_field], "urn:group-reader:hit");
+            }
+        }
+    }
+}
+
+#[test]
+fn search_nodes_dual_namespace_group_reader() {
+    assert_group_namespace_reader("nodes");
+}
+
+#[test]
+fn search_facts_dual_namespace_group_reader() {
+    assert_group_namespace_reader("facts");
+}
+
+#[test]
+fn semantic_search_dual_namespace_group_reader() {
+    assert_group_namespace_reader("semantic");
+}

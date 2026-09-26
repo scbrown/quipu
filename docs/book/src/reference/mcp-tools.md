@@ -449,6 +449,10 @@ re-running the same ASK over the same committed evidence gets the same verdict
 (checked, not trusted). The verdict is returned **unsigned** unless the store
 has a signing identity attached.
 
+Stored `claim` and `evidenceProbe` properties are read under both vocabulary
+namespaces. Identical alias values collapse; conflicting values are refused.
+The stored query text, target identity, and signature inputs are preserved.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `policy` | One of policy/claim | Policy IRI whose `aegis:claim` to evaluate |
@@ -465,6 +469,10 @@ be valid under the verifier's **registered** public key, and the verifier must
 be authorized to attest the predicate. `trusted` is the conjunction — the
 property a consumer should gate on.
 
+Registration classes and verifier/key predicates are read under both vocabulary
+namespaces. Conflicting registered keys are refused, rather than choosing one;
+duplicate aliases carrying the same key are accepted.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `predicate_id` | Yes | Predicate the verdict attests |
@@ -478,7 +486,8 @@ property a consumer should gate on.
 ### `quipu_verifier_authorized`
 
 Check the Phase-0 verifier registry: may this verifier attest this predicate?
-The discovery half of the governance gate.
+The discovery half of the governance gate. Registration classes and each
+verifier/attests predicate may independently use the legacy or Quechua vocabulary.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -490,7 +499,9 @@ The discovery half of the governance gate.
 Deterministic, auditable work-item co-occurrence: given a work-item (`Bead`)
 IRI, returns the other work-items that share at least one touched code entity
 via the provenance chain `Bead ←implements− GitCommit −modifies→ entity`.
-A graph query over typed provenance edges, ordered by overlap strength.
+A graph query over typed provenance edges, ordered by overlap strength. Each
+implements/modifies edge may use the legacy or Quechua vocabulary independently;
+duplicate aliases do not inflate shared-entity counts.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -658,6 +669,19 @@ to list every query, its parameters, and their types.
 | `references_to` | `entity` (iri), `limit` (int, 50) | Entities that reference the given entity (incoming) |
 | `entities_of_type` | `type` (iri), `limit` (int, 100) | All entities of a given `rdf:type` |
 | `labeled_like` | `text` (text), `limit` (int, 50) | Entities whose `rdfs:label` contains `text` (case-insensitive) |
+
+The provenance queries `brief_ground`, `brief_related`, `entity_work`, and
+`cochanged_with` read both legacy vocabulary predicates and their Quechua
+counterparts under `https://scbrown.github.io/quechua/ns#`. Each edge can use
+either spelling independently. Duplicate aliases do not inflate returned paths
+or shared-item counts. Entity IRIs and dataset selection stay unchanged; these
+queries do not require an equivalence reasoner.
+
+The group scope in `quipu_search`, `quipu_search_nodes`, and
+`quipu_search_facts` accepts either vocabulary's `groupId` predicate on the
+provenance episode. Duplicate aliases do not duplicate search results. Other
+groups, unrelated predicates with the same local name, and nodes without an
+episode remain outside a requested group scope.
 
 Parameters are validated and escaped by type before substitution, so values are
 safe against SPARQL injection. The response includes the resolved `sparql`, the
