@@ -22,7 +22,18 @@ impl Store {
     /// registry on first use. Returns `Err(PolicyDenied)` when a `deny` policy's
     /// claim is unsatisfied for a touched target — the caller rolls the write
     /// back so nothing is committed.
-    pub(crate) fn enforce_write_policies(&mut self, datums: &[Datum], graph: i64) -> Result<()> {
+    ///
+    /// `caller_len` is how many of `datums` the caller wrote (the rest is OWL
+    /// inference). On a denial, and with the quarantine enabled, the gate also
+    /// captures what a replay needs — the attempt, the post-state digest, the
+    /// rule-set digest — while the savepoint still holds the post-state.
+    pub(crate) fn enforce_write_policies(
+        &mut self,
+        datums: &[Datum],
+        caller_len: usize,
+        graph: i64,
+    ) -> Result<()> {
+        self.pending_quarantine = None;
         if !self.governance_config.enforce_on_write || self.recording_verdicts {
             return Ok(());
         }
@@ -34,7 +45,23 @@ impl Store {
         let registry = self.policy_registry.take().expect("registry just built");
         let mut verdicts = Vec::new();
         let mut requests = Vec::new();
+        // One clock per evaluation: escalation expiry is judged at this instant,
+        // and the quarantine records it so a replay judges at the same one.
+        let pinned = self.gate_clock;
+        let now = pinned.unwrap_or_else(|| i64::try_from(crate::time::epoch_secs()).unwrap_or(0));
+        self.gate_clock = Some(now);
         let result = registry.evaluate_write(self, datums, graph, &mut verdicts, &mut requests);
+        self.gate_clock = pinned;
+        if matches!(result, Err(Error::PolicyDenied(_)))
+            && !verdicts.is_empty()
+            && self.governance_config.quarantine.enabled
+        {
+            let caller = &datums[..caller_len.min(datums.len())];
+            // Best effort, like the verdict flush: a capture that fails must
+            // not turn the policy's refusal into a different error.
+            self.pending_quarantine =
+                crate::governance::quarantine::capture(self, &registry, caller, graph, now).ok();
+        }
         self.policy_registry = Some(registry);
         self.pending_requests = requests;
         // STAGED, not written. The caller writes them after the savepoint
@@ -260,16 +287,36 @@ impl Store {
     /// here are swallowed: a verdict that cannot be recorded must not turn a
     /// successful write into a failed one, nor a denial into a different error
     /// than the policy's.
+    ///
+    /// A refused write's quarantine entry is recorded here too, one row per
+    /// verdict, and only once that verdict's facts have landed: the entry is
+    /// keyed by the verdict it backs, and an entry for a verdict that was never
+    /// written would be evidence for nothing.
     pub(crate) fn flush_pending_verdicts(&mut self, timestamp: &str, actor: Option<&str>) {
+        let quarantine = self.pending_quarantine.take();
+        // A replay's throwaway copy hands the decision back instead of writing
+        // it — the copy has no signing identity, and nothing it decides is a
+        // new verdict.
+        if let Some(capture) = self.replay_capture.as_mut() {
+            capture.verdicts = std::mem::take(&mut self.pending_verdicts);
+            capture.quarantine = quarantine;
+            self.pending_requests.clear();
+            return;
+        }
         self.flush_pending_requests(timestamp);
         let pending = std::mem::take(&mut self.pending_verdicts);
         if pending.is_empty() || self.recording_verdicts {
             return;
         }
         let mut datums = Vec::new();
+        let mut subjects = Vec::new();
         for verdict in &pending {
             match crate::governance::verdict_facts::datums_for(self, verdict, timestamp, actor) {
-                Ok(mut d) => datums.append(&mut d),
+                Ok(mut d) => {
+                    // The first datum's subject IS the verdict (its rdf:type).
+                    subjects.extend(d.first().map(|x| x.entity));
+                    datums.append(&mut d);
+                }
                 // No signing identity => no verdict, never an unsigned one.
                 Err(_) => return,
             }
@@ -278,13 +325,18 @@ impl Store {
             return;
         }
         self.recording_verdicts = true;
-        let _ = self.transact(
+        let recorded = self.transact(
             &datums,
             timestamp,
             Some("quipu"),
             Some("write-gate verdict"),
         );
         self.recording_verdicts = false;
+        if let (Ok(_), Some(capture)) = (recorded, quarantine) {
+            // Swallowed for the verdict's reason: the refusal the caller gets
+            // must be the policy's, whatever happens to its paperwork.
+            let _ = crate::governance::quarantine::record(self, &capture, &subjects);
+        }
     }
 
     /// Set the principal-and-agent chain for subsequent writes.

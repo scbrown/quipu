@@ -257,6 +257,50 @@ pub struct GovernanceConfig {
     /// all of them at once. The flag makes a supplied chain BINDING, so adopting
     /// attribution is per-caller and cannot silently widen.
     pub enforce_authority: bool,
+
+    /// What a refused write leaves behind for replay (GS6 for denials,
+    /// `src/governance/quarantine.rs`). `[quipu.governance.quarantine]`.
+    pub quarantine: QuarantineConfig,
+}
+
+/// Denial quarantine retention (`[quipu.governance.quarantine]`).
+///
+/// A denied write is rolled back (GS2), so without this its verdict survives
+/// and the evidence to re-derive it does not. The quarantine keeps that
+/// evidence OUTSIDE the governed graph — plain tables no query can reach.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct QuarantineConfig {
+    /// Record a quarantine entry for each verdict of a refused write. Default
+    /// **on**: digests only, so nothing refused is retained — just a hash of
+    /// the attempt, a digest of the post-state the gate judged, and a digest of
+    /// the rule set in force. The cost is one scan of the live facts per
+    /// DENIAL (never per write), and it is what makes a refusal re-derivable
+    /// from a delta presented later rather than only attestable.
+    pub enabled: bool,
+    /// Graph IRIs whose refused attempts are kept IN FULL, sealed, so replay
+    /// needs nothing presented. `"*"` means every graph;
+    /// `"urn:quipu:graph:root"` names ROOT. Default empty: keeping refused
+    /// content is an opt-in decision, per graph, because it is exactly the
+    /// content the gate refused.
+    pub retain_full: Vec<String>,
+}
+
+impl Default for QuarantineConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            retain_full: Vec::new(),
+        }
+    }
+}
+
+impl QuarantineConfig {
+    /// Whether refused attempts against `graph_iri` are kept in full.
+    #[must_use]
+    pub fn retains_full(&self, graph_iri: &str) -> bool {
+        self.retain_full.iter().any(|g| g == "*" || g == graph_iri)
+    }
 }
 
 /// Event-log retention policy (quipu-9z9).

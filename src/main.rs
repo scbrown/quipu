@@ -21,6 +21,8 @@
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu audit namespace                                   Report base-namespace drift
+//!   quipu audit replay <verdict> [--delta <file>]           Re-derive a gate decision as of its tx
+//!   quipu audit quarantine [list|purge]                     Refused-attempt evidence behind verdicts
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
 //!   quipu db attach --list                List the databases mounted alongside this store
 //!   quipu pack <graph-iri> --out <file> [--space N]  Export a graph as an attachable pack
@@ -49,6 +51,7 @@ mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
+mod cli_quarantine;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -337,6 +340,9 @@ COMMANDS:
     quipu merge <share-dir> [--actor <id>] [--db <path>]
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
+    quipu audit replay <verdict> [--delta <file>] [--json] [--db <path>]
+    quipu audit quarantine [list [--verdict <iri>]] [--json] [--db <path>]
+    quipu audit quarantine purge (--graph <iri>|--before <ts>|--older-than <days>|--all) [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
 OPTIONS:

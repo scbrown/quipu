@@ -46,6 +46,13 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("term_spaces", Disposition::Content),
     ("schema_terms", Disposition::Content),
     ("store_identity", Disposition::Content),
+    // Digests of refused attempts, keyed by the verdicts they back (GS6). Hashes
+    // and ids only — no refused content — and they are what lets a restored
+    // copy still re-derive a denial from a presented delta, so they travel with
+    // the verdict facts they belong to. A hash of low-entropy content can be
+    // confirmed by guessing; that is the same exposure the verdict's own
+    // evidence hash already has, not a new one.
+    ("denial_quarantine", Disposition::Content),
     // -- regenerated --------------------------------------------------------
     // ~2.2 GB of floats at homelab scale, which rules out text. The pinned
     // embedding model and config are part of the declared set precisely because
@@ -92,6 +99,12 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // any store that has ever loaded a pack has 25. Measured: fresh store 24 /
     // no pack_loads; after one `quipu unpack`, 25 / present.
     ("pack_loads", Disposition::Excluded),
+    // THE REFUSED CONTENT ITSELF. GS2 keeps a denied write out of the governed
+    // graph; a pack carrying this table would hand that content to whoever
+    // restores it, in a store that never refused anything. Sealed deltas stay
+    // on the store that refused them — a restored copy can still re-derive a
+    // denial, but only from a delta someone presents against the digest.
+    ("quarantine_deltas", Disposition::Excluded),
 ];
 
 /// What a reconstruction does with `table`, or `None` if it is undeclared.

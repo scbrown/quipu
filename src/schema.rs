@@ -205,6 +205,52 @@ CREATE TABLE IF NOT EXISTS schema_terms (
     PRIMARY KEY (term, kind)
 );
 
+-- Denial quarantine (GS6 for refusals; `src/governance/quarantine.rs`).
+--
+-- A denied write is rolled back (GS2), so its verdict survives and its evidence
+-- does not — which left a refusal replayable only as an attestation that the
+-- rules were in force. These two tables keep enough to RE-DERIVE it without
+-- the attempt ever entering the governed graph: they are plain tables, not
+-- facts, so no SPARQL, search, or fact read can reach them. Only the audit
+-- replay path (`quipu audit replay <verdict>`) reads them.
+--
+-- `denial_quarantine` is one row per (verdict, attempt): digests only. The
+-- verdict IRI is NOT unique here on purpose — a verdict's IRI is derived from
+-- its signature over (policy, target, outcome, writer, chain), so two distinct
+-- refused attempts by the same writer on the same target share one verdict,
+-- and each attempt needs its own row. Purging keeps the row (and so the
+-- digests) and stamps `purged_at`: the audit can still say "refused, content
+-- purged" and still verify a delta someone presents.
+CREATE TABLE IF NOT EXISTS denial_quarantine (
+    id           INTEGER PRIMARY KEY,
+    verdict      TEXT    NOT NULL,
+    attempt      TEXT    NOT NULL,   -- sha256 of the canonical attempted delta
+    graph        TEXT    NOT NULL,   -- graph IRI the write targeted
+    base_tx      INTEGER NOT NULL,   -- last committed tx the gate's pre-state held
+    at           TEXT    NOT NULL,   -- the refused write's timestamp
+    actor        TEXT,
+    source       TEXT,
+    chain        TEXT,               -- comma-joined principal chain in force
+    gate_now     INTEGER NOT NULL,   -- the gate's clock (escalation expiry)
+    rules_digest TEXT    NOT NULL,   -- sha256 over the compiled rule set in force
+    post_digest  TEXT    NOT NULL,   -- sha256 over the post-state the gate judged
+    retention    TEXT    NOT NULL CHECK (retention IN ('digest','full')),
+    verifier     TEXT    NOT NULL,
+    seal         TEXT    NOT NULL,   -- ed25519 over the row's canonical fields
+    purged_at    TEXT,
+    UNIQUE (verdict, attempt, base_tx)
+);
+CREATE INDEX IF NOT EXISTS idx_quarantine_verdict ON denial_quarantine(verdict);
+CREATE INDEX IF NOT EXISTS idx_quarantine_graph ON denial_quarantine(graph, at);
+
+-- The sealed attempted deltas, content-addressed by `attempt`. Only written for
+-- a graph under full retention; a purge DELETES rows here (real erasure, not a
+-- flag), and nothing outside this table ever held the content.
+CREATE TABLE IF NOT EXISTS quarantine_deltas (
+    attempt TEXT PRIMARY KEY,
+    delta   TEXT NOT NULL
+);
+
 -- Term-space registry (quipu #74). Each database owns a SPACE `s` and allocates
 -- term ids from `s * 2^40 + k`, making ids globally unique across composed files
 -- by construction — so an attached DB needs no remap at read time, which is the

@@ -19,19 +19,33 @@ use quipu::governance::tree;
 
 /// Run a checker: `audit <trace.jsonl>` against a trace, `audit inventory`
 /// against the dispatch graph, `audit replay <trace.jsonl>` for promotion
-/// readiness, `audit namespace` for base-namespace drift.
+/// readiness, `audit replay <verdict>` to re-derive one gate decision as of its
+/// transaction, `audit quarantine` for the refused-attempt evidence behind it,
+/// `audit namespace` for base-namespace drift.
 pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
     let Some(subject) = args.get(2).filter(|a| !a.starts_with("--")) else {
         eprintln!(
             "usage: quipu audit <trace.jsonl>|inventory|namespace|replay <trace.jsonl>|\
+             replay <verdict> [--delta <file>]|quarantine [list|purge]|\
              tree <trace.jsonl>|inheritance <trace.jsonl> [--json] [--db <path>]"
         );
         std::process::exit(1);
     };
-    let store = crate::cli_open::open_store(db_path);
+    let mut store = crate::cli_open::open_store(db_path);
 
     if subject == "replay" {
-        cmd_replay(args, &store);
+        // A trace file replays a window (promotion readiness); anything else is
+        // a verdict, replayed against the store as of its transaction (GS6).
+        match args.get(3).filter(|a| !a.starts_with("--")) {
+            Some(arg) if !std::path::Path::new(arg).is_file() => {
+                crate::cli_quarantine::cmd_replay_verdict(args, &mut store, arg);
+            }
+            _ => cmd_replay(args, &store),
+        }
+        return;
+    }
+    if subject == "quarantine" {
+        crate::cli_quarantine::cmd_quarantine(args, &store);
         return;
     }
     if subject == "tree" {

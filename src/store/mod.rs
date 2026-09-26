@@ -120,6 +120,18 @@ pub struct Store {
     /// inserted before the rollback would die with it, same reason as
     /// `pending_verdicts`. Taken (and thus cleared) on the write's error path.
     pub(crate) pending_refusal: Option<events::PendingRefusal>,
+    /// What a refused write leaves for replay, captured by the gate INSIDE the
+    /// savepoint (the post-state it judged exists only there) and recorded after
+    /// the rollback alongside the verdicts it backs — same ordering problem,
+    /// same answer. See `crate::governance::quarantine`.
+    pub(crate) pending_quarantine: Option<crate::governance::quarantine::Capture>,
+    /// Set only on the throwaway copy a verdict replay builds: the verdict flush
+    /// hands what the gate decided to the replayer instead of writing it.
+    pub(crate) replay_capture: Option<crate::governance::quarantine::ReplayCapture>,
+    /// The gate's clock, pinned for one evaluation. Escalation expiry reads it,
+    /// so a replay can re-run the gate at the instant the original ran rather
+    /// than at wall-clock now. `None` outside an evaluation.
+    pub(crate) gate_clock: Option<i64>,
     /// The principal-and-agent chain the current caller is acting under (SARC
     /// §9.6's `P`). Empty means unattributed, which is NOT the same as
     /// unconstrained — see `enforce_graph_authority`.
