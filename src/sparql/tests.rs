@@ -3929,3 +3929,30 @@ fn filter_same_term_non_canonical_lexical_form() {
     .unwrap();
     assert!(names(&result).is_empty());
 }
+
+// ── CONSTRUCT template blank nodes are fresh per solution (aegis-soqv1r) ────
+// One template label used to be reused for every row, fusing all solutions
+// into one node (W3C sparql10 construct-3/-4).
+
+#[test]
+fn construct_template_blank_node_is_fresh_per_solution() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+         CONSTRUCT { [ rdf:subject ?s ; rdf:object ?n ] } WHERE { ?s ex:name ?n }",
+    )
+    .unwrap();
+    let QueryResult::Graph(triples) = result else {
+        panic!("CONSTRUCT did not return a graph");
+    };
+    let subjects: std::collections::HashSet<_> =
+        triples.iter().map(|t| t.subject.clone()).collect();
+    assert_eq!(
+        subjects.len(),
+        3,
+        "one fresh node per solution: {subjects:?}"
+    );
+    assert_eq!(triples.len(), 6);
+}
