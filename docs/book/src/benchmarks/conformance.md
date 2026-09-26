@@ -38,8 +38,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `60f4e9b6b5a2451f6363a9da3ab4ea1bcbe3f40b` |
-| Quipu revision (syntax) | `60f4e9b6b5a2451f6363a9da3ab4ea1bcbe3f40b` |
+| Quipu revision (evaluation) | `4e484267b1f110493f72f85a49acc8f79b2f7874` |
+| Quipu revision (syntax) | `4e484267b1f110493f72f85a49acc8f79b2f7874` |
 | Quipu version | `quipu 0.9.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -112,6 +112,25 @@ cannot parse a triple term. The RDF 1.2 cases are enumerated from the pinned
 manifests and not run: a loader that rejects all RDF 1.2 input would "pass" every
 negative-syntax case, and those passes would read as partial support. No RDF 1.2
 case is scored as a pass until the support exists.
+
+### Known deviation: literal lexical identity
+
+The current loader canonicalizes integer and double literals: for example,
+`"01"^^xsd:integer` is stored and exported as `"1"^^xsd:integer`.
+It also converts an ill-typed boolean such as `"z"^^xsd:boolean` to `false`,
+and rejects some ill-typed numeric literals during loading. These are known
+deviations, not the intended storage contract; affected cases remain failures.
+
+The chosen contract is to preserve lexical form and datatype as RDF term
+identity, including ill-typed literals, and derive numeric values separately.
+Distinct terms such as `"01"` and `"1"` with the same integer datatype must
+coexist even though their numeric values compare equal. This follows
+[RDF 1.1 literal term equality](https://www.w3.org/TR/rdf11-concepts/#section-Graph-Literal).
+An expression's effective boolean value must not replace the stored term.
+
+The preservation fix is not implemented yet. Existing data cannot recover
+discarded spellings; a future compatibility plan must preserve legacy term
+identity, exact retraction and history without inventing missing lexical forms.
 
 Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)
 and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).
@@ -253,7 +272,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-26T03:25:18Z by [CI run](https://github.com/scbrown/quipu/actions/runs/36214428830), from quipu `60f4e9b6b5a2`.
+Ledger re-derived 2026-09-26T05:27:54Z by [CI run](https://github.com/scbrown/quipu/actions/runs/36219262465), from quipu `4e484267b1f1`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
