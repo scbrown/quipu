@@ -75,6 +75,21 @@ impl Store {
         Ok(())
     }
 
+    /// Index transactions by source tag (aegis-m6agjy).
+    ///
+    /// Snapshot replacement plans its retraction as "every current fact whose
+    /// transaction carries this source" (`SOURCE_RETRACTION_SQL`). With no index
+    /// on `transactions.source` that query could only start from `facts`, so each
+    /// replacement walked the whole graph under the writer lock. This index lets
+    /// it start from the handful of transactions one producer wrote.
+    ///
+    /// Idempotent and purely additive: it changes no query's meaning, only its
+    /// plan.
+    pub(super) fn migrate_transaction_source_index(conn: &Connection) -> Result<()> {
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_tx_source ON transactions(source);")?;
+        Ok(())
+    }
+
     /// Drop the redundant `idx_eavt` permutation (quipu-fcg).
     ///
     /// Once `idx_geav (g, e, a, v)` exists (the migration above), `idx_eavt

@@ -42,7 +42,7 @@ pub fn collect_class_and_subclasses(store: &Store, class_iri: &str) -> Result<Ve
             // Find all X where X rdfs:subClassOf super_id (as a Ref value)
             let target_bytes = Value::Ref(*super_id).to_bytes();
             let mut stmt = store.prepare(
-                "SELECT e FROM facts WHERE a = ?1 AND v = ?2 AND op = 1 AND g = 0 AND valid_to IS NULL",
+                "SELECT DISTINCT e FROM facts WHERE a = ?1 AND v = ?2 AND op = 1 AND g = 0 AND valid_to IS NULL",
             )?;
             let mut rows = stmt.query(rusqlite::params![subclass_pred, target_bytes])?;
             while let Some(row) = rows.next()? {

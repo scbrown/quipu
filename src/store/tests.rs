@@ -1143,6 +1143,44 @@ fn active_object_reference_probe_uses_the_reverse_value_index() {
 }
 
 #[test]
+fn source_retraction_starts_from_the_source_not_the_whole_graph() {
+    // aegis-m6agjy: planned from `facts` via `idx_geav (g=?)`, every snapshot
+    // replacement walked the whole graph under the writer lock (~4s per `/knot`
+    // replace on production). Pin the PLAN of the exact statement that runs: an
+    // index-existence check would stay green if `+f.g` were dropped, and that is
+    // the regression that puts the floor back.
+    let store = Store::open_in_memory().unwrap();
+    let details: Vec<String> = store
+        .conn
+        .prepare(&format!(
+            "EXPLAIN QUERY PLAN {}",
+            ops::SOURCE_RETRACTION_SQL
+        ))
+        .unwrap()
+        .query_map(
+            params!["snapshot:probe", crate::schema::ROOT_GRAPH],
+            |row| row.get(3),
+        )
+        .unwrap()
+        .map(|row| row.unwrap())
+        .collect();
+    assert!(
+        details.iter().any(|d| d.contains("idx_tx_source")),
+        "source retraction must seek transactions by source, plan={details:?}"
+    );
+    assert!(
+        details.iter().any(|d| d.contains("idx_tx ")),
+        "source retraction must reach facts through idx_tx, plan={details:?}"
+    );
+    assert!(
+        !details
+            .iter()
+            .any(|d| d.contains("idx_geav") || d.contains("SCAN f")),
+        "source retraction must not walk the graph, plan={details:?}"
+    );
+}
+
+#[test]
 fn identity_orphan_planning_obeys_the_store_query_budget() {
     let store = Store::open_in_memory().unwrap();
     let err = store
@@ -1753,8 +1791,8 @@ fn compose_view_dedupes_reasserted_root_facts() {
 /// `luvu` carried 29 rows of one `rdf:type` value.
 ///
 /// The duplicates are inserted DIRECTLY here on purpose: today's `transact`
-/// skips an assert whose (e, a, v) is already active, so the modern write path
-/// can no longer produce this state and a test built on it would pass against
+/// skips repeated claims from the same source, so the modern write path
+/// can no longer produce these duplicate claims and a test built on it would pass against
 /// the bug. That is precisely why the original hypothesis looked disproven when
 /// checked with a freshly-ingested node.
 #[test]
@@ -1801,9 +1839,9 @@ fn retract_survives_duplicate_backing_rows() {
             .unwrap();
     }
     assert_eq!(
-        store.entity_facts(e).unwrap().len(),
+        store.entity_history(e).unwrap().len(),
         4,
-        "precondition: one logical triple backed by four rows"
+        "precondition: one logical triple backed by four audit rows"
     );
 
     // Previously: Err(UNIQUE constraint failed: facts.e, facts.a, facts.v, facts.tx)
@@ -1826,6 +1864,14 @@ fn retract_survives_duplicate_backing_rows() {
     assert!(
         store.entity_facts(e).unwrap().is_empty(),
         "every backing row must be closed, or the triple survives its own retraction"
+    );
+    assert!(
+        store
+            .entity_history(e)
+            .unwrap()
+            .iter()
+            .filter(|fact| fact.op == Op::Assert)
+            .all(|fact| fact.valid_to.is_some())
     );
 }
 
