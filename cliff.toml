@@ -47,8 +47,9 @@ trim = true
 # `[] []`. The bracket rules mirror the paren ones, and the run rule comes first so
 # a sequence of bracketed refs collapses in one pass rather than leaving gaps.
 commit_preprocessors = [
-    # Preserve the current-count index entry when regenerating the changelog.
-    { pattern = '(?m)^Index current graph counts before read-model admission$', replace = "fix(store): index current graph counts before read-model admission" },
+    # Repair the merged #282 subject without rewriting history. Keep this exact
+    # correction so automatic regeneration retains its reviewed release entry.
+    { pattern = '(?m)^Index current graph counts before read-model admission$', replace = "refactor(store): index current graph counts before read-model admission" },
     # Exact repairs for immutable pack-recipe subjects; keep their entries
     # when release-plz or the changelog corrector regenerates a release.
     { pattern = '(?m)^Warn when full text backups omit vectors without a recipe$', replace = "fix(pack): apply CLI embedding settings and diagnose incomplete text backup recipes" },

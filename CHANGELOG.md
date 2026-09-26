@@ -9,15 +9,17 @@ All notable changes to this project will be documented in this file.
 - *(bench)* The W3C SPARQL 1.1 harness against Oxigraph and rdflib([80653bb](https://github.com/scbrown/quipu/commit/80653bba329eb61b7a3cd17d1adef457e8c68e28))
 - *(bench)* Jena Fuseki and RDF4J join the competitor table([4552171](https://github.com/scbrown/quipu/commit/4552171c59f2b898a1f30f3407eeb7c4a83c3f9b))
 - *(conformance)* W3C RDF 1.1 syntax suites harness — Turtle, N-Triples, N-Quads, TriG([db487c3](https://github.com/scbrown/quipu/commit/db487c35355d36335ff5b4cc8c7c9f099c292897))
-- *(bench)* Put the competitor table on the generated conformance page([a07247d](https://github.com/scbrown/quipu/commit/a07247de05b5bfd844336d8c2945ad6b72437d3c))
-- *(conformance)* Publish RDF syntax on the page; RDF 1.2 pinned as not supported([055ee2c](https://github.com/scbrown/quipu/commit/055ee2cfcf7554de2d70db31354aef3e0e006b52))
 - *(auth)* Add audience-bound crew credential attribution([2df184b](https://github.com/scbrown/quipu/commit/2df184b130293649018d455f9d9b8feaf41fa0ea))
 - Bind local transaction audit to request credentials([7414915](https://github.com/scbrown/quipu/commit/74149156bcf805bc54694688e57401df638a0126))
 - *(mcp)* Serve native HTTP and stdio through guarded REST handlers([2a40d52](https://github.com/scbrown/quipu/commit/2a40d52d40f4f9ee9d81ffe32024c9a3243f016a))
 - *(compose)* Inspect verified pack unions with explicit shape authority([51094ef](https://github.com/scbrown/quipu/commit/51094ef909b5a648ff61bd12e4f669f0549758b4))
 - *(mcp)* List quipu in the official MCP Registry as a ghcr.io image([059bc88](https://github.com/scbrown/quipu/commit/059bc881f7f468a1e804d02195a709f540180c09))
 
+### CI/CD
 
+### Changed
+
+- *(store)* Index current graph counts before read-model admission([81a8c3d](https://github.com/scbrown/quipu/commit/81a8c3da861fff8193a374fb22e7b2aaf6b9c221))
 
 ### Documentation
 
@@ -38,7 +40,6 @@ All notable changes to this project will be documented in this file.
 - *(import)* Preserve local retractions during snapshot promotion([36a7377](https://github.com/scbrown/quipu/commit/36a73772ad6bf3e01303f9801c026d775bee2463))
 - *(mcp)* Align feature counts and isolate transport startup([c267c72](https://github.com/scbrown/quipu/commit/c267c725f8181ef46506b43893ac1134ea9318fc))
 - *(compose)* Quarantine types outside the selected vocabulary([ad31f9e](https://github.com/scbrown/quipu/commit/ad31f9e66f773437970678891a99db9dd2b2a98d))
-- *(store)* Index current graph counts before read-model admission([81a8c3d](https://github.com/scbrown/quipu/commit/81a8c3da861fff8193a374fb22e7b2aaf6b9c221))
 
 ### Miscellaneous
 
@@ -49,8 +50,8 @@ All notable changes to this project will be documented in this file.
 - *(beads)* Regenerate export with redacted owners([d62aa9f](https://github.com/scbrown/quipu/commit/d62aa9fb3d2258e42bcfb0164ac5c6af44912ec1))
 - *(conformance)* Refresh ledgers for README test relocation([903e9be](https://github.com/scbrown/quipu/commit/903e9bef8193418b8a4ba841e7b73e1bd365b398))
 - *(conformance)* Refresh measured syntax ledgers on current base([9eb007f](https://github.com/scbrown/quipu/commit/9eb007ff30846508eff97c40b7acb46c865fbeae))
-- *(conformance)* Record measured snapshot-promotion ledgers([1b076b5](https://github.com/scbrown/quipu/commit/1b076b57bb1c709d4a89f0c292355e2781d2d962))
 - *(conformance)* Record named credential regression ledgers([48223e7](https://github.com/scbrown/quipu/commit/48223e785e7b350ee313ae6ed9a290f604787661))
+- *(conformance)* Record measured snapshot-promotion ledgers([1b076b5](https://github.com/scbrown/quipu/commit/1b076b57bb1c709d4a89f0c292355e2781d2d962))
 - *(conformance)* Refresh reconciled identity ledgers([328a3a7](https://github.com/scbrown/quipu/commit/328a3a7154bc9f9ed6be6247c14cc6e6ef00e412))
 - *(conformance)* Record measured composition ledgers([f93f915](https://github.com/scbrown/quipu/commit/f93f9151d154943147b04b5164e49df6be835a0b))
 - *(beads)* Ignore br's SQLite store file .beads/dolt and its WAL sidecars([75a605f](https://github.com/scbrown/quipu/commit/75a605f929636251ad0930357ab93f0ffa62e7cb))
@@ -58,17 +59,12 @@ All notable changes to this project will be documented in this file.
 ### Testing
 
 - Refresh conformance for current graph count index([ddbd94d](https://github.com/scbrown/quipu/commit/ddbd94d1c4343ff8c705080af4dd4cad42190aad))
-- Refresh conformance after count-index integration([5baeeab](https://github.com/scbrown/quipu/commit/5baeeab730b1a2c447a0a91f19960be4b3a7349c))
-- Refresh conformance after packaging integration([029730f](https://github.com/scbrown/quipu/commit/029730fb685e263f1bf57b64219b4d59c7bd11e3))
 
-
+### Merge
 
 ### Results
 
 - RDF 1.1 syntax ledger — Turtle 306/313, N-Triples 70/70, N-Quads 0/87 and TriG 0/357 unsupported([8f94139](https://github.com/scbrown/quipu/commit/8f941397b7652a2582f5f542d33f9f5412108bdb))
-- Re-derived conformance ledgers at 055ee2c (run 36156989710); no outcome changes([d824167](https://github.com/scbrown/quipu/commit/d824167f0885c5a9b0fd9d1115e5c3d1ad26bd86))
-- Re-derived conformance ledgers at a71b5b1 (run 36157852270); no outcome changes([53c8e28](https://github.com/scbrown/quipu/commit/53c8e285e0dfab6a42ae716a1d6d7c2cb7c05426))
-- Re-derived conformance ledgers at 6501dbf (run 36189689131); no outcome changes([aa59b59](https://github.com/scbrown/quipu/commit/aa59b5910bd6ab41a63e882ca816bd5a3f39437e))
 
 ## [0.8.1] - 2026-09-21
 
