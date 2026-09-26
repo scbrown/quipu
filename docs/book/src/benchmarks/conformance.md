@@ -13,6 +13,10 @@
 > **What these counts are.** Working Group–approved tests only. The query-evaluation
 > manifests list 225 tests, and the 168 approved ones are scored; the 57 Proposed or unclassified are not run.
 > The update-syntax suites are not run yet.
+> **The SPARQL 1.0 suite is not run.** These manifests hold what SPARQL 1.1 added; the
+> SPARQL 1.0 tests (rdf-tests `sparql/sparql10`) also bear on SPARQL 1.1 Query conformance,
+> and this harness does not score them yet. A trial run found real failures there, including
+> `sameTerm` inside `FILTER`, so read the counts above as the 1.1 additions only (aegis-soqv1r).
 > **This score is fitted to this suite.** Quipu's failures here were found by running this suite
 > and fixed against it, case by case, so a perfect score is partly a record of that work rather
 > than an independent sample. Other stores measured with the same harness were not tuned to it.
