@@ -440,7 +440,7 @@ pub fn import_share(
         "unchanged"
     } else {
         let graph = store.graph_create(&graph_iri)?;
-        crate::rdf::ingest_rdf_to_graph(
+        crate::rdf::ingest_assigned_rdf(
             store,
             resolved.as_bytes(),
             RdfFormat::NTriples,

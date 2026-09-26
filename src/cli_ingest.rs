@@ -123,7 +123,7 @@ pub fn cmd_ingest(args: &[String], db_path: &str) {
         sha256: declared_sha.to_string(),
     };
     let started = std::time::Instant::now();
-    match quipu::ingest_rdf_declared(
+    match quipu::rdf::ingest_rdf_declared_with_scope(
         &mut store,
         reader,
         format,
@@ -134,6 +134,7 @@ pub fn cmd_ingest(args: &[String], db_path: &str) {
         graph,
         chunk,
         &declaration,
+        flag_value(args, "--blank-node-scope"),
     ) {
         Ok(report) => {
             let secs = started.elapsed().as_secs_f64();

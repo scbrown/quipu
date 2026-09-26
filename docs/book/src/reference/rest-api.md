@@ -1416,3 +1416,5 @@ selectors, each optional — a paged triple-pattern read for TPF clients.
 OpenRefine Reconciliation API: a body without `queries` returns the service
 manifest; `{"queries": {...}}` runs the batch and returns candidates per
 query, scored the way `/resolve` scores.
+
+RDF `/knot` loads accept `blank_node_scope`: distinct IDs separate repeated identical input; the same ID shares blank nodes across graphs only for byte-identical input. By default, whole-document bytes and destination graph define scope.

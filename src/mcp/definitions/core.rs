@@ -112,6 +112,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "shapes": { "type": "string", "description": "Optional SHACL shapes in Turtle for validation" },
                     "graph": { "type": "string", "description": "Named-graph IRI to write into. Must already be registered committed-class (graph_create). Unknown IRI is an error, never interned. Omit for ROOT." },
                     "replace_snapshot": { "type": "boolean", "description": "Replace the prior facts written under this snapshot key (diffed: unchanged facts stay live). Requires 'snapshot'." },
+                    "blank_node_scope": { "type": "string", "description": "Explicit document scope: distinct IDs separate identical loads; the same ID shares nodes across graphs only for identical input bytes." },
                     "snapshot": { "type": "string", "description": "Stable producer key scoping replace_snapshot (e.g. 'bobbin-chunks:myrepo'). Scoped to the target graph." }
                 },
                 "required": ["turtle"]

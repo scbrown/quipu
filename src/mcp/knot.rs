@@ -237,12 +237,14 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         // resolved graph: a snapshot in graph G replaces only G's prior
         // facts under this producer key and leaves ROOT untouched.
         let mut datums = store.plan_source_retraction(&source_tag, graph)?;
-        let mut assertions = crate::rdf::parse_rdf(
+        let mut assertions = crate::rdf::parse_rdf_scoped(
             store,
             turtle.as_bytes(),
             oxrdfio::RdfFormat::Turtle,
             None,
             &valid_from,
+            graph,
+            input.get("blank_node_scope").and_then(JsonValue::as_str),
         )?;
         let count = assertions.len();
         datums.retain(|old| {
@@ -269,7 +271,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         // is `knot:<actor>` — attributable, retractable, and outside the
         // `snapshot:` namespace, which carries authority this write lacks.
         let tagged = crate::store::source_tag::resolve("knot", actor, source);
-        crate::rdf::ingest_rdf_bitemporal(
+        crate::rdf::ingest_rdf_bitemporal_with_scope(
             store,
             turtle.as_bytes(),
             oxrdfio::RdfFormat::Turtle,
@@ -279,6 +281,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             actor,
             Some(&tagged),
             graph,
+            input.get("blank_node_scope").and_then(JsonValue::as_str),
         )?
     };
 
