@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [0.9.1] - 2026-09-26
 
+### Added
+
+- *(bench)* Put the competitor table on the generated conformance page([a07247d](https://github.com/scbrown/quipu/commit/a07247de05b5bfd844336d8c2945ad6b72437d3c))
+- *(conformance)* Publish RDF syntax on the page; RDF 1.2 pinned as not supported([055ee2c](https://github.com/scbrown/quipu/commit/055ee2cfcf7554de2d70db31354aef3e0e006b52))
+
 ### Documentation
 
 - *(conformance)* Say the SPARQL 1.0 suite is not run([60f4e9b](https://github.com/scbrown/quipu/commit/60f4e9b6b5a2451f6363a9da3ab4ea1bcbe3f40b))
@@ -11,20 +16,33 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - *(store)* Preserve independent source claims during cleanup([1241696](https://github.com/scbrown/quipu/commit/1241696efa875d4d534f1c2a4aecb261656a5a7f))
+- *(sparql)* Evaluate sameTerm inside FILTER([f1cb968](https://github.com/scbrown/quipu/commit/f1cb9684cb0924fa6f145290802e80d714319b98))
 - *(store)* Project co-owned claims consistently across readers([34414b3](https://github.com/scbrown/quipu/commit/34414b31025a466d871c1ac5dea4c5a30e34134c))
 
 ### Miscellaneous
 
 - *(conformance)* Re-derived ledgers at 60f4e9b6([e751be5](https://github.com/scbrown/quipu/commit/e751be5f5d93b2c716d665d73bb3623068527626))
+- *(conformance)* Re-derived ledgers at 244302c5([730b802](https://github.com/scbrown/quipu/commit/730b802a25977ddfe25dccf55aba63596117b74e))
 
 ### Testing
 
+- Refresh conformance after count-index integration([5baeeab](https://github.com/scbrown/quipu/commit/5baeeab730b1a2c447a0a91f19960be4b3a7349c))
+- Refresh conformance after packaging integration([029730f](https://github.com/scbrown/quipu/commit/029730fb685e263f1bf57b64219b4d59c7bd11e3))
+- *(sparql)* Pin what sameTerm can and cannot tell apart([d6aee87](https://github.com/scbrown/quipu/commit/d6aee87f944bc60b44136bc8e497576d07e734d2))
 - *(conformance)* Record source ownership regression ledgers([fd1d255](https://github.com/scbrown/quipu/commit/fd1d25576a1cdb4df5c14b0dfc63a2137114f5ee))
+
+
 
 ### Perf
 
 - *(store)* Plan source-scoped retraction from the source, not the whole graph([05e0eb8](https://github.com/scbrown/quipu/commit/05e0eb87f309326f81a6560d59f0887671b96084))
 - *(store)* Keep the retraction order exact with an explicit f.v tie-break([c86ce79](https://github.com/scbrown/quipu/commit/c86ce79703e40b12ef147d6cfe062ad624a383d5))
+
+### Results
+
+- Re-derived conformance ledgers at 055ee2c (run 36156989710); no outcome changes([d824167](https://github.com/scbrown/quipu/commit/d824167f0885c5a9b0fd9d1115e5c3d1ad26bd86))
+- Re-derived conformance ledgers at a71b5b1 (run 36157852270); no outcome changes([53c8e28](https://github.com/scbrown/quipu/commit/53c8e285e0dfab6a42ae716a1d6d7c2cb7c05426))
+- Re-derived conformance ledgers at 6501dbf (run 36189689131); no outcome changes([aa59b59](https://github.com/scbrown/quipu/commit/aa59b5910bd6ab41a63e882ca816bd5a3f39437e))
 
 ## [0.9.0] - 2026-09-25
 
