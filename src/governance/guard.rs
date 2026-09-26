@@ -430,3 +430,7 @@ pub fn is_governance_write(store: &Store, datums: &[Datum]) -> Result<bool> {
 #[cfg(test)]
 #[path = "guard_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "guard_golden_tests.rs"]
+mod golden_tests;
