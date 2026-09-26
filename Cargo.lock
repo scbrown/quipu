@@ -4665,6 +4665,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "axum",
+ "bigdecimal",
  "datafrog",
  "flate2",
  "futures",

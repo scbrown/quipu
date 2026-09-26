@@ -205,6 +205,12 @@ impl Store {
             }
             Op::Tombstone => {
                 let v_bytes = value.to_bytes();
+                let mut existing = self.conn.prepare("SELECT 1 FROM facts WHERE e=?1 AND a=?2 AND v=?3 AND g=?4 AND op=2 AND valid_to IS NULL")?;
+                let mut exists = false;
+                for alias in self.literal_aliases(&value, false)? {
+                    exists |= existing.exists(params![entity, attribute, alias, overlay_g])?;
+                }
+                drop(existing);
                 let sp = self.conn.savepoint()?;
                 sp.execute(
                     "INSERT INTO transactions (timestamp, actor, source) VALUES (?1, ?2, ?3)",
@@ -213,16 +219,6 @@ impl Store {
                 let tx_id = sp.last_insert_rowid();
                 crate::transaction_auth::record(&sp, tx_id)?;
                 // Idempotent: one active tombstone per (e,a,v) in this overlay.
-                let exists: bool = sp
-                    .query_row(
-                        "SELECT 1 FROM facts \
-                         WHERE e = ?1 AND a = ?2 AND v = ?3 AND g = ?4 AND op = 2 AND valid_to IS NULL \
-                         LIMIT 1",
-                        params![entity, attribute, v_bytes, overlay_g],
-                        |_| Ok(true),
-                    )
-                    .optional()?
-                    .unwrap_or(false);
                 if !exists {
                     sp.execute(
                         "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
@@ -245,29 +241,7 @@ impl Store {
     /// overlay row is the one returned). Root is never mutated; this is a pure
     /// read. `overlay_g` must be a registered overlay.
     pub fn compose_view(&self, overlay_g: i64) -> Result<Vec<Fact>> {
-        let root_g = self.overlay_parent(overlay_g)?;
-        // (1) every live overlay assertion (shadows root); UNION (2) live root
-        // assertions the overlay neither tombstones nor re-asserts. The outer
-        // GROUP BY e,a,v collapses a triple that was re-asserted across several
-        // transactions (multiple current op=1 rows) to ONE composed triple —
-        // the same dedup the SPARQL BGP path applies (GH#13). Without it the
-        // composed view repeats every re-asserted base fact once per assertion.
-        let mut stmt = self.conn.prepare(
-            "SELECT e, a, v, tx, valid_from, valid_to, op FROM ( \
-               SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
-               WHERE g = ?1 AND op = 1 AND valid_to IS NULL \
-               UNION ALL \
-               SELECT r.e, r.a, r.v, r.tx, r.valid_from, r.valid_to, r.op FROM facts r \
-               WHERE r.g = ?2 AND r.op = 1 AND r.valid_to IS NULL \
-                 AND NOT EXISTS ( \
-                   SELECT 1 FROM facts t WHERE t.g = ?1 AND t.op = 2 AND t.valid_to IS NULL \
-                     AND t.e = r.e AND t.a = r.a AND t.v = r.v) \
-                 AND NOT EXISTS ( \
-                   SELECT 1 FROM facts o WHERE o.g = ?1 AND o.op = 1 AND o.valid_to IS NULL \
-                     AND o.e = r.e AND o.a = r.a AND o.v = r.v) \
-             ) GROUP BY e, a, v ORDER BY e, a",
-        )?;
-        Self::collect_facts(&mut stmt, params![overlay_g, root_g])
+        self.compose_literal_view(overlay_g, false)
     }
 
     /// Governed-wins composition (quipu-e61): resolve `[overlay > parent]`
@@ -293,22 +267,6 @@ impl Store {
     /// (nearest-overlay-wins); the two reads answer different questions and
     /// deliberately coexist.
     pub fn compose_view_governed(&self, overlay_g: i64) -> Result<Vec<Fact>> {
-        let root_g = self.overlay_parent(overlay_g)?;
-        let mut stmt = self.conn.prepare(
-            "SELECT e, a, v, tx, valid_from, valid_to, op FROM ( \
-               SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
-               WHERE g = ?2 AND op = 1 AND valid_to IS NULL \
-               UNION ALL \
-               SELECT o.e, o.a, o.v, o.tx, o.valid_from, o.valid_to, o.op FROM facts o \
-               WHERE o.g = ?1 AND o.op = 1 AND o.valid_to IS NULL \
-                 AND NOT EXISTS ( \
-                   SELECT 1 FROM facts r WHERE r.g = ?2 AND r.op = 1 AND r.valid_to IS NULL \
-                     AND r.e = o.e AND r.a = o.a) \
-                 AND NOT EXISTS ( \
-                   SELECT 1 FROM facts t WHERE t.g = ?1 AND t.op = 2 AND t.valid_to IS NULL \
-                     AND t.e = o.e AND t.a = o.a AND t.v = o.v) \
-             ) GROUP BY e, a, v ORDER BY e, a",
-        )?;
-        Self::collect_facts(&mut stmt, params![overlay_g, root_g])
+        self.compose_literal_view(overlay_g, true)
     }
 }

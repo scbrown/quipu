@@ -42,6 +42,9 @@ pub fn eval_filter(
 ) -> Result<bool> {
     match expr {
         Expression::Equal(left, right) => Ok(expr_eq(store, left, right, row)),
+        Expression::SameTerm(left, right) => Ok(
+            matches!((eval_expr(store,left,row), eval_expr(store,right,row)), (Some(a),Some(b)) if a == b),
+        ),
         // quipu #52: `?x IN (a, b)` is defined by SPARQL 1.1 as the disjunction
         // `?x = a || ?x = b`, so it desugars here rather than needing its own
         // comparison logic — it shares `expr_eq` with the `=` arm above so the
@@ -112,12 +115,12 @@ pub fn eval_filter(
     }
 }
 
-/// Term equality for `=` and `IN`. An operand that cannot be evaluated (an
+/// Value equality for `=` and `IN`. An operand that cannot be evaluated (an
 /// unbound variable, an IRI absent from the dictionary) is not equal to
 /// anything rather than an error — matching what `=` has always done.
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
     match (eval_expr(store, left, row), eval_expr(store, right, row)) {
-        (Some(l), Some(r)) => l == r,
+        (Some(l), Some(r)) => crate::numeric_value::equal(&l, &r),
         _ => false,
     }
 }
@@ -128,12 +131,14 @@ fn effective_boolean_value(v: &Value) -> Option<bool> {
         Value::Bool(b) => Some(*b),
         Value::Str(s) => Some(!s.is_empty()),
         Value::Int(i) => Some(*i != 0),
-        Value::Float(f) => Some(*f != 0.0),
+        Value::Float(f) => Some(*f != 0.0 && !f.is_nan()),
         // SPARQL EBV: numeric literals test against zero, plain/lang strings
         // against emptiness. Other datatypes have no EBV.
-        Value::Typed { lexical, datatype } if namespace::is_numeric_datatype(datatype) => {
-            lexical.parse::<f64>().ok().map(|f| f != 0.0)
-        }
+        Value::Typed { lexical, datatype } if namespace::is_numeric_datatype(datatype) => Some(
+            lexical
+                .parse::<f64>()
+                .is_ok_and(|f| f != 0.0 && !f.is_nan()),
+        ),
         Value::Typed { lexical, datatype } if datatype == namespace::XSD_BOOLEAN => {
             Some(matches!(lexical.as_str(), "true" | "1"))
         }
@@ -294,18 +299,48 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             | Function::Regex,
             _,
         ) => eval_expression_boolean(store, expr, row).map(Value::Bool),
-        Expression::Add(left, right) => {
-            numeric_binary(store, left, right, row, i64::checked_add, |a, b| a + b)
-        }
-        Expression::Subtract(left, right) => {
-            numeric_binary(store, left, right, row, i64::checked_sub, |a, b| a - b)
-        }
-        Expression::Multiply(left, right) => {
-            numeric_binary(store, left, right, row, i64::checked_mul, |a, b| a * b)
-        }
+        Expression::Add(left, right) => numeric_binary(
+            store,
+            left,
+            right,
+            row,
+            i64::checked_add,
+            |a, b| a + b,
+            |a, b| a + b,
+        ),
+        Expression::Subtract(left, right) => numeric_binary(
+            store,
+            left,
+            right,
+            row,
+            i64::checked_sub,
+            |a, b| a - b,
+            |a, b| a - b,
+        ),
+        Expression::Multiply(left, right) => numeric_binary(
+            store,
+            left,
+            right,
+            row,
+            i64::checked_mul,
+            |a, b| a * b,
+            |a, b| a * b,
+        ),
         Expression::Divide(left, right) => {
             let dividend = eval_expr(store, left, row)?;
             let divisor_value = eval_expr(store, right, row)?;
+            if let (Some(a), Some(b)) = (
+                crate::numeric_value::decimal(&dividend),
+                crate::numeric_value::decimal(&divisor_value),
+            ) {
+                if b == 0 {
+                    return None;
+                }
+                return Some(crate::numeric_value::decimal_result(
+                    &(a / b),
+                    namespace::XSD_DECIMAL,
+                ));
+            }
             let divisor = divisor_value.as_f64()?;
             if divisor == 0.0 {
                 return None;
@@ -337,7 +372,18 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::UnaryPlus(inner) => eval_expr(store, inner, row),
         Expression::UnaryMinus(inner) => match eval_expr(store, inner, row)? {
             Value::Int(value) => value.checked_neg().map(Value::Int),
-            value => Some(Value::Float(-value.as_f64()?)),
+            value => {
+                if let Some(exact) = crate::numeric_value::decimal(&value) {
+                    let datatype = if value.datatype() == Some(namespace::XSD_DECIMAL) {
+                        namespace::XSD_DECIMAL
+                    } else {
+                        namespace::XSD_INTEGER
+                    };
+                    Some(crate::numeric_value::decimal_result(&(-exact), datatype))
+                } else {
+                    Some(Value::Float(-value.as_f64()?))
+                }
+            }
         },
         Expression::If(condition, when_true, when_false) => {
             if eval_expression_boolean(store, condition, row)? {
@@ -498,20 +544,10 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             function @ (Function::Md5 | Function::Sha1 | Function::Sha256 | Function::Sha512),
             args,
         ) => hash_string(store, function, args, row),
-        Expression::FunctionCall(Function::Abs, args) => {
-            numeric_unary(store, args, row, i64::checked_abs, f64::abs)
-        }
-        Expression::FunctionCall(Function::Ceil, args) => {
-            numeric_unary(store, args, row, Some, f64::ceil)
-        }
-        Expression::FunctionCall(Function::Floor, args) => {
-            numeric_unary(store, args, row, Some, f64::floor)
-        }
-        // SPARQL ROUND follows XPath: a half-way value rounds toward positive
-        // infinity. Rust's f64::round instead rounds halves away from zero.
-        Expression::FunctionCall(Function::Round, args) => {
-            numeric_unary(store, args, row, Some, |value| (value + 0.5).floor())
-        }
+        Expression::FunctionCall(
+            function @ (Function::Abs | Function::Ceil | Function::Floor | Function::Round),
+            args,
+        ) => numeric_unary(store, args, row, function),
         _ => None,
     }
 }

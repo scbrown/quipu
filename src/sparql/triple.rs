@@ -179,9 +179,12 @@ fn eval_triple_pattern_limited(
             let ids = store.lookup_all(&iri)?;
             conditions.push(sql_ref_in(&ids, &mut sql_params));
         } else {
-            let bytes = value.to_bytes();
-            conditions.push(format!("v = ?{}", sql_params.len() + 1));
-            sql_params.push(Box::new(bytes));
+            let mut placeholders = Vec::new();
+            for bytes in store.literal_aliases(&value, true)? {
+                placeholders.push(format!("?{}", sql_params.len() + 1));
+                sql_params.push(Box::new(bytes));
+            }
+            conditions.push(format!("v IN ({})", placeholders.join(",")));
         }
     }
 
@@ -321,7 +324,7 @@ fn eval_triple_pattern_limited(
         } else {
             None
         };
-        let canonical_key = (e_id, a_id, v.to_bytes(), g_id);
+        let canonical_key = (e_id, a_id, v.term_key(), g_id);
         if !canonical_rows.insert(canonical_key) {
             continue;
         }
@@ -534,7 +537,7 @@ pub(super) fn eval_triple_pattern_from_model(
             .collect(),
         (None, None, None) => model.triples(store)?,
     };
-    candidates.sort_unstable_by_key(|l| (l.0, l.1, l.2.to_bytes()));
+    candidates.sort_unstable_by_key(|l| (l.0, l.1, l.2.term_key()));
 
     let mut results = Vec::with_capacity(candidates.len());
     for (e_id, a_id, v) in candidates {

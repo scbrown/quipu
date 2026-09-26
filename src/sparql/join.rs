@@ -177,7 +177,7 @@ fn hash_join_bindings(
     let key_of = |b: &Bindings| -> Vec<Vec<u8>> {
         shared
             .iter()
-            .map(|k| b.get(*k).map(Value::to_bytes).unwrap_or_default())
+            .map(|k| b.get(*k).map(Value::term_key).unwrap_or_default())
             .collect()
     };
 

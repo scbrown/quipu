@@ -29,14 +29,19 @@ impl Store {
     /// Current asserted facts in ONE graph (quipu #36 subset export). `g = 0` is
     /// the ROOT / default committed graph; a named graph's `g` is the term id of
     /// its graph IRI. This is a graph's OWN facts (the same scope a
-    /// `GRAPH <iri> { … }` read sees), not a composed overlay view.
+    /// `GRAPH <iri> { … }` read sees), not a composed overlay view. Multiple
+    /// physical source claims project to one term; the returned provenance is
+    /// a representative assertion, not an enumeration of all owners.
     pub fn current_facts_in_graph(&self, g: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
              WHERE op = 1 AND valid_to IS NULL AND g = ?1 \
-             ORDER BY e, a",
+             ORDER BY e, a, tx",
         )?;
-        Self::collect_facts(&mut stmt, params![g])
+        let mut facts = Self::collect_facts(&mut stmt, params![g])?;
+        let mut seen = std::collections::HashSet::new();
+        facts.retain(|f| seen.insert((f.entity, f.attribute, f.value.term_key())));
+        Ok(facts)
     }
 
     /// Current asserted facts across a SET of graphs, unioned. The read the
@@ -115,7 +120,19 @@ impl Store {
             }
         }
         events.sort_by_key(|(tx, _)| *tx);
-        Ok(events.into_iter().map(|(_, d)| d).collect())
+        let mut seen = std::collections::HashSet::new();
+        let mut changes = Vec::new();
+        for (_, mut datum) in events.into_iter().rev() {
+            if seen.insert((datum.entity, datum.attribute, datum.value.term_key())) {
+                datum.op = if self.has_literal(datum.entity, datum.attribute, &datum.value, g)? {
+                    Op::Assert
+                } else {
+                    Op::Retract
+                };
+                changes.push(datum);
+            }
+        }
+        Ok(changes)
     }
 
     /// Return current facts for only the requested attributes in one graph.

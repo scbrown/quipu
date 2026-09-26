@@ -55,6 +55,21 @@ pub fn eval_aggregate(
             match name {
                 AggregateFunction::Count => Some(Value::Int(values.len() as i64)),
                 AggregateFunction::Sum => {
+                    if let Some(exact) = values
+                        .iter()
+                        .map(crate::numeric_value::decimal)
+                        .collect::<Option<Vec<_>>>()
+                    {
+                        let datatype = if values.iter().all(is_integral) {
+                            crate::namespace::XSD_INTEGER
+                        } else {
+                            crate::namespace::XSD_DECIMAL
+                        };
+                        return Some(crate::numeric_value::decimal_result(
+                            &exact.into_iter().sum(),
+                            datatype,
+                        ));
+                    }
                     if values.iter().any(|value| value.as_f64().is_none()) {
                         return None;
                     }
@@ -80,6 +95,19 @@ pub fn eval_aggregate(
                     }
                 }
                 AggregateFunction::Avg => {
+                    if !values.is_empty()
+                        && let Some(exact) = values
+                            .iter()
+                            .map(crate::numeric_value::decimal)
+                            .collect::<Option<Vec<_>>>()
+                    {
+                        let sum: bigdecimal::BigDecimal = exact.into_iter().sum();
+                        return Some(crate::numeric_value::decimal_result(
+                            &(sum
+                                / bigdecimal::BigDecimal::from(u64::try_from(values.len()).ok()?)),
+                            crate::namespace::XSD_DECIMAL,
+                        ));
+                    }
                     if values.is_empty() {
                         return None;
                     }
@@ -194,6 +222,14 @@ fn typed_number(value: f64, datatype: &str) -> Value {
 
 /// Compare two optional Values for ordering (used by ORDER BY).
 pub fn compare_option_values(a: &Option<Value>, b: &Option<Value>) -> std::cmp::Ordering {
+    if let (Some(a), Some(b)) = (a, b)
+        && a.datatype()
+            .is_some_and(crate::namespace::is_numeric_datatype)
+        && b.datatype()
+            .is_some_and(crate::namespace::is_numeric_datatype)
+    {
+        return crate::numeric_value::compare(a, b).unwrap_or(std::cmp::Ordering::Equal);
+    }
     match (a, b) {
         (None, None) => std::cmp::Ordering::Equal,
         (None, Some(_)) => std::cmp::Ordering::Less,
