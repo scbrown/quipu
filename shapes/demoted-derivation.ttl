@@ -1,0 +1,58 @@
+# Product evidence schema for truth-maintenance demotions.
+# Ship/load with the compatible demotion runtime, not as a data repair.
+# Identity is minted by the runtime from (s,p,o,premise graph,deriver source,
+# promotion tx), independently of this RDF reification encoding.
+# Atomicity, premise exclusion, idempotence and state transitions are runtime
+# guarantees; SHACL validates the retained record, not those operations.
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
+@prefix quipu: <http://quipu.local/graph#> .
+
+quipu:DemotedDerivation a rdfs:Class ;
+    rdfs:subClassOf rdf:Statement .
+
+quipu:DemotedDerivationShape a sh:NodeShape ;
+    sh:targetClass quipu:DemotedDerivation ;
+    sh:nodeKind sh:IRI ;
+    sh:property [
+        sh:path quipu:derivationState ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:in ( "unsupported" "resolved" )
+    ] ;
+    sh:property [
+        sh:path rdf:subject ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI
+    ] ;
+    sh:property [
+        sh:path rdf:predicate ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI
+    ] ;
+    sh:property [
+        sh:path rdf:object ;
+        sh:minCount 1 ; sh:maxCount 1
+    ] ;
+    sh:property [
+        sh:path quipu:premiseGraph ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI
+    ] ;
+    sh:property [
+        sh:path quipu:deriverSource ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string
+    ] ;
+    sh:property [
+        sh:path quipu:promotionTx ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:integer ; sh:minInclusive 1
+    ] ;
+    sh:property [
+        sh:path quipu:invalidationTx ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:integer ; sh:minInclusive 1
+    ] ;
+    sh:property [
+        sh:path prov:invalidatedAtTime ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime
+    ] .

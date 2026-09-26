@@ -81,6 +81,26 @@ authorize instances of `urn:example:Task`. The write vocabulary still comes
 from loaded shape sets; add and load a shape targeting the intended class
 before writing its instances. Unknown types continue to be refused.
 
+## Demoted derivation records
+
+`shapes/demoted-derivation.ttl` defines the product evidence schema in
+`http://quipu.local/graph#`, matching the truth-maintenance runtime vocabulary.
+Ship and load this set together with the compatible demotion runtime.
+
+A `DemotedDerivation` is an IRI identifying an `rdf:Statement`. It retains
+exactly one `rdf:subject`, `rdf:predicate`, `rdf:object`, `premiseGraph`,
+`deriverSource`, `promotionTx`, `invalidationTx`, and `prov:invalidatedAtTime`.
+Subject, predicate and premise graph are IRIs; the object may be any RDF term.
+The source is a string, transaction IDs are integers at least one, and the
+invalidation time is an `xsd:dateTime`.
+
+`derivationState` must be exactly one string: `unsupported` or `resolved`.
+Resolution preserves the evidence record. Extra annotations are allowed.
+The shape rejects missing or ambiguous fields and incorrect RDF term kinds.
+It does not establish atomic demotion, deterministic identity, exclusion from
+premise evaluation, or authorization to promote; those are runtime guarantees.
+Loading the shape does not repair data or promote unsupported evidence.
+
 ## Validation in Action
 
 Try to add a Host without a hostname:
