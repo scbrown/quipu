@@ -4619,8 +4619,12 @@ fn assert_namespace_reader(name: &str, params: &serde_json::Value, expected_coun
             None,
         )
         .unwrap();
-        let out =
-            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":params})).unwrap();
+        let out = if name == "cooccurrence" {
+            super::governance::tool_cooccurrence(&store, params)
+        } else {
+            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":params}))
+        }
+        .unwrap();
         assert_eq!(out["count"], expected_count, "{name}/{mode}: {out}");
         match name {
             "brief_ground" => {
@@ -4640,6 +4644,10 @@ fn assert_namespace_reader(name: &str, params: &serde_json::Value, expected_coun
                 assert_eq!(out["rows"][0]["other"], "urn:reader:e2");
                 assert_eq!(out["rows"][0]["shared_workitems"], 1);
             }
+            "cooccurrence" => {
+                assert_eq!(out["cooccurring"][0]["work_item"], "urn:reader:workB");
+                assert_eq!(out["cooccurring"][0]["shared_entities"], 1);
+            }
             "entity_work" => {
                 let commits: std::collections::BTreeSet<_> = out["rows"]
                     .as_array()
@@ -4658,11 +4666,17 @@ fn assert_namespace_reader(name: &str, params: &serde_json::Value, expected_coun
         }
         let missing = if params.get("item").is_some() {
             serde_json::json!({"item":"ABSENT"})
+        } else if name == "cooccurrence" {
+            serde_json::json!({"work_item":"urn:reader:absent"})
         } else {
             serde_json::json!({"entity":"urn:reader:absent"})
         };
-        let control =
-            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":missing})).unwrap();
+        let control = if name == "cooccurrence" {
+            super::governance::tool_cooccurrence(&store, &missing)
+        } else {
+            crate::tool_ask(&store, &serde_json::json!({"name":name,"params":missing}))
+        }
+        .unwrap();
         assert_eq!(
             control["count"], 0,
             "{name}/{mode} negative control: {control}"
@@ -4694,6 +4708,15 @@ fn cochanged_with_dual_namespace_reader() {
     assert_namespace_reader(
         "cochanged_with",
         &serde_json::json!({"entity":"urn:reader:e1"}),
+        1,
+    );
+}
+
+#[test]
+fn cooccurrence_dual_namespace_reader() {
+    assert_namespace_reader(
+        "cooccurrence",
+        &serde_json::json!({"work_item":"urn:reader:workA"}),
         1,
     );
 }
