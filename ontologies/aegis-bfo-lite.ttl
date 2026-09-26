@@ -98,6 +98,10 @@ aegis:Principal rdfs:subClassOf obo:BFO_0000002 .
 aegis:Probe rdfs:subClassOf obo:BFO_0000002 .
 aegis:PublisherAttestation rdfs:subClassOf obo:BFO_0000002 .
 aegis:PushgatewayJob rdfs:subClassOf obo:BFO_0000002 .
+# A reaction is a standing rule; its firing is a durable transition record,
+# distinct from the execution that produced it (like Observation).
+aegis:Reaction rdfs:subClassOf obo:BFO_0000002 .
+aegis:ReactionFiring rdfs:subClassOf obo:BFO_0000002 .
 aegis:Requirement rdfs:subClassOf obo:BFO_0000002 .
 aegis:ResponsibilityDomain rdfs:subClassOf obo:BFO_0000002 .
 aegis:ReverseProxyRoute rdfs:subClassOf obo:BFO_0000002 .

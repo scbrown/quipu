@@ -228,7 +228,10 @@ alone does not parse SPARQL or duration strings.
 
 A firing records a transition, never each evaluation. It has exactly one
 `firedBy` link to a typed Reaction, one IRI `focus`, and one `xsd:dateTime`
-`startedAt`. `resolvedAt` is absent while active and set once via `/set` when
+`startedAt`. Its stable IRI identifies the machine-emitted record; it does
+not require an `rdfs:label`. The rule and its durable firing record are BFO
+continuants, separate from the execution that produced the record.
+`resolvedAt` is absent while active and set once via `/set` when
 the condition resolves. A failed or timed-out query is unknown and must not
 resolve an existing firing. A later firing after resolution is a new
 occurrence. SHACL does not enforce these temporal rules or timestamp ordering.
