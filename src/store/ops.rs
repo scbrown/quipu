@@ -117,6 +117,20 @@ impl Store {
         source: Option<&str>,
         graph: i64,
     ) -> Result<i64> {
+        self.transact_to_graph_scoped(datums, timestamp, actor, source, graph, None)
+    }
+
+    /// Source cleanup must preserve assertions belonging to other producers.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn transact_to_graph_scoped(
+        &mut self,
+        datums: &[Datum],
+        timestamp: &str,
+        actor: Option<&str>,
+        source: Option<&str>,
+        graph: i64,
+        retract_source: Option<&str>,
+    ) -> Result<i64> {
         // Manual savepoint commands (not the RAII `Savepoint`) so `&self` stays
         // usable for the write-time policy guard AFTER the datums are staged but
         // BEFORE commit — the `&Store`-based SPARQL evaluator cannot run while a
@@ -161,7 +175,7 @@ impl Store {
         // the model never observed the staged rows at all.
         self.set_write_in_progress(true);
         self.conn.execute_batch("SAVEPOINT quipu_transact")?;
-        match self.stage_and_guard(datums, timestamp, actor, source, graph) {
+        match self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source) {
             Ok(mut staged) => {
                 let tx_id = staged.tx_id;
                 // Taken before `staged` moves into after_commit_hooks below.
@@ -221,6 +235,7 @@ impl Store {
     /// the tx id (and, under `reactive-reasoner`, the written datum indices) on
     /// success; any `Err` (including a policy denial) leaves the savepoint open
     /// for the caller to roll back.
+    #[allow(clippy::too_many_arguments)]
     fn stage_and_guard(
         &mut self,
         datums: &[Datum],
@@ -228,6 +243,7 @@ impl Store {
         actor: Option<&str>,
         source: Option<&str>,
         graph: i64,
+        retract_source: Option<&str>,
     ) -> Result<Staged> {
         let tx_id = crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?;
 
@@ -247,19 +263,6 @@ impl Store {
         // Whether anything beyond the caller's datums entered this write.
         let inferred = staged_datums.len() != datums.len();
 
-        // Collect the datums actually written (for observer notification),
-        // classified by op. Overlay view-markers (Tombstone) are excluded from
-        // the committed reactive stream (#36).
-        #[cfg(feature = "reactive-reasoner")]
-        let mut asserts: Vec<Datum> = Vec::new();
-        #[cfg(feature = "reactive-reasoner")]
-        let mut retracts: Vec<Datum> = Vec::new();
-
-        // Datums ACTUALLY written (idempotent no-ops excluded), for the event
-        // log (event-log P1). Unconditional — events are core, not a feature.
-        let mut written_asserts: Vec<&Datum> = Vec::new();
-        let mut written_retracts: Vec<&Datum> = Vec::new();
-
         // Functional-property supersede (aegis-7vn3b). MUST run before the insert
         // loop below: it closes the PRIOR value so the new one lands as the only
         // current fact. Run after, and both would be live and the OWL gate would
@@ -273,71 +276,10 @@ impl Store {
         #[cfg(not(feature = "owl"))]
         let superseded = 0usize;
 
-        {
-            let mut insert = self.conn.prepare(
-                "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            )?;
-            // Retraction is SCOPED to `graph`: an overlay closing an assertion
-            // touches only its own graph, never ROOT (base un-mutated, #36).
-            // quipu #83: `retracted_tx` records WHICH transaction closed the
-            // fact. Without it `as_of_tx` cannot tell a fact that was live at N
-            // from one retracted since, and silently under-reports.
-            let mut close_assertion = self.conn.prepare(
-                "UPDATE facts SET valid_to = ?1, retracted_tx = ?6 \
-                 WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
-            )?;
-            // Idempotent assertions: skip if an active fact with the same
-            // (e, a, v) already exists IN THIS GRAPH. Scoped to `graph` so the
-            // same triple can be asserted independently into ROOT and overlays.
-            let mut check_exists = self.conn.prepare(
-                "SELECT 1 FROM facts \
-                 WHERE e = ?1 AND a = ?2 AND v = ?3 AND g = ?4 AND op = 1 AND valid_to IS NULL \
-                 LIMIT 1",
-            )?;
-            for d in &staged_datums {
-                let v_bytes = d.value.to_bytes();
-                if d.op == Op::Retract {
-                    close_assertion.execute(params![
-                        timestamp,
-                        d.entity,
-                        d.attribute,
-                        v_bytes,
-                        graph,
-                        tx_id
-                    ])?;
-                    written_retracts.push(d);
-                } else {
-                    // Skip assertion if an identical active fact already exists
-                    // IN THIS GRAPH.
-                    let exists: bool = check_exists
-                        .query_row(params![d.entity, d.attribute, v_bytes, graph], |_| Ok(true))
-                        .unwrap_or(false);
-                    if exists {
-                        continue;
-                    }
-                    if d.op == Op::Assert {
-                        written_asserts.push(d);
-                    }
-                }
-                insert.execute(params![
-                    d.entity,
-                    d.attribute,
-                    v_bytes,
-                    graph,
-                    tx_id,
-                    d.valid_from,
-                    d.valid_to,
-                    d.op as i32,
-                ])?;
-                #[cfg(feature = "reactive-reasoner")]
-                match d.op {
-                    Op::Assert => asserts.push(d.clone()),
-                    Op::Retract => retracts.push(d.clone()),
-                    Op::Tombstone => {}
-                }
-            }
-        }
+        let (asserts, retracts) =
+            self.stage_source_claims(&staged_datums, graph, tx_id, timestamp, retract_source)?;
+        let written_asserts: Vec<_> = asserts.iter().collect();
+        let written_retracts: Vec<_> = retracts.iter().collect();
 
         // Definition-time placement check (SARC §4.2). Runs FIRST and only on
         // writes that define or amend a policy: a malformed constraint must be
@@ -756,11 +698,13 @@ impl Store {
 
         // Stamp the retraction tx with a distinct source so it is traceable and
         // never re-selected as one of the episode's own assertions.
-        let tx_id = self.transact(
+        let tx_id = self.transact_to_graph_scoped(
             &datums,
             timestamp,
             actor,
             Some(&format!("retract-episode:{episode_name}")),
+            0,
+            Some(&source_tag),
         )?;
         Ok(RetractEpisodeOutcome {
             tx_id,
