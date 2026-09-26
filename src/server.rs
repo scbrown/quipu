@@ -529,11 +529,6 @@ async fn main() {
                         // is indistinguishable from "the algorithm returned no
                         // results" or "the graph is empty". Measured on /project:
                         // it took two round trips to discover it was auth at all.
-                        //
-                        // Same failure SHAPE this repo already records for the
-                        // bobbin /search 405 (CLAUDE.md): a documented recipe that
-                        // silently returns nothing, so the reader concludes the
-                        // service is empty rather than that they called it wrong.
                         // A refusal MUST say it refused; an empty body cannot.
                         //
                         // Fixed HERE, in the middleware, rather than per-route:
@@ -561,7 +556,11 @@ async fn main() {
                                         "unauthorized: {path} is a WRITE endpoint and requires a bearer \
                                          token. Send `Authorization: Bearer <token>`. Read endpoints \
                                          (/query, /search, entity reads, /health) are open and need no \
-                                         credential.{why}"
+                                         credential.{why} Obtain an accepted token from this server's \
+                                         administrator. Shantytown and CABOODLE clients read \
+                                         ~/.config/quipu/token (mode 0400), overridden by \
+                                         QUIPU_AUTH_TOKEN_FILE or QUIPU_AUTH_TOKEN. See the REST API \
+                                         reference Authentication section for provisioning."
                                     ),
                                     "endpoint": path,
                                     "reason": "missing_or_invalid_bearer_token",

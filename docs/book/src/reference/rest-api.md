@@ -98,6 +98,38 @@ Authorization: Bearer <token>
 Reads — `/query`, `/search`, entity lookups, `/health`, `/version` — need no
 credential and answer normally.
 
+### Provision a client credential
+
+The server administrator issues credentials through the deployment's approved
+secret distribution channel. For a shared bearer, the supplied value must match
+an active server bearer. For a named credential, the administrator registers its
+verifier and activates the validated registry before supplying the plaintext to
+the client. Installing an arbitrary token on a client cannot grant access.
+
+Shantytown and CABOODLE use `~/.config/quipu/token` as the default credential
+file. A nonempty `QUIPU_AUTH_TOKEN` overrides `QUIPU_AUTH_TOKEN_FILE`, which
+overrides this default. Files are read at request time. This is a client
+convention; the server neither reads your home directory nor distributes secrets.
+
+```sh
+install -d -m 700 "$HOME/.config/quipu" && install -m 400 /secure/issued-token "$HOME/.config/quipu/token"
+st ops doctor quipu --no-latest
+# Or, on a CABOODLE host:
+caboodle doctor
+```
+
+Keep an existing explicit file override until provisioning and rotation move
+together. Do not create independent copies that can diverge at rotation. Never
+put a token value in command arguments, logs, issues, or version control.
+
+The doctor check POSTs an empty object to `/episode`. Authentication and
+read-only policy run before episode parsing: an accepted request receives
+HTTP 400 with `invalid episode JSON: missing field ...`, and stores nothing.
+HTTP 401 means a missing or rejected bearer; HTTP 403 with
+`reason: server_is_read_only` means no credential can permit the write.
+Network failures and unexpected responses leave authorization unproven. This
+check proves access to the write handler, not a successful storage commit.
+
 ### Additive named credentials
 
 `[quipu.server].crew_credentials_file` optionally points to a local JSON registry
