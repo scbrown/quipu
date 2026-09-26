@@ -573,6 +573,17 @@ aegis:PredicateShape a sh:NodeShape ;
 aegis:VerdictShape a sh:NodeShape ;
     sh:targetClass aegis:Verdict ;
     sh:property [
+        # Optional link to the COMMITTED transaction whose delta was judged,
+        # never the verdict's own persistence transaction. Refused/rolled-back
+        # attempts and historical verdicts omit it; never predict or backfill
+        # a transaction id from timestamps. The producer must bind this value
+        # into signed evidence and verdict identity; SHACL checks only its kind.
+        sh:path aegis:gatedTx ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ;
+        sh:minInclusive 1 ;
+    ] ;
+    sh:property [
         sh:path aegis:predicateId ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;

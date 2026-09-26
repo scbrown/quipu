@@ -140,6 +140,29 @@ attribution: `sha256` over `predicate|target|outcome|writer|chain`, binding the
 `aegis:attributedWriter` and `aegis:principalChain` into the signed seal. It is
 deliberately *not* a hash of graph state, which has no stable serialisation.
 
+### Linking a verdict to the judged transaction
+
+The shipped governance shape permits an optional `aegis:gatedTx`: one
+`xsd:integer` greater than or equal to one. It identifies the **committed
+transaction whose delta was judged**, not the later transaction that persists
+the verdict. Transaction IDs are local to their originating store; cross-store
+audits must retain that store's provenance.
+
+Refused or rolled-back attempts omit `gatedTx`. Their attempted transaction row
+is rolled back, so its provisional ID is not a durable identity and must never
+be predicted or reused as the link. Use a durable `write.refused` event identity
+for a refusal correlation when the producer provides one. This shape does not
+introduce that event link. Historical verdicts may also omit `gatedTx`; absence
+means the transaction join is unavailable, not that the verdict was a refusal.
+Do not guess a backfill from timestamps or matching predicate/target pairs.
+
+This is the schema contract, not automatic producer support. A producer adding
+`gatedTx` must bind it into the signed evidence and verdict identity: changing
+the judged transaction must change the seal and identity. Otherwise identical
+outcomes can collapse to one verdict with several transaction IDs, and the link
+itself is not authenticated. SHACL checks cardinality and datatype; it does not
+prove that the referenced transaction exists or that the signature binds it.
+
 ## The Phase-0 root of trust
 
 Trust concentrates in a small, human-owned surface: `aegis:VerifierRegistration`
