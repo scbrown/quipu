@@ -24,6 +24,8 @@
 //!   quipu gate shadow ...                 Judge a candidate policy set over recorded history (never writes)
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu audit namespace                                   Report base-namespace drift
+//!   quipu audit replay <verdict> [--delta <file>]           Re-derive a gate decision as of its tx
+//!   quipu audit quarantine [list|purge]                     Refused-attempt evidence behind verdicts
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
 //!   quipu db attach --list                List the databases mounted alongside this store
 //!   quipu pack <graph-iri> --out <file> [--space N]  Export a graph as an attachable pack
@@ -65,6 +67,7 @@ mod cli_search;
 mod cli_share_diff;
 mod hook_session_capture;
 mod hooks_install;
+mod cli_quarantine;
 
 fn main() {
     quipu::write_kind::set_cli();
@@ -410,6 +413,9 @@ COMMANDS:
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit <trace.jsonl> --repo <root> --from <base> --to <tip> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
+    quipu audit replay <verdict> [--delta <file>] [--json] [--db <path>]
+    quipu audit quarantine [list [--verdict <iri>]] [--json] [--db <path>]
+    quipu audit quarantine purge (--graph <iri>|--before <ts>|--older-than <days>|--all) [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
     quipu hook session-capture   Stop hook: solicit one knowledge episode per session (stdin JSON)
     quipu hooks bundle           print quipu's hook bundle (st.hook-bundle/1)
