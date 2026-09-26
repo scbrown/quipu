@@ -69,6 +69,36 @@ fn lexical_variants_and_ill_typed_literals_round_trip() {
 }
 
 #[test]
+fn min_and_max_return_original_numeric_terms() {
+    let mut store = Store::open_in_memory().unwrap();
+    load(
+        &mut store,
+        "<http://example.org/s> <http://example.org/p> 2E-1, 2.2, 3E1 .",
+    );
+    // SPARQL 18.5.1.5/6 select an input term, rather than constructing a
+    // canonical spelling. The pinned agg-min-02 expected file spells its
+    // input 2E-1 as 2.0E-1; keep the runtime contract explicit here.
+    for enabled in [false, true] {
+        store.set_read_model_enabled(enabled);
+        let result = quipu::sparql::query(
+            &store,
+            "SELECT (MIN(?v) AS ?min) (MAX(?v) AS ?max) WHERE { ?s <http://example.org/p> ?v }",
+        )
+        .unwrap();
+        for (name, lexical) in [("min", "2E-1"), ("max", "3E1")] {
+            assert_eq!(
+                result.rows()[0].get(name),
+                Some(&Value::Typed {
+                    lexical: lexical.into(),
+                    datatype: "http://www.w3.org/2001/XMLSchema#double".into(),
+                }),
+                "{name} model={enabled}",
+            );
+        }
+    }
+}
+
+#[test]
 fn value_equality_is_separate_from_same_term_and_str() {
     let store = Store::open_in_memory().unwrap();
     let query = r#"PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>

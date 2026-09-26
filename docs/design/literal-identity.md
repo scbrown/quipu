@@ -80,6 +80,22 @@ notification paths. The seven Turtle evaluation failures and the existing suites
 must pass. Performance, complete CI, owner review and the deployment slot remain
 separate acceptance gates.
 
+### Open conformance discrepancy
+
+The pinned W3C SPARQL `aggregates/agg-min-02` fixture currently fails strict
+result-term comparison: its input contains `2E-1`, while its expected result
+contains `2.0E-1`. The candidate returns the original `2E-1` term. SPARQL
+[MIN](https://www.w3.org/TR/sparql11-query/#defn_aggMin) selects the first term
+of the ordered input sequence; canonicalizing that term would erase its lexical
+identity. The local MIN/MAX regression checks the original spelling with both
+read models.
+
+This remains a reported failure and a landing hold. The pinned fixture and the
+strict comparison are unchanged. Upstream
+[issue 58](https://github.com/w3c/rdf-tests/issues/58) discusses numeric result
+spelling, but an open question is not authorization to normalize results or
+count this case as passed.
+
 The offline `literal_compatibility` example emits a JSON result per legacy case.
 Its first argument is a new output directory; an optional second directory
 supplies databases written by the old probe. It refuses an existing output
