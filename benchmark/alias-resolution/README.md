@@ -76,3 +76,9 @@ Held-out-only results exclude the pilot. No threshold is fitted to the cohort.
 Raw preparation output still contains private names. Publication requires a
 separate scrubbed view and the artifact scrub gate; this directory's tools
 neither anonymize that output nor make its publication safe.
+
+The interrupted pilot's numeric responses and all ten item statuses are recorded
+in `pilot-responses.json` and `pilot-attempts.json`; four items are explicitly
+not yet attempted. The subsequent bounded-retry amendment in the registration
+applies only to those four untouched items. Historical observations retain their
+original policy and are not silently replaced by retries.

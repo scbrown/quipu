@@ -217,3 +217,30 @@ item identities, gold labels, prompt, thresholds and ten-attempt cap remain
 frozen. A completed pilot will therefore contain at most nine usable responses.
 No model response was observed before this amendment; no accuracy-based tuning
 occurred. The full run still requires a separate decision after pilot reporting.
+
+### Pilot continuation: bounded retries (2026-09-27)
+
+After six pilot attempts (four responses, two timeouts), the reviewer authorized
+finishing only the four untouched pilot items with at most two retries per item.
+This amendment must be publicly committed before any such call. Each attempt
+has a 120-second client timeout. A returned, schema-valid typed response ends
+that item's attempts, including a valid abstention. Only transport failures or
+unavailable/malformed responses permit another attempt, with no changes to the
+frozen request. Every attempted request is durably recorded before transmission
+and reported separately with elapsed time, status, usage and known/unknown cost.
+No hidden retries are allowed. Stop after three attempts for any item.
+
+The untouched IDs are n-eae6b3df355233dcd356e4dc,
+n-6ce96617b48e3b3a80f9ef32, n-b383d6d2a38889f65059a5a1 and
+n-d7a61edb4bdd3ce7afc8c51d. The two previously timed-out items remain
+unavailable and are not retried by this authorization. The former ten-attempt
+pilot cap is explicitly superseded for this continuation: at most twelve new
+attempts, eighteen pilot attempts total, still exactly ten unique pilot items.
+
+Report availability both per first attempt (responses/items attempted once) and
+per item (items with a valid response within their applicable attempt policy).
+Also report responses/total attempts and all timeout observations. Distinguish
+policy versions; the original six attempts had no retries. Unknown billing on
+any failed attempt remains unknown and cannot be replaced by a zero estimate.
+Full-run item count, attempt cap and spend estimate require separate review after
+this pilot. No full-run calls are authorized by this amendment.
