@@ -429,6 +429,71 @@ PYTEST
   rm -rf "$d"
 done
 
+# Execute the actual main workflow step. A populated Unreleased draft can lag
+# behind main; the package's released section must retain its tagged boundary.
+main_step="$(python3 - "$REPO_ROOT/.github/workflows/release.yml" <<'PYTEST'
+from pathlib import Path
+import sys
+lines = Path(sys.argv[1]).read_text().splitlines()
+starts = [i for i, line in enumerate(lines)
+          if line.startswith("      - name:") and line.endswith(" on main")]
+assert len(starts) == 1, "expected one main changelog workflow step"
+start = starts[0]
+end = next((i for i in range(start + 1, len(lines))
+            if lines[i].startswith("      - ")), len(lines))
+run = next(i for i in range(start, end) if lines[i].startswith("        run:"))
+value = lines[run].split("run:", 1)[1].strip()
+if value == "|":
+    body = []
+    for line in lines[run + 1:end]:
+        if line and not line.startswith("          "):
+            break
+        body.append(line[10:])
+    print("\n".join(body))
+else:
+    print(value)
+PYTEST
+)" || exit 1
+read -r d a b c < <(make_repo)
+{
+  echo '# Changelog'; echo; echo '## [Unreleased]'; echo; entry "$b"
+  echo; echo '## [1.1.0] - 2026-01-01'; echo; entry "$b"; entry "$c"
+  echo; echo '## [1.0.0] - 2025-12-01'; echo; entry "$a"
+} > "$d/CHANGELOG.md"
+(
+  cd "$d"
+  sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml
+  git add Cargo.toml CHANGELOG.md; git commit -qm 'chore: release v1.1.0'
+  git tag quipu-ai-v1.1.0
+  echo fourth >> src/lib.rs; git commit -qam 'feat: fourth change after release'
+) || exit 1
+fourth="$(git -C "$d" rev-parse --short=7 HEAD)"
+for arm in stale-draft missing-released missing-pending complete-pending; do
+  case "$arm" in
+    stale-draft) want=0; version=1.1.0 ;;
+    missing-released)
+      sed -i "/\[$c\]/d" "$d/CHANGELOG.md"
+      want=1; version=1.1.0 ;;
+    missing-pending)
+      git -C "$d" show quipu-ai-v1.1.0:CHANGELOG.md > "$d/CHANGELOG.md"
+      sed -i 's/version="1.1.0"/version="1.2.0"/' "$d/Cargo.toml"
+      sed -i '/^## \[1.1.0\]/i ## [1.2.0] - 2026-01-02\n' "$d/CHANGELOG.md"
+      want=1; version=1.2.0 ;;
+    complete-pending)
+      sed -i "/^## \[1.2.0\]/a $(entry "$fourth")" "$d/CHANGELOG.md"
+      want=0; version=1.2.0 ;;
+  esac
+  out="$(cd "$d" && bash -e -c "$main_step" 2>&1)"; rc=$?
+  if [[ "$rc" -eq "$want" ]] && grep -qF "version $version," <<<"$out"; then
+    echo "  PASS  main workflow $arm (exit $rc)"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL  main workflow $arm: wanted $want/version $version, got $rc: $out" >&2
+    fail=$((fail + 1))
+  fi
+done
+rm -rf "$d"
+
 # The detector's own arms, including its parse-error cases.
 if python3 "$REPO_ROOT/scripts/changelog-duplicates.py" --selftest >/dev/null 2>&1; then
   echo "  PASS  changelog-duplicates.py selftest (all arms)"

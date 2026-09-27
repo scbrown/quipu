@@ -210,8 +210,14 @@ jobs:
       - name: Self-test the guard (both directions)
         run: ./scripts/test-verify-changelog.sh
 
-      - name: Verify the newest section on main
-        run: ./scripts/verify-changelog.sh
+      # Main can accumulate new commits while its populated Unreleased draft
+      # still describes an earlier window. Verify the package artifact: a tagged
+      # version uses its release boundary; a new version still checks through HEAD.
+      # The pending release PR below remains independently checked in full.
+      - name: Verify package version on main
+        run: |
+          VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          ./scripts/verify-changelog.sh --version "$VERSION"
 
       # The pending release PR is the artifact that actually gets merged, and it is
       # regenerated on every push — so it is worth re-checking every push, not just
