@@ -91,28 +91,56 @@
     "id": "n-eae6b3df355233dcd356e4dc",
     "class": "id-form",
     "gold": "different",
-    "status": "NOT_ATTEMPTED",
-    "cost_usd": null
+    "status": "RESPONSE",
+    "cost_usd": "0.000058548",
+    "attempt": 1,
+    "request_bytes": 2879,
+    "attempt_at": "2026-09-27T04:35:24.127234+00:00",
+    "elapsed_seconds": 0.3771244010422379,
+    "decision": "different",
+    "confidence": 0.99,
+    "input_tokens": 1394
   },
   {
     "id": "n-6ce96617b48e3b3a80f9ef32",
     "class": "id-form",
     "gold": "different",
-    "status": "NOT_ATTEMPTED",
-    "cost_usd": null
+    "status": "RESPONSE",
+    "cost_usd": "0.000040404",
+    "attempt": 1,
+    "request_bytes": 1843,
+    "attempt_at": "2026-09-27T04:35:24.514413+00:00",
+    "elapsed_seconds": 0.7816987229743972,
+    "decision": "different",
+    "confidence": 0.97,
+    "input_tokens": 962
   },
   {
     "id": "n-b383d6d2a38889f65059a5a1",
     "class": "semantic",
     "gold": "different",
-    "status": "NOT_ATTEMPTED",
-    "cost_usd": null
+    "status": "RESPONSE",
+    "cost_usd": "0.000070644",
+    "attempt": 1,
+    "request_bytes": 3582,
+    "attempt_at": "2026-09-27T04:35:25.305736+00:00",
+    "elapsed_seconds": 0.3331864079227671,
+    "decision": "different",
+    "confidence": 1.0,
+    "input_tokens": 1682
   },
   {
     "id": "n-d7a61edb4bdd3ce7afc8c51d",
     "class": "semantic",
     "gold": "different",
-    "status": "NOT_ATTEMPTED",
-    "cost_usd": null
+    "status": "RESPONSE",
+    "cost_usd": "0.000072954",
+    "attempt": 1,
+    "request_bytes": 3778,
+    "attempt_at": "2026-09-27T04:35:25.649772+00:00",
+    "elapsed_seconds": 0.30236829502973706,
+    "decision": "different",
+    "confidence": 1.0,
+    "input_tokens": 1737
   }
 ]

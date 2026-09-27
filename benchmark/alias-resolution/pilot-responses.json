@@ -74,5 +74,81 @@
       "input_tokens": 1306,
       "output_tokens": 40
     }
+  },
+  "n-eae6b3df355233dcd356e4dc": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "q": {
+        "type": "choice",
+        "choice": "different",
+        "confidence": 0.99,
+        "probabilities": {
+          "different": 0.99,
+          "cannot_tell": 0.01,
+          "same": 0.0
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 1394,
+      "output_tokens": 40
+    }
+  },
+  "n-6ce96617b48e3b3a80f9ef32": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "q": {
+        "type": "choice",
+        "choice": "different",
+        "confidence": 0.97,
+        "probabilities": {
+          "cannot_tell": 0.02,
+          "different": 0.98,
+          "same": 0.0
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 962,
+      "output_tokens": 40
+    }
+  },
+  "n-b383d6d2a38889f65059a5a1": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "q": {
+        "type": "choice",
+        "choice": "different",
+        "confidence": 1.0,
+        "probabilities": {
+          "same": 0.0,
+          "cannot_tell": 0.0,
+          "different": 1.0
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 1682,
+      "output_tokens": 40
+    }
+  },
+  "n-d7a61edb4bdd3ce7afc8c51d": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "q": {
+        "type": "choice",
+        "choice": "different",
+        "confidence": 1.0,
+        "probabilities": {
+          "cannot_tell": 0.0,
+          "different": 1.0,
+          "same": 0.0
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 1737,
+      "output_tokens": 40
+    }
   }
 }

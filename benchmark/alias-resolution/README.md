@@ -77,8 +77,16 @@ Raw preparation output still contains private names. Publication requires a
 separate scrubbed view and the artifact scrub gate; this directory's tools
 neither anonymize that output nor make its publication safe.
 
-The interrupted pilot's numeric responses and all ten item statuses are recorded
-in `pilot-responses.json` and `pilot-attempts.json`; four items are explicitly
-not yet attempted. The subsequent bounded-retry amendment in the registration
-applies only to those four untouched items. Historical observations retain their
-original policy and are not silently replaced by retries.
+The completed pilot's numeric responses and all ten item statuses are recorded
+in `pilot-responses.json` and `pilot-attempts.json`; `pilot-metrics.json` is the
+offline replay restricted to pilot items. Eight responses, two unavailable
+items, ten attempts: all four items under the bounded-retry amendment succeeded
+on their first attempt. Earlier timeouts were not retried. Availability is 8/10
+both per first attempt and per item; no actual merges were performed.
+
+The known usage-derived list-price subtotal is $0.000533358, plus unknown possible
+charges for two failed attempts. Total account spend is unknown. Request bytes,
+latency, and usage are reported per call. The first failure latency uses attempt
+timestamp to error-receipt mtime; subsequent latencies use a monotonic timer.
+Pilot comparisons are small and selected; semantic negatives are easy. Full-run
+calls require separate authorization.
