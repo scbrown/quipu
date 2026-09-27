@@ -200,3 +200,20 @@ Validate every public byte with the artifact scrub gate; do not release the
 private correspondence or hashes that enable name recovery. Paper edits must
 state missing evidence, failed comparisons and adverse results, compile, receive
 review, and pass the Release workflow before landing.
+
+## Transport amendment, registered after attempt one and before attempt two
+
+The first pilot item, `p-040`, raised `TimeoutError` without an HTTP response or
+usage. Its error receipt was written 30.158 seconds after the attempt receipt,
+matching the frozen client's 30-second timeout; the request was 4,355 bytes.
+It remains UNAVAILABLE, possibly billed, and consumes one of the ten attempts.
+It will not be retried or replaced.
+
+Before any further call, the reviewer authorized increasing the client timeout
+to 120 seconds for the nine untouched, already reviewed requests. Record each
+attempt's monotonic duration and any HTTP status, and stop again if a failure
+recurs. This changes only the transport deadline. The exact request bodies,
+item identities, gold labels, prompt, thresholds and ten-attempt cap remain
+frozen. A completed pilot will therefore contain at most nine usable responses.
+No model response was observed before this amendment; no accuracy-based tuning
+occurred. The full run still requires a separate decision after pilot reporting.
