@@ -264,6 +264,18 @@ crew identity (hq-otm) land it should require an authorized principal.
 
 ### `quipu_retract_source`
 
+Identical facts asserted by different sources retain independent ownership.
+Repair removes only the selected source's claims in the selected graph; a fact
+remains visible until its last owner retracts it. Repeating an assertion under
+the same source is idempotent. The reported `retracted` count is the number of
+source-owned statements processed, not the number that disappeared from the
+logical graph. Historical assertions remain in the audit log.
+
+**The ownership fix is forward-only for newly recorded claims.** Older versions
+skipped identical assertions from later producers, so those historical claims
+cannot be reconstructed. Reassert all relevant producer snapshots before
+retracting old shared facts; this release does not backfill ownership.
+
 Retract-only repair of facts owned by a **legacy transaction source**
 (`POST /retract/source`).
 
@@ -331,6 +343,7 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
+| `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
 | `valid_at` | No | Temporal filter |
 | `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
@@ -341,6 +354,10 @@ so zero results are distinguishable from an unembedded store — see
 [Embeddings and Semantic Search](../concepts/embeddings.md).
 | `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label, **not** an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope) |
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
+
+Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
+exceptions, temporal behavior, and bounded candidate recall.
 
 ### `quipu_hybrid_search`
 
