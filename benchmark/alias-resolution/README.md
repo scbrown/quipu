@@ -1,7 +1,8 @@
 # Arm D preparation and offline replay
 
 The [preregistered protocol](PREREGISTRATION.md) governs this experiment.
-These tools do not call Jev or modify a graph. No model result is claimed yet.
+These tools do not call Jev or modify a graph. Stored pilot and held-out results
+are included for offline replay.
 
 Run the isolated controls with:
 
@@ -88,5 +89,29 @@ The known usage-derived list-price subtotal is $0.000533358, plus unknown possib
 charges for two failed attempts. Total account spend is unknown. Request bytes,
 latency, and usage are reported per call. The first failure latency uses attempt
 timestamp to error-receipt mtime; subsequent latencies use a monotonic timer.
-Pilot comparisons are small and selected; semantic negatives are easy. Full-run
-calls require separate authorization.
+Pilot comparisons are small and selected; semantic negatives are easy. The separately authorized full run is now complete.
+
+## Completed held-out run
+
+`responses.json` contains the 212 valid pilot and held-out responses;
+`held-out-attempts.json` records every one of the 216 held-out attempts, including
+12 timeouts. `held-out-completion.json` and `first50-gate.json` record the run's
+stopping/accounting state. Pilot attempts remain in `pilot-attempts.json`.
+First-attempt availability was 192/204 and eventual availability 204/204; pilot
+availability was 8/10 under its separately recorded policies.
+
+At the registered threshold, held-out Jev recovered 11/88 original positives
+(11/55 eligible) with one false identity proposal. ID-form recovery was 10/43
+(10/36 eligible), with no false proposals. Semantic recovery was 1/45 (1/19
+eligible), with one false proposal; label matching recovered 3/45 (3/19 eligible)
+with none. Across both cohorts Jev recovered 14/93, not the entire alias gap.
+The known usage-derived subtotal including the pilot is $0.014897148, plus
+unknown possible charges for 14 timeouts. Actual merges remain zero.
+
+See `REPLAY.md` for reproducing both recall denominators and cohort separation,
+`metrics.json` and `curves.csv` for threshold curves, `comparison-summary.json`
+for the registered operating points, and `PROVENANCE.md` for input/privacy limits.
+
+The preregistered requirement that Jev beat the free baselines fails on the
+semantic stratum. This is a negative finding for Jev, not a recommendation to
+add a paid entity-resolution step.

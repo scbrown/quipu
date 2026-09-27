@@ -25,3 +25,14 @@ and raw numeric responses support offline recomputation of reported metrics.
 They do not enable independent regeneration of embeddings or model inference
 from the original private evidence. This is a reproducibility limitation, not an
 anonymized request set claimed to be equivalent to the originals.
+
+## Held-out false identity proposal
+
+`n-9390f092d781b0fcd7dbe4dc`: one record describes CPU thermal excursions;
+the other describes missing fan telemetry on the same host. The preregistered
+negative rationale distinguishes the thermal failure from a monitoring gap:
+either can exist without the other. Jev returned `same` at confidence `.77`
+(probability `.84`), crossing the registered floor. Label similarity `.3462`
+and embedding cosine `.5709` stayed below their registered `.90` threshold.
+Shared context was insufficient for identity, but the model proposed it anyway.
+The gold label is unchanged from its pre-inference adjudication.
