@@ -28,6 +28,8 @@ mod auth;
 mod base;
 #[path = "server/entity.rs"]
 mod entity;
+#[path = "server/feed.rs"]
+mod feed;
 #[cfg(test)]
 #[path = "server/feed_read_pool_tests.rs"]
 mod feed_read_pool_tests;
@@ -64,10 +66,10 @@ mod wal_maintenance;
 
 use base::{health, metrics_handler, print_usage, stats, version};
 use entity::{
-    changes_get, entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
-    entity_turtle_suffix, events_commit, events_get, fragments_handler, preview_handler,
-    reconcile_handler, spotlight_handler, transactions,
+    entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
+    entity_turtle_suffix, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
 };
+use feed::{changes_get, events_commit, events_get, transactions};
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 use publication::{export, share_payload};
 #[cfg(test)]
