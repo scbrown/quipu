@@ -9,13 +9,16 @@ We left the class in the benchmark deliberately: it is the most common real
 divergence defect in the recorded corpus, and excluding it would have produced a
 shape-aware arm scoring $1.000$ on both precision and recall as an artefact of
 what we chose to measure. Arm D tests a separate pairwise entity-resolution stage, using labels and
-historical neighbourhoods to propose identity decisions. Its pilot recovered
-some aliases but also abstained and encountered unavailable requests; it never
-collapsed entities. Candidate generation remains a separate requirement whose
-recall bounds end-to-end resolution. Historical evidence gaps, the semantic
-negative shortfall, and easy reviewed semantic negatives limit the comparison.
-An absence of false proposals in a small selected sample would not establish
-that identity errors are cheaper than the defects they prevent.
+historical neighbourhoods to propose identity decisions. Its held-out run recovered
+$11/88$ aliases ($11/55$ with eligible evidence) and proposed one false identity.
+Semantic recall was $1/45$ ($1/19$ eligible), compared with label matching's
+$3/45$ ($3/19$ eligible) and zero false proposals. The preregistered baseline-beating
+condition fails on this stratum, a negative finding for Jev. Candidate generation
+remains a separate requirement whose recall bounds end-to-end resolution; its
+recall was not measured here. Historical evidence gaps, the semantic negative
+shortfall, easy reviewed negatives, and shared endpoints limit generalisation.
+No actual identities were merged, so the study measures proposed errors rather
+than downstream damage or the economic cost of accepting them.
 
 \paragraph{The $939$ is a counterfactual.} Those doublings arose from sequential
 re-posts through a single write path, not from a share, a divergence and a merge.
@@ -24,8 +27,8 @@ been reconciled by this operator, each would have been surfaced as a decision
 instead of silently doubling. It is \emph{not} a claim that the operator was
 running and prevented $1{,}784$ doublings.
 
-\paragraph{Comment bodies in the corpus are synthetic.} Real values are prose
-about a deployment. Only the multiplicity is real --- which is all the merge
+\paragraph{Comment bodies in the merge replay corpus are synthetic.} Real values are prose
+about a deployment. In arms A and B, only the multiplicity is real --- which is all the merge
 reasons about, but it does mean the corpus cannot support any claim about value
 content.
 

@@ -90,44 +90,113 @@ manifest embeds a timestamp. Fork-point anchoring depends on the graph hash, so
 lineage is unaffected --- but a share identifier must not be used as a content
 identity.
 
-\paragraph{Arm D: interrupted pairwise alias pilot.}
-A preregistered follow-up evaluates typed \texttt{same}, \texttt{different},
-and \texttt{cannot\_tell} proposals from Jev~1.13.0 against free label and
-embedding baselines, using historical evidence before identity repair and
-withholding identity annotations. It performs no actual merges. The original
-$93$ positives remain the denominator; evidence gaps become abstentions.
-The proposed negative cohort contains $114/46=2.478$ negatives per id-form
-positive and $41/47=0.872$ per semantic positive, short of the respective
-$3{:}1$ targets by $24$ and $100$. Overall $155$ negatives exceed the $93$
-floor but miss the $279$ target by $124$; one semantic negative exceeds the
-request-size cap. The reviewed semantic pilot negatives have clearly different
-descriptions and therefore do not establish hard-negative discrimination.
+\subsection{Arm D: pairwise identity proposals}
+\label{sec:armD}
+A preregistered follow-up tests whether Jev~1.13.0 can propose identity decisions
+for the $93$ aliases missed by the triple-level operator. Given a pair, it
+returns \texttt{same}, \texttt{different}, or \texttt{cannot\_tell}; the latter
+and confidence below $.75$ abstain. A proposal never applies an identity merge.
+The free comparators use normalized label edit similarity, MiniLM cosine, their
+union (all at $.90$), and a conservative explicit repository/commit-ID control.
+Thresholds and prompts were frozen before paid inference.
 
-The authorized ten-item pilot stopped after six attempts: four typed responses
-and two client timeouts, with four items never attempted. The first timeout
-reached the original $30$-second deadline; a timeout-only amendment registered
-before further calls raised the deadline to $120$ seconds. The next four
-responses took $0.328$--$1.418$ seconds, followed by another timeout at
-$120.115$ seconds. Neither failed request was retried. Thus $2/6$ attempts
-were unavailable; this selected, interrupted pilot with two deadlines is not
-an estimate of general provider reliability. Request size alone does not explain
-the observations: $4{,}355$ bytes timed out, $5{,}427$ bytes succeeded in
-$0.344$ seconds, and $5{,}538$ bytes timed out. The first elapsed measurement
-($30.158$ seconds) uses attempt time to durable error-receipt time; subsequent
-measurements use a monotonic timer.
+Evidence comes from preserved ROOT assertions before each pair's earliest
+recorded transitive identity connection, with both transaction and valid-time
+restrictions. Identity annotations are stripped; current text and vectors do
+not fill missing historical evidence. Only $60/93$ positives have mechanically
+eligible evidence ($39/46$ id-form, $21/47$ semantic). All original positives
+remain in recall; we also report recall among eligible positives.
 
-At the registered confidence floor of $.75$, the positive pilot produced
-$2/3$ id-form and $1/2$ semantic identity proposals, with one unavailable
-id-form item and one semantic abstention. A second publicly registered amendment permitted up to two retries per item
-for only the four untouched negatives, at $120$ seconds per attempt. All four
-returned valid \texttt{different} decisions on their first attempt, in
-$0.302$--$0.782$ seconds; no retry was used. The completed pilot therefore has
-ten attempts, eight typed responses, two unavailable items, and no false
-identity proposals among four responding negatives. First-attempt availability
-and eventual item availability are both $8/10$; the original no-retry subgroup
-is $4/6$ and the amended subgroup $4/4$. The earlier two failures remain
-unavailable. These observations do not resolve the $0/93$ alias gap or
-constitute a completed comparison with free baselines. Returned usage implies
-a list-price subtotal of \$0.000533358; total spend is unknown because the two
-timed-out requests may have been processed and billed. Full-run calls await
-separate review.
+Same-type neighbours ranked by maximum label/cosine score supplied proposed
+negatives, independently adjudicated using distinctness evidence. There are
+$114/46=2.478$ negatives per id-form positive and $41/47=0.872$ per semantic
+positive, short of the respective $3{:}1$ targets by $24$ and $100$.
+Overall $155$ negatives exceed the $93$ floor but miss the $279$ target by $124$;
+one semantic negative exceeds the request-size cap. The reviewed semantic pilot
+negatives have clearly different descriptions, limiting hard-negative claims.
+
+\paragraph{Pilot and availability.}
+The ten-item pilot produced eight typed responses and two client timeouts.
+After a first timeout at $30.158$ seconds, a registered amendment raised the
+client deadline from $30$ to $120$ seconds. Four responses took
+$0.328$--$1.418$ seconds, followed by another timeout at $120.115$ seconds.
+The first latency uses attempt time to durable error-receipt time; subsequent
+measurements use a monotonic timer. Size alone does not explain these events:
+$4{,}355$ bytes timed out, $5{,}427$ bytes succeeded in $0.344$ seconds, and
+$5{,}538$ bytes timed out. A second public amendment allowed two retries for
+only the four untouched pilot negatives; all four responded on their first
+attempt. Earlier failures were retained, not retried. First-attempt and eventual
+item availability are both $8/10$. The pilot recovered $2/3$ id-form and $1/2$
+semantic positives, with one unavailable positive and one abstention; its four
+responding negatives produced no false identity proposals.
+
+The held-out run used $204$ untouched eligible items, at most three attempts per
+item, $120$ seconds per attempt, a $612$-attempt cap and a \$0.20 allowance.
+The first-$50$ stop gate passed: first-attempt availability $48/50$, eventual
+availability $50/50$, requiring $52$ attempts. Valid abstentions count as
+available responses but not recovered aliases.
+
+The completed held-out run used $216$ attempts; first-attempt
+availability was $192/204$ and eventual item
+availability $204/204$. Including the pilot, returned
+usage implies a list-price subtotal of \$0.014897148;
+14 attempts have unknown possible charges. Total account spend
+is therefore unknown. The local guard reserved \$0.001 per unknown or in-flight
+attempt in addition to known usage; this is not a certified debit bound.
+
+\paragraph{Held-out results.}
+Table~\ref{tab:armD} keeps pilot items separate and retains unavailable evidence
+in the original-positive denominator. False proposals are the errors that would
+collapse distinct entities if accepted; actual merges are zero in every arm.
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{llrrr}
+\hline
+Stratum & Method & Recall, original & Recall, eligible & False proposals\\
+\hline
+id-form & Jev & $10/43$ & $10/36$ & $0$\\
+id-form & Label & $0/43$ & $0/36$ & $0$\\
+id-form & Cosine & $0/43$ & $0/36$ & $2$\\
+id-form & Union & $0/43$ & $0/36$ & $2$\\
+id-form & Commit-ID & $10/43$ & $10/36$ & $0$\\
+semantic & Jev & $1/45$ & $1/19$ & $1$\\
+semantic & Label & $3/45$ & $3/19$ & $0$\\
+semantic & Cosine & $0/45$ & $0/19$ & $0$\\
+semantic & Union & $3/45$ & $3/19$ & $0$\\
+semantic & Commit-ID & $0/45$ & $0/19$ & $0$\\
+\hline
+\end{tabular}
+\caption{Arm D held-out pairwise decisions at the registered thresholds.
+Original-positive recall includes missing evidence; eligible recall excludes
+those preparation failures but retains model abstentions and unavailable calls.}
+\label{tab:armD}
+\end{table}
+
+Across pilot and held-out items, Jev recovered $14/93$ aliases; this is
+partial recovery of the operator's $0/93$ gap, not end-to-end entity resolution.
+On held-out positives it recovered $11/88$ overall, with
+one false identity proposal. The gains are predominantly id-form: the
+commit-ID control recovers ten held-out aliases without paid inference. On
+semantic positives Jev recovers one, versus three for label matching; the
+pilot is too small to reverse that conclusion. The preregistered requirement to beat the free baselines fails on the semantic
+stratum: this is a negative finding for Jev at the registered operating point,
+not evidence for adding a paid resolution step.
+Precision, abstention rates and threshold curves are released in the offline
+artifact; shared endpoints and selected negatives limit population inference.
+
+
+Held-out Jev precision is $10/10$ for id-form and $1/2$ for semantic proposals.
+Among eligible items, decision abstentions are $43/147$ id-form and $21/57$
+semantic; another $7$ and $27$ items respectively were withheld during evidence
+preparation. The ten ID-form recoveries overlap the commit-ID control on only
+five pairs: equal recall does not mean identical decisions.
+
+The false proposal illustrates the distinction the prompt asks for: one record
+names CPU thermal excursions, while the other names missing fan telemetry on
+the same host. They describe different failure modes even though their host and
+thermal context overlap. Jev proposed identity at confidence $.77$; both free
+similarity scores were below $.90$. This observed error, together with lower
+semantic recall than label matching, argues for reviewed proposals rather than
+automatic identity collapse. Structured-predicate checks found zero identity
+predicates in all $248$ frozen request states, with an injected-edge positive
+control detected; this control does not certify arbitrary prose.
