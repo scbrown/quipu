@@ -8,9 +8,14 @@ it, so a recall of $1.000$ is not achievable by anything in Table~\ref{tab:armA}
 We left the class in the benchmark deliberately: it is the most common real
 divergence defect in the recorded corpus, and excluding it would have produced a
 shape-aware arm scoring $1.000$ on both precision and recall as an artefact of
-what we chose to measure. Resolving it needs entity resolution --- a different
-kind of system, working from labels and neighbourhoods rather than from triples,
-and one whose errors are not obviously cheaper than the ones it prevents.
+what we chose to measure. Arm D tests a separate pairwise entity-resolution stage, using labels and
+historical neighbourhoods to propose identity decisions. Its pilot recovered
+some aliases but also abstained and encountered unavailable requests; it never
+collapsed entities. Candidate generation remains a separate requirement whose
+recall bounds end-to-end resolution. Historical evidence gaps, the semantic
+negative shortfall, and easy reviewed semantic negatives limit the comparison.
+An absence of false proposals in a small selected sample would not establish
+that identity errors are cheaper than the defects they prevent.
 
 \paragraph{The $939$ is a counterfactual.} Those doublings arose from sequential
 re-posts through a single write path, not from a share, a divergence and a merge.
@@ -50,3 +55,15 @@ scorer, and the comparison in Table~\ref{tab:armA} would not transfer unchanged.
 store. Its class distribution --- alias-mint and functional-value doubling
 dominating --- may not generalise, and we make no claim about divergence rates
 in other systems from it.
+
+\paragraph{Private evidence limits inference reproducibility.}
+Arm D publishes the item labels, frozen free-baseline scores, prompt, numeric
+responses, attempt ledger, and offline scorer. Its structural item views replace
+private strings with random tokens and withhold descriptions; selected evidence
+examples are scrubbed editorial paraphrases. These artifacts reproduce scoring,
+not the original model requests or embeddings. Reviewer inspection used the
+preserved private evidence. A reader cannot independently regenerate the model
+outputs from the public views, and a commercial model may change separately.
+Timeouts may be billed without usage responses, so list-price subtotals do not
+establish total account spend. First-attempt and eventual-item availability
+must be reported separately when retries are allowed.
