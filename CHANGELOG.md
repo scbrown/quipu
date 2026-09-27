@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Documentation
+
+- *(conformance)* Refresh conformance evidence for FILTER error integration ([9892916](https://github.com/scbrown/quipu/commit/98929162f105303ee3a04a5652f9f8c6a8ca6369)).
+
 ## [0.9.0] - 2026-09-25
 
 ### Added
