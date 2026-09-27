@@ -13,6 +13,10 @@
 > **What these counts are.** Working Group–approved tests only. The query-evaluation
 > manifests list 225 tests, and the 168 approved ones are scored; the 57 Proposed or unclassified are not run.
 > The update-syntax suites are not run yet.
+> **The SPARQL 1.0 suite is not run.** These manifests hold what SPARQL 1.1 added; the
+> SPARQL 1.0 tests (rdf-tests `sparql/sparql10`) also bear on SPARQL 1.1 Query conformance,
+> and this harness does not score them yet. A trial run found real failures there, including
+> `sameTerm` inside `FILTER`, so read the counts above as the 1.1 additions only (aegis-soqv1r).
 > **This score is fitted to this suite.** Quipu's failures here were found by running this suite
 > and fixed against it, case by case, so a perfect score is partly a record of that work rather
 > than an independent sample. Other stores measured with the same harness were not tuned to it.
@@ -34,9 +38,9 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `ae56eaecc723cb7b7380600d6aab493c830c8055` |
-| Quipu revision (syntax) | `ae56eaecc723cb7b7380600d6aab493c830c8055` |
-| Quipu version | `quipu 0.8.1` |
+| Quipu revision (evaluation) | `fb625165bb2deeda38c3ea10df03ddec98ad3539` |
+| Quipu revision (syntax) | `fb625165bb2deeda38c3ea10df03ddec98ad3539` |
+| Quipu version | `quipu 0.9.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -59,6 +63,58 @@ carries a named reason further down this page.
 
 The final row is an arithmetic total, not a score. It is here so the class rows
 can be checked against the ledgers, not so it can be quoted as a percentage.
+
+## Other stores, same harness
+
+The same discovery, test selection and result comparison, run against other
+stores at the same rdf-tests revision (`369a90d1`). Scores use RDF
+term equality, the rule quipu is held to. "Same value" counts failures whose answer
+had the right values in a different lexical form; they stay failures and are
+shown separately, so a design choice is not presented as a wrong answer.
+
+| System | Version | Query evaluation | Of those failures, same value | Update |
+|---|---|---:|---:|---:|
+| quipu | `quipu 0.9.0` | 168/168 | — | 93/93 |
+| RDF4J | `6.1.0` | 162/168 | 5 | 87/93 |
+| Oxigraph | `0.5.11` | 159/168 | 8 | 93/93 |
+| Jena Fuseki | `6.2.0` | 155/168 | 12 | 93/93 |
+| rdflib | `7.6.0` | 154/168 | 9 | 69/93 |
+
+The quipu row is this page's own ledger. Quipu's runner compares exact labels and has
+no same-value tag, so that cell is empty rather than zero.
+
+**Disclosure.** Quipu parses SPARQL with `spargebra` and models RDF with `oxrdf`, both
+from the Oxigraph project. Where the two agree, part of that agreement is shared code.
+
+**Quipu's score is fitted to this suite.** Its failures were found by running this
+suite and fixed against it, case by case. The other stores were not tuned to this
+harness.
+
+Pinned versions, the fairness rules, every competitor deviation checked by hand, and
+the per-case ledgers are in
+[`benchmark/competitors`](https://github.com/scbrown/quipu/tree/main/benchmark/competitors).
+
+## RDF syntax
+
+The W3C RDF 1.1 and RDF 1.2 syntax suites at the same rdf-tests revision
+(`369a90d1`). Every manifest case is counted, including cases
+the manifests have not marked approved.
+
+| Format | RDF 1.1 | RDF 1.2 |
+|---|---:|---:|
+| Turtle | 306/313 | not supported (0/106) |
+| N-Triples | 70/70 | not supported (0/70) |
+| N-Quads | 0/87 (87 unsupported) | not supported (0/68) |
+| TriG | 0/357 (357 unsupported) | not supported (0/61) |
+
+**RDF 1.2 is measured and not supported.** Quipu is built without RDF 1.2, so it
+cannot parse a triple term. The RDF 1.2 cases are enumerated from the pinned
+manifests and not run: a loader that rejects all RDF 1.2 input would "pass" every
+negative-syntax case, and those passes would read as partial support. No RDF 1.2
+case is scored as a pass until the support exists.
+
+Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)
+and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).
 
 ## Query evaluation, by feature family
 
@@ -197,7 +253,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-25T22:23:26Z by [CI run](https://github.com/scbrown/quipu/actions/runs/36196025690), from quipu `ae56eaecc723`.
+Ledger re-derived 2026-09-26T18:36:35Z by [CI run](https://github.com/scbrown/quipu/actions/runs/36262827794), from quipu `fb625165bb2d`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.

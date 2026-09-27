@@ -1,4 +1,8 @@
-/* Dracula Theme Override — applied to the Coal theme (default) */
+/* Intel One Mono font for code */
+@import url('https://fonts.googleapis.com/css2?family=Intel+One+Mono:wght@400;700&display=swap');
+
+/* Caboodle Documentation — Dracula Theme Override
+   Applied to the Coal theme (default) */
 
 /* Dracula palette:
    Background:    #282a36
@@ -69,6 +73,14 @@ pre {
     overflow-x: auto;
 }
 
+code {
+    font-family: 'Intel One Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+pre code {
+    font-family: 'Intel One Mono', 'Fira Code', 'Consolas', monospace;
+}
+
 /* Blockquote callouts */
 blockquote {
     border-left: 4px solid var(--quote-border);
@@ -82,18 +94,48 @@ blockquote strong {
     color: #f1fa8c;
 }
 
-/* Headings with Dracula purple accent */
-.coal h1, .coal h2, .coal h3 {
-    color: #bd93f9;
+/* Command page styling */
+.cli-usage {
+    background: #44475a;
+    border-radius: 4px;
+    padding: 1rem;
+    margin: 1rem 0;
 }
 
-.coal h4, .coal h5, .coal h6 {
-    color: #ff79c6;
+/* Status badges */
+.status-draft {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 600;
+    background: #f1fa8c;
+    color: #282a36;
 }
 
-/* Improved link hover */
-.coal a:hover {
-    color: #ff79c6;
+.status-stable {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 600;
+    background: #50fa7b;
+    color: #282a36;
+}
+
+.status-planned {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 600;
+    background: #6272a4;
+    color: #f8f8f2;
+}
+
+/* Navigation improvements */
+.chapter li.chapter-item {
+    margin-top: 0.25rem;
 }
 
 /* Search result highlighting */
@@ -104,31 +146,90 @@ mark {
     border-radius: 2px;
 }
 
-/* SPARQL/Turtle code block accent — left border indicates query language */
-code.language-sparql,
-code.language-turtle {
-    border-left: 3px solid #bd93f9;
-    padding-left: 0.6rem;
-    display: block;
+/* Headings with Dracula purple accent */
+.coal h1, .coal h2, .coal h3 {
+    color: #bd93f9;
 }
 
-/* Results table styling — tighter for inline query results */
-.results-table table {
-    font-size: 0.9em;
+.coal h4, .coal h5, .coal h6 {
+    color: #ff79c6;
 }
 
-/* Persona badge styling */
-.persona-badge {
+/* Eval result badges */
+.eval-easy {
     display: inline-block;
-    padding: 0.2rem 0.6rem;
-    border-radius: 4px;
-    font-size: 0.85em;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75em;
     font-weight: 600;
-    margin-bottom: 0.5rem;
+    background: #50fa7b;
+    color: #282a36;
 }
 
-/* Mermaid diagram container */
-.mermaid {
-    text-align: center;
+.eval-medium {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: 600;
+    background: #f1fa8c;
+    color: #282a36;
+}
+
+.eval-hard {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: 600;
+    background: #ff5555;
+    color: #f8f8f2;
+}
+
+.eval-pass {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 600;
+    background: #50fa7b;
+    color: #282a36;
+}
+
+.eval-fail {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 600;
+    background: #ff5555;
+    color: #f8f8f2;
+}
+
+.eval-chart {
     margin: 1rem 0;
+    text-align: center;
+    overflow-x: auto;
+}
+
+.eval-chart svg,
+.eval-chart img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+}
+
+.eval-delta-positive {
+    color: #50fa7b;
+    font-weight: 600;
+}
+
+.eval-delta-negative {
+    color: #ff5555;
+    font-weight: 600;
+}
+
+/* Improved link hover */
+.coal a:hover {
+    color: #ff79c6;
 }

@@ -110,7 +110,13 @@ SHAPES = Path(__file__).resolve().parent / "aegis-ontology.shapes.ttl"
 # Untargeted PropertyShapes are inert by construction; they validate nothing.
 # Deliberate (aegis-7hgo), so they are exempt from I2/I3 — see the file's
 # "INERT BY CONSTRUCTION" note.
-LABEL_EXEMPT = {"aegis:LabelRequiredShape"}
+LABEL_EXEMPT = {
+    "aegis:LabelRequiredShape",
+    # Machine-emitted transition records use a stable firing IRI, not a label.
+    # Chaski graph_sink.py emits firedBy/focus/startedAt/eventId; the exact
+    # producer fixture and required-field negatives live in reaction_shapes.rs.
+    "aegis:ReactionFiringShape",
+}
 
 AEGIS_NS = "http://aegis.gastown.local/ontology/"
 
@@ -135,6 +141,19 @@ AEGIS_NS = "http://aegis.gastown.local/ontology/"
 # above is what that produces: shapes requiring predicates nothing emitted, and
 # ingestion for 11 classes one validate_on_write flag away from dying.
 REQUIRED_PREDICATE_PROVEN = {
+    # Zero asserted Reaction/ReactionFiring instances, measured 2026-09-26.
+    # Schema-first contract: tests/reaction_shapes.rs covers complete producer
+    # records and each missing required field; no existing class is relaxed.
+    **{
+        ("aegis:ReactionShape", f"aegis:{predicate}"):
+            "schema-first zero-instance contract + producer/negative fixtures 2026-09-26"
+        for predicate in ("triggerKind", "condition", "severity", "action", "owner")
+    },
+    **{
+        ("aegis:ReactionFiringShape", f"aegis:{predicate}"):
+            "schema-first zero-instance contract + producer/negative fixtures 2026-09-26"
+        for predicate in ("firedBy", "focus", "startedAt")
+    },
     # (shape, predicate): "<measured coverage> <date> <who>"
     ("aegis:TextRuleShape", "aegis:regex"):
         "7/7 TextRule instances (via rdfs:subClassOf*) 2026-08-24 grant",

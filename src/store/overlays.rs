@@ -267,7 +267,7 @@ impl Store {
                      AND o.e = r.e AND o.a = r.a AND o.v = r.v) \
              ) GROUP BY e, a, v ORDER BY e, a",
         )?;
-        Self::collect_facts(&mut stmt, params![overlay_g, root_g])
+        Self::collect_visible_facts(&mut stmt, params![overlay_g, root_g])
     }
 
     /// Governed-wins composition (quipu-e61): resolve `[overlay > parent]`
@@ -309,6 +309,6 @@ impl Store {
                      AND t.e = o.e AND t.a = o.a AND t.v = o.v) \
              ) GROUP BY e, a, v ORDER BY e, a",
         )?;
-        Self::collect_facts(&mut stmt, params![overlay_g, root_g])
+        Self::collect_visible_facts(&mut stmt, params![overlay_g, root_g])
     }
 }
