@@ -47,6 +47,8 @@ trim = true
 # `[] []`. The bracket rules mirror the paren ones, and the run rule comes first so
 # a sequence of bracketed refs collapses in one pass rather than leaving gaps.
 commit_preprocessors = [
+    # Preserve the reviewed search-ranking entry for the immutable squash subject.
+    { pattern = '(?m)^Add opt-in content ranking for operational knowledge search \(#324\)$', replace = "feat(search): add opt-in content ranking for operational knowledge search (#324)" },
     # Preserve the FILTER integration evidence entry without rewriting history.
     { pattern = '(?m)^Refresh conformance evidence for FILTER error integration$', replace = "docs(conformance): refresh conformance evidence for FILTER error integration" },
     # Repair the merged #282 subject without rewriting history. Keep this exact

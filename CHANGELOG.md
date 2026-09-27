@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- *(search)* Add opt-in content ranking for operational knowledge search ([3827071](https://github.com/scbrown/quipu/commit/3827071e8212cf2d3427801bf03110db7bc0ba76))
+
 - *(bench)* Put the competitor table on the generated conformance page([a07247d](https://github.com/scbrown/quipu/commit/a07247de05b5bfd844336d8c2945ad6b72437d3c))
 - *(conformance)* Publish RDF syntax on the page; RDF 1.2 pinned as not supported([055ee2c](https://github.com/scbrown/quipu/commit/055ee2cfcf7554de2d70db31354aef3e0e006b52))
 - *(schema)* Govern reactions and event-identified firings([d7985e8](https://github.com/scbrown/quipu/commit/d7985e8f2d1a174b295128dd73b8eac42df6667d))
