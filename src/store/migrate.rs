@@ -18,13 +18,18 @@ impl Store {
     /// the source-of-truth graph un-mutated and a no-dataset query still sees
     /// exactly what it saw before — the migration changes no query's meaning.
     ///
-    /// It also owns the `idx_geav` graph index (NOT `schema::INIT_SQL`), and
-    /// creates it unconditionally for both fresh and just-migrated stores.
+    /// It also owns the graph indexes (NOT `schema::INIT_SQL`), and
+    /// creates them unconditionally for both fresh and just-migrated stores.
     /// `INIT_SQL` runs first and against pre-quad stores too, so a
     /// `CREATE INDEX ... ON facts(g, ...)` there hard-fails with
     /// `no such column: g` before this ALTER can add the column (aegis-akb8:
     /// caught by a scratch-copy smoke test before a blind swap would have
     /// crash-looped the live graph on open).
+    ///
+    /// `idx_current_g` bounds the read-model affordability count to current
+    /// facts in the requested graph. Without it, `idx_geav` seeks the graph
+    /// but visits historical table rows to check `op` and `valid_to`. The
+    /// decision to decline a model can then consume the query's whole budget.
     pub(super) fn migrate_named_graphs(conn: &Connection) -> Result<()> {
         let has_g: bool = conn
             .prepare("SELECT 1 FROM pragma_table_info('facts') WHERE name = 'g'")?
@@ -35,6 +40,8 @@ impl Store {
         conn.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_geav ON facts(g, e, a, v);\
              CREATE INDEX IF NOT EXISTS idx_active_vge ON facts(v, g, e)\
+               WHERE op = 1 AND valid_to IS NULL;\
+             CREATE INDEX IF NOT EXISTS idx_current_g ON facts(g)\
                WHERE op = 1 AND valid_to IS NULL;",
         )?;
         Ok(())
@@ -65,6 +72,21 @@ impl Store {
             "CREATE INDEX IF NOT EXISTS idx_current_aev ON facts(a, e, v)\
                WHERE op = 1 AND valid_to IS NULL;",
         )?;
+        Ok(())
+    }
+
+    /// Index transactions by source tag (aegis-m6agjy).
+    ///
+    /// Snapshot replacement plans its retraction as "every current fact whose
+    /// transaction carries this source" (`SOURCE_RETRACTION_SQL`). With no index
+    /// on `transactions.source` that query could only start from `facts`, so each
+    /// replacement walked the whole graph under the writer lock. This index lets
+    /// it start from the handful of transactions one producer wrote.
+    ///
+    /// Idempotent and purely additive: it changes no query's meaning, only its
+    /// plan.
+    pub(super) fn migrate_transaction_source_index(conn: &Connection) -> Result<()> {
+        conn.execute_batch("CREATE INDEX IF NOT EXISTS idx_tx_source ON transactions(source);")?;
         Ok(())
     }
 

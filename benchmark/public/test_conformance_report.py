@@ -266,6 +266,76 @@ class PublishedArtifactsTests(unittest.TestCase):
         self.assertIn(f"update **{n['passed']}/{n['cases']}**", fallback)
 
 
+class CompetitorTableTests(unittest.TestCase):
+    """aegis-hit21a: other stores sit on the generated page, from their ledgers."""
+
+    COMPETITORS = REPO / "benchmark" / "competitors" / "results"
+
+    def test_the_page_carries_every_competitor_from_its_ledger(self):
+        data = REPORT.load(RESULTS, self.COMPETITORS)
+        page = REPORT.render_markdown(data)
+        self.assertIn("## Other stores, same harness", page)
+        for system in data["competitors"]:
+            query = system["classes"]["query-evaluation"]
+            self.assertIn(system["label"], page)
+            self.assertIn(f"{query['passed']}/{query['cases']}", page)
+        self.assertIn("spargebra", page)  # the shared-parser disclosure stays with the table
+
+    def test_a_ledger_from_another_suite_revision_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            for path in self.COMPETITORS.glob("*.json"):
+                shutil.copy(path, tmp / path.name)
+            stale = json.loads((tmp / "rdflib.json").read_text())
+            stale["suite_revision"] = "0" * 40
+            (tmp / "rdflib.json").write_text(json.dumps(stale))
+            with self.assertRaises(REPORT.LedgerError) as caught:
+                REPORT.load(RESULTS, tmp)
+            self.assertIn("same revision", str(caught.exception))
+
+    def test_a_missing_competitor_ledger_is_refused_not_dropped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            for path in self.COMPETITORS.glob("*.json"):
+                if path.name != "fuseki.json":
+                    shutil.copy(path, tmp / path.name)
+            with self.assertRaises(REPORT.LedgerError):
+                REPORT.load(RESULTS, tmp)
+
+
+class Sparql10DisclosureTests(unittest.TestCase):
+    """aegis-soqv1r: the 1.1 manifests are the 1.1 ADDITIONS; the 1.0 suite is not scored."""
+
+    def test_the_claim_boundary_says_the_sparql10_suite_is_not_run(self):
+        page = REPORT.render_markdown(REPORT.load(RESULTS))
+        boundary = page.split("**Claim boundary")[1].split("\n\n")[0]
+        self.assertIn("The SPARQL 1.0 suite is not run.", boundary)
+        self.assertIn("sparql/sparql10", boundary)
+
+
+class RdfSyntaxTableTests(unittest.TestCase):
+    """aegis-mhee08: RDF 1.1 scored, RDF 1.2 published as measured-not-supported."""
+
+    def test_the_page_carries_both_versions_and_never_scores_rdf12(self):
+        page = REPORT.render_markdown(REPORT.load(RESULTS))
+        self.assertIn("## RDF syntax", page)
+        self.assertIn("RDF 1.2 is measured and not supported", page)
+        section = page.split("## RDF syntax")[1].split("\n## ")[0]
+        self.assertNotRegex(section, r"not supported \([1-9]")
+
+    def test_an_rdf12_row_that_claims_a_pass_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            shutil.copytree(RESULTS, tmp / "results")
+            path = tmp / "results" / "rdf12-syntax.json"
+            ledger = json.loads(path.read_text())
+            ledger["results"][0]["passed"] = True
+            path.write_text(json.dumps(ledger))
+            with self.assertRaises(REPORT.LedgerError) as caught:
+                REPORT.load(tmp / "results")
+            self.assertIn("not a pass", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -529,6 +599,11 @@ def head_tree_fixture(*, stale=True):
         for source in (REPO / "benchmark/public").glob("*.py"):
             shutil.copy2(source, public / source.name)
         shutil.copytree(RESULTS, public / "results")
+        # The page also renders the competitor table (aegis-hit21a), which refuses
+        # to render without its ledgers.
+        shutil.copytree(
+            REPO / "benchmark/competitors/results", root / "benchmark/competitors/results"
+        )
         run = lambda *args: subprocess.run(  # noqa: E731
             ["git", *args], cwd=root, check=True, capture_output=True, text=True
         )

@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS transactions (
     source    TEXT
 );
 
+-- Local credential evidence; actor/source remain historical or caller-declared.
+CREATE TABLE IF NOT EXISTS transaction_auth (
+    tx INTEGER PRIMARY KEY REFERENCES transactions(id),
+    principal TEXT NOT NULL,
+    credential_id TEXT,
+    auth_class TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS store_identity (
     id       INTEGER PRIMARY KEY CHECK (id = 1),
     store_id TEXT NOT NULL UNIQUE

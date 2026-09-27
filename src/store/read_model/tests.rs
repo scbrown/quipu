@@ -1376,3 +1376,56 @@ fn a_caught_up_model_equals_a_rebuild_across_retractions_and_reasserts() {
     drop(writer);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn current_fact_count_does_not_scan_history_or_other_graphs() {
+    // The model-budget check runs before a multi-pattern query can decline the
+    // model. Bound SQLite work, rather than wall time: a history scan must fail
+    // even on a fast test host, while the two current ROOT rows fit easily.
+    let s = store();
+    s.conn.execute_batch(
+        "INSERT INTO transactions(id,timestamp) VALUES(1,'2026-01-01');
+         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000)
+         INSERT INTO facts(e,a,v,tx,valid_from,valid_to,op,g)
+         SELECT x,1,X'30',1,'2026-01-01',CASE WHEN x>9998 THEN NULL ELSE '2026-02-01' END,1,0 FROM n;
+         WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000)
+         INSERT INTO facts(e,a,v,tx,valid_from,valid_to,op,g)
+         SELECT x+10000,1,X'30',1,'2026-01-01',NULL,1,7 FROM n;
+         INSERT INTO facts(e,a,v,tx,valid_from,op,g) VALUES(20001,1,X'30',1,'2026-01-01',-1,0);",
+    ).unwrap();
+    let steps = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = steps.clone();
+    s.conn
+        .progress_handler(
+            100,
+            Some(move || seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 100),
+        )
+        .unwrap();
+    let count = s.current_fact_count(0);
+    s.conn.progress_handler(0, None::<fn() -> bool>).unwrap();
+    assert_eq!(
+        count.expect("current ROOT count must fit the work budget"),
+        2
+    );
+    assert_eq!(s.current_fact_count(7).unwrap(), 10000);
+    assert_eq!(s.current_fact_count(8).unwrap(), 0);
+}
+
+#[test]
+fn reopening_an_existing_store_adds_the_current_graph_index() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("existing.db");
+    let path = path.to_str().unwrap();
+    {
+        let s = Store::open(path).unwrap();
+        s.conn.execute_batch("DROP INDEX idx_current_g").unwrap();
+    }
+    for _ in 0..2 {
+        let s = Store::open(path).unwrap();
+        let plan: String = s.conn.query_row(
+            "EXPLAIN QUERY PLAN SELECT COUNT(*) FROM facts WHERE op=1 AND valid_to IS NULL AND g=0",
+            [], |r| r.get(3),
+        ).unwrap();
+        assert!(plan.contains("idx_current_g"), "count plan: {plan}");
+    }
+}

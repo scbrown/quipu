@@ -719,8 +719,8 @@ fn no_attachment_facts_source_is_the_literal_facts_table() {
 
 #[test]
 fn graph_predicate_is_pushed_into_each_union_branch() {
-    // Acceptance 2. `idx_geav` exists per file — each database's own migration
-    // created it — so a graph-scoped read should SEARCH both files by index.
+    // Acceptance 2. Graph indexes exist per file — each database's own
+    // migration created them — so a graph-scoped read should SEARCH both by g.
     // Pushed outside the union instead, SQLite scans both files on every
     // triple pattern.
     //
@@ -757,10 +757,12 @@ fn graph_predicate_is_pushed_into_each_union_branch() {
 
     for file in ["main.facts", "shared.facts"] {
         assert!(
-            plan.iter()
-                .any(|l| l.contains(file) && l.contains("idx_geav") && l.contains("SEARCH")),
+            plan.iter().any(|l| l.contains(file)
+                && l.contains("SEARCH")
+                && l.contains("USING INDEX")
+                && l.contains("(g=?)")),
             "the graph predicate must reach INSIDE the branch for {file}, so \
-             that file's own idx_geav is used. Plan was: {plan_text}"
+             that file's own graph index is searched by g. Plan was: {plan_text}"
         );
     }
     assert!(

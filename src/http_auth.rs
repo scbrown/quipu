@@ -201,6 +201,8 @@ pub enum AuthGeneration {
     Current,
     /// The temporary previous bearer authenticated within its grace window.
     Previous,
+    /// An additive audience-bound credential authenticated the request.
+    Named,
 }
 
 /// Hard ceiling for a previous bearer grace window. Rotation is an operational
@@ -223,6 +225,7 @@ pub struct Authorization {
 pub struct BearerPolicy {
     current: Option<String>,
     previous: Option<ExpiringBearer>,
+    named: crate::crew_credentials::CredentialRegistry,
 }
 
 #[derive(Clone)]
@@ -268,7 +271,27 @@ impl BearerPolicy {
                 expires_at_epoch_secs,
             }),
         };
-        Ok(Self { current, previous })
+        Ok(Self {
+            current,
+            previous,
+            named: crate::crew_credentials::CredentialRegistry::default(),
+        })
+    }
+
+    /// Add verified named credentials without replacing either shared bearer.
+    #[must_use]
+    pub fn with_named(mut self, named: crate::crew_credentials::CredentialRegistry) -> Self {
+        self.named = named;
+        self
+    }
+
+    /// Identity lookup never uses caller-declared metadata.
+    #[must_use]
+    pub fn named_principal(
+        &self,
+        header: Option<&str>,
+    ) -> Option<crate::crew_credentials::CrewPrincipal> {
+        self.named.authenticate(header)
     }
 
     /// The retained previous bearer's deadline, absent when it has expired.
@@ -311,7 +334,11 @@ pub fn authorize_bearers(
     let Some(current) = policy.current.as_deref() else {
         return Authorization {
             decision: AccessDecision::Allow,
-            generation: Some(AuthGeneration::OpenWrite),
+            generation: Some(if policy.named_principal(auth_header).is_some() {
+                AuthGeneration::Named
+            } else {
+                AuthGeneration::OpenWrite
+            }),
         };
     };
     let presented = auth_header.and_then(parse_bearer);
@@ -330,6 +357,12 @@ pub fn authorize_bearers(
             generation: Some(AuthGeneration::Previous),
         };
     }
+    if policy.named_principal(auth_header).is_some() {
+        return Authorization {
+            decision: AccessDecision::Allow,
+            generation: Some(AuthGeneration::Named),
+        };
+    }
     Authorization {
         decision: AccessDecision::Unauthorized,
         generation: None,
@@ -338,18 +371,22 @@ pub fn authorize_bearers(
 
 /// Server-established identity attached to an authenticated write request.
 ///
-/// The shared bearer is deliberately not a crew identity. Until session
-/// attestation lands, writes using it receive this explicit legacy principal
-/// instead of trusting an actor supplied in the request body.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AuthenticatedPrincipal(&'static str);
+/// Shared credentials retain an explicit legacy principal. Named credentials
+/// carry the registry-bound IRI; neither trusts an actor in the request body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedPrincipal(std::borrow::Cow<'static, str>);
 
 impl AuthenticatedPrincipal {
-    pub const LEGACY_SHARED_BEARER: Self = Self("legacy-shared-bearer");
+    pub const LEGACY_SHARED_BEARER: Self = Self(std::borrow::Cow::Borrowed("legacy-shared-bearer"));
 
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        self.0
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn from_crew(principal: &crate::crew_credentials::CrewPrincipal) -> Self {
+        Self(std::borrow::Cow::Owned(principal.iri.clone()))
     }
 }
 

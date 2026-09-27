@@ -1,6 +1,7 @@
 # Summary
 
 [Introduction](README.md)
+[Why Quipu](why-quipu.md)
 
 # Getting Started
 
@@ -13,6 +14,7 @@
 - [Triples and the Knowledge Graph](concepts/triples.md)
 - [The Temporal Model](concepts/temporal-model.md)
 - [Named Graphs, Overlays & Datasets](concepts/named-graphs.md)
+  - [Pack composition](concepts/pack-composition.md)
 - [Graph Labels & the Trust Lattice](concepts/graph-labels.md)
 - [Graph Kinds & Deep Freeze](concepts/graph-kinds.md)
 - [Governance: Policies, Verdicts & the Write Gate](concepts/governance.md)
@@ -80,3 +82,7 @@
 
 - [CI/CD and Releases](architecture/ci-cd.md)
 - [Contributing](reference/contributing.md)
+
+# Map
+
+- [Docs map](docs-map.md)

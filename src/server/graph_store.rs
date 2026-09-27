@@ -140,7 +140,7 @@ async fn write_graph(
         Ok(v) => v,
         Err(r) => return r,
     };
-    let actor = principal.map(|Extension(p)| p.as_str());
+    let actor = principal.map(|Extension(p)| p.as_str().to_owned());
     let writer = store.clone();
     match blocking(move || {
         let mut store = writer.lock();
@@ -159,7 +159,7 @@ async fn write_graph(
                 format,
                 graph.as_deref(),
                 &quipu::time::now_iso(),
-                actor,
+                actor.as_deref(),
                 Some("graph-store-put"),
                 graph.as_deref(),
             )
@@ -174,7 +174,7 @@ async fn write_graph(
                 format,
                 graph.as_deref(),
                 &quipu::time::now_iso(),
-                actor,
+                actor.as_deref(),
                 Some("graph-store-post"),
                 g,
             )
@@ -229,7 +229,7 @@ pub(crate) async fn graph_store_delete(
         Ok(v) => v.map(str::to_owned),
         Err(r) => return r,
     };
-    let actor = principal.map(|Extension(p)| p.as_str());
+    let actor = principal.map(|Extension(p)| p.as_str().to_owned());
     match blocking(move || {
         let mut store = store.lock();
         if let Some(iri) = graph.as_deref() {
@@ -241,7 +241,12 @@ pub(crate) async fn graph_store_delete(
                 return Ok(false);
             }
         }
-        quipu::delete_rdf_graph(&mut store, &quipu::time::now_iso(), actor, graph.as_deref())?;
+        quipu::delete_rdf_graph(
+            &mut store,
+            &quipu::time::now_iso(),
+            actor.as_deref(),
+            graph.as_deref(),
+        )?;
         Ok(true)
     })
     .await

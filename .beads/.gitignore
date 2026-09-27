@@ -78,3 +78,16 @@ bd.db
 
 # Added by bd (missing required patterns)
 *.gate.lock*
+
+# br's SQLite store FILE. metadata.json names the store "dolt" (a legacy value), so br
+# creates .beads/dolt as a regular file. A trailing-slash `dolt/` rule matches only a
+# directory and misses it. A local store must never be committed.
+/dolt
+/dolt-shm
+/dolt-wal
+/dolt-wal-cert*
+/dolt.fsqlite-migration-state
+# br runtime sidecars that bobbin/camayoc already ignore and this file did not.
+*-fsqlite-ns-gate
+*-fsqlite-ns-use
+.br_recovery/
