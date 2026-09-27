@@ -751,7 +751,26 @@ curl -s localhost:3030/explain -X POST \
 ### `POST /search`
 
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
-`valid_at`, and best-effort scoping by `group_ids` / `entity_type`.
+`valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
+
+Opt-in `ranking: "content"` reranks the oversampled candidates before the
+result limit. A `Section`, `Chunk`, or `CodeSymbol` with no explanatory comment
+or content beyond its label/name is demoted: positive cosine similarity is
+halved, and negative similarity is reduced by half its magnitude. Metadata such
+as paths, line numbers and revisions does not count as content. Exact label/name
+queries are exempt. Artifacts with explanatory text and other entity types keep
+their similarity score. This is a relevance heuristic, not a trust classification.
+
+The default `ranking: "semantic"` preserves the original cosine order.
+Choose `content` when retrieving explanatory operational knowledge; keep
+`semantic` for general search or locating code and documentation. An identifier
+can be the correct answer without any body text, so content ranking must not
+be applied indiscriminately. Each result exposes
+`similarity` (raw cosine), `score` (ranking score), and `ranking_reason`
+(`semantic` or `contentless_artifact`). No vectors are deleted or re-embedded.
+Only the existing bounded candidate pool is reranked: this cannot recover an
+entity outside that pool or guarantee semantic equivalence detection. Historical
+searches classify candidates using facts valid at the requested `valid_at`.
 
 ```bash
 curl -s localhost:3030/search -X POST \
