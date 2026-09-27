@@ -10,16 +10,19 @@ The `quipu` binary provides a command-line interface for all operations.
 
 ## Build identity
 
-`quipu --version` (also `-V` or `version`) reports two lines without loading
+`quipu --version` (also `-V` or `version`) reports build identity without loading
 configuration or opening a database:
 
 ```text
 quipu <version>
 git_sha: <build-commit>
+git_dirty: <true-or-false>
 ```
 
 The first line retains the version-only format for existing parsers. The second
 line identifies the source commit, or `unknown` when built without Git metadata.
+The third reports the build-time working-tree dirty flag. `quipu-server --version`
+(and `-V`) exposes the same fields with a `quipu-server` first-line prefix.
 Compare known build commits to detect differences between releases; equal version
 strings alone do not establish that two binaries contain the same code.
 
