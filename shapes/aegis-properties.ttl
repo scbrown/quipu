@@ -648,3 +648,55 @@ aegis:untrustedOrigin a owl:DatatypeProperty ;
     rdfs:domain aegis:ToolClass ;
     rdfs:range xsd:string ;
     rdfs:comment "Where the imported state comes from, in prose, for a reader deciding how much to worry. Free text rather than an enum: an enum would go stale the first time a new integration lands, and a wrong enum value is worse than a sentence." .
+
+# Chaski reactions and firing records. No domains: shared predicates must not
+# re-type other records as reactions merely because they carry a timestamp.
+
+aegis:triggerKind a owl:DatatypeProperty ;
+    rdfs:label "triggerKind" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Whether a reaction is triggered by event-feed activity or by its schedule." .
+
+aegis:eventTypes a owl:DatatypeProperty ;
+    rdfs:label "eventTypes" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Comma-separated event types selecting which feed events trigger a reaction evaluation." .
+
+aegis:condition a owl:DatatypeProperty ;
+    rdfs:label "condition" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A reaction condition expressed as SPARQL SELECT ?focus. Query failure means unknown, not resolution. An adapter may interpret the result as its candidate population." .
+
+aegis:action a owl:DatatypeProperty ;
+    rdfs:label "action" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "An action requested by a reaction: alert, page, bead or webhook. Multiple actions may be requested." .
+
+aegis:enabled a owl:DatatypeProperty ;
+    rdfs:label "enabled" ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment "Whether the carrying rule is enabled. Chaski treats omission as enabled; this is a consumer default, not an asserted graph value." .
+
+aegis:eventId a owl:DatatypeProperty ;
+    rdfs:label "eventId" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Stable producer event identity. For a ReactionFiring, derive its IRI from the reaction label and this event ID, preserving the same payload on retries. No domain: events and other records may carry this identity." .
+
+aegis:startedAt a owl:DatatypeProperty ;
+    rdfs:label "startedAt" ;
+    rdfs:range xsd:dateTime ;
+    rdfs:comment "The start instant of an occurrence. For a delivered ReactionFiring, use the frozen event payload observed_at, never retry send time." .
+
+aegis:resolvedAt a owl:DatatypeProperty ;
+    rdfs:label "resolvedAt" ;
+    rdfs:range xsd:dateTime ;
+    rdfs:comment "Resolution instant of an occurrence. For a ReactionFiring this is absent while active and set once on resolution; SHACL cardinality cannot enforce that temporal transition." .
+
+aegis:firedBy a owl:ObjectProperty ;
+    rdfs:label "fired by" ;
+    rdfs:range aegis:Reaction ;
+    rdfs:comment "The Reaction whose transition produced this firing record." .
+
+aegis:focus a owl:ObjectProperty ;
+    rdfs:label "focus" ;
+    rdfs:comment "The IRI that a reaction condition or adapter identified as the focus of a firing. No range class: any IRI may be a focus." .

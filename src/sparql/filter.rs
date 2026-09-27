@@ -42,6 +42,11 @@ pub fn eval_filter(
 ) -> Result<bool> {
     match expr {
         Expression::Equal(left, right) => Ok(expr_eq(store, left, right, row)),
+        // sameTerm had no FILTER arm, so every form fell to the catch-all
+        // error below while the same call in BIND answered (aegis-soqv1r,
+        // W3C sparql10 sameTerm-simple/-eq/-not-eq). It shares `expr_eq` with
+        // the BIND path in `eval_expression_boolean` so the two cannot drift.
+        Expression::SameTerm(left, right) => Ok(expr_eq(store, left, right, row)),
         // quipu #52: `?x IN (a, b)` is defined by SPARQL 1.1 as the disjunction
         // `?x = a || ?x = b`, so it desugars here rather than needing its own
         // comparison logic — it shares `expr_eq` with the `=` arm above so the
