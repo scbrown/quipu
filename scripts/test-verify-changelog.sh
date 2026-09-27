@@ -357,6 +357,78 @@ else
 fi
 rm -rf "$d"
 
+# A release PR may carry an empty or populated Unreleased section above the
+# pending release. Explicit version selection must repair THAT artifact, preserve
+# its neighbours byte-for-byte, retain the date, and converge on a second pass.
+for pending in empty populated; do
+  read -r d a b c < <(make_repo)
+  { echo "# Changelog"; echo; echo "## [Unreleased]"; echo;
+    [[ "$pending" == empty ]] || entry "$b";
+    echo; echo "## [1.1.0] - 2026-01-01"; echo;
+    echo "### Added"; entry "$b"; entry "$b";
+    echo; echo "## [1.0.0] - 2025-12-01"; echo; entry "$a";
+  } > "$d/CHANGELOG.md"
+  cp "$d/CHANGELOG.md" "$d/before.md"
+  before="$(cd "$d" && ./scripts/verify-changelog.sh --version 1.1.0 2>&1)"; before_rc=$?
+  fix_out="$(cd "$d" && ./scripts/fix-changelog.sh --version 1.1.0 2>&1)"; fix_rc=$?
+  verify_out="$(cd "$d" && ./scripts/verify-changelog.sh --version 1.1.0 2>&1)"; verify_rc=$?
+  stable_out="$(cd "$d" && ./scripts/fix-changelog.sh --check --version 1.1.0 2>&1)"; stable_rc=$?
+  python3 - "$d" <<'PYTEST'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+before, after = (p / "before.md").read_text(), (p / "CHANGELOG.md").read_text()
+assert before.split("## [1.1.0]")[0] == after.split("## [1.1.0]")[0]
+assert before.split("## [1.0.0]")[1] == after.split("## [1.0.0]")[1]
+assert "## [1.1.0] - 2026-01-01" in after
+PYTEST
+  neighbours_rc=$?
+  if [[ "$before_rc" -ne 0 && "$fix_rc" -eq 0 && "$verify_rc" -eq 0 && "$stable_rc" -eq 0 && "$neighbours_rc" -eq 0 ]]; then
+    echo "  PASS  explicit pending release below $pending Unreleased: repaired, verified, stable"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL  explicit $pending: before=$before_rc fix=$fix_rc verify=$verify_rc stable=$stable_rc neighbours=$neighbours_rc" >&2
+    printf '%s\n' "$fix_out" "$verify_out" "$stable_out" >&2
+    fail=$((fail + 1))
+  fi
+  # Default selection skips only the empty placeholder. --at must select the
+  # named release from the referenced file, not the current working copy.
+  if [[ "$pending" == empty ]]; then
+    (cd "$d" && ./scripts/verify-changelog.sh >/dev/null 2>&1); default_rc=$?
+    (cd "$d" && ./scripts/fix-changelog.sh --check >/dev/null 2>&1); default_fix=$?
+    if [[ "$default_rc" -eq 0 && "$default_fix" -eq 0 ]]; then
+      echo "  PASS  default skips empty Unreleased in both tools"
+      pass=$((pass + 1))
+    else
+      echo "  FAIL  empty placeholder default: verify=$default_rc fix=$default_fix" >&2
+      fail=$((fail + 1))
+    fi
+  fi
+  (cd "$d" && git add CHANGELOG.md && git commit -qm "chore: release v1.1.0")
+  printf 'invalid working copy\n' > "$d/CHANGELOG.md"
+  (cd "$d" && ./scripts/verify-changelog.sh --at HEAD --version 1.1.0 >/dev/null 2>&1); at_rc=$?
+  git -C "$d" show HEAD:CHANGELOG.md > "$d/CHANGELOG.md"
+  if [[ "$at_rc" -eq 0 ]]; then
+    echo "  PASS  explicit release from --at ignores working copy ($pending)"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL  explicit release from --at: $at_rc" >&2
+    fail=$((fail + 1))
+  fi
+  # An absent target must fail without rewriting anything, in both tools.
+  cp "$d/CHANGELOG.md" "$d/after.md"
+  (cd "$d" && ./scripts/fix-changelog.sh --version 9.9.9 >/dev/null 2>&1); bad_fix=$?
+  (cd "$d" && ./scripts/verify-changelog.sh --version 9.9.9 >/dev/null 2>&1); bad_verify=$?
+  if [[ "$bad_fix" -eq 2 && "$bad_verify" -eq 2 ]] && cmp -s "$d/after.md" "$d/CHANGELOG.md"; then
+    echo "  PASS  absent explicit release refuses without writing ($pending)"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL  absent explicit release: fix=$bad_fix verify=$bad_verify" >&2
+    fail=$((fail + 1))
+  fi
+  rm -rf "$d"
+done
+
 # The detector's own arms, including its parse-error cases.
 if python3 "$REPO_ROOT/scripts/changelog-duplicates.py" --selftest >/dev/null 2>&1; then
   echo "  PASS  changelog-duplicates.py selftest (all arms)"

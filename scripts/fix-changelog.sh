@@ -17,6 +17,7 @@
 #
 # Usage:
 #   scripts/fix-changelog.sh            # rewrite the newest section in place
+#   scripts/fix-changelog.sh --version X.Y.Z  # target the pending release
 #   scripts/fix-changelog.sh --check    # exit 1 if it WOULD change something
 #
 # Exit: 0 = section is correct (or was corrected); 1 = --check found a diff;
@@ -28,12 +29,17 @@ cd "$REPO_ROOT"
 
 CLIFF_CONFIG="${CLIFF_CONFIG:-cliff.toml}"
 CHECK_ONLY=0
-case "${1:-}" in
-  --check) CHECK_ONLY=1 ;;
-  -h|--help) grep '^#' "$0" | sed 's/^# \?//'; exit 0 ;;
-  "") ;;
-  *) echo "unknown arg: $1" >&2; exit 2 ;;
-esac
+TARGET_VERSION=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --check) CHECK_ONLY=1; shift ;;
+    --version)
+      [[ $# -ge 2 && "$2" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "ERROR: --version requires x.y.z" >&2; exit 2; }
+      TARGET_VERSION="$2"; shift 2 ;;
+    -h|--help) grep '^#' "$0" | sed 's/^# \?//'; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
 
 command -v git-cliff >/dev/null 2>&1 || { echo "ERROR: git-cliff not installed" >&2; exit 2; }
 [[ -f CHANGELOG.md ]] || { echo "ERROR: no CHANGELOG.md at $REPO_ROOT" >&2; exit 2; }
@@ -67,9 +73,26 @@ PACKAGED_HASHES="$SCRATCH/packaged-hashes"
 export GEN_FILE PACKAGED_HASHES
 
 # Newest version section = from the first `## [x.y.z]` heading to the next one.
-newest_ver="$(grep -m1 -oE '^## \[(Unreleased|[0-9]+\.[0-9]+\.[0-9]+)\]' CHANGELOG.md \
-  | grep -oE 'Unreleased|[0-9]+\.[0-9]+\.[0-9]+' || true)"
+# Ignore an empty Unreleased placeholder; populated pending notes stay first.
+newest_ver="$(awk '
+  /^## \[(Unreleased|[0-9]+\.[0-9]+\.[0-9]+)\]/ {
+    if (version != "") {
+      if (version != "Unreleased" || populated) { if (!selected) selected = version }
+      else version = ""
+    }
+    if (version == "") { version = $0; sub(/^## \[/, "", version); sub(/\].*$/, "", version) }
+    next
+  }
+  version != "" && /[^[:space:]]/ { populated = 1 }
+  END { print selected ? selected : version }
+' CHANGELOG.md)"
+newest_ver="${TARGET_VERSION:-$newest_ver}"
 [[ -n "$newest_ver" ]] || { echo "ERROR: no release or Unreleased section found in CHANGELOG.md" >&2; exit 2; }
+
+# Explicit release selection must exist exactly once; never fall back silently.
+[[ "$(grep -Fc "## [${newest_ver}]" CHANGELOG.md)" -eq 1 ]] || {
+  echo "ERROR: expected exactly one ${newest_ver} section" >&2; exit 2;
+}
 
 # Keep whatever date the section already carries; release-plz sets it and it is not
 # ours to move. Only fall back to today when the heading has no date at all.
