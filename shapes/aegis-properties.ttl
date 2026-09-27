@@ -700,3 +700,7 @@ aegis:firedBy a owl:ObjectProperty ;
 aegis:focus a owl:ObjectProperty ;
     rdfs:label "focus" ;
     rdfs:comment "The IRI that a reaction condition or adapter identified as the focus of a firing. No range class: any IRI may be a focus." .
+
+aegis:aboutWorkItem a owl:ObjectProperty ;
+    rdfs:label "about work item" ;
+    rdfs:comment "The primary work item providing an episode's context. This is an attribution claim, not proof of implementation or completion. A producer verifies the existing target's direct WorkItem type in its authoritative records graph before writing; a reader joins that graph explicitly. The target is not copied into the episode graph. No global domain or range: neither endpoint gains a type merely from a reference." .
