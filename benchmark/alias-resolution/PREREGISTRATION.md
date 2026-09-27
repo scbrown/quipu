@@ -244,3 +244,23 @@ policy versions; the original six attempts had no retries. Unknown billing on
 any failed attempt remains unknown and cannot be replaced by a zero estimate.
 Full-run item count, attempt cap and spend estimate require separate review after
 this pilot. No full-run calls are authorized by this amendment.
+
+### Held-out run authorization (2026-09-27)
+
+Following the completed pilot, the reviewer authorized exactly 204 untouched
+eligible items, at most three attempts per item (612 attempts total), each with
+a 120-second timeout, and a $0.20 allowance. Prompts, gold labels, evidence,
+thresholds and item order remain frozen. Pilot results are reported separately.
+At the first 50-item boundary, stop if eventual valid-response availability is
+below 60%; also stop conservatively if first-attempt availability is below 60%.
+Report both availability measures, per-stratum recall with all original positives
+and with eligible positives, and false identity proposals (no actual merges).
+
+Stop if returned-usage list-price spend passes $0.20. Because failed attempts may
+be billed without returning usage, the local guard additionally reserves $0.001
+per such attempt and per in-flight request and refuses another attempt if the
+known spend plus reserves would exceed $0.20. This reserve is a conservative
+operational accounting assumption, not a provider-certified debit bound. Report
+unknown charges explicitly; do not equate the local guard with account billing.
+The guard includes the pilot subtotal and reserves for its two failed attempts.
+No already-attempted pilot item is revisited.
