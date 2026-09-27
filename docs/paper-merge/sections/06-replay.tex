@@ -89,3 +89,38 @@ hash is stable across runs while the share identifier is not, because the
 manifest embeds a timestamp. Fork-point anchoring depends on the graph hash, so
 lineage is unaffected --- but a share identifier must not be used as a content
 identity.
+
+\paragraph{Arm D: interrupted pairwise alias pilot.}
+A preregistered follow-up evaluates typed \texttt{same}, \texttt{different},
+and \texttt{cannot\_tell} proposals from Jev~1.13.0 against free label and
+embedding baselines, using historical evidence before identity repair and
+withholding identity annotations. It performs no actual merges. The original
+$93$ positives remain the denominator; evidence gaps become abstentions.
+The proposed negative cohort contains $114/46=2.478$ negatives per id-form
+positive and $41/47=0.872$ per semantic positive, short of the respective
+$3{:}1$ targets by $24$ and $100$. Overall $155$ negatives exceed the $93$
+floor but miss the $279$ target by $124$; one semantic negative exceeds the
+request-size cap. The reviewed semantic pilot negatives have clearly different
+descriptions and therefore do not establish hard-negative discrimination.
+
+The authorized ten-item pilot stopped after six attempts: four typed responses
+and two client timeouts, with four items never attempted. The first timeout
+reached the original $30$-second deadline; a timeout-only amendment registered
+before further calls raised the deadline to $120$ seconds. The next four
+responses took $0.328$--$1.418$ seconds, followed by another timeout at
+$120.115$ seconds. Neither failed request was retried. Thus $2/6$ attempts
+were unavailable; this selected, interrupted pilot with two deadlines is not
+an estimate of general provider reliability. Request size alone does not explain
+the observations: $4{,}355$ bytes timed out, $5{,}427$ bytes succeeded in
+$0.344$ seconds, and $5{,}538$ bytes timed out. The first elapsed measurement
+($30.158$ seconds) uses attempt time to durable error-receipt time; subsequent
+measurements use a monotonic timer.
+
+At the registered confidence floor of $.75$, the positive pilot produced
+$2/3$ id-form and $1/2$ semantic identity proposals, with one unavailable
+id-form item and one semantic abstention. No negative response was obtained,
+so false-positive performance is unmeasured. These observations do not resolve
+the $0/93$ alias gap or constitute a completed comparison with free baselines.
+Returned usage implies a list-price subtotal of \$0.000290808; total spend is
+unknown because the two timed-out requests may have been processed and billed.
+Further calls remain held for review.
