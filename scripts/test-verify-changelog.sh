@@ -391,6 +391,30 @@ PYTEST
     printf '%s\n' "$fix_out" "$verify_out" "$stable_out" >&2
     fail=$((fail + 1))
   fi
+  # Default selection skips only the empty placeholder. --at must select the
+  # named release from the referenced file, not the current working copy.
+  if [[ "$pending" == empty ]]; then
+    (cd "$d" && ./scripts/verify-changelog.sh >/dev/null 2>&1); default_rc=$?
+    (cd "$d" && ./scripts/fix-changelog.sh --check >/dev/null 2>&1); default_fix=$?
+    if [[ "$default_rc" -eq 0 && "$default_fix" -eq 0 ]]; then
+      echo "  PASS  default skips empty Unreleased in both tools"
+      pass=$((pass + 1))
+    else
+      echo "  FAIL  empty placeholder default: verify=$default_rc fix=$default_fix" >&2
+      fail=$((fail + 1))
+    fi
+  fi
+  (cd "$d" && git add CHANGELOG.md && git commit -qm "chore: release v1.1.0")
+  printf 'invalid working copy\n' > "$d/CHANGELOG.md"
+  (cd "$d" && ./scripts/verify-changelog.sh --at HEAD --version 1.1.0 >/dev/null 2>&1); at_rc=$?
+  git -C "$d" show HEAD:CHANGELOG.md > "$d/CHANGELOG.md"
+  if [[ "$at_rc" -eq 0 ]]; then
+    echo "  PASS  explicit release from --at ignores working copy ($pending)"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL  explicit release from --at: $at_rc" >&2
+    fail=$((fail + 1))
+  fi
   # An absent target must fail without rewriting anything, in both tools.
   cp "$d/CHANGELOG.md" "$d/after.md"
   (cd "$d" && ./scripts/fix-changelog.sh --version 9.9.9 >/dev/null 2>&1); bad_fix=$?
