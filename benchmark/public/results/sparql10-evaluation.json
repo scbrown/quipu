@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "4e009891518859fb2046e86e1953d080cb83f03b",
-  "quipu_version": "quipu 0.9.0\ngit_sha: 4e009891518859fb2046e86e1953d080cb83f03b",
-  "generated_at": "2026-09-26T03:37:45Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36215046471",
+  "quipu_revision": "244ab1f112525ac2af629d793d1f595ae9ede08b",
+  "quipu_version": "quipu 0.9.0\ngit_sha: 244ab1f112525ac2af629d793d1f595ae9ede08b\ngit_dirty: false",
+  "generated_at": "2026-09-29T21:24:50Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36631991001",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -26,8 +26,8 @@
     "sparql10-query": {
       "cases": 242,
       "error": 6,
-      "failed": 73,
-      "passed": 153,
+      "failed": 71,
+      "passed": 155,
       "unsupported": 10
     }
   },
@@ -1429,8 +1429,8 @@
       "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
       "query": "../sparql10/boolean-effective-value/query-bev-5.rq",
       "result": "../sparql10/boolean-effective-value/result-bev-5.ttl",
-      "status": "failed",
-      "diagnostic": "query error: FILTER expression has no effective boolean value: Variable(Variable { name: \"w\" })"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1439,8 +1439,8 @@
       "manifest": "../sparql10/boolean-effective-value/manifest.ttl",
       "query": "../sparql10/boolean-effective-value/query-bev-6.rq",
       "result": "../sparql10/boolean-effective-value/result-bev-6.ttl",
-      "status": "failed",
-      "diagnostic": "query error: FILTER expression has no effective boolean value: Variable(Variable { name: \"w\" })"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1670,7 +1670,7 @@
       "query": "../sparql10/expr-builtin/sameTerm.rq",
       "result": "../sparql10/expr-builtin/result-sameTerm.ttl",
       "status": "failed",
-      "diagnostic": "query error: unsupported FILTER expression: SameTerm(Variable(Variable { name: \"v1\" }), Variable(Variable { name: \"v2\" }))"
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "sparql10-query",
@@ -1680,7 +1680,7 @@
       "query": "../sparql10/expr-builtin/sameTerm-eq.rq",
       "result": "../sparql10/expr-builtin/result-sameTerm-eq.ttl",
       "status": "failed",
-      "diagnostic": "query error: unsupported FILTER expression: SameTerm(Variable(Variable { name: \"v1\" }), Variable(Variable { name: \"v2\" }))"
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "sparql10-query",
@@ -1690,7 +1690,7 @@
       "query": "../sparql10/expr-builtin/sameTerm-not-eq.rq",
       "result": "../sparql10/expr-builtin/result-sameTerm-not-eq.ttl",
       "status": "failed",
-      "diagnostic": "query error: unsupported FILTER expression: SameTerm(Variable(Variable { name: \"v1\" }), Variable(Variable { name: \"v2\" }))"
+      "diagnostic": "actual result differs from expected multiset"
     },
     {
       "class": "sparql10-query",
