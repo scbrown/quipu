@@ -343,6 +343,7 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
+| `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
 | `valid_at` | No | Temporal filter |
 | `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
@@ -353,6 +354,10 @@ so zero results are distinguishable from an unembedded store — see
 [Embeddings and Semantic Search](../concepts/embeddings.md).
 | `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label, **not** an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope) |
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
+
+Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
+exceptions, temporal behavior, and bounded candidate recall.
 
 ### `quipu_hybrid_search`
 
