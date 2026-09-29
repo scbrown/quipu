@@ -446,6 +446,7 @@ async fn main() {
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
+        .route("/embed_backfill_graph", post(embed_backfill_graph))
         // Entity + history
         .route("/entity", get(entity_query_conneg))
         .route("/entity/{iri}", get(entity_conneg))
