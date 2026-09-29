@@ -94,6 +94,31 @@ pub trait KnowledgeVectorStore {
         self.vector_search(query, oversample, valid_at)
     }
 
+    /// Search, keeping only entities `keep` admits, and return up to `limit`
+    /// of them. The built-in SQLite backend applies `keep` while walking the
+    /// full ranking, so a small scope is never starved. This default
+    /// oversamples and post-filters, which is best-effort only: a scope much
+    /// smaller than the store can still come back short.
+    fn vector_search_where(
+        &self,
+        query: &[f32],
+        limit: usize,
+        valid_at: Option<&str>,
+        keep: &mut dyn FnMut(i64) -> Result<bool>,
+    ) -> Result<Vec<VectorMatch>> {
+        let oversample = limit.saturating_mul(crate::config::DEFAULT_OVERSAMPLE_FACTOR);
+        let mut kept = Vec::with_capacity(limit);
+        for m in self.vector_search(query, oversample, valid_at)? {
+            if kept.len() >= limit {
+                break;
+            }
+            if keep(m.entity_id)? {
+                kept.push(m);
+            }
+        }
+        Ok(kept)
+    }
+
     /// Return the number of current embeddings.
     fn vector_count(&self) -> Result<usize>;
 
@@ -161,6 +186,39 @@ impl KnowledgeVectorStore for Store {
         limit: usize,
         valid_at: Option<&str>,
     ) -> Result<Vec<VectorMatch>> {
+        self.scan_vectors(query_embedding, limit, valid_at, None)
+    }
+
+    fn vector_search_where(
+        &self,
+        query: &[f32],
+        limit: usize,
+        valid_at: Option<&str>,
+        keep: &mut dyn FnMut(i64) -> Result<bool>,
+    ) -> Result<Vec<VectorMatch>> {
+        self.scan_vectors(query, limit, valid_at, Some(keep))
+    }
+
+    fn vector_count(&self) -> Result<usize> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM vectors WHERE valid_to IS NULL",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(usize::try_from(count).unwrap_or(0))
+    }
+}
+
+impl Store {
+    /// Brute-force cosine scan over current (or `valid_at`) vectors, returning
+    /// the top `limit` entities, optionally only those `keep` admits.
+    fn scan_vectors(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+        valid_at: Option<&str>,
+        keep: Option<&mut dyn FnMut(i64) -> Result<bool>>,
+    ) -> Result<Vec<VectorMatch>> {
         // Score WITHOUT loading the `text` column. This is a
         // brute-force scan over EVERY vector; for a ~150k-entity store the text
         // of every entity dwarfs the vectors, and the old code materialized a
@@ -208,7 +266,28 @@ impl KnowledgeVectorStore for Store {
 
         // Sort by score descending, take top N.
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        scored.truncate(limit);
+        // With a `keep` predicate, walk the WHOLE ranked list and keep the first
+        // `limit` entities it admits. Filtering after a truncation starves a
+        // small scope (aegis-rcz5ib.10): a graph of a few thousand entities
+        // never survives a top-N cut taken over the whole store.
+        let scored = match keep {
+            None => {
+                scored.truncate(limit);
+                scored
+            }
+            Some(keep) => {
+                let mut kept = Vec::with_capacity(limit);
+                for (entity_id, score) in scored {
+                    if kept.len() >= limit {
+                        break;
+                    }
+                    if keep(entity_id)? {
+                        kept.push((entity_id, score));
+                    }
+                }
+                kept
+            }
+        };
 
         // Fetch text + validity for the survivors only (same validity filter, so
         // the row scored is the row read back).
@@ -253,17 +332,6 @@ impl KnowledgeVectorStore for Store {
         Ok(matches)
     }
 
-    fn vector_count(&self) -> Result<usize> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM vectors WHERE valid_to IS NULL",
-            [],
-            |row| row.get(0),
-        )?;
-        Ok(usize::try_from(count).unwrap_or(0))
-    }
-}
-
-impl Store {
     /// Return a reference to this store's vector backend.
     ///
     /// Priority: external delegate > local backend (`LanceDB`) > built-in `SQLite`.
