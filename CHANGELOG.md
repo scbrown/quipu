@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- *(search)* Add opt-in content ranking for operational knowledge search (#324)([3827071](https://github.com/scbrown/quipu/commit/3827071e8212cf2d3427801bf03110db7bc0ba76))
+- *(shapes)* Tighten CredentialShape and add VerificationShape for the credential inventory([a6b9ca2](https://github.com/scbrown/quipu/commit/a6b9ca2159c946d693332d5cdaf4963616b2ac8d))
 - *(bench)* Put the competitor table on the generated conformance page([a07247d](https://github.com/scbrown/quipu/commit/a07247de05b5bfd844336d8c2945ad6b72437d3c))
 - *(conformance)* Publish RDF syntax on the page; RDF 1.2 pinned as not supported([055ee2c](https://github.com/scbrown/quipu/commit/055ee2cfcf7554de2d70db31354aef3e0e006b52))
 - *(schema)* Govern reactions and event-identified firings([d7985e8](https://github.com/scbrown/quipu/commit/d7985e8f2d1a174b295128dd73b8eac42df6667d))
@@ -19,6 +21,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- *(release)* Repair #324 release coverage and re-derive ledgers on main([62c4976](https://github.com/scbrown/quipu/commit/62c4976525abb7b8f32d89f4f80a1537bd6c026a))
+- *(shapes)* VerificationShape adds only result/verifiedAt; camayoc-core already owns label/sourceKind/falsifier([280c75d](https://github.com/scbrown/quipu/commit/280c75dbc3cd52e6bb917e12a8ad07931df2ee80))
+- *(shapes)* VerificationShape restates the rdfs:label floor (invariant I2)([81112a6](https://github.com/scbrown/quipu/commit/81112a62f52097edbbb2faf202d536be4aa6270d))
+- *(ontology)* Place aegis:Verification in the BFO split as a continuant([bbe6c31](https://github.com/scbrown/quipu/commit/bbe6c318730b99eff0c3b7e1ca0eacdd15c99803))
 - *(cli)* Expose companion server build identity without opening a store([4912860](https://github.com/scbrown/quipu/commit/4912860b7469bc9bb790c89d9aa3b187d42551b2))
 - *(sparql)* A FILTER type error drops the row, not the query([a4409ad](https://github.com/scbrown/quipu/commit/a4409ad66372daf6acabe1abbd50c93facc2a0a0))
 - *(store)* Preserve independent source claims during cleanup([1241696](https://github.com/scbrown/quipu/commit/1241696efa875d4d534f1c2a4aecb261656a5a7f))
@@ -33,6 +39,7 @@ All notable changes to this project will be documented in this file.
 
 ### Testing
 
+- *(shapes)* Credential inventory fields are optional and constrained when present([05a2a95](https://github.com/scbrown/quipu/commit/05a2a95ad68838d5ae1eb86d97bbae09fb2b8739))
 - Refresh conformance provenance for version identity([3731e7d](https://github.com/scbrown/quipu/commit/3731e7d7eb11b40bc6dfb327669a2750ebd3e441))
 - Refresh conformance after count-index integration([5baeeab](https://github.com/scbrown/quipu/commit/5baeeab730b1a2c447a0a91f19960be4b3a7349c))
 - Refresh conformance after packaging integration([029730f](https://github.com/scbrown/quipu/commit/029730fb685e263f1bf57b64219b4d59c7bd11e3))
