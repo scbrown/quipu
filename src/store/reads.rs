@@ -4,6 +4,7 @@
 //! follow-up): these are the committed-tier read queries `ops`' write path
 //! and the export/audit surfaces share.
 
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 
 use crate::error::Result;
@@ -433,6 +434,62 @@ impl Store {
              ORDER BY a",
         )?;
         Self::collect_visible_facts(&mut stmt, params![entity])
+    }
+
+    /// The graph id of a REGISTERED named graph, or `None`. Scoped reads
+    /// refuse an unregistered IRI rather than falling back to ROOT.
+    pub fn registered_graph_id(&self, graph_iri: &str) -> Result<Option<i64>> {
+        let Some(g) = self.lookup(graph_iri)? else {
+            return Ok(None);
+        };
+        Ok(self
+            .conn
+            .query_row("SELECT g FROM graphs WHERE g = ?1", params![g], |r| {
+                r.get(0)
+            })
+            .optional()?)
+    }
+
+    /// Whether `entity` has a current asserted fact in graph `g`.
+    pub fn entity_in_graph(&self, entity: i64, g: i64) -> Result<bool> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM facts WHERE g = ?2 AND e = ?1 AND op = 1 \
+                 AND valid_to IS NULL LIMIT 1",
+                params![entity, g],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// Whether `entity` is a named-graph-only entity: it has current facts in
+    /// some named graph and has never had a fact in ROOT. Unscoped search
+    /// excludes these so ROOT results are unchanged (aegis-rcz5ib.10).
+    pub fn entity_is_named_graph_only(&self, entity: i64) -> Result<bool> {
+        let ever_root = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM facts WHERE g = 0 AND e = ?1 LIMIT 1",
+                params![entity],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if ever_root {
+            return Ok(false);
+        }
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM facts WHERE e = ?1 AND g != 0 AND op = 1 \
+                 AND valid_to IS NULL LIMIT 1",
+                params![entity],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
     }
 
     /// Time-travel query: return ROOT's facts as they were at a given point.

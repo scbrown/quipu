@@ -7,7 +7,6 @@ use crate::error::{Error, Result};
 use crate::sparql;
 use crate::store::Store;
 use crate::types::Value;
-use crate::vector::KnowledgeVectorStore;
 
 /// MCP tool: `quipu_search` -- Semantic vector search over entity embeddings.
 ///
@@ -89,6 +88,28 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 
     let scope = scoped_entity_iris(store, entity_type, group_ids.as_deref())?;
 
+    // Named-graph scope (aegis-rcz5ib.10). `graph` searches one registered
+    // named graph; an unknown IRI is refused, never silently ROOT. Without it
+    // the search stays ROOT: named-graph-only entities, which now have vectors,
+    // are excluded so ROOT results are unchanged.
+    let graph_iri = match input.get("graph") {
+        None | Some(JsonValue::Null) => None,
+        Some(JsonValue::String(iri)) => Some(iri.as_str()),
+        Some(_) => {
+            return Err(Error::InvalidValue(
+                "graph must be a named-graph IRI string".into(),
+            ));
+        }
+    };
+    let graph = match graph_iri {
+        Some(iri) => Some(store.registered_graph_id(iri)?.ok_or_else(|| {
+            Error::InvalidValue(format!(
+                "unknown graph: {iri}; search refuses rather than searching ROOT"
+            ))
+        })?),
+        None => None,
+    };
+
     // Oversample in both paths: an entity has one embedding row per fact/text,
     // so the raw top-N can be several rows of the same entity (aegis-a1s5).
     // Fetching extra candidates leaves room to dedupe down to `limit` entities.
@@ -98,24 +119,27 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         oversampled = oversampled.max(ANCHOR_POOL);
     }
 
-    let matches = if let Some(ref allowed) = scope {
-        // Keep only in-scope entities (works for both the SQLite backend and as
-        // a safety net over LanceDB pushdown). entity_type is also pushed down
-        // to LanceDB for efficiency.
-        let pushdown = entity_type.map(|t| format!("entity_type = '{t}'"));
+    // The in-scope predicate is applied while walking the full ranking
+    // (vector_search_where), so a small graph or group is never starved by a
+    // top-N cut taken over the whole store.
+    let mut keep = |entity_id: i64| -> Result<bool> {
+        let in_graph = match graph {
+            Some(g) => store.entity_in_graph(entity_id, g)?,
+            None => !store.entity_is_named_graph_only(entity_id)?,
+        };
+        if !in_graph {
+            return Ok(false);
+        }
+        Ok(scope.as_ref().is_none_or(|allowed| {
+            store
+                .resolve(entity_id)
+                .is_ok_and(|iri| allowed.contains(&iri))
+        }))
+    };
+    let matches =
         store
             .vector_store()
-            .vector_search_filtered(&embedding, oversampled, pushdown.as_deref(), valid_at)?
-            .into_iter()
-            .filter(|m| {
-                store
-                    .resolve(m.entity_id)
-                    .is_ok_and(|iri| allowed.contains(&iri))
-            })
-            .collect::<Vec<_>>()
-    } else {
-        store.vector_search(&embedding, oversampled, valid_at)?
-    };
+            .vector_search_where(&embedding, oversampled, valid_at, &mut keep)?;
 
     // Dedupe by entity, keeping the highest-scoring occurrence. Matches arrive
     // score-descending, so the first row seen for an entity is its best one.
@@ -149,7 +173,7 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             let iri = prefixes
                 .as_ref()
                 .map_or(iri.clone(), |map| map.compact(&iri));
-            serde_json::json!({
+            let mut result = serde_json::json!({
                 "entity": iri,
                 "text": m.text,
                 "score": ranked.score,
@@ -158,7 +182,11 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
                 "source": "knowledge",
                 "valid_from": m.valid_from,
                 "valid_to": m.valid_to
-            })
+            });
+            if let (Some(iri), Some(object)) = (graph_iri, result.as_object_mut()) {
+                object.insert("graph".into(), JsonValue::String(iri.to_string()));
+            }
+            result
         })
         .collect();
 
