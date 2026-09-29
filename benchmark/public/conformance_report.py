@@ -344,6 +344,10 @@ def claim_boundary(data: dict) -> list[str]:
         f"> manifests list {LISTED['query-evaluation']} tests, and the {core['query-evaluation']['cases']} approved ones are scored;"
         f" the {LISTED['query-evaluation'] - core['query-evaluation']['cases']} Proposed or unclassified are not run.",
         "> The update-syntax suites are not run yet.",
+        "> **The SPARQL 1.0 suite is not run.** These manifests hold what SPARQL 1.1 added; the",
+        "> SPARQL 1.0 tests (rdf-tests `sparql/sparql10`) also bear on SPARQL 1.1 Query conformance,",
+        "> and this harness does not score them yet. A trial run found real failures there, including",
+        "> `sameTerm` inside `FILTER`, so read the counts above as the 1.1 additions only (aegis-soqv1r).",
         "> **This score is fitted to this suite.** Quipu's failures here were found by running this suite",
         "> and fixed against it, case by case, so a perfect score is partly a record of that work rather",
         "> than an independent sample. Other stores measured with the same harness were not tuned to it.",

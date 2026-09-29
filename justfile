@@ -282,3 +282,9 @@ mcp action="test":
     cargo test --features full --lib mcp_transport
     target=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
     timeout 120 python3 scripts/test-native-mcp.py "$target/debug/quipu-server"
+
+# Judged search evaluation; test is offline and CI-runnable.
+search-eval cmd="test" *args="":
+    @if [ "{{cmd}}" = "test" ]; then python3 scripts/test_search_eval.py; \
+    elif [ "{{cmd}}" = "run" ]; then python3 scripts/search-eval.py {{args}}; \
+    else echo "unknown search-eval command: {{cmd}}" >&2; exit 1; fi

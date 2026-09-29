@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "queries": [
+    {
+      "id": "smoke-0",
+      "query": "example traffic",
+      "class": "traffic",
+      "source": "synthetic CI replay (not sampled traffic)",
+      "judgment_note": "Known hand-calculated graded ranking; no production data.",
+      "relevance": {
+        "https://example.org/a": 3,
+        "https://example.org/b": 1
+      }
+    },
+    {
+      "id": "smoke-1",
+      "query": "example identifier",
+      "class": "identifier",
+      "source": "synthetic CI replay (not sampled traffic)",
+      "judgment_note": "Known hand-calculated graded ranking; no production data.",
+      "relevance": {
+        "https://example.org/a": 3,
+        "https://example.org/b": 1
+      }
+    },
+    {
+      "id": "smoke-2",
+      "query": "example attribute",
+      "class": "attribute",
+      "source": "synthetic CI replay (not sampled traffic)",
+      "judgment_note": "Known hand-calculated graded ranking; no production data.",
+      "relevance": {
+        "https://example.org/a": 3,
+        "https://example.org/b": 1
+      }
+    },
+    {
+      "id": "smoke-3",
+      "query": "example paraphrase",
+      "class": "paraphrase",
+      "source": "synthetic CI replay (not sampled traffic)",
+      "judgment_note": "Known hand-calculated graded ranking; no production data.",
+      "relevance": {
+        "https://example.org/a": 3,
+        "https://example.org/b": 1
+      }
+    },
+    {
+      "id": "smoke-4",
+      "query": "example long-body",
+      "class": "long-body",
+      "source": "synthetic CI replay (not sampled traffic)",
+      "judgment_note": "Known hand-calculated graded ranking; no production data.",
+      "relevance": {
+        "https://example.org/a": 3,
+        "https://example.org/b": 1
+      }
+    }
+  ]
+}
