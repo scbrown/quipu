@@ -1,0 +1,12 @@
+<http://aegis.gastown.local/ontology/reaction-example-rule> a <http://aegis.gastown.local/ontology/Reaction> ;
+  <http://www.w3.org/2000/01/rdf-schema#label> "example-rule" ;
+  <http://aegis.gastown.local/ontology/triggerKind> "schedule" ; <http://aegis.gastown.local/ontology/schedule> "PT15M" ;
+  <http://aegis.gastown.local/ontology/condition> "SELECT ?focus WHERE { ?focus a ?type }" ;
+  <http://aegis.gastown.local/ontology/severity> "info" ; <http://aegis.gastown.local/ontology/action> "alert" ;
+  <http://aegis.gastown.local/ontology/owner> "example" ;
+  <http://www.w3.org/2000/01/rdf-schema#comment> "Emitter contract fixture." .
+<http://aegis.gastown.local/ontology/firing-5c42d17d99a25bbcbdb0ed05b424d8e7> a <http://aegis.gastown.local/ontology/ReactionFiring> ;
+  <http://aegis.gastown.local/ontology/firedBy> <http://aegis.gastown.local/ontology/reaction-example-rule> ;
+  <http://aegis.gastown.local/ontology/focus> <https://example.org/item> ;
+  <http://aegis.gastown.local/ontology/startedAt> "2026-09-26T05:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
+  <http://aegis.gastown.local/ontology/eventId> "stable-event" .

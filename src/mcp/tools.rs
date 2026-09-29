@@ -8,6 +8,7 @@ mod graphs;
 mod queries;
 mod read;
 pub(crate) mod search;
+mod search_ranking;
 mod shapes;
 mod write;
 

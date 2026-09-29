@@ -37,6 +37,7 @@ mod set;
 mod settings;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod snapshot_upload;
+mod source_claims;
 pub mod source_tag;
 #[cfg(test)]
 mod source_tap_tests;
