@@ -422,6 +422,19 @@ impl Store {
         Self::collect_visible_facts(&mut stmt, params![entity, g])
     }
 
+    /// Current asserted facts for an entity across every NAMED graph (never
+    /// ROOT). Search embeds an entity from its ROOT facts; this is the fallback
+    /// for an entity that exists only in named graphs, which otherwise builds no
+    /// text and is never embedded (aegis-rcz5ib.10).
+    pub fn entity_facts_in_named_graphs(&self, entity: i64) -> Result<Vec<Fact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
+             WHERE e = ?1 AND op = 1 AND valid_to IS NULL AND g != 0 \
+             ORDER BY a",
+        )?;
+        Self::collect_visible_facts(&mut stmt, params![entity])
+    }
+
     /// Time-travel query: return ROOT's facts as they were at a given point.
     ///
     /// **ROOT-scoped** (quipu #56) — time travel scopes *within* a graph
