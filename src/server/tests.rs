@@ -1612,3 +1612,6 @@ async fn read_admission_bounds_concurrent_blocking_reads() {
         let _ = t.await;
     }
 }
+
+#[path = "source_claims_tests.rs"]
+mod source_claims;
