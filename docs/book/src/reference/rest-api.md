@@ -1200,6 +1200,19 @@ Backfill embeddings for entities that lack them. Returns
 `--embed-backfill` startup flag instead exits non-zero rather than serving
 without the capability it was asked for.
 
+### `POST /embed_backfill_graph`
+
+Embed up to `max_entities` (default 256, clamped to 1-2000) entities of one
+registered named graph that have no current vector. Body:
+`{"graph": "<IRI>", "max_entities": N}`. Returns `entities_embedded`,
+`remaining` (still un-vectored in that graph) and `stale_skipped` (entities
+edited during the call, left for the next one). An unknown graph is refused.
+
+Each call is deliberately bounded: pace repeated calls and watch server memory
+between them rather than draining a large graph in one pass. Entities that
+exist only in named graphs are embedded from their named-graph facts, and they
+are searchable with `quipu_search` `graph=<IRI>`; unscoped search stays ROOT.
+
 ### `GET /preview/{iri}`
 
 Return a preview rendering of an entity by IRI.

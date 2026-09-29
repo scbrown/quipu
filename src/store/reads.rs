@@ -492,6 +492,15 @@ impl Store {
             .is_some())
     }
 
+    /// Distinct entities with a current asserted fact in graph `g`.
+    pub fn entities_in_graph(&self, g: i64) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT e FROM facts WHERE g = ?1 AND op = 1 AND valid_to IS NULL ORDER BY e",
+        )?;
+        let rows = stmt.query_map(params![g], |r| r.get(0))?;
+        Ok(rows.collect::<std::result::Result<Vec<i64>, _>>()?)
+    }
+
     /// Time-travel query: return ROOT's facts as they were at a given point.
     ///
     /// **ROOT-scoped** (quipu #56) — time travel scopes *within* a graph
