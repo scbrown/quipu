@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-29
+
+### Added
+
+- *(search)* Add opt-in content ranking for operational knowledge search (#324)([3827071](https://github.com/scbrown/quipu/commit/3827071e8212cf2d3427801bf03110db7bc0ba76))
+
+### Documentation
+
+- *(conformance)* Say the SPARQL 1.0 suite is not run([60f4e9b](https://github.com/scbrown/quipu/commit/60f4e9b6b5a2451f6363a9da3ab4ea1bcbe3f40b))
+- *(conformance)* Refresh conformance evidence for FILTER error integration([9892916](https://github.com/scbrown/quipu/commit/98929162f105303ee3a04a5652f9f8c6a8ca6369))
+- *(conformance)* Refresh companion identity integration ledgers([5c25524](https://github.com/scbrown/quipu/commit/5c25524bd9f88f9e503a4b009c2870d6f0e725a9))
+
+### Fixed
+
+- *(crate)* Point documentation at docs.rs/quipu-ai, not the unrelated quipu crate([dc71edd](https://github.com/scbrown/quipu/commit/dc71edd74760fa001a837f59b3e46d768f5c94af))
+- *(release)* Document #324 and re-derive ledgers on main (#332)([48bc3ef](https://github.com/scbrown/quipu/commit/48bc3ef1508fa6e90b81fa3d6f24b18cc509ed20))
+- *(mcp)* Create the --db directory before starting the stdio server (#319)([182aab1](https://github.com/scbrown/quipu/commit/182aab1999640c4bf39a57184859957a220f9bbc))
+
+### Miscellaneous
+
+- *(conformance)* Re-derived ledgers at 60f4e9b6([e751be5](https://github.com/scbrown/quipu/commit/e751be5f5d93b2c716d665d73bb3623068527626))
+- *(conformance)* Re-derived ledgers at 244302c5([730b802](https://github.com/scbrown/quipu/commit/730b802a25977ddfe25dccf55aba63596117b74e))
+
+### Testing
+
+- *(search)* Add isolated judged retrieval evaluation runner (#326)([abd356c](https://github.com/scbrown/quipu/commit/abd356ce5a82fd3d338834aa7da8ecde267856a5))
+
 ### Added
 
 - *(search)* Add opt-in content ranking for operational knowledge search (#324)([3827071](https://github.com/scbrown/quipu/commit/3827071e8212cf2d3427801bf03110db7bc0ba76))
