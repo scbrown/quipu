@@ -57,6 +57,9 @@ commit_preprocessors = [
     { pattern = '(?m)^Warn when full text backups omit vectors without a recipe$', replace = "fix(pack): apply CLI embedding settings and diagnose incomplete text backup recipes" },
     { pattern = '(?m)^Refuse incomplete text backup recipes unless explicitly waived$', replace = "fix(pack): refuse incomplete text backup recipes unless explicitly waived" },
     { pattern = '(?m)^Refresh conformance ledgers for the pack recipe guard$', replace = "docs(conformance): refresh conformance results for the pack recipe guard" },
+    # Repair the merged #324 subject without rewriting history. Keep this exact
+    # correction so automatic regeneration retains its reviewed release entry.
+    { pattern = '(?m)^Add opt-in content ranking for operational knowledge search \(#324\)$', replace = "feat(search): add opt-in content ranking for operational knowledge search (#324)" },
     # Repair the merged #202 subject without rewriting history. Keep this exact
     # correction so automatic regeneration retains its reviewed release entry.
     { pattern = '(?m)^Support bearer rotation with a restart-safe grace deadline \(#202\)$', replace = "feat(auth): support bearer rotation with a restart-safe grace deadline (#202)" },
