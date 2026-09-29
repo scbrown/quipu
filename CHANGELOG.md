@@ -4,12 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-29
+
 ### Added
 
 - *(bench)* Put the competitor table on the generated conformance page([a07247d](https://github.com/scbrown/quipu/commit/a07247de05b5bfd844336d8c2945ad6b72437d3c))
 - *(conformance)* Publish RDF syntax on the page; RDF 1.2 pinned as not supported([055ee2c](https://github.com/scbrown/quipu/commit/055ee2cfcf7554de2d70db31354aef3e0e006b52))
 - *(schema)* Govern reactions and event-identified firings([d7985e8](https://github.com/scbrown/quipu/commit/d7985e8f2d1a174b295128dd73b8eac42df6667d))
 - *(shapes)* Govern positive and negative text rule examples([f962814](https://github.com/scbrown/quipu/commit/f962814f960348ac7d681ed9acf9617e0489dc1a))
+- *(shapes)* Tighten CredentialShape and add VerificationShape for the credential inventory([a6b9ca2](https://github.com/scbrown/quipu/commit/a6b9ca2159c946d693332d5cdaf4963616b2ac8d))
+- *(search)* Add opt-in content ranking for operational knowledge search (#324)([3827071](https://github.com/scbrown/quipu/commit/3827071e8212cf2d3427801bf03110db7bc0ba76))
 
 ### Documentation
 
@@ -25,6 +29,11 @@ All notable changes to this project will be documented in this file.
 - *(sparql)* Evaluate sameTerm inside FILTER([f1cb968](https://github.com/scbrown/quipu/commit/f1cb9684cb0924fa6f145290802e80d714319b98))
 - *(store)* Project co-owned claims consistently across readers([34414b3](https://github.com/scbrown/quipu/commit/34414b31025a466d871c1ac5dea4c5a30e34134c))
 - *(schema)* Integrate reaction records with ontology invariants([45371ee](https://github.com/scbrown/quipu/commit/45371ee6a519be30fea62d2cc0f0214d6b41e5e5))
+- *(shapes)* VerificationShape adds only result/verifiedAt; camayoc-core already owns label/sourceKind/falsifier([280c75d](https://github.com/scbrown/quipu/commit/280c75dbc3cd52e6bb917e12a8ad07931df2ee80))
+- *(shapes)* VerificationShape restates the rdfs:label floor (invariant I2)([81112a6](https://github.com/scbrown/quipu/commit/81112a62f52097edbbb2faf202d536be4aa6270d))
+- *(ontology)* Place aegis:Verification in the BFO split as a continuant([bbe6c31](https://github.com/scbrown/quipu/commit/bbe6c318730b99eff0c3b7e1ca0eacdd15c99803))
+- *(release)* Document #324 and re-derive ledgers on main (#332)([48bc3ef](https://github.com/scbrown/quipu/commit/48bc3ef1508fa6e90b81fa3d6f24b18cc509ed20))
+- *(mcp)* Create the --db directory before starting the stdio server (#319)([182aab1](https://github.com/scbrown/quipu/commit/182aab1999640c4bf39a57184859957a220f9bbc))
 
 ### Miscellaneous
 
@@ -38,6 +47,8 @@ All notable changes to this project will be documented in this file.
 - Refresh conformance after packaging integration([029730f](https://github.com/scbrown/quipu/commit/029730fb685e263f1bf57b64219b4d59c7bd11e3))
 - *(sparql)* Pin what sameTerm can and cannot tell apart([d6aee87](https://github.com/scbrown/quipu/commit/d6aee87f944bc60b44136bc8e497576d07e734d2))
 - *(conformance)* Record source ownership regression ledgers([fd1d255](https://github.com/scbrown/quipu/commit/fd1d25576a1cdb4df5c14b0dfc63a2137114f5ee))
+- *(shapes)* Credential inventory fields are optional and constrained when present([05a2a95](https://github.com/scbrown/quipu/commit/05a2a95ad68838d5ae1eb86d97bbae09fb2b8739))
+- *(search)* Add isolated judged retrieval evaluation runner (#326)([abd356c](https://github.com/scbrown/quipu/commit/abd356ce5a82fd3d338834aa7da8ecde267856a5))
 
 
 
