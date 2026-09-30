@@ -1323,8 +1323,11 @@ attest this predicate, per the Phase-0 verifier registry?
 
 Verify a signed Verdict against the Phase-0 root of trust:
 `{"predicate_id", "target_ref", "outcome", "evidence_hash", "tier"?,
-"verifier", "signature"}` → `{"signature_valid", "verifier_registered",
-"verifier_authorized", "trusted"}` — `trusted` is the conjunction to gate on.
+"verifier", "signature", "verdict"?, "signed_at"?, "tx"?}` →
+`{"signature_valid", "verifier_registered", "verifier_authorized", "trusted",
+"as_of"}` — `trusted` is the conjunction to gate on. The registry is read as of
+the signature: pass `verdict` (the stored verdict IRI) to use the instant the
+store recorded it.
 
 ## Overlays
 

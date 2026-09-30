@@ -4571,3 +4571,100 @@ fn a_stamp_sqlite_cannot_parse_makes_the_lag_unknown_through_the_store() {
 
 #[path = "snapshot_identity_tests.rs"]
 mod snapshot_identity;
+
+// ── signing-plane S1 (aegis-kzt0ql.9.1): verify as-of the recorded signature ──
+#[test]
+fn test_verdict_verify_answers_as_of_the_recorded_signature() {
+    use crate::store::Datum;
+    use crate::types::{Op, Value};
+    use std::sync::Arc;
+    let ns = "http://aegis.gastown.local/ontology/";
+    let mut store = Store::open_in_memory().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let id = crate::signing::SigningIdentity::load(&dir.path().join("k.pk8"), "quipu").unwrap();
+    let old_key = id.public_key_hex();
+    store.set_signing_identity(Arc::new(id));
+    let ttl = format!(
+        "@prefix a: <{ns}> .\n\
+         a:reg a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" ; a:publicKey \"{old_key}\" .\n\
+         a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n"
+    );
+    crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let claim = format!("PREFIX a: <{ns}> ASK {{ $target a:hasTest ?t }}");
+    let v = super::tool_policy_check(
+        &store,
+        &serde_json::json!({
+            "claim": claim, "target": format!("{ns}sym1"), "predicate_id": "has-test"
+        }),
+    )
+    .unwrap();
+    let sig = v["signature"].as_str().unwrap().to_string();
+
+    // Record the verdict, then rotate the key (close-then-insert).
+    let verdict = format!("{ns}verdict_s1");
+    let rec = Datum {
+        entity: store.intern(&verdict).unwrap(),
+        attribute: store.intern(&format!("{ns}signature")).unwrap(),
+        value: Value::Str(sig.clone()),
+        valid_from: "2026-02-01T00:00:00Z".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store
+        .transact(&[rec], "2026-02-01T00:00:00Z", None, None)
+        .unwrap();
+    let reg = store.lookup(&format!("{ns}reg")).unwrap().unwrap();
+    let pk = store.lookup(&format!("{ns}publicKey")).unwrap();
+    store
+        .retract_triples(
+            reg,
+            pk,
+            Some(&Value::Str(old_key)),
+            "2026-03-01T00:00:00Z",
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+    let next = Datum {
+        entity: reg,
+        attribute: pk.unwrap(),
+        value: Value::Str("00".repeat(32)),
+        valid_from: "2026-03-01T00:00:00Z".into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store
+        .transact(&[next], "2026-03-01T00:00:00Z", None, None)
+        .unwrap();
+
+    let mut recorded = v.clone();
+    recorded["verdict"] = serde_json::json!(verdict);
+    let then = super::tool_verdict_verify(&store, &recorded).unwrap();
+    assert_eq!(
+        then["trusted"], true,
+        "recorded before the rotation: {then:#?}"
+    );
+    assert_eq!(then["as_of"]["basis"], "recorded");
+
+    let now = super::tool_verdict_verify(&store, &v).unwrap();
+    assert_eq!(
+        now["trusted"], false,
+        "the old key is not registered now: {now:#?}"
+    );
+    assert_eq!(now["as_of"]["basis"], "now");
+
+    // A caller cannot name a verdict that was never recorded with this signature.
+    let mut unknown = v.clone();
+    unknown["verdict"] = serde_json::json!(format!("{ns}verdict_never"));
+    assert!(super::tool_verdict_verify(&store, &unknown).is_err());
+}

@@ -491,6 +491,14 @@ property a consumer should gate on.
 | `tier` | No | Evidence tier (default: `committed`) |
 | `verifier` | Yes | Verifier IRI whose registered key verifies the signature |
 | `signature` | Yes | Hex ed25519 signature over the verdict message |
+| `verdict` | No | IRI of the stored verdict carrying this signature: verify as of when the store recorded it (use this for trust decisions) |
+| `signed_at` | No | Explicit valid-time instant (a what-if query; default now) |
+| `tx` | No | Explicit transaction to verify as of (a what-if query; default latest) |
+
+The registry is read **as of the signature** (signing-plane S1): a key that
+has since been rotated still verifies what it signed while registered, and
+cannot verify anything recorded after it was closed. The result's
+`as_of.basis` is `recorded`, `caller-supplied` or `now`.
 
 ### `quipu_verifier_authorized`
 
@@ -501,6 +509,8 @@ The discovery half of the governance gate.
 |-----------|----------|-------------|
 | `verifier` | Yes | Verifier IRI |
 | `predicate` | Yes | Predicate IRI to attest |
+| `signed_at` | No | Valid-time instant to check at (default now) |
+| `tx` | No | Transaction to check as of (default latest) |
 
 ### `quipu_cooccurrence`
 
