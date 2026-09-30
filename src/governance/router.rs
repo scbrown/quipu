@@ -197,7 +197,7 @@ pub(crate) fn resolve_at(
     // agent could approve its own request.
     let dq = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
-         SELECT ?outcome ?by ?sig WHERE {{ \
+         SELECT ?d ?outcome ?by ?sig WHERE {{ \
             ?d a a:Decision ; a:evidenceHash \"{hash}\" ; a:outcome ?outcome ; a:by ?by . \
             OPTIONAL {{ ?d a:signature ?sig }} \
          }}",
@@ -216,7 +216,10 @@ pub(crate) fn resolve_at(
             let Some(sig) = str_of(row.get("sig")) else {
                 continue;
             };
-            if !decision_verifies_at(store, policy_iri, &hash, &outcome, &by, &sig, at)? {
+            let Some(decision) = super::precedent::iri_of(store, row.get("d")) else {
+                continue;
+            };
+            if !decision_verifies(store, &decision, policy_iri, &hash, &outcome, &by, &sig)? {
                 continue;
             }
             match outcome.as_str() {
@@ -330,55 +333,41 @@ pub fn decision_message(evidence_hash: &str, outcome: &str, by: &str) -> Vec<u8>
 /// and whose `aegis:attests` names the escalating policy. The registry is the
 /// same human-owned root of trust the verdict plane uses; quipu never registers
 /// deciders itself.
+///
+/// The registry is read AS OF the decision (signing-plane S1): the key must have
+/// been registered, for this policy, when the store recorded this signature on
+/// `decision_iri`. A rotation afterwards therefore leaves the ruling standing,
+/// and a key closed before the decision was recorded cannot make one. See
+/// [`super::verifier_registry`] for why the instant is the store's, not the
+/// signer's.
 pub(crate) fn decision_verifies(
     store: &Store,
+    decision_iri: &str,
     policy_iri: &str,
     evidence_hash: &str,
     outcome: &str,
     by: &str,
     signature: &str,
 ) -> Result<bool> {
-    decision_verifies_at(
+    use super::verifier_registry::{Scope, Witness, registered_keys};
+    let Some(witness) = Witness::of_fact(
         store,
-        policy_iri,
-        evidence_hash,
-        outcome,
-        by,
+        decision_iri,
+        &format!("{DEFAULT_BASE_NS}signature"),
         signature,
-        &TemporalContext::default(),
-    )
-}
-
-/// [`decision_verifies`] against the registrations as they stood at `at`.
-fn decision_verifies_at(
-    store: &Store,
-    policy_iri: &str,
-    evidence_hash: &str,
-    outcome: &str,
-    by: &str,
-    signature: &str,
-    at: &TemporalContext,
-) -> Result<bool> {
-    let kq = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
-         SELECT ?k WHERE {{ \
-            ?r a a:VerifierRegistration ; a:verifier \"{by}\" ; \
-               a:attests \"{policy}\" ; a:publicKey ?k . \
-         }}",
-        by = escape(by),
-        policy = escape(policy_iri),
-    );
-    let QueryResult::Select { rows, .. } = sparql::query_temporal(store, &kq, at)? else {
+    )?
+    else {
         return Ok(false);
     };
     let message = decision_message(evidence_hash, outcome, by);
-    // Any registered key for this decider may verify — a decider mid key
-    // rotation legitimately has two registrations, and requiring "the first
-    // row" would make the ruling depend on row order.
-    Ok(rows
-        .iter()
-        .filter_map(|r| str_of(r.get("k")))
-        .any(|key| crate::signing::verify_hex(&key, &message, signature)))
+    // Any key registered then may verify: a decider mid-rotation legitimately
+    // holds two, and requiring "the first row" would make the ruling depend on
+    // row order.
+    Ok(
+        registered_keys(store, by, Some(policy_iri), &witness, Scope::Root)?
+            .iter()
+            .any(|key| crate::signing::verify_hex(key, &message, signature)),
+    )
 }
 
 /// The deterministic `DecisionRequest` IRI for `(policy, target)`.

@@ -27,6 +27,7 @@ pub mod search;
 mod tests;
 pub mod tools;
 mod value;
+mod verdict_witness;
 
 use serde_json::Value as JsonValue;
 

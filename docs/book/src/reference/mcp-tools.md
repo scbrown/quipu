@@ -491,9 +491,20 @@ property a consumer should gate on.
 | `tier` | No | Evidence tier (default: `committed`) |
 | `verifier` | Yes | Verifier IRI whose registered key verifies the signature |
 | `signature` | Yes | Signature over the verdict message: hex for `ed25519`; base64url assertion signature for `webauthn-*`; the armored SSH SIGNATURE for `sshsig-sk-ed25519` |
+| `verdict` | No | IRI of the stored verdict carrying this signature: verify as of when the store recorded it (use this for trust decisions) |
+| `signed_at` | No | Explicit valid-time instant (a what-if query; default now) |
+| `tx` | No | Explicit transaction to verify as of (a what-if query; default latest) |
 | `scheme` | No | `ed25519` (default), `webauthn-es256`, `webauthn-eddsa`, or `sshsig-sk-ed25519` |
 | `authenticator_data` | WebAuthn | base64url `authenticatorData` |
 | `client_data_json` | WebAuthn | base64url `clientDataJSON` |
+
+The registry is read **as of the signature** (signing-plane S1): a key that
+has since been rotated still verifies what it signed while registered, and
+cannot verify anything recorded after it was closed. The result's
+`as_of.basis` is `recorded`, `caller-supplied` or `now`. A caller-supplied
+instant is a what-if: `trusted` is then always `false`, and the answer is in
+`would_verify_as_of_supplied_instant`. Otherwise naming a transaction from
+before a revocation would make a revoked key read as trusted.
 
 Hardware schemes are **off by default** (`[quipu.governance]
 hardware_verdict_schemes`); while off, a verdict naming one is refused. A
@@ -512,6 +523,10 @@ WebAuthn requires user verification (UV); SSHSIG requires user presence and
 reports UV without requiring it.
 See `src/verdict_schemes/mod.rs` for the full rule list.
 
+The as-of rule binds every scheme: a hardware verdict is checked against
+the registrations, grants and recorded `aegis:signCount` in effect at the
+same instant, and a caller-supplied instant leaves it untrusted too.
+
 ### `quipu_verifier_authorized`
 
 Check the Phase-0 verifier registry: may this verifier attest this predicate?
@@ -521,6 +536,8 @@ The discovery half of the governance gate.
 |-----------|----------|-------------|
 | `verifier` | Yes | Verifier IRI |
 | `predicate` | Yes | Predicate IRI to attest |
+| `signed_at` | No | Valid-time instant to check at (default now) |
+| `tx` | No | Transaction to check as of (default latest) |
 
 ### `quipu_cooccurrence`
 

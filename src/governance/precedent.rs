@@ -102,7 +102,7 @@ pub fn nearest_decided(
 
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
-         SELECT ?r ?rp ?rt ?h ?outcome ?by ?sig WHERE {{ \
+         SELECT ?r ?d ?rp ?rt ?h ?outcome ?by ?sig WHERE {{ \
             ?r a a:DecisionRequest ; a:forPolicy ?rp ; a:forTarget ?rt ; \
                a:evidenceHash ?h . \
             ?d a a:Decision ; a:evidenceHash ?h ; a:outcome ?outcome ; \
@@ -132,7 +132,10 @@ pub fn nearest_decided(
             ) else {
                 continue;
             };
-            if !decision_verifies(store, &prior_policy, &hash, &outcome, &by, &sig)? {
+            let Some(decision) = iri_of(store, row.get("d")) else {
+                continue;
+            };
+            if !decision_verifies(store, &decision, &prior_policy, &hash, &outcome, &by, &sig)? {
                 continue;
             }
             decided.insert(iri, request_text(&prior_policy, &prior_target));
@@ -245,7 +248,7 @@ fn str_of(v: Option<&Value>) -> Option<String> {
     }
 }
 
-fn iri_of(store: &Store, v: Option<&Value>) -> Option<String> {
+pub(crate) fn iri_of(store: &Store, v: Option<&Value>) -> Option<String> {
     match v {
         Some(Value::Ref(id)) => store.resolve(*id).ok(),
         _ => None,
