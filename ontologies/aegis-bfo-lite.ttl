@@ -130,6 +130,11 @@ aegis:Transition rdfs:subClassOf obo:BFO_0000002 .
 # (aegis-zjpqjr). A run of the check would be an occurrent.
 aegis:Verification rdfs:subClassOf obo:BFO_0000002 .
 aegis:VerifierRegistration rdfs:subClassOf obo:BFO_0000002 .
+# A sealed decision's presentation and the verdict answering it are RECORDS of
+# a freeze and of a signature (aegis-kzt0ql.9.3), like aegis:DecisionRequest:
+# durable continuants, not the act of presenting or signing.
+aegis:DecisionPresentation rdfs:subClassOf obo:BFO_0000002 .
+aegis:DecisionVerdict rdfs:subClassOf obo:BFO_0000002 .
 aegis:Watchlist rdfs:subClassOf obo:BFO_0000002 .
 # WorkItem is the tracker-agnostic sibling of aegis:Bead, which is already a
 # continuant. An item of work is a record that persists and changes state; the
