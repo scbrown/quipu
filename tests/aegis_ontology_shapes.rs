@@ -430,3 +430,28 @@ fn lead_for_refuses_every_broken_pairing() {
         );
     }
 }
+
+#[test]
+fn lead_for_shapes_route_to_the_rejecting_document_together() {
+    // Emit only OBSERVES; 1:1 must gate the write. All three shapes must also
+    // land in ONE routed document, or the sh:node reference dangles.
+    let split = quipu::shacl::split_shapes_by_policy(SHAPES);
+    for shape in [
+        "aegis:LeadForShape",
+        "aegis:KeeperRoleShape",
+        "aegis:LeadForKeeperShape",
+    ] {
+        assert!(
+            split.reject.contains(&format!("{shape} a sh:NodeShape")),
+            "{shape} must reject"
+        );
+        assert!(
+            !split.emit.contains(&format!("{shape} a sh:NodeShape")),
+            "{shape} must not emit"
+        );
+    }
+    assert!(
+        split.emit.contains("aegis:HasRoleShape a sh:NodeShape"),
+        "control: the splitter does route emit shapes"
+    );
+}
