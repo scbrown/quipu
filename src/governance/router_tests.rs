@@ -23,42 +23,20 @@ fn keypair() -> ring::signature::Ed25519KeyPair {
 /// Register `by` as a decider for `policy` — the human-authored root-of-trust
 /// fact a real deployment writes when it appoints an operator.
 fn register_decider(store: &mut Store, by: &str, policy: &str, public_key_hex: &str) {
+    // A HUMAN-tier registration (aegis-kzt0ql.9.4): the router verifies human
+    // decisions only against those, and writing one takes a signed amendment.
     let iri = format!(
         "http://ex/reg_{by}_{}",
         policy.replace(['/', ':', '#'], "_")
     );
-    let class = Value::Ref(
-        store
-            .intern(&format!("{DEFAULT_BASE_NS}VerifierRegistration"))
-            .unwrap(),
+    crate::governance::trust_root::test_support::register_human(
+        store,
+        &iri,
+        by,
+        &[policy],
+        public_key_hex,
+        TS,
     );
-    let d = |store: &Store, p: &str, v: Value| Datum {
-        entity: store.intern(&iri).unwrap(),
-        attribute: store.intern(p).unwrap(),
-        value: v,
-        valid_from: TS.to_string(),
-        valid_to: None,
-        op: Op::Assert,
-    };
-    let datums = vec![
-        d(store, RDF_TYPE, class),
-        d(
-            store,
-            &format!("{DEFAULT_BASE_NS}verifier"),
-            Value::Str(by.into()),
-        ),
-        d(
-            store,
-            &format!("{DEFAULT_BASE_NS}attests"),
-            Value::Str(policy.into()),
-        ),
-        d(
-            store,
-            &format!("{DEFAULT_BASE_NS}publicKey"),
-            Value::Str(public_key_hex.into()),
-        ),
-    ];
-    store.transact(&datums, TS, None, None).unwrap();
 }
 
 /// Write a decision fact, optionally carrying `signature`. No registration —
@@ -892,30 +870,19 @@ fn rotate(store: &mut Store, by: &str, policy: &str, key: &str, next: &str, at: 
         "http://ex/reg_{by}_{}",
         policy.replace(['/', ':', '#'], "_")
     );
-    let entity = store.lookup(&iri).unwrap().unwrap();
-    let pk = store
-        .lookup(&format!("{DEFAULT_BASE_NS}publicKey"))
-        .unwrap();
-    store
-        .retract_triples(
-            entity,
-            pk,
-            Some(&Value::Str(key.into())),
-            at,
-            None,
-            false,
-            None,
-        )
-        .unwrap();
-    let datum = Datum {
-        entity,
-        attribute: pk.unwrap(),
-        value: Value::Str(next.into()),
+    let d = |store: &Store, v: &str, op: Op| Datum {
+        entity: store.intern(&iri).unwrap(),
+        attribute: store
+            .intern(&format!("{DEFAULT_BASE_NS}publicKey"))
+            .unwrap(),
+        value: Value::Str(v.into()),
         valid_from: at.to_string(),
         valid_to: None,
-        op: Op::Assert,
+        op,
     };
-    store.transact(&[datum], at, None, None).unwrap();
+    // Close-then-insert in ONE signed amendment (aegis-kzt0ql.9.4).
+    let change = vec![d(store, key, Op::Retract), d(store, next, Op::Assert)];
+    crate::governance::trust_root::test_support::amend(store, &iri, change, at);
 }
 
 #[test]

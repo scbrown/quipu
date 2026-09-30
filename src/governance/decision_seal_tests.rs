@@ -25,13 +25,17 @@ fn put(store: &mut Store, s: &str, p: &str, v: Value) {
     store.transact(&[datum], TS, None, None).unwrap();
 }
 
+/// A HUMAN-tier registration (aegis-kzt0ql.9.4): human decisions verify only
+/// against those, and writing one takes a signed amendment.
 fn register(store: &mut Store, verifier: &str, key_hex: &str) {
-    let reg = format!("http://ex/reg/{verifier}");
-    let class = Value::Ref(store.intern(&ns("VerifierRegistration")).unwrap());
-    put(store, &reg, RDF_TYPE, class);
-    put(store, &reg, &ns("verifier"), Value::Str(verifier.into()));
-    put(store, &reg, &ns("attests"), Value::Str(POLICY.into()));
-    put(store, &reg, &ns("publicKey"), Value::Str(key_hex.into()));
+    crate::governance::trust_root::test_support::register_human(
+        store,
+        &format!("http://ex/reg/{verifier}"),
+        verifier,
+        &[POLICY],
+        key_hex,
+        TS,
+    );
 }
 
 /// A decision with a question, two options (one as a blank node list item) and scope.
@@ -277,21 +281,23 @@ fn a_rotated_key_still_reverifies_what_it_sealed() {
     let v = attest(&mut store, &p.nonce, "approve", "stiwi", &sig, NOW + 10)
         .unwrap()
         .unwrap();
-    // Rotate stiwi's key after the verdict was recorded (S1).
-    let reg = store.lookup("http://ex/reg/stiwi").unwrap().unwrap();
-    let pk = store.lookup(&ns("publicKey")).unwrap();
+    // Rotate stiwi's key after the verdict was recorded (S1), as a signed
+    // amendment: the registry is the trust root.
     let old = crate::signing::public_key_hex(&kp);
-    store
-        .retract_triples(
-            reg,
-            pk,
-            Some(&Value::Str(old)),
-            "2999-01-01T00:00:00Z",
-            None,
-            false,
-            None,
-        )
-        .unwrap();
+    let retract = Datum {
+        entity: store.intern("http://ex/reg/stiwi").unwrap(),
+        attribute: store.intern(&ns("publicKey")).unwrap(),
+        value: Value::Str(old),
+        valid_from: TS.to_string(),
+        valid_to: None,
+        op: Op::Retract,
+    };
+    crate::governance::trust_root::test_support::amend(
+        &mut store,
+        "http://ex/reg/stiwi",
+        vec![retract],
+        "2999-01-01T00:00:00Z",
+    );
     assert_eq!(verify_recorded(&store, &v).unwrap(), Ok(()));
 }
 

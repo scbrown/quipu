@@ -134,6 +134,10 @@ aegis:VerifierRegistration rdfs:subClassOf obo:BFO_0000002 .
 # a freeze and of a signature (aegis-kzt0ql.9.3), like aegis:DecisionRequest:
 # durable continuants, not the act of presenting or signing.
 aegis:DecisionPresentation rdfs:subClassOf obo:BFO_0000002 .
+# A registry amendment and a bootstrap record are RECORDS of an enrolment act
+# (aegis-kzt0ql.9.4): durable continuants, like the registration they change.
+aegis:RegistryAmendment rdfs:subClassOf obo:BFO_0000002 .
+aegis:TrustRootBootstrap rdfs:subClassOf obo:BFO_0000002 .
 aegis:DecisionVerdict rdfs:subClassOf obo:BFO_0000002 .
 aegis:Watchlist rdfs:subClassOf obo:BFO_0000002 .
 # WorkItem is the tracker-agnostic sibling of aegis:Bead, which is already a
