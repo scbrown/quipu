@@ -1994,6 +1994,35 @@ aegis:HasRoleShape a sh:NodeShape ;
     sh:targetSubjectsOf aegis:hasRole ;
     sh:property [ sh:path aegis:hasRole ; sh:class aegis:CrewRole ; ] .
 
+# aegis:leadFor — a review/design LEAD paired 1:1 with the KEEPER whose
+# domain it reviews (aegis-cpfw7a, for the aegis-vj3uet role redesign;
+# quipu proposal 26). NOT reports_to: it routes design/review work, not the
+# stop-event tree. WIRED at birth: measured 0 live aegis:leadFor edges on
+# 2026-09-30, so the zero-violations precondition holds trivially.
+#
+# 1:1 is enforced from BOTH ends: a lead names at most one keeper
+# (LeadForShape), and a keeper is named by at most one lead
+# (LeadForKeeperShape). Roles are matched by VALUE (sh:hasValue on
+# aegis:hasRole), so the shape does not depend on aegis:keeper also being
+# used as a predicate elsewhere (a pre-existing pun, measured live).
+aegis:LeadForShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf aegis:leadFor ;
+    sh:property [ sh:path aegis:hasRole ; sh:hasValue aegis:lead ;
+        sh:message "only a CrewMember holding aegis:lead may declare aegis:leadFor" ] ;
+    sh:property [ sh:path aegis:leadFor ; sh:maxCount 1 ; sh:class aegis:CrewMember ;
+        sh:node aegis:KeeperRoleShape ;
+        sh:message "aegis:leadFor names exactly one CrewMember holding aegis:keeper" ] .
+
+aegis:KeeperRoleShape a sh:NodeShape ;
+    sh:property [ sh:path aegis:hasRole ; sh:hasValue aegis:keeper ] .
+
+aegis:LeadForKeeperShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetObjectsOf aegis:leadFor ;
+    sh:property [ sh:path [ sh:inversePath aegis:leadFor ] ; sh:maxCount 1 ;
+        sh:message "a keeper is paired with at most one lead" ] .
+
 aegis:CommittedToShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
     sh:targetSubjectsOf aegis:committed_to ;
