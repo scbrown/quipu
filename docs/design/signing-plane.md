@@ -1,6 +1,8 @@
 # Design: The Signing Plane — governing the trust root like everything else
 
-> **Implementation status (2026-09-11):** **v1 verdict signing and verifier
+> **Implementation status (2026-09-30):** **S1, the bitemporal verifier
+> registry, is implemented** (aegis-kzt0ql.9.1; see §5 S1).
+> **v1 verdict signing and verifier
 > registration are implemented (§2).** Native session/share attestation also
 > ships with a protected binding registry and durable nonce replay protection
 > (§2.1). **The signing-plane governance proposals in §5–§7 remain future work.**
@@ -133,7 +135,7 @@ replays":
   `is_registered_verifier` and `registered_public_key`
   (`src/mcp/mod.rs`) query the registry with
   `TemporalContext::default()`: latest-only. There is no key history to
-  ask an as-of question of.
+  ask an as-of question of. *(Historical: closed by S1, 2026-09-30.)*
 
 Consequence: rotate a key and every historical verdict verifies against
 the wrong key or none. Every *decision* in the store replays to the
@@ -168,6 +170,26 @@ shared crate both quipu and yupana depend on. Ends the
 Cheapest item, unblocks nothing but protects everything.
 
 ### S1 — bitemporal key registry (the prerequisite for the rest)
+
+> **Implemented** in [`src/governance/verifier_registry.rs`](../../src/governance/verifier_registry.rs).
+> Registrations are ordinary graph facts, so no schema was needed: rotation
+> retracts the old `aegis:publicKey` and asserts the new one, revocation
+> retracts it, and expiry is a `valid_to` set in the future. Every verifier
+> (verdict verify, the escalation router and its precedent search, the
+> transition gate) asks the registry through one function, `registered_keys`,
+> and the key must be a fact of the same registration that grants the scope.
+>
+> **The instant is the store's, not the signer's.** A `Witness` is the
+> transaction that first recorded the signature, plus that transaction's
+> timestamp. A registration counts only if it was asserted by that tx and not
+> yet closed by it. Tx ids are monotonic, so a revoked key cannot back-date a
+> signature into its old window. The registration's valid interval must also
+> cover the timestamp, which lets a compromise revocation reach back to an
+> earlier instant. Signatures being written in the current transaction (the
+> write gates) verify at now. `quipu_verdict_verify` takes `verdict` (the
+> stored verdict's IRI) to verify as-of its recording, and reports
+> `as_of.basis`. Tests: `verifier_registry_tests.rs`, `s1_*` in
+> `router_tests.rs`, and `test_verdict_verify_answers_as_of_the_recorded_signature`.
 
 `aegis:publicKey` (and the registration's attest-scope) get
 `valid_from`/`valid_to`, exactly as shapes did
