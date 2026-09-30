@@ -158,6 +158,32 @@ by value, so `"01"` reads back as `1`); others are engine defects being fixed.
 Every case, with its diagnostic, is in
 [`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).
 
+## SPARQL 1.2 query tests
+
+The W3C SPARQL 1.2 query tests (`sparql/sparql12`) at the same rdf-tests revision
+(`369a90d1`). No SPARQL 1.2 case is Working Group–approved yet; every one is
+counted anyway. **2 of 269 pass, and 263 are not run.**
+
+Most of SPARQL 1.2 needs grammar or terms Quipu does not have: triple terms, the `VERSION`
+declaration, base direction, new codepoint escapes. Those cases are listed and never run,
+because a parser that rejects all SPARQL 1.2 input would "pass" every negative case. The
+few cases that need nothing new are run by the same runner as everything above.
+
+| Part | Passed | Failed | Not run | Cases | Why not run |
+|---|---:|---:|---:|---:|---|
+| `codepoint-escapes` | 0 | 0 | 14 | 14 | SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection |
+| `eval-triple-terms` | 0 | 0 | 41 | 41 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
+| `expression` | 0 | 1 | 4 | 5 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
+| `grouping` | 0 | 2 | 0 | 2 | run |
+| `lang-basedir` | 0 | 0 | 11 | 11 | RDF 1.2 base direction (rdf:dirLangString) is not implemented |
+| `rdf11` | 2 | 1 | 0 | 3 | run |
+| `syntax` | 0 | 0 | 6 | 6 | not wired: the syntax runner scores the 1.1 syntax manifest only |
+| `syntax-triple-terms-negative` | 0 | 0 | 65 | 65 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
+| `syntax-triple-terms-positive` | 0 | 0 | 113 | 113 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
+| `version` | 0 | 0 | 9 | 9 | the SPARQL 1.2 VERSION declaration is not implemented |
+
+Ledger: [`sparql12.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql12.json).
+
 ## Query evaluation, by feature family
 
 The family is the pinned suite's own directory for each manifest, so this

@@ -34,6 +34,8 @@ RDF11_SYNTAX_LEDGER = "rdf11-syntax.json"
 RDF12_SYNTAX_LEDGER = "rdf12-syntax.json"
 SPARQL10_LEDGER = "sparql10-evaluation.json"
 SPARQL10_CASES = 242
+SPARQL12_LEDGER = "sparql12.json"
+SPARQL12_CASES = 269
 RDF_SYNTAX_SUITES = (
     ("rdf-turtle", "Turtle"),
     ("rdf-n-triples", "N-Triples"),
@@ -250,9 +252,28 @@ def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
         raise LedgerError(f"{sparql10_path} must carry exactly {SPARQL10_CASES} sparql10-query rows, "
                           f"found {len(sparql10_rows)}")
 
+    sparql12_path = results_dir / SPARQL12_LEDGER
+    if not sparql12_path.is_file():
+        raise LedgerError(f"missing ledger: {sparql12_path}")
+    sparql12 = json.loads(sparql12_path.read_text())
+    if sparql12.get("suite_revision") != evaluation["suite_revision"]:
+        raise LedgerError(f"{sparql12_path} ran at rdf-tests {str(sparql12.get('suite_revision'))[:8]}, "
+                          f"not {evaluation['suite_revision'][:8]}")
+    sparql12_rows = sparql12.get("results", [])
+    if len(sparql12_rows) != SPARQL12_CASES:
+        raise LedgerError(f"{sparql12_path} must carry exactly {SPARQL12_CASES} rows, found {len(sparql12_rows)}")
+    for row in sparql12_rows:
+        # A case that needs RDF 1.2 grammar or terms is never scored as run:
+        # a rejecting parser would "pass" its negative cases (aegis-mhee08).
+        if row.get("status") != "unsupported" and "triple-terms" in row.get("manifest", ""):
+            raise LedgerError(f"{sparql12_path} scores triple-term case {row.get('id')} as run; "
+                              "Quipu has no RDF 1.2 support")
+
     return {
         "classes": classes,
         "sparql10": {"rows": sparql10_rows, "counts": tally(sparql10_rows)},
+        "sparql12": {"rows": sparql12_rows, "counts": tally(sparql12_rows)},
+        "sparql12_quipu_revision": sparql12["quipu_revision"],
         "sparql10_quipu_revision": sparql10["quipu_revision"],
         "suite_revision": evaluation["suite_revision"],
         "quipu_revision": evaluation["quipu_revision"],
@@ -508,6 +529,41 @@ def render_sparql10(data: dict) -> list[str]:
     return out
 
 
+def render_sparql12(data: dict) -> list[str]:
+    """SPARQL 1.2: run what needs nothing new, enumerate the rest (aegis-mhee08)."""
+    rows = data["sparql12"]["rows"]
+    counts = data["sparql12"]["counts"]
+    parts: dict[str, list[dict]] = {}
+    for row in rows:
+        parts.setdefault(row["manifest"].split("/")[2], []).append(row)
+    table = []
+    for name in sorted(parts):
+        c = tally(parts[name])
+        reasons = sorted({r.get("reason", "") for r in parts[name] if r["status"] == "unsupported"} - {""})
+        table.append([f"`{name}`", str(c["passed"]), str(c["failed"] + c["error"]), str(c["unsupported"]),
+                      str(c["cases"]), "; ".join(reasons) or "run"])
+    out = [
+        "## SPARQL 1.2 query tests",
+        "",
+        "The W3C SPARQL 1.2 query tests (`sparql/sparql12`) at the same rdf-tests revision",
+        f"(`{data['suite_revision'][:8]}`). No SPARQL 1.2 case is Working Group–approved yet; every one is",
+        f"counted anyway. **{counts['passed']} of {counts['cases']} pass, and {counts['unsupported']} are not run.**",
+        "",
+        "Most of SPARQL 1.2 needs grammar or terms Quipu does not have: triple terms, the `VERSION`",
+        "declaration, base direction, new codepoint escapes. Those cases are listed and never run,",
+        "because a parser that rejects all SPARQL 1.2 input would \"pass\" every negative case. The",
+        "few cases that need nothing new are run by the same runner as everything above.",
+        "",
+    ]
+    out += _table(["Part", "Passed", "Failed", "Not run", "Cases", "Why not run"], table, right={1, 2, 3, 4})
+    out += [
+        "",
+        "Ledger: [`sparql12.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql12.json).",
+        "",
+    ]
+    return out
+
+
 def render_markdown(data: dict) -> str:
     classes = data["classes"]
     out: list[str] = [GENERATED_HEADER, "# SPARQL 1.1 conformance", ""]
@@ -588,6 +644,7 @@ def render_markdown(data: dict) -> str:
     out += render_competitors(data)
     out += render_rdf_syntax(data)
     out += render_sparql10(data)
+    out += render_sparql12(data)
     out += [
         "## Query evaluation, by feature family",
         "",
