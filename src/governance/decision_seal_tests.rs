@@ -295,6 +295,133 @@ fn a_rotated_key_still_reverifies_what_it_sealed() {
     assert_eq!(verify_recorded(&store, &v).unwrap(), Ok(()));
 }
 
+/// Write a verdict straight into the graph, the way an `/episode` writer
+/// could until S3, skipping `attest` entirely (wu-rev-345 F1).
+fn forge_verdict(
+    store: &mut Store,
+    verdict: &str,
+    p: &Presentation,
+    outcome: &str,
+    sig: &str,
+    at: i64,
+) {
+    let ts = crate::time::format_iso(u64::try_from(at).unwrap());
+    let e = store.intern(verdict).unwrap();
+    let fields = [
+        (
+            RDF_TYPE,
+            Value::Ref(store.intern(&ns("DecisionVerdict")).unwrap()),
+        ),
+        (
+            &*ns("forPresentation"),
+            Value::Ref(store.intern(&p.iri).unwrap()),
+        ),
+        (&*ns("outcome"), Value::Str(outcome.into())),
+        (&*ns("verifier"), Value::Str("stiwi".into())),
+        (&*ns("sealSignature"), Value::Str(sig.into())),
+    ];
+    let datums: Vec<Datum> = fields
+        .into_iter()
+        .map(|(pr, v)| Datum {
+            entity: e,
+            attribute: store.intern(pr).unwrap(),
+            value: v,
+            valid_from: ts.clone(),
+            valid_to: None,
+            op: Op::Assert,
+        })
+        .collect();
+    store.transact(&datums, &ts, None, Some("episode")).unwrap();
+}
+
+fn verdict_iri(p: &Presentation) -> String {
+    ns(&format!("decision_verdict_{}", p.nonce))
+}
+
+#[test]
+fn a_hand_written_verdict_with_a_captured_signature_is_refused() {
+    let (mut store, kp) = seeded();
+    let p = present(&mut store, D, 3600, NOW).unwrap();
+    // Stiwi signs, but the verdict never goes through attest.
+    let sig = sign(&kp, &p, "approve");
+    let v = verdict_iri(&p);
+    forge_verdict(&mut store, &v, &p, "approve", &sig, NOW + 10);
+    assert_eq!(
+        verify_recorded(&store, &v).unwrap(),
+        Err(Refusal::NotAttested)
+    );
+    // Control: the signature itself is good, so attest admits it, and the
+    // hand-written facts do not ride along on the spend.
+    assert!(
+        attest(&mut store, &p.nonce, "approve", "stiwi", &sig, NOW + 20)
+            .unwrap()
+            .is_ok()
+    );
+    assert_eq!(
+        verify_recorded(&store, &v).unwrap(),
+        Err(Refusal::NotAttested)
+    );
+}
+
+#[test]
+fn a_verdict_recorded_after_expiry_is_refused() {
+    let (mut store, kp) = seeded();
+    let p = present(&mut store, D, 60, NOW).unwrap();
+    let sig = sign(&kp, &p, "approve");
+    // attest refused it as Expired; the captured signature is written anyway.
+    assert_eq!(
+        attest(&mut store, &p.nonce, "approve", "stiwi", &sig, NOW + 60).unwrap(),
+        Err(Refusal::Expired)
+    );
+    let v = verdict_iri(&p);
+    forge_verdict(&mut store, &v, &p, "approve", &sig, NOW + 3600);
+    assert_eq!(verify_recorded(&store, &v).unwrap(), Err(Refusal::Expired));
+}
+
+#[test]
+fn a_second_verdict_on_a_spent_nonce_is_refused() {
+    let (mut store, kp) = seeded();
+    let p = present(&mut store, D, 3600, NOW).unwrap();
+    let sig = sign(&kp, &p, "approve");
+    let v = attest(&mut store, &p.nonce, "approve", "stiwi", &sig, NOW + 10)
+        .unwrap()
+        .unwrap();
+    // A second entity over the same presentation and signature.
+    let twin = ns("decision_verdict_twin");
+    forge_verdict(&mut store, &twin, &p, "approve", &sig, NOW + 20);
+    assert_eq!(
+        verify_recorded(&store, &twin).unwrap(),
+        Err(Refusal::NotAttested)
+    );
+    // The attested one still verifies.
+    assert_eq!(verify_recorded(&store, &v).unwrap(), Ok(()));
+}
+
+#[test]
+fn rewriting_an_attested_verdict_with_another_captured_signature_is_refused() {
+    let (mut store, kp) = seeded();
+    let p = present(&mut store, D, 3600, NOW).unwrap();
+    let approve = sign(&kp, &p, "approve");
+    // Stiwi also signed "reject" once; the writer captured it.
+    let reject = sign(&kp, &p, "reject");
+    let v = attest(&mut store, &p.nonce, "approve", "stiwi", &approve, NOW + 10)
+        .unwrap()
+        .unwrap();
+    let e = store.lookup(&v).unwrap().unwrap();
+    for (field, old) in [("outcome", "approve"), ("sealSignature", approve.as_str())] {
+        let a = store.lookup(&ns(field)).unwrap();
+        store
+            .retract_triples(e, a, Some(&Value::Str(old.into())), TS, None, false, None)
+            .unwrap();
+    }
+    put(&mut store, &v, &ns("outcome"), Value::Str("reject".into()));
+    put(&mut store, &v, &ns("sealSignature"), Value::Str(reject));
+    assert_eq!(
+        verify_recorded(&store, &v).unwrap(),
+        Err(Refusal::NotAttested)
+    );
+}
+
 /// What `present` and `attest` actually write must satisfy the governance
 /// shapes, and a presentation missing its nonce must not.
 #[cfg(feature = "shacl")]
