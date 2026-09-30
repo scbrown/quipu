@@ -145,6 +145,44 @@ The second, separate verb. Nothing reaches ROOT because a file arrived; it
 reaches ROOT because someone ran this. Keeping admission in its own command is
 the point rather than an inconvenience — see the [primitive](../sharing/README.md).
 
+## The project graph: `quipu share --project` and `quipu load`
+
+```text
+quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]
+quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]
+```
+
+A repository commits its project's graph under `.quipu/`, tool-neutral:
+
+| path | committed | what |
+|---|---|---|
+| `.quipu/project` | yes | one line, the project id; the graph is `urn:quipu:project:<id>` |
+| `.quipu/graph/` | yes | the share bundle for that graph (`manifest.json`, `export.nt`, …) |
+| `.quipu/.gitignore` | yes | written by quipu: an allow-list for the two above |
+| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and the host's PRIVATE signing key |
+
+`share --project <id>` names the project once (it is then committed) and
+re-shares the graph into `.quipu/graph/`. Re-running it replaces the bundle;
+it never re-points a repository at a different id. The outward scrub applies
+exactly as for any share, because the repository may be public; use
+`--destination internal` only for a private one.
+
+`load <dir>`, on a directory holding a share manifest, is the one command a
+fresh clone needs:
+
+```bash
+git clone <repo> && cd <repo>
+quipu load .quipu/graph --db .quipu/local.db
+```
+
+It runs the ordinary [`import`](#quipu-import--receive-a-share-into-quarantine),
+with every gate import has, and then promotes into the bundle's own graph
+instead of ROOT, as a diff. A re-load after `git pull` changes only what
+changed; an unchanged bundle opens no transaction. A quarantined import loads
+nothing. `load <file.ttl>` still means `knot`.
+
+The server equivalent is `POST /import` of the same bundle, which stages it.
+
 ## `quipu status` — has this share diverged?
 
 ```text
