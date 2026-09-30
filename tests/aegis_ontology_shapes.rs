@@ -336,3 +336,122 @@ fn credential_inventory_fields_are_optional_and_constrained_when_present() {
         );
     }
 }
+
+// aegis:leadFor (aegis-cpfw7a): a lead paired 1:1 with a keeper.
+fn lead_for_fixture(body: &str) -> String {
+    format!(
+        r#"
+            @prefix aegis: <http://aegis.gastown.local/ontology/> .
+            @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+            aegis:lead a aegis:CrewRole ; rdfs:label "lead" .
+            aegis:keeper a aegis:CrewRole ; rdfs:label "keeper" .
+            aegis:worker a aegis:CrewRole ; rdfs:label "worker" .
+            aegis:ian a aegis:CrewMember ; rdfs:label "ian" ; aegis:hasRole aegis:lead .
+            aegis:harding a aegis:CrewMember ; rdfs:label "harding" ; aegis:hasRole aegis:lead .
+            aegis:wu a aegis:CrewMember ; rdfs:label "wu" ; aegis:hasRole aegis:keeper .
+            aegis:dearing a aegis:CrewMember ; rdfs:label "dearing" ; aegis:hasRole aegis:keeper .
+            aegis:kelly a aegis:CrewMember ; rdfs:label "kelly" ; aegis:hasRole aegis:worker .
+            aegis:products rdfs:label "products" .
+            aegis:a-service rdfs:label "a service" ; aegis:hasRole aegis:keeper .
+            {body}
+        "#
+    )
+}
+
+/// The report's violations, as (focus, path) pairs.
+fn lead_for_violations(body: &str) -> Vec<(String, Option<String>)> {
+    quipu::validate_shapes(SHAPES, &lead_for_fixture(body))
+        .unwrap()
+        .results
+        .into_iter()
+        .map(|r| (r.focus_node, r.path))
+        .collect()
+}
+
+#[test]
+fn lead_for_accepts_the_two_planned_pairings() {
+    assert_eq!(
+        lead_for_violations(""),
+        vec![],
+        "control: the fixture alone conforms"
+    );
+    assert_eq!(
+        lead_for_violations(
+            "aegis:ian aegis:leadFor aegis:wu . aegis:harding aegis:leadFor aegis:dearing ."
+        ),
+        vec![]
+    );
+}
+
+#[test]
+fn lead_for_refuses_every_broken_pairing() {
+    const NS: &str = "http://aegis.gastown.local/ontology/";
+    for (why, body, path) in [
+        (
+            "subject is not a lead",
+            "aegis:kelly aegis:leadFor aegis:wu .",
+            "hasRole",
+        ),
+        (
+            "target is not a keeper",
+            "aegis:ian aegis:leadFor aegis:kelly .",
+            "leadFor",
+        ),
+        (
+            "target is not a CrewMember",
+            "aegis:ian aegis:leadFor aegis:products .",
+            "leadFor",
+        ),
+        // Claims the keeper role but is not a CrewMember: only sh:class catches it.
+        (
+            "a keeper that is not a CrewMember",
+            "aegis:ian aegis:leadFor aegis:a-service .",
+            "leadFor",
+        ),
+        (
+            "a lead with two keepers",
+            "aegis:ian aegis:leadFor aegis:wu , aegis:dearing .",
+            "leadFor",
+        ),
+        (
+            "a keeper with two leads",
+            "aegis:ian aegis:leadFor aegis:wu . aegis:harding aegis:leadFor aegis:wu .",
+            "leadFor",
+        ),
+    ] {
+        let v = lead_for_violations(body);
+        assert!(!v.is_empty(), "{why} must not conform");
+        assert!(
+            v.iter()
+                .all(|(_, p)| p.as_deref().is_some_and(|p| p.ends_with(path))
+                    || p.as_deref()
+                        .is_some_and(|p| p.contains(&format!("{NS}leadFor")))),
+            "{why}: every violation must come from the leadFor pairing, got {v:?}"
+        );
+    }
+}
+
+#[test]
+fn lead_for_shapes_route_to_the_rejecting_document_together() {
+    // Emit only OBSERVES; 1:1 must gate the write. All three shapes must also
+    // land in ONE routed document, or the sh:node reference dangles.
+    let split = quipu::shacl::split_shapes_by_policy(SHAPES);
+    for shape in [
+        "aegis:LeadForShape",
+        "aegis:KeeperRoleShape",
+        "aegis:LeadForKeeperShape",
+    ] {
+        assert!(
+            split.reject.contains(&format!("{shape} a sh:NodeShape")),
+            "{shape} must reject"
+        );
+        assert!(
+            !split.emit.contains(&format!("{shape} a sh:NodeShape")),
+            "{shape} must not emit"
+        );
+    }
+    assert!(
+        split.emit.contains("aegis:HasRoleShape a sh:NodeShape"),
+        "control: the splitter does route emit shapes"
+    );
+}

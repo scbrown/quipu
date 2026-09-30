@@ -299,6 +299,13 @@ impl Store {
         self.verify_transition_signatures(&staged_datums, graph)
             .map_err(|e| self.stash_refusal("transition", e, staged_datums.len()))?;
 
+        // Verdict signature-scheme gate (src/verdict_schemes): a registration
+        // declaring an unknown scheme, or a hardware scheme while
+        // `hardware_verdict_schemes` is off, rolls back. Always on; inert for
+        // any write that does not assert `aegis:signatureScheme`.
+        self.refuse_disabled_signature_schemes(&staged_datums)
+            .map_err(|e| self.stash_refusal("signature-scheme", e, staged_datums.len()))?;
+
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.
