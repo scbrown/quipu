@@ -999,6 +999,14 @@ def ledger_provenance(data: dict, pr_base: str | None = None) -> tuple[int, list
     return 0, []
 
 
+def _write_output(name: str, value: str) -> None:
+    """Append `name=value` to $GITHUB_OUTPUT when running under Actions."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"{name}={value}\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, default=Path("benchmark/public/results"))
@@ -1035,6 +1043,16 @@ def main(argv: list[str] | None = None) -> int:
              "them as separately-named checks so a reader can tell which they have "
              "without opening the log. `both` (default) preserves the original "
              "single-command behaviour for humans and for any existing caller.",
+    )
+    parser.add_argument(
+        "--report-stale",
+        action="store_true",
+        help="provenance arm only (aegis-qmrymu): report a STALE stamp as a "
+             "notice and exit 0 instead of 1, and write `stale=true|false` to "
+             "$GITHUB_OUTPUT so CI can re-derive automatically. UNVERIFIED (exit "
+             "2) still fails: a check that could not look is not a fresh stamp. "
+             "Off by default, so humans and existing callers keep the blocking "
+             "behaviour.",
     )
     args = parser.parse_args(argv)
 
@@ -1081,6 +1099,8 @@ def main(argv: list[str] | None = None) -> int:
         arm = f"PR mode (base {base})" if base else "STRICT mode (ledger revision must be HEAD)"
         print(f"conformance_report: provenance arm = {arm}")
         code, messages = ledger_provenance(data, base)
+        if args.report_stale and code in (0, 1):
+            _write_output("stale", "true" if code == 1 else "false")
         if code:
             label = (
                 "ledger provenance CANNOT BE VERIFIED"
@@ -1130,6 +1150,20 @@ def main(argv: list[str] | None = None) -> int:
                     "(regenerates the page from them)",
                     file=sys.stderr,
                 )
+                if args.report_stale:
+                    # Reported, not failed (aegis-qmrymu). 17 of 37 PR runs in
+                    # 13.5h went red here, all on a stamp, each paid for with a
+                    # hand re-derive. CI now re-derives on this `stale=true`
+                    # output instead, and that re-derive is what gates on
+                    # check_regression, so the regression check still runs
+                    # BEFORE merge rather than moving after it.
+                    print(
+                        "::notice title=Ledger stamp is stale::The ledgers name a "
+                        "revision that is not this code; CI re-derives them "
+                        "automatically (re-run-conformance). This is not a "
+                        "conformance regression."
+                    )
+                    return 0
             return code
         print(f"conformance_report: {len(files)} published artifact(s) match the ledgers")
         if base:

@@ -1255,10 +1255,47 @@ aegis:WorkItemScopeShape a sh:NodeShape ;
 # Media
 # ══════���════════════════════════════════════════════════════════════
 
+# ── FileCollection ───────────────────────────────────────────────
+#
+# A folder on a filesystem export, summarised: how many files, how many
+# bytes, the newest mtime, and every file extension present anywhere in its
+# SUBTREE (aegis-1v555n, Stiwi 2026-09-27). It is how the graph answers
+# "where is my GoldenEye 64 cart backup" without crawling 255k files over
+# NFS: ask which collection hasExtension ".z64".
+#
+# ONE generic class on purpose (sattler, 2026-09-30): not Show / Season /
+# Album / Book. A season is a FileCollection whose parentCollection is its
+# show. MediaLibrary is a subclass rather than a second media concept.
+# Tied to the existing NFSExport through inExport; no parallel export class.
+#
+# Only the label is required, so a MediaLibrary that is not a folder (a
+# Plex library, say) is not forced to invent a path. Measured 2026-09-30:
+# 0 FileCollection and 0 MediaLibrary instances, so this rejects safely.
+aegis:MediaLibrary rdfs:subClassOf aegis:FileCollection .
+
+aegis:FileCollectionShape a sh:NodeShape ;
+    sh:targetClass aegis:FileCollection ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    sh:property [ sh:path aegis:inExport ; sh:class aegis:NFSExport ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:parentCollection ; sh:class aegis:FileCollection ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:relativePath ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+    sh:property [ sh:path aegis:fileCount ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 0 ; ] ;
+    sh:property [ sh:path aegis:byteCount ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 0 ; ] ;
+    sh:property [ sh:path aegis:newestMtime ; sh:datatype xsd:string ; sh:maxCount 1 ;
+        sh:pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" ; ] ;
+    sh:property [ sh:path aegis:hasExtension ; sh:datatype xsd:string ;
+        sh:pattern "^\\.[a-z0-9_+-]{1,16}$" ; ] ;
+    sh:property [ sh:path aegis:extensionCounts ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .
+
 # ── MediaLibrary ─────────────────────────────────────────────────
 
 aegis:MediaLibraryShape a sh:NodeShape ;
     sh:targetClass aegis:MediaLibrary ;
+    # A MediaLibrary IS a FileCollection (the subClassOf above gives query-time
+    # inference). The validator does not carry a shapes-graph subClassOf onto
+    # data instances (measured, aegis-1v555n), so the constraints are applied
+    # explicitly here rather than silently skipped.
+    sh:node aegis:FileCollectionShape ;
     sh:property [
         sh:path aegis:platform ;
         sh:datatype xsd:string ;
