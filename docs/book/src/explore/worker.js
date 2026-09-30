@@ -32,7 +32,13 @@ onmessage = async (e) => {
         // right one: the import timestamp records when THIS reader took the
         // pack in, not when the producer built it. The producer's time is in
         // the manifest, and the page shows both.
-        explorer = Explorer.loadPendant(
+        // The page's sources are committed, but its wasm is staged from the
+        // newest RELEASE, which may predate the qpack -> pendant rename and so
+        // export only `loadQpack` (aegis-fxpbys.3). Prefer the new name and
+        // fall back to the old one until a release carrying it is out.
+        const load = Explorer.loadPendant ?? Explorer.loadQpack;
+        explorer = load.call(
+          Explorer,
           new Uint8Array(bytes),
           source,
           new Date().toISOString(),
