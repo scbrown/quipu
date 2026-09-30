@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -121,7 +121,7 @@ url = { version = "2", optional = true }
 oxigraph = { version = "0.5", default-features = false, optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
 libc = { version = "0.2", optional = true }
-rmcp = { version = "0.12", features = ["server", "transport-io", "transport-streamable-http-server", "axum"], optional = true }
+rmcp = { version = "0.13", features = ["server", "transport-io", "transport-streamable-http-server"], optional = true }
 tower-http = { version = "0.6", features = ["cors", "limit"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 petgraph = "0.7"
