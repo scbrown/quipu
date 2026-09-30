@@ -20,6 +20,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "valid_at": { "type": "string", "description": "Point-in-time for temporal filtering (ISO-8601)" },
                     "group_ids": { "type": "array", "items": { "type": "string" }, "description": "Optional: best-effort filter to entities from these provenance groups (episode-scoped label, NOT an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope)" },
                     "entity_type": { "type": "string", "description": "Optional: restrict to entities of this rdf:type IRI" },
+                    "graph": { "type": "string", "description": "Optional: search one registered named graph instead of ROOT. An unknown graph IRI is refused, never silently ROOT. Omit to search ROOT." },
                     "ranking": { "type": "string", "enum": ["content", "semantic"], "default": "semantic", "description": "Content ranking demotes repository artifacts lacking explanatory content; semantic returns raw cosine order." }
                     ,"verbose": { "type": "boolean", "description": "Return expanded full IRIs instead of default CURIE-compacted values." }
                 }

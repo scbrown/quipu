@@ -80,7 +80,14 @@ See docs/book/src/concepts/embeddings.md.";
 ///
 /// Returns an empty string if the entity has no facts (fully retracted).
 pub fn build_entity_text(store: &Store, entity_id: i64) -> Result<String> {
-    let facts = store.entity_facts(entity_id)?;
+    // ROOT facts define the text of any entity that has them, so no ROOT
+    // entity's vector changes. An entity that exists only in named graphs used
+    // to build no text and was never embedded, which hid whole graphs from
+    // search (aegis-rcz5ib.10); fall back to its named-graph facts.
+    let mut facts = store.entity_facts(entity_id)?;
+    if facts.is_empty() {
+        facts = store.entity_facts_in_named_graphs(entity_id)?;
+    }
     if facts.is_empty() {
         return Ok(String::new());
     }

@@ -590,3 +590,63 @@ fn snapshot_republish_embeds_only_changed_or_unembedded_entities() {
     assert_eq!(healed, vec!["gamma".to_string()]);
     assert_eq!(store.vector_count().unwrap(), 3);
 }
+
+fn ingest_named(store: &mut Store, graph_iri: &str, turtle: &str) {
+    let graph = store.overlay_create(graph_iri, 0).unwrap();
+    crate::rdf::ingest_rdf_to_graph(
+        store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+}
+
+#[test]
+fn named_graph_only_entity_gets_embedding_text() {
+    // aegis-rcz5ib.10: an entity that exists only in a named graph used to
+    // build EMPTY text and was never embedded, so search could not reach it.
+    let mut store = Store::open_in_memory().unwrap();
+    ingest_named(
+        &mut store,
+        "urn:test:graph:knowledge",
+        r#"<https://example.org/issues/5877> <http://www.w3.org/2000/01/rdf-schema#label> "beads#5877: Proposal: Memory Beads" ."#,
+    );
+    let id = store
+        .lookup("https://example.org/issues/5877")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        build_entity_text(&store, id).unwrap(),
+        "beads#5877: Proposal: Memory Beads"
+    );
+}
+
+#[test]
+fn root_text_ignores_the_entitys_named_graph_facts() {
+    // ROOT facts define the text of any entity that has them, so adding a
+    // named-graph fallback cannot move an existing ROOT vector.
+    let mut store = Store::open_in_memory().unwrap();
+    ingest_rdf(
+        &mut store,
+        r#"<http://example.org/alice> <http://www.w3.org/2000/01/rdf-schema#label> "Alice" ."#
+            .as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+    ingest_named(
+        &mut store,
+        "urn:test:graph:other",
+        r#"<http://example.org/alice> <http://www.w3.org/2000/01/rdf-schema#comment> "graph-only note" ."#,
+    );
+    let id = store.lookup("http://example.org/alice").unwrap().unwrap();
+    assert_eq!(build_entity_text(&store, id).unwrap(), "Alice");
+}
