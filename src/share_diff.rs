@@ -17,7 +17,7 @@
 //! entity-grouped form, so `git diff` with a `textconv` driver shows readable
 //! diffs without Quipu having to be the diff engine.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use oxrdf::{BlankNode, GraphName, NamedOrBlankNode, Quad, Term};
 use oxrdfio::{RdfFormat, RdfParser};
@@ -26,28 +26,10 @@ use serde::Serialize;
 use crate::error::{Error, Result};
 
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
-const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
 /// Inline blank-node rendering stops here; identity (the signature) does not.
 const MAX_INLINE_DEPTH: usize = 4;
 /// Signature recursion bound: a guard against pathological cyclic inputs.
 const MAX_SIGNATURE_DEPTH: usize = 64;
-
-/// Well-known vocabularies rendered as `prefix:local`. Deliberately a fixed
-/// table: a prefix inferred from the data would differ between the two sides of
-/// a diff and make every line of a textconv rendering change at once.
-const PREFIXES: &[(&str, &str)] = &[
-    ("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#"),
-    ("rdfs", "http://www.w3.org/2000/01/rdf-schema#"),
-    ("owl", "http://www.w3.org/2002/07/owl#"),
-    ("xsd", "http://www.w3.org/2001/XMLSchema#"),
-    ("skos", "http://www.w3.org/2004/02/skos/core#"),
-    ("prov", "http://www.w3.org/ns/prov#"),
-    ("dct", "http://purl.org/dc/terms/"),
-    ("dcat", "http://www.w3.org/ns/dcat#"),
-    ("sh", "http://www.w3.org/ns/shacl#"),
-    ("foaf", "http://xmlns.com/foaf/0.1/"),
-    ("schema", "https://schema.org/"),
-];
 
 /// Parse an N-Quads or N-Triples payload (N-Triples is a subset of N-Quads).
 pub fn parse_payload(bytes: &[u8], what: &str) -> Result<Vec<Quad>> {
@@ -100,7 +82,9 @@ enum Shown {
 
 /// One side of a diff: keyed facts plus what is needed to display them.
 pub struct Snapshot {
-    facts: BTreeSet<Fact>,
+    /// Each fact with its multiplicity: how many distinct blank nodes of the
+    /// same structure assert it (always 1 for IRI and literal terms).
+    facts: BTreeMap<Fact, usize>,
     shown: HashMap<String, Shown>,
     labels: HashMap<String, String>,
 }
@@ -167,6 +151,7 @@ impl<'a> Blanks<'a> {
             .out
             .get(id)
             .map(|edges| {
+                let preds = names.preds(edges.iter().map(|(p, _)| *p));
                 edges
                     .iter()
                     .map(|(p, o)| {
@@ -179,7 +164,7 @@ impl<'a> Blanks<'a> {
                             #[cfg(feature = "shacl")]
                             Term::Triple(t) => t.to_string(),
                         };
-                        format!("{} {value}", names.pred(p))
+                        format!("{} {value}", preds[p])
                     })
                     .collect()
             })
@@ -201,9 +186,10 @@ impl Snapshot {
     /// own triples are not listed again. A blank node never referenced is an
     /// entity of its own, keyed by its signature.
     ///
-    /// LIMIT: two blank nodes with identical structure have the same key, so
-    /// two identical anonymous values on one slot count once (RDF set semantics
-    /// already holds for identical IRIs and literals).
+    /// Two blank nodes with identical structure share a key, so they are one
+    /// fact with a multiplicity of 2: cardinality matters to shapes
+    /// (`sh:maxCount`), so a changed count is reported. LIMIT: inside an
+    /// inlined blank node, identical nested values still collapse.
     pub fn new(quads: &[Quad]) -> Self {
         let mut blanks = Blanks {
             out: HashMap::new(),
@@ -231,7 +217,7 @@ impl Snapshot {
                 }
             }
         }
-        let mut facts = BTreeSet::new();
+        let mut occurrences: BTreeMap<Fact, HashSet<(String, String)>> = BTreeMap::new();
         let mut shown = HashMap::new();
         let mut blank_ids: Vec<(String, &str)> = Vec::new();
         for q in quads {
@@ -280,12 +266,17 @@ impl Snapshot {
                 // LIMIT: a blank graph name keys by its label; RDFC may relabel it.
                 GraphName::BlankNode(b) => format!("_:{}", b.as_str()),
             };
-            facts.insert(Fact {
+            let fact = Fact {
                 subject,
                 predicate: q.predicate.as_str().to_string(),
                 object,
                 graph,
-            });
+            };
+            // Distinct concrete (subject, object) terms behind one keyed fact.
+            occurrences
+                .entry(fact)
+                .or_default()
+                .insert((q.subject.to_string(), q.object.to_string()));
         }
         let names = Names {
             labels: vec![&labels],
@@ -296,100 +287,10 @@ impl Snapshot {
                 .or_insert_with(|| Shown::Text(blanks.inline(id, &names, 0, &mut Vec::new())));
         }
         Snapshot {
-            facts,
+            facts: occurrences.into_iter().map(|(f, o)| (f, o.len())).collect(),
             shown,
             labels,
         }
-    }
-}
-
-/// Resolves IRIs to display names from one or more label tables, in order.
-struct Names<'a> {
-    labels: Vec<&'a HashMap<String, String>>,
-}
-
-impl Names<'_> {
-    fn label(&self, iri: &str) -> Option<&str> {
-        self.labels
-            .iter()
-            .find_map(|l| l.get(iri))
-            .map(String::as_str)
-    }
-    /// Predicates read as vocabulary words, so they compact to the local name.
-    fn pred(&self, iri: &str) -> String {
-        self.label(iri)
-            .map_or_else(|| local_name(iri), String::from)
-    }
-    fn iri(&self, iri: &str) -> String {
-        self.label(iri).map_or_else(|| compact(iri), String::from)
-    }
-    /// Entity header: `Label (compact)` so a label never hides which entity.
-    fn entity(&self, key: &str, snap: &[&Snapshot]) -> String {
-        match key.strip_prefix('<').and_then(|k| k.strip_suffix('>')) {
-            Some(iri) => match self.label(iri) {
-                Some(label) => format!("{label} ({})", compact(iri)),
-                None => compact(iri),
-            },
-            None => format!("(blank node) {}", self.term(key, snap)),
-        }
-    }
-    fn term(&self, key: &str, snap: &[&Snapshot]) -> String {
-        match snap.iter().find_map(|s| s.shown.get(key)) {
-            Some(Shown::Iri(iri)) => self.iri(iri),
-            Some(Shown::Text(t)) => t.clone(),
-            None => key.to_string(),
-        }
-    }
-}
-
-/// `prefix:local` for a well-known vocabulary; otherwise the IRI's last two
-/// path segments (`ability/aaa-tracking`), or its fragment when it has one.
-/// Derived from the IRI alone, so it is stable across versions.
-pub fn compact(iri: &str) -> String {
-    for (prefix, ns) in PREFIXES {
-        if let Some(local) = iri.strip_prefix(ns)
-            && !local.is_empty()
-        {
-            return format!("{prefix}:{local}");
-        }
-    }
-    if let Some((_, fragment)) = iri.rsplit_once('#')
-        && !fragment.is_empty()
-    {
-        return fragment.to_string();
-    }
-    let parts: Vec<&str> = iri
-        .trim_end_matches('/')
-        .rsplit('/')
-        .take(2)
-        .collect::<Vec<_>>();
-    match parts.as_slice() {
-        [last, parent] if !parent.is_empty() && !parent.contains(':') => {
-            format!("{parent}/{last}")
-        }
-        [last, ..] if !last.is_empty() => last.to_string(),
-        _ => format!("<{iri}>"),
-    }
-}
-
-/// A predicate's short name: `prefix:local` for a well-known vocabulary,
-/// otherwise the fragment or last path segment.
-pub fn local_name(iri: &str) -> String {
-    let full = compact(iri);
-    if full.contains(':') || !full.contains('/') {
-        return full;
-    }
-    full.rsplit('/').next().unwrap_or(&full).to_string()
-}
-
-fn literal(l: &oxrdf::Literal) -> String {
-    let quoted = serde_json::to_string(l.value()).unwrap_or_else(|_| l.value().to_string());
-    if let Some(lang) = l.language() {
-        format!("{quoted}@{lang}")
-    } else if l.datatype().as_str() == XSD_STRING {
-        quoted
-    } else {
-        format!("{quoted}^^{}", compact(l.datatype().as_str()))
     }
 }
 
@@ -444,14 +345,27 @@ pub struct PackDiff {
 
 type Slot = (String, String, String);
 
-fn slot_counts(facts: &BTreeSet<Fact>) -> HashMap<Slot, usize> {
+fn slot_counts(facts: &BTreeMap<Fact, usize>) -> HashMap<Slot, usize> {
     let mut counts = HashMap::new();
-    for f in facts {
+    for (f, n) in facts {
         *counts
             .entry((f.subject.clone(), f.predicate.clone(), f.graph.clone()))
-            .or_insert(0) += 1;
+            .or_insert(0) += n;
     }
     counts
+}
+
+/// Per slot: (removed facts, added facts, facts whose multiplicity changed).
+type Sides<'f> = (Vec<&'f Fact>, Vec<&'f Fact>, Vec<(&'f Fact, usize, usize)>);
+type Grouped<'f> = BTreeMap<&'f str, BTreeMap<Slot, Sides<'f>>>;
+
+fn side<'g, 'f>(grouped: &'g mut Grouped<'f>, f: &'f Fact) -> &'g mut Sides<'f> {
+    let slot = (f.subject.clone(), f.predicate.clone(), f.graph.clone());
+    grouped
+        .entry(&f.subject)
+        .or_default()
+        .entry(slot)
+        .or_default()
 }
 
 /// Compare two snapshots.
@@ -460,35 +374,23 @@ pub fn diff(old: &Snapshot, new: &Snapshot) -> PackDiff {
         labels: vec![&new.labels, &old.labels],
     };
     let (old_counts, new_counts) = (slot_counts(&old.facts), slot_counts(&new.facts));
-    let old_subjects: HashSet<&str> = old.facts.iter().map(|f| f.subject.as_str()).collect();
-    let new_subjects: HashSet<&str> = new.facts.iter().map(|f| f.subject.as_str()).collect();
-    // Per subject: slot -> (removed facts, added facts).
-    type Sides<'f> = (Vec<&'f Fact>, Vec<&'f Fact>);
-    let mut grouped: BTreeMap<&str, BTreeMap<Slot, Sides<'_>>> = BTreeMap::new();
-    for f in old.facts.difference(&new.facts) {
-        let slot = (f.subject.clone(), f.predicate.clone(), f.graph.clone());
-        grouped
-            .entry(&f.subject)
-            .or_default()
-            .entry(slot)
-            .or_default()
-            .0
-            .push(f);
+    let old_subjects: HashSet<&str> = old.facts.keys().map(|f| f.subject.as_str()).collect();
+    let new_subjects: HashSet<&str> = new.facts.keys().map(|f| f.subject.as_str()).collect();
+    let mut grouped: Grouped<'_> = BTreeMap::new();
+    for (f, n) in &old.facts {
+        match new.facts.get(f) {
+            None => side(&mut grouped, f).0.push(f),
+            Some(m) if m != n => side(&mut grouped, f).2.push((f, *n, *m)),
+            Some(_) => {}
+        }
     }
-    for f in new.facts.difference(&old.facts) {
-        let slot = (f.subject.clone(), f.predicate.clone(), f.graph.clone());
-        grouped
-            .entry(&f.subject)
-            .or_default()
-            .entry(slot)
-            .or_default()
-            .1
-            .push(f);
+    for f in new.facts.keys().filter(|f| !old.facts.contains_key(*f)) {
+        side(&mut grouped, f).1.push(f);
     }
     let graph = |g: &str| (!g.is_empty()).then(|| names.term(g, &[new, old]));
-    let view = |f: &Fact, side: &Snapshot| FactView {
-        predicate: names.pred(&f.predicate),
-        value: names.term(&f.object, &[side]),
+    let view = |f: &Fact, side: &Snapshot, predicate: &str| FactView {
+        predicate: predicate.to_string(),
+        value: names.term(&f.object, &[side]) + &times(side.facts[f]),
         graph: graph(&f.graph),
     };
     let mut out = PackDiff {
@@ -514,19 +416,33 @@ pub fn diff(old: &Snapshot, new: &Snapshot) -> PackDiff {
             added: Vec::new(),
             removed: Vec::new(),
         };
-        for (slot, (removed, added)) in slots {
+        let iris: Vec<String> = slots.keys().map(|s| s.1.clone()).collect();
+        let preds = names.preds(iris.iter().map(String::as_str));
+        for (slot, (removed, added, recounted)) in slots {
+            let predicate = &preds[slot.1.as_str()];
+            for (f, n, m) in recounted {
+                let value = names.term(&f.object, &[new, old]);
+                e.changed.push(Change {
+                    predicate: predicate.clone(),
+                    old: format!("{value} x{n}"),
+                    new: format!("{value} x{m}"),
+                    graph: graph(&slot.2),
+                });
+            }
             let functional = old_counts.get(&slot) == Some(&1) && new_counts.get(&slot) == Some(&1);
             if functional && removed.len() == 1 && added.len() == 1 {
                 e.changed.push(Change {
-                    predicate: names.pred(&slot.1),
+                    predicate: predicate.clone(),
                     old: names.term(&removed[0].object, &[old]),
                     new: names.term(&added[0].object, &[new]),
                     graph: graph(&slot.2),
                 });
                 continue;
             }
-            e.removed.extend(removed.iter().map(|f| view(f, old)));
-            e.added.extend(added.iter().map(|f| view(f, new)));
+            e.removed
+                .extend(removed.iter().map(|f| view(f, old, predicate)));
+            e.added
+                .extend(added.iter().map(|f| view(f, new, predicate)));
         }
         // Display order, so a reader scans predicates alphabetically.
         e.changed
@@ -542,6 +458,12 @@ pub fn diff(old: &Snapshot, new: &Snapshot) -> PackDiff {
     }
     out
 }
+
+// IRI, predicate and literal display names.
+#[path = "share_diff_names.rs"]
+mod names;
+use names::{Names, literal, times};
+pub use names::{compact, local_name};
 
 // Text, Markdown and textconv renderings live beside the model.
 #[path = "share_diff_render.rs"]

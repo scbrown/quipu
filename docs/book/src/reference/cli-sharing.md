@@ -366,8 +366,12 @@ change to its content, and it contributes nothing.
 - An entity is shown by its `rdfs:label` with a compact name beside it; an
   unlabelled IRI is shown compactly (`prefix:local` for well-known vocabularies,
   otherwise its last two path segments). Predicates show their label or local
-  name. Compaction depends only on the IRI, never on the data, so both sides of
-  a diff name things the same way.
+  name. When two distinct predicates under one entity would show the same name
+  (`ex:name` and `schema:name` both labelled "name", or two IRIs ending
+  `/name`), each carries its compact IRI — `name (ex/name)`,
+  `name (schema:name)` — or its full IRI if even those collide. Compaction
+  depends only on the IRI, never on the data, so both sides of a diff name
+  things the same way.
 - `~ predicate: old -> new` is reported only when the slot (subject, predicate,
   graph) holds exactly one value on **both** sides. A multi-valued slot shows
   its removed and added values separately.
@@ -375,8 +379,12 @@ change to its content, and it contributes nothing.
   every blank node between two versions of a payload; a pure relabel is zero
   lines. A blank node referenced from another node is shown inline
   (`[ city "Paris" ; zip "75001" ]`) as part of the referencing fact, so an edit
-  inside it is a change of that fact. Limits: two structurally identical blank
-  nodes on one slot count once; a blank node referenced only from inside a
+  inside it is a change of that fact. Structurally identical blank nodes on
+  one slot are one fact with a count: cardinality matters to shapes
+  (`sh:maxCount`), so adding a second copy is shown as
+  `~ p: [ r "v" ] x1 -> [ r "v" ] x2`, and the textconv marks a fact asserted
+  more than once with `xN`. Limits: identical values nested inside an inlined
+  blank node still collapse; a blank node referenced only from inside a
   blank-node cycle has no named root and is not shown; a blank *graph name*
   is keyed by its label.
 - `--format markdown` suits a PR comment; `--format json` is the same

@@ -1,7 +1,7 @@
 //! Renderings of a [`PackDiff`] and of one [`Snapshot`] (aegis-fxpbys.1).
 use std::collections::BTreeMap;
 
-use super::{EntityStatus, Names, PackDiff, Snapshot};
+use super::{EntityStatus, Fact, Names, PackDiff, Snapshot, times};
 
 fn graph_suffix(graph: &Option<String>) -> String {
     graph
@@ -103,16 +103,27 @@ pub fn render_textconv(snap: &Snapshot) -> String {
     let names = Names {
         labels: vec![&snap.labels],
     };
-    let mut by_subject: BTreeMap<&str, Vec<String>> = BTreeMap::new();
-    for f in &snap.facts {
-        let graph = (!f.graph.is_empty()).then(|| names.term(&f.graph, &[snap]));
-        by_subject.entry(&f.subject).or_default().push(format!(
-            "  {}: {}{}",
-            names.pred(&f.predicate),
-            names.term(&f.object, &[snap]),
-            graph_suffix(&graph)
-        ));
+    let mut by_subject: BTreeMap<&str, Vec<(&Fact, usize)>> = BTreeMap::new();
+    for (f, n) in &snap.facts {
+        by_subject.entry(&f.subject).or_default().push((f, *n));
     }
+    let by_subject = by_subject.into_iter().map(|(subject, facts)| {
+        let preds = names.preds(facts.iter().map(|(f, _)| f.predicate.as_str()));
+        let lines: Vec<String> = facts
+            .iter()
+            .map(|(f, n)| {
+                let graph = (!f.graph.is_empty()).then(|| names.term(&f.graph, &[snap]));
+                format!(
+                    "  {}: {}{}{}",
+                    preds[f.predicate.as_str()],
+                    names.term(&f.object, &[snap]),
+                    times(*n),
+                    graph_suffix(&graph)
+                )
+            })
+            .collect();
+        (subject, lines)
+    });
     // IRIs (`<`) before blank-node entities (`_`) by ASCII order.
     let mut out = String::new();
     for (subject, mut lines) in by_subject {

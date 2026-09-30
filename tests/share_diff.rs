@@ -3,6 +3,9 @@
 //! change (alice's age), one added entity (carol), one removed fact (alice's
 //! nickname), and one blank node that is ONLY relabelled (alice's address,
 //! `_:b0` -> `_:c14n7`, same content).
+//! The fixtures are standard-artifact `payload.nq` files, not `export.nt`: a
+//! tracked `*/export.nt` directory is a qpack to `quipu qpack-check`, which
+//! refuses one without a manifest.
 // The `quipu` binary has required-features = ["shacl"].
 #![cfg(feature = "shacl")]
 use std::path::{Path, PathBuf};
@@ -40,7 +43,7 @@ fn stdout(o: &Output) -> String {
 #[test]
 fn control_raw_line_diff_of_the_fixture_is_ugly() {
     let lines = |side: &str| -> std::collections::BTreeSet<String> {
-        std::fs::read_to_string(fixture(side).join("export.nt"))
+        std::fs::read_to_string(fixture(side).join("payload.nq"))
             .unwrap()
             .lines()
             .map(String::from)
@@ -129,7 +132,7 @@ fn cli_share_diff_formats() {
     let json: serde_json::Value = serde_json::from_str(&run("json")).unwrap();
     assert_eq!(json["changed"], 1);
     // A single payload file works as well as a pack directory.
-    let file = fixture("new").join("export.nt");
+    let file = fixture("new").join("payload.nq");
     let same = quipu(
         dir,
         &[
@@ -195,10 +198,10 @@ fn git_diff_uses_the_textconv() {
     .unwrap();
     let textconv = format!("'{}' diff-textconv", env!("CARGO_BIN_EXE_quipu"));
     git(p, &["config", "diff.quipu.textconv", &textconv]);
-    std::fs::copy(fixture("old").join("export.nt"), p.join("export.nt")).unwrap();
+    std::fs::copy(fixture("old").join("payload.nq"), p.join("export.nt")).unwrap();
     git(p, &["add", "."]);
     git(p, &["commit", "-q", "-m", "old"]);
-    std::fs::copy(fixture("new").join("export.nt"), p.join("export.nt")).unwrap();
+    std::fs::copy(fixture("new").join("payload.nq"), p.join("export.nt")).unwrap();
     let out = git(p, &["diff", "--no-color", "-U0", "--", "export.nt"]);
     let changes: Vec<&str> = out
         .lines()
