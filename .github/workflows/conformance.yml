@@ -86,8 +86,12 @@ jobs:
   #              STAMP. Routine; one re-derive fixes it, and it says nothing
   #              about conformance results.
   #
-  # Both still BLOCK. What changes is that the check NAME tells a reader which
-  # they have without opening a log. Measured cost of not doing so: three quipu
+  # CONTENT blocks. PROVENANCE REPORTS (aegis-qmrymu): a stale stamp exits 0 with
+  # a notice and sets `stale=true`, and re-run-conformance below then re-derives
+  # on that signal. Measured before: 17 of 37 PR runs in 13.5h red on this job
+  # alone, all 17 cleared by a hand dispatch. UNVERIFIED (a shallow or broken
+  # checkout) still fails — a check that could not look is not a fresh stamp.
+  # The check NAME still tells a reader which question failed. Measured cost of not doing so: three quipu
   # PRs in one day (#237, #244, #245) sat red on the provenance arm looking like
   # broken conformance, while every re-derive changed nothing but duration_ms
   # and the stamps.
@@ -95,6 +99,8 @@ jobs:
     name: Ledgers were derived from the code they ship with
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      stale: ${{ steps.provenance.outputs.stale }}
     steps:
       # fetch-depth: 0 is REQUIRED, not tidiness. This asks whether each ledger
       # was derived from the code it ships with, which needs the ledger's own
@@ -107,14 +113,32 @@ jobs:
           fetch-depth: 0
 
       - name: Ledgers were derived from the code they ship with
-        run: python3 benchmark/public/conformance_report.py --check --arm provenance
+        id: provenance
+        run: python3 benchmark/public/conformance_report.py --check --arm provenance --report-stale
 
+  # Also runs when the provenance job reports a STALE stamp (aegis-qmrymu):
+  #   pull_request  PR mode, so only a PR whose OWN code changes the conformance
+  #                 inputs triggers it. It gates that PR on check_regression
+  #                 BEFORE merge. That is not optional: the red provenance arm
+  #                 used to force a hand re-derive, and that re-derive was the
+  #                 only pre-merge regression check a src PR ever got. Making
+  #                 provenance report-only without this would silently move the
+  #                 regression gate to after merge. Nothing is committed here.
+  #   push (main)   derives at the merged SHA and uploads
+  #                 conformance-ledgers-<sha>; the aegis ledger cron commits it
+  #                 through a chore PR, so main is stamped with no human step.
+  # `!cancelled()` is needed because ledger-provenance is SKIPPED on release,
+  # schedule and dispatch, and a skipped `needs` would otherwise skip this job.
   re-run-conformance:
     name: Re-derive conformance from the pinned W3C suite
+    needs: ledger-provenance
     if: >-
-      github.event_name == 'release' ||
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch'
+      ${{ !cancelled() && (
+        github.event_name == 'release' ||
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch' ||
+        needs.ledger-provenance.outputs.stale == 'true'
+      ) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
