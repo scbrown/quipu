@@ -11,7 +11,16 @@ pub struct AliasProposal {
     pub similarity: f64,
 }
 
-fn entities(graph: &Graph) -> BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)> {
+/// Minimum Jaro-Winkler similarity between normalized labels for a proposal.
+pub(crate) const ALIAS_THRESHOLD: f64 = 0.90;
+/// At most this many candidates per new entity, best first.
+const MAX_PER_ENTITY: usize = 5;
+
+/// Per IRI subject: its `rdf:type` set and its normalized (whitespace-collapsed,
+/// lowercase) `rdfs:label` set.
+pub(crate) type Entities = BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)>;
+
+pub(crate) fn entities(graph: &Graph) -> Entities {
     let mut out = BTreeMap::new();
     for t in graph {
         // Blank-node labels are snapshot-local, not entity identities.
@@ -40,23 +49,48 @@ fn entities(graph: &Graph) -> BTreeMap<String, (BTreeSet<String>, BTreeSet<Strin
     out
 }
 
+/// Best label similarity between two entities, or `None` when they share no
+/// `rdf:type` (the proposer only ever compares same-type entities).
+pub(crate) fn similarity(
+    a: &(BTreeSet<String>, BTreeSet<String>),
+    b: &(BTreeSet<String>, BTreeSet<String>),
+) -> Option<f64> {
+    if a.0.is_disjoint(&b.0) {
+        return None;
+    }
+    Some(
+        a.1.iter()
+            .flat_map(|x| b.1.iter().map(move |y| strsim::jaro_winkler(x, y)))
+            .fold(0.0_f64, f64::max),
+    )
+}
+
+/// Keep the best [`MAX_PER_ENTITY`] candidates, highest similarity first.
+pub(crate) fn best(mut candidates: Vec<AliasProposal>) -> Vec<AliasProposal> {
+    candidates.sort_by(|a, b| {
+        b.similarity
+            .total_cmp(&a.similarity)
+            .then(a.theirs.cmp(&b.theirs))
+    });
+    candidates.truncate(MAX_PER_ENTITY);
+    candidates
+}
+
 pub(crate) fn propose(base: &Graph, ours: &Graph, theirs: &Graph) -> Vec<AliasProposal> {
     let (base, ours, theirs) = (entities(base), entities(ours), entities(theirs));
     let mut proposals = Vec::new();
-    for (o, (ot, ol)) in &ours {
+    for (o, oe) in &ours {
         if base.contains_key(o) || theirs.contains_key(o) {
             continue;
         }
         let mut candidates = Vec::new();
-        for (t, (tt, tl)) in &theirs {
-            if base.contains_key(t) || ours.contains_key(t) || ot.is_disjoint(tt) {
+        for (t, te) in &theirs {
+            if base.contains_key(t) || ours.contains_key(t) {
                 continue;
             }
-            let score = ol
-                .iter()
-                .flat_map(|a| tl.iter().map(move |b| strsim::jaro_winkler(a, b)))
-                .fold(0.0_f64, f64::max);
-            if score >= 0.90 {
+            if let Some(score) = similarity(oe, te)
+                && score >= ALIAS_THRESHOLD
+            {
                 candidates.push(AliasProposal {
                     ours: o.clone(),
                     theirs: t.clone(),
@@ -64,12 +98,7 @@ pub(crate) fn propose(base: &Graph, ours: &Graph, theirs: &Graph) -> Vec<AliasPr
                 });
             }
         }
-        candidates.sort_by(|a, b| {
-            b.similarity
-                .total_cmp(&a.similarity)
-                .then(a.theirs.cmp(&b.theirs))
-        });
-        proposals.extend(candidates.into_iter().take(5));
+        proposals.extend(best(candidates));
     }
     proposals
 }
