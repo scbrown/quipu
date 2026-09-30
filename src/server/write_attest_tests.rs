@@ -1,4 +1,4 @@
-//! The rw_handler! barrier for signed writes that mutate WITHOUT a
+//! The `rw_handler!` barrier for signed writes that mutate WITHOUT a
 //! transaction (aegis-bys8d1, malcolm's arm). Over HTTP a replay is stopped by
 //! the pre-check and create is idempotent, so a server test cannot tell whether
 //! `refuse_if_refused` (tools.rs, right after the writer lock) exists at all.
