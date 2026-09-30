@@ -776,6 +776,72 @@ class ArmSeparationTest(unittest.TestCase):
                 )
 
 
+class ReportStaleTest(unittest.TestCase):
+    """`--report-stale` turns a stale STAMP into a CI signal, not a red run.
+
+    aegis-qmrymu: 17 of 37 PR conformance runs in 13.5h failed on the
+    provenance arm alone, each cleared by a hand re-derive. With the flag a
+    stale stamp exits 0 and writes `stale=true`, which the workflow uses to
+    re-derive automatically. The three outcomes are asserted separately
+    because the flag must never turn "could not look" into "fresh".
+    """
+
+    def _run(self, root, output, *args, env_extra=None):
+        import os
+
+        env = dict(os.environ, GITHUB_OUTPUT=str(output))
+        env.pop("GITHUB_BASE_REF", None)
+        env.update(env_extra or {})
+        return subprocess.run(
+            [sys.executable, str(root / "benchmark/public/conformance_report.py"),
+             "--check", "--pr-base", "", "--arm", "provenance", *args],
+            cwd=root, capture_output=True, text=True, check=False, env=env,
+        )
+
+    def test_a_stale_stamp_is_reported_and_exits_zero(self):
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("::notice title=Ledger stamp is stale::", result.stdout)
+            self.assertEqual(output.read_text(), "stale=true\n")
+
+    def test_without_the_flag_a_stale_stamp_still_blocks(self):
+        # The control: the flag is the only thing that changes the exit code.
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertFalse(output.exists(), "no output is written without the flag")
+
+    def test_a_current_stamp_reports_not_stale(self):
+        with head_tree_fixture(stale=False) as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(output.read_text(), "stale=false\n")
+
+    def test_unverified_still_fails_and_claims_nothing(self):
+        # A checkout where the ledger's revision is absent is UNVERIFIED (2).
+        # Reporting it as "not stale" would let CI skip the re-derive on a
+        # check that never looked.
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            for ledger_path in (work / "benchmark/public/results").glob("*.json"):
+                data = json.loads(ledger_path.read_text())
+                for key in data:
+                    if key.endswith("quipu_revision"):
+                        data[key] = "0" * 40
+                ledger_path.write_text(json.dumps(data))
+            subprocess.run(
+                [sys.executable, str(work / "benchmark/public/conformance_report.py")],
+                cwd=work, capture_output=True, text=True, check=True,
+            )
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertFalse(output.exists(), "UNVERIFIED must not write stale=false")
+
+
 class RemedyNamesEveryStepTest(unittest.TestCase):
     """The printed remedy must name ALL THREE steps (aegis-j9zw4u).
 

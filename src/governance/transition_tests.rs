@@ -7,6 +7,7 @@ use ring::rand::SystemRandom;
 use ring::signature::Ed25519KeyPair;
 
 use super::*;
+use crate::namespace::RDF_TYPE;
 use crate::signing::{public_key_hex, sign_hex};
 use crate::store::Store;
 use crate::types::Op;

@@ -20,6 +20,7 @@ pub mod labels;
 pub mod labels_advisory;
 mod migrate;
 mod open;
+pub(crate) use open::open_file_immutable;
 pub mod ops;
 pub mod overlays;
 pub mod push;
