@@ -384,6 +384,12 @@ impl AuthenticatedPrincipal {
         &self.0
     }
 
+    /// The agent a verified session attestation is bound to.
+    #[must_use]
+    pub fn attested(agent: &str) -> Self {
+        Self(std::borrow::Cow::Owned(agent.to_owned()))
+    }
+
     #[must_use]
     pub fn from_crew(principal: &crate::crew_credentials::CrewPrincipal) -> Self {
         Self(std::borrow::Cow::Owned(principal.iri.clone()))

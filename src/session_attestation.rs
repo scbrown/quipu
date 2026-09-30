@@ -19,6 +19,14 @@ use crate::share::sha256;
 pub const WRITE_V1: &str = "quipu-write-v1";
 pub const SHARE_V1: &str = "quipu-share-v1";
 
+/// The one clock window every attestation is checked against, shares and
+/// signed HTTP writes alike; the nonce horizon derives from it.
+pub const ATTESTATION_SKEW_SECS: u64 = 300;
+
+#[path = "session_attestation_write.rs"]
+mod write;
+pub use write::{Refusal, body_sha256, check_binding_deferred};
+
 /// Server-protected binding installed by a trusted introducer.
 ///
 /// Serializable because a producer's PUBLIC binding travels inside a share
@@ -333,6 +341,30 @@ pub fn verify_binding<B: AttestationBindings + ?Sized>(
     allowed_skew_secs: u64,
 ) -> Result<VerifiedPrincipal> {
     let mut observation = VerificationObservation::new(payload);
+    let binding = check_binding(
+        bindings,
+        envelope,
+        payload,
+        now_epoch,
+        allowed_skew_secs,
+        &mut observation,
+    )?;
+    if !bindings.consume_nonce(&binding.session, &envelope.nonce, now_epoch)? {
+        observation.result = Verdict::Replay;
+        return Err(Error::InvalidValue("attestation nonce replay".into()));
+    }
+    observation.result = Verdict::Ok;
+    Ok(binding.into())
+}
+
+fn check_binding<B: AttestationBindings + ?Sized>(
+    bindings: &B,
+    envelope: &AttestationEnvelope,
+    payload: &SignedBinding<'_>,
+    now_epoch: u64,
+    allowed_skew_secs: u64,
+    observation: &mut VerificationObservation,
+) -> Result<SessionBinding> {
     observation.result = Verdict::Invalid;
     validate_envelope(envelope, payload)?;
     observation.result = Verdict::Error;
@@ -345,7 +377,7 @@ pub fn verify_binding<B: AttestationBindings + ?Sized>(
         return Err(Error::InvalidValue("revoked attestation session".into()));
     }
     if now_epoch > binding.expires_at_epoch || now_epoch < binding.issued_at_epoch {
-        observation.result = Verdict::Skew;
+        observation.result = Verdict::Expired;
         return Err(Error::InvalidValue(
             "expired or not-yet-valid session binding".into(),
         ));
@@ -369,17 +401,7 @@ pub fn verify_binding<B: AttestationBindings + ?Sized>(
             "attestation signature does not verify".into(),
         ));
     }
-    if !bindings.consume_nonce(&binding.session, &envelope.nonce, now_epoch)? {
-        observation.result = Verdict::Replay;
-        return Err(Error::InvalidValue("attestation nonce replay".into()));
-    }
-    observation.result = Verdict::Ok;
-    Ok(VerifiedPrincipal {
-        agent: binding.agent,
-        session: binding.session,
-        key_id: binding.key_id,
-        introducer: binding.introducer,
-    })
+    Ok(binding)
 }
 
 fn validate_envelope(envelope: &AttestationEnvelope, payload: &SignedBinding<'_>) -> Result<()> {
@@ -389,6 +411,29 @@ fn validate_envelope(envelope: &AttestationEnvelope, payload: &SignedBinding<'_>
             envelope.version,
             payload.version()
         )));
+    }
+    // canonical_message is newline-delimited: a field carrying a newline or
+    // any other control character could make two different envelopes
+    // serialize to the same signed bytes (aegis-bys8d1 S3). Refuse them all.
+    let fields: Vec<&str> = match payload {
+        SignedBinding::Write(w) => vec![w.method, w.path, w.content_type, w.body_sha256],
+        SignedBinding::Share(s) => vec![s.share_id, s.graph_hash, s.shapes_hash],
+    };
+    let common = [
+        &envelope.key_id,
+        &envelope.session,
+        &envelope.introducer,
+        &envelope.signature,
+    ];
+    if common
+        .iter()
+        .map(|f| f.as_str())
+        .chain(fields)
+        .any(|f| f.chars().any(char::is_control))
+    {
+        return Err(Error::InvalidValue(
+            "attestation fields must not contain control characters".into(),
+        ));
     }
     if envelope.nonce.len() != 32
         || envelope.nonce != envelope.nonce.to_ascii_lowercase()

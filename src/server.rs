@@ -375,6 +375,7 @@ async fn main() {
         }
     }
 
+    let attest_store = state.clone();
     let app = Router::new()
         .merge(assets::routes())
         // Core API
@@ -471,9 +472,15 @@ async fn main() {
         .layer(axum::middleware::from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_policy = auth_policy.clone();
+                let attest_store = attest_store.clone();
                 async move {
                     let path = req.uri().path().to_string();
                     let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
+                    // A signed write authenticates by attestation, never by a
+                    // bearer on the same request (aegis-bys8d1).
+                    if is_write && !read_only && req.headers().contains_key(auth::write_attest::HEADER) {
+                        return auth::write_attest::handle(attest_store, req, next).await;
+                    }
                     let auth_header = req
                         .headers()
                         .get(axum::http::header::AUTHORIZATION)

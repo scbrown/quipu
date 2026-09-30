@@ -114,7 +114,16 @@ impl StoreHandle {
     /// Every pre-existing `.lock()` call site means exactly what it meant
     /// before, which is why this refactor does not have to audit them.
     pub(crate) fn lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        self.writer.lock()
+        let guard = self.writer.lock();
+        // A signed write settles HERE, in the same lock hold as its work: its
+        // binding is re-checked (a revocation that landed while it queued is
+        // honoured) and its nonce spent, even if the work turns out to be a
+        // no-op. A refusal is recorded on the request, and the store then
+        // refuses to open a transaction for it (aegis-bys8d1).
+        if let Some(pending) = quipu::transaction_auth::current_attestation() {
+            let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
+        }
+        guard
     }
 
     /// A READ connection from the pool, or the writer when the pool is empty.
