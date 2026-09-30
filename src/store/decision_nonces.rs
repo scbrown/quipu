@@ -183,6 +183,14 @@ impl Store {
         datums: &[Datum],
         timestamp: &str,
     ) -> Result<i64> {
+        // Re-checked here, not only in `bootstrap()`: the history rule belongs
+        // to the one path that can admit a first key (wu-rev-350 N1).
+        if crate::governance::trust_root::ever_bootstrapped(self)? {
+            return Err(Error::PolicyDenied(
+                "trust root (aegis-kzt0ql.9.4): a human key has already been enrolled in this store"
+                    .into(),
+            ));
+        }
         self.trust_root_bootstrap = Some(registration.to_string());
         let result = self.transact(
             datums,
