@@ -105,8 +105,8 @@ const SHARING_VERBS: &[&str] = &[
     "knot",
     "git-merge",
     "merge-driver",
-    "qpack-resolve",
-    "qpack-check",
+    "pendant-resolve",
+    "pendant-check",
 ];
 
 #[test]

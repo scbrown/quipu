@@ -71,8 +71,8 @@ fn main() {
     match args[1].as_str() {
         "git-merge" => return cli_git_merge::run(&args),
         "merge-driver" => return cli_git_merge::run(&args),
-        "qpack-resolve" => return cli_git_merge::run(&args),
-        "qpack-check" => return cli_git_merge::run(&args),
+        "pendant-resolve" => return cli_git_merge::run(&args),
+        "pendant-check" => return cli_git_merge::run(&args),
         _ => {}
     }
 
@@ -347,8 +347,8 @@ COMMANDS:
     quipu merge <share-dir> [--actor <id>] [--db <path>]
     quipu git-merge <ref>   merge qpacks from Git snapshots, stop before commit
     quipu merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
-    quipu qpack-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
-    quipu qpack-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
+    quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
+    quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]

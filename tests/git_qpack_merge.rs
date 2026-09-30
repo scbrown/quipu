@@ -136,7 +136,7 @@ impl Fixture {
         cli(
             self.path(),
             &[
-                "qpack-resolve",
+                "pendant-resolve",
                 &self.base,
                 &self.ours,
                 &self.theirs,
@@ -153,7 +153,13 @@ impl Fixture {
     fn check(&self) -> Output {
         cli(
             self.path(),
-            &["qpack-check", &self.base, &self.ours, &self.theirs, "HEAD"],
+            &[
+                "pendant-check",
+                &self.base,
+                &self.ours,
+                &self.theirs,
+                "HEAD",
+            ],
         )
     }
     fn graph(&self) -> String {
@@ -322,7 +328,10 @@ fn single_branch_invalid_shacl_is_caught_without_driver() {
     rehash(f.path());
     g(f.path(), &["add", "."]);
     g(f.path(), &["commit", "-m", "invalid"]);
-    let o = cli(f.path(), &["qpack-check", &f.base, &f.base, "HEAD", "HEAD"]);
+    let o = cli(
+        f.path(),
+        &["pendant-check", &f.base, &f.base, "HEAD", "HEAD"],
+    );
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains("SHACL"));
 }
@@ -350,7 +359,7 @@ fn ci_entrypoint_replays_historical_merges_and_has_a_positive_control() {
         )
         .unwrap();
         let output = Command::new("python3")
-            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/qpack-merge-check.py"))
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/pendant-merge-check.py"))
             .args(["--binary", env!("CARGO_BIN_EXE_quipu")])
             .env("GITHUB_EVENT_NAME", "push")
             .env("GITHUB_EVENT_PATH", &event)
@@ -400,7 +409,7 @@ fn driver_binds_temporary_inputs_to_context_before_writing() {
 fn missing_git_executable_is_reported_plainly() {
     let empty = TempDir::new().unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_quipu"))
-        .args(["qpack-check", "a", "b", "c", "d"])
+        .args(["pendant-check", "a", "b", "c", "d"])
         .env("PATH", empty.path())
         .current_dir(empty.path())
         .output()

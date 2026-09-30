@@ -12,18 +12,18 @@ pub fn run(args: &[String]) {
             path,
         ),
         ("git-merge", [incoming]) => quipu::git_merge::merge(repo, incoming),
-        ("qpack-resolve", [base, ours, theirs, dir, key, choice]) => {
+        ("pendant-resolve", [base, ours, theirs, dir, key, choice]) => {
             quipu::git_merge::resolve(repo, base, ours, theirs, dir, key, choice)
         }
-        ("qpack-check", [base, ours, theirs, result]) => {
+        ("pendant-check", [base, ours, theirs, result]) => {
             quipu::git_merge::check(repo, base, ours, theirs, result).map(|n| {
-                println!("qpack-check: {n} packs verified");
+                println!("pendant-check: {n} packs verified");
                 true
             })
         }
         _ => {
             eprintln!(
-                "usage: quipu git-merge REF | merge-driver BASE OURS THEIRS PATH | qpack-resolve BASE_REF OURS_REF THEIRS_REF DIR KEY CHOICE | qpack-check BASE_REF OURS_REF THEIRS_REF RESULT_REF"
+                "usage: quipu git-merge REF | merge-driver BASE OURS THEIRS PATH | pendant-resolve BASE_REF OURS_REF THEIRS_REF DIR KEY CHOICE | pendant-check BASE_REF OURS_REF THEIRS_REF RESULT_REF"
             );
             std::process::exit(1);
         }
