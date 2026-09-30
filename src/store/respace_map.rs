@@ -203,6 +203,9 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     // The decision is stored as its IRI text, not a term id, so nothing moves.
     ("decision_nonces", "nonce", TermIdKind::None),
     ("decision_nonces", "decision", TermIdKind::None),
+    // The verdict is an IRI's text and `tx` a transaction id; neither is a term id.
+    ("decision_nonces", "verdict", TermIdKind::None),
+    ("decision_nonces", "tx", TermIdKind::None),
     ("decision_nonces", "consumed_at", TermIdKind::None),
     // -- resumable snapshot upload staging (aegis-tzhyzq) --
     // Content addresses, producer keys, metadata and raw Turtle bytes are all
