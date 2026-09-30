@@ -498,7 +498,10 @@ property a consumer should gate on.
 The registry is read **as of the signature** (signing-plane S1): a key that
 has since been rotated still verifies what it signed while registered, and
 cannot verify anything recorded after it was closed. The result's
-`as_of.basis` is `recorded`, `caller-supplied` or `now`.
+`as_of.basis` is `recorded`, `caller-supplied` or `now`. A caller-supplied
+instant is a what-if: `trusted` is then always `false`, and the answer is in
+`would_verify_as_of_supplied_instant`. Otherwise naming a transaction from
+before a revocation would make a revoked key read as trusted.
 
 ### `quipu_verifier_authorized`
 

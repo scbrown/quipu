@@ -121,12 +121,18 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
     let scoped_keys =
         registered_keys(store, &verifier, Some(&predicate_id), &witness, Scope::Root)?;
 
+    let seal_ok = verifies(&scoped_keys);
+    let trustworthy_basis = basis != "caller-supplied";
     Ok(serde_json::json!({
         "signature_valid": verifies(&any_keys),
         "verifier_registered": !any_keys.is_empty(),
         "verifier_authorized": is_registered_verifier(store, &verifier, &predicate_id, &witness)?,
-        // The key that verifies must be one the AUTHORIZING registration holds.
-        "trusted": verifies(&scoped_keys),
+        // The key that verifies must be one the AUTHORIZING registration holds,
+        // AND the instant must be one quipu chose. A caller-supplied instant is
+        // a what-if: naming a tx from before a revocation would otherwise make
+        // a revoked key read as trusted.
+        "trusted": trustworthy_basis && seal_ok,
+        "would_verify_as_of_supplied_instant": if trustworthy_basis { JsonValue::Null } else { JsonValue::Bool(seal_ok) },
         "as_of": witness_json(&witness, basis)
     }))
 }

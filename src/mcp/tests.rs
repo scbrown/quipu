@@ -4668,3 +4668,69 @@ fn test_verdict_verify_answers_as_of_the_recorded_signature() {
     unknown["verdict"] = serde_json::json!(format!("{ns}verdict_never"));
     assert!(super::tool_verdict_verify(&store, &unknown).is_err());
 }
+
+// sattler review of #344: a caller-chosen instant is a what-if, never trust.
+#[test]
+fn test_verdict_verify_never_trusts_a_caller_supplied_instant() {
+    use crate::types::Value;
+    use std::sync::Arc;
+    let ns = "http://aegis.gastown.local/ontology/";
+    let mut store = Store::open_in_memory().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let id = crate::signing::SigningIdentity::load(&dir.path().join("k.pk8"), "quipu").unwrap();
+    let key = id.public_key_hex();
+    store.set_signing_identity(Arc::new(id));
+    let ttl = format!(
+        "@prefix a: <{ns}> .\n\
+         a:reg a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" ; a:publicKey \"{key}\" .\n\
+         a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n"
+    );
+    let pre_revocation_tx = crate::rdf::ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap()
+    .0;
+    let claim = format!("PREFIX a: <{ns}> ASK {{ $target a:hasTest ?t }}");
+    let v = super::tool_policy_check(
+        &store,
+        &serde_json::json!({
+            "claim": claim, "target": format!("{ns}sym1"), "predicate_id": "has-test"
+        }),
+    )
+    .unwrap();
+    // Revoke the key (compromise).
+    let reg = store.lookup(&format!("{ns}reg")).unwrap().unwrap();
+    let pk = store.lookup(&format!("{ns}publicKey")).unwrap();
+    store
+        .retract_triples(
+            reg,
+            pk,
+            Some(&Value::Str(key)),
+            "2026-03-01T00:00:00Z",
+            None,
+            false,
+            None,
+        )
+        .unwrap();
+
+    // The forger names a transaction from before the revocation.
+    let mut what_if = v.clone();
+    what_if["tx"] = serde_json::json!(pre_revocation_tx);
+    what_if["signed_at"] = serde_json::json!("2026-02-01T00:00:00Z");
+    let r = super::tool_verdict_verify(&store, &what_if).unwrap();
+    assert_eq!(r["as_of"]["basis"], "caller-supplied");
+    assert_eq!(
+        r["trusted"], false,
+        "a caller-chosen instant must never yield trust: {r:#?}"
+    );
+    assert_eq!(
+        r["would_verify_as_of_supplied_instant"], true,
+        "the what-if answer is still reported"
+    );
+}

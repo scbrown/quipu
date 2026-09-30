@@ -27,7 +27,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_verdict_verify",
-            "description": "Verify a signed Verdict against the root of trust AS OF the signature (signing-plane S1): the signature must be valid under a key registered to the verifier at that instant, AND that same registration must authorize the predicate. 'trusted' is that conjunction — the property a consumer should gate on. Pass 'verdict' (the stored verdict's IRI) for a trust decision: quipu then reads when the store recorded the signature, which the signer cannot choose. 'as_of.basis' says which instant was used (recorded | caller-supplied | now).",
+            "description": "Verify a signed Verdict against the root of trust AS OF the signature (signing-plane S1): the signature must be valid under a key registered to the verifier at that instant, AND that same registration must authorize the predicate. 'trusted' is that conjunction — the property a consumer should gate on. Pass 'verdict' (the stored verdict's IRI) for a trust decision: quipu then reads when the store recorded the signature, which the signer cannot choose. 'as_of.basis' says which instant was used (recorded | caller-supplied | now). A caller-supplied signed_at/tx is a what-if: 'trusted' is then always false and the answer is in 'would_verify_as_of_supplied_instant'.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
