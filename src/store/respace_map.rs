@@ -205,6 +205,14 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     // The verdict is an IRI's text and `tx` a transaction id; neither is a term id.
     ("decision_nonces", "verdict", TermIdKind::None),
     ("decision_nonces", "tx", TermIdKind::None),
+    // Trust-root amendment nonces (aegis-kzt0ql.9.4): IRIs as text, no term ids.
+    ("registry_amendment_nonces", "nonce", TermIdKind::None),
+    (
+        "registry_amendment_nonces",
+        "registration",
+        TermIdKind::None,
+    ),
+    ("registry_amendment_nonces", "amendment", TermIdKind::None),
     ("decision_nonces", "consumed_at", TermIdKind::None),
     // -- resumable snapshot upload staging (aegis-tzhyzq) --
     // Content addresses, producer keys, metadata and raw Turtle bytes are all

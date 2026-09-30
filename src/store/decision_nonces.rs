@@ -147,4 +147,50 @@ impl Store {
             )
             .optional()?)
     }
+
+    pub(super) fn migrate_registry_amendment_nonces(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS registry_amendment_nonces (
+                 nonce        TEXT PRIMARY KEY,
+                 registration TEXT NOT NULL,
+                 amendment    TEXT NOT NULL
+             );",
+        )?;
+        Ok(())
+    }
+
+    /// Spend a trust-root registry amendment's nonce (aegis-kzt0ql.9.4).
+    /// Called by the gate INSIDE the write's savepoint, so a refused write
+    /// gives the nonce back. `false` means it was already spent.
+    pub(crate) fn spend_registry_amendment_nonce(
+        &self,
+        nonce: &str,
+        registration: &str,
+        amendment: &str,
+    ) -> Result<bool> {
+        Ok(self.conn.execute(
+            "INSERT OR IGNORE INTO registry_amendment_nonces (nonce, registration, amendment)
+             VALUES (?1, ?2, ?3)",
+            params![nonce, registration, amendment],
+        )? == 1)
+    }
+
+    /// Transact a console bootstrap: the gate admits exactly `registration`
+    /// as the first human key, and nothing else. CLI-only.
+    pub(crate) fn transact_trust_root_bootstrap(
+        &mut self,
+        registration: &str,
+        datums: &[Datum],
+        timestamp: &str,
+    ) -> Result<i64> {
+        self.trust_root_bootstrap = Some(registration.to_string());
+        let result = self.transact(
+            datums,
+            timestamp,
+            Some("console"),
+            Some("trust-root bootstrap"),
+        );
+        self.trust_root_bootstrap = None;
+        result
+    }
 }

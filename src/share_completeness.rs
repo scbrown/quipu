@@ -73,6 +73,7 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.
     ("decision_nonces", Disposition::Excluded),
+    ("registry_amendment_nonces", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
     // Webhook URLs. Restoring them aims a new store at another store's endpoints.

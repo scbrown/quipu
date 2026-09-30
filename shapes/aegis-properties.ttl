@@ -559,6 +559,52 @@ aegis:attests a rdf:Property ;
     rdfs:domain aegis:VerifierRegistration ;
     rdfs:comment "What this registration vouches for — a compact policy id string or a governed subject IRI such as a workflow definition. Human-authored, and the root of trust: nothing in the automated path may mint one, or the chain verifies only against itself." .
 
+# ── The human trust root (aegis-kzt0ql.9.4) ─────────────────────────
+aegis:trustTier a owl:DatatypeProperty ;
+    rdfs:label "trust tier" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "\"human\" marks a VerifierRegistration as a human trust-root key. Human decisions verify only against these, matched as an ASSERTED fact in ROOT. Adding, changing or removing the marker is a registry amendment that an already-enrolled human key must sign. No rdfs:domain on purpose: inference must never type an entity because of it." .
+
+aegis:amends a owl:ObjectProperty ;
+    rdfs:label "amends" ;
+    rdfs:domain aegis:RegistryAmendment ;
+    rdfs:comment "The human-tier registration a signed amendment changes, adds or revokes. Exactly one per amendment, so a single signature can never authorize changes to several registrations." .
+
+aegis:amendedDigest a owl:DatatypeProperty ;
+    rdfs:label "amended digest" ;
+    rdfs:domain aegis:RegistryAmendment ;
+    rdfs:range xsd:string ;
+    rdfs:comment "sha256 over the RDFC-1.0 form of the registration as the amending write leaves it, or \"revoked\". The gate recomputes it from the post-write state; a mismatch covers nothing." .
+
+aegis:amendmentSigner a owl:DatatypeProperty ;
+    rdfs:label "amendment signer" ;
+    rdfs:domain aegis:RegistryAmendment ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The verifier name of the human key that signed the amendment. It must have been enrolled for urn:quipu:policy:trust-root BEFORE the amending write." .
+
+aegis:amendmentNonce a owl:DatatypeProperty ;
+    rdfs:label "amendment nonce" ;
+    rdfs:domain aegis:RegistryAmendment ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Single-use, at least 128 bits of hex. Spent in the amending write; a replayed amendment is refused." .
+
+aegis:amendmentSignature a owl:DatatypeProperty ;
+    rdfs:label "amendment signature" ;
+    rdfs:domain aegis:RegistryAmendment ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The enrolled human key's signature over quipu-registry-amendment-v1|store id|registration|digest|nonce. Binding the store id stops an amendment signed for one store being replayed into another; binding the digest means it authorizes exactly one resulting registration, not whatever the write happens to contain." .
+
+aegis:enrolled a owl:ObjectProperty ;
+    rdfs:label "enrolled" ;
+    rdfs:domain aegis:TrustRootBootstrap ;
+    rdfs:comment "The registration a one-time console bootstrap enrolled as the first human key. The bootstrap can run once per store, ever; every later key is an amendment signed by an enrolled one." .
+
+aegis:keyFingerprint a owl:DatatypeProperty ;
+    rdfs:label "key fingerprint" ;
+    rdfs:domain aegis:TrustRootBootstrap ;
+    rdfs:range xsd:string ;
+    rdfs:comment "SHA256 fingerprint of the bootstrapped key, as ssh-keygen -lf prints it. The ceremony compares it with the device; a mismatch means someone else bootstrapped first." .
+
 aegis:publicKey a owl:DatatypeProperty ;
     rdfs:label "public key" ;
     rdfs:domain aegis:VerifierRegistration ;
