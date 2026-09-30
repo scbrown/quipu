@@ -1,8 +1,7 @@
 fn eval_expression_boolean(store: &Store, expr: &Expression, row: &Bindings) -> Option<bool> {
     match expr {
-        Expression::Equal(left, right) | Expression::SameTerm(left, right) => {
-            Some(expr_eq(store, left, right, row))
-        }
+        Expression::Equal(left, right) => Some(sparql_eq(store, left, right, row)),
+        Expression::SameTerm(left, right) => Some(expr_eq(store, left, right, row)),
         Expression::Greater(left, right) => {
             Some(compare_values(store, left, right, row, |order| {
                 order == std::cmp::Ordering::Greater
