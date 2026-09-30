@@ -80,6 +80,10 @@ pub struct ShareOptions {
     pub shapes: Vec<String>,
     /// Explicitly produce a shapes-free share.
     pub no_shapes: bool,
+    /// Stored queries for `queries.ttl` (aegis-fxpbys.2): `None` carries those
+    /// registered against the scope, `Some(names)` exactly those (`Some([])`
+    /// carries none). See `share_queries` for the default's definition.
+    pub queries: Option<Vec<String>>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
@@ -123,6 +127,9 @@ pub struct SharePayloadRequest {
     /// Explicitly produce a shapes-free share.
     #[serde(default)]
     pub no_shapes: bool,
+    /// Stored queries to carry; absent means those registered against the scope.
+    #[serde(default)]
+    pub queries: Option<Vec<String>>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also include a human-readable `export.ttl` derived view.
@@ -139,6 +146,7 @@ impl SharePayloadRequest {
             scope: self.scope.clone(),
             shapes: self.shapes.clone(),
             no_shapes: self.no_shapes,
+            queries: self.queries.clone(),
             parent_share: self.parent_share.clone(),
             turtle_view: self.turtle_view,
             // Not settable over HTTP: pack_dir is a property of the producing
@@ -198,6 +206,10 @@ pub struct ShareFiles {
     pub shapes: String,
     /// Optional derived Turtle view.
     pub turtle_view: Option<String>,
+    /// Stored-query member (aegis-fxpbys.2). Omitted when the share carries no
+    /// queries, so such a manifest is byte-identical to one from before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queries: Option<String>,
 }
 
 /// Versioned, hash-checked share envelope.
@@ -218,6 +230,10 @@ pub struct ShareManifest {
     pub canonicalization: Option<String>,
     /// Hash of exact `shapes.ttl` bytes.
     pub shapes_hash: String,
+    /// Hash of exact `queries.ttl` bytes, present exactly when the share carries
+    /// queries. Part of `share_id`: changing one query's text changes the id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queries_hash: Option<String>,
     /// Export scope.
     pub scope: ShareScope,
     /// Prior share in this lineage.
@@ -401,6 +417,8 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         oxrdfio::RdfFormat::NTriples,
     )?)?;
     let shapes = shapes_bytes(store, &opts.shapes, opts.no_shapes)?;
+    let queries = crate::share_queries::select(store, &opts.scope, opts.queries.as_deref())?;
+    let queries = (!queries.is_empty()).then(|| crate::share_queries::to_turtle(&queries));
     let turtle = if opts.turtle_view {
         Some(export_scope(
             store,
@@ -428,6 +446,7 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         graph_hash: sha256(&graph),
         canonicalization: Some("RDFC-1.0".into()),
         shapes_hash: sha256(&shapes),
+        queries_hash: queries.as_ref().map(|q| sha256(q.as_bytes())),
         scope: opts.scope.clone(),
         parent_share: opts.parent_share.clone(),
         #[cfg(not(target_arch = "wasm32"))]
@@ -441,6 +460,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             graph: "export.nt".into(),
             shapes: "shapes.ttl".into(),
             turtle_view: turtle.as_ref().map(|_| "export.ttl".to_string()),
+            queries: queries
+                .as_ref()
+                .map(|_| crate::share_queries::QUERIES_FILE.to_string()),
         },
         pack_dir: opts.pack_dir.clone(),
         // Stamped BEFORE share_id is computed, because it is part of the id.
@@ -475,6 +497,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         String::from_utf8(shapes)
             .map_err(|e| Error::Serialization(format!("share shapes UTF-8: {e}")))?,
     );
+    if let Some(queries) = queries {
+        files.insert(crate::share_queries::QUERIES_FILE.into(), queries);
+    }
     if let Some(turtle) = turtle {
         files.insert(
             "export.ttl".into(),
@@ -499,6 +524,17 @@ fn manifest_turtle(manifest: &ShareManifest) -> String {
     // one produced before this field existed. A reader of the RDF view sees the
     // same marker as a reader of the JSON — the exemption must not be visible
     // in only one of the two representations a consumer might read.
+    // A third distribution only when the share carries queries, for the same
+    // byte-identity reason as the destination marker below.
+    let queries = manifest.queries_hash.as_ref().map_or_else(String::new, |hash| {
+        format!(
+            ",\n  [ a dcat:Distribution ; dcat:mediaType \"text/turtle\" ;\n    \
+             dcat:downloadURL <payload:queries.ttl> ;\n    \
+             spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;\n      \
+             spdx:checksumValue {} ] ]",
+            literal(hash.strip_prefix("sha256:").unwrap_or(hash))
+        )
+    });
     let destination = match manifest.destination {
         Some(ShareDestination::Internal) => " ;\n  quipu:destination \"internal\"",
         _ => "",
@@ -524,7 +560,7 @@ fn manifest_turtle(manifest: &ShareManifest) -> String {
   [ a dcat:Distribution ; dcat:mediaType "text/turtle" ;
     dcat:downloadURL <payload:shapes.ttl> ;
     spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;
-      spdx:checksumValue {} ] ] .
+      spdx:checksumValue {} ] ]{queries} .
 "#,
         literal(&manifest.share_id),
         literal(&manifest.created_at),
