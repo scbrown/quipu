@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "244ab1f112525ac2af629d793d1f595ae9ede08b",
-  "quipu_version": "quipu 0.9.0\ngit_sha: 244ab1f112525ac2af629d793d1f595ae9ede08b\ngit_dirty: false",
-  "generated_at": "2026-09-29T21:24:50Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36631991001",
+  "quipu_revision": "cec3a9d49f79f9e4f6426177d34fcb710e5493cd",
+  "quipu_version": "quipu 0.9.1\ngit_sha: cec3a9d49f79f9e4f6426177d34fcb710e5493cd\ngit_dirty: false",
+  "generated_at": "2026-09-30T00:55:32Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36652169730",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -26,8 +26,8 @@
     "sparql10-query": {
       "cases": 242,
       "error": 6,
-      "failed": 71,
-      "passed": 155,
+      "failed": 69,
+      "passed": 157,
       "unsupported": 10
     }
   },
@@ -1769,8 +1769,8 @@
       "manifest": "../sparql10/expr-equals/manifest.ttl",
       "query": "../sparql10/expr-equals/query-eq-1.rq",
       "result": "../sparql10/expr-equals/result-eq-1.ttl",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1779,8 +1779,8 @@
       "manifest": "../sparql10/expr-equals/manifest.ttl",
       "query": "../sparql10/expr-equals/query-eq-2.rq",
       "result": "../sparql10/expr-equals/result-eq-2.ttl",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
