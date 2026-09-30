@@ -324,6 +324,9 @@ fn routes_in_server_source() -> Vec<String> {
         "server/tests.rs",
         "server/tools.rs",
         "server/update.rs",
+        // Slice planner for /update (aegis-jm1lcl): pure analysis of the parsed
+        // update, called from update.rs, no routes.
+        "server/update_slice.rs",
         // WAL reset + passive checkpoint maintenance (aegis-raq1ok): a
         // startup call and a background tick, no routes.
         "server/wal_maintenance.rs",

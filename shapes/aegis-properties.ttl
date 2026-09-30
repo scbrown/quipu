@@ -497,6 +497,10 @@ aegis:attests a rdf:Property ;
     rdfs:domain aegis:VerifierRegistration ;
     rdfs:comment "What this registration vouches for — a compact policy id string or a governed subject IRI such as a workflow definition. Human-authored, and the root of trust: nothing in the automated path may mint one, or the chain verifies only against itself." .
 
+aegis:leadFor a owl:ObjectProperty ;
+    rdfs:label "lead for" ;
+    rdfs:comment "Pairs a review/design LEAD with the KEEPER whose domain it reviews, 1:1 from both ends. Not reports_to: it routes design and review work, not the stop-event tree (aegis-vj3uet). No rdfs:domain or rdfs:range on purpose: the roles are asserted with aegis:hasRole and checked by LeadForShape, so inference must not type anyone as a lead." .
+
 aegis:publicKey a owl:DatatypeProperty ;
     rdfs:label "public key" ;
     rdfs:domain aegis:VerifierRegistration ;

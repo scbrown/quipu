@@ -98,6 +98,7 @@ pub(crate) async fn metrics_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let mut body = store.graph_metrics.render();
     super::request_middleware::render_request_starts(&mut body);
+    super::update::render_update_paths(&mut body);
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
