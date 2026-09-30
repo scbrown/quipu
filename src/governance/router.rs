@@ -58,7 +58,7 @@
 
 use crate::error::Result;
 use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
-use crate::sparql::{self, QueryResult};
+use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -151,6 +151,27 @@ pub fn resolve(
     target_iri: &str,
     now: i64,
 ) -> Result<Option<Ruling>> {
+    resolve_at(
+        store,
+        policy_iri,
+        target_iri,
+        now,
+        &TemporalContext::default(),
+    )
+}
+
+/// [`resolve`] as the store stood at `at`: the request, the decision and the
+/// decider registration are all read through the same temporal context, so a
+/// ruling or a key recorded later cannot backdate an approval. The shadow gate
+/// (aegis-xfuch4.2) reads history through this; the live gate passes the
+/// default context and gets exactly [`resolve`].
+pub(crate) fn resolve_at(
+    store: &Store,
+    policy_iri: &str,
+    target_iri: &str,
+    now: i64,
+    at: &TemporalContext,
+) -> Result<Option<Ruling>> {
     let hash = evidence_hash(policy_iri, target_iri);
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
@@ -161,7 +182,7 @@ pub fn resolve(
         policy = escape(policy_iri),
         target = escape(target_iri),
     );
-    let QueryResult::Select { rows, .. } = sparql::query(store, &q)? else {
+    let QueryResult::Select { rows, .. } = sparql::query_temporal(store, &q, at)? else {
         return Ok(None);
     };
     // No request => nothing has been escalated yet.
@@ -182,7 +203,7 @@ pub fn resolve(
          }}",
         hash = escape(&hash),
     );
-    if let QueryResult::Select { rows, .. } = sparql::query(store, &dq)? {
+    if let QueryResult::Select { rows, .. } = sparql::query_temporal(store, &dq, at)? {
         // A rejection outranks an approval when both exist. Two humans
         // disagreeing is not a state to resolve by row order, and the safe
         // reading of a disagreement about whether to permit something is "no".

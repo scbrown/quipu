@@ -1,6 +1,8 @@
 //! SPARQL 1.1 Update protocol adapter.
 
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::{
     body::Bytes,
@@ -16,6 +18,7 @@ use oxigraph::{
 use super::{
     SharedStore,
     base::{AppError, blocking},
+    update_slice::{self, Plan, Subjects},
 };
 
 pub(crate) async fn update_post(
@@ -108,48 +111,91 @@ pub(crate) async fn update_post(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+static UPDATES_SLICED: AtomicU64 = AtomicU64::new(0);
+static UPDATES_FULL: AtomicU64 = AtomicU64::new(0);
+
+/// How many `/update` requests evaluated over a slice versus the whole store
+/// (aegis-jm1lcl). A rising `full` count names updates still paying O(store).
+pub(crate) fn render_update_paths(out: &mut String) {
+    out.push_str(
+        "# HELP quipu_sparql_update_evaluations_total SPARQL updates evaluated, by dataset path (sliced or full store copy).\n\
+         # TYPE quipu_sparql_update_evaluations_total counter\n",
+    );
+    for (path, counter) in [("sliced", &UPDATES_SLICED), ("full", &UPDATES_FULL)] {
+        let _ = writeln!(
+            out,
+            "quipu_sparql_update_evaluations_total{{path=\"{path}\"}} {}",
+            counter.load(Ordering::Relaxed)
+        );
+    }
+}
+
+/// Which dataset an update was evaluated over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum UpdatePath {
+    /// Only the facts the update can match or write (see [`update_slice`]).
+    Sliced,
+    /// A copy of every current fact in every dataset graph.
+    Full,
+}
+
+/// What one update did: the dataset path and the datums it transacted.
+///
+/// Only the tests read it back; production uses the counters above.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(super) struct Applied {
+    pub(super) path: UpdatePath,
+    pub(super) changes: Vec<(i64, Vec<quipu::store::Datum>)>,
+}
+
 fn apply_update(shared: &SharedStore, update: &str) -> Result<(), AppError> {
+    apply_update_as(shared, update, false).map(|_| ())
+}
+
+/// Evaluate `update` with Oxigraph and transact the before/after diff.
+///
+/// The dataset is the slice [`update_slice::plan`] names, or a copy of the
+/// whole store when it cannot name one (or `force_full`, which tests use to
+/// compare both paths). Planning parses only, so it runs before the lock.
+pub(super) fn apply_update_as(
+    shared: &SharedStore,
+    update: &str,
+    force_full: bool,
+) -> Result<Applied, AppError> {
+    let plan = if force_full {
+        Plan::Full("forced")
+    } else {
+        update_slice::plan(update)
+    };
     let mut store = shared.lock();
     let ox = OxStore::new().map_err(|e| quipu::Error::Store(e.to_string()))?;
     let mut graph_ids = HashMap::new();
     graph_ids.insert(GraphName::DefaultGraph, 0);
-    let mut ids = vec![0];
-    ids.extend(store.all_named_graph_ids()?);
-    for graph_id in ids {
-        let graph = if graph_id == 0 {
-            GraphName::DefaultGraph
-        } else {
-            let iri = store.resolve(graph_id)?;
-            let name = GraphName::NamedNode(
-                NamedNode::new(iri).map_err(|e| quipu::Error::InvalidValue(e.to_string()))?,
-            );
-            graph_ids.insert(name.clone(), graph_id);
-            name
-        };
-        for fact in store.current_facts_in_graph(graph_id)? {
-            let subject_iri = store.resolve(fact.entity)?;
-            let subject = if let Some(id) = subject_iri.strip_prefix("_:") {
-                NamedOrBlankNode::BlankNode(
-                    oxigraph::model::BlankNode::new(id)
-                        .map_err(|e| quipu::Error::InvalidValue(e.to_string()))?,
-                )
-            } else {
-                NamedOrBlankNode::NamedNode(
-                    NamedNode::new(subject_iri)
-                        .map_err(|e| quipu::Error::InvalidValue(e.to_string()))?,
-                )
-            };
-            let predicate = NamedNode::new(store.resolve(fact.attribute)?)
-                .map_err(|e| quipu::Error::InvalidValue(e.to_string()))?;
-            ox.insert(&Quad::new(
-                subject,
-                predicate,
-                quipu::rdf::value_to_term(&store, &fact.value)?,
-                graph.clone(),
-            ))
-            .map_err(|e| quipu::Error::Store(e.to_string()))?;
-        }
+    let mut graphs = vec![(0, GraphName::DefaultGraph)];
+    for graph_id in store.all_named_graph_ids()? {
+        let iri = store.resolve(graph_id)?;
+        let name = GraphName::NamedNode(
+            NamedNode::new(iri).map_err(|e| quipu::Error::InvalidValue(e.to_string()))?,
+        );
+        graph_ids.insert(name.clone(), graph_id);
+        graphs.push((graph_id, name));
     }
+    let path = match &plan {
+        Plan::Full(_) => {
+            for (graph_id, graph) in &graphs {
+                for fact in store.current_facts_in_graph(*graph_id)? {
+                    insert_fact(&store, &ox, fact.entity, fact.attribute, &fact.value, graph)?;
+                }
+            }
+            UPDATES_FULL.fetch_add(1, Ordering::Relaxed);
+            UpdatePath::Full
+        }
+        Plan::Sliced(touched) => {
+            load_slice(&store, &ox, &graphs, touched)?;
+            UPDATES_SLICED.fetch_add(1, Ordering::Relaxed);
+            UpdatePath::Sliced
+        }
+    };
     let before: HashSet<Quad> = ox
         .iter()
         .collect::<Result<_, _>>()
@@ -192,6 +238,89 @@ fn apply_update(shared: &SharedStore, update: &str) -> Result<(), AppError> {
     }
     let batches: Vec<_> = changes.into_iter().collect();
     store.transact_graph_batches(&batches, &now, Some("sparql-update"), Some("sparql-update"))?;
+    // Register every named graph this update asserted into, so the next
+    // update's dataset includes it (aegis-e9o5ci). After the commit, so a
+    // refused write leaves no empty registry row behind.
+    for (graph_id, datums) in &batches {
+        if datums.iter().any(|d| d.op == quipu::Op::Assert) {
+            store.graph_ensure_registered(*graph_id)?;
+        }
+    }
+    Ok(Applied {
+        path,
+        changes: batches,
+    })
+}
+
+/// Copy the planned slice — each touched predicate, for all or only the named
+/// subjects — out of every dataset graph with one indexed read per predicate
+/// group. A predicate or subject never interned has no facts and is skipped.
+fn load_slice(
+    store: &quipu::Store,
+    ox: &OxStore,
+    graphs: &[(i64, GraphName)],
+    touched: &std::collections::BTreeMap<String, Subjects>,
+) -> Result<(), AppError> {
+    let dataset: HashMap<i64, &GraphName> = graphs.iter().map(|(id, name)| (*id, name)).collect();
+    let mut every_subject = Vec::new();
+    let mut reads = Vec::new();
+    for (predicate, subjects) in touched {
+        let attributes = store.lookup_all(predicate)?;
+        if attributes.is_empty() {
+            continue;
+        }
+        match subjects {
+            Subjects::All => every_subject.extend(attributes),
+            Subjects::Only(iris) => {
+                let mut entities = Vec::new();
+                for iri in iris {
+                    entities.extend(store.lookup_all(iri)?);
+                }
+                reads.push((attributes, Some(entities)));
+            }
+        }
+    }
+    reads.push((every_subject, None));
+    for (attributes, entities) in &reads {
+        for (g, entity, attribute, value) in
+            store.current_graph_facts_for_attributes(attributes, entities.as_deref())?
+        {
+            if let Some(graph) = dataset.get(&g) {
+                insert_fact(store, ox, entity, attribute, &value, graph)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn insert_fact(
+    store: &quipu::Store,
+    ox: &OxStore,
+    entity: i64,
+    attribute: i64,
+    value: &quipu::Value,
+    graph: &GraphName,
+) -> Result<(), AppError> {
+    let subject_iri = store.resolve(entity)?;
+    let subject = if let Some(id) = subject_iri.strip_prefix("_:") {
+        NamedOrBlankNode::BlankNode(
+            oxigraph::model::BlankNode::new(id)
+                .map_err(|e| quipu::Error::InvalidValue(e.to_string()))?,
+        )
+    } else {
+        NamedOrBlankNode::NamedNode(
+            NamedNode::new(subject_iri).map_err(|e| quipu::Error::InvalidValue(e.to_string()))?,
+        )
+    };
+    let predicate = NamedNode::new(store.resolve(attribute)?)
+        .map_err(|e| quipu::Error::InvalidValue(e.to_string()))?;
+    ox.insert(&Quad::new(
+        subject,
+        predicate,
+        quipu::rdf::value_to_term(store, value)?,
+        graph.clone(),
+    ))
+    .map_err(|e| quipu::Error::Store(e.to_string()))?;
     Ok(())
 }
 
@@ -212,3 +341,13 @@ fn graph_id(
     ids.insert(graph.clone(), id);
     Ok(id)
 }
+
+#[cfg(test)]
+#[path = "update_bench.rs"]
+mod bench;
+#[cfg(test)]
+#[path = "update_graph_tests.rs"]
+mod graph_tests;
+#[cfg(test)]
+#[path = "update_tests.rs"]
+mod tests;
