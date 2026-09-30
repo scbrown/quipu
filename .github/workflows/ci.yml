@@ -153,6 +153,13 @@ jobs:
           cargo build --features full --bin quipu --bin quipu-server
           cargo test --features full --lib mcp_transport
           timeout 120 python3 scripts/test-native-mcp.py target/debug/quipu-server
+      # The quipu-server binary's own unit tests (src/server/*). The bin needs
+      # shacl+onnx+server, which no `test` matrix arm enables, so these were
+      # clippy'd and built but never RUN anywhere in CI. They include the
+      # /update sliced-vs-full differential (aegis-jm1lcl), whose soundness
+      # argument rests on them. Reuses the full-feature build just above.
+      - name: quipu-server binary tests
+        run: cargo test --features full --bin quipu-server
       # The MCP Registry image otherwise runs only at release time, which is
       # when a broken Dockerfile would first be seen: after the release shipped.
       # Same Dockerfile, same smoke as mcp-registry.yml, on the binaries just
