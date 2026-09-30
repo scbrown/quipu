@@ -136,6 +136,12 @@ ort = { version = "=2.0.0-rc.11", default-features = false, features = ["std", "
 tokenizers = { version = "0.21", optional = true }
 ndarray = { version = "0.16", optional = true }
 
+# The store-free Git qpack merge (`src/git_merge*.rs`) writes outputs atomically
+# and runs `git merge-file` on temporary copies. Both are filesystem-bound, so the
+# dependency is native-only, like the modules that use it.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tempfile = "3"
+
 # The wasm clock shim (quipu-gsg): `SystemTime::now`/`Instant::now` panic on
 # wasm32-unknown-unknown, so `src/time.rs` reads `js_sys::Date::now()` there.
 # Target-gated — native builds never see it. See docs/design/wasm-support.md §4.4.

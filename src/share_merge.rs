@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use oxrdf::{Term, Triple};
 use oxrdfio::{RdfFormat, RdfParser};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::share::{ShareManifest, manifest_bytes, sha256};
@@ -16,7 +16,7 @@ use crate::types::Op;
 
 const SH_PATH: &str = "http://www.w3.org/ns/shacl#path";
 const SH_MAX_COUNT: &str = "http://www.w3.org/ns/shacl#maxCount";
-type Graph = HashSet<Triple>;
+pub(crate) type Graph = HashSet<Triple>;
 type Slot = (String, String);
 
 #[derive(Clone)]
@@ -27,7 +27,7 @@ struct LoadedShare {
     shapes: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DecisionRecord {
     pub subject: String,
     pub predicate: String,
@@ -62,7 +62,7 @@ pub struct MergeResult {
     pub conflicts: Vec<DecisionRecord>,
 }
 
-fn parse_graph(input: &str, what: &str) -> Result<Graph> {
+pub(crate) fn parse_graph(input: &str, what: &str) -> Result<Graph> {
     RdfParser::from_format(RdfFormat::NTriples)
         .for_reader(input.as_bytes())
         .map(|q| {
@@ -199,7 +199,7 @@ fn max_counts(shapes: &str) -> Result<BTreeMap<String, usize>> {
         .collect())
 }
 
-fn merge_graphs(
+pub(crate) fn merge_graphs(
     base: &Graph,
     ours: &Graph,
     theirs: &Graph,
