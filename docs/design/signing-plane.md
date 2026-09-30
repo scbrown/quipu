@@ -193,7 +193,33 @@ CEN-M2 grows a column: verdicts whose seal re-verifies as-of.
 >    never pruned).
 > 4. `verify_recorded` recomputes the digest from the decision as it stands
 >    now (so an edit after signing invalidates the verdict) and verifies as
->    of the recorded signature (S1).
+>    of the recorded signature (S1). It also requires that `attest` admitted
+>    the verdict: the verdict is `decision_verdict_<nonce>`, the nonce's
+>    spend row names this decision and this verdict, the spending
+>    transaction wrote every load-bearing verdict fact (`forPresentation`,
+>    `outcome`, `verifier`, `sealSignature`), and it was recorded before
+>    `presentationExpiresAt`. Verdicts are graph-writable until S3, so
+>    without this a hand-written verdict carrying a captured signature (one
+>    `attest` refused as expired, or never received) would verify, and so
+>    would a second verdict on a spent nonce (wu-rev-345 F1).
+>
+> **Limits of the seal (wu-rev-345 F2, F4).** The digest covers the
+> decision's own ROOT facts and their blank-node closure, nothing more.
+> An object that is an IRI (an `aegis:authorizedAction <x>`, a warrant-scope
+> entity) is sealed BY REFERENCE: a later change to that entity's own facts
+> is not detected. Facts about the decision in NAMED graphs are not sealed,
+> because `entity_facts` reads ROOT; a reader that resolves decision
+> content across graphs can read something other than what was sealed.
+> .9.6 should consider sealing the closure of the scope and action
+> predicates too. The digest also depends on the lexical form quipu emits
+> for each literal, so a future literal re-encoding (e.g. numeric
+> identity, #320) changes every sealed digest and turns open presentations
+> into `ContentChanged`. That fails closed.
+>
+> **Wiring rule (F3).** `present(now)` and `attest(now)` have no production
+> caller yet. When they are exposed over MCP or REST, `now` MUST be the
+> server clock and never input, or the expiry becomes caller-controlled
+> (the same rule as S1's caller-supplied instant).
 >
 > The seal uses its own predicates where a shared one carries an
 > `rdfs:domain` that inference would apply (`decisionPolicy`,

@@ -11,11 +11,28 @@
 //! open for hours, and its nonce must stay spent for as long as the
 //! presentation could be answered. Human decisions are few, so this table is
 //! never pruned.
+//!
+//! A spend row also names the verdict it admitted and the transaction that
+//! recorded it. That is what lets a later re-verification tell a verdict that
+//! went through `attest` from one written straight into the graph with a
+//! captured signature: the second has no spend, or a spend that names another
+//! verdict or another transaction (wu-rev-345 F1).
 
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{Datum, Store};
 use crate::error::{Error, Result};
+
+/// What a spent decision nonce admitted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecisionNonceSpend {
+    /// The decision the nonce was presented for.
+    pub decision: String,
+    /// The one verdict the spend admitted.
+    pub verdict: String,
+    /// The transaction that recorded that verdict.
+    pub tx: Option<i64>,
+}
 
 impl Store {
     pub(super) fn migrate_decision_nonces(conn: &Connection) -> Result<()> {
@@ -23,21 +40,26 @@ impl Store {
             "CREATE TABLE IF NOT EXISTS decision_nonces (
                  nonce       TEXT PRIMARY KEY,
                  decision    TEXT NOT NULL,
+                 verdict     TEXT NOT NULL,
+                 tx          INTEGER,
                  consumed_at TEXT NOT NULL
              );",
         )?;
         Ok(())
     }
 
-    /// Spend `nonce` for `decision` and transact `datums` atomically.
+    /// Spend `nonce` for `decision`'s `verdict` and transact `datums`
+    /// atomically. The spend row records the verdict and the transaction.
     ///
     /// `Ok(Some(tx))` when the nonce was fresh and the facts landed;
     /// `Ok(None)` when the nonce was already spent (a replay), in which case
     /// nothing is written.
+    #[allow(clippy::too_many_arguments)]
     pub fn transact_spending_decision_nonce(
         &mut self,
         nonce: &str,
         decision: &str,
+        verdict: &str,
         datums: &[Datum],
         timestamp: &str,
         actor: Option<&str>,
@@ -46,9 +68,9 @@ impl Store {
         self.conn.execute_batch("SAVEPOINT quipu_decision_nonce")?;
         let result = (|| -> Result<Option<i64>> {
             let inserted = self.conn.execute(
-                "INSERT OR IGNORE INTO decision_nonces (nonce, decision, consumed_at)
-                 VALUES (?1, ?2, ?3)",
-                params![nonce, decision, timestamp],
+                "INSERT OR IGNORE INTO decision_nonces (nonce, decision, verdict, consumed_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![nonce, decision, verdict, timestamp],
             )?;
             if inserted == 0 {
                 // An ignored insert is a replay only if the row is really
@@ -68,7 +90,12 @@ impl Store {
                     ))),
                 };
             }
-            Ok(Some(self.transact(datums, timestamp, actor, source)?))
+            let tx = self.transact(datums, timestamp, actor, source)?;
+            self.conn.execute(
+                "UPDATE decision_nonces SET tx = ?2 WHERE nonce = ?1",
+                params![nonce, tx],
+            )?;
+            Ok(Some(tx))
         })();
         match result {
             Ok(Some(tx)) => {
@@ -101,5 +128,23 @@ impl Store {
             )
             .optional()?
             .is_some())
+    }
+
+    /// The spend of `nonce`, if it has been spent.
+    pub fn decision_nonce_spend(&self, nonce: &str) -> Result<Option<DecisionNonceSpend>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT decision, verdict, tx FROM decision_nonces WHERE nonce = ?1",
+                params![nonce],
+                |row| {
+                    Ok(DecisionNonceSpend {
+                        decision: row.get(0)?,
+                        verdict: row.get(1)?,
+                        tx: row.get(2)?,
+                    })
+                },
+            )
+            .optional()?)
     }
 }

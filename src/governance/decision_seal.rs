@@ -20,7 +20,12 @@
 //! 4. [`verify_recorded`] re-checks a recorded verdict later: it recomputes
 //!    the digest from the decision as it stands NOW (an edit after signing
 //!    invalidates the verdict) and verifies the signature against the key
-//!    registered when the store recorded it.
+//!    registered when the store recorded it. It also requires that `attest`
+//!    admitted this verdict: it was recorded before the presentation expired,
+//!    its nonce was spent FOR it, and its facts were written by the spending
+//!    transaction. Until S3 (.9.4) verdicts are graph-writable, so without
+//!    this a verdict hand-written with a captured signature would skip every
+//!    attest-time gate (wu-rev-345 F1).
 //!
 //! # What the digest covers
 //!
@@ -31,6 +36,17 @@
 //! as N-Triples and canonicalized with W3C RDFC-1.0, so the digest does not
 //! depend on fact order or blank-node labels. It is `sha256:<hex>` of the
 //! canonical bytes.
+//!
+//! Limits (wu-rev-345 F2, F4): an IRI object is sealed BY REFERENCE, so a
+//! change to the referenced entity's own facts (an authorized action, a
+//! warrant scope) is not detected; facts about the decision in NAMED graphs
+//! are not sealed; and the digest depends on the lexical form quipu emits
+//! for literals, so a future re-encoding turns open presentations into
+//! [`Refusal::ContentChanged`] (fail-closed).
+//!
+//! `now` in [`present`] and [`attest`] MUST be the server clock when these
+//! are wired to MCP or REST, never caller input, or the expiry becomes
+//! caller-controlled (F3).
 //!
 //! # Vocabulary
 //!
@@ -223,6 +239,10 @@ pub enum Refusal {
     BadSignature,
     /// The nonce was already spent: a replay.
     Replayed,
+    /// The verdict was not admitted by [`attest`]: its nonce was never spent,
+    /// the spend admitted a different verdict, or the verdict's facts were
+    /// written by some other transaction.
+    NotAttested,
 }
 
 /// Accept a signed verdict over `nonce`'s presentation. Returns the verdict
@@ -286,6 +306,7 @@ pub fn attest(
     match store.transact_spending_decision_nonce(
         nonce,
         &p.decision,
+        &verdict,
         &datums,
         &ts,
         Some(verifier),
@@ -296,9 +317,14 @@ pub fn attest(
     }
 }
 
+/// The verdict facts `attest` writes and a re-verification relies on. Each
+/// must still be the one the spending transaction wrote.
+const ATTESTED: [&str; 4] = ["forPresentation", "outcome", "verifier", "sealSignature"];
+
 /// Re-verify a recorded verdict: the decision must still have the sealed
-/// content, and the signature must verify under a key registered, for the
-/// decision's policy, when the store recorded it.
+/// content, the verdict must be the one `attest` admitted before the
+/// presentation expired, and the signature must verify under a key
+/// registered, for the decision's policy, when the store recorded it.
 pub fn verify_recorded(store: &Store, verdict: &str) -> Result<std::result::Result<(), Refusal>> {
     let Some(presentation) = ref_of(store, verdict, &ns("forPresentation"))? else {
         return Ok(Err(Refusal::UnknownPresentation));
@@ -325,6 +351,33 @@ pub fn verify_recorded(store: &Store, verdict: &str) -> Result<std::result::Resu
     let Some(witness) = Witness::of_fact(store, verdict, &ns("sealSignature"), &signature)? else {
         return Ok(Err(Refusal::BadSignature));
     };
+    // Recorded before the presentation expired. An unparseable instant fails
+    // closed. Both sides are canonical `YYYY-MM-DDTHH:MM:SSZ`, so they order
+    // as strings.
+    let deadline = crate::time::format_iso(u64::try_from(p.expires_at).unwrap_or(0));
+    match crate::time::normalize_rfc3339_utc(&witness.at) {
+        Some(at) if at < deadline => {}
+        _ => return Ok(Err(Refusal::Expired)),
+    }
+    // Admitted by attest: the one verdict this nonce's spend names, written
+    // by the spending transaction.
+    if verdict != ns(&format!("decision_verdict_{nonce}")) {
+        return Ok(Err(Refusal::NotAttested));
+    }
+    let Some(spend) = store.decision_nonce_spend(&nonce)? else {
+        return Ok(Err(Refusal::NotAttested));
+    };
+    let Some(spend_tx) = spend.tx else {
+        return Ok(Err(Refusal::NotAttested));
+    };
+    if spend.decision != p.decision || spend.verdict != verdict || witness.tx != Some(spend_tx) {
+        return Ok(Err(Refusal::NotAttested));
+    }
+    for field in ATTESTED {
+        if sole_fact_tx(store, verdict, &ns(field))? != Some(spend_tx) {
+            return Ok(Err(Refusal::NotAttested));
+        }
+    }
     let message = p.challenge(&outcome);
     let keys = registered_keys(store, &verifier, Some(&policy), &witness, Scope::Root)?;
     if keys
@@ -393,6 +446,24 @@ fn values(store: &Store, subject: &str, predicate: &str) -> Result<Vec<Value>> {
         .filter(|f| f.attribute == a)
         .map(|f| f.value)
         .collect())
+}
+
+/// The transaction that wrote `subject`'s single current `predicate` fact;
+/// none when there is no such fact or more than one.
+fn sole_fact_tx(store: &Store, subject: &str, predicate: &str) -> Result<Option<i64>> {
+    let (Some(e), Some(a)) = (store.lookup(subject)?, store.lookup(predicate)?) else {
+        return Ok(None);
+    };
+    let txs: Vec<i64> = store
+        .entity_facts(e)?
+        .into_iter()
+        .filter(|f| f.attribute == a)
+        .map(|f| f.tx)
+        .collect();
+    Ok(match txs.as_slice() {
+        [one] => Some(*one),
+        _ => None,
+    })
 }
 
 fn scalars(store: &Store, subject: &str, predicate: &str) -> Result<Vec<String>> {
