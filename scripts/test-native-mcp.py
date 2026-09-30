@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Exercise actual MCP protocol and credential boundaries on isolated binaries."""
 import concurrent.futures
+import ctypes
 import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import subprocess
 import sys
@@ -17,6 +19,40 @@ server_binary = Path(sys.argv[1]).resolve()
 cli_binary = server_binary.with_name('quipu')
 SHARED = 's' * 43
 TOKENS = {'one': 'a' * 43, 'two': 'b' * 43}
+
+
+# Children must not outlive this harness (aegis-lij3e8). CI and `just` run it
+# under `timeout 120`, which sends SIGTERM; Python's default SIGTERM action
+# exits WITHOUT running `finally`, so the cleanup below never ran and every
+# timed-out run left a quipu-server (ppid 1) holding its db and the cargo
+# target open. Measured: SIGTERM, SIGHUP and SIGKILL of this harness each left
+# one live server and its temp dir.
+#
+# Two layers, because one does not cover the other:
+# - SIGTERM/SIGHUP become SystemExit, so `finally` kills the children and the
+#   TemporaryDirectory is removed.
+# - On Linux every child also gets PR_SET_PDEATHSIG, so it is killed when this
+#   process dies by a signal nothing can catch (SIGKILL). Its temp dir then
+#   stays behind; the process does not.
+def _exit_on_signal(signum, _frame):
+    raise SystemExit(128 + signum)
+
+
+for _sig in (signal.SIGTERM, signal.SIGHUP):
+    signal.signal(_sig, _exit_on_signal)
+
+PR_SET_PDEATHSIG = 1
+_libc = None
+if sys.platform.startswith('linux'):
+    try:
+        _libc = ctypes.CDLL(None, use_errno=True)
+    except OSError:
+        _libc = None
+
+
+def _die_with_parent():
+    if _libc is not None:
+        _libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
 
 
 def envelope(method, params=None, ident=1):
@@ -67,7 +103,7 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
     def start(*args):
         proc = subprocess.Popen([str(server_binary), *args], cwd=root, env=env,
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                stderr=log, text=True)
+                                stderr=log, text=True, preexec_fn=_die_with_parent)
         processes.append(proc)
         return proc
 
@@ -176,7 +212,8 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
         token_file = root / 'client-token'; token_file.write_text(TOKENS['one']); token_file.chmod(0o600)
         proc = subprocess.Popen([str(cli_binary), 'mcp', '--db', str(root / 'stdio.db'),
                                  '--mcp-token-file', str(token_file)], cwd=root, env=env,
-                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, text=True)
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, text=True,
+                                preexec_fn=_die_with_parent)
         processes.append(proc)
         def stdio(message):
             proc.stdin.write(json.dumps(message) + '\n'); proc.stdin.flush()
