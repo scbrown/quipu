@@ -107,6 +107,7 @@ const SHARING_VERBS: &[&str] = &[
     "merge-driver",
     "qpack-resolve",
     "qpack-check",
+    "diff-textconv",
 ];
 
 #[test]

@@ -50,6 +50,7 @@ mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
+mod cli_share_diff;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -73,6 +74,11 @@ fn main() {
         "merge-driver" => return cli_git_merge::run(&args),
         "qpack-resolve" => return cli_git_merge::run(&args),
         "qpack-check" => return cli_git_merge::run(&args),
+        // Store-free pack readers: no config, no database (aegis-fxpbys.1).
+        "diff-textconv" => return cli_share_diff::cmd_textconv(&args),
+        "share" if args.get(2).map(String::as_str) == Some("diff") => {
+            return cli_share_diff::cmd_diff(&args);
+        }
         _ => {}
     }
 
@@ -349,6 +355,8 @@ COMMANDS:
     quipu merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
     quipu qpack-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
     quipu qpack-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
+    quipu share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
+    quipu diff-textconv <file>   labelled pack rendering for git diff's textconv
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
