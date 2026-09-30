@@ -83,6 +83,32 @@ This nonce replay protection prevents reusing an attestation. It does not
 implement the historical, as-of trust-root verification proposed below, or
 §6's task-scoped capability model.
 
+### 2.2. Hardware verdict schemes — implemented, off by default
+
+[`src/verdict_schemes`](../../src/verdict_schemes/mod.rs) adds three schemes
+beside raw ed25519 so a human can attest a verdict with a device whose private
+key never leaves it: `webauthn-es256` and `webauthn-eddsa` (passkeys and
+security keys; the assertion signs `authenticatorData || SHA-256(clientDataJSON)`)
+and `sshsig-sk-ed25519` (`ssh-keygen -Y sign -n quipu-verdict` with a FIDO
+`sk-ssh-ed25519@openssh.com` key). All sign the same v1 canonical message.
+
+A registration declares its scheme with `aegis:signatureScheme` (absent means
+`ed25519`, so existing registrations are unchanged), and a verdict verifies
+only against a registration declaring the scheme it names. Quipu derives the
+WebAuthn challenge from the verdict message and never takes one from the
+caller; it checks the origin, the RP ID hash, and the UP and UV flags (UP for
+SSHSIG sk keys), the SSHSIG namespace, and a non-regressing authenticator
+counter. The counter to record is returned; verification itself stays
+read-only.
+
+The schemes are **off by default** (`[quipu.governance]
+hardware_verdict_schemes`). Until S3 (§5) restricts `VerifierRegistration`
+amendments to an enrolled human key, a registration is still graph-writable,
+so enabling them is an operator decision. While off, both a verdict naming a
+hardware scheme and a write declaring one are refused. The whole-decision
+canonicalization and single-use nonce of the hardware-verdict design are
+separate work; this scheme layer signs the v1 message.
+
 ## 3. What replay actually covers today — measured honestly
 
 The paper's RQ5 claim is precise and verified (CEN-M2,

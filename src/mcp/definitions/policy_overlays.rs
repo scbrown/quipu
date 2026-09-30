@@ -37,7 +37,10 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "evidence_hash": { "type": "string", "description": "Evidence hash the signature seals" },
                     "tier": { "type": "string", "description": "Evidence tier (default: committed)" },
                     "verifier": { "type": "string", "description": "Verifier IRI whose registered key verifies the signature" },
-                    "signature": { "type": "string", "description": "Hex ed25519 signature over the verdict message" }
+                    "signature": { "type": "string", "description": "The signature over the verdict message: hex for ed25519 (default); base64url DER/raw assertion signature for webauthn-*; the armored SSH SIGNATURE block for sshsig-sk-ed25519" },
+                    "scheme": { "type": "string", "description": "Signature scheme: ed25519 (default) | webauthn-es256 | webauthn-eddsa | sshsig-sk-ed25519. Hardware schemes are refused unless [quipu.governance] hardware_verdict_schemes is on, and verify only against registrations declaring the same aegis:signatureScheme" },
+                    "authenticator_data": { "type": "string", "description": "webauthn-* only: base64url authenticatorData from the assertion" },
+                    "client_data_json": { "type": "string", "description": "webauthn-* only: base64url clientDataJSON from the assertion; its challenge must equal the one quipu derives from the verdict message" }
                 },
                 "required": ["predicate_id", "target_ref", "outcome", "evidence_hash", "verifier", "signature"]
             }
