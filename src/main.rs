@@ -43,6 +43,7 @@ mod cli_explain;
 mod cli_export;
 mod cli_fork;
 mod cli_gate;
+mod cli_git_merge;
 mod cli_graph;
 mod cli_ingest;
 mod cli_mcp;
@@ -67,6 +68,14 @@ fn main() {
         println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
         println!("git_dirty: {}", env!("QUIPU_GIT_DIRTY"));
         return;
+    }
+
+    match args[1].as_str() {
+        "git-merge" => return cli_git_merge::run(&args),
+        "merge-driver" => return cli_git_merge::run(&args),
+        "pendant-resolve" => return cli_git_merge::run(&args),
+        "pendant-check" => return cli_git_merge::run(&args),
+        _ => {}
     }
 
     // Parse --db flag from anywhere in args (overrides config file).
@@ -347,6 +356,10 @@ COMMANDS:
     quipu align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
     quipu status <share-dir> [--db <path>]
     quipu merge <share-dir> [--actor <id>] [--db <path>]
+    quipu git-merge <ref>   merge qpacks from Git snapshots, stop before commit
+    quipu merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
+    quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
+    quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]

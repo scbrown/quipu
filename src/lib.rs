@@ -72,6 +72,12 @@ pub mod pack_full_text;
 // The format gate + `restore`. Filesystem-bound like `pack_load`, so gated the
 // same way.
 #[cfg(not(target_arch = "wasm32"))]
+pub mod git_merge;
+#[cfg(not(target_arch = "wasm32"))]
+mod git_merge_alias;
+#[cfg(not(target_arch = "wasm32"))]
+mod git_merge_repo;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod pack_restore;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
