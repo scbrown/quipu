@@ -29,7 +29,7 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 }
 
 /// Reject an IRI that could break out of an inlined `<...>` and inject SPARQL.
-fn guard_iri(iri: &str) -> Result<()> {
+pub(super) fn guard_iri(iri: &str) -> Result<()> {
     if iri
         .chars()
         .any(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '{' | '}' | '\\'))
@@ -42,7 +42,7 @@ fn guard_iri(iri: &str) -> Result<()> {
 }
 
 /// Run a SPARQL ASK over the committed graph at `ctx`, returning its boolean.
-fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
+pub(super) fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
     match sparql::query_temporal(store, ask, ctx)? {
         QueryResult::Ask(b) => Ok(b),
         _ => Err(Error::InvalidValue(
@@ -70,7 +70,7 @@ fn fetch_scalar(store: &Store, subject: &str, predicate: &str) -> Result<Option<
 
 /// Escape a value for safe inlining as a SPARQL string literal (reject the
 /// characters that could break out of the quotes or inject).
-fn sparql_string_literal(value: &str) -> Result<String> {
+pub(super) fn sparql_string_literal(value: &str) -> Result<String> {
     if value.contains(['"', '\n', '\r', '\\']) {
         return Err(Error::InvalidValue(
             "value must not contain a quote, backslash, or newline".into(),
@@ -82,7 +82,11 @@ fn sparql_string_literal(value: &str) -> Result<String> {
 /// Is `verifier` registered (Phase-0 root of trust) to attest `predicate_id`?
 /// True iff an `aegis:VerifierRegistration` names both. A governed authority
 /// check — independent of (and prior to) cryptographic signing.
-fn is_registered_verifier(store: &Store, verifier: &str, predicate_id: &str) -> Result<bool> {
+pub(super) fn is_registered_verifier(
+    store: &Store,
+    verifier: &str,
+    predicate_id: &str,
+) -> Result<bool> {
     let v = sparql_string_literal(verifier)?;
     let p = sparql_string_literal(predicate_id)?;
     let ask = format!(
@@ -94,11 +98,17 @@ fn is_registered_verifier(store: &Store, verifier: &str, predicate_id: &str) -> 
 
 /// The hex public key a verifier is registered with (Phase-0 root of trust), or
 /// `None` if it has no `aegis:VerifierRegistration` carrying a key.
+///
+/// Only ed25519 registrations are considered: one whose `aegis:signatureScheme`
+/// names a hardware scheme holds a key in another format and must never be
+/// picked for a v1 verdict. A registration with no scheme is ed25519, so every
+/// store without scheme facts answers exactly as before.
 fn registered_public_key(store: &Store, verifier: &str) -> Result<Option<String>> {
     let v = sparql_string_literal(verifier)?;
     let q = format!(
         "PREFIX a: <http://aegis.gastown.local/ontology/> \
-         SELECT ?k WHERE {{ ?r a a:VerifierRegistration ; a:verifier {v} ; a:publicKey ?k }} LIMIT 1"
+         SELECT ?k WHERE {{ ?r a a:VerifierRegistration ; a:verifier {v} ; a:publicKey ?k . \
+         FILTER NOT EXISTS {{ ?r a:signatureScheme ?s . FILTER(?s != \"ed25519\") }} }} LIMIT 1"
     );
     match sparql::query_temporal(store, &q, &TemporalContext::default())? {
         QueryResult::Select { rows, .. } => {
@@ -147,6 +157,25 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         tier,
         &verifier,
     );
+
+    // A verdict naming a hardware scheme takes its own path
+    // (`super::governance_hardware`). Absent or "ed25519" continues below on
+    // the v1 path, unchanged.
+    if let Some(tag) = input.get("scheme").and_then(JsonValue::as_str) {
+        let scheme = crate::verdict_schemes::Scheme::parse(tag).map_err(Error::InvalidValue)?;
+        if scheme.is_hardware() {
+            return super::governance_hardware::verify_hardware_verdict(
+                store,
+                scheme,
+                input,
+                &verifier,
+                &predicate_id,
+                &message,
+                &signature,
+            );
+        }
+    }
+
     let pubkey = registered_public_key(store, &verifier)?;
     let signature_valid = pubkey
         .as_deref()

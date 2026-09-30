@@ -110,6 +110,9 @@ md-5 = "0.10"
 sha1 = "0.10"
 sha2 = "0.10"
 hex = "0.4"
+# base64url (WebAuthn wire encoding) and standard base64 (SSHSIG armor) for the
+# hardware verdict schemes. Already in the lock file transitively.
+base64 = "0.22"
 spargebra = "0.4"
 regex = "1"
 rudof_rdf = { version = "0.3.16", optional = true }

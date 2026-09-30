@@ -102,6 +102,7 @@ pub mod vector;
 pub mod vector_delegate;
 #[cfg(feature = "lancedb")]
 pub mod vector_lance;
+pub mod verdict_schemes;
 pub mod vocabulary;
 pub mod w3c;
 
