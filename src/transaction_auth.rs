@@ -84,6 +84,18 @@ impl PartialEq for AttestationSlot {
 
 impl Eq for AttestationSlot {}
 
+/// Refuse NOW if this thread's signed write has been refused. For store work
+/// that mutates without opening a transaction (so `record` never runs): call it
+/// right after taking the writer lock, where the settle has just happened.
+pub fn refuse_if_refused() -> crate::Result<()> {
+    match current_attestation().map(|p| p.state()) {
+        Some(AttestState::Refused { verdict, message }) => Err(crate::Error::InvalidValue(
+            format!("attestation refused ({verdict}): {message}"),
+        )),
+        _ => Ok(()),
+    }
+}
+
 /// The pending attestation of the identity scoped on this thread, if any.
 #[must_use]
 pub fn current_attestation() -> Option<Arc<PendingAttestation>> {
@@ -121,6 +133,7 @@ pub(crate) fn settle_on(
     let problem = match &binding {
         None => Some(("unbound", "the session is no longer registered")),
         Some(b) if b.revoked => Some(("revoked", "the session binding was revoked")),
+        Some(b) if !b.allow_write => Some(("scope", "the session binding is not granted write")),
         Some(b) if now > b.expires_at_epoch || now < b.issued_at_epoch => {
             Some(("expired", "the session binding is expired or not yet valid"))
         }

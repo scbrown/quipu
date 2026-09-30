@@ -35,10 +35,13 @@ use crate::SharedStore;
 /// The header carrying `base64url(JSON AttestationEnvelope)`, unpadded.
 pub(crate) const HEADER: &str = "x-quipu-attestation";
 
-/// Endpoints that accept a signed write. Each mutates ONLY through store
-/// transactions, so `transaction_auth::record` is a complete barrier for a
-/// refused request. Other write endpoints are added after the same audit.
-const ATTESTED_PATHS: [&str; 3] = ["/knot", "/update", "/episode"];
+/// Endpoints that accept a signed write, each audited for its barrier:
+/// /knot, /update and /episode mutate ONLY through store transactions, so
+/// `transaction_auth::record` refuses a refused request. /graph/create writes
+/// the graphs registry WITHOUT a transaction; it is an `rw_handler!`, which
+/// calls `refuse_if_refused` right after the writer lock is taken. Any other
+/// endpoint is added only after the same audit names its barrier.
+const ATTESTED_PATHS: [&str; 4] = ["/knot", "/update", "/episode", "/graph/create"];
 
 /// The largest body a signed write may carry (the server's own body limit).
 const MAX_BODY: usize = 64 * 1024 * 1024;
@@ -61,12 +64,30 @@ pub(crate) async fn handle(
     if let AttestState::Refused { verdict, message } = pending.state() {
         return refuse(&Refusal { verdict, message });
     }
+    // Spent by the lock hook = spent in autocommit at lock acquisition, so
+    // already durable: a failure here is benign. UNSPENT = no writer lock was
+    // taken, so nothing was mutated; if the spend fails, the nonce would stay
+    // replayable against a later state, so answer INDETERMINATE (503) rather
+    // than 2xx. That loses nothing and a client re-signs (malcolm, bys8d1).
+    let was_unspent = pending.state() == AttestState::Unspent;
     if let Err(e) = spend_durably(&store, &pending).await {
         eprintln!(
             "{} signed write: durable nonce spend failed for session {}: {e}",
             quipu::time::now_iso(),
             pending.session
         );
+        if was_unspent {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                axum::Json(serde_json::json!({
+                    "error": "signed write indeterminate: its nonce could not be recorded; \
+                              nothing was written; re-sign with a fresh nonce",
+                    "verdict": "error",
+                    "indeterminate": true,
+                })),
+            )
+                .into_response();
+        }
     }
     response
         .extensions_mut()

@@ -169,7 +169,12 @@ impl Client {
         .unwrap();
         Self {
             key,
-            binding,
+            // Write-granted: registration is share-only unless granted
+            // (aegis-bys8d1); the share-only arm below clears this.
+            binding: SessionBinding {
+                allow_write: true,
+                ..binding
+            },
             nonce: u128::from(seed) << 64,
         }
     }
@@ -319,6 +324,7 @@ fn unregistered_revoked_and_expired_keys_are_refused_with_their_verdicts() {
         now - 3600,
     )
     .unwrap();
+    expired.binding.allow_write = true; // isolate expiry from the scope check
     let dir = fixture(&[&revoked, &expired]);
     quipu::Store::open(dir.path().join("store.db").to_str().unwrap())
         .unwrap()
@@ -462,4 +468,68 @@ fn a_no_op_signed_write_cannot_be_replayed_after_the_state_changes() {
         "the replay must not re-create the entity"
     );
     let _ = &server.root;
+}
+
+#[test]
+fn a_share_only_binding_is_refused_as_scope_until_write_is_granted() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // wu's arm: a key registered to trust a share PRODUCER must not thereby
+    // be able to sign writes. The same key succeeds only after the grant.
+    let mut client = Client::new("seeds-share-only", 11);
+    client.binding.allow_write = false;
+    let dir = fixture(&[&client]);
+    {
+        let server = spawn(dir.path());
+        let (subject, body) = knot(1);
+        let (status, reply) = server
+            .send("POST", "/knot", &client.sign("/knot", &body), &body)
+            .unwrap();
+        assert_eq!(
+            (status, verdict(&reply)),
+            (401, "scope".to_owned()),
+            "{reply}"
+        );
+        assert_eq!(server.count(&subject), 0);
+    }
+    quipu::Store::open(dir.path().join("store.db").to_str().unwrap())
+        .unwrap()
+        .attestation_set_write("seeds-share-only", true)
+        .unwrap();
+    let server = spawn(dir.path());
+    let (subject, body) = knot(2);
+    let (status, reply) = server
+        .send("POST", "/knot", &client.sign("/knot", &body), &body)
+        .unwrap();
+    assert_eq!(status, 200, "{reply}");
+    assert_eq!(server.count(&subject), 1);
+}
+
+#[test]
+fn a_signed_graph_create_lands_and_its_replay_is_refused() {
+    let _serial = SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // wu's contract gap: seeds creates its graph before writing to it.
+    let mut client = Client::new("seeds-graph", 12);
+    let dir = fixture(&[&client]);
+    let server = spawn(dir.path());
+    let body = serde_json::json!({ "graph": "urn:signed:graph" }).to_string();
+    let headers = client.sign("/graph/create", &body);
+    let (status, reply) = server
+        .send("POST", "/graph/create", &headers, &body)
+        .unwrap();
+    assert_eq!(status, 200, "{reply}");
+    assert!(reply.contains("\"created\":true"), "{reply}");
+    let (status, reply) = server
+        .send("POST", "/graph/create", &headers, &body)
+        .unwrap();
+    assert_eq!(
+        (status, verdict(&reply)),
+        (401, "replay".to_owned()),
+        "{reply}"
+    );
+    let (_, listing) = server.send("GET", "/graphs", &[], "").unwrap();
+    assert!(listing.contains("urn:signed:graph"), "{listing}");
 }

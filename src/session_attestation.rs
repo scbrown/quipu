@@ -43,6 +43,13 @@ pub struct SessionBinding {
     pub issued_at_epoch: u64,
     pub expires_at_epoch: u64,
     pub revoked: bool,
+    /// Granted to SIGN HTTP WRITES (aegis-bys8d1). Operator-granted only:
+    /// `serde(skip)` means it never travels in a share manifest and never
+    /// deserializes as anything but `false`, so no producer can grant itself
+    /// write by shipping a binding. A binding registered to trust a share
+    /// producer is share-only until an operator grants write explicitly.
+    #[serde(skip)]
+    pub allow_write: bool,
 }
 
 impl SessionBinding {
@@ -76,6 +83,7 @@ impl SessionBinding {
             issued_at_epoch,
             expires_at_epoch,
             revoked: false,
+            allow_write: false,
         })
     }
 }
@@ -376,6 +384,12 @@ fn check_binding<B: AttestationBindings + ?Sized>(
         observation.result = Verdict::Revoked;
         return Err(Error::InvalidValue("revoked attestation session".into()));
     }
+    if matches!(payload, SignedBinding::Write(_)) && !binding.allow_write {
+        observation.result = Verdict::Scope;
+        return Err(Error::InvalidValue(
+            "session binding is not granted write (quipu attest allow-write)".into(),
+        ));
+    }
     if now_epoch > binding.expires_at_epoch || now_epoch < binding.issued_at_epoch {
         observation.result = Verdict::Expired;
         return Err(Error::InvalidValue(
@@ -484,7 +498,7 @@ mod tests {
     fn fixture() -> (BindingRegistry, Ed25519KeyPair, SessionBinding) {
         let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
         let key = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-        let binding = SessionBinding::new(
+        let mut binding = SessionBinding::new(
             "urn:agent:malcolm",
             "session-1",
             hex::encode(key.public_key().as_ref()),
@@ -493,6 +507,7 @@ mod tests {
             NOW + 60,
         )
         .unwrap();
+        binding.allow_write = true; // signs the write domain too (aegis-bys8d1)
         let registry = BindingRegistry::default();
         registry.register(binding.clone()).unwrap();
         (registry, key, binding)

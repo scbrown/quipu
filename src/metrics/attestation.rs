@@ -92,6 +92,8 @@ pub(crate) enum VerificationResult {
     /// The session binding itself is expired or not yet valid. Distinct from
     /// `Skew` (the caller's clock): the remedy is re-registration, not a clock.
     Expired,
+    /// A valid binding used outside its grant: a share-only key signing a write.
+    Scope,
     Invalid,
     Error,
 }
@@ -107,6 +109,7 @@ impl VerificationResult {
             Self::Unbound => "unbound",
             Self::Skew => "skew",
             Self::Expired => "expired",
+            Self::Scope => "scope",
             Self::Invalid => "invalid",
             Self::Error => "error",
         }

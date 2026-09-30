@@ -21,7 +21,7 @@ fn registered(store: &Store, session: &str, expires_in: i64) -> SessionBinding {
         .fold(7u8, |a, b| a.wrapping_mul(31).wrapping_add(b));
     let key = Ed25519KeyPair::from_seed_unchecked(&[seed; 32]).unwrap();
     let now = crate::time::epoch_secs();
-    let binding = SessionBinding::new(
+    let mut binding = SessionBinding::new(
         "urn:crew:tester",
         session,
         hex::encode(key.public_key().as_ref()),
@@ -30,6 +30,7 @@ fn registered(store: &Store, session: &str, expires_in: i64) -> SessionBinding {
         now.saturating_add_signed(expires_in),
     )
     .unwrap();
+    binding.allow_write = true;
     store.attestation_register(&binding).unwrap();
     binding
 }
@@ -184,4 +185,153 @@ fn a_refused_request_stays_refused_for_every_later_transaction() {
     for _ in 0..2 {
         assert!(with_identity(Some(identity(&p)), || store.transact(&[], TS, None, None)).is_err());
     }
+}
+
+#[test]
+fn a_write_grant_withdrawn_while_queued_is_refused_as_scope() {
+    let mut store = Store::open_in_memory().unwrap();
+    let b = registered(&store, "s7", 3600);
+    let p = pending(&b, NONCE);
+    store.attestation_set_write("s7", false).unwrap();
+    let before = store.latest_tx_id().unwrap();
+    assert!(with_identity(Some(identity(&p)), || store.transact(&[], TS, None, None)).is_err());
+    assert!(matches!(
+        p.state(),
+        AttestState::Refused {
+            verdict: "scope",
+            ..
+        }
+    ));
+    assert_eq!(store.latest_tx_id().unwrap(), before);
+}
+
+#[test]
+fn the_write_grant_never_travels_in_a_serialized_binding() {
+    // A producer's binding rides in a share manifest; a grant carried there
+    // must neither be emitted nor accepted.
+    let store = Store::open_in_memory().unwrap();
+    let b = registered(&store, "s8", 3600);
+    assert!(b.allow_write);
+    let json = serde_json::to_value(&b).unwrap();
+    assert!(json.get("allow_write").is_none(), "{json}");
+    let mut forged = json;
+    forged["allow_write"] = serde_json::Value::Bool(true);
+    let parsed: SessionBinding = serde_json::from_value(forged).unwrap();
+    assert!(!parsed.allow_write);
+}
+
+#[test]
+fn a_binding_that_predates_the_grant_migrates_as_share_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy.db");
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE attestation_bindings (
+                 session TEXT PRIMARY KEY, agent TEXT NOT NULL, public_key TEXT NOT NULL,
+                 key_id TEXT NOT NULL UNIQUE, introducer TEXT NOT NULL,
+                 issued_at_epoch INTEGER NOT NULL, expires_at_epoch INTEGER NOT NULL,
+                 revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)));",
+        )
+        .unwrap();
+        let key = Ed25519KeyPair::from_seed_unchecked(&[9; 32]).unwrap();
+        let b = SessionBinding::new(
+            "urn:crew:producer",
+            "legacy",
+            hex::encode(key.public_key().as_ref()),
+            "urn:crew:lead",
+            1,
+            u64::from(u32::MAX),
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO attestation_bindings VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, 0)",
+            rusqlite::params![
+                b.session,
+                b.agent,
+                b.public_key,
+                b.key_id,
+                b.introducer,
+                u32::MAX
+            ],
+        )
+        .unwrap();
+    }
+    let store = Store::open(path.to_str().unwrap()).unwrap();
+    let b = store.attestation_binding("legacy").unwrap().unwrap();
+    assert!(
+        !b.allow_write,
+        "an existing producer binding must read as share-only"
+    );
+}
+
+#[test]
+fn the_http_precheck_refuses_a_share_only_key_as_scope_and_admits_a_granted_one() {
+    use crate::session_attestation::{
+        AttestationEnvelope, BindingRegistry, SignedBinding, WRITE_V1, WriteBinding,
+        canonical_message, check_binding_deferred,
+    };
+    let key = Ed25519KeyPair::from_seed_unchecked(&[77; 32]).unwrap();
+    let now = crate::time::epoch_secs();
+    let mut binding = SessionBinding::new(
+        "urn:crew:producer",
+        "precheck",
+        hex::encode(key.public_key().as_ref()),
+        "urn:crew:lead",
+        now - 60,
+        now + 3600,
+    )
+    .unwrap();
+    let write = WriteBinding {
+        method: "POST",
+        path: "/knot",
+        content_type: "application/json",
+        body_sha256: &"0".repeat(64),
+    };
+    let mut envelope = AttestationEnvelope {
+        version: WRITE_V1.into(),
+        key_id: binding.key_id.clone(),
+        session: "precheck".into(),
+        introducer: "urn:crew:lead".into(),
+        issued_at_epoch: now,
+        nonce: NONCE.into(),
+        signature: String::new(),
+    };
+    envelope.signature = hex::encode(
+        key.sign(&canonical_message(
+            &envelope,
+            &SignedBinding::Write(write.clone()),
+        ))
+        .as_ref(),
+    );
+    for (granted, want) in [(false, Err("scope")), (true, Ok(()))] {
+        binding.allow_write = granted;
+        let registry = BindingRegistry::default();
+        registry.register(binding.clone()).unwrap();
+        let got = check_binding_deferred(
+            &registry,
+            &envelope,
+            &SignedBinding::Write(write.clone()),
+            now,
+            crate::session_attestation::ATTESTATION_SKEW_SECS,
+        )
+        .map(|_| ())
+        .map_err(|r| r.verdict);
+        assert_eq!(got, want, "allow_write={granted}");
+    }
+}
+
+#[test]
+fn refuse_if_refused_stops_non_transactional_work_for_a_refused_request() {
+    // The guard rw_handler! calls after taking the writer lock.
+    let store = Store::open_in_memory().unwrap();
+    let b = registered(&store, "s9", 3600);
+    let ok = pending(&b, NONCE);
+    with_identity(Some(identity(&ok)), super::refuse_if_refused).unwrap();
+    store.attestation_revoke("s9").unwrap();
+    let refused = pending(&b, "fedcba9876543210fedcba9876543210");
+    assert!(store.settle_attestation(&refused).is_err());
+    assert!(with_identity(Some(identity(&refused)), super::refuse_if_refused).is_err());
+    // Outside any signed request it is a no-op.
+    super::refuse_if_refused().unwrap();
 }
