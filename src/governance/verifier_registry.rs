@@ -103,7 +103,20 @@ pub enum Scope {
     /// Every graph. The transition gate reads this way, because the identity
     /// graph is a named graph of the operator's choosing.
     AllGraphs,
+    /// Only HUMAN trust-root registrations: ROOT, and carrying an ASSERTED
+    /// `aegis:trustTier "human"` in ROOT (aegis-kzt0ql.9.4). Human decisions
+    /// verify only against these. Agent registrations stay writable by agents
+    /// and can never verify a human decision. The marker is matched as an
+    /// asserted ROOT fact in SQL, so neither inference nor a named graph can
+    /// supply it, and adding or changing it passes the trust-root gate
+    /// (`crate::governance::trust_root`).
+    HumanTier,
 }
+
+/// The predicate and value that mark a human trust-root registration.
+pub const TRUST_TIER: &str = "http://aegis.gastown.local/ontology/trustTier";
+/// See [`TRUST_TIER`].
+pub const HUMAN_TIER: &str = "human";
 
 /// The hex public keys registered to `verifier`, in effect at `witness`, and,
 /// when `attests` is given, authorized for it by the SAME registration. Every
@@ -220,7 +233,7 @@ fn select(
     // are inlined IN-lists of store term ids.
     let in_effect = |alias: &str| {
         let graph = match scope {
-            Scope::Root => format!(" AND {alias}.g = 0"),
+            Scope::Root | Scope::HumanTier => format!(" AND {alias}.g = 0"),
             Scope::AllGraphs => String::new(),
         };
         format!(
@@ -276,6 +289,21 @@ fn select(
     } else {
         "?4"
     };
+    let tier_attr = if scope == Scope::HumanTier {
+        match store.lookup(TRUST_TIER)? {
+            Some(id) => Some(id),
+            // Never interned: no human registration can exist.
+            None => return Ok(Vec::new()),
+        }
+    } else {
+        None
+    };
+    if tier_attr.is_some() {
+        sql.push_str(&format!(
+            " JOIN facts tr ON tr.e = t.e AND tr.a = ?12 AND tr.v = ?13 AND {}",
+            in_effect("tr")
+        ));
+    }
     sql.push_str(&format!(
         " WHERE t.a = ?3 AND t.v IN ({class_in}) AND {}",
         in_effect("t")
@@ -284,6 +312,7 @@ fn select(
     let verifier_bytes = Value::Str(verifier.to_string()).to_bytes();
     let attests_bytes = attests.map(|p| Value::Str(p.to_string()).to_bytes());
     let ed25519_bytes = Value::Str("ed25519".to_string()).to_bytes();
+    let tier_bytes = Value::Str(HUMAN_TIER.to_string()).to_bytes();
     let mut stmt = store.prepare(&sql)?;
     let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![
         ("?1", &witness.at),
@@ -300,6 +329,10 @@ fn select(
     }
     if scheme_attrs.is_some() {
         params.push(("?10", &ed25519_bytes));
+    }
+    if let Some(t) = &tier_attr {
+        params.push(("?12", t));
+        params.push(("?13", &tier_bytes));
     }
     let rows = stmt
         .query_map(params.as_slice(), |row| row.get(0))?
