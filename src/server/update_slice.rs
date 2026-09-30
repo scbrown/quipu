@@ -32,6 +32,28 @@
 //! `USING`, `USING NAMED` and `WITH` only choose which graphs a pattern reads;
 //! the slice is taken from every graph, so they need no special handling.
 //!
+//! # What a slice costs
+//!
+//! The slice is read through `idx_aevt`, which leads on `(a, e)`. A predicate
+//! whose subjects are all constant ([`Subjects::Only`]) is an index SEEK on
+//! each `(predicate, subject)` pair, so it costs the facts that subject has
+//! under that predicate. A predicate with an open subject anywhere
+//! ([`Subjects::All`]) reads every current fact of that predicate: an update
+//! with `?s rdf:type ?t` still pays O(|rdf:type facts|). That is bounded by
+//! the touched predicates rather than the store, but it is not O(1).
+//!
+//! # Where the two paths may legitimately differ
+//!
+//! `LIMIT`/`OFFSET` without `ORDER BY`, `SAMPLE`, and the order inside
+//! `GROUP_CONCAT` choose among solutions by dataset iteration order, which
+//! differs between a slice and a full copy. SPARQL leaves that choice to the
+//! engine, so either answer is conforming; but a caller that needs a
+//! deterministic pick (for example "claim one open item") must say
+//! `ORDER BY` rather than rely on `LIMIT 1` alone.
+//!
+//! A stored fact the full copy cannot convert (an invalid IRI, say) used to
+//! fail every update; now it fails only updates whose slice includes it.
+//!
 //! # When the argument fails, and the update takes the full-copy path
 //!
 //! * a variable predicate, in a pattern or a template;

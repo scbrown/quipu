@@ -275,3 +275,132 @@ fn metrics_count_both_paths() {
         assert!(count >= 1, "{line}");
     }
 }
+
+// Review probes: paths with constant endpoints, cross-graph re-inserts,
+// GRAPH ?g joined with VALUES or outer patterns, operators inside GRAPH,
+// EXISTS reaching into a named graph, never-interned predicates, and a
+// delete-then-read sequence.
+const PROBE_CORPUS: &[&str] = &[
+    // reverse / sequence / alternative paths with constant endpoints
+    "INSERT { ?x p:rev true } WHERE { e:s1 ^p:dependsOn ?x }",
+    "INSERT { ?x p:two true } WHERE { e:s3 p:dependsOn/p:dependsOn ?x }",
+    "INSERT { e:s1 p:alt ?x } WHERE { e:s1 (p:status|p:claimedBy) ?x }",
+    "INSERT { ?x p:revplus true } WHERE { e:s2 ^p:dependsOn+ ?x }",
+    // WHERE reads one subject, template writes another subject of the same predicate
+    r#"INSERT { e:s2 p:claimedBy "q" } WHERE { e:s1 p:claimedBy ?o }"#,
+    // re-insert of a fact present in ANOTHER graph only
+    r#"INSERT DATA { e:s4 p:status "open" }"#,
+    r#"INSERT DATA { GRAPH <http://ex.org/g/2> { e:s1 p:claimedBy "agentA" } }"#,
+    // GRAPH ?g joined with VALUES and with an outer pattern
+    r#"INSERT { e:v p:g ?g } WHERE { VALUES ?g { <http://ex.org/g/2> <http://ex.org/g/3> } GRAPH ?g { ?s p:priority ?p } }"#,
+    r#"INSERT { ?s p:alsoNamed ?g } WHERE { ?s p:status ?v . GRAPH ?g { ?s p:claimedBy ?c } }"#,
+    // EXISTS / OPTIONAL / UNION / MINUS inside GRAPH, with a required triple
+    r#"INSERT { GRAPH ?g { ?s p:noprio true } } WHERE { GRAPH ?g { ?s p:status ?v FILTER NOT EXISTS { ?s p:priority ?p } } }"#,
+    r#"INSERT { e:o p:opt ?g } WHERE { GRAPH ?g { ?s p:status ?v OPTIONAL { ?s p:priority ?p } } }"#,
+    r#"INSERT { e:u p:uni ?g } WHERE { GRAPH ?g { { ?s p:status ?v } UNION { ?s p:priority ?v } } }"#,
+    r#"INSERT { e:m p:min ?s } WHERE { GRAPH ?g { ?s p:status ?v MINUS { ?s p:priority ?p } } }"#,
+    // EXISTS reaching into a GRAPH from the default graph
+    r#"INSERT { ?s p:namedToo true } WHERE { ?s p:status ?v FILTER EXISTS { GRAPH ?h { ?s p:claimedBy ?c } } }"#,
+    // aggregate over an empty / never-interned predicate
+    r#"INSERT { e:z p:count ?n } WHERE { SELECT (COUNT(*) AS ?n) WHERE { ?s p:neverInterned ?o } }"#,
+    // DELETE WHERE across all named graphs
+    r#"DELETE WHERE { GRAPH ?g { ?s p:status "done" } }"#,
+    // one-or-more path inside GRAPH
+    r#"INSERT { e:gp p:reach ?x } WHERE { GRAPH ?g { e:s1 p:dependsOn+ ?x } }"#,
+    // multi-op: delete then read-after-delete
+    r#"DELETE DATA { e:s3 p:status "open" } ; INSERT { e:s3 p:gone true } WHERE { FILTER NOT EXISTS { e:s3 p:status ?v } }"#,
+    // numeric object equivalence is not narrowed by the planner
+    r#"DELETE { ?s p:priority ?p } INSERT { ?s p:priority 3 } WHERE { ?s p:priority ?p FILTER(?p = 2.0) }"#,
+    // blank-node subject used in template with another predicate
+    r#"INSERT { ?b p:tagged true } WHERE { ?b p:status "open" FILTER(isBlank(?b)) }"#,
+];
+
+#[test]
+fn review_probes_match_full_path() {
+    for update in PROBE_CORPUS {
+        differential(&[update]);
+    }
+    // And as one cumulative sequence.
+    differential(PROBE_CORPUS);
+}
+
+// Templates whose predicate/subject the WHERE never reads: only the template
+// rule puts the target in the slice (aegis-jm1lcl).
+const TEMPLATE_ONLY: &[&str] = &[
+    r#"DELETE { e:s1 p:status "open" } WHERE { e:s1 p:claimedBy ?c }"#,
+    r#"DELETE { ?s p:priority ?p } WHERE { ?s p:status "closed" . e:s2 p:priority ?p }"#,
+    r#"INSERT { e:s2 p:status "closed" } WHERE { e:s1 p:claimedBy ?c }"#,
+    r#"DELETE { GRAPH <http://ex.org/g/2> { e:s5 p:priority 1 } } WHERE { e:s1 p:claimedBy ?c }"#,
+];
+
+#[test]
+fn template_only_targets_are_in_the_slice() {
+    // Each of these fails if either template rule in `update_slice` is
+    // dropped: the WHERE clause never reads what the template writes.
+    let paths = differential(TEMPLATE_ONLY);
+    assert!(paths.iter().all(|p| *p == UpdatePath::Sliced), "{paths:?}");
+}
+
+mod generated {
+    //! Randomised differential over a small alphabet: a generator is cheap
+    //! at finding the pattern/template combination a hand corpus misses.
+    use proptest::prelude::*;
+
+    const SUBJECTS: &[&str] = &["e:s1", "e:s2", "e:s3", "?s"];
+    const PREDICATES: &[&str] = &["p:status", "p:claimedBy", "p:priority", "p:dependsOn"];
+    const OBJECTS: &[&str] = &["\"open\"", "\"closed\"", "\"agentA\"", "2", "e:s1", "?o"];
+
+    fn triple() -> impl Strategy<Value = String> {
+        (
+            prop::sample::select(SUBJECTS),
+            prop::sample::select(PREDICATES),
+            prop::sample::select(OBJECTS),
+        )
+            .prop_map(|(s, p, o)| format!("{s} {p} {o}"))
+    }
+
+    /// A triple, optionally scoped to a named graph.
+    fn quad() -> impl Strategy<Value = String> {
+        (triple(), any::<bool>()).prop_map(|(t, named)| {
+            if named {
+                format!("GRAPH <http://ex.org/g/1> {{ {t} }}")
+            } else {
+                t
+            }
+        })
+    }
+
+    fn update() -> impl Strategy<Value = String> {
+        (
+            prop::collection::vec(quad(), 0..3),
+            prop::collection::vec(quad(), 0..3),
+            prop::collection::vec(quad(), 1..3),
+            prop::option::of(quad()),
+            0..3u8,
+        )
+            .prop_map(|(delete, insert, wheres, extra, shape)| {
+                let body = wheres.join(" . ");
+                let body = match (extra, shape) {
+                    (Some(x), 0) => format!("{body} OPTIONAL {{ {x} }}"),
+                    (Some(x), 1) => format!("{body} FILTER NOT EXISTS {{ {x} }}"),
+                    (Some(x), _) => format!("{{ {body} }} UNION {{ {x} }}"),
+                    (None, _) => body,
+                };
+                format!(
+                    "DELETE {{ {} }} INSERT {{ {} }} WHERE {{ {body} }}",
+                    delete.join(" . "),
+                    insert.join(" . ")
+                )
+            })
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+        #[test]
+        fn random_updates_match_full_path(updates in prop::collection::vec(update(), 1..4)) {
+            let refs: Vec<&str> = updates.iter().map(String::as_str).collect();
+            let paths = super::differential(&refs);
+            prop_assert!(paths.iter().all(|p| *p == super::UpdatePath::Sliced), "{paths:?}");
+        }
+    }
+}
