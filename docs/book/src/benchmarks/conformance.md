@@ -162,7 +162,7 @@ Every case, with its diagnostic, is in
 
 The W3C SPARQL 1.2 query tests (`sparql/sparql12`) at the same rdf-tests revision
 (`369a90d1`). No SPARQL 1.2 case is Working Group–approved yet; every one is
-counted anyway. **2 of 269 pass, and 263 are not run.**
+counted anyway. **3 of 269 pass, and 263 are not run.**
 
 Most of SPARQL 1.2 needs grammar or terms Quipu does not have: triple terms, the `VERSION`
 declaration, base direction, new codepoint escapes. Those cases are listed and never run,
@@ -176,7 +176,7 @@ few cases that need nothing new are run by the same runner as everything above.
 | `expression` | 0 | 1 | 4 | 5 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
 | `grouping` | 0 | 2 | 0 | 2 | run |
 | `lang-basedir` | 0 | 0 | 11 | 11 | RDF 1.2 base direction (rdf:dirLangString) is not implemented |
-| `rdf11` | 2 | 1 | 0 | 3 | run |
+| `rdf11` | 3 | 0 | 0 | 3 | run |
 | `syntax` | 0 | 0 | 6 | 6 | not wired: the syntax runner scores the 1.1 syntax manifest only |
 | `syntax-triple-terms-negative` | 0 | 0 | 65 | 65 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
 | `syntax-triple-terms-positive` | 0 | 0 | 113 | 113 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |

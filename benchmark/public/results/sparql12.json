@@ -1,14 +1,14 @@
 {
   "benchmark": "W3C SPARQL 1.2 query tests (all dawgt:Proposed at the pinned revision)",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "57f8c1752d52089377f9483ad19dc14f0c7ad61f",
+  "quipu_revision": "459d612c80601cab335ea845b48f437a18e8acdc",
   "scope": "cases needing RDF 1.2 grammar or terms are enumerated, not run; the rest are run",
   "totals": {
     "all": {
       "cases": 269,
-      "failed": 4,
+      "failed": 3,
       "unsupported": 263,
-      "passed": 2
+      "passed": 3
     },
     "parts": {
       "codepoint-escapes": {
@@ -34,8 +34,7 @@
       },
       "rdf11": {
         "cases": 3,
-        "passed": 2,
-        "failed": 1
+        "passed": 3
       },
       "syntax": {
         "cases": 6,
@@ -2339,8 +2338,8 @@
       "id": ":plain-string-same",
       "kind": "QueryEvaluationTest",
       "approval": "Proposed",
-      "status": "failed",
-      "diagnostic": "query error: unsupported FILTER expression: SameTerm(Literal(Literal(String(\"foo\"))), Literal(Literal(String(\"foo\"))))"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql12",
@@ -2478,6 +2477,6 @@
       "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
     }
   ],
-  "generated_at": "2026-09-26T03:55:11Z",
+  "generated_at": "2026-09-30T18:23:22Z",
   "generated_by": "local"
 }
