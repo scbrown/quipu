@@ -38,11 +38,16 @@
 //!
 //! Both `WebAuthn` and FIDO sk signatures carry an authenticator counter. The
 //! verifier takes the highest counter previously recorded for the
-//! registration (`aegis:signCount`) and refuses a signature when both the
-//! recorded and the presented counters are nonzero and the presented one is
-//! not strictly greater: the credential may have been cloned. A zero counter
-//! on either side means "this authenticator does not count" (synced passkeys
-//! report 0) and is accepted. Verification is read-only: the accepted counter
+//! registration (`aegis:signCount`) and applies `WebAuthn` Level 3 §7.2: if
+//! EITHER counter is nonzero, the presented counter must be strictly greater
+//! than the recorded one, or the signature is refused because the credential
+//! may have been cloned. So once a nonzero counter has been recorded, a
+//! presented 0 is refused too: accepting it would tell the recorder to store
+//! 0 and silently switch clone detection off for that credential. Only when
+//! BOTH are 0 (an authenticator that does not count, such as a synced
+//! passkey, from its first use) is the signature accepted without an advance.
+//!
+//! Verification is read-only: the accepted counter
 //! is returned as `sign_count`, and whoever RECORDS the verdict is responsible
 //! for persisting it as the new high-water mark. Clone detection is therefore
 //! exactly as strong as the counters that have been recorded.
@@ -141,10 +146,18 @@ pub fn webauthn_challenge(message: &[u8]) -> [u8; 32] {
 /// The counter policy described in the module docs. `Ok` carries the counter
 /// to record; `Err` is the refusal reason.
 ///
+/// | recorded | presented | result |
+/// |---|---|---|
+/// | 0 | 0 | accept (authenticator does not count) |
+/// | 0 | n > 0 | accept |
+/// | r > 0 | 0 | refuse |
+/// | r > 0 | n <= r | refuse |
+/// | r > 0 | n > r | accept |
+///
 /// # Errors
-/// When both counters are nonzero and `presented <= recorded`.
+/// When a counter has been recorded (`recorded > 0`) and `presented <= recorded`.
 pub fn check_counter(recorded: u32, presented: u32) -> Result<u32, String> {
-    if recorded != 0 && presented != 0 && presented <= recorded {
+    if recorded != 0 && presented <= recorded {
         return Err(format!(
             "signature counter did not advance (recorded {recorded}, presented {presented}): \
              the credential may be cloned"

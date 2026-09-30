@@ -368,30 +368,35 @@ fn signature_by_a_different_key_is_refused() {
 }
 
 #[test]
-fn sign_count_policy_refuses_regression_and_accepts_zero() {
+fn sign_count_policy_follows_webauthn_l3() {
     let auth = Authenticator::es256();
-    let signed = auth.sign(&Ceremony::for_message(MESSAGE)); // count 7
-    // Recorded 7, presented 7: not an advance -> clone suspected.
-    refused(
-        check(&auth, &auth.cose_key(), 7, &signed, MESSAGE),
-        "counter",
-    );
-    // Recorded 9, presented 7: regression.
-    refused(
-        check(&auth, &auth.cose_key(), 9, &signed, MESSAGE),
-        "counter",
-    );
-    // Recorded 6, presented 7: advance, accepted, and 7 is what to record.
-    assert_eq!(
-        check(&auth, &auth.cose_key(), 6, &signed, MESSAGE)
-            .unwrap()
-            .sign_count,
-        7
-    );
-    // An authenticator that does not count (synced passkeys report 0).
-    let mut c = Ceremony::for_message(MESSAGE);
-    c.sign_count = 0;
-    assert!(check(&auth, &auth.cose_key(), 9, &auth.sign(&c), MESSAGE).is_ok());
+    let signed_with = |count: u32| {
+        let mut c = Ceremony::for_message(MESSAGE);
+        c.sign_count = count;
+        auth.sign(&c)
+    };
+    let run = |recorded: u32, presented: u32| {
+        check(
+            &auth,
+            &auth.cose_key(),
+            recorded,
+            &signed_with(presented),
+            MESSAGE,
+        )
+    };
+    // recorded 0, presented 0: the authenticator does not count -> accept.
+    assert_eq!(run(0, 0).unwrap().sign_count, 0);
+    // recorded 0, presented 7: first counted use -> accept, record 7.
+    assert_eq!(run(0, 7).unwrap().sign_count, 7);
+    // recorded 9, presented 0: a counting credential now reports 0 -> refuse
+    // (accepting would record 0 and switch clone detection off).
+    refused(run(9, 0), "counter");
+    // recorded 9, presented 7: regression -> refuse.
+    refused(run(9, 7), "counter");
+    // recorded 9, presented 9: no advance -> refuse.
+    refused(run(9, 9), "counter");
+    // recorded 9, presented 10: advance -> accept, record 10.
+    assert_eq!(run(9, 10).unwrap().sign_count, 10);
 }
 
 #[test]

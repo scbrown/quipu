@@ -29,7 +29,7 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 }
 
 /// Reject an IRI that could break out of an inlined `<...>` and inject SPARQL.
-fn guard_iri(iri: &str) -> Result<()> {
+pub(super) fn guard_iri(iri: &str) -> Result<()> {
     if iri
         .chars()
         .any(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '{' | '}' | '\\'))
@@ -42,7 +42,7 @@ fn guard_iri(iri: &str) -> Result<()> {
 }
 
 /// Run a SPARQL ASK over the committed graph at `ctx`, returning its boolean.
-fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
+pub(super) fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
     match sparql::query_temporal(store, ask, ctx)? {
         QueryResult::Ask(b) => Ok(b),
         _ => Err(Error::InvalidValue(
@@ -70,7 +70,7 @@ fn fetch_scalar(store: &Store, subject: &str, predicate: &str) -> Result<Option<
 
 /// Escape a value for safe inlining as a SPARQL string literal (reject the
 /// characters that could break out of the quotes or inject).
-fn sparql_string_literal(value: &str) -> Result<String> {
+pub(super) fn sparql_string_literal(value: &str) -> Result<String> {
     if value.contains(['"', '\n', '\r', '\\']) {
         return Err(Error::InvalidValue(
             "value must not contain a quote, backslash, or newline".into(),
@@ -82,7 +82,11 @@ fn sparql_string_literal(value: &str) -> Result<String> {
 /// Is `verifier` registered (Phase-0 root of trust) to attest `predicate_id`?
 /// True iff an `aegis:VerifierRegistration` names both. A governed authority
 /// check — independent of (and prior to) cryptographic signing.
-fn is_registered_verifier(store: &Store, verifier: &str, predicate_id: &str) -> Result<bool> {
+pub(super) fn is_registered_verifier(
+    store: &Store,
+    verifier: &str,
+    predicate_id: &str,
+) -> Result<bool> {
     let v = sparql_string_literal(verifier)?;
     let p = sparql_string_literal(predicate_id)?;
     let ask = format!(
@@ -145,20 +149,22 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         .and_then(JsonValue::as_str)
         .unwrap_or("committed");
 
-    // A verdict naming a hardware scheme takes its own path. Absent or
-    // "ed25519" falls through to the v1 path below, unchanged.
+    let message = crate::signing::verdict_message(
+        &predicate_id,
+        &target_ref,
+        &outcome,
+        &evidence_hash,
+        tier,
+        &verifier,
+    );
+
+    // A verdict naming a hardware scheme takes its own path
+    // (`super::governance_hardware`). Absent or "ed25519" continues below on
+    // the v1 path, unchanged.
     if let Some(tag) = input.get("scheme").and_then(JsonValue::as_str) {
         let scheme = crate::verdict_schemes::Scheme::parse(tag).map_err(Error::InvalidValue)?;
         if scheme.is_hardware() {
-            let message = crate::signing::verdict_message(
-                &predicate_id,
-                &target_ref,
-                &outcome,
-                &evidence_hash,
-                tier,
-                &verifier,
-            );
-            return verify_hardware_verdict(
+            return super::governance_hardware::verify_hardware_verdict(
                 store,
                 scheme,
                 input,
@@ -170,14 +176,6 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         }
     }
 
-    let message = crate::signing::verdict_message(
-        &predicate_id,
-        &target_ref,
-        &outcome,
-        &evidence_hash,
-        tier,
-        &verifier,
-    );
     let pubkey = registered_public_key(store, &verifier)?;
     let signature_valid = pubkey
         .as_deref()
@@ -189,215 +187,6 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         "verifier_registered": pubkey.is_some(),
         "verifier_authorized": verifier_authorized,
         "trusted": signature_valid && verifier_authorized
-    }))
-}
-
-/// One hardware-scheme registration of a verifier, as read from the graph.
-struct HardwareRegistration {
-    iri: String,
-    public_key: String,
-    rp_id: Option<String>,
-    origin: Option<String>,
-}
-
-/// Every registration of `verifier` declaring `scheme`, one row per
-/// (registration, key, RP ID, origin) combination.
-fn hardware_registrations(
-    store: &Store,
-    verifier: &str,
-    scheme: crate::verdict_schemes::Scheme,
-) -> Result<Vec<HardwareRegistration>> {
-    let v = sparql_string_literal(verifier)?;
-    let s = sparql_string_literal(scheme.tag())?;
-    let q = format!(
-        "PREFIX a: <http://aegis.gastown.local/ontology/> \
-         SELECT ?r ?k ?rp ?o WHERE {{ ?r a a:VerifierRegistration ; a:verifier {v} ; \
-         a:signatureScheme {s} ; a:publicKey ?k . \
-         OPTIONAL {{ ?r a:webauthnRpId ?rp }} OPTIONAL {{ ?r a:webauthnOrigin ?o }} }}"
-    );
-    let text = |row: &std::collections::HashMap<String, crate::types::Value>, k: &str| {
-        row.get(k).and_then(|v| match v {
-            crate::types::Value::Str(s) => Some(s.clone()),
-            _ => None,
-        })
-    };
-    let QueryResult::Select { rows, .. } =
-        sparql::query_temporal(store, &q, &TemporalContext::default())?
-    else {
-        return Ok(Vec::new());
-    };
-    let mut out = Vec::new();
-    for row in &rows {
-        let (Some(crate::types::Value::Ref(r)), Some(public_key)) = (row.get("r"), text(row, "k"))
-        else {
-            continue;
-        };
-        out.push(HardwareRegistration {
-            iri: store.resolve(*r)?,
-            public_key,
-            rp_id: text(row, "rp"),
-            origin: text(row, "o"),
-        });
-    }
-    Ok(out)
-}
-
-/// The highest `aegis:signCount` recorded on a registration (0 when none).
-fn recorded_sign_count(store: &Store, registration: &str) -> Result<u32> {
-    guard_iri(registration)?;
-    let q = format!(
-        "SELECT ?c WHERE {{ <{registration}> <http://aegis.gastown.local/ontology/signCount> ?c }}"
-    );
-    let QueryResult::Select { rows, .. } =
-        sparql::query_temporal(store, &q, &TemporalContext::default())?
-    else {
-        return Ok(0);
-    };
-    let mut max = 0u32;
-    for value in rows.iter().filter_map(|r| r.get("c")) {
-        let n = match value {
-            crate::types::Value::Int(i) => u32::try_from(*i).ok(),
-            crate::types::Value::Str(s) => s.parse::<u32>().ok(),
-            _ => None,
-        }
-        .ok_or_else(|| {
-            Error::InvalidValue(format!(
-                "registration {registration} has a non-numeric aegis:signCount"
-            ))
-        })?;
-        max = max.max(n);
-    }
-    Ok(max)
-}
-
-/// Does THIS registration authorize `predicate_id`? For hardware verdicts the
-/// key that verified and the grant that authorizes must be one registration,
-/// so a device enrolled for one predicate cannot borrow another registration's
-/// grant under the same verifier name.
-fn registration_attests(store: &Store, registration: &str, predicate_id: &str) -> Result<bool> {
-    guard_iri(registration)?;
-    let p = sparql_string_literal(predicate_id)?;
-    let ask = format!(
-        "PREFIX a: <http://aegis.gastown.local/ontology/> ASK {{ <{registration}> a:attests {p} }}"
-    );
-    run_ask(store, &ask, &TemporalContext::default())
-}
-
-/// Verify a verdict signed under a hardware scheme (`src/verdict_schemes`).
-///
-/// Refused outright (an error, not `trusted: false`) while
-/// `[quipu.governance] hardware_verdict_schemes` is off. Otherwise every
-/// registration of the verifier declaring the scheme is tried; the verdict is
-/// trusted iff one of them both verifies the signature and attests the
-/// predicate. The reported `sign_count` is the counter to record as that
-/// registration's new `aegis:signCount`; this read-only check does not write it.
-fn verify_hardware_verdict(
-    store: &Store,
-    scheme: crate::verdict_schemes::Scheme,
-    input: &JsonValue,
-    verifier: &str,
-    predicate_id: &str,
-    message: &[u8],
-    signature: &str,
-) -> Result<JsonValue> {
-    use crate::verdict_schemes::{Scheme, b64url_decode, sshsig, webauthn};
-
-    if !store.governance_config().hardware_verdict_schemes {
-        return Err(Error::InvalidValue(
-            crate::verdict_schemes::disabled_message(scheme.tag()),
-        ));
-    }
-    let registrations = hardware_registrations(store, verifier, scheme)?;
-    let verifier_authorized = is_registered_verifier(store, verifier, predicate_id)?;
-
-    // Decode the WebAuthn parts once; a malformed input is a caller error.
-    let webauthn_parts = if matches!(scheme, Scheme::WebauthnEs256 | Scheme::WebauthnEddsa) {
-        let part = |k: &str| -> Result<Vec<u8>> {
-            let raw = input
-                .get(k)
-                .and_then(JsonValue::as_str)
-                .ok_or_else(|| Error::InvalidValue(format!("missing '{k}' parameter")))?;
-            b64url_decode(raw).map_err(|e| Error::InvalidValue(format!("'{k}': {e}")))
-        };
-        Some((
-            part("authenticator_data")?,
-            part("client_data_json")?,
-            b64url_decode(signature)
-                .map_err(|e| Error::InvalidValue(format!("'signature': {e}")))?,
-        ))
-    } else {
-        None
-    };
-
-    let mut reasons: Vec<String> = Vec::new();
-    for reg in &registrations {
-        let recorded = recorded_sign_count(store, &reg.iri)?;
-        let result = match (&webauthn_parts, scheme) {
-            (Some((ad, cdj, sig)), _) => {
-                let (Some(rp_id), Some(origin)) = (&reg.rp_id, &reg.origin) else {
-                    reasons.push(format!(
-                        "{}: a WebAuthn registration needs aegis:webauthnRpId and \
-                         aegis:webauthnOrigin",
-                        reg.iri
-                    ));
-                    continue;
-                };
-                b64url_decode(&reg.public_key).and_then(|cose_key| {
-                    webauthn::verify(
-                        scheme,
-                        &webauthn::Registered {
-                            cose_key: &cose_key,
-                            rp_id,
-                            origin,
-                            recorded_sign_count: recorded,
-                        },
-                        &webauthn::Assertion {
-                            authenticator_data: ad,
-                            client_data_json: cdj,
-                            signature: sig,
-                        },
-                        message,
-                    )
-                })
-            }
-            (None, Scheme::SshsigSkEd25519) => {
-                sshsig::verify_sk(signature, &reg.public_key, recorded, message)
-            }
-            (None, _) => Err("scheme has no verifier".to_string()),
-        };
-        match result {
-            Ok(v) => {
-                let authorized = registration_attests(store, &reg.iri, predicate_id)?;
-                return Ok(serde_json::json!({
-                    "scheme": scheme.tag(),
-                    "signature_valid": true,
-                    "verifier_registered": true,
-                    "verifier_authorized": verifier_authorized,
-                    "registration": reg.iri,
-                    "registration_authorized": authorized,
-                    "user_present": v.user_present,
-                    "user_verified": v.user_verified,
-                    "sign_count": v.sign_count,
-                    "trusted": authorized
-                }));
-            }
-            Err(reason) => reasons.push(format!("{}: {reason}", reg.iri)),
-        }
-    }
-
-    if registrations.is_empty() {
-        reasons.push(format!(
-            "verifier has no aegis:VerifierRegistration declaring scheme '{}'",
-            scheme.tag()
-        ));
-    }
-    Ok(serde_json::json!({
-        "scheme": scheme.tag(),
-        "signature_valid": false,
-        "verifier_registered": !registrations.is_empty(),
-        "verifier_authorized": verifier_authorized,
-        "trusted": false,
-        "reasons": reasons
     }))
 }
 
@@ -966,7 +755,3 @@ mod graph_registry_tool_tests {
         assert!(err.is_err(), "a label declaring no axis must be refused");
     }
 }
-
-#[cfg(test)]
-#[path = "governance_hardware_tests.rs"]
-mod hardware_tests;

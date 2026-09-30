@@ -96,9 +96,12 @@ A registration declares its scheme with `aegis:signatureScheme` (absent means
 `ed25519`, so existing registrations are unchanged), and a verdict verifies
 only against a registration declaring the scheme it names. Quipu derives the
 WebAuthn challenge from the verdict message and never takes one from the
-caller; it checks the origin, the RP ID hash, and the UP and UV flags (UP for
-SSHSIG sk keys), the SSHSIG namespace, and a non-regressing authenticator
-counter. The counter to record is returned; verification itself stays
+caller; it checks the origin, the RP ID hash, the SSHSIG namespace, and a
+non-regressing authenticator counter (WebAuthn Level 3 §7.2: once a nonzero
+counter is recorded, a counter that does not exceed it, including 0, is
+refused). "Hardware-backed" means user presence is always required; user
+verification (biometric or PIN) is required for WebAuthn and only reported for
+SSHSIG, where it depends on the key being created with `verify-required`. The counter to record is returned; verification itself stays
 read-only.
 
 The schemes are **off by default** (`[quipu.governance]

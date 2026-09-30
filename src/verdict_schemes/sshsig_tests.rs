@@ -271,6 +271,11 @@ fn sk_counter_regression_is_refused() {
     let err = verify_sk(&sig, &key.openssh_line(), 5, MESSAGE).unwrap_err();
     assert!(err.contains("counter"), "{err}");
     assert!(verify_sk(&sig, &key.openssh_line(), 4, MESSAGE).is_ok());
+    // A key whose recorded counter is nonzero may not fall back to 0.
+    let zero = key.sign(SSHSIG_NAMESPACE, MESSAGE, 0x01, 0);
+    let err = verify_sk(&zero, &key.openssh_line(), 5, MESSAGE).unwrap_err();
+    assert!(err.contains("counter"), "{err}");
+    assert!(verify_sk(&zero, &key.openssh_line(), 0, MESSAGE).is_ok());
 }
 
 #[test]

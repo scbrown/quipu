@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 
-use super::tool_verdict_verify;
+use super::super::governance::{tool_policy_check, tool_verdict_verify};
 use crate::store::Store;
 use crate::verdict_schemes::sshsig_tests::{MESSAGE, SkKey};
 use crate::verdict_schemes::webauthn_tests::{Authenticator, Ceremony, ORIGIN, RP_ID};
@@ -278,7 +278,7 @@ fn ed25519_verdicts_are_unaffected_by_a_hardware_registration_beside_them() {
         ),
     )
     .unwrap();
-    let v = super::tool_policy_check(
+    let v = tool_policy_check(
         &store,
         &json!({
             "claim": "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a:hasTest ?t }",
@@ -310,4 +310,52 @@ fn an_unknown_verdict_scheme_is_an_error() {
     v["scheme"] = json!("rsa-pkcs1");
     v["signature"] = json!("00");
     assert!(tool_verdict_verify(&store, &v).is_err());
+}
+
+#[test]
+fn an_ambiguous_registration_is_refused() {
+    // Two origins on one registration: neither pairing may verify.
+    let mut store = enabled_store();
+    let auth = Authenticator::es256();
+    ingest(
+        &mut store,
+        &webauthn_registration(&auth, "; a:webauthnOrigin \"https://other.example.org\" "),
+    )
+    .unwrap();
+    let out = tool_verdict_verify(
+        &store,
+        &webauthn_verdict(&auth, &Ceremony::for_message(MESSAGE)),
+    )
+    .unwrap();
+    assert_eq!(out["trusted"], false, "{out:#}");
+    assert!(out["reasons"].to_string().contains("ambiguous"), "{out:#}");
+}
+
+#[test]
+fn an_unauthorized_registration_does_not_mask_an_authorizing_one() {
+    // The same key enrolled twice: once without the grant, once with it.
+    // Whichever is read first, the verdict is trusted.
+    let mut store = enabled_store();
+    let auth = Authenticator::es256();
+    let unauthorized = webauthn_registration(&auth, "")
+        .replace("a:passkey ", "a:aaa-first ")
+        .replace("\"human-approval\"", "\"other-predicate\"");
+    ingest(&mut store, &unauthorized).unwrap();
+    ingest(
+        &mut store,
+        &webauthn_registration(&auth, "").replace("a:passkey ", "a:zzz-second "),
+    )
+    .unwrap();
+    let out = tool_verdict_verify(
+        &store,
+        &webauthn_verdict(&auth, &Ceremony::for_message(MESSAGE)),
+    )
+    .unwrap();
+    assert_eq!(out["trusted"], true, "{out:#}");
+    assert!(
+        out["registration"]
+            .as_str()
+            .unwrap()
+            .ends_with("zzz-second")
+    );
 }

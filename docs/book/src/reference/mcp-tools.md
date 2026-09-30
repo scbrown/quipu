@@ -505,8 +505,11 @@ registrations carry an OpenSSH `sk-ssh-ed25519@openssh.com` public key line.
 The WebAuthn challenge is derived by quipu from the verdict message, never
 taken from the caller, and SSHSIG must use namespace `quipu-verdict`. The
 response's `sign_count` is the authenticator counter to record as the
-registration's `aegis:signCount`; a signature whose nonzero counter does not
-exceed the recorded nonzero high-water mark is refused as a possible clone.
+registration's `aegis:signCount`. Once a nonzero counter is recorded, a
+signature whose counter does not exceed it (including 0) is refused as a
+possible clone; a credential that has only ever reported 0 is accepted.
+WebAuthn requires user verification (UV); SSHSIG requires user presence and
+reports UV without requiring it.
 See `src/verdict_schemes/mod.rs` for the full rule list.
 
 ### `quipu_verifier_authorized`
