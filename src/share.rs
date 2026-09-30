@@ -222,6 +222,9 @@ pub struct ShareManifest {
     pub scope: ShareScope,
     /// Prior share in this lineage.
     pub parent_share: Option<String>,
+    /// Both incoming identities for a Git merge; omitted on ordinary shares.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub merge_parents: Vec<String>,
     /// Producer attestation over this manifest's identity (aegis-tadzdf).
     ///
     /// ADDITIVE and EXCLUDED FROM `share_id`. The envelope signs `share_id`,
@@ -430,6 +433,7 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         shapes_hash: sha256(&shapes),
         scope: opts.scope.clone(),
         parent_share: opts.parent_share.clone(),
+        merge_parents: Vec::new(),
         #[cfg(not(target_arch = "wasm32"))]
         attestation: None,
         created_at,
@@ -486,7 +490,7 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
     Ok(SharePayload { manifest, files })
 }
 
-fn manifest_turtle(manifest: &ShareManifest) -> String {
+pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
     let id = format!("urn:{}", manifest.share_id);
     let literal = |value: &str| serde_json::to_string(value).expect("string JSON cannot fail");
     let parent = manifest
@@ -499,6 +503,11 @@ fn manifest_turtle(manifest: &ShareManifest) -> String {
     // one produced before this field existed. A reader of the RDF view sees the
     // same marker as a reader of the JSON — the exemption must not be visible
     // in only one of the two representations a consumer might read.
+    let merge_parents = manifest
+        .merge_parents
+        .iter()
+        .map(|parent| format!(" ;\n  prov:wasDerivedFrom <urn:{parent}>"))
+        .collect::<String>();
     let destination = match manifest.destination {
         Some(ShareDestination::Internal) => " ;\n  quipu:destination \"internal\"",
         _ => "",
@@ -515,7 +524,7 @@ fn manifest_turtle(manifest: &ShareManifest) -> String {
   dct:identifier {} ;
   prov:generatedAtTime {}^^xsd:dateTime ;
   prov:wasAttributedTo [ a prov:SoftwareAgent ;
-    dct:title {} ; quipu:version {} ]{parent}{destination} ;
+    dct:title {} ; quipu:version {} ]{parent}{merge_parents}{destination} ;
   dcat:distribution [ a dcat:Distribution ;
     dcat:mediaType "application/n-triples" ;
     dcat:downloadURL <payload:export.nt> ;

@@ -111,6 +111,8 @@ jobs:
           # SQLite table (quipu-lv7). Extended-features compiles and runs them.
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:
@@ -123,6 +125,13 @@ jobs:
             ${{ runner.os }}-cargo-test-${{ matrix.name }}-
             ${{ runner.os }}-cargo-
       - run: cargo test ${{ matrix.flags }}
+
+      # Release correctness already requires this job. No path filter or driver config.
+      - name: Verify qpack Git merge semantics
+        if: matrix.name == 'shacl'
+        run: |
+          cargo build --locked --features shacl --bin quipu
+          python3 scripts/ci/qpack-merge-check.py
 
   # Unique but non-CD-gating cfg surfaces. Run them serially on PRs/nightly so
   # they remain release evidence without competing with a pushed head's six
