@@ -1933,6 +1933,8 @@ aegis:ClaudeCodeHookShape a sh:NodeShape ;
 #   committed_to += GitRepository, Repo (the class-name drift family, vt9m)
 #   authored_by  += Polecat (historical polecat-era authors)
 #   triggered_by += GitCommit (bead provenance), CLI (tool-invoked scripts)
+#   triggered_by += SystemdTimer (a .timer activating its .service is the
+#                   canonical trigger sense, same as CronJob; aegis-6bh4g4)
 #
 # STILL UNWIRED — HELD, with the measured blocker for each (fmt5-class
 # semantic-migration work, not range tweaks):
@@ -2013,7 +2015,7 @@ aegis:TriggeredByShape a sh:NodeShape ;
     sh:targetSubjectsOf aegis:triggered_by ;
     sh:property [
         sh:path aegis:triggered_by ;
-        sh:or ( [ sh:class aegis:CronJob ] [ sh:class aegis:Script ] [ sh:class aegis:GitCommit ] [ sh:class aegis:CLI ] ) ;
+        sh:or ( [ sh:class aegis:CronJob ] [ sh:class aegis:SystemdTimer ] [ sh:class aegis:Script ] [ sh:class aegis:GitCommit ] [ sh:class aegis:CLI ] ) ;
     ] .
 
 # The ten structure-only relationship guards: objects must be IRIs (an entity
