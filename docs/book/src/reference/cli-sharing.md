@@ -366,8 +366,12 @@ change to its content, and it contributes nothing.
 - An entity is shown by its `rdfs:label` with a compact name beside it; an
   unlabelled IRI is shown compactly (`prefix:local` for well-known vocabularies,
   otherwise its last two path segments). Predicates show their label or local
-  name. Compaction depends only on the IRI, never on the data, so both sides of
-  a diff name things the same way.
+  name. When two distinct predicates under one entity would show the same name
+  (`ex:name` and `schema:name` both labelled "name", or two IRIs ending
+  `/name`), each carries its compact IRI — `name (ex/name)`,
+  `name (schema:name)` — or its full IRI if even those collide. Compaction
+  depends only on the IRI, never on the data, so both sides of a diff name
+  things the same way.
 - `~ predicate: old -> new` is reported only when the slot (subject, predicate,
   graph) holds exactly one value on **both** sides. A multi-valued slot shows
   its removed and added values separately.
@@ -375,8 +379,12 @@ change to its content, and it contributes nothing.
   every blank node between two versions of a payload; a pure relabel is zero
   lines. A blank node referenced from another node is shown inline
   (`[ city "Paris" ; zip "75001" ]`) as part of the referencing fact, so an edit
-  inside it is a change of that fact. Limits: two structurally identical blank
-  nodes on one slot count once; a blank node referenced only from inside a
+  inside it is a change of that fact. Structurally identical blank nodes on
+  one slot are one fact with a count: cardinality matters to shapes
+  (`sh:maxCount`), so adding a second copy is shown as
+  `~ p: [ r "v" ] x1 -> [ r "v" ] x2`, and the textconv marks a fact asserted
+  more than once with `xN`. Limits: identical values nested inside an inlined
+  blank node still collapse; a blank node referenced only from inside a
   blank-node cycle has no named root and is not shown; a blank *graph name*
   is keyed by its label.
 - `--format markdown` suits a PR comment; `--format json` is the same
@@ -485,18 +493,23 @@ Without the `git config` line the attribute is inert and Git diffs raw lines.
 `git diff --no-textconv` shows the raw form on demand. A file that does not
 parse (a working copy with merge conflict markers, say) is printed unchanged,
 so `git diff` never fails on it. Textconv affects display only: merges, hashes
-and `qpack-check` still operate on the canonical bytes.
+and `pendant-check` still operate on the canonical bytes.
 
 ## Git transport: driver, decisions, and CI
 
 These commands operate on repository files and immutable Git snapshots. They do
 not open a Quipu store. Use a build with the `shacl` feature (the default).
 
+They shell out to the `git` executable found on `PATH` (the wrapper, the driver's
+snapshot reads, the shapes three-way merge, and `pendant-check` all do). If `git`
+cannot be found, the command exits 1 with `` `git` executable not found on PATH ``
+and writes nothing.
+
 ```text
 quipu git-merge <ref>
 quipu merge-driver <base-file> <ours-file> <theirs-file> <path>
-quipu qpack-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
-quipu qpack-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
+quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
+quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
 ```
 
 Version attributes for each share directory (adjust `qpack` to your layout):
@@ -540,8 +553,8 @@ matches; the decision belongs to the reviewer.
 Exit 2 means decisions or Git conflicts remain. Inspect the sidecar, then choose:
 
 ```bash
-quipu qpack-resolve "$base" "$ours" "$theirs" qpack conflict:0 ours
-quipu qpack-resolve "$base" "$ours" "$theirs" qpack alias:0 reject
+quipu pendant-resolve "$base" "$ours" "$theirs" qpack conflict:0 ours
+quipu pendant-resolve "$base" "$ours" "$theirs" qpack alias:0 reject
 ```
 
 Conflict choices are `base`, `ours`, or `theirs`; alias choices are `accept`
@@ -558,7 +571,7 @@ use. Review and stage the complete directory, then commit:
 ```bash
 git add qpack
 git commit
-quipu qpack-check "$base" "$ours" "$theirs" HEAD
+quipu pendant-check "$base" "$ours" "$theirs" HEAD
 ```
 
 The wrapper always stops before commit, including clean merges. It reconciles
@@ -568,7 +581,7 @@ labels are not stable identities across snapshots. Skolemize those nodes first.
 
 **CI is required even when local driver use is documented.** A clone with no
 driver definition, a forge merge button, or a rebase can fall back to text merge.
-The repository's SHACL test job runs `scripts/ci/qpack-merge-check.py` with full
+The repository's SHACL test job runs `scripts/ci/pendant-merge-check.py` with full
 history and the PR's synthetic merge commit. It also replays two-parent merges introduced on the topic branch, then
 reconstructs base/ours/theirs,
 requires recorded resolutions, compares the committed graph, shapes and manifest
@@ -576,6 +589,18 @@ with the operator result, and validates SHACL. A hand-rehashed unsafe result
 still fails. Push/nightly runs validate the committed packs too; a squash commit
 alone cannot reconstruct the original branch pair, so the PR check remains
 load-bearing. Keep the SHACL test check required in branch protection.
+
+**Known gap: an administrator bypasses the gate.** The replay that can actually
+fail is the PR check. On a `push` event the final replay is trivially
+`(base, ours, theirs) = (before, before, result)`: a fast-forward of the previous
+tip, so it re-validates the committed packs but cannot reconstruct a merge
+that happened elsewhere. This repository's `main` protection uses strict status
+checks, so a squash merge's tree equals the synthetic merge commit the PR check
+tested. It does **not** enforce protection for administrators, so an admin's
+direct push, or an admin merge that skips pending or failing checks, lands a
+qpack that no merge replay has verified. Treat an admin bypass as unverified and
+run `quipu pendant-check` on the original base/ours/theirs yourself, or enable
+"include administrators" if that gap is unacceptable.
 
 Measured on the repository's real Datalinks qpack, replacing the same functional
 value on both branches produces a **text conflict**, not a clean double. Git

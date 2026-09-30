@@ -47,8 +47,8 @@ def main():
         ancestor = git("merge-base", "--all", left, right)
         if "\n" in ancestor:
             raise SystemExit("refusing: ambiguous historical merge base")
-        subprocess.run([args.binary, "qpack-check", ancestor, left, right, merge], check=True)
-    subprocess.run([args.binary, "qpack-check", base, ours, theirs, result], check=True)
+        subprocess.run([args.binary, "pendant-check", ancestor, left, right, merge], check=True)
+    subprocess.run([args.binary, "pendant-check", base, ours, theirs, result], check=True)
 
 
 if __name__ == "__main__":

@@ -136,7 +136,7 @@ impl Fixture {
         cli(
             self.path(),
             &[
-                "qpack-resolve",
+                "pendant-resolve",
                 &self.base,
                 &self.ours,
                 &self.theirs,
@@ -153,7 +153,13 @@ impl Fixture {
     fn check(&self) -> Output {
         cli(
             self.path(),
-            &["qpack-check", &self.base, &self.ours, &self.theirs, "HEAD"],
+            &[
+                "pendant-check",
+                &self.base,
+                &self.ours,
+                &self.theirs,
+                "HEAD",
+            ],
         )
     }
     fn graph(&self) -> String {
@@ -178,6 +184,14 @@ fn functional_driver_holds_base_then_resolves_and_ci_verifies() {
     assert!(!f.graph().contains("<<<<<<<"));
     assert!(f.graph().contains("x2 vs. air attacks"));
     assert_eq!(f.decisions()["conflicts"].as_array().unwrap().len(), 1);
+    // Every output, decisions.json included, is renamed into place from a
+    // same-directory temp file; none may be left behind.
+    let stray: Vec<_> = std::fs::read_dir(f.path().join("qpack"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(".tmp"))
+        .collect();
+    assert!(stray.is_empty(), "stray temp files: {stray:?}");
     assert!(f.resolve("conflict:0", "ours").status.success());
     f.commit();
     let o = f.check();
@@ -314,7 +328,10 @@ fn single_branch_invalid_shacl_is_caught_without_driver() {
     rehash(f.path());
     g(f.path(), &["add", "."]);
     g(f.path(), &["commit", "-m", "invalid"]);
-    let o = cli(f.path(), &["qpack-check", &f.base, &f.base, "HEAD", "HEAD"]);
+    let o = cli(
+        f.path(),
+        &["pendant-check", &f.base, &f.base, "HEAD", "HEAD"],
+    );
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains("SHACL"));
 }
@@ -342,7 +359,7 @@ fn ci_entrypoint_replays_historical_merges_and_has_a_positive_control() {
         )
         .unwrap();
         let output = Command::new("python3")
-            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/qpack-merge-check.py"))
+            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/ci/pendant-merge-check.py"))
             .args(["--binary", env!("CARGO_BIN_EXE_quipu")])
             .env("GITHUB_EVENT_NAME", "push")
             .env("GITHUB_EVENT_PATH", &event)
@@ -386,6 +403,20 @@ fn driver_binds_temporary_inputs_to_context_before_writing() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("does not match immutable snapshot"));
     assert_eq!(std::fs::read_to_string(ours).unwrap(), "forged input");
+}
+
+#[test]
+fn missing_git_executable_is_reported_plainly() {
+    let empty = TempDir::new().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .args(["pendant-check", "a", "b", "c", "d"])
+        .env("PATH", empty.path())
+        .current_dir(empty.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("`git` executable not found on PATH"), "{err}");
 }
 
 #[test]

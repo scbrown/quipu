@@ -1,6 +1,6 @@
 //! Git plumbing: explicit immutable snapshots, never file-order assumptions.
 use crate::error::Result;
-use crate::git_merge::{Decisions, Merged, Pack, invalid, io, plan, validate};
+use crate::git_merge::{Decisions, Merged, Pack, invalid, io, plan, spawn_git, validate};
 use crate::share::{manifest_bytes, manifest_turtle};
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
@@ -12,7 +12,7 @@ fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
         .arg(repo)
         .args(args)
         .output()
-        .map_err(io)?;
+        .map_err(|e| spawn_git(&e))?;
     if !o.status.success() {
         return Err(invalid(String::from_utf8_lossy(&o.stderr).into_owned()));
     }
@@ -144,6 +144,13 @@ fn build(repo: &Path, r: &[String; 3], dir: &str) -> Result<Merged> {
     };
     plan(&get(&r[0])?, &get(&r[1])?, &get(&r[2])?)
 }
+/// Replace one file atomically: a temp file in the same directory, then rename.
+fn replace(dir: &Path, name: &str, bytes: &[u8]) -> Result<()> {
+    let mut temp = tempfile::NamedTempFile::new_in(dir).map_err(io)?;
+    std::io::Write::write_all(&mut temp, bytes).map_err(io)?;
+    temp.persist(dir.join(name)).map_err(io)?;
+    Ok(())
+}
 fn write(dir: &Path, merged: &Merged) -> Result<()> {
     std::fs::create_dir_all(dir).map_err(io)?;
     for (name, bytes) in [
@@ -162,9 +169,7 @@ fn write(dir: &Path, merged: &Merged) -> Result<()> {
             serde_json::to_vec_pretty(&merged.decisions).map_err(io)?,
         ),
     ] {
-        let mut temp = tempfile::NamedTempFile::new_in(dir).map_err(io)?;
-        std::io::Write::write_all(&mut temp, &bytes).map_err(io)?;
-        temp.persist(dir.join(name)).map_err(io)?;
+        replace(dir, name, &bytes)?;
     }
     if dir.join("export.ttl").exists() {
         std::fs::remove_file(dir.join("export.ttl")).map_err(io)?;
@@ -204,11 +209,11 @@ pub fn driver(repo: &Path, base: &Path, ours: &Path, theirs: &Path, path: &str) 
     std::fs::write(ours, bytes).map_err(io)?;
     if name == "export.nt" {
         std::fs::create_dir_all(&output).map_err(io)?;
-        std::fs::write(
-            output.join("decisions.json"),
-            serde_json::to_vec_pretty(&merged.decisions).map_err(io)?,
-        )
-        .map_err(io)?;
+        replace(
+            &output,
+            "decisions.json",
+            &serde_json::to_vec_pretty(&merged.decisions).map_err(io)?,
+        )?;
     }
     Ok(ready || name != "export.nt")
 }
@@ -260,7 +265,7 @@ pub fn merge(repo: &Path, incoming: &str) -> Result<bool> {
         .env("QUIPU_QPACK_OURS", &ours)
         .env("QUIPU_QPACK_THEIRS", &theirs)
         .status()
-        .map_err(io)?;
+        .map_err(|e| spawn_git(&e))?;
     if !plans.is_empty() && !commit(repo, "MERGE_HEAD").is_ok_and(|head| head == theirs) {
         return Err(invalid(
             "Git did not enter the expected merge; no qpack outputs rewritten",

@@ -131,7 +131,7 @@ jobs:
         if: matrix.name == 'shacl'
         run: |
           cargo build --locked --features shacl --bin quipu
-          python3 scripts/ci/qpack-merge-check.py
+          python3 scripts/ci/pendant-merge-check.py
 
   # Unique but non-CD-gating cfg surfaces. Run them serially on PRs/nightly so
   # they remain release evidence without competing with a pushed head's six

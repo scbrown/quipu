@@ -3,6 +3,9 @@
 //! change (alice's age), one added entity (carol), one removed fact (alice's
 //! nickname), and one blank node that is ONLY relabelled (alice's address,
 //! `_:b0` -> `_:c14n7`, same content).
+//! The fixtures are standard-artifact `payload.nq` files, not `export.nt`: a
+//! tracked `*/export.nt` directory is a qpack to `quipu pendant-check`, which
+//! refuses one without a manifest.
 // The `quipu` binary has required-features = ["shacl"].
 #![cfg(feature = "shacl")]
 use std::path::{Path, PathBuf};
