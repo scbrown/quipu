@@ -3772,6 +3772,16 @@ fn equals_promotes_numerics_across_datatypes() {
     assert_eq!(bind_bool("1 = 2"), Some(Value::Bool(false)));
 }
 
+// `=` promotes numerics; sameTerm must not. Asserted in BIND, where a type
+// error would surface as an unbound `?r` rather than as `false`. The FILTER
+// test below cannot tell `false` from an error: both drop the row.
+#[test]
+fn same_term_keeps_datatype_identity_beside_numeric_equals() {
+    assert_eq!(bind_bool("sameTerm(1, 1.0)"), Some(Value::Bool(false)));
+    assert_eq!(bind_bool("sameTerm(1, 1)"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 = 1.0"), Some(Value::Bool(true)));
+}
+
 #[test]
 fn equals_does_not_coerce_strings_to_numbers() {
     assert_eq!(bind_bool(r#""1" = 1"#), Some(Value::Bool(false)));

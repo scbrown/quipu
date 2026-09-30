@@ -23,6 +23,8 @@ pub mod placement;
 pub mod precedent;
 pub mod replay;
 pub mod router;
+pub mod shadow;
+pub mod shadow_io;
 pub mod similarity;
 pub mod transition;
 pub mod tree;
