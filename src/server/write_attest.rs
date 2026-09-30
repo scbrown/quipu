@@ -222,3 +222,7 @@ fn refuse(refusal: &Refusal) -> Response {
         .insert(quipu::request_usage::AuthOutcome::Unauthorized);
     response
 }
+
+#[cfg(test)]
+#[path = "write_attest_tests.rs"]
+mod tests;
