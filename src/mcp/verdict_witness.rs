@@ -71,3 +71,23 @@ pub(super) fn is_registered_verifier(
         Scope::Root,
     )
 }
+
+/// MCP tool: `quipu_verifier_authorized` -- check the verifier registry: may
+/// `verifier` attest `predicate`? Input: `{ "verifier": "...", "predicate":
+/// "...", "signed_at"?: "...", "tx"?: N }` (default: now). Output:
+/// `{ "authorized": bool, "as_of": {...} }`.
+pub fn tool_verifier_authorized(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let verifier = input
+        .get("verifier")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'verifier' parameter".into()))?;
+    let predicate = input
+        .get("predicate")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'predicate' parameter".into()))?;
+    let (witness, basis) = explicit_witness(input);
+    Ok(serde_json::json!({
+        "authorized": is_registered_verifier(store, verifier, predicate, &witness)?,
+        "as_of": witness_json(&witness, basis)
+    }))
+}

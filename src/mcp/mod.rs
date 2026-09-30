@@ -9,6 +9,7 @@ pub mod entailment;
 #[cfg(feature = "owl")]
 pub mod explain;
 pub mod governance;
+mod governance_hardware;
 pub mod graphiti;
 pub mod impact;
 pub mod knot;

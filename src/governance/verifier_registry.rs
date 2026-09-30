@@ -168,6 +168,11 @@ fn select(
     } else {
         None
     };
+    let scheme_attr = if with_key {
+        lookup("signatureScheme")?
+    } else {
+        None
+    };
     let attests_attr = match attests {
         Some(_) => match lookup("attests")? {
             Some(id) => Some(id),
@@ -206,6 +211,19 @@ fn select(
             " JOIN facts pk ON pk.e = t.e AND pk.a = ?7 AND {}",
             in_effect("pk")
         ));
+        // Only ed25519 registrations hold a key in the hex format these
+        // callers verify with. One whose `aegis:signatureScheme` (in effect at
+        // the witness) names a hardware scheme is never offered as an ed25519
+        // key; no scheme means ed25519, so a store without scheme facts
+        // answers exactly as before. The write gate admits only plain string
+        // scheme literals, so comparing the plain encoding is complete.
+        if let Some(scheme_attr) = scheme_attr {
+            sql.push_str(&format!(
+                " AND NOT EXISTS (SELECT 1 FROM facts ss WHERE ss.e = t.e AND ss.a = {scheme_attr} \
+                 AND ss.v != ?10 AND {})",
+                in_effect("ss")
+            ));
+        }
     }
     if attests_attr.is_some() {
         sql.push_str(&format!(
@@ -221,6 +239,7 @@ fn select(
     let class_bytes = Value::Ref(class).to_bytes();
     let verifier_bytes = Value::Str(verifier.to_string()).to_bytes();
     let attests_bytes = attests.map(|p| Value::Str(p.to_string()).to_bytes());
+    let ed25519_bytes = Value::Str("ed25519".to_string()).to_bytes();
     let mut stmt = store.prepare(&sql)?;
     let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![
         ("?1", &witness.at),
@@ -236,6 +255,9 @@ fn select(
     if let (Some(a), Some(b)) = (&attests_attr, &attests_bytes) {
         params.push(("?8", a));
         params.push(("?9", b));
+    }
+    if scheme_attr.is_some() {
+        params.push(("?10", &ed25519_bytes));
     }
     let rows = stmt
         .query_map(params.as_slice(), |row| row.get(0))?

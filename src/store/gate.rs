@@ -397,6 +397,43 @@ impl Store {
         crate::governance::verify_transitions(self, datums, graph)
     }
 
+    /// Refuse a write that declares a verdict signature scheme this store will
+    /// not honour (`src/verdict_schemes`). An `aegis:signatureScheme` value
+    /// must be a known scheme tag, and a hardware scheme is refused unless
+    /// `[quipu.governance] hardware_verdict_schemes` is on.
+    ///
+    /// Unlike the gates above this one is NOT opt-in: the default must refuse,
+    /// because a registration declaring a hardware scheme is the very thing
+    /// the flag exists to keep out until an operator turns it on. It only
+    /// inspects asserted `aegis:signatureScheme` datums, so every write that
+    /// does not mention that predicate is unaffected.
+    pub(crate) fn refuse_disabled_signature_schemes(&self, datums: &[Datum]) -> Result<()> {
+        let Some(attr) = self.lookup(&format!(
+            "{}signatureScheme",
+            crate::namespace::DEFAULT_BASE_NS
+        ))?
+        else {
+            return Ok(());
+        };
+        for datum in datums
+            .iter()
+            .filter(|d| d.attribute == attr && d.op == crate::types::Op::Assert)
+        {
+            let crate::types::Value::Str(tag) = &datum.value else {
+                return Err(Error::PolicyDenied(
+                    "aegis:signatureScheme must be a plain string literal".into(),
+                ));
+            };
+            let scheme = crate::verdict_schemes::Scheme::parse(tag).map_err(Error::PolicyDenied)?;
+            if scheme.is_hardware() && !self.governance_config.hardware_verdict_schemes {
+                return Err(Error::PolicyDenied(
+                    crate::verdict_schemes::disabled_message(tag),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Invalidate the cached policy registry if this transaction defined or
     /// amended a governance policy. Cheap no-op unless enforcement is enabled.
     pub(crate) fn invalidate_policy_registry_if_governance(

@@ -13,9 +13,8 @@ use serde_json::Value as JsonValue;
 use crate::error::{Error, Result};
 use crate::governance::verifier_registry::{Scope, Witness, registered_keys};
 
-use super::verdict_witness::{
-    explicit_witness, is_registered_verifier, witness_from, witness_json,
-};
+pub use super::verdict_witness::tool_verifier_authorized;
+use super::verdict_witness::{is_registered_verifier, witness_from, witness_json};
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::Store;
 
@@ -47,7 +46,7 @@ pub(super) fn guard_iri(iri: &str) -> Result<()> {
 }
 
 /// Run a SPARQL ASK over the committed graph at `ctx`, returning its boolean.
-fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
+pub(super) fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
     match sparql::query_temporal(store, ask, ctx)? {
         QueryResult::Ask(b) => Ok(b),
         _ => Err(Error::InvalidValue(
@@ -113,6 +112,18 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         tier,
         &verifier,
     );
+
+    let claim = super::governance_hardware::Claim {
+        verifier: &verifier,
+        predicate_id: &predicate_id,
+        message: &message,
+        signature: &signature,
+    };
+    if let Some(out) = super::governance_hardware::dispatch(store, input, &claim, &witness, basis)?
+    {
+        return Ok(out);
+    }
+
     let verifies = |keys: &[String]| {
         keys.iter()
             .any(|pk| crate::signing::verify_hex(pk, &message, &signature))
@@ -134,26 +145,6 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         // a revoked key read as trusted.
         "trusted": trustworthy_basis && seal_ok,
         "would_verify_as_of_supplied_instant": if trustworthy_basis { JsonValue::Null } else { JsonValue::Bool(seal_ok) },
-        "as_of": witness_json(&witness, basis)
-    }))
-}
-
-/// MCP tool: `quipu_verifier_authorized` -- check the verifier registry: may
-/// `verifier` attest `predicate`? Input: `{ "verifier": "...", "predicate":
-/// "...", "signed_at"?: "...", "tx"?: N }` (default: now). Output:
-/// `{ "authorized": bool, "as_of": {...} }`.
-pub fn tool_verifier_authorized(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let verifier = input
-        .get("verifier")
-        .and_then(JsonValue::as_str)
-        .ok_or_else(|| Error::InvalidValue("missing 'verifier' parameter".into()))?;
-    let predicate = input
-        .get("predicate")
-        .and_then(JsonValue::as_str)
-        .ok_or_else(|| Error::InvalidValue("missing 'predicate' parameter".into()))?;
-    let (witness, basis) = explicit_witness(input);
-    Ok(serde_json::json!({
-        "authorized": is_registered_verifier(store, verifier, predicate, &witness)?,
         "as_of": witness_json(&witness, basis)
     }))
 }

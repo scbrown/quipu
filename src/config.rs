@@ -257,6 +257,19 @@ pub struct GovernanceConfig {
     /// all of them at once. The flag makes a supplied chain BINDING, so adopting
     /// attribution is per-caller and cannot silently widen.
     pub enforce_authority: bool,
+
+    /// Accept the hardware verdict signature schemes (`webauthn-es256`,
+    /// `webauthn-eddsa`, `sshsig-sk-ed25519`; `src/verdict_schemes`) beside
+    /// the v1 raw ed25519.
+    ///
+    /// Default false, and deliberately so: `aegis:VerifierRegistration` is
+    /// still graph-writable, so a "hardware-backed" verdict cannot yet be
+    /// trusted more than an ed25519 one. Until registry amendments are
+    /// restricted to an enrolled human key, enabling these is an operator
+    /// decision. While off, `quipu_verdict_verify` refuses a verdict naming a
+    /// hardware scheme, and a write asserting a non-ed25519
+    /// `aegis:signatureScheme` is refused.
+    pub hardware_verdict_schemes: bool,
 }
 
 /// Event-log retention policy (quipu-9z9).
