@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu does **not** pass every approved W3C SPARQL 1.1 Query, Update, Protocol
-> and Results test at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **168/168**, update **93/93**, protocol **34/34**, result format **10/10**, SPARQL 1.0 query **157/242**.
+> and Results test at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **168/168**, update **93/93**, protocol **34/34**, result format **10/10**, SPARQL 1.0 query **175/242**.
 > Exceptions, each named below: federated query (`SERVICE`) passes 6/7, with 1 refused by policy (variable
 > endpoints); entailment regimes are scored separately (35/70 passed, 0 failing, 35 declared non-goals);
 > SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.
@@ -15,7 +15,7 @@
 > The update-syntax suites are not run yet.
 > **The SPARQL 1.0 query tests are scored separately.** The SPARQL 1.1 manifests hold what
 > 1.1 added; the 1.0 tests (rdf-tests `sparql/sparql10`) also bear on SPARQL 1.1 Query
-> conformance. Quipu passes 157/242 of the approved ones, with 69 failing, 6 errors and 10 not comparable; see [SPARQL 1.0 query tests](#sparql-10-query-tests).
+> conformance. Quipu passes 175/242 of the approved ones, with 51 failing, 6 errors and 10 not comparable; see [SPARQL 1.0 query tests](#sparql-10-query-tests).
 > **This score is fitted to this suite.** Quipu's failures here were found by running this suite
 > and fixed against it, case by case, so a perfect score is partly a record of that work rather
 > than an independent sample. Other stores measured with the same harness were not tuned to it.
@@ -37,8 +37,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `097ac368f5c00de5a143eae9c0ec3d26d8c50a5b` |
-| Quipu revision (syntax) | `097ac368f5c00de5a143eae9c0ec3d26d8c50a5b` |
+| Quipu revision (evaluation) | `bae69aa45ae2127a9ae622e96050dbeb802e5831` |
+| Quipu revision (syntax) | `bae69aa45ae2127a9ae622e96050dbeb802e5831` |
 | Quipu version | `quipu 0.9.1` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -118,7 +118,7 @@ and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/p
 ## SPARQL 1.0 query tests
 
 The approved W3C SPARQL 1.0 query-evaluation tests (`sparql/sparql10`) at the same
-rdf-tests revision (`369a90d1`), run by the same runner: **157/242** pass.
+rdf-tests revision (`369a90d1`), run by the same runner: **175/242** pass.
 
 Most SPARQL 1.0 answers are RDF result-set graphs (`rs:ResultSet`). They are read with
 rdflib, pinned, with literal normalisation off, so `"01"^^xsd:integer` stays `01`.
@@ -128,7 +128,6 @@ RDF/XML answers, which the runner does not read.
 
 | Family | Passed | Failed | Error | Unsupported | Cases |
 |---|---:|---:|---:|---:|---:|
-| `type-promotion` | 12 | 18 | 0 | 0 | 30 |
 | `expr-builtin` | 10 | 14 | 0 | 0 | 24 |
 | `open-world` | 3 | 8 | 6 | 0 | 17 |
 | `sort` | 2 | 1 | 0 | 10 | 13 |
@@ -152,6 +151,7 @@ RDF/XML answers, which the runner does not read.
 | `optional-filter` | 4 | 0 | 0 | 0 | 4 |
 | `solution-seq` | 13 | 0 | 0 | 0 | 13 |
 | `triple-match` | 4 | 0 | 0 | 0 | 4 |
+| `type-promotion` | 30 | 0 | 0 | 0 | 30 |
 
 Some failures are the lexical-form design choice described above (a number is stored
 by value, so `"01"` reads back as `1`); others are engine defects being fixed.
@@ -295,7 +295,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-30T02:59:44Z by [CI run](https://github.com/scbrown/quipu/actions/runs/36661941340), from quipu `097ac368f5c0`.
+Ledger re-derived 2026-09-30T06:54:26Z by [CI run](https://github.com/scbrown/quipu/actions/runs/36680212488), from quipu `bae69aa45ae2`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
