@@ -248,10 +248,11 @@ class PublishedArtifactsTests(unittest.TestCase):
         # aegis-zmln5e: the strong sentence must not outlive the numbers.
         import copy
         data = REPORT.load(RESULTS)
+        s10 = data["sparql10"]["counts"]
         core_all_pass = all(
             data["classes"][n]["counts"]["passed"] == data["classes"][n]["counts"]["cases"]
             for n in REPORT.CORE_CLAIM_CLASSES
-        )
+        ) and s10["passed"] == s10["cases"]
         block = "\n".join(REPORT.claim_boundary(data))
         self.assertEqual("passes **all**" in block, core_all_pass)
         # Break exactly one core row: the claim must fall back, with no "all".
@@ -303,14 +304,45 @@ class CompetitorTableTests(unittest.TestCase):
                 REPORT.load(RESULTS, tmp)
 
 
-class Sparql10DisclosureTests(unittest.TestCase):
-    """aegis-soqv1r: the 1.1 manifests are the 1.1 ADDITIONS; the 1.0 suite is not scored."""
+class Sparql10Tests(unittest.TestCase):
+    """aegis-soqv1r: the SPARQL 1.0 query tests are scored, and they gate "all"."""
 
-    def test_the_claim_boundary_says_the_sparql10_suite_is_not_run(self):
-        page = REPORT.render_markdown(REPORT.load(RESULTS))
+    def _passing(self, data):
+        import copy
+        data = copy.deepcopy(data)
+        for name in REPORT.CORE_CLAIM_CLASSES:
+            rows = [{**r, "status": "passed"} for r in data["classes"][name]["rows"]]
+            data["classes"][name] = {"rows": rows, "counts": REPORT.tally(rows)}
+        return data
+
+    def test_the_claim_boundary_carries_the_sparql10_score(self):
+        data = REPORT.load(RESULTS)
+        page = REPORT.render_markdown(data)
         boundary = page.split("**Claim boundary")[1].split("\n\n")[0]
-        self.assertIn("The SPARQL 1.0 suite is not run.", boundary)
+        c = data["sparql10"]["counts"]
+        self.assertIn(f"SPARQL 1.0 query **{c['passed']}/{c['cases']}**", boundary)
         self.assertIn("sparql/sparql10", boundary)
+        self.assertIn("## SPARQL 1.0 query tests", page)
+
+    def test_a_failing_sparql10_row_alone_withdraws_all(self):
+        data = self._passing(REPORT.load(RESULTS))
+        rows = [{**r, "status": "passed"} for r in data["sparql10"]["rows"]]
+        data["sparql10"] = {"rows": rows, "counts": REPORT.tally(rows)}
+        self.assertIn("passes **all**", "\n".join(REPORT.claim_boundary(data)))
+        rows[0] = {**rows[0], "status": "failed"}
+        data["sparql10"] = {"rows": rows, "counts": REPORT.tally(rows)}
+        self.assertNotIn("passes **all**", "\n".join(REPORT.claim_boundary(data)))
+
+    def test_a_short_sparql10_ledger_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = pathlib.Path(tmp)
+            shutil.copytree(RESULTS, tmp / "results")
+            path = tmp / "results" / "sparql10-evaluation.json"
+            ledger = json.loads(path.read_text())
+            ledger["results"] = ledger["results"][1:]
+            path.write_text(json.dumps(ledger))
+            with self.assertRaises(REPORT.LedgerError):
+                REPORT.load(tmp / "results")
 
 
 class RdfSyntaxTableTests(unittest.TestCase):
