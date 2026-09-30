@@ -48,8 +48,8 @@ proof = {
 }
 pack.with_name(pack.name + ".provenance.json").write_text(json.dumps(proof, indent=2) + "\n")
 PY
-# DEPRECATED ALIAS, ONE RELEASE (aegis-fxpbys.3). Releases up to and including
-# quipu-ai-v0.9.1 published this asset as *-repository.qpack.tar.gz, and older
+# DEPRECATED ALIAS, ONE RELEASE (aegis-fxpbys.3). Every release cut before the
+# pendant rename published this asset as *-repository.qpack.tar.gz, and older
 # docs builds and scripts download it by that name. Publish byte-identical
 # copies under the old name for one release, then drop this block.
 LEGACY="quipu-${TAG}-repository.qpack.tar.gz"

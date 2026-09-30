@@ -90,7 +90,7 @@ jobs:
             echo "::warning::release ${TAG} has no wasm bundle yet (first one lands with the next release)"
           fi
 
-          # Releases up to quipu-ai-v0.9.1 named this asset *-repository.qpack.tar.gz
+          # Releases cut before the pendant rename named this asset *-repository.qpack.tar.gz
           # (aegis-fxpbys.3); fall back to that name so the page still stages
           # from a release cut before the rename. Same bytes, older name.
           if gh release download "${TAG}" --pattern '*-repository.pendant.tar.gz' --dir "${TMP}"; then
