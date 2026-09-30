@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "7fce4e416f3756cecd3265f796c17c625cb6f696",
-  "quipu_version": "quipu 0.9.1\ngit_sha: 7fce4e416f3756cecd3265f796c17c625cb6f696\ngit_dirty: false",
-  "generated_at": "2026-09-30T21:03:31Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36776135891",
+  "quipu_revision": "30ab901eeb3078e718eb9b53a6f9d5076b7887af",
+  "quipu_version": "quipu 0.9.1\ngit_sha: 30ab901eeb3078e718eb9b53a6f9d5076b7887af\ngit_dirty: false",
+  "generated_at": "2026-09-30T23:03:02Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36788473681",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -26,8 +26,8 @@
     "sparql10-query": {
       "cases": 242,
       "error": 6,
-      "failed": 51,
-      "passed": 175,
+      "failed": 49,
+      "passed": 177,
       "unsupported": 10
     }
   },
@@ -1979,8 +1979,8 @@
       "manifest": "../sparql10/construct/manifest.ttl",
       "query": "../sparql10/construct/query-ident.rq",
       "result": "../sparql10/construct/result-ident.ttl",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
@@ -1989,8 +1989,8 @@
       "manifest": "../sparql10/construct/manifest.ttl",
       "query": "../sparql10/construct/query-subgraph.rq",
       "result": "../sparql10/construct/result-subgraph.ttl",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
