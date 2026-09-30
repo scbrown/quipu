@@ -35,6 +35,15 @@ pub(crate) fn invalid(msg: impl Into<String>) -> Error {
 pub(crate) fn io(e: impl std::fmt::Display) -> Error {
     Error::Store(e.to_string())
 }
+/// Map a failure to start `git` into an actionable error: every qpack Git
+/// command shells out to the `git` executable found on PATH.
+pub(crate) fn spawn_git(e: &std::io::Error) -> Error {
+    if e.kind() == std::io::ErrorKind::NotFound {
+        invalid("`git` executable not found on PATH; qpack Git commands require git")
+    } else {
+        io(format!("failed to run git: {e}"))
+    }
+}
 
 impl Pack {
     pub(crate) fn verify(&self) -> Result<()> {
@@ -91,7 +100,7 @@ fn shapes(base: &str, ours: &str, theirs: &str) -> Result<String> {
         .arg(dir.path().join("base"))
         .arg(dir.path().join("theirs"))
         .output()
-        .map_err(io)?;
+        .map_err(|e| spawn_git(&e))?;
     if !out.status.success() {
         return Err(invalid(
             "overlapping shapes edits: resolve shapes in the branches before merging",

@@ -178,6 +178,14 @@ fn functional_driver_holds_base_then_resolves_and_ci_verifies() {
     assert!(!f.graph().contains("<<<<<<<"));
     assert!(f.graph().contains("x2 vs. air attacks"));
     assert_eq!(f.decisions()["conflicts"].as_array().unwrap().len(), 1);
+    // Every output, decisions.json included, is renamed into place from a
+    // same-directory temp file; none may be left behind.
+    let stray: Vec<_> = std::fs::read_dir(f.path().join("qpack"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(".tmp"))
+        .collect();
+    assert!(stray.is_empty(), "stray temp files: {stray:?}");
     assert!(f.resolve("conflict:0", "ours").status.success());
     f.commit();
     let o = f.check();
@@ -386,6 +394,20 @@ fn driver_binds_temporary_inputs_to_context_before_writing() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("does not match immutable snapshot"));
     assert_eq!(std::fs::read_to_string(ours).unwrap(), "forged input");
+}
+
+#[test]
+fn missing_git_executable_is_reported_plainly() {
+    let empty = TempDir::new().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .args(["qpack-check", "a", "b", "c", "d"])
+        .env("PATH", empty.path())
+        .current_dir(empty.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("`git` executable not found on PATH"), "{err}");
 }
 
 #[test]

@@ -421,6 +421,11 @@ and `qpack-check` still operate on the canonical bytes.
 These commands operate on repository files and immutable Git snapshots. They do
 not open a Quipu store. Use a build with the `shacl` feature (the default).
 
+They shell out to the `git` executable found on `PATH` (the wrapper, the driver's
+snapshot reads, the shapes three-way merge, and `qpack-check` all do). If `git`
+cannot be found, the command exits 1 with `` `git` executable not found on PATH ``
+and writes nothing.
+
 ```text
 quipu git-merge <ref>
 quipu merge-driver <base-file> <ours-file> <theirs-file> <path>
@@ -505,6 +510,18 @@ with the operator result, and validates SHACL. A hand-rehashed unsafe result
 still fails. Push/nightly runs validate the committed packs too; a squash commit
 alone cannot reconstruct the original branch pair, so the PR check remains
 load-bearing. Keep the SHACL test check required in branch protection.
+
+**Known gap: an administrator bypasses the gate.** The replay that can actually
+fail is the PR check. On a `push` event the final replay is trivially
+`(base, ours, theirs) = (before, before, result)`: a fast-forward of the previous
+tip, so it re-validates the committed packs but cannot reconstruct a merge
+that happened elsewhere. This repository's `main` protection uses strict status
+checks, so a squash merge's tree equals the synthetic merge commit the PR check
+tested. It does **not** enforce protection for administrators, so an admin's
+direct push, or an admin merge that skips pending or failing checks, lands a
+qpack that no merge replay has verified. Treat an admin bypass as unverified and
+run `quipu qpack-check` on the original base/ours/theirs yourself, or enable
+"include administrators" if that gap is unacceptable.
 
 Measured on the repository's real Datalinks qpack, replacing the same functional
 value on both branches produces a **text conflict**, not a clean double. Git
