@@ -422,7 +422,7 @@ Without the `git config` line the attribute is inert and Git diffs raw lines.
 `git diff --no-textconv` shows the raw form on demand. A file that does not
 parse (a working copy with merge conflict markers, say) is printed unchanged,
 so `git diff` never fails on it. Textconv affects display only: merges, hashes
-and `qpack-check` still operate on the canonical bytes.
+and `pendant-check` still operate on the canonical bytes.
 
 ## Git transport: driver, decisions, and CI
 
@@ -430,15 +430,15 @@ These commands operate on repository files and immutable Git snapshots. They do
 not open a Quipu store. Use a build with the `shacl` feature (the default).
 
 They shell out to the `git` executable found on `PATH` (the wrapper, the driver's
-snapshot reads, the shapes three-way merge, and `qpack-check` all do). If `git`
+snapshot reads, the shapes three-way merge, and `pendant-check` all do). If `git`
 cannot be found, the command exits 1 with `` `git` executable not found on PATH ``
 and writes nothing.
 
 ```text
 quipu git-merge <ref>
 quipu merge-driver <base-file> <ours-file> <theirs-file> <path>
-quipu qpack-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
-quipu qpack-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
+quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
+quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
 ```
 
 Version attributes for each share directory (adjust `qpack` to your layout):
@@ -482,8 +482,8 @@ matches; the decision belongs to the reviewer.
 Exit 2 means decisions or Git conflicts remain. Inspect the sidecar, then choose:
 
 ```bash
-quipu qpack-resolve "$base" "$ours" "$theirs" qpack conflict:0 ours
-quipu qpack-resolve "$base" "$ours" "$theirs" qpack alias:0 reject
+quipu pendant-resolve "$base" "$ours" "$theirs" qpack conflict:0 ours
+quipu pendant-resolve "$base" "$ours" "$theirs" qpack alias:0 reject
 ```
 
 Conflict choices are `base`, `ours`, or `theirs`; alias choices are `accept`
@@ -500,7 +500,7 @@ use. Review and stage the complete directory, then commit:
 ```bash
 git add qpack
 git commit
-quipu qpack-check "$base" "$ours" "$theirs" HEAD
+quipu pendant-check "$base" "$ours" "$theirs" HEAD
 ```
 
 The wrapper always stops before commit, including clean merges. It reconciles
@@ -510,7 +510,7 @@ labels are not stable identities across snapshots. Skolemize those nodes first.
 
 **CI is required even when local driver use is documented.** A clone with no
 driver definition, a forge merge button, or a rebase can fall back to text merge.
-The repository's SHACL test job runs `scripts/ci/qpack-merge-check.py` with full
+The repository's SHACL test job runs `scripts/ci/pendant-merge-check.py` with full
 history and the PR's synthetic merge commit. It also replays two-parent merges introduced on the topic branch, then
 reconstructs base/ours/theirs,
 requires recorded resolutions, compares the committed graph, shapes and manifest
@@ -528,7 +528,7 @@ checks, so a squash merge's tree equals the synthetic merge commit the PR check
 tested. It does **not** enforce protection for administrators, so an admin's
 direct push, or an admin merge that skips pending or failing checks, lands a
 qpack that no merge replay has verified. Treat an admin bypass as unverified and
-run `quipu qpack-check` on the original base/ours/theirs yourself, or enable
+run `quipu pendant-check` on the original base/ours/theirs yourself, or enable
 "include administrators" if that gap is unacceptable.
 
 Measured on the repository's real Datalinks qpack, replacing the same functional
