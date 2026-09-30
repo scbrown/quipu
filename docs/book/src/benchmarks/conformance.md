@@ -6,7 +6,7 @@
 
 > **Claim boundary — read this before quoting any number on this page.**
 > Quipu does **not** pass every approved W3C SPARQL 1.1 Query, Update, Protocol
-> and Results test at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **168/168**, update **93/93**, protocol **34/34**, result format **10/10**, SPARQL 1.0 query **175/242**.
+> and Results test at rdf-tests `369a90d`: query syntax **86/86**, query evaluation **168/168**, update **93/93**, protocol **34/34**, result format **10/10**, SPARQL 1.0 query **177/242**.
 > Exceptions, each named below: federated query (`SERVICE`) passes 6/7, with 1 refused by policy (variable
 > endpoints); entailment regimes are scored separately (35/70 passed, 0 failing, 35 declared non-goals);
 > SHACL-SPARQL, OWL, RIF and D entailment are declared non-goals.
@@ -15,7 +15,7 @@
 > The update-syntax suites are not run yet.
 > **The SPARQL 1.0 query tests are scored separately.** The SPARQL 1.1 manifests hold what
 > 1.1 added; the 1.0 tests (rdf-tests `sparql/sparql10`) also bear on SPARQL 1.1 Query
-> conformance. Quipu passes 175/242 of the approved ones, with 51 failing, 6 errors and 10 not comparable; see [SPARQL 1.0 query tests](#sparql-10-query-tests).
+> conformance. Quipu passes 177/242 of the approved ones, with 49 failing, 6 errors and 10 not comparable; see [SPARQL 1.0 query tests](#sparql-10-query-tests).
 > **This score is fitted to this suite.** Quipu's failures here were found by running this suite
 > and fixed against it, case by case, so a perfect score is partly a record of that work rather
 > than an independent sample. Other stores measured with the same harness were not tuned to it.
@@ -37,8 +37,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `b2d851256f67f9fc38c712c13eed671a74c1cfc5` |
-| Quipu revision (syntax) | `b2d851256f67f9fc38c712c13eed671a74c1cfc5` |
+| Quipu revision (evaluation) | `30ab901eeb3078e718eb9b53a6f9d5076b7887af` |
+| Quipu revision (syntax) | `30ab901eeb3078e718eb9b53a6f9d5076b7887af` |
 | Quipu version | `quipu 0.9.1` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -118,7 +118,7 @@ and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/p
 ## SPARQL 1.0 query tests
 
 The approved W3C SPARQL 1.0 query-evaluation tests (`sparql/sparql10`) at the same
-rdf-tests revision (`369a90d1`), run by the same runner: **175/242** pass.
+rdf-tests revision (`369a90d1`), run by the same runner: **177/242** pass.
 
 Most SPARQL 1.0 answers are RDF result-set graphs (`rs:ResultSet`). They are read with
 rdflib, pinned, with literal normalisation off, so `"01"^^xsd:integer` stays `01`.
@@ -133,10 +133,10 @@ RDF/XML answers, which the runner does not read.
 | `sort` | 2 | 1 | 0 | 10 | 13 |
 | `cast` | 1 | 6 | 0 | 0 | 7 |
 | `distinct` | 6 | 5 | 0 | 0 | 11 |
-| `construct` | 1 | 4 | 0 | 0 | 5 |
 | `dataset` | 8 | 4 | 0 | 0 | 12 |
 | `expr-equals` | 8 | 4 | 0 | 0 | 12 |
 | `graph` | 8 | 3 | 0 | 0 | 11 |
+| `construct` | 3 | 2 | 0 | 0 | 5 |
 | `reduced` | 1 | 1 | 0 | 0 | 2 |
 | `regex` | 3 | 1 | 0 | 0 | 4 |
 | `algebra` | 14 | 0 | 0 | 0 | 14 |
@@ -157,6 +157,32 @@ Some failures are the lexical-form design choice described above (a number is st
 by value, so `"01"` reads back as `1`); others are engine defects being fixed.
 Every case, with its diagnostic, is in
 [`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).
+
+## SPARQL 1.2 query tests
+
+The W3C SPARQL 1.2 query tests (`sparql/sparql12`) at the same rdf-tests revision
+(`369a90d1`). No SPARQL 1.2 case is Working Group–approved yet; every one is
+counted anyway. **3 of 269 pass, and 263 are not run.**
+
+Most of SPARQL 1.2 needs grammar or terms Quipu does not have: triple terms, the `VERSION`
+declaration, base direction, new codepoint escapes. Those cases are listed and never run,
+because a parser that rejects all SPARQL 1.2 input would "pass" every negative case. The
+few cases that need nothing new are run by the same runner as everything above.
+
+| Part | Passed | Failed | Not run | Cases | Why not run |
+|---|---:|---:|---:|---:|---|
+| `codepoint-escapes` | 0 | 0 | 14 | 14 | SPARQL 1.2 codepoint-escape grammar is not implemented; its negative cases would pass by rejection |
+| `eval-triple-terms` | 0 | 0 | 41 | 41 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
+| `expression` | 0 | 1 | 4 | 5 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
+| `grouping` | 0 | 2 | 0 | 2 | run |
+| `lang-basedir` | 0 | 0 | 11 | 11 | RDF 1.2 base direction (rdf:dirLangString) is not implemented |
+| `rdf11` | 3 | 0 | 0 | 3 | run |
+| `syntax` | 0 | 0 | 6 | 6 | not wired: the syntax runner scores the 1.1 syntax manifest only |
+| `syntax-triple-terms-negative` | 0 | 0 | 65 | 65 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
+| `syntax-triple-terms-positive` | 0 | 0 | 113 | 113 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
+| `version` | 0 | 0 | 9 | 9 | the SPARQL 1.2 VERSION declaration is not implemented |
+
+Ledger: [`sparql12.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql12.json).
 
 ## Query evaluation, by feature family
 
@@ -295,7 +321,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-09-30T16:27:53Z by [CI run](https://github.com/scbrown/quipu/actions/runs/36743568035), from quipu `b2d851256f67`.
+Ledger re-derived 2026-09-30T23:02:36Z by [CI run](https://github.com/scbrown/quipu/actions/runs/36788473681), from quipu `30ab901eeb30`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.

@@ -345,6 +345,35 @@ class Sparql10Tests(unittest.TestCase):
                 REPORT.load(tmp / "results")
 
 
+class Sparql12Tests(unittest.TestCase):
+    """aegis-mhee08: SPARQL 1.2 runs what needs nothing new and enumerates the rest."""
+
+    def test_the_page_carries_the_sparql12_section(self):
+        page = REPORT.render_markdown(REPORT.load(RESULTS))
+        self.assertIn("## SPARQL 1.2 query tests", page)
+        self.assertIn("never run", page)
+
+    def _mutated(self, change):
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        shutil.copytree(RESULTS, tmp / "results")
+        path = tmp / "results" / "sparql12.json"
+        ledger = json.loads(path.read_text())
+        change(ledger)
+        path.write_text(json.dumps(ledger))
+        return tmp / "results"
+
+    def test_a_triple_term_case_scored_as_run_is_refused(self):
+        def run_one(ledger):
+            row = next(r for r in ledger["results"] if "triple-terms" in r["manifest"])
+            row["status"] = "passed"
+        with self.assertRaises(REPORT.LedgerError):
+            REPORT.load(self._mutated(run_one))
+
+    def test_a_short_sparql12_ledger_is_refused(self):
+        with self.assertRaises(REPORT.LedgerError):
+            REPORT.load(self._mutated(lambda ledger: ledger["results"].pop()))
+
+
 class RdfSyntaxTableTests(unittest.TestCase):
     """aegis-mhee08: RDF 1.1 scored, RDF 1.2 published as measured-not-supported."""
 
