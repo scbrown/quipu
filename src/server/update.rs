@@ -238,6 +238,14 @@ pub(super) fn apply_update_as(
     }
     let batches: Vec<_> = changes.into_iter().collect();
     store.transact_graph_batches(&batches, &now, Some("sparql-update"), Some("sparql-update"))?;
+    // Register every named graph this update asserted into, so the next
+    // update's dataset includes it (aegis-e9o5ci). After the commit, so a
+    // refused write leaves no empty registry row behind.
+    for (graph_id, datums) in &batches {
+        if datums.iter().any(|d| d.op == quipu::Op::Assert) {
+            store.graph_ensure_registered(*graph_id)?;
+        }
+    }
     Ok(Applied {
         path,
         changes: batches,
@@ -337,6 +345,9 @@ fn graph_id(
 #[cfg(test)]
 #[path = "update_bench.rs"]
 mod bench;
+#[cfg(test)]
+#[path = "update_graph_tests.rs"]
+mod graph_tests;
 #[cfg(test)]
 #[path = "update_tests.rs"]
 mod tests;
