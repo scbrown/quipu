@@ -199,6 +199,39 @@ as-of replay extended to the trust root — GS6 for signatures. Rotation
 is a close-then-insert; revocation is a close; expiry is absence.
 CEN-M2 grows a column: verdicts whose seal re-verifies as-of.
 
+### Sealed decisions (aegis-kzt0ql.9.3) — sign the whole decision
+
+> **Implemented** in [`src/governance/decision_seal.rs`](../../src/governance/decision_seal.rs).
+> `decision-v1` signs `evidenceHash|outcome|by` only, so a decision's
+> question, options, scope and expiry could be rewritten after signing and
+> the ruling would still stand (pinned by
+> `v1_decisions_do_not_seal_their_content_use_decision_seal`).
+> `quipu-decision-v2` seals the content:
+>
+> 1. `present` computes `sha256` over the RDFC-1.0 canonical form of the
+>    decision's concise bounded description (its facts in ROOT, plus the
+>    blank nodes it reaches; only attestation fields are excluded), mints a
+>    nonce, and records an `aegis:DecisionPresentation`.
+> 2. The approver signs
+>    `quipu-decision-v2|quipu-verdict|decision|digest|outcome|nonce|expiresAt`.
+> 3. `attest` RECOMPUTES the digest from the stored decision and never takes
+>    a supplied one. It checks the digest equals the frozen one, checks the
+>    outcome is a declared `aegis:option`, and verifies against a key
+>    registered now for `aegis:decisionPolicy`. It then spends the nonce and
+>    records the `aegis:DecisionVerdict` in ONE savepoint (`decision_nonces`,
+>    never pruned).
+> 4. `verify_recorded` recomputes the digest from the decision as it stands
+>    now (so an edit after signing invalidates the verdict) and verifies as
+>    of the recorded signature (S1).
+>
+> The seal uses its own predicates where a shared one carries an
+> `rdfs:domain` that inference would apply (`decisionPolicy`,
+> `presentationExpiresAt`, `sealSignature`). Presentation writes are
+> graph-writable until S3 gates them. That cannot forge a verdict (the
+> digest is recomputed and the key is checked), but an agent could choose
+> a presentation's nonce or expiry, and the approver sees both in the
+> challenge.
+
 ### S2 — the scheme as a versioned fact
 
 `aegis:SigningScheme` facts carry the canonical message format, hash

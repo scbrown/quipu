@@ -9,6 +9,7 @@ pub mod attestation;
 mod batches;
 pub mod changes;
 pub mod datasets;
+mod decision_nonces;
 pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;

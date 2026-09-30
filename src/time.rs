@@ -158,7 +158,7 @@ pub fn epoch_of_rfc3339(s: &str) -> Option<i64> {
 }
 
 /// Format Unix-epoch seconds as an ISO-8601 UTC timestamp.
-fn format_iso(secs: u64) -> String {
+pub fn format_iso(secs: u64) -> String {
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;
     let (y, m, d) = civil_from_days(days);

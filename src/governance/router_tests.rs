@@ -976,3 +976,32 @@ fn s1_a_decision_signed_with_the_old_key_after_rotation_is_ignored() {
             .permits()
     );
 }
+
+// ---- decision-v1 does not seal the decision's content (aegis-kzt0ql.9.3) ----
+// This pins a KNOWN LIMITATION, not desired behaviour: v1 signs only
+// evidenceHash|outcome|by. A decision whose content must be bound belongs in
+// `governance::decision_seal` (quipu-decision-v2). Kept so that, if v1 is ever
+// made to seal content, this test fails and says so.
+#[test]
+fn v1_decisions_do_not_seal_their_content_use_decision_seal() {
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    decide(&mut store, "approve", "stiwi", &hash, POLICY);
+    // Rewrite what was being approved, after the signature.
+    let d = store.intern("http://ex/decision_approve_stiwi").unwrap();
+    let q = store.intern(&format!("{DEFAULT_BASE_NS}question")).unwrap();
+    let datum = Datum {
+        entity: d,
+        attribute: q,
+        value: Value::Str("wire $50,000 to an unknown account".into()),
+        valid_from: TS.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store.transact(&[datum], TS, None, None).unwrap();
+    // v1: the edit does not touch the ruling.
+    assert_eq!(
+        resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap(),
+        Ruling::Approved { by: "stiwi".into() }
+    );
+}
