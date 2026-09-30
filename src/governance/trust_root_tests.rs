@@ -122,7 +122,11 @@ fn human_registration(store: &Store, iri: &str, verifier: &str, key: &str) -> Ve
     ]
 }
 
-fn human_keys(store: &Store) -> Vec<String> {
+/// The keys a HUMAN DECISION verifies against: the exact reader the decision
+/// seal and the router call (`registered_keys` at `Scope::HumanTier`). Tests
+/// assert on this, not on the `trust_root::human_keys` listing, so they pin
+/// the verification path itself (wu-rev-350 R1).
+fn decision_keys(store: &Store) -> Vec<String> {
     registered_keys(
         store,
         "stiwi",
@@ -148,7 +152,7 @@ fn a_forged_human_registration_is_refused() {
     let datums = human_registration(&store, "http://ex/reg/forged", "stiwi", &pk(&mallory));
     let m = refused(store.transact(&datums, TS, Some("mallory"), Some("episode")));
     assert!(m.contains("trust root"), "{m}");
-    assert!(human_keys(&store).is_empty());
+    assert!(decision_keys(&store).is_empty());
 }
 
 #[test]
@@ -161,7 +165,7 @@ fn an_agent_registration_still_lands_and_cannot_verify_a_human_decision() {
         .transact(&datums, TS, Some("mallory"), Some("episode"))
         .unwrap();
     assert!(
-        human_keys(&store).is_empty(),
+        decision_keys(&store).is_empty(),
         "agent tier never verifies a human decision"
     );
     assert_eq!(
@@ -176,7 +180,7 @@ fn bootstrap_enrols_once_with_fingerprint_and_never_again() {
     let mut store = Store::open_in_memory().unwrap();
     let stiwi = keypair();
     let e = enrol(&mut store, &stiwi);
-    assert_eq!(human_keys(&store), vec![pk(&stiwi)]);
+    assert_eq!(decision_keys(&store), vec![pk(&stiwi)]);
     assert_eq!(e.fingerprint, fingerprint(&pk(&stiwi)).unwrap());
     let record = strings(
         &store,
@@ -217,7 +221,7 @@ fn bootstrap_stays_closed_after_the_human_key_is_revoked() {
         Op::Retract,
     )];
     amend(&mut store, &stiwi, &e.registration, revoke).unwrap();
-    assert!(human_keys(&store).is_empty());
+    assert!(decision_keys(&store).is_empty());
     let other = keypair();
     let pop = crate::signing::sign_hex(
         &other,
@@ -256,7 +260,7 @@ fn a_second_device_is_an_amendment_signed_by_the_first() {
     let reg = "http://ex/reg/yubikey";
     let datums = human_registration(&store, reg, "stiwi", &pk(&yubikey));
     amend(&mut store, &stiwi, reg, datums).unwrap();
-    let keys = human_keys(&store);
+    let keys = decision_keys(&store);
     assert!(
         keys.contains(&pk(&yubikey)) && keys.contains(&pk(&stiwi)),
         "{keys:?}"
@@ -288,7 +292,7 @@ fn a_replayed_amendment_nonce_is_refused() {
     .unwrap();
     let revoke = vec![d(&store, reg, TRUST_TIER, s(HUMAN_TIER), Op::Retract)];
     amend(&mut store, &stiwi, reg, revoke).unwrap();
-    assert_eq!(human_keys(&store), vec![pk(&stiwi)]);
+    assert_eq!(decision_keys(&store), vec![pk(&stiwi)]);
     let m = refused(amend_with(
         &mut store,
         &stiwi,
@@ -300,7 +304,7 @@ fn a_replayed_amendment_nonce_is_refused() {
     ));
     assert!(m.contains("already used"), "{m}");
     assert_eq!(
-        human_keys(&store),
+        decision_keys(&store),
         vec![pk(&stiwi)],
         "the revoked key stays revoked"
     );
@@ -326,7 +330,7 @@ fn unsigned_edits_and_revocations_are_refused_signed_ones_accepted() {
     store
         .transact_to_graph(&add, TS, Some("mallory"), Some("episode"), g)
         .unwrap();
-    assert_eq!(human_keys(&store), vec![pk(&stiwi)]);
+    assert_eq!(decision_keys(&store), vec![pk(&stiwi)]);
     // An unsigned revocation (DoS) is refused.
     let revoke = vec![d(
         &store,
@@ -336,10 +340,10 @@ fn unsigned_edits_and_revocations_are_refused_signed_ones_accepted() {
         Op::Retract,
     )];
     refused(store.transact(&revoke, TS, Some("mallory"), Some("episode")));
-    assert_eq!(human_keys(&store), vec![pk(&stiwi)]);
+    assert_eq!(decision_keys(&store), vec![pk(&stiwi)]);
     // Signed by the enrolled key: accepted.
     amend(&mut store, &stiwi, &e.registration, revoke).unwrap();
-    assert!(human_keys(&store).is_empty());
+    assert!(decision_keys(&store).is_empty());
 }
 
 #[test]
@@ -359,12 +363,30 @@ fn promoting_an_agent_registration_by_adding_the_marker_is_refused() {
         Op::Assert,
     )];
     refused(store.transact(&promote, TS, Some("mallory"), Some("episode")));
-    // The marker asserted OUTSIDE ROOT does not count.
+    // The marker asserted OUTSIDE ROOT does not count, on the VERIFICATION
+    // reader (registered_keys at HumanTier). Mutation-checked: dropping the
+    // tier join's `tr.g = 0` makes this assertion fail (wu-rev-350 R1).
     let g = store.intern("http://ex/graph/identity").unwrap();
     store
         .transact_to_graph(&promote, TS, Some("mallory"), Some("episode"), g)
         .unwrap();
-    assert!(human_keys(&store).is_empty());
+    assert_eq!(
+        registered_keys(
+            &store,
+            "stiwi",
+            Some(POLICY),
+            &Witness::now(),
+            Scope::HumanTier
+        )
+        .unwrap(),
+        Vec::<String>::new(),
+        "a named-graph marker must not make mallory's key verify a human decision"
+    );
+    assert_eq!(
+        registered_keys(&store, "stiwi", Some(POLICY), &Witness::now(), Scope::Root).unwrap(),
+        vec![pk(&mallory)],
+        "control: the agent registration is present, so the empty answer above is the tier filter"
+    );
 }
 
 #[test]
@@ -538,5 +560,28 @@ fn the_bootstrap_path_cannot_add_to_a_populated_registry() {
     let reg = "http://ex/reg/second";
     let datums = human_registration(&store, reg, "stiwi", &pk(&keypair()));
     refused(store.transact_trust_root_bootstrap(reg, &datums, TS));
-    assert_eq!(human_keys(&store), vec![pk(&stiwi)]);
+    assert_eq!(decision_keys(&store), vec![pk(&stiwi)]);
+}
+
+#[test]
+fn the_bootstrap_path_stays_closed_once_the_registry_is_empty_again() {
+    // Every human key revoked: the registry is EMPTY again, so the gate's
+    // empty-registry rule alone would admit a new "first" key. The history
+    // check inside the bootstrap write refuses it (wu-rev-350 N1).
+    let mut store = Store::open_in_memory().unwrap();
+    let stiwi = keypair();
+    let e = enrol(&mut store, &stiwi);
+    let revoke = vec![d(
+        &store,
+        &e.registration,
+        TRUST_TIER,
+        s(HUMAN_TIER),
+        Op::Retract,
+    )];
+    amend(&mut store, &stiwi, &e.registration, revoke).unwrap();
+    assert!(decision_keys(&store).is_empty());
+    let reg = "http://ex/reg/usurper";
+    let datums = human_registration(&store, reg, "stiwi", &pk(&keypair()));
+    refused(store.transact_trust_root_bootstrap(reg, &datums, TS));
+    assert!(decision_keys(&store).is_empty());
 }
