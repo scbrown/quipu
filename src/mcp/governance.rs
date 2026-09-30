@@ -122,7 +122,8 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         registered_keys(store, &verifier, Some(&predicate_id), &witness, Scope::Root)?;
 
     let seal_ok = verifies(&scoped_keys);
-    let trustworthy_basis = basis != "caller-supplied";
+    // An ALLOW-list: a basis added later fails closed rather than trusting by default.
+    let trustworthy_basis = matches!(basis, "recorded" | "now");
     Ok(serde_json::json!({
         "signature_valid": verifies(&any_keys),
         "verifier_registered": !any_keys.is_empty(),
