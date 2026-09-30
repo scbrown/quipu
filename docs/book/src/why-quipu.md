@@ -63,7 +63,7 @@ queries the page will show you. It takes any Quipu pack, not just this one.
 `tool_set` / `tool_retract` / `tool_episode`, the same functions the REST API exposes,
 with the closed-vocabulary gate still enforcing what the sender's shapes allow. The views
 update as you go, and you can take the result with you: the edited store exports as a
-genuine `.qpack.tar.gz`, built by the same `share_payload` the CLI uses and declaring the
+genuine `.pendant.tar.gz`, built by the same `share_payload` the CLI uses and declaring the
 pack it came from as its parent. Import it directly with
 `quipu import <archive> --db your.db` to stage it against your database's loaded shapes;
 promotion is a separate step. Without `--db`, archive verification stays in memory. Or download

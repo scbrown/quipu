@@ -17,6 +17,7 @@ const PACK_FORMATS: &[&str] = &["turtle", "text"];
 
 pub fn cmd_pack(args: &[String], db_path: &str) {
     if let Some(path) = flag_value(args, "--verify") {
+        warn_deprecated_extension(path);
         // Dispatch on the FORMAT, because the two artifacts hash differently
         // and `pack::verify` cannot recompute a full pack's hash at all: it
         // hashes canonical CURRENT-FACTS content for `manifest.source_graph`,
@@ -54,7 +55,7 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         .filter(|a| !a.starts_with("--"))
         .map_or(quipu::schema::ROOT_GRAPH_IRI, String::as_str);
     let out = flag_value(args, "--out").unwrap_or_else(|| {
-        eprintln!("quipu pack requires --out <file.qpack.db>");
+        eprintln!("quipu pack requires --out <file.pendant.db>");
         std::process::exit(1);
     });
 
@@ -186,9 +187,10 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
 /// `quipu unpack <pack> [--into <graph-iri>]` (quipu #82).
 pub fn cmd_unpack(args: &[String], db_path: &str) {
     let Some(pack) = args.get(2).filter(|s| !s.starts_with("--")) else {
-        eprintln!("usage: quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]");
+        eprintln!("usage: quipu unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]");
         std::process::exit(1);
     };
+    warn_deprecated_extension(pack);
     let opts = quipu::pack::LoadOptions {
         into: flag_value(args, "--into"),
         expect_repository: flag_value(args, "--expect-repo"),
@@ -222,12 +224,13 @@ pub fn cmd_unpack(args: &[String], db_path: &str) {
 pub fn cmd_restore(args: &[String], db_path: &str) {
     let Some(pack) = args.get(2).filter(|s| !s.starts_with("--")) else {
         eprintln!(
-            "usage: quipu restore <file.qpack> [--force] [--db <path>]\n       \
+            "usage: quipu restore <file.pendant> [--force] [--db <path>]\n       \
              REPLACES the store at --db with the pack's whole contents. To MERGE a \
              published pack into an existing store, use `quipu unpack` instead."
         );
         std::process::exit(1);
     };
+    warn_deprecated_extension(pack);
     let force = args.iter().any(|a| a == "--force");
     match quipu::pack_restore::restore(pack, db_path, force) {
         Ok(r) => {
@@ -401,6 +404,8 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             eprintln!("usage: quipu import delta <parent-share> <delta-share>");
             std::process::exit(1);
         });
+        warn_deprecated_extension(parent);
+        warn_deprecated_extension(delta);
         let actor = flag_value(args, "--actor");
         let imported = quipu::share_delta::materialize(parent, delta).and_then(|mut request| {
             request.actor = actor.map(String::from);
@@ -448,6 +453,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             );
             std::process::exit(1);
         });
+    warn_deprecated_extension(reference);
     let actor = flag_value(args, "--actor");
     // Keep no-file archive/URL verification as the default, but an explicit
     // database selects the same local shapes, bindings and staging as a directory.
@@ -485,6 +491,15 @@ pub fn cmd_import(args: &[String], db_path: &str) {
 /// direction, but `--destination internal-only` silently defaulting to outward
 /// on a payload the operator believed exempt is a refusal they will read as the
 /// guard misfiring — and the fix they reach for is to look for a way round it.
+/// Print the one-release `.qpack` -> `.pendant` rename notice to stderr, if
+/// `reference` still uses the old name (aegis-fxpbys.3). Never fails the
+/// command: the old name is an alias, not an error.
+pub(crate) fn warn_deprecated_extension(reference: &str) {
+    if let Some(notice) = quipu::share_transport::deprecated_extension_notice(reference) {
+        eprintln!("{notice}");
+    }
+}
+
 fn destination_flag(args: &[String]) -> quipu::share::ShareDestination {
     match flag_value(args, "--destination") {
         None | Some("outward") => quipu::share::ShareDestination::Outward,

@@ -32,7 +32,7 @@ onmessage = async (e) => {
         // right one: the import timestamp records when THIS reader took the
         // pack in, not when the producer built it. The producer's time is in
         // the manifest, and the page shows both.
-        explorer = Explorer.loadQpack(
+        explorer = Explorer.loadPendant(
           new Uint8Array(bytes),
           source,
           new Date().toISOString(),

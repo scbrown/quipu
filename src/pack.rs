@@ -137,7 +137,7 @@ pub use crate::pack_load::{LoadOptions, UnpackReport, unpack, unpack_verified};
 /// there are THREE of them and putting it in `pack_into` covered only two.
 /// `pack()` and `pack_to_bytes()` share `pack_into`; `pack_turtle()` does not —
 /// it calls [`canonical_content`] directly — so the `--format turtle` bundle
-/// went on shipping the identifier after the .qpack stopped. Measured by test,
+/// went on shipping the identifier after the .pendant stopped. Measured by test,
 /// because `grep -c scrub src/pack_turtle.rs` returns 0 for "no scrub" AND for
 /// "scrubbed via a wrapper", and cannot tell them apart (aegis-9f899e).
 ///

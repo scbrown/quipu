@@ -51,7 +51,7 @@ fn tmp(name: &str) -> Tmp {
         .unwrap();
     let path = dir
         .path()
-        .join("out.qpack.db")
+        .join("out.pendant.db")
         .to_string_lossy()
         .into_owned();
     Tmp { _dir: dir, path }
@@ -1263,7 +1263,7 @@ fn the_turtle_bundle_does_not_carry_an_internal_identifier_either() {
     // A SECOND producer, found while checking my own fix. `pack_turtle` is the
     // `--format turtle` interop bundle: it calls `canonical_content` DIRECTLY
     // rather than going through `pack_into`, so the scrub added there did not
-    // cover it — and a turtle bundle is as outward-facing as a .qpack.
+    // cover it — and a turtle bundle is as outward-facing as a .pendant.
     //
     // Proven by TEST rather than by grep. `grep -c scrub src/pack_turtle.rs`
     // returns 0, but a zero there would also be returned by a function that
@@ -1467,7 +1467,7 @@ fn every_canonical_content_caller_scrubs_or_is_classified() {
         "canonical_content caller(s) {unscrubbed:?} neither call \
          `enforce_pack_destination` nor appear in NOT_A_PRODUCER. A pack \
          producer that skips the scrub ships internal identifiers outward — \
-         that has happened twice already (.qpack, then the turtle bundle). \
+         that has happened twice already (.pendant, then the turtle bundle). \
          Either call the scrub, or add the name to NOT_A_PRODUCER with the \
          reason it is not a producer (aegis-9f899e)."
     );

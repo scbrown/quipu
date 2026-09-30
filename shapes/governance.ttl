@@ -1066,7 +1066,7 @@ aegis:ExternalTruthMappingShape a sh:NodeShape ;
     ] ;
     sh:property [ sh:path aegis:verified_by ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
 
-# A .qpack.db is Quipu's SQLite archive encoding of this bundle, not a second
+# A .pendant.db is Quipu's SQLite archive encoding of this bundle, not a second
 # semantic format. canonicalGraphHash is the pack_manifest content_hash:
 # sha256 over lexically sorted N-Triples for graph + shapes + queries + labels.
 aegis:CertifiedShareBundleShape a sh:NodeShape ;
@@ -1099,7 +1099,7 @@ aegis:KnowledgeCertificationSealShape a sh:NodeShape ;
     sh:property [ sh:path aegis:signingKey ; sh:class aegis:VerifierRegistration ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:attestationSignature ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
     # A Camayoc bundle cut from an operational shuttle window names it here.
-    # Static packs such as core.qpack.db have no window, so this is optional
+    # Static packs such as core.pendant.db have no window, so this is optional
     # on the generic certified-bundle envelope.
     sh:property [ sh:path aegis:frozenWindow ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
 

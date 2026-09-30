@@ -712,16 +712,16 @@ quipu doctor labels --db my.db
 ### `quipu pack` / `quipu unpack`
 
 Knowledge packs: export one named graph as a self-describing, attachable
-`.qpack.db` artifact (facts, manifest, shapes, stored queries, optionally
+`.pendant.db` artifact (facts, manifest, shapes, stored queries, optionally
 vectors), verify one, or import one into a local graph.
 
 ```bash
-quipu pack urn:example:graph --out domain.qpack.db --name "domain" --version 1.0.0
-quipu pack urn:example:graph --out domain.qpack.db --shapes s.ttl --queries q.json --with-vectors
-quipu pack urn:example:graph --out domain.qpack.db --space 7
-quipu pack --verify domain.qpack.db
-quipu pack urn:example:repo --out repo.qpack.db --repo scbrown/example --repo-sha "$BASE_SHA" --model-id all-MiniLM-L6-v2 --model-version 1
-quipu unpack repo.qpack.db --expect-repo scbrown/example --head-sha "$(git rev-parse HEAD)" --into urn:local:domain --db my.db
+quipu pack urn:example:graph --out domain.pendant.db --name "domain" --version 1.0.0
+quipu pack urn:example:graph --out domain.pendant.db --shapes s.ttl --queries q.json --with-vectors
+quipu pack urn:example:graph --out domain.pendant.db --space 7
+quipu pack --verify domain.pendant.db
+quipu pack urn:example:repo --out repo.pendant.db --repo scbrown/example --repo-sha "$BASE_SHA" --model-id all-MiniLM-L6-v2 --model-version 1
+quipu unpack repo.pendant.db --expect-repo scbrown/example --head-sha "$(git rev-parse HEAD)" --into urn:local:domain --db my.db
 ```
 
 | Flag | Description |
@@ -808,7 +808,7 @@ quipu graph list --kind operational --db my.db
 quipu graph list --frozen --db my.db
 ```
 
-`freeze` exports the graph's full history to a `.qpack.db` archive, verifies
+`freeze` exports the graph's full history to a `.pendant.db` archive, verifies
 it by content hash, deletes the local rows and re-attaches the pack
 read-only; the graph stays queryable at the same IRI and refuses writes
 until `thaw`. `list` prints `iri  class  kind  lifecycle  source` per graph.

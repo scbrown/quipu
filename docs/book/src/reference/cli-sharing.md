@@ -6,8 +6,8 @@ this page cannot quietly fall behind the binary.
 
 A note on vocabulary: **the share is the portable artifact.** `quipu share`
 writes its standard text files directly; releases may carry the same files in a
-deterministic `.qpack.tar.gz` archive. The older `pack` and `unpack` commands
-remain for local SQLite compatibility, but a `.qpack.db` is not the published
+deterministic `.pendant.tar.gz` archive. The older `pack` and `unpack` commands
+remain for local SQLite compatibility, but a `.pendant.db` is not the published
 interchange format.
 
 ---
@@ -55,7 +55,7 @@ one for a share bound for an internal forge, where those identifiers are the
 point. `--destination internal` is the single explicit way to say so:
 
 ```text
-quipu share --output qpack/today --destination internal
+quipu share --output pendant/today --destination internal
 ```
 
 It does three things, and the third is what makes the first two safe:
@@ -176,10 +176,10 @@ from "went wrong".
 ## `quipu pack` / `quipu unpack` — legacy SQLite compatibility
 
 ```text
-quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N]
+quipu pack <graph-iri> --out <file.pendant.db> [--name N] [--version V] [--space N]
            [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
-quipu pack --verify <file.qpack.db>
-quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
+quipu pack --verify <file.pendant.db>
+quipu unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]
 ```
 
 | Flag | Effect |
@@ -195,7 +195,7 @@ quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
 
 `--verify` answers whether a legacy SQLite pack is intact before loading it.
 New repository and release workflows use `share` and `import`; they do not
-publish `.qpack.db` files.
+publish `.pendant.db` files.
 
 ## `quipu pack --full` / `quipu restore` — whole-store packs
 
@@ -207,7 +207,7 @@ with it.
 
 ```text
 quipu pack --full [--format text] --destination internal --out <path> [--db <path>]
-quipu restore <file.qpack | text-pack-dir> [--force] [--db <path>]
+quipu restore <file.pendant | text-pack-dir> [--force] [--db <path>]
 ```
 
 | Flag | Effect |

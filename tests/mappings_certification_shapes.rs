@@ -36,7 +36,7 @@ fn certified_bundle_requires_both_distinct_signatures_and_a_passing_scrub() {
     let valid = r#"
         @prefix aegis: <http://aegis.gastown.local/ontology/> .
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-        aegis:bundle a aegis:CertifiedShareBundle ; rdfs:label "crew.qpack" ;
+        aegis:bundle a aegis:CertifiedShareBundle ; rdfs:label "crew.pendant" ;
             aegis:canonicalGraphHash "sha256:graph" ;
             aegis:shapesBundleVersion "aegis-ontology@1" ;
             aegis:provenanceManifest aegis:manifest ;
@@ -72,7 +72,7 @@ fn certified_bundle_requires_both_distinct_signatures_and_a_passing_scrub() {
     assert!(!report(&one_signature).conforms);
 
     // The generic envelope also certifies static packs (for example
-    // core.qpack.db), which have no shuttle source window.
+    // core.pendant.db), which have no shuttle source window.
     let static_pack = valid.replace(
         "            aegis:signingKey aegis:certifier-key ; aegis:attestationSignature \"cosign:certifier\" ;\n            aegis:frozenWindow aegis:window-42 .",
         "            aegis:signingKey aegis:certifier-key ; aegis:attestationSignature \"cosign:certifier\" .",

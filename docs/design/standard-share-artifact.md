@@ -2,7 +2,7 @@
 
 Status: implementation boundary for `aegis-iv3df7.5`.
 
-Quipu has one portable graph artifact: a **share**. A repository `.qpack` is a
+Quipu has one portable graph artifact: a **share**. A repository `.pendant` is a
 share packaged for release, not a SQLite database. SQLite may be constructed as
 an internal cache after verification, but it is never a published interchange
 format. Bobbin indexes remain separate binary artifacts.
@@ -29,7 +29,7 @@ facts nor depend on the homelab store.
 ## Wire form and identity
 
 A full share contains `manifest.ttl`, `payload.nq`, and `shapes.ttl`. A release
-asset is those files in a deterministic POSIX tar archive named `*.qpack`; a
+asset is those files in a deterministic POSIX tar archive named `*.pendant`; a
 served directory exposes the same files individually. Archive entry order,
 paths, modes, owners, and timestamps are normalized, but archive bytes do not
 define identity.
@@ -59,7 +59,7 @@ shapes, lineage, scope, or producer does.
 
 ## Import by reference
 
-`quipu import <URL>` accepts an HTTP(S) directory manifest or a `.qpack` release
+`quipu import <URL>` accepts an HTTP(S) directory manifest or a `.pendant` release
 asset. It follows bounded redirects, enforces response and expanded-size limits,
 rejects unsafe archive paths, and keeps fetched bytes in bounded memory; it does
 not create a user-visible download. Before opening a destination store it:
@@ -135,7 +135,7 @@ The feature is not complete until these independent checks pass:
 
 ## Reconstruction completeness (aegis-9f899e)
 
-The sections above settle the **form**: a `.qpack` is a text share, not a SQLite
+The sections above settle the **form**: a `.pendant` is a text share, not a SQLite
 blob. This section settles the **content**, and it is a widening: the share
 described above carries CURRENT FACTS ONLY, which is not enough to reconstruct
 the store it came from.

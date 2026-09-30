@@ -43,7 +43,7 @@ bind = "127.0.0.1:3030"
 # without changing what any existing query returns.
 # [[quipu.attachments]]
 # alias = "reference"
-# path = "/srv/quipu/reference.qpack.db"
+# path = "/srv/quipu/reference.pendant.db"
 ```
 
 ## Config Fields
@@ -117,7 +117,7 @@ honour it at open — every `quipu` subcommand and `quipu-server` alike.
 ```toml
 [[quipu.attachments]]
 alias = "reference"
-path = "/srv/quipu/reference.qpack.db"
+path = "/srv/quipu/reference.pendant.db"
 
 [[quipu.attachments]]
 alias = "tenant_a"
