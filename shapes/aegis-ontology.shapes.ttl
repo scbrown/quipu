@@ -812,8 +812,11 @@ aegis:DirectiveShape a sh:NodeShape ;
 # EMIT, deliberately, while the backfill runs: measured 2026-09-24, about
 # 1,030 directives are untraced, so a reject shape would refuse every
 # directive write in the fleet. Emitted violations become shacl.violation
-# events and the write commits; that event count IS the progress metric.
-# Drop the annotation (enforcement reverts to reject) once it reads zero:
+# events and the write commits. Those events depend on the write path and on
+# shacl.validate_on_write, so they are NOT the progress metric: progress is
+# `quipu validate` (or SPARQL) over the stored graph (ian ruling, aegis-4c3ppi).
+# Drop the annotation (enforcement reverts to reject) once that count reads
+# zero AND both predicates are in REQUIRED_PREDICATE_PROVEN at measured 100%:
 # "work it to true". Store-context validation (emit path) is what lets
 # sh:class see the linked WorkItem/Policy types that are not in the payload.
 #
