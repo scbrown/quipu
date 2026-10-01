@@ -269,6 +269,27 @@ impl Store {
         Ok(())
     }
 
+    /// A staged share's stored queries, held until `import promote`
+    /// (aegis-9ofqqs). Additive. One row per share: a re-import of the same
+    /// share replaces it, and promotion deletes it after installing.
+    ///
+    /// `member` is the sealed `queries.ttl` text, kept verbatim so promotion
+    /// re-parses and re-vets it against the store AS IT IS THEN, not as it
+    /// was at import.
+    pub(super) fn migrate_pending_share_queries(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS pending_share_queries (
+                 share_id  TEXT    PRIMARY KEY,
+                 member    TEXT    NOT NULL,
+                 store_id  TEXT    NOT NULL,
+                 namespace TEXT    NOT NULL,
+                 replace   INTEGER NOT NULL CHECK (replace IN (0, 1)),
+                 staged_at TEXT    NOT NULL
+             );",
+        )?;
+        Ok(())
+    }
+
     /// Bitemporal migration for `shapes` and `ontologies` (quipu #71) —
     /// **close, don't overwrite**.
     ///

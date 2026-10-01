@@ -169,6 +169,15 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("query_params", "required", TermIdKind::None),
     ("query_params", "default_val", TermIdKind::None),
     ("query_params", "description", TermIdKind::None),
+    // -- Store::migrate_pending_share_queries (aegis-9ofqqs) --
+    // A share id, the sealed queries.ttl text, a store id, a namespace and a
+    // timestamp: all TEXT, none a term id.
+    ("pending_share_queries", "share_id", TermIdKind::None),
+    ("pending_share_queries", "member", TermIdKind::None),
+    ("pending_share_queries", "store_id", TermIdKind::None),
+    ("pending_share_queries", "namespace", TermIdKind::None),
+    ("pending_share_queries", "replace", TermIdKind::None),
+    ("pending_share_queries", "staged_at", TermIdKind::None),
     // -- Store::migrate_retraction_tx (quipu #83) --
     ("facts", "retracted_tx", TermIdKind::None),
     // -- Store::migrate_forks (quipu-gp5) --
