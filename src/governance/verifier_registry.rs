@@ -42,6 +42,9 @@ use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
 use crate::store::Store;
 use crate::types::Value;
 
+/// The public Quechua namespace the aegis vocabulary is renamed into (aegis-9dpcta).
+const QUECHUA_NS: &str = "https://scbrown.github.io/quechua/ns#";
+
 /// The instant a signature was recorded, as the store observed it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Witness {
@@ -151,39 +154,70 @@ fn select(
     scope: Scope,
     with_key: bool,
 ) -> Result<Vec<Vec<u8>>> {
-    let lookup = |name: &str| store.lookup(&format!("{DEFAULT_BASE_NS}{name}"));
-    let (Some(rdf_type), Some(class), Some(verifier_attr)) = (
+    // Dual-read (aegis-9dpcta): every registry term is matched in BOTH the
+    // legacy aegis namespace and its public Quechua twin, independently, so a
+    // registration written in either vocabulary (or a mix of the two, during
+    // the rename) answers the same. Term ids come from the store, so they are
+    // inlined; nothing caller-supplied is.
+    let lookup = |name: &str| -> Result<Vec<i64>> {
+        let mut ids = Vec::new();
+        for ns in [DEFAULT_BASE_NS, QUECHUA_NS] {
+            if let Some(id) = store.lookup(&format!("{ns}{name}"))? {
+                ids.push(id);
+            }
+        }
+        Ok(ids)
+    };
+    let one_of = |ids: &[i64]| {
+        ids.iter()
+            .map(i64::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let (Some(rdf_type), classes, verifier_attrs) = (
         store.lookup(RDF_TYPE)?,
         lookup("VerifierRegistration")?,
         lookup("verifier")?,
     ) else {
-        // A term that was never interned means no registration exists yet.
         return Ok(Vec::new());
     };
-    let key_attr = if with_key {
-        match lookup("publicKey")? {
-            Some(id) => Some(id),
-            None => return Ok(Vec::new()),
+    if classes.is_empty() || verifier_attrs.is_empty() {
+        // A term that was never interned means no registration exists yet.
+        return Ok(Vec::new());
+    }
+    let key_attrs = if with_key {
+        let ids = lookup("publicKey")?;
+        if ids.is_empty() {
+            return Ok(Vec::new());
         }
+        Some(ids)
     } else {
         None
     };
-    let scheme_attr = if with_key {
-        lookup("signatureScheme")?
+    // signatureScheme has no published Quechua twin yet (it postdates the term
+    // map), so it is read in the legacy namespace only. No twin is invented.
+    let scheme_attrs = if with_key {
+        store
+            .lookup(&format!("{DEFAULT_BASE_NS}signatureScheme"))?
+            .map(|id| vec![id])
     } else {
         None
     };
-    let attests_attr = match attests {
-        Some(_) => match lookup("attests")? {
-            Some(id) => Some(id),
-            None => return Ok(Vec::new()),
-        },
+    let attests_attrs = match attests {
+        Some(_) => {
+            let ids = lookup("attests")?;
+            if ids.is_empty() {
+                return Ok(Vec::new());
+            }
+            Some(ids)
+        }
         None => None,
     };
 
-    // ?1 = the instant, ?2 = the tx (NULL means latest), ?3/?4 = rdf:type and
-    // the class, ?5/?6 = aegis:verifier and its value, ?7 = aegis:publicKey,
-    // ?8/?9 = aegis:attests and its value.
+    // ?1 = the instant, ?2 = the tx (NULL means latest), ?3 = rdf:type, ?4 (and
+    // ?11) = the class, ?6 = the verifier value, ?9 = the attests value, ?10 =
+    // "ed25519". Attribute ids (verifier, publicKey, signatureScheme, attests)
+    // are inlined IN-lists of store term ids.
     let in_effect = |alias: &str| {
         let graph = match scope {
             Scope::Root => format!(" AND {alias}.g = 0"),
@@ -198,17 +232,19 @@ fn select(
     };
     let mut sql = format!(
         "SELECT DISTINCT {out} FROM facts t \
-         JOIN facts vr ON vr.e = t.e AND vr.a = ?5 AND vr.v = ?6 AND {vr}",
+         JOIN facts vr ON vr.e = t.e AND vr.a IN ({verifier_in}) AND vr.v = ?6 AND {vr}",
         out = if with_key {
             "pk.v"
         } else {
             "CAST(t.e AS BLOB)"
         },
         vr = in_effect("vr"),
+        verifier_in = one_of(&verifier_attrs),
     );
-    if with_key {
+    if let Some(key_attrs) = &key_attrs {
         sql.push_str(&format!(
-            " JOIN facts pk ON pk.e = t.e AND pk.a = ?7 AND {}",
+            " JOIN facts pk ON pk.e = t.e AND pk.a IN ({}) AND {}",
+            one_of(key_attrs),
             in_effect("pk")
         ));
         // Only ed25519 registrations hold a key in the hex format these
@@ -217,26 +253,34 @@ fn select(
         // key; no scheme means ed25519, so a store without scheme facts
         // answers exactly as before. The write gate admits only plain string
         // scheme literals, so comparing the plain encoding is complete.
-        if let Some(scheme_attr) = scheme_attr {
+        if let Some(scheme_attrs) = &scheme_attrs {
             sql.push_str(&format!(
-                " AND NOT EXISTS (SELECT 1 FROM facts ss WHERE ss.e = t.e AND ss.a = {scheme_attr} \
+                " AND NOT EXISTS (SELECT 1 FROM facts ss WHERE ss.e = t.e AND ss.a IN ({}) \
                  AND ss.v != ?10 AND {})",
+                one_of(scheme_attrs),
                 in_effect("ss")
             ));
         }
     }
-    if attests_attr.is_some() {
+    if let Some(attests_attrs) = &attests_attrs {
         sql.push_str(&format!(
-            " JOIN facts sc ON sc.e = t.e AND sc.a = ?8 AND sc.v = ?9 AND {}",
+            " JOIN facts sc ON sc.e = t.e AND sc.a IN ({}) AND sc.v = ?9 AND {}",
+            one_of(attests_attrs),
             in_effect("sc")
         ));
     }
+    // ?4 is the legacy-or-only class, ?11 the second one when both exist.
+    let class_bytes: Vec<Vec<u8>> = classes.iter().map(|c| Value::Ref(*c).to_bytes()).collect();
+    let class_in = if class_bytes.len() > 1 {
+        "?4, ?11"
+    } else {
+        "?4"
+    };
     sql.push_str(&format!(
-        " WHERE t.a = ?3 AND t.v = ?4 AND {}",
+        " WHERE t.a = ?3 AND t.v IN ({class_in}) AND {}",
         in_effect("t")
     ));
 
-    let class_bytes = Value::Ref(class).to_bytes();
     let verifier_bytes = Value::Str(verifier.to_string()).to_bytes();
     let attests_bytes = attests.map(|p| Value::Str(p.to_string()).to_bytes());
     let ed25519_bytes = Value::Str("ed25519".to_string()).to_bytes();
@@ -245,18 +289,16 @@ fn select(
         ("?1", &witness.at),
         ("?2", &witness.tx),
         ("?3", &rdf_type),
-        ("?4", &class_bytes),
-        ("?5", &verifier_attr),
+        ("?4", &class_bytes[0]),
         ("?6", &verifier_bytes),
     ];
-    if let Some(k) = &key_attr {
-        params.push(("?7", k));
+    if let Some(second) = class_bytes.get(1) {
+        params.push(("?11", second));
     }
-    if let (Some(a), Some(b)) = (&attests_attr, &attests_bytes) {
-        params.push(("?8", a));
+    if let Some(b) = &attests_bytes {
         params.push(("?9", b));
     }
-    if scheme_attr.is_some() {
+    if scheme_attrs.is_some() {
         params.push(("?10", &ed25519_bytes));
     }
     let rows = stmt

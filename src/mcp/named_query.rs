@@ -194,7 +194,7 @@ pub const CATALOG: &[NamedQuery] = &[
     NamedQuery {
         name: "brief_ground",
         description: "Files prior work on a work item touched — its observed ground, the L1 expansion of a briefing's ground census (quipu-1uq).",
-        template: "PREFIX a: <http://aegis.gastown.local/ontology/> SELECT DISTINCT ?path WHERE { ?w a:identifier '{item}' . ?c a:implements ?w ; a:modifies ?e . ?e a:filePath ?path } ORDER BY ?path LIMIT {limit}",
+        template: "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX q: <https://scbrown.github.io/quechua/ns#> SELECT DISTINCT ?path WHERE { VALUES ?_vocab0 { a:identifier q:identifier } VALUES ?_vocab1 { a:implements q:implements } VALUES ?_vocab2 { a:modifies q:modifies } VALUES ?_vocab3 { a:filePath q:filePath } ?w ?_vocab0 '{item}' . ?c ?_vocab1 ?w ; ?_vocab2 ?e . ?e ?_vocab3 ?path } ORDER BY ?path LIMIT {limit}",
         params: &[
             ParamSpec {
                 name: "item",
@@ -215,7 +215,7 @@ pub const CATALOG: &[NamedQuery] = &[
     NamedQuery {
         name: "brief_related",
         description: "Work items whose commits touched the same entities as the given item — likely coordination, the L1 expansion of a briefing's related-work census (quipu-1uq).",
-        template: "PREFIX a: <http://aegis.gastown.local/ontology/> SELECT ?other (COUNT(DISTINCT ?e) AS ?shared_entities) WHERE { ?w a:identifier '{item}' . ?cA a:implements ?w ; a:modifies ?e . ?cB a:modifies ?e ; a:implements ?otherW . ?otherW a:identifier ?other . FILTER(?other != '{item}') } GROUP BY ?other ORDER BY DESC(?shared_entities) LIMIT {limit}",
+        template: "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX q: <https://scbrown.github.io/quechua/ns#> SELECT ?other (COUNT(DISTINCT ?e) AS ?shared_entities) WHERE { VALUES ?_vocab0 { a:identifier q:identifier } VALUES ?_vocab1 { a:implements q:implements } VALUES ?_vocab2 { a:modifies q:modifies } VALUES ?_vocab3 { a:modifies q:modifies } VALUES ?_vocab4 { a:implements q:implements } VALUES ?_vocab5 { a:identifier q:identifier } ?w ?_vocab0 '{item}' . ?cA ?_vocab1 ?w ; ?_vocab2 ?e . ?cB ?_vocab3 ?e ; ?_vocab4 ?otherW . ?otherW ?_vocab5 ?other . FILTER(?other != '{item}') } GROUP BY ?other ORDER BY DESC(?shared_entities) LIMIT {limit}",
         params: &[
             ParamSpec {
                 name: "item",
@@ -372,7 +372,7 @@ pub const CATALOG: &[NamedQuery] = &[
     NamedQuery {
         name: "entity_work",
         description: "Work-items (beads) and commits that touched a code entity — the auditable 'what work touched this' provenance query (quipu#37).",
-        template: "PREFIX a: <http://aegis.gastown.local/ontology/> SELECT DISTINCT ?commit ?bead WHERE { ?commit a:modifies <{entity}> . ?commit a:implements ?bead } LIMIT {limit}",
+        template: "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX q: <https://scbrown.github.io/quechua/ns#> SELECT DISTINCT ?commit ?bead WHERE { VALUES ?_vocab0 { a:modifies q:modifies } VALUES ?_vocab1 { a:implements q:implements } ?commit ?_vocab0 <{entity}> . ?commit ?_vocab1 ?bead } LIMIT {limit}",
         params: &[
             ParamSpec {
                 name: "entity",
@@ -393,7 +393,7 @@ pub const CATALOG: &[NamedQuery] = &[
     NamedQuery {
         name: "cochanged_with",
         description: "Code entities that share a touching work-item with the given entity, ranked by shared-work-item count — deterministic provenance co-change, complementary to Bobbin's statistical co-change (quipu#37).",
-        template: "PREFIX a: <http://aegis.gastown.local/ontology/> SELECT ?other (COUNT(DISTINCT ?bead) AS ?shared_workitems) WHERE { ?cA a:modifies <{entity}> . ?cA a:implements ?bead . ?cB a:implements ?bead . ?cB a:modifies ?other . FILTER(?other != <{entity}>) } GROUP BY ?other ORDER BY DESC(?shared_workitems) LIMIT {limit}",
+        template: "PREFIX a: <http://aegis.gastown.local/ontology/> PREFIX q: <https://scbrown.github.io/quechua/ns#> SELECT ?other (COUNT(DISTINCT ?bead) AS ?shared_workitems) WHERE { VALUES ?_vocab0 { a:modifies q:modifies } VALUES ?_vocab1 { a:implements q:implements } VALUES ?_vocab2 { a:implements q:implements } VALUES ?_vocab3 { a:modifies q:modifies } ?cA ?_vocab0 <{entity}> . ?cA ?_vocab1 ?bead . ?cB ?_vocab2 ?bead . ?cB ?_vocab3 ?other . FILTER(?other != <{entity}>) } GROUP BY ?other ORDER BY DESC(?shared_workitems) LIMIT {limit}",
         params: &[
             ParamSpec {
                 name: "entity",

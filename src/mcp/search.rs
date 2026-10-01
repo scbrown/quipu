@@ -55,7 +55,7 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
     if let Some(ref gids) = group_ids {
         patterns.push_str(
             "?s <http://www.w3.org/ns/prov#wasGeneratedBy> ?_episode . \
-             ?_episode <http://aegis.gastown.local/ontology/groupId> ?_gid . ",
+             VALUES ?_groupPredicate { <http://aegis.gastown.local/ontology/groupId> <https://scbrown.github.io/quechua/ns#groupId> } ?_episode ?_groupPredicate ?_gid . ",
         );
         let gid_filters: Vec<String> = gids
             .iter()
@@ -128,7 +128,7 @@ pub fn tool_search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> 
     if let Some(ref gids) = group_ids {
         patterns.push_str(
             "?s <http://www.w3.org/ns/prov#wasGeneratedBy> ?_episode . \
-             ?_episode <http://aegis.gastown.local/ontology/groupId> ?_gid . ",
+             VALUES ?_groupPredicate { <http://aegis.gastown.local/ontology/groupId> <https://scbrown.github.io/quechua/ns#groupId> } ?_episode ?_groupPredicate ?_gid . ",
         );
         let gid_filters: Vec<String> = gids
             .iter()
@@ -140,7 +140,8 @@ pub fn tool_search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> 
         patterns.push_str(&format!("FILTER({}) ", gid_filters.join(" || ")));
     }
 
-    let sparql = format!("SELECT ?s ?p ?o WHERE {{ ?s ?p ?o . {patterns}}} LIMIT {oversample}");
+    let sparql =
+        format!("SELECT DISTINCT ?s ?p ?o WHERE {{ ?s ?p ?o . {patterns}}} LIMIT {oversample}");
 
     let result = sparql::query(store, &sparql)?;
     let query_lower = query.to_lowercase();

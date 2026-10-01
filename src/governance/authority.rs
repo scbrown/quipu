@@ -162,15 +162,30 @@ pub fn intersect_chain(authorities: &[Authority]) -> Authority {
 /// A principal with no `aegis:authorityOver` facts holds [`Authority::none`] —
 /// **not** the wildcard. An undeclared authority is an absent grant, and reading
 /// absence as permission is how an access-control layer becomes decorative.
+/// Both legacy and public vocabulary spellings are read independently. A
+/// matching principal with conflicting identity values fails closed; graph
+/// grants remain set-valued and chain authority still uses intersection.
 pub fn authority_of(store: &Store, principal: &str) -> Result<Authority> {
     let q = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
-         SELECT ?g WHERE {{ ?p a a:Principal ; a:principalId \"{id}\" ; a:authorityOver ?g }}",
+         PREFIX q: <https://scbrown.github.io/quechua/ns#> \
+         SELECT DISTINCT ?id ?g WHERE {{ \
+         {{ ?p a a:Principal }} UNION {{ ?p a q:Principal }} \
+         VALUES ?matchingId {{ a:principalId q:principalId }} \
+         VALUES ?identity {{ a:principalId q:principalId }} \
+         VALUES ?grant {{ a:authorityOver q:authorityOver }} \
+         ?p ?matchingId \"{id}\" ; ?identity ?id ; ?grant ?g }}",
         id = principal.replace('\\', "\\\\").replace('"', "\\\""),
     );
     let QueryResult::Select { rows, .. } = sparql::query(store, &q)? else {
         return Ok(Authority::none());
     };
+    if rows
+        .iter()
+        .any(|r| !matches!(r.get("id"), Some(Value::Str(id)) if id == principal))
+    {
+        return Ok(Authority::none());
+    }
     let graphs: Vec<String> = rows
         .iter()
         .filter_map(|r| match r.get("g") {

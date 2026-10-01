@@ -183,6 +183,12 @@ delegation only narrows and an empty intersection refuses
 inert for callers that present no principal chain. This gates **writes only** —
 it is not a read-side confidentiality boundary.
 
+The authority reader accepts both legacy and Quechua vocabulary spellings for
+`Principal`, `principalId`, and `authorityOver`, including mixed spellings.
+Identical aliases collapse; conflicting identity values grant no authority.
+Graph grants remain set-valued, and the reader retains its committed root-graph
+scope. This compatibility does not change principal identities or grant writers.
+
 ## Audit & replay
 
 The rest of `src/governance/` closes the loop after the fact:
