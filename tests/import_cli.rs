@@ -48,7 +48,7 @@ fn fixture(root: &Path) -> (String, String) {
     .unwrap();
     let dir = root.join("share");
     quipu::share::share(&source, dir.to_str().unwrap(), &Default::default()).unwrap();
-    let archive = root.join("share.qpack.tar.gz");
+    let archive = root.join("share.pendant.tar.gz");
     let zip = flate2::write::GzEncoder::new(
         std::fs::File::create(&archive).unwrap(),
         flate2::Compression::default(),
@@ -118,4 +118,43 @@ fn archive_does_not_adopt_carried_shapes_or_create_a_default_database() {
         serde_json::json!(["urn:Widget"])
     );
     assert!(db.exists(), "an explicit --db must not be silently ignored");
+}
+
+// THE RENAME ALIAS (aegis-fxpbys.3). A pendant is the artifact once called a
+// qpack. An archive still named `.qpack.tar.gz` must import exactly as before
+// -- same share, same outcome -- and say on stderr what to rename it to; a
+// `.pendant.tar.gz` must import without that notice.
+#[test]
+fn a_legacy_qpack_archive_still_imports_and_warns_while_a_pendant_does_not() {
+    let root = tempfile::tempdir().unwrap();
+    let (_, pendant) = fixture(root.path());
+    let legacy = root.path().join("share.qpack.tar.gz");
+    std::fs::copy(&pendant, &legacy).unwrap();
+    let run = |reference: &str| {
+        let output = Command::new(env!("CARGO_BIN_EXE_quipu"))
+            .current_dir(root.path())
+            .env("HOME", root.path())
+            .args(["import", reference])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        (json, String::from_utf8_lossy(&output.stderr).into_owned())
+    };
+    let (new_json, new_err) = run(&pendant);
+    let (old_json, old_err) = run(legacy.to_str().unwrap());
+    assert_eq!(old_json["share_id"], new_json["share_id"]);
+    assert_eq!(old_json["outcome"], new_json["outcome"]);
+    assert!(
+        old_err.contains("deprecated") && old_err.contains("share.pendant.tar.gz"),
+        "legacy name must warn: {old_err}"
+    );
+    assert!(
+        !new_err.contains("deprecated"),
+        "a pendant must not warn: {new_err}"
+    );
 }

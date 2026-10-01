@@ -13,7 +13,7 @@ if [ -n "${EXPLORER_RELEASE_PUBLISHED_AT:-}" ]; then
   age=$(( $(date -u +%s) - published ))
   if [ "$age" -ge 0 ] && [ "$age" -lt 1800 ]; then pending=true; fi
 fi
-for f in pkg/quipu_wasm_explorer.js pkg/quipu_wasm_explorer_bg.wasm repository.qpack.tar.gz; do
+for f in pkg/quipu_wasm_explorer.js pkg/quipu_wasm_explorer_bg.wasm repository.pendant.tar.gz; do
   if test -s "$SOURCE/$f"; then
     test -s "$OUTPUT/$f" || { echo "staged but not published: explore/$f"; exit 1; }
     cmp -s "$SOURCE/$f" "$OUTPUT/$f" || { echo "published bytes differ: explore/$f"; exit 1; }

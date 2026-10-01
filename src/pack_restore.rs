@@ -28,8 +28,8 @@
 //! an intact pack (aegis-9f899e):
 //!
 //! ```text
-//! quipu unpack full.qpack       -> exit 1, "unpack error: unknown graph: urn:quipu:whole-store"
-//! quipu pack --verify full.qpack -> exit 1, "pack verify error: unknown graph: urn:quipu:whole-store"
+//! quipu unpack full.pendant       -> exit 1, "unpack error: unknown graph: urn:quipu:whole-store"
+//! quipu pack --verify full.pendant -> exit 1, "pack verify error: unknown graph: urn:quipu:whole-store"
 //! ```
 //!
 //! Nothing was corrupted — the refusal is real — but it names a MISSING GRAPH

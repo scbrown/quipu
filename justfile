@@ -205,9 +205,12 @@ explorer mode="release":
             && tar -C "$TMP" -xzf "$TMP"/*-wasm.tar.gz \
             && find "$TMP" -name 'quipu_wasm_explorer*' -exec cp {} "$DEST/pkg/" \; \
             || echo "warning: $TAG has no wasm bundle yet"
-        gh release download "$TAG" --pattern '*-repository.qpack.tar.gz' --dir "$TMP" \
-            && cp "$TMP"/*-repository.qpack.tar.gz "$DEST/repository.qpack.tar.gz" \
-            || echo "warning: $TAG has no repository qpack"
+        # Releases cut before the pendant rename named it *-repository.qpack.tar.gz.
+        gh release download "$TAG" --pattern '*-repository.pendant.tar.gz' --dir "$TMP" \
+            && cp "$TMP"/*-repository.pendant.tar.gz "$DEST/repository.pendant.tar.gz" \
+            || { gh release download "$TAG" --pattern '*-repository.qpack.tar.gz' --dir "$TMP" \
+                && cp "$TMP"/*-repository.qpack.tar.gz "$DEST/repository.pendant.tar.gz"; } \
+            || echo "warning: $TAG has no repository pendant"
     fi
     ls -la "$DEST" "$DEST/pkg"
 

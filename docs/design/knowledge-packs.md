@@ -28,7 +28,7 @@ artifact format can *be* the database format.)
 `quipu pack` produces a fresh, self-contained Quipu SQLite store:
 
 ```text
-quipu pack <graph-iri> --out <file.qpack.db>
+quipu pack <graph-iri> --out <file.pendant.db>
     [--name <n>] [--version <semver>] [--space <term-space>]
     [--shapes <name>...] [--queries <name>...]
     [--with-vectors] [--format turtle]

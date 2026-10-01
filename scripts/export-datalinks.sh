@@ -8,7 +8,7 @@ if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
     exit 2
 fi
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-OUT=${4:-$ROOT/docs/book/src/datalinks/qpack}
+OUT=${4:-$ROOT/docs/book/src/datalinks/pendant}
 QUIPU_BIN=${QUIPU_BIN:-quipu}
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

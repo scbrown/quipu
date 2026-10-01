@@ -152,7 +152,7 @@ fn rows_by_table(path: &str) -> std::collections::BTreeMap<String, Vec<String>> 
 #[test]
 fn unpack_refuses_a_full_pack_and_names_restore() {
     let dir = tmpdir("wrong-verb-unpack");
-    let pack = full_pack(&dir, "full.qpack");
+    let pack = full_pack(&dir, "full.pendant");
     let manifest = crate::pack::read_manifest(&pack).unwrap();
 
     let error = require_format(&manifest, Verb::Unpack)
@@ -174,7 +174,7 @@ fn unpack_refuses_a_full_pack_and_names_restore() {
 #[test]
 fn restore_refuses_a_published_pack_and_names_unpack() {
     let dir = tmpdir("wrong-verb-restore");
-    let pack = published_pack(&dir, "pub.qpack");
+    let pack = published_pack(&dir, "pub.pendant");
     let dest = at(&dir, "dest.db");
 
     let error = restore(&pack, &dest, false)
@@ -194,7 +194,7 @@ fn restore_refuses_a_published_pack_and_names_unpack() {
 #[test]
 fn an_unknown_pack_format_is_refused_by_both_verbs() {
     let dir = tmpdir("unknown-format");
-    let pack = full_pack(&dir, "future.qpack");
+    let pack = full_pack(&dir, "future.pendant");
     restamp_format(&pack, "quipu-pack-full/99");
     let manifest = crate::pack::read_manifest(&pack).unwrap();
 
@@ -212,7 +212,7 @@ fn an_unknown_pack_format_is_refused_by_both_verbs() {
 #[test]
 fn an_export_only_format_is_refused_and_says_nothing_reads_it() {
     let dir = tmpdir("export-only");
-    let pack = full_pack(&dir, "bundle.qpack");
+    let pack = full_pack(&dir, "bundle.pendant");
     restamp_format(&pack, FORMAT_TURTLE);
     let manifest = crate::pack::read_manifest(&pack).unwrap();
 
@@ -231,7 +231,7 @@ fn an_export_only_format_is_refused_and_says_nothing_reads_it() {
 #[test]
 fn a_frozen_archive_is_pointed_at_attach_not_at_the_other_load_verb() {
     let dir = tmpdir("frozen");
-    let pack = full_pack(&dir, "frozen.qpack");
+    let pack = full_pack(&dir, "frozen.pendant");
     restamp_format(&pack, FORMAT_FROZEN);
     let manifest = crate::pack::read_manifest(&pack).unwrap();
 
@@ -263,7 +263,7 @@ fn the_format_gate_decides_before_the_hash_does() {
     let dest = at(&dir, "dest.db");
 
     // ARM 1: a FULL pack, corrupted, handed to `unpack`.
-    let full = full_pack(&dir, "both-wrong.qpack");
+    let full = full_pack(&dir, "both-wrong.pendant");
     corrupt_a_fact(&full);
     let (_c, _r, matches) = crate::pack_full::verify_full(&full).unwrap();
     assert!(!matches, "fixture must be corrupt or this test is vacuous");
@@ -282,7 +282,7 @@ fn the_format_gate_decides_before_the_hash_does() {
     );
 
     // ARM 2: a PUBLISHED pack, corrupted, handed to `restore`.
-    let published = published_pack(&dir, "pub-wrong.qpack");
+    let published = published_pack(&dir, "pub-wrong.pendant");
     corrupt_a_fact(&published);
     let (_c2, _r2, matches2) = crate::pack::verify(&published).unwrap();
     assert!(!matches2, "fixture must be corrupt or this arm is vacuous");
@@ -307,7 +307,7 @@ fn the_format_gate_decides_before_the_hash_does() {
 #[test]
 fn restore_reproduces_every_row_of_every_table() {
     let dir = tmpdir("round-trip");
-    let pack = full_pack(&dir, "src.qpack");
+    let pack = full_pack(&dir, "src.pendant");
     let dest = at(&dir, "restored.db");
 
     let report = restore(&pack, &dest, false).expect("a full pack must restore into a fresh store");
@@ -338,7 +338,7 @@ fn restore_reproduces_every_row_of_every_table() {
     // And the producer agrees: re-packing the restored store reproduces the
     // same content hash. Checked SECOND, because on its own it only proves the
     // hash is stable, not that the rows are there.
-    let repacked = at(&dir, "again.qpack");
+    let repacked = at(&dir, "again.pendant");
     let store = Store::open(&dest).unwrap();
     let again = crate::pack_full::pack_full(&store, &repacked, &internal(), TS).unwrap();
     assert_eq!(
@@ -350,7 +350,7 @@ fn restore_reproduces_every_row_of_every_table() {
 #[test]
 fn restore_refuses_a_populated_destination_unless_forced() {
     let dir = tmpdir("populated");
-    let pack = full_pack(&dir, "src.qpack");
+    let pack = full_pack(&dir, "src.pendant");
     let dest = at(&dir, "live.db");
 
     // A destination with live facts of its own.
@@ -392,7 +392,7 @@ fn restore_refuses_a_populated_destination_unless_forced() {
 #[test]
 fn restore_refuses_a_tampered_pack_and_writes_nothing() {
     let dir = tmpdir("tampered");
-    let pack = full_pack(&dir, "tampered.qpack");
+    let pack = full_pack(&dir, "tampered.pendant");
     corrupt_a_fact(&pack);
     let dest = at(&dir, "dest.db");
 
@@ -409,7 +409,7 @@ fn restore_refuses_a_tampered_pack_and_writes_nothing() {
 #[test]
 fn verify_full_answers_a_question_pack_verify_cannot() {
     let dir = tmpdir("verify");
-    let pack = full_pack(&dir, "full.qpack");
+    let pack = full_pack(&dir, "full.pendant");
 
     let (claimed, recomputed, matches) = crate::pack_full::verify_full(&pack).unwrap();
     assert!(
