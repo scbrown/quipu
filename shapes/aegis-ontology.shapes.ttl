@@ -825,6 +825,12 @@ aegis:DirectiveShape a sh:NodeShape ;
 aegis:DirectiveTraceabilityShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
     sh:targetClass aegis:Directive ;
+    # I2 label floor. DirectiveShape already requires it, so this asserts
+    # nothing new about the data; it keeps every targetClass shape honest.
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+    ] ;
     sh:or (
         [ sh:class aegis:Policy ]
         [ sh:class aegis:AlertRule ]
