@@ -3,6 +3,18 @@ name: Release
 on:
   push:
     branches: [main]
+    # The automated ledger chore ("chore(conformance): re-derive ledgers at
+    # <sha>") lands about once per code merge and touches only these files. It
+    # cannot change the crate, so it cannot change the next version. Running
+    # Release for it cost a ~20 min cold cargo-semver-checks on every chore,
+    # and the merge queue waits for main to be complete-green, so each chore
+    # held the next merge for ~25 min (aegis-hpe0lg). A push whose files are
+    # ALL in this list starts no Release run; any other file runs it as before.
+    # Keep this list to ledger outputs. Widening it to src/ or Cargo.* would
+    # skip real releases.
+    paths-ignore:
+      - "benchmark/public/results/**"
+      - "docs/book/src/benchmarks/conformance.md"
   # Manual re-run of the artifact build for an existing tag, e.g. when a
   # release job failed after the tag was already pushed. Skips release-plz.
   workflow_dispatch:
@@ -68,6 +80,13 @@ jobs:
           fi
 
       - uses: dtolnay/rust-toolchain@stable
+
+      # cargo-semver-checks builds rustdoc for the baseline and the current
+      # crate. With no cache that took 20m03s of a 21 min job (aegis-hpe0lg,
+      # run 36848555661). A dedicated key keeps it apart from CI's caches.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-plz
 
       # Inspect merged subjects across the package release window before the
       # action can cut a release. A PR title lint cannot see final squash titles.
