@@ -39,6 +39,16 @@ pub(crate) struct StoreHandle {
     /// query path (quipu-tkh). Empty means `federated: true` fans out to the
     /// local store alone.
     pub(crate) federation: quipu::config::FederationConfig,
+    /// The embedding provider, captured once when the handle is built.
+    ///
+    /// The provider is installed at startup and never replaced, so a request
+    /// that only needs the provider must not queue on the WRITER for it.
+    /// `/search` used to take `lock()` just to clone this `Arc` before its
+    /// lock-free ONNX query embed, which parked every text search behind a
+    /// long write: a 23 MB `/knot/promote` held the writer ~2 min and every
+    /// text `/search` timed out while pooled `/query` answered in 8 ms
+    /// (aegis-hzh9rz).
+    pub(crate) embedding_provider: Option<Arc<dyn quipu::EmbeddingProvider>>,
     /// The registered reactive reasoner, kept concrete (not as the
     /// `dyn TransactObserver` the store holds) so `POST /shapes` can hot-swap
     /// its ruleset — quipu-923, gap G6: without this handle, rules loaded at
@@ -102,6 +112,7 @@ impl StoreHandle {
         Self {
             graph_metrics: super::graph_metrics::GraphMetrics::new(":memory:"),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
+            embedding_provider: store.embedding_provider(),
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             federation: quipu::config::FederationConfig::default(),

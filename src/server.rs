@@ -310,11 +310,13 @@ async fn main() {
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
 
     let vector_reads_pooled = store.has_sqlite_vector_backend();
+    let embedding_provider = store.embedding_provider();
     let state: SharedStore = Arc::new(StoreHandle {
         graph_metrics: graph_metrics::GraphMetrics::new(&db_path),
         writer: FairMutex::new(store),
         readers: read_pool,
         vector_reads_pooled,
+        embedding_provider,
         federation: config.federation.clone(),
         #[cfg(feature = "reactive-reasoner")]
         reasoner: reactive_reasoner,
