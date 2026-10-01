@@ -375,9 +375,18 @@ same the governance plane uses; it is not an HSM.
 
 ```text
 quipu attest register --agent <a> --session <s> --public-key <hex> \
-  --introducer <who> --issued-at <epoch> --expires-at <epoch> [--db <path>]
+  --introducer <who> --issued-at <epoch> --expires-at <epoch> [--allow-write] [--db <path>]
+quipu attest allow-write|deny-write <session> [--db <path>]
+quipu attest revoke <session> [--db <path>]
 quipu attest list [--db <path>]
 ```
+
+A binding is **share-only** unless an operator grants it write (`--allow-write` at
+registration, or `allow-write` later). Only then may its key sign HTTP writes. `list`
+prints each binding's `allow_write`, `expires_at` and `revoked`, so the scope a key
+holds is visible without reading the store. `revoke` keeps the row: a revoked binding
+refuses as `revoked`, which is a different finding from an unbound key. Rotation is a
+new binding plus a revoke of the old one.
 
 **Importing a share never registers its producer.** This is the point, not an
 omission: a key that vouches for the bundle it arrived in vouches for nothing, and an

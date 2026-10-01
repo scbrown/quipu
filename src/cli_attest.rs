@@ -45,11 +45,13 @@ pub fn cmd_attest(args: &[String], db_path: &str) {
         Some(verb @ ("allow-write" | "deny-write")) => {
             set_write(args, db_path, verb == "allow-write");
         }
+        Some("revoke") => revoke(args, db_path),
         _ => {
             eprintln!(
                 "quipu attest register --agent A --session S --public-key HEX \\
                  --introducer I --issued-at EPOCH --expires-at EPOCH [--allow-write] [--db PATH]\n\
                  quipu attest allow-write|deny-write <SESSION> [--db PATH]\n\
+                 quipu attest revoke <SESSION> [--db PATH]\n\
                  quipu attest list [--db PATH]\n\n\
                  A binding is SHARE-ONLY unless granted write: --allow-write at\n\
                  registration, or allow-write later. Only then may its key sign\n\
@@ -126,6 +128,27 @@ fn set_write(args: &[String], db_path: &str, allow: bool) {
     }
 }
 
+/// Revoke a session binding. Rotation is "register the new binding, revoke the
+/// old one", and before this verb the second half had no operator path: the
+/// store function existed with tests as its only callers, so a revoke on a live
+/// store meant raw SQL (aegis-bys8d1, measured on the first production probe).
+/// The row is kept: a revoked binding refuses as `revoked`, which is a
+/// different finding from an unbound one.
+fn revoke(args: &[String], db_path: &str) {
+    let Some(session) = args.get(3).filter(|a| !a.starts_with("--")) else {
+        eprintln!("usage: quipu attest revoke <SESSION> [--db PATH]");
+        std::process::exit(2);
+    };
+    let store = crate::cli_open::open_store(db_path);
+    match store.attestation_revoke(session) {
+        Ok(()) => println!("session {session}: REVOKED"),
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn list(db_path: &str) {
     let store = crate::cli_open::open_store(db_path);
     match store.attestation_bindings() {
@@ -136,8 +159,14 @@ fn list(db_path: &str) {
         Ok(bindings) => {
             for b in bindings {
                 println!(
-                    "{}\t{}\tkey_id={}\tintroducer={}\trevoked={}",
-                    b.agent, b.session, b.key_id, b.introducer, b.revoked
+                    "{}\t{}\tkey_id={}\tintroducer={}\tallow_write={}\texpires_at={}\trevoked={}",
+                    b.agent,
+                    b.session,
+                    b.key_id,
+                    b.introducer,
+                    b.allow_write,
+                    b.expires_at_epoch,
+                    b.revoked
                 );
             }
         }
