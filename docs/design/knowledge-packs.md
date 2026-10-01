@@ -147,6 +147,11 @@ renderer serves both.
   `quipu_ask` stays on the read-only pool: registry *reads* are fine there,
   and the pooled-tool survival test pins it. CLI: `quipu queries
   load|list|get|remove`.
+- **In a share:** the text share carries selected stored queries as
+  `queries.ttl`, sealed by the manifest and namespaced on import, so a qpack
+  ships its competency questions too — see
+  [standard-share-artifact.md § Stored queries](standard-share-artifact.md#stored-queries-queriesttl)
+  (aegis-fxpbys.2).
 
 ## 3. Retrieval policy — recommend, never enforce
 
