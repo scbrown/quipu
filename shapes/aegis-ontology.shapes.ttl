@@ -2198,3 +2198,14 @@ aegis:ReactionFiringShape a sh:NodeShape ;
     # (reaction label, eventId) and freezes the payload before its first send.
     # SHACL does not prove deterministic identity or receiver idempotence.
     sh:property [ sh:path aegis:eventId ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .
+
+# Episode context references can point into an explicitly selected records graph.
+# SHACL checks the reference shape; the producer checks direct WorkItem typing
+# in that graph. Do not copy or infer a WorkItem into the episode graph.
+aegis:AboutWorkItemShape a sh:NodeShape ;
+    sh:targetSubjectsOf aegis:aboutWorkItem ;
+    sh:property [
+        sh:path aegis:aboutWorkItem ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+    ] .

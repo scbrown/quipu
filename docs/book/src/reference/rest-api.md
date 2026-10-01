@@ -416,6 +416,45 @@ Two things it does **not** promise, both still on the caller:
   nobody queries is `created` and unreachable. Ask it back the way a reader
   would.
 
+#### Work-item context without duplicate entities
+
+An episode may carry one `aegis:aboutWorkItem` edge from its generated activity
+(`episode_` plus the sanitized episode name) to an existing WorkItem IRI. This
+claims the episode's context, not that the work is implemented or complete.
+Knowledge remains reachable by joining `prov:wasGeneratedBy` to that activity.
+Do not copy the WorkItem into the knowledge graph merely to create a reference.
+
+The shipped `AboutWorkItemShape` constrains the reference to one IRI. The
+producer must first verify the target's direct WorkItem type in its authoritative
+records graph, behind a passing control, and read the edge back after writing.
+SHACL does not prove a target's type in a graph outside its validation dataset.
+The property has no global domain or range, so linking cannot manufacture the
+type assertion used by that verification. Historical episodes may omit it.
+
+Select both graphs explicitly when retrieving bead-related knowledge. For
+example, with `ex:` bound to the deployment vocabulary, join the records graph's
+`ex:WorkItem` to the knowledge graph's activity and generated entities:
+
+```sparql
+PREFIX ex: <https://example.org/vocab/>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+SELECT DISTINCT ?knowledge WHERE {
+  GRAPH <urn:example:records> {
+    <https://example.org/vocab/task-123> a ?type .
+    FILTER(?type = ex:WorkItem)
+  }
+  GRAPH <urn:example:knowledge> {
+    ?episode ex:aboutWorkItem <https://example.org/vocab/task-123> .
+    ?knowledge prov:wasGeneratedBy ?episode .
+  }
+}
+```
+
+The producer chooses the primary task explicitly; do not guess it from every
+identifier mentioned in free text. Direct `/episode` calls do not parse task
+markers automatically. This relationship does not repair historical omissions
+or establish that a tracker backlog has drained.
+
 #### Edge `relation`: which vocabularies `/episode` can write
 
 `/episode` used to force **every** relation into `aegis:` and then sanitize it, so
