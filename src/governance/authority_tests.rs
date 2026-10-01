@@ -306,3 +306,120 @@ fn a_wildcard_holder_still_narrows_to_its_delegate() {
         "the wildcard must not survive delegation to a scoped worker"
     );
 }
+
+fn load_authority(store: &mut Store, turtle: &str, graph: i64) {
+    crate::rdf::ingest_rdf_to_graph(
+        store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        TS,
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+}
+
+#[test]
+fn namespace_authority_combinations_preserve_write_and_delegate_boundaries() {
+    let public = "https://scbrown.github.io/quechua/ns#";
+    let choices = [
+        vec![DEFAULT_BASE_NS],
+        vec![public],
+        vec![DEFAULT_BASE_NS, public],
+    ];
+    for types in &choices {
+        for identities in &choices {
+            for grants in &choices {
+                let mut store = Store::open_in_memory().unwrap();
+                let mut ttl = String::new();
+                for ns in types {
+                    ttl.push_str(&format!("<urn:principal> a <{ns}Principal> .\n"));
+                }
+                for ns in identities {
+                    ttl.push_str(&format!("<urn:principal> <{ns}principalId> \"caller\" .\n"));
+                }
+                for ns in grants {
+                    ttl.push_str(&format!(
+                        "<urn:principal> <{ns}authorityOver> <{}>, <urn:allowed> .\n",
+                        crate::schema::ROOT_GRAPH_IRI
+                    ));
+                }
+                load_authority(&mut store, &ttl, 0);
+                let authority = authority_of(&store, "caller").unwrap();
+                assert_eq!(authority.graphs().len(), 2, "identical aliases collapse");
+                assert!(authority.permits(crate::schema::ROOT_GRAPH_IRI));
+                assert!(!authority.permits("urn:secret"));
+                declare(&mut store, "delegate", &["urn:allowed"]);
+                store.governance_config_mut().enforce_authority = true;
+                store.set_principal_chain(vec!["caller".into()]);
+                store
+                    .transact(&a_fact(&store, "urn:accepted"), TS, None, None)
+                    .unwrap();
+                store.set_principal_chain(vec!["caller".into(), "delegate".into()]);
+                assert!(matches!(
+                    store.transact(&a_fact(&store, "urn:denied"), TS, None, None),
+                    Err(crate::error::Error::PolicyDenied(_))
+                ));
+            }
+        }
+    }
+}
+
+#[test]
+fn namespace_authority_conflicting_identity_fails_closed() {
+    let mut store = Store::open_in_memory().unwrap();
+    let public = "https://scbrown.github.io/quechua/ns#";
+    load_authority(
+        &mut store,
+        &format!(
+            "<urn:principal> a <{DEFAULT_BASE_NS}Principal> ; \
+         <{DEFAULT_BASE_NS}principalId> \"caller\" ; \
+         <{public}principalId> \"someone-else\" ; \
+         <{public}authorityOver> \"*\" ."
+        ),
+        0,
+    );
+    for principal in ["caller", "someone-else"] {
+        assert!(authority_of(&store, principal).unwrap().is_empty());
+        store.governance_config_mut().enforce_authority = true;
+        store.set_principal_chain(vec![principal.into()]);
+        assert!(matches!(
+            store.transact(&a_fact(&store, "urn:denied"), TS, None, None),
+            Err(crate::error::Error::PolicyDenied(_))
+        ));
+    }
+}
+
+#[test]
+fn namespace_authority_foreign_terms_and_named_graphs_do_not_grant() {
+    for ns in [DEFAULT_BASE_NS, "https://scbrown.github.io/quechua/ns#"] {
+        let mut store = Store::open_in_memory().unwrap();
+        load_authority(
+            &mut store,
+            &format!(
+                "<urn:foreign-type> a <https://example.org/Principal> ; \
+             <{ns}principalId> \"foreign-type\" ; <{ns}authorityOver> \"*\" .\n\
+             <urn:foreign-grant> a <{ns}Principal> ; \
+             <{ns}principalId> \"foreign-grant\" ; <https://example.org/authorityOver> \"*\" ."
+            ),
+            0,
+        );
+        let graph = store.intern("urn:isolated").unwrap();
+        load_authority(
+            &mut store,
+            &format!(
+                "<urn:isolated-principal> a <{ns}Principal> ; \
+             <{ns}principalId> \"isolated\" ; <{ns}authorityOver> \"*\" ."
+            ),
+            graph,
+        );
+        for principal in ["foreign-type", "foreign-grant", "isolated", "missing"] {
+            assert!(
+                authority_of(&store, principal).unwrap().is_empty(),
+                "{principal}"
+            );
+        }
+    }
+}
