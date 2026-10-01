@@ -440,3 +440,27 @@ fn issue_key(issue: &crate::shacl::ValidationIssue) -> String {
 #[cfg(test)]
 #[path = "shacl_context_tests.rs"]
 mod shacl_context_tests;
+
+/// Queue each result of an EMIT-mode validation as a `shacl.violation` event
+/// riding the next write's savepoint (event P3). One definition for every
+/// write path that routes by `quipu:onViolation` (`/episode`, `/knot`), so the
+/// event shape cannot drift between them (aegis-4c3ppi).
+pub fn queue_emit_violations(store: &Store, feedback: &crate::shacl::ValidationFeedback) {
+    if feedback.conforms {
+        return;
+    }
+    for issue in &feedback.results {
+        store.queue_write_event(crate::store::PendingWriteEvent {
+            event_type: "shacl.violation".to_string(),
+            subject: Some(issue.focus_node.clone()),
+            payload: serde_json::json!({
+                "shape": issue.source_shape,
+                "message": issue.message,
+                "component": issue.component,
+                "path": issue.path,
+                "severity": issue.severity,
+                "mode": "emit",
+            }),
+        });
+    }
+}

@@ -185,20 +185,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 turtle,
                 graph,
             )?;
-            for issue in observed.results.iter().filter(|_| !observed.conforms) {
-                store.queue_write_event(crate::store::PendingWriteEvent {
-                    event_type: "shacl.violation".to_string(),
-                    subject: Some(issue.focus_node.clone()),
-                    payload: serde_json::json!({
-                        "shape": issue.source_shape,
-                        "message": issue.message,
-                        "component": issue.component,
-                        "path": issue.path,
-                        "severity": issue.severity,
-                        "mode": "emit",
-                    }),
-                });
-            }
+            crate::shacl_context::queue_emit_violations(store, &observed);
         }
         if !feedback.conforms {
             // A gate refusal, even though this surface reports it as
