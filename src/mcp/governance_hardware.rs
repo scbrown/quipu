@@ -89,9 +89,15 @@ fn hardware_registrations(
     let v = sparql_string_literal(verifier)?;
     let s = sparql_string_literal(scheme.tag())?;
     let q = format!(
+        // Dual-read (aegis-9dpcta): the class, verifier and publicKey match in the
+        // legacy or the Quechua namespace (VALUES/UNION; property-path
+        // alternation is unreliable, aegis-sxlptn). signatureScheme and the
+        // webauthn terms have no published twin yet, so they stay legacy-only.
         "PREFIX a: <http://aegis.gastown.local/ontology/> \
-         SELECT ?r ?k ?rp ?o WHERE {{ ?r a a:VerifierRegistration ; a:verifier {v} ; \
-         a:signatureScheme {s} ; a:publicKey ?k . \
+         PREFIX q: <https://scbrown.github.io/quechua/ns#> \
+         SELECT ?r ?k ?rp ?o WHERE {{ {{ ?r a a:VerifierRegistration }} UNION {{ ?r a q:VerifierRegistration }} \
+         VALUES ?_verifier {{ a:verifier q:verifier }} VALUES ?_key {{ a:publicKey q:publicKey }} \
+         ?r ?_verifier {v} ; a:signatureScheme {s} ; ?_key ?k . \
          OPTIONAL {{ ?r a:webauthnRpId ?rp }} OPTIONAL {{ ?r a:webauthnOrigin ?o }} }}"
     );
     let text = |row: &std::collections::HashMap<String, crate::types::Value>, k: &str| {
@@ -173,7 +179,9 @@ fn registration_attests(
     guard_iri(registration)?;
     let p = sparql_string_literal(predicate_id)?;
     let ask = format!(
-        "PREFIX a: <http://aegis.gastown.local/ontology/> ASK {{ <{registration}> a:attests {p} }}"
+        "PREFIX a: <http://aegis.gastown.local/ontology/> \
+         PREFIX q: <https://scbrown.github.io/quechua/ns#> \
+         ASK {{ VALUES ?_attests {{ a:attests q:attests }} <{registration}> ?_attests {p} }}"
     );
     run_ask(store, &ask, ctx)
 }

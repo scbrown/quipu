@@ -261,6 +261,14 @@ impl Store {
     /// successful write into a failed one, nor a denial into a different error
     /// than the policy's.
     pub(crate) fn flush_pending_verdicts(&mut self, timestamp: &str, actor: Option<&str>) {
+        // Gate bookkeeping, counted as such rather than as the request that
+        // triggered it (aegis-gwkd76).
+        crate::write_kind::scoped(Some(crate::write_kind::WriteKind::Verdict), || {
+            self.flush_pending_verdicts_inner(timestamp, actor);
+        });
+    }
+
+    fn flush_pending_verdicts_inner(&mut self, timestamp: &str, actor: Option<&str>) {
         self.flush_pending_requests(timestamp);
         let pending = std::mem::take(&mut self.pending_verdicts);
         if pending.is_empty() || self.recording_verdicts {
