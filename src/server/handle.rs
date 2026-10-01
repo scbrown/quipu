@@ -39,6 +39,16 @@ pub(crate) struct StoreHandle {
     /// query path (quipu-tkh). Empty means `federated: true` fans out to the
     /// local store alone.
     pub(crate) federation: quipu::config::FederationConfig,
+    /// The embedding provider, captured once when the handle is built.
+    ///
+    /// The provider is installed at startup and never replaced, so a request
+    /// that only needs the provider must not queue on the WRITER for it.
+    /// `/search` used to take `lock()` just to clone this `Arc` before its
+    /// lock-free ONNX query embed, which parked every text search behind a
+    /// long write: a 23 MB `/knot/promote` held the writer ~2 min and every
+    /// text `/search` timed out while pooled `/query` answered in 8 ms
+    /// (aegis-hzh9rz).
+    pub(crate) embedding_provider: Option<Arc<dyn quipu::EmbeddingProvider>>,
     /// The registered reactive reasoner, kept concrete (not as the
     /// `dyn TransactObserver` the store holds) so `POST /shapes` can hot-swap
     /// its ruleset — quipu-923, gap G6: without this handle, rules loaded at
@@ -93,6 +103,34 @@ impl ReadPool {
 }
 
 impl StoreHandle {
+    /// The serving handle. Store-derived fields are read BEFORE the store moves
+    /// into the writer mutex, so nothing a request needs later has to take the
+    /// writer to get it (aegis-hzh9rz).
+    pub(crate) fn serving(
+        store: quipu::Store,
+        readers: ReadPool,
+        db_path: &str,
+        federation: quipu::config::FederationConfig,
+    ) -> Self {
+        Self {
+            graph_metrics: super::graph_metrics::GraphMetrics::new(db_path),
+            vector_reads_pooled: store.has_sqlite_vector_backend(),
+            embedding_provider: store.embedding_provider(),
+            writer: FairMutex::new(store),
+            readers,
+            federation,
+            #[cfg(feature = "reactive-reasoner")]
+            reasoner: None,
+        }
+    }
+
+    /// Attach the registered reactive reasoner (see the `reasoner` field).
+    #[cfg(feature = "reactive-reasoner")]
+    pub(crate) fn with_reasoner(mut self, reasoner: Option<Arc<quipu::ReactiveReasoner>>) -> Self {
+        self.reasoner = reasoner;
+        self
+    }
+
     /// A handle with NO read pool: every read takes the writer lock, which is
     /// the pre-pool behaviour. Used by the in-memory server tests, where a pool
     /// is not merely unhelpful but wrong — each `:memory:` connection would be
@@ -102,6 +140,7 @@ impl StoreHandle {
         Self {
             graph_metrics: super::graph_metrics::GraphMetrics::new(":memory:"),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
+            embedding_provider: store.embedding_provider(),
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             federation: quipu::config::FederationConfig::default(),
