@@ -491,6 +491,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seed", type=int, default=1, help="base seed; trial k uses seed + k")
     p.add_argument("--out", default="target/bench-agents")
     p.add_argument("--census", default=None, help="census example binary (default: target/release/examples/census)")
+    p.add_argument("--gate-cmd", default=None,
+                   help="shell command run BEFORE every trial; a non-zero exit stops the run cleanly "
+                        "(e.g. a spend-budget check). Results so far are still written.")
     args = p.parse_args(argv)
 
     census = args.census or default_census()
@@ -504,10 +507,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     out = Path(args.out)
     results = []
+    stopped = False
     for spec in [m for m in args.models.split(",") if m]:
         for task in tasks:
             for k in range(args.trials):
                 seed = args.seed + k
+                if args.gate_cmd and subprocess.run(args.gate_cmd, shell=True).returncode != 0:
+                    print(f"GATE CLOSED before {spec} {task} t{k + 1}: stopping, writing partial results",
+                          file=sys.stderr)
+                    stopped = True
+                    break
                 tdir = out / spec.replace(":", "_") / task / f"t{k + 1}"
                 try:
                     r = run_trial(spec, task, seed, census, tdir)
@@ -518,6 +527,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{spec} {task} t{k + 1} seed={seed}: attempt1 {r['attempt1']['accepted']}/"
                       f"{r['attempt1']['actions']} -> attempt2 {r['attempt2']['accepted']}/"
                       f"{r['attempt2']['actions']} {r['disposition']}")
+            if stopped:
+                break
+        if stopped:
+            break
     rows = aggregate(results)
     out.mkdir(parents=True, exist_ok=True)
     (out / "results.json").write_text(json.dumps({"protocol": "run_agents.py; PROMPT.md template; "
@@ -525,7 +538,7 @@ def main(argv: list[str] | None = None) -> int:
                                                   "trials": results, "aggregate": rows}, indent=1))
     (out / "summary.md").write_text(markdown(rows))
     print(markdown(rows), end="")
-    return 0
+    return 4 if stopped else 0
 
 
 if __name__ == "__main__":
