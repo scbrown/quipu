@@ -481,10 +481,12 @@ pub fn from_turtle(turtle: &str) -> Result<Vec<SharedQuery>> {
 }
 
 mod import;
+mod pending;
 pub use import::{
     Pending, QueryCollision, QueryImport, QueryQuarantine, check_namespace, default_namespace,
     install, off_vocabulary, prepare, settle, verify_member,
 };
+pub use pending::release;
 
 #[cfg(test)]
 #[path = "share_queries_tests.rs"]

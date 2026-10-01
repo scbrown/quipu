@@ -39,6 +39,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("ontologies", Disposition::Content),
     ("queries", Disposition::Content),
     ("query_params", Disposition::Content),
+    // The stored queries of a staged import, waiting on `import promote`
+    // (aegis-9ofqqs). The staged graph they belong to travels as `graphs` +
+    // `facts`, so the copy can promote it; dropping these would make that
+    // promotion silently lose the share's queries.
+    ("pending_share_queries", Disposition::Content),
     ("datasets", Disposition::Content),
     ("dataset_members", Disposition::Content),
     ("forks", Disposition::Content),
