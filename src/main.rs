@@ -55,6 +55,7 @@ mod cli_propose;
 mod cli_share_diff;
 
 fn main() {
+    quipu::write_kind::set_cli();
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
