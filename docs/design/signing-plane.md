@@ -1,6 +1,8 @@
 # Design: The Signing Plane — governing the trust root like everything else
 
-> **Implementation status (2026-09-11):** **v1 verdict signing and verifier
+> **Implementation status (2026-09-30):** **S1, the bitemporal verifier
+> registry, is implemented** (aegis-kzt0ql.9.1; see §5 S1).
+> **v1 verdict signing and verifier
 > registration are implemented (§2).** Native session/share attestation also
 > ships with a protected binding registry and durable nonce replay protection
 > (§2.1). **The signing-plane governance proposals in §5–§7 remain future work.**
@@ -83,6 +85,35 @@ This nonce replay protection prevents reusing an attestation. It does not
 implement the historical, as-of trust-root verification proposed below, or
 §6's task-scoped capability model.
 
+### 2.2. Hardware verdict schemes — implemented, off by default
+
+[`src/verdict_schemes`](../../src/verdict_schemes/mod.rs) adds three schemes
+beside raw ed25519 so a human can attest a verdict with a device whose private
+key never leaves it: `webauthn-es256` and `webauthn-eddsa` (passkeys and
+security keys; the assertion signs `authenticatorData || SHA-256(clientDataJSON)`)
+and `sshsig-sk-ed25519` (`ssh-keygen -Y sign -n quipu-verdict` with a FIDO
+`sk-ssh-ed25519@openssh.com` key). All sign the same v1 canonical message.
+
+A registration declares its scheme with `aegis:signatureScheme` (absent means
+`ed25519`, so existing registrations are unchanged), and a verdict verifies
+only against a registration declaring the scheme it names. Quipu derives the
+WebAuthn challenge from the verdict message and never takes one from the
+caller; it checks the origin, the RP ID hash, the SSHSIG namespace, and a
+non-regressing authenticator counter (WebAuthn Level 3 §7.2: once a nonzero
+counter is recorded, a counter that does not exceed it, including 0, is
+refused). "Hardware-backed" means user presence is always required; user
+verification (biometric or PIN) is required for WebAuthn and only reported for
+SSHSIG, where it depends on the key being created with `verify-required`. The counter to record is returned; verification itself stays
+read-only.
+
+The schemes are **off by default** (`[quipu.governance]
+hardware_verdict_schemes`). Until S3 (§5) restricts `VerifierRegistration`
+amendments to an enrolled human key, a registration is still graph-writable,
+so enabling them is an operator decision. While off, both a verdict naming a
+hardware scheme and a write declaring one are refused. The whole-decision
+canonicalization and single-use nonce of the hardware-verdict design are
+separate work; this scheme layer signs the v1 message.
+
 ## 3. What replay actually covers today — measured honestly
 
 The paper's RQ5 claim is precise and verified (CEN-M2,
@@ -104,7 +135,7 @@ replays":
   `is_registered_verifier` and `registered_public_key`
   (`src/mcp/mod.rs`) query the registry with
   `TemporalContext::default()`: latest-only. There is no key history to
-  ask an as-of question of.
+  ask an as-of question of. *(Historical: closed by S1, 2026-09-30.)*
 
 Consequence: rotate a key and every historical verdict verifies against
 the wrong key or none. Every *decision* in the store replays to the
@@ -139,6 +170,26 @@ shared crate both quipu and yupana depend on. Ends the
 Cheapest item, unblocks nothing but protects everything.
 
 ### S1 — bitemporal key registry (the prerequisite for the rest)
+
+> **Implemented** in [`src/governance/verifier_registry.rs`](../../src/governance/verifier_registry.rs).
+> Registrations are ordinary graph facts, so no schema was needed: rotation
+> retracts the old `aegis:publicKey` and asserts the new one, revocation
+> retracts it, and expiry is a `valid_to` set in the future. Every verifier
+> (verdict verify, the escalation router and its precedent search, the
+> transition gate) asks the registry through one function, `registered_keys`,
+> and the key must be a fact of the same registration that grants the scope.
+>
+> **The instant is the store's, not the signer's.** A `Witness` is the
+> transaction that first recorded the signature, plus that transaction's
+> timestamp. A registration counts only if it was asserted by that tx and not
+> yet closed by it. Tx ids are monotonic, so a revoked key cannot back-date a
+> signature into its old window. The registration's valid interval must also
+> cover the timestamp, which lets a compromise revocation reach back to an
+> earlier instant. Signatures being written in the current transaction (the
+> write gates) verify at now. `quipu_verdict_verify` takes `verdict` (the
+> stored verdict's IRI) to verify as-of its recording, and reports
+> `as_of.basis`. Tests: `verifier_registry_tests.rs`, `s1_*` in
+> `router_tests.rs`, and `test_verdict_verify_answers_as_of_the_recorded_signature`.
 
 `aegis:publicKey` (and the registration's attest-scope) get
 `valid_from`/`valid_to`, exactly as shapes did

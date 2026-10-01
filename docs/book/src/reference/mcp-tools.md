@@ -343,6 +343,7 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
+| `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
 | `valid_at` | No | Temporal filter |
 | `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
@@ -353,6 +354,10 @@ so zero results are distinguishable from an unembedded store — see
 [Embeddings and Semantic Search](../concepts/embeddings.md).
 | `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label, **not** an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope) |
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
+
+Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
+exceptions, temporal behavior, and bounded candidate recall.
 
 ### `quipu_hybrid_search`
 
@@ -493,7 +498,42 @@ duplicate aliases carrying the same key are accepted.
 | `evidence_hash` | Yes | Evidence hash the signature seals |
 | `tier` | No | Evidence tier (default: `committed`) |
 | `verifier` | Yes | Verifier IRI whose registered key verifies the signature |
-| `signature` | Yes | Hex ed25519 signature over the verdict message |
+| `signature` | Yes | Signature over the verdict message: hex for `ed25519`; base64url assertion signature for `webauthn-*`; the armored SSH SIGNATURE for `sshsig-sk-ed25519` |
+| `verdict` | No | IRI of the stored verdict carrying this signature: verify as of when the store recorded it (use this for trust decisions) |
+| `signed_at` | No | Explicit valid-time instant (a what-if query; default now) |
+| `tx` | No | Explicit transaction to verify as of (a what-if query; default latest) |
+| `scheme` | No | `ed25519` (default), `webauthn-es256`, `webauthn-eddsa`, or `sshsig-sk-ed25519` |
+| `authenticator_data` | WebAuthn | base64url `authenticatorData` |
+| `client_data_json` | WebAuthn | base64url `clientDataJSON` |
+
+The registry is read **as of the signature** (signing-plane S1): a key that
+has since been rotated still verifies what it signed while registered, and
+cannot verify anything recorded after it was closed. The result's
+`as_of.basis` is `recorded`, `caller-supplied` or `now`. A caller-supplied
+instant is a what-if: `trusted` is then always `false`, and the answer is in
+`would_verify_as_of_supplied_instant`. Otherwise naming a transaction from
+before a revocation would make a revoked key read as trusted.
+
+Hardware schemes are **off by default** (`[quipu.governance]
+hardware_verdict_schemes`); while off, a verdict naming one is refused. A
+hardware verdict verifies only against a registration declaring the same
+`aegis:signatureScheme`, and is trusted only when that same registration
+attests the predicate. WebAuthn registrations carry the base64url COSE key in
+`aegis:publicKey` plus `aegis:webauthnRpId` and `aegis:webauthnOrigin`; SSHSIG
+registrations carry an OpenSSH `sk-ssh-ed25519@openssh.com` public key line.
+The WebAuthn challenge is derived by quipu from the verdict message, never
+taken from the caller, and SSHSIG must use namespace `quipu-verdict`. The
+response's `sign_count` is the authenticator counter to record as the
+registration's `aegis:signCount`. Once a nonzero counter is recorded, a
+signature whose counter does not exceed it (including 0) is refused as a
+possible clone; a credential that has only ever reported 0 is accepted.
+WebAuthn requires user verification (UV); SSHSIG requires user presence and
+reports UV without requiring it.
+See `src/verdict_schemes/mod.rs` for the full rule list.
+
+The as-of rule binds every scheme: a hardware verdict is checked against
+the registrations, grants and recorded `aegis:signCount` in effect at the
+same instant, and a caller-supplied instant leaves it untrusted too.
 
 ### `quipu_verifier_authorized`
 
@@ -505,6 +545,8 @@ verifier/attests predicate may independently use the legacy or Quechua vocabular
 |-----------|----------|-------------|
 | `verifier` | Yes | Verifier IRI |
 | `predicate` | Yes | Predicate IRI to attest |
+| `signed_at` | No | Valid-time instant to check at (default now) |
+| `tx` | No | Transaction to check as of (default latest) |
 
 ### `quipu_cooccurrence`
 

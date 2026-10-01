@@ -230,23 +230,34 @@ pub(crate) fn collect_embed_work(
         .map(|d| d.entity)
         .collect();
 
-    // Close embeddings for entities that had retractions.
-    for &eid in &retracted {
-        vs.close_embedding(eid, timestamp)?;
-    }
-
-    // Build texts for all touched entities.
+    // Build texts for all touched entities. A producer snapshot replace hands
+    // this EVERY entity in the snapshot, unchanged ones included, so skip an
+    // entity whose current vector was built from byte-identical text: the
+    // vector is already right, and re-embedding it cost a full-repository ONNX
+    // drain on every republication (aegis-tvlxr4). An entity with no current
+    // vector is still embedded, which heals one left bare by a restart.
     let mut items: Vec<(i64, String)> = Vec::new();
+    let mut seen = BTreeSet::new();
     for &eid in entity_ids {
+        seen.insert(eid);
         let text = build_entity_text(store, eid)?;
-        if !text.is_empty() {
-            // For assertions on entities without prior retractions,
-            // close the old embedding before creating a new one.
-            if !retracted.contains(&eid) {
+        if text.is_empty() {
+            if retracted.contains(&eid) {
                 vs.close_embedding(eid, timestamp)?;
             }
-            items.push((eid, text));
+            continue;
         }
+        if vs.current_embedding_text(eid)?.as_deref() == Some(text.as_str()) {
+            continue;
+        }
+        // Close the old embedding before creating a new one.
+        vs.close_embedding(eid, timestamp)?;
+        items.push((eid, text));
+    }
+
+    // Close embeddings for retracted entities the caller did not list.
+    for &eid in retracted.difference(&seen) {
+        vs.close_embedding(eid, timestamp)?;
     }
 
     Ok(DeferredEmbed {

@@ -11,6 +11,10 @@
 use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
+use crate::governance::verifier_registry::{Scope, Witness, registered_keys};
+
+pub use super::verdict_witness::tool_verifier_authorized;
+use super::verdict_witness::{is_registered_verifier, witness_from, witness_json};
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::Store;
 
@@ -29,7 +33,7 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 }
 
 /// Reject an IRI that could break out of an inlined `<...>` and inject SPARQL.
-fn guard_iri(iri: &str) -> Result<()> {
+pub(super) fn guard_iri(iri: &str) -> Result<()> {
     if iri
         .chars()
         .any(|c| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '{' | '}' | '\\'))
@@ -42,7 +46,7 @@ fn guard_iri(iri: &str) -> Result<()> {
 }
 
 /// Run a SPARQL ASK over the committed graph at `ctx`, returning its boolean.
-fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
+pub(super) fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result<bool> {
     match sparql::query_temporal(store, ask, ctx)? {
         QueryResult::Ask(b) => Ok(b),
         _ => Err(Error::InvalidValue(
@@ -77,63 +81,18 @@ fn fetch_scalar(store: &Store, subject: &str, local_name: &str) -> Result<Option
     }
 }
 
-/// Escape a value for safe inlining as a SPARQL string literal (reject the
-/// characters that could break out of the quotes or inject).
-fn sparql_string_literal(value: &str) -> Result<String> {
-    if value.contains(['"', '\n', '\r', '\\']) {
-        return Err(Error::InvalidValue(
-            "value must not contain a quote, backslash, or newline".into(),
-        ));
-    }
-    Ok(format!("\"{value}\""))
-}
-
-/// Is `verifier` registered (Phase-0 root of trust) to attest `predicate_id`?
-/// True iff an `aegis:VerifierRegistration` names both. A governed authority
-/// check — independent of (and prior to) cryptographic signing.
-fn is_registered_verifier(store: &Store, verifier: &str, predicate_id: &str) -> Result<bool> {
-    let v = sparql_string_literal(verifier)?;
-    let p = sparql_string_literal(predicate_id)?;
-    let ask = format!(
-        "PREFIX a: <http://aegis.gastown.local/ontology/> \
-         PREFIX q: <https://scbrown.github.io/quechua/ns#> ASK {{ {{ ?r a a:VerifierRegistration }} UNION {{ ?r a q:VerifierRegistration }} VALUES ?verifier {{ a:verifier q:verifier }} VALUES ?attests {{ a:attests q:attests }} ?r ?verifier {v} ; ?attests {p} }}"
-    );
-    run_ask(store, &ask, &TemporalContext::default())
-}
-
-/// The hex public key a verifier is registered with (Phase-0 root of trust), or
-/// `None` if it has no `aegis:VerifierRegistration` carrying a key.
-fn registered_public_key(store: &Store, verifier: &str) -> Result<Option<String>> {
-    let v = sparql_string_literal(verifier)?;
-    let q = format!(
-        "PREFIX a: <http://aegis.gastown.local/ontology/> \
-         PREFIX q: <https://scbrown.github.io/quechua/ns#> SELECT DISTINCT ?k WHERE {{ {{ ?r a a:VerifierRegistration }} UNION {{ ?r a q:VerifierRegistration }} VALUES ?verifier {{ a:verifier q:verifier }} VALUES ?key {{ a:publicKey q:publicKey }} ?r ?verifier {v} ; ?key ?k }} LIMIT 2"
-    );
-    match sparql::query_temporal(store, &q, &TemporalContext::default())? {
-        QueryResult::Select { rows, .. } => {
-            if rows.len() > 1 {
-                return Err(Error::InvalidValue(format!(
-                    "conflicting public keys for verifier {verifier}"
-                )));
-            }
-            Ok(rows.first().and_then(|r| r.get("k")).and_then(|v| match v {
-                crate::types::Value::Str(s) => Some(s.clone()),
-                _ => None,
-            }))
-        }
-        _ => Ok(None),
-    }
-}
-
 /// MCP tool: `quipu_verdict_verify` -- verify a signed Verdict against the
-/// Phase-0 root of trust: the signature must be valid under the verifier's
-/// REGISTERED public key, AND the verifier must be authorized to attest the
-/// predicate. `trusted` is the conjunction — the property a consumer should gate
-/// on (checked, not trusted-by-assertion).
+/// root of trust AS OF the signature (signing-plane S1): the signature must be
+/// valid under a key that was registered to the verifier at that instant, AND
+/// that same registration must authorize the predicate. `trusted` is exactly
+/// that conjunction, the property a consumer should gate on.
 ///
-/// Input: the verdict fields `{ predicate_id, target_ref, outcome, evidence_hash,
-/// tier?, verifier, signature }`. Output: `{ signature_valid, verifier_registered,
-/// verifier_authorized, trusted }`.
+/// Input: the verdict fields `{ predicate_id, target_ref, outcome,
+/// evidence_hash, tier?, verifier, signature }`, plus the instant: `verdict`
+/// (the stored verdict's IRI; quipu reads when it was recorded) or
+/// `signed_at`/`tx` (explicit), defaulting to now. Output: `{ signature_valid,
+/// verifier_registered, verifier_authorized, trusted, as_of }`, where
+/// `as_of.basis` is `recorded`, `caller-supplied` or `now`.
 pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let field = |k: &str| -> Result<String> {
         input
@@ -152,6 +111,7 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         .get("tier")
         .and_then(JsonValue::as_str)
         .unwrap_or("committed");
+    let (witness, basis) = witness_from(store, input, &signature)?;
 
     let message = crate::signing::verdict_message(
         &predicate_id,
@@ -161,34 +121,40 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         tier,
         &verifier,
     );
-    let pubkey = registered_public_key(store, &verifier)?;
-    let signature_valid = pubkey
-        .as_deref()
-        .is_some_and(|pk| crate::signing::verify_hex(pk, &message, &signature));
-    let verifier_authorized = is_registered_verifier(store, &verifier, &predicate_id)?;
 
-    Ok(serde_json::json!({
-        "signature_valid": signature_valid,
-        "verifier_registered": pubkey.is_some(),
-        "verifier_authorized": verifier_authorized,
-        "trusted": signature_valid && verifier_authorized
-    }))
-}
+    let claim = super::governance_hardware::Claim {
+        verifier: &verifier,
+        predicate_id: &predicate_id,
+        message: &message,
+        signature: &signature,
+    };
+    if let Some(out) = super::governance_hardware::dispatch(store, input, &claim, &witness, basis)?
+    {
+        return Ok(out);
+    }
 
-/// MCP tool: `quipu_verifier_authorized` -- check the Phase-0 verifier registry:
-/// may `verifier` attest `predicate`? Input: `{ "verifier": "...",
-/// "predicate": "..." }`. Output: `{ "authorized": bool }`.
-pub fn tool_verifier_authorized(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let verifier = input
-        .get("verifier")
-        .and_then(JsonValue::as_str)
-        .ok_or_else(|| Error::InvalidValue("missing 'verifier' parameter".into()))?;
-    let predicate = input
-        .get("predicate")
-        .and_then(JsonValue::as_str)
-        .ok_or_else(|| Error::InvalidValue("missing 'predicate' parameter".into()))?;
+    let verifies = |keys: &[String]| {
+        keys.iter()
+            .any(|pk| crate::signing::verify_hex(pk, &message, &signature))
+    };
+    let any_keys = registered_keys(store, &verifier, None, &witness, Scope::Root)?;
+    let scoped_keys =
+        registered_keys(store, &verifier, Some(&predicate_id), &witness, Scope::Root)?;
+
+    let seal_ok = verifies(&scoped_keys);
+    // An ALLOW-list: a basis added later fails closed rather than trusting by default.
+    let trustworthy_basis = matches!(basis, "recorded" | "now");
     Ok(serde_json::json!({
-        "authorized": is_registered_verifier(store, verifier, predicate)?
+        "signature_valid": verifies(&any_keys),
+        "verifier_registered": !any_keys.is_empty(),
+        "verifier_authorized": is_registered_verifier(store, &verifier, &predicate_id, &witness)?,
+        // The key that verifies must be one the AUTHORIZING registration holds,
+        // AND the instant must be one quipu chose. A caller-supplied instant is
+        // a what-if: naming a tx from before a revocation would otherwise make
+        // a revoked key read as trusted.
+        "trusted": trustworthy_basis && seal_ok,
+        "would_verify_as_of_supplied_instant": if trustworthy_basis { JsonValue::Null } else { JsonValue::Bool(seal_ok) },
+        "as_of": witness_json(&witness, basis)
     }))
 }
 
@@ -306,7 +272,8 @@ pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> 
     // Phase-0 authority: is this verifier registered to attest this predicate?
     // The registry (aegis:VerifierRegistration) is the governed root of trust —
     // a signature is only TRUSTED once a human registers the verifier's key.
-    let verifier_authorized = is_registered_verifier(store, &verifier, &predicate_id)?;
+    let verifier_authorized =
+        is_registered_verifier(store, &verifier, &predicate_id, &Witness::now())?;
 
     Ok(serde_json::json!({
         "predicate_id": predicate_id,

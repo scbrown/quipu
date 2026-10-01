@@ -81,6 +81,7 @@ stops being read.
 | `governance.validate_placement` | `false` | Check SARC class↔placement rules when a write defines/amends a policy |
 | `governance.verify_transitions` | `false` | Refuse a write landing an `aegis:TransitionEvent` whose signature is missing or does not verify under a registered key |
 | `governance.enforce_authority` | `false` | Make a supplied principal chain binding for graph writes |
+| `governance.hardware_verdict_schemes` | `false` | Accept WebAuthn and SSHSIG `sk-ssh-ed25519` verdict signatures beside ed25519; while off, those verdicts and registrations declaring them are refused |
 | `resolution.enabled` | `false` | Entity resolution (dedup) on the episode write path |
 | `resolution.threshold` / `top_k` / `strict_mode` | `0.85` / `3` / `false` | Match threshold, candidate count, refuse-on-ambiguity |
 | `embedding.auto_embed` | `false` | Auto-embed entities on write (needs model/tokenizer paths) |

@@ -86,8 +86,12 @@ jobs:
   #              STAMP. Routine; one re-derive fixes it, and it says nothing
   #              about conformance results.
   #
-  # Both still BLOCK. What changes is that the check NAME tells a reader which
-  # they have without opening a log. Measured cost of not doing so: three quipu
+  # CONTENT blocks. PROVENANCE REPORTS (aegis-qmrymu): a stale stamp exits 0 with
+  # a notice and sets `stale=true`, and re-run-conformance below then re-derives
+  # on that signal. Measured before: 17 of 37 PR runs in 13.5h red on this job
+  # alone, all 17 cleared by a hand dispatch. UNVERIFIED (a shallow or broken
+  # checkout) still fails — a check that could not look is not a fresh stamp.
+  # The check NAME still tells a reader which question failed. Measured cost of not doing so: three quipu
   # PRs in one day (#237, #244, #245) sat red on the provenance arm looking like
   # broken conformance, while every re-derive changed nothing but duration_ms
   # and the stamps.
@@ -95,6 +99,8 @@ jobs:
     name: Ledgers were derived from the code they ship with
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      stale: ${{ steps.provenance.outputs.stale }}
     steps:
       # fetch-depth: 0 is REQUIRED, not tidiness. This asks whether each ledger
       # was derived from the code it ships with, which needs the ledger's own
@@ -107,14 +113,32 @@ jobs:
           fetch-depth: 0
 
       - name: Ledgers were derived from the code they ship with
-        run: python3 benchmark/public/conformance_report.py --check --arm provenance
+        id: provenance
+        run: python3 benchmark/public/conformance_report.py --check --arm provenance --report-stale
 
+  # Also runs when the provenance job reports a STALE stamp (aegis-qmrymu):
+  #   pull_request  PR mode, so only a PR whose OWN code changes the conformance
+  #                 inputs triggers it. It gates that PR on check_regression
+  #                 BEFORE merge. That is not optional: the red provenance arm
+  #                 used to force a hand re-derive, and that re-derive was the
+  #                 only pre-merge regression check a src PR ever got. Making
+  #                 provenance report-only without this would silently move the
+  #                 regression gate to after merge. Nothing is committed here.
+  #   push (main)   derives at the merged SHA and uploads
+  #                 conformance-ledgers-<sha>; the aegis ledger cron commits it
+  #                 through a chore PR, so main is stamped with no human step.
+  # `!cancelled()` is needed because ledger-provenance is SKIPPED on release,
+  # schedule and dispatch, and a skipped `needs` would otherwise skip this job.
   re-run-conformance:
     name: Re-derive conformance from the pinned W3C suite
+    needs: ledger-provenance
     if: >-
-      github.event_name == 'release' ||
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch'
+      ${{ !cancelled() && (
+        github.event_name == 'release' ||
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch' ||
+        needs.ledger-provenance.outputs.stale == 'true'
+      ) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -265,6 +289,40 @@ jobs:
             --baseline benchmark/public/results/sparql11-entailment.json \
             --candidate /tmp/sparql11-entailment.json
 
+      # SPARQL 1.0 query tests (aegis-soqv1r). The sparql11 manifests hold only
+      # what 1.1 added, so the 1.0 core was never scored. Most 1.0 answers are
+      # rs:ResultSet graphs, read with a pinned rdflib (literal normalisation
+      # off). rdflib lives in its own venv so no other step's Python changes.
+      - name: SPARQL 1.0 query evaluation
+        continue-on-error: true
+        run: |
+          python3 -m venv /tmp/rdflib-venv
+          /tmp/rdflib-venv/bin/pip install --quiet rdflib==7.6.0
+          /tmp/rdflib-venv/bin/python benchmark/public/sparql11_evaluation.py \
+            --suite /tmp/rdf-tests/sparql/sparql11 \
+            --quipu "${{ steps.bin.outputs.path }}" \
+            --class sparql10-query --output /tmp/sparql10-evaluation.json
+
+      - name: Fail only on SPARQL 1.0 regression
+        run: |
+          test -s /tmp/sparql10-evaluation.json \
+            || { echo "the SPARQL 1.0 runner produced no ledger" >&2; exit 2; }
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/sparql10-evaluation.json \
+            --candidate /tmp/sparql10-evaluation.json
+
+      # SPARQL 1.2 (aegis-mhee08): cases needing RDF 1.2 grammar or terms are
+      # enumerated, never run; the rest run through the evaluation runner.
+      - name: SPARQL 1.2 query tests
+        run: |
+          /tmp/rdflib-venv/bin/python benchmark/public/sparql12.py \
+            --suite /tmp/rdf-tests \
+            --quipu "${{ steps.bin.outputs.path }}" \
+            --output /tmp/sparql12.json
+          python3 benchmark/public/check_regression.py \
+            --baseline benchmark/public/results/sparql12.json \
+            --candidate /tmp/sparql12.json
+
       - name: Publish the re-derived ledgers
         if: always()
         uses: actions/upload-artifact@v4
@@ -277,5 +335,7 @@ jobs:
             /tmp/sparql11-federated-query.json
             /tmp/shacl-core.json
             /tmp/rdf11-syntax.json
+            /tmp/sparql10-evaluation.json
+            /tmp/sparql12.json
           if-no-files-found: warn
           retention-days: 90

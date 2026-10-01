@@ -4,7 +4,7 @@ use crate::error::{Error, Result};
 use crate::namespace;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::{Episode, node_iri};
 
@@ -84,10 +84,56 @@ pub(super) fn ingest_reconciled(
         timestamp,
     )?;
     reconcile_node_descriptions(store, episode, base_ns, graph, &mut datums)?;
+    keep_existing_node_labels(store, graph, &mut datums)?;
     let count = datums.len();
     let source = format!("episode:{}", episode.name);
     let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source), graph)?;
     Ok((tx_id, count))
+}
+
+/// A node that already has a label keeps it (aegis-2mx55r).
+///
+/// `/episode` names a node and asserts that name as its `rdfs:label`. Naming an
+/// existing node by its IRI slug (`bead_reference_pattern` for the node first
+/// written as `bead reference pattern`) reaches the same IRI, so the slug became
+/// a SECOND label. A policy node with two labels made the share producer refuse
+/// "conflicting policy definitions". Drop the new label when the entity already
+/// carries a different active one in this graph; a fresh node, or one reused by
+/// its existing label, is unaffected.
+pub(super) fn keep_existing_node_labels(
+    store: &mut Store,
+    graph: i64,
+    datums: &mut Vec<Datum>,
+) -> Result<()> {
+    let label = store.intern(&format!("{}label", namespace::RDFS))?;
+    let mut labelled: Vec<i64> = datums
+        .iter()
+        .filter(|d| d.attribute == label && d.op == Op::Assert)
+        .map(|d| d.entity)
+        .collect();
+    labelled.sort_unstable();
+    labelled.dedup();
+
+    let mut existing: HashMap<i64, Vec<Value>> = HashMap::new();
+    for entity in labelled {
+        let current: Vec<Value> = store
+            .entity_history_in_graph(entity, graph)?
+            .into_iter()
+            .filter(|f| f.attribute == label && f.op == Op::Assert && f.valid_to.is_none())
+            .map(|f| f.value)
+            .collect();
+        if !current.is_empty() {
+            existing.insert(entity, current);
+        }
+    }
+    datums.retain(|d| {
+        d.attribute != label
+            || d.op != Op::Assert
+            || existing
+                .get(&d.entity)
+                .is_none_or(|current| current.contains(&d.value))
+    });
+    Ok(())
 }
 
 /// Reconcile explicitly revised node descriptions into the pending episode tx.

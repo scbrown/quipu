@@ -751,7 +751,26 @@ curl -s localhost:3030/explain -X POST \
 ### `POST /search`
 
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
-`valid_at`, and best-effort scoping by `group_ids` / `entity_type`.
+`valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
+
+Opt-in `ranking: "content"` reranks the oversampled candidates before the
+result limit. A `Section`, `Chunk`, or `CodeSymbol` with no explanatory comment
+or content beyond its label/name is demoted: positive cosine similarity is
+halved, and negative similarity is reduced by half its magnitude. Metadata such
+as paths, line numbers and revisions does not count as content. Exact label/name
+queries are exempt. Artifacts with explanatory text and other entity types keep
+their similarity score. This is a relevance heuristic, not a trust classification.
+
+The default `ranking: "semantic"` preserves the original cosine order.
+Choose `content` when retrieving explanatory operational knowledge; keep
+`semantic` for general search or locating code and documentation. An identifier
+can be the correct answer without any body text, so content ranking must not
+be applied indiscriminately. Each result exposes
+`similarity` (raw cosine), `score` (ranking score), and `ranking_reason`
+(`semantic` or `contentless_artifact`). No vectors are deleted or re-embedded.
+Only the existing bounded candidate pool is reranked: this cannot recover an
+entity outside that pool or guarantee semantic equivalence detection. Historical
+searches classify candidates using facts valid at the requested `valid_at`.
 
 ```bash
 curl -s localhost:3030/search -X POST \
@@ -1098,6 +1117,12 @@ background task scans the live root graph at startup and again five minutes
 after each refresh completes. Scrapes neither acquire database connections nor
 trigger scans. WAL size still comes from a current filesystem metadata read.
 
+`quipu_http_requests_started_total` counts HTTP arrivals before handler dispatch,
+including pending requests, cancelled requests and metrics scrapes. It has no
+labels and resets when the process restarts. Use it to measure arrival rate:
+`quipu_http_requests_total` and `quipu_http_client_requests_total` count completed
+responses, so low completion rates alone do not establish low traffic.
+
 Before the first successful refresh, graph-size gauges are omitted and
 `quipu_graph_counts_ready` is zero. A failed refresh retains the last successful
 snapshot and increments `quipu_graph_counts_refresh_failures_total`; it never
@@ -1305,8 +1330,11 @@ attest this predicate, per the Phase-0 verifier registry?
 
 Verify a signed Verdict against the Phase-0 root of trust:
 `{"predicate_id", "target_ref", "outcome", "evidence_hash", "tier"?,
-"verifier", "signature"}` → `{"signature_valid", "verifier_registered",
-"verifier_authorized", "trusted"}` — `trusted` is the conjunction to gate on.
+"verifier", "signature", "verdict"?, "signed_at"?, "tx"?}` →
+`{"signature_valid", "verifier_registered", "verifier_authorized", "trusted",
+"as_of"}` — `trusted` is the conjunction to gate on. The registry is read as of
+the signature: pass `verdict` (the stored verdict IRI) to use the instant the
+store recorded it.
 
 ## Overlays
 

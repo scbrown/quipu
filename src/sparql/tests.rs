@@ -3712,6 +3712,100 @@ fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
     );
 }
 
+// ── numeric type promotion (aegis-soqv1r, W3C sparql10 type-promotion) ──────
+// integer (and every type derived from it) < decimal < float < double; the
+// result takes the higher operand type. float + float used to come back as
+// xsd:double, and short + short as a double rather than an integer.
+
+fn result_datatype(expr: &str) -> String {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?d WHERE {{ BIND(datatype({expr}) AS ?d) }}"
+    );
+    let result = query(&store, &q).unwrap();
+    match result.rows().first().and_then(|r| r.get("d")) {
+        Some(Value::Ref(id)) => store.resolve(*id).unwrap(),
+        other => panic!("no datatype for {expr}: {other:?}"),
+    }
+}
+
+#[test]
+fn arithmetic_promotes_to_the_higher_operand_type() {
+    let xsd = |t: &str| format!("http://www.w3.org/2001/XMLSchema#{t}");
+    let cases = [
+        (r#""1"^^xsd:float + "1"^^xsd:float"#, "float"),
+        (r#""1"^^xsd:float + "1"^^xsd:decimal"#, "float"),
+        (r#""1"^^xsd:double + "1"^^xsd:float"#, "double"),
+        (r#""1"^^xsd:short + "1"^^xsd:short"#, "integer"),
+        (r#""1"^^xsd:unsignedByte + "1"^^xsd:short"#, "integer"),
+        (r#""1"^^xsd:short + "1"^^xsd:decimal"#, "decimal"),
+        (r#""1"^^xsd:short + "1"^^xsd:float"#, "float"),
+        ("1 + 1", "integer"),
+        ("1 / 2", "decimal"),
+        (r#""4"^^xsd:float / "2"^^xsd:float"#, "float"),
+    ];
+    for (expr, want) in cases {
+        assert_eq!(result_datatype(expr), xsd(want), "{expr}");
+    }
+}
+
+// ── `=` compares numbers by value across datatypes (aegis-soqv1r) ────────────
+// `1 = 1.0` was false: `=` shared sameTerm's term identity. Ordering already
+// promoted numerics (`1 <= 1.0` was true), so `=` disagreed with `<=` and `>=`.
+
+fn bind_bool(expr: &str) -> Option<Value> {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        &format!("SELECT ?r WHERE {{ BIND(({expr}) AS ?r) }}"),
+    )
+    .unwrap();
+    result.rows().first().and_then(|r| r.get("r").cloned())
+}
+
+#[test]
+fn equals_promotes_numerics_across_datatypes() {
+    assert_eq!(bind_bool("1 = 1.0"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 = 1.0e0"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 != 1.0"), Some(Value::Bool(false)));
+    assert_eq!(bind_bool("1 = 2"), Some(Value::Bool(false)));
+}
+
+// `=` promotes numerics; sameTerm must not. Asserted in BIND, where a type
+// error would surface as an unbound `?r` rather than as `false`. The FILTER
+// test below cannot tell `false` from an error: both drop the row.
+#[test]
+fn same_term_keeps_datatype_identity_beside_numeric_equals() {
+    assert_eq!(bind_bool("sameTerm(1, 1.0)"), Some(Value::Bool(false)));
+    assert_eq!(bind_bool("sameTerm(1, 1)"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 = 1.0"), Some(Value::Bool(true)));
+}
+
+#[test]
+fn equals_does_not_coerce_strings_to_numbers() {
+    assert_eq!(bind_bool(r#""1" = 1"#), Some(Value::Bool(false)));
+}
+
+#[test]
+fn filter_equals_promotes_numerics() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n ; ex:age ?a . FILTER(?a = 30.0) }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Alice".to_string()]);
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n ; ex:age ?a . FILTER(?a IN (1, 25.0)) }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Bob".to_string()]);
+}
+
 // ── FILTER type errors eliminate the row (aegis-soqv1r, W3C dawg-bev-5/-6) ──
 // An unbound variable has no effective boolean value. That is a SPARQL type
 // error: the row is dropped and the query still answers. It used to fail the

@@ -196,6 +196,7 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("attestation_bindings", "issued_at_epoch", TermIdKind::None),
     ("attestation_bindings", "expires_at_epoch", TermIdKind::None),
     ("attestation_bindings", "revoked", TermIdKind::None),
+    ("attestation_bindings", "allow_write", TermIdKind::None),
     ("attestation_nonces", "session", TermIdKind::None),
     ("attestation_nonces", "nonce", TermIdKind::None),
     ("attestation_nonces", "consumed_at_epoch", TermIdKind::None),

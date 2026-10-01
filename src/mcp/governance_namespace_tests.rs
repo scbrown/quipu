@@ -16,33 +16,24 @@ fn ingest(store: &mut Store, turtle: &str) {
     .unwrap();
 }
 
+/// A registry written in the legacy namespace, the Quechua one, a MIX (class
+/// and verifier legacy, attests and key public), or BOTH at once, plus a
+/// foreign-namespace registration that must never count. The registry matches
+/// the registration class exactly (no subclass inference), as on main.
 fn registry(mode: &str) -> Store {
     let mut store = Store::open_in_memory().unwrap();
     let namespaces = match mode {
-        "old" | "subclass" => vec![(LEGACY, LEGACY, LEGACY)],
-        "new" | "public-subclass" => vec![(PUBLIC, PUBLIC, PUBLIC)],
-        "mixed" => vec![(LEGACY, PUBLIC, LEGACY)],
+        "old" => vec![(LEGACY, LEGACY, LEGACY)],
+        "new" => vec![(PUBLIC, PUBLIC, PUBLIC)],
+        "mixed" => vec![(LEGACY, LEGACY, PUBLIC)],
         "both" => vec![(LEGACY, LEGACY, LEGACY), (PUBLIC, PUBLIC, PUBLIC)],
         _ => unreachable!(),
     };
     for (class, name, value) in namespaces {
-        let kind = if mode.ends_with("subclass") {
-            "urn:registration:child".to_string()
-        } else {
-            format!("{class}VerifierRegistration")
-        };
-        if mode.ends_with("subclass") {
-            ingest(
-                &mut store,
-                &format!(
-                    "<{kind}> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <{class}VerifierRegistration> ."
-                ),
-            );
-        }
         ingest(
             &mut store,
             &format!(
-                "<urn:registry:one> a <{kind}> ; <{name}verifier> \"verifier\" ; <{value}attests> \"predicate\" ; <{value}publicKey> \"key\" ."
+                "<urn:registry:one> a <{class}VerifierRegistration> ; <{name}verifier> \"verifier\" ; <{value}attests> \"predicate\" ; <{value}publicKey> \"key\" ."
             ),
         );
     }
@@ -53,43 +44,50 @@ fn registry(mode: &str) -> Store {
     store
 }
 
+const MODES: [&str; 4] = ["old", "new", "mixed", "both"];
+
 #[test]
 fn verifier_registration_dual_namespace_reader() {
-    for mode in ["old", "new", "mixed", "both", "subclass", "public-subclass"] {
+    for mode in MODES {
         let store = registry(mode);
+        let now = Witness::now();
         assert!(
-            is_registered_verifier(&store, "verifier", "predicate").unwrap(),
+            is_registered_verifier(&store, "verifier", "predicate", &now).unwrap(),
             "{mode}"
         );
         assert!(
-            !is_registered_verifier(&store, "verifier", "other").unwrap(),
+            !is_registered_verifier(&store, "verifier", "other", &now).unwrap(),
             "{mode}"
         );
         assert!(
-            !is_registered_verifier(&store, "foreign", "predicate").unwrap(),
-            "{mode}"
+            !is_registered_verifier(&store, "foreign", "predicate", &now).unwrap(),
+            "{mode}: a foreign namespace must never authorize"
         );
     }
 }
 
 #[test]
-fn public_key_dual_namespace_reader_refuses_conflicts() {
-    for mode in ["old", "new", "mixed", "both", "subclass", "public-subclass"] {
+fn public_key_dual_namespace_reader_counts_each_key_once() {
+    for mode in MODES {
         let mut store = registry(mode);
-        assert_eq!(
-            registered_public_key(&store, "verifier")
-                .unwrap()
-                .as_deref(),
-            Some("key")
-        );
-        assert_eq!(registered_public_key(&store, "foreign").unwrap(), None);
+        let keys = |store: &Store, who: &str| {
+            registered_keys(store, who, Some("predicate"), &Witness::now(), Scope::Root).unwrap()
+        };
+        // "both" writes the same key in two namespaces: still ONE key.
+        assert_eq!(keys(&store, "verifier"), vec!["key".to_string()], "{mode}");
+        assert!(keys(&store, "foreign").is_empty(), "{mode}");
+        // A second key in the Quechua namespace is a second key (rotation
+        // semantics, as on main), never silently dropped.
         ingest(
             &mut store,
-            &format!("<urn:registry:one> <{PUBLIC}publicKey> \"different-key\" ."),
+            &format!("<urn:registry:one> <{PUBLIC}publicKey> \"second-key\" ."),
         );
-        assert!(
-            registered_public_key(&store, "verifier").is_err(),
-            "{mode}: conflicting aliases cannot choose a key"
+        let mut got = keys(&store, "verifier");
+        got.sort();
+        assert_eq!(
+            got,
+            vec!["key".to_string(), "second-key".to_string()],
+            "{mode}"
         );
     }
 }
