@@ -133,6 +133,26 @@ jobs:
           cargo build --locked --features shacl --bin quipu
           python3 scripts/ci/pendant-merge-check.py
 
+      # The evidence behind "the label homomorphism is machine-checked"
+      # (aegis-xfuch4.4): every lattice law at 10,000 seeded cases on the real
+      # meet AND on a deliberately widening one, which the direction laws must
+      # catch. Reuses this arm's test build; about 2 s of test time.
+      - name: Label-lattice property evidence
+        if: matrix.name == 'default'
+        env:
+          QUIPU_EVIDENCE_CASES: "10000"
+          QUIPU_EVIDENCE_DIR: target/evidence
+        run: |
+          cargo test ${{ matrix.flags }} --lib lattice::evidence_tests
+          cat target/evidence/lattice-proptest.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload label-lattice evidence
+        if: matrix.name == 'default'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lattice-proptest-evidence
+          path: target/evidence/lattice-proptest.*
+          if-no-files-found: error
+
   # Unique but non-CD-gating cfg surfaces. Run them serially on PRs/nightly so
   # they remain release evidence without competing with a pushed head's six
   # required checks for account runners.
