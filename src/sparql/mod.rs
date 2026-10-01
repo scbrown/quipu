@@ -10,6 +10,8 @@ pub mod exists;
 pub mod filter;
 pub mod pattern;
 pub mod pattern_util;
+#[cfg(test)]
+mod pattern_util_tests;
 pub mod property_path;
 pub mod rdfs;
 pub mod rdfs_closure;

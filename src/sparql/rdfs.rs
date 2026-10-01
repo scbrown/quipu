@@ -71,16 +71,17 @@ pub fn eval_type_pattern_with_subclasses(
     let Some(type_pred_id) = store.lookup(RDF_TYPE)? else {
         return Ok(vec![]);
     };
-    let subject_ids =
-        if let Some(iri) = super::pattern_util::resolve_subject_pattern(&tp.subject, bindings) {
-            let ids = store.lookup_all(&iri)?;
-            if ids.is_empty() {
-                return Ok(vec![]);
-            }
-            Some(ids)
-        } else {
-            None
-        };
+    let subject_ids = if let Some(iri) =
+        super::pattern_util::resolve_subject_pattern(store, &tp.subject, bindings)?
+    {
+        let ids = store.lookup_all(&iri)?;
+        if ids.is_empty() {
+            return Ok(vec![]);
+        }
+        Some(ids)
+    } else {
+        None
+    };
     let mut results = Vec::new();
     // An entity may assert both a subclass and its superclass. Entailment
     // produces one graph triple, not one row per proof path.
