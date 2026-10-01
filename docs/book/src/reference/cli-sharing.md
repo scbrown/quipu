@@ -21,13 +21,15 @@ exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this chec
 
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
-            [--shapes NAME]... [--no-shapes] [--parent-share ID]
-            [--since <parent-reference>] [--turtle] [--destination internal]
+            [--shapes NAME]... [--no-shapes] [--queries NAME]... [--no-queries]
+            [--parent-share ID] [--since <parent-reference>] [--turtle]
+            [--destination internal]
 ```
 
 Writes a deterministic, git-native share into `<dir>`: RDFC-1.0 canonical
 `export.nt` (the facts), `shapes.ttl` (the constraints they were validated
-against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
+against), `queries.ttl` (the stored queries that answer questions about them,
+when there are any), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 
 | Flag | Effect |
 |---|---|
@@ -37,6 +39,8 @@ against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 | `--construct <QUERY>` | share exactly what a CONSTRUCT query yields |
 | `--shapes <NAME>` | include a named shape set; repeatable |
 | `--no-shapes` | omit `shapes.ttl` — the receiver then has no constraints to validate against, so prefer not to |
+| `--queries <NAME>` | carry exactly these stored queries in `queries.ttl`; repeatable. Default: every query *registered against* the scope — see [Stored queries](#stored-queries-queriesttl) |
+| `--no-queries` | carry no stored queries; no `queries.ttl` is written |
 | `--parent-share <ID>` | record lineage: the share this one descends from |
 | `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL, not a `share_id` |
 | `--turtle` | additionally write a Turtle view for humans |
@@ -104,12 +108,72 @@ parent cannot be three-way merged — `merge` refuses with *"incoming share has 
 parent_share; three-way merge has no base"* — so record it at production time,
 when you know it, rather than trying to reconstruct it at reconnect time.
 
+## Stored queries (`queries.ttl`)
+
+A share carries the stored queries `quipu_ask` answers by name, so a qpack
+ships its competency questions beside its data. Each query is described as RDF
+in `queries.ttl`; the manifest seals that file's SHA-256 as `queries_hash` and it
+takes part in the `share_id`, so changing one query's text changes the share's
+identity. A share with no queries has no `queries.ttl` and a manifest
+byte-identical to one produced before the member existed.
+
+```turtle
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix quipu: <https://quipu.dev/ontology/> .
+
+<urn:quipu:query:members-of> a quipu:StoredQuery ;
+  quipu:queryName "members-of" ;
+  quipu:queryForm "SELECT" ;
+  dct:description "Who belongs to a team" ;
+  quipu:parameter [ a quipu:QueryParameter ; quipu:parameterName "team" ;
+    quipu:parameterIndex 0 ; quipu:parameterKind "iri" ; quipu:required true ] ;
+  quipu:sparqlTemplate """SELECT ?p WHERE { ?p <http://example.org/memberOf> <{team}> }""" .
+```
+
+`quipu:targetsClass` lists every constant `rdf:type` object in the template's
+patterns. The vocabulary is governed by
+[`shapes/stored-queries.ttl`](https://github.com/scbrown/quipu/blob/main/shapes/stored-queries.ttl),
+which the producer and the importer both apply.
+
+**Which queries a share carries by default.** A query is *registered against*
+the shared graph when `quipu_ask` would answer it from that graph: an unscoped
+query (no dataset) belongs to a ROOT share and to `--group-id` and `--construct`
+slices of ROOT; a dataset-scoped query belongs to a `--graph <IRI>` share whose
+IRI is a member of its dataset, and to nothing else. The dataset IRI itself is
+producer-local and is not carried.
+
+**A carried query is data, not code.** Only `SELECT`, `CONSTRUCT`, `ASK` and
+`DESCRIBE` travel. The form is decided by parsing the template with Quipu's
+SPARQL parser — at share time and again at import — and a SPARQL Update is
+refused at both ends. Import evaluates nothing: a query runs only when somebody
+asks for it, under the receiver's normal read policy and timeouts.
+
+**Import namespaces and never overwrites.** Carried queries install in the
+receiver's registry as `<namespace>/<name>`. The namespace defaults to
+`pack-<12 hex>` derived from the producer's store identity, so newer shares of
+the same pack land on the same names; `--query-namespace` chooses one. A local
+query with the same name is never touched. A *different* definition already at a
+pack-scoped name is reported under `queries.collisions` and left in place, and a
+pack-scoped query the share no longer carries is reported as `stale`.
+`--replace-queries` replaces the differing ones and closes the stale ones
+(closed, never deleted — the prior version stays queryable). A query that targets
+a class the receiver's loaded shapes do not sanction adds the blocker
+`query_off_vocabulary`: the pack is quarantined and none of its queries is
+installed. A full share installs its queries when it stages, before promotion,
+so run `quipu import promote` before asking questions of the staged data in ROOT.
+
+A delta share carries the resulting share's complete `queries.ttl`, like its
+shapes, so queries added, replaced or removed since the parent arrive as what
+the member now says, sealed by the result manifest's `queries_hash`.
+
 ## `quipu import` — receive a share, into quarantine
 
 ```text
 quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>]
-            [--destination internal] [--db <path>]
+            [--destination internal] [--query-namespace NS]
+            [--replace-queries] [--db <path>]
 quipu import delta <parent-share> <delta-share> [--actor <id>]
+            [--query-namespace NS]
 ```
 
 Verifies the manifest and payload hashes, then stages a local directory in its
@@ -130,6 +194,8 @@ share graph hash mismatch: manifest=… actual=…
 | `--source <uri>` | record where the share came from; defaults to the directory, archive path, or URL |
 | `--actor <id>` | attribute the import |
 | `--db <path>` | stage in this store, including archive and URL imports |
+| `--query-namespace <NS>` | install carried queries as `NS/<name>` (`[A-Za-z0-9._-]+`); default `pack-<12 hex>` from the producer's store identity |
+| `--replace-queries` | replace differing `NS/*` queries and close ones the share no longer carries; otherwise both are only reported |
 
 `import delta` verifies the full parent and the delta's lineage, hashes and
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
