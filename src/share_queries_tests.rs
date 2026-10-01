@@ -122,6 +122,47 @@ fn opts() -> ShareOptions {
     ShareOptions::default()
 }
 
+/// The merge with main put two independent manifest.ttl additions side by
+/// side: merge_parents (prov:wasDerivedFrom on the dataset) and the queries
+/// distribution. A merge share that ALSO carries queries must render both, as
+/// Turtle that parses, without either displacing the other.
+#[test]
+fn a_merge_manifest_with_queries_keeps_both_parents_and_the_queries_distribution() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = write(&producer(), temp.path(), "s", &opts());
+    let mut manifest: crate::share::ShareManifest =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("manifest.json")).unwrap()).unwrap();
+    assert!(
+        manifest.queries_hash.is_some(),
+        "control: this share carries queries"
+    );
+    manifest.merge_parents = vec![
+        format!("sha256:{}", "a".repeat(64)),
+        format!("sha256:{}", "b".repeat(64)),
+    ];
+    let ttl = crate::share::manifest_turtle(&manifest);
+    let triples: Vec<_> = oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::Turtle)
+        .for_reader(ttl.as_bytes())
+        .map(|t| t.unwrap())
+        .collect();
+    let count = |p: &str| triples.iter().filter(|t| t.predicate.as_str() == p).count();
+    assert_eq!(count("http://www.w3.org/ns/dcat#distribution"), 3, "{ttl}");
+    assert_eq!(
+        count("http://www.w3.org/ns/prov#wasDerivedFrom"),
+        2,
+        "{ttl}"
+    );
+    let hash = manifest
+        .queries_hash
+        .as_deref()
+        .unwrap()
+        .trim_start_matches("sha256:");
+    assert!(
+        triples.iter().any(|t| t.object.to_string().contains(hash)),
+        "queries checksum present: {ttl}"
+    );
+}
+
 #[test]
 fn a_share_carries_every_registered_query_as_rdf() {
     let temp = tempfile::tempdir().unwrap();
