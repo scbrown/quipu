@@ -224,7 +224,7 @@ pub fn withheld_types(store: &Store, query: &str, ctx: &TemporalContext) -> Vec<
 /// wherever it occurs — inside OPTIONAL, UNION, a subquery, a FILTER EXISTS.
 /// Anything not recognised simply contributes nothing: a missed pattern costs a
 /// marker, never a wrong one.
-fn type_constants(query: &spargebra::Query) -> Vec<String> {
+pub(crate) fn type_constants(query: &spargebra::Query) -> Vec<String> {
     use spargebra::algebra::GraphPattern;
 
     // The wildcard arm below is DELIBERATE and must stay a wildcard.
