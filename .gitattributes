@@ -16,3 +16,9 @@
 **/qpack/shapes.ttl merge=quipu
 **/qpack/manifest.json merge=quipu
 **/qpack/manifest.ttl merge=quipu
+
+# Readable pack diffs: `git diff` shows facts grouped by labelled entity when
+# `git config diff.quipu.textconv "quipu diff-textconv"` is set. Without that
+# config the attribute is inert and Git diffs the raw lines as before.
+*.nt diff=quipu
+*.nq diff=quipu

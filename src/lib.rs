@@ -86,6 +86,9 @@ pub mod share_completeness;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_compose;
 pub mod share_delta;
+// Entity-grouped, blank-node-stable payload diffs and the `git diff` textconv
+// rendering (aegis-fxpbys.1). Pure apart from `read_payload`, which is gated.
+pub mod share_diff;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
