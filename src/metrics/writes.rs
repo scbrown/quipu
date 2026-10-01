@@ -69,7 +69,7 @@ impl WriteMetrics {
     pub(super) fn render(&self, out: &mut String) {
         out.push_str(
             "# HELP quipu_write_facts_total Datums of committed writes by code path (writer), graph \
-             scope (root is what quipu_graph_facts counts) and outcome: submitted by the caller, \
+             scope (root: the scope of the graph-facts gauge) and outcome: submitted by the caller, \
              inferred into the batch, asserted or retracted (changed the current-fact view), \
              superseded (prior functional values closed), noop (changed nothing). Net root-graph \
              growth = asserted - retracted - superseded with graph=\"root\".\n\
