@@ -52,6 +52,34 @@ prerequisites passed; it does not authorize a request. The final request size,
 input/label/prompt manifests, reviewer check and spending ledger remain separate
 mandatory gates. No paid-call runner is included here.
 
+## Blocking recall
+
+`recall.py` measures candidate generation, not pairwise resolution. For each of
+the 93 cohort pairs the left endpoint ranks every entity that asserted one of
+its types in ROOT before the repair transaction, scored by the larger of the
+normalized label score and the frozen MiniLM cosine over the same cleaned
+historical evidence. No API is called and no current vector or fact is read.
+
+The STRICT rank is primary: every other usable candidate competes, and ties
+count against the partner, so it needs no post-repair knowledge. The LENIENT
+rank also drops competitors recorded as aliases of the anchor at any time; it
+uses later knowledge and is only a bound. Label-only and cosine-only ranks are
+reported beside the combined score. Pairs that cannot be ranked stay in the
+denominator under a named status: `no_anchor_evidence`,
+`partner_not_in_typed_pool` or `partner_without_usable_evidence`. The run
+aborts if the partner's evidence differs from arm D's prepared view, or if an
+identity edge reaches ranking evidence.
+
+```sh
+just -f benchmark/alias-resolution/justfile recall \
+  /private/source.db /private/prepared.json \
+  /private/model.onnx /private/tokenizer.json blocking-recall.json
+```
+
+`blocking-recall.json` is public. Its rows hold only published corpus indexes,
+classes, statuses, usable pool sizes and ranks, so recall at any k can be
+recomputed from it without the private store.
+
 ## Replay
 
 `replay.py` computes curves from an item manifest and stored raw numeric
