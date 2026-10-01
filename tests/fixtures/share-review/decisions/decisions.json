@@ -1,0 +1,24 @@
+{
+  "schema": "https://github.com/scbrown/quipu/git-decisions/v1",
+  "inputs": ["sha256:base", "sha256:ours", "sha256:theirs"],
+  "conflicts": [
+    {
+      "subject": "<http://example.org/people/alice>",
+      "predicate": "http://example.org/vocab#age",
+      "max_count": 1,
+      "base": ["\"30\"^^<http://www.w3.org/2001/XMLSchema#integer>"],
+      "ours": ["\"31\"^^<http://www.w3.org/2001/XMLSchema#integer>"],
+      "theirs": ["\"32\"^^<http://www.w3.org/2001/XMLSchema#integer>"]
+    }
+  ],
+  "aliases": [
+    {
+      "ours": "<http://example.org/people/alice>",
+      "theirs": "<http://example.org/people/asmith>",
+      "similarity": 0.975
+    }
+  ],
+  "resolutions": {
+    "conflict:0": "ours"
+  }
+}

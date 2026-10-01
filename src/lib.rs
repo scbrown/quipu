@@ -88,12 +88,16 @@ pub mod share_delta;
 // Entity-grouped, blank-node-stable payload diffs and the `git diff` textconv
 // rendering (aegis-fxpbys.1). Pure apart from `read_payload`, which is gated.
 pub mod share_diff;
+// The PR-review report over two pack versions: facts, introduced SHACL
+// violations, merge decisions, alias caveat (aegis-fxpbys.1, M2).
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_mint;
 mod share_promotion;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod share_review;
 pub mod share_scrub;
 pub mod share_transport;
 pub mod signing;
