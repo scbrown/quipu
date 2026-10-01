@@ -153,7 +153,7 @@ fn eval_triple_pattern_limited(
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
     // Subject
-    if let Some(iri) = resolve_subject_pattern(&tp.subject, bindings) {
+    if let Some(iri) = resolve_subject_pattern(store, &tp.subject, bindings)? {
         let ids = store.lookup_all(&iri)?;
         if ids.is_empty() {
             return Ok(vec![]); // IRI not in dictionary -> no matches
@@ -162,7 +162,7 @@ fn eval_triple_pattern_limited(
     }
 
     // Predicate
-    if let Some(iri) = resolve_predicate_pattern(&tp.predicate, bindings) {
+    if let Some(iri) = resolve_predicate_pattern(store, &tp.predicate, bindings)? {
         let ids = store.lookup_all(&iri)?;
         if ids.is_empty() {
             return Ok(vec![]);
@@ -475,14 +475,14 @@ pub(super) fn eval_triple_pattern_from_model(
     bindings: &Bindings,
     graph: i64,
 ) -> Result<Vec<Bindings>> {
-    let subject = match resolve_subject_pattern(&tp.subject, bindings) {
+    let subject = match resolve_subject_pattern(store, &tp.subject, bindings)? {
         Some(iri) => match store.lookup(&iri)? {
             Some(id) => Some(id),
             None => return Ok(vec![]), // not in the dictionary -> no matches
         },
         None => None,
     };
-    let predicate = match resolve_predicate_pattern(&tp.predicate, bindings) {
+    let predicate = match resolve_predicate_pattern(store, &tp.predicate, bindings)? {
         Some(iri) => match store.lookup(&iri)? {
             Some(id) => Some(id),
             None => return Ok(vec![]),
