@@ -66,15 +66,15 @@ about distribution.
     regenerates it.
 
 **License** — recommend `CC BY 4.0`. The artifact is already public; a
-non-commercial or no-derivatives licence would sit oddly beside it. This is a
-one-way door on arXiv: the licence cannot be loosened after announcement.
+non-commercial or no-derivatives license would sit oddly beside it. This is a
+one-way door on arXiv: the license cannot be loosened after announcement.
 
 **Abstract** (plain text for the web form — no LaTeX, transcribed from the built
 PDF):
 
-Version control works for source code because its merge understands the medium: lines. Knowledge graphs shared between people and software agents are not lines, and merging their serialisations makes conflicts out of ordering and misses the ones that matter. We describe and evaluate a three-way merge for RDF in which the schema decides what a conflict is: the merge is set algebra over canonical triples, and a slot is contended only where a SHACL shape declares that it can hold at most one value. Multi-valued predicates union; functional predicates with divergent values are handed to a person. The same shapes graph then validates the merge result, so the schema that defines conflicts also audits their resolution.
+Version control works for source code because its merge understands the medium: lines. Knowledge graphs shared between people and software agents are not lines, and merging their serializations makes conflicts out of ordering and misses the ones that matter. We describe and evaluate a three-way merge for RDF in which the schema decides what a conflict is: the merge is set algebra over canonical triples, and a slot is contended only where a SHACL shape declares that it can hold at most one value. Multi-valued predicates union; functional predicates with divergent values are handed to a person. The same shapes graph then validates the merge result, so the schema that defines conflicts also audits their resolution.
 
-We do not claim the first three-way merge for RDF. Git-backed RDF versioning with merge strategies is established prior work, and the closest neighbour -- Quit Store's Context Merge -- is included here as a baseline that this operator extends rather than replaces. Our contribution is an implementation in a production multi-agent store and an evaluation of what schema-derived conflict semantics buys against that neighbour and against six other strategies.
+We do not claim the first three-way merge for RDF. Git-backed RDF versioning with merge strategies is established prior work, and the closest neighbor -- Quit Store's Context Merge -- is included here as a baseline that this operator extends rather than replaces. Our contribution is an implementation in a production multi-agent store and an evaluation of what schema-derived conflict semantics buys against that neighbor and against six other strategies.
 
 On a synthetic divergence benchmark over five seeds, the shape-aware operator raised 33 conflicts, all true positives, with no false positives, no triples lost, none fabricated, and no SHACL violations admitted. The context-overlap baseline detected the same 33 conflicts and asked 845 questions to do it. We also report a limit no schema removes: when two sides mint different names for one entity, the divergence is invisible to any triple-level operator, including this one. Replaying a recorded production corpus against the shipped operator -- 105 repairs a person actually performed, 93 of them after excluding 12 chained pairs, and 939 real duplicate-value incidents -- reproduces both the blindness (0 of 93 alias repairs, matching 0 of 21 on the synthetic arm) and the benefit, on data nobody generated for the purpose.
 

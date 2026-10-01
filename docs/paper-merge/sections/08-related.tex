@@ -2,7 +2,7 @@
 \label{sec:related}
 
 \paragraph{Git-backed RDF versioning.} Quit Store~\cite{arndt2019quit} is the
-closest neighbour and the reason this paper makes no priority claim. It places
+closest neighbor and the reason this paper makes no priority claim. It places
 RDF under git --- the system's own gloss on its name is ``Quads in Git'' ---
 versions quads with commit-level provenance, and supplies merge strategies,
 including a Context Merge that identifies conflicts by node overlap and hands
@@ -50,15 +50,15 @@ shapes graph to consult. We position this operator as an extension of that line
 of work: the algebra is theirs, the conflict predicate is the contribution.
 
 \paragraph{Diff and patch over versioned graphs.} TerminusDB~\cite{terminusdb} provides diff and
-patch over a versioned graph store. RDF Patch and LD Patch standardise the
+patch over a versioned graph store. RDF Patch and LD Patch standardize the
 description of change sets. These solve the representation and transport of a
 delta; they are complementary to, and do not decide, what makes two deltas
 irreconcilable.
 
-\paragraph{Canonicalisation.} W3C RDF Dataset Canonicalization~\cite{rdfc2024} (RDFC-1.0,
-formerly URDNA2015) gives deterministic labelling of blank nodes and hence
+\paragraph{Canonicalization.} W3C RDF Dataset Canonicalization~\cite{rdfc2024} (RDFC-1.0,
+formerly URDNA2015) gives deterministic labeling of blank nodes and hence
 decidable graph equality. We build directly on it: it is what makes ``the same
-triple'' well defined across two independently serialised bundles, and it is a
+triple'' well defined across two independently serialized bundles, and it is a
 substrate rather than a competitor. R43ples~\cite{graube2016r43ples} and archiving systems such as
 OSTRICH~\cite{taelman2018ostrich} address efficient storage and querying of revision histories, a
 different problem from reconciling two live divergent copies.
@@ -75,7 +75,7 @@ be true, a silently dropped assertion is the more expensive failure. Operational
 transformation has the same shape of trade in a different lineage.
 
 \paragraph{Schema-aware merging elsewhere.} Ontology alignment and matching
-address a related question --- reconciling different conceptualisations --- but
+address a related question --- reconciling different conceptualizations --- but
 operate on schema-to-schema correspondence rather than on three-way
 reconciliation of instance data under a shared schema. Structured merge tools
 for source code (semi-structured and AST merges) share our motivation exactly:

@@ -9,3 +9,6 @@ candidates db prepared model tokenizer output:
 
 replay items responses:
     uv run --no-project python replay.py --items {{quote(items)}} --responses {{quote(responses)}}
+
+recall db prepared model tokenizer output:
+    uv run --script recall.py --db {{quote(db)}} --prepared {{quote(prepared)}} --model {{quote(model)}} --tokenizer {{quote(tokenizer)}} --output {{quote(output)}}
