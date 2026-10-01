@@ -52,8 +52,10 @@ mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
+mod cli_share_diff;
 
 fn main() {
+    quipu::write_kind::set_cli();
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
@@ -75,6 +77,11 @@ fn main() {
         "merge-driver" => return cli_git_merge::run(&args),
         "pendant-resolve" => return cli_git_merge::run(&args),
         "pendant-check" => return cli_git_merge::run(&args),
+        // Store-free pack readers: no config, no database (aegis-fxpbys.1).
+        "diff-textconv" => return cli_share_diff::cmd_textconv(&args),
+        "share" if args.get(2).map(String::as_str) == Some("diff") => {
+            return cli_share_diff::cmd_diff(&args);
+        }
         _ => {}
     }
 
@@ -344,10 +351,12 @@ COMMANDS:
                                                                      REPLACES the store with a --full pack, binary or text
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
+    quipu share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     quipu attest list [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
+    quipu import ... [--query-namespace NS] [--replace-queries]   carried queries land as NS/<name>; collisions are reported
     quipu import delta <parent-share> <delta-share> [--actor <id>]
     quipu compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
@@ -360,6 +369,8 @@ COMMANDS:
     quipu merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
     quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
     quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
+    quipu share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
+    quipu diff-textconv <file>   labelled pack rendering for git diff's textconv
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]

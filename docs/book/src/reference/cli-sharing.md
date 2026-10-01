@@ -21,13 +21,15 @@ exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this chec
 
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
-            [--shapes NAME]... [--no-shapes] [--parent-share ID]
-            [--since <parent-reference>] [--turtle] [--destination internal]
+            [--shapes NAME]... [--no-shapes] [--queries NAME]... [--no-queries]
+            [--parent-share ID] [--since <parent-reference>] [--turtle]
+            [--destination internal]
 ```
 
 Writes a deterministic, git-native share into `<dir>`: RDFC-1.0 canonical
 `export.nt` (the facts), `shapes.ttl` (the constraints they were validated
-against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
+against), `queries.ttl` (the stored queries that answer questions about them,
+when there are any), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 
 | Flag | Effect |
 |---|---|
@@ -37,6 +39,8 @@ against), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 | `--construct <QUERY>` | share exactly what a CONSTRUCT query yields |
 | `--shapes <NAME>` | include a named shape set; repeatable |
 | `--no-shapes` | omit `shapes.ttl` — the receiver then has no constraints to validate against, so prefer not to |
+| `--queries <NAME>` | carry exactly these stored queries in `queries.ttl`; repeatable. Default: every query *registered against* the scope — see [Stored queries](#stored-queries-queriesttl) |
+| `--no-queries` | carry no stored queries; no `queries.ttl` is written |
 | `--parent-share <ID>` | record lineage: the share this one descends from |
 | `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL, not a `share_id` |
 | `--turtle` | additionally write a Turtle view for humans |
@@ -104,12 +108,72 @@ parent cannot be three-way merged — `merge` refuses with *"incoming share has 
 parent_share; three-way merge has no base"* — so record it at production time,
 when you know it, rather than trying to reconstruct it at reconnect time.
 
+## Stored queries (`queries.ttl`)
+
+A share carries the stored queries `quipu_ask` answers by name, so a qpack
+ships its competency questions beside its data. Each query is described as RDF
+in `queries.ttl`; the manifest seals that file's SHA-256 as `queries_hash` and it
+takes part in the `share_id`, so changing one query's text changes the share's
+identity. A share with no queries has no `queries.ttl` and a manifest
+byte-identical to one produced before the member existed.
+
+```turtle
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix quipu: <https://quipu.dev/ontology/> .
+
+<urn:quipu:query:members-of> a quipu:StoredQuery ;
+  quipu:queryName "members-of" ;
+  quipu:queryForm "SELECT" ;
+  dct:description "Who belongs to a team" ;
+  quipu:parameter [ a quipu:QueryParameter ; quipu:parameterName "team" ;
+    quipu:parameterIndex 0 ; quipu:parameterKind "iri" ; quipu:required true ] ;
+  quipu:sparqlTemplate """SELECT ?p WHERE { ?p <http://example.org/memberOf> <{team}> }""" .
+```
+
+`quipu:targetsClass` lists every constant `rdf:type` object in the template's
+patterns. The vocabulary is governed by
+[`shapes/stored-queries.ttl`](https://github.com/scbrown/quipu/blob/main/shapes/stored-queries.ttl),
+which the producer and the importer both apply.
+
+**Which queries a share carries by default.** A query is *registered against*
+the shared graph when `quipu_ask` would answer it from that graph: an unscoped
+query (no dataset) belongs to a ROOT share and to `--group-id` and `--construct`
+slices of ROOT; a dataset-scoped query belongs to a `--graph <IRI>` share whose
+IRI is a member of its dataset, and to nothing else. The dataset IRI itself is
+producer-local and is not carried.
+
+**A carried query is data, not code.** Only `SELECT`, `CONSTRUCT`, `ASK` and
+`DESCRIBE` travel. The form is decided by parsing the template with Quipu's
+SPARQL parser — at share time and again at import — and a SPARQL Update is
+refused at both ends. Import evaluates nothing: a query runs only when somebody
+asks for it, under the receiver's normal read policy and timeouts.
+
+**Import namespaces and never overwrites.** Carried queries install in the
+receiver's registry as `<namespace>/<name>`. The namespace defaults to
+`pack-<12 hex>` derived from the producer's store identity, so newer shares of
+the same pack land on the same names; `--query-namespace` chooses one. A local
+query with the same name is never touched. A *different* definition already at a
+pack-scoped name is reported under `queries.collisions` and left in place, and a
+pack-scoped query the share no longer carries is reported as `stale`.
+`--replace-queries` replaces the differing ones and closes the stale ones
+(closed, never deleted — the prior version stays queryable). A query that targets
+a class the receiver's loaded shapes do not sanction adds the blocker
+`query_off_vocabulary`: the pack is quarantined and none of its queries is
+installed. A full share installs its queries when it stages, before promotion,
+so run `quipu import promote` before asking questions of the staged data in ROOT.
+
+A delta share carries the resulting share's complete `queries.ttl`, like its
+shapes, so queries added, replaced or removed since the parent arrive as what
+the member now says, sealed by the result manifest's `queries_hash`.
+
 ## `quipu import` — receive a share, into quarantine
 
 ```text
 quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>]
-            [--destination internal] [--db <path>]
+            [--destination internal] [--query-namespace NS]
+            [--replace-queries] [--db <path>]
 quipu import delta <parent-share> <delta-share> [--actor <id>]
+            [--query-namespace NS]
 ```
 
 Verifies the manifest and payload hashes, then stages a local directory in its
@@ -130,6 +194,8 @@ share graph hash mismatch: manifest=… actual=…
 | `--source <uri>` | record where the share came from; defaults to the directory, archive path, or URL |
 | `--actor <id>` | attribute the import |
 | `--db <path>` | stage in this store, including archive and URL imports |
+| `--query-namespace <NS>` | install carried queries as `NS/<name>` (`[A-Za-z0-9._-]+`); default `pack-<12 hex>` from the producer's store identity |
+| `--replace-queries` | replace differing `NS/*` queries and close ones the share no longer carries; otherwise both are only reported |
 
 `import delta` verifies the full parent and the delta's lineage, hashes and
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
@@ -344,6 +410,94 @@ merely does not read as failure.
 when that test was written, `--help` documented `share`, `status`, `merge` and
 `unpack` but **not `import`**, so a page-versus-help check would have passed while
 the verb that receives a share stayed undiscoverable.
+
+## `quipu share diff` — what changed between two packs
+
+```text
+quipu share diff <old> <new> [--format text|markdown|json]
+```
+
+Each side is a pack directory (the standard artifact's `payload.nq`, else a
+legacy share's `export.nt`) or a single N-Triples/N-Quads file. Like the Git
+transport commands below, it reads files only and opens no store.
+
+The diff compares **facts**, not lines, and groups them by subject entity:
+
+```text
+~ Alice (people/alice)
+  ~ age: "30"^^xsd:integer -> "31"^^xsd:integer
+  - nickname: "Al"
++ Carol (people/carol)
+  + rdfs:label: "Carol"
+  + role: "designer"
+2 entities: 1 changed, 2 added, 1 removed facts
+```
+
+That is the whole output for the fixture pair in `tests/fixtures/share-diff/`,
+whose raw line diff is 11 lines of full IRIs and blank-node labels: Alice's
+address is a blank node that RDFC relabelled (`_:b0` to `_:c14n7`) without any
+change to its content, and it contributes nothing.
+
+- An entity is shown by its `rdfs:label` with a compact name beside it; an
+  unlabelled IRI is shown compactly (`prefix:local` for well-known vocabularies,
+  otherwise its last two path segments). Predicates show their label or local
+  name. When two distinct predicates under one entity would show the same name
+  (`ex:name` and `schema:name` both labelled "name", or two IRIs ending
+  `/name`), each carries its compact IRI — `name (ex/name)`,
+  `name (schema:name)` — or its full IRI if even those collide. Compaction
+  depends only on the IRI, never on the data, so both sides of a diff name
+  things the same way.
+- `~ predicate: old -> new` is reported only when the slot (subject, predicate,
+  graph) holds exactly one value on **both** sides. A multi-valued slot shows
+  its removed and added values separately.
+- **Blank nodes are matched by structure, not label.** RDFC-1.0 can relabel
+  every blank node between two versions of a payload; a pure relabel is zero
+  lines. A blank node referenced from another node is shown inline
+  (`[ city "Paris" ; zip "75001" ]`) as part of the referencing fact, so an edit
+  inside it is a change of that fact. Structurally identical blank nodes on
+  one slot are one fact with a count: cardinality matters to shapes
+  (`sh:maxCount`), so adding a second copy is shown as
+  `~ p: [ r "v" ] x1 -> [ r "v" ] x2`, and the textconv marks a fact asserted
+  more than once with `xN`. Limits: identical values nested inside an inlined
+  blank node still collapse; a blank node referenced only from inside a
+  blank-node cycle has no named root and is not shown; a blank *graph name*
+  is keyed by its label.
+- `--format markdown` suits a PR comment; `--format json` is the same
+  structure (`entities[].changed/added/removed`, plus totals) for tools.
+
+## `quipu diff-textconv` — readable `git diff` for pack files
+
+```text
+quipu diff-textconv <file>
+```
+
+Prints one payload file as stable, labelled, entity-grouped text: one header
+per entity (sorted by IRI, so a relabel never reorders the file), one
+`predicate: value` line per fact, blank nodes inline. Git's `textconv` runs it
+on both sides of a diff, so an ordinary `git diff`, `git log -p` or `git show`
+reads like this instead of two lines of full IRIs:
+
+```diff
+@@ -1,5 +1,5 @@
+ AAA Tracking (ability/aaa-tracking)
+-  abbrev: "AAA"
++  abbrev: "AAA CHANGED"
+   effectText: "x2 vs. air attacks"
+```
+
+Setup, once per clone (the attribute is already in this repository's
+`.gitattributes`; add it to your own):
+
+```bash
+printf '*.nt diff=quipu\n*.nq diff=quipu\n' >> .gitattributes
+git config diff.quipu.textconv "quipu diff-textconv"
+```
+
+Without the `git config` line the attribute is inert and Git diffs raw lines.
+`git diff --no-textconv` shows the raw form on demand. A file that does not
+parse (a working copy with merge conflict markers, say) is printed unchanged,
+so `git diff` never fails on it. Textconv affects display only: merges, hashes
+and `pendant-check` still operate on the canonical bytes.
 
 ## Git transport: driver, decisions, and CI
 

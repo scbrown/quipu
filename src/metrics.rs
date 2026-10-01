@@ -25,6 +25,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 pub(crate) mod attestation;
+pub mod writes;
 
 /// Current process (resident, virtual) memory in bytes, from `/proc/self/statm`
 /// on Linux; `(0, 0)` elsewhere. `statm` fields are in pages; on the `x86_64`
@@ -223,6 +224,7 @@ fn request_key<V>(
 #[derive(Default)]
 pub struct Metrics {
     attestation: attestation::AttestationMetrics,
+    writes: writes::WriteMetrics,
     /// (endpoint template, status) -> request count.
     requests: Mutex<BTreeMap<(String, u16), u64>>,
     /// endpoint template -> duration histogram.
@@ -366,10 +368,14 @@ impl Metrics {
             .or_insert(0) += 1;
     }
 
-    /// Record `n` datums committed, and sample RSS into the high-water mark so
+    /// Record one committed write, and sample RSS into the high-water mark so
     /// a burst export's peak is captured even between 15s scrapes (memory telemetry).
-    pub fn observe_write(&self, n: u64) {
-        self.facts_written.fetch_add(n, Ordering::Relaxed);
+    /// `quipu_facts_written_total` keeps counting SUBMITTED datums, unchanged;
+    /// the outcome split is `quipu_write_facts_total` (aegis-gwkd76).
+    pub fn observe_write(&self, counts: &writes::WriteCounts) {
+        self.facts_written
+            .fetch_add(counts.submitted, Ordering::Relaxed);
+        self.writes.observe(counts);
         self.sample_rss();
     }
 
@@ -410,6 +416,7 @@ impl Metrics {
     ) -> String {
         let mut out = String::new();
         self.attestation.render(&mut out);
+        self.writes.render(&mut out);
 
         out.push_str(
             "# HELP quipu_http_requests_total Requests served, by route template and status.\n\
@@ -639,7 +646,7 @@ impl Metrics {
         );
         let _ = writeln!(out, "quipu_process_peak_rss_bytes {peak}");
         out.push_str(
-            "# HELP quipu_facts_written_total Datums committed to the store (correlates RSS with write volume).\n\
+            "# HELP quipu_facts_written_total Datums SUBMITTED to committed transactions, including no-op re-assertions and every internal writer; not net growth (split: quipu_write_facts_total). Resets on restart.\n\
              # TYPE quipu_facts_written_total counter\n",
         );
         let _ = writeln!(

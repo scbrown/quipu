@@ -107,6 +107,7 @@ const SHARING_VERBS: &[&str] = &[
     "merge-driver",
     "pendant-resolve",
     "pendant-check",
+    "diff-textconv",
 ];
 
 #[test]

@@ -19,6 +19,16 @@ pub(crate) fn render_request_starts(out: &mut String) {
     );
 }
 
+tokio::task_local! {
+    /// The write code path of this request (aegis-gwkd76), from its route.
+    static REQUEST_WRITE_KIND: Option<quipu::write_kind::WriteKind>;
+}
+
+/// The request's write kind, to carry across a `spawn_blocking` hop.
+pub(crate) fn request_write_kind() -> Option<quipu::write_kind::WriteKind> {
+    REQUEST_WRITE_KIND.try_with(|k| *k).ok().flatten()
+}
+
 pub(crate) async fn log_request(
     req: axum::extract::Request,
     next: axum::middleware::Next,
@@ -70,7 +80,12 @@ async fn log_request_with_sequence(
         )
     );
     let started = std::time::Instant::now();
-    let resp = next.run(req).await;
+    let resp = REQUEST_WRITE_KIND
+        .scope(
+            quipu::write_kind::WriteKind::for_route(&endpoint),
+            next.run(req),
+        )
+        .await;
     let status = resp.status().as_u16();
     let elapsed = started.elapsed().as_secs_f64();
     quipu::metrics::metrics().observe_request(&endpoint, status, elapsed);

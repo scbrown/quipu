@@ -16,6 +16,7 @@ pub const MAX_SHARE_DOWNLOAD_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_SHARE_EXPANDED_BYTES: usize = 64 * 1024 * 1024;
 
 const REQUIRED: [&str; 3] = ["manifest.json", "export.nt", "shapes.ttl"];
+const QUERIES: &str = crate::share_queries::QUERIES_FILE;
 
 fn request_from_files(
     files: &BTreeMap<String, String>,
@@ -48,6 +49,11 @@ fn request_from_files(
         manifest,
         export_ntriples: get("export.nt")?,
         shapes_turtle: get("shapes.ttl")?,
+        // Optional member; whether it must be present is the manifest's call,
+        // checked by `verify_share` (aegis-fxpbys.2).
+        queries_turtle: files.get(QUERIES).cloned(),
+        query_namespace: None,
+        replace_queries: false,
         source: source.to_string(),
         actor: None,
         accept_exact: false,
@@ -88,7 +94,9 @@ fn archive_files<R: Read>(reader: R, source: &str) -> Result<BTreeMap<String, St
             .and_then(|v| v.to_str())
             .ok_or_else(|| Error::InvalidValue("share archive path is not UTF-8".into()))?
             .to_string();
-        if !REQUIRED.contains(&name.as_str()) && name != "export.ttl" && name != "manifest.ttl" {
+        if !REQUIRED.contains(&name.as_str())
+            && !matches!(name.as_str(), "export.ttl" | "manifest.ttl" | QUERIES)
+        {
             return Err(Error::InvalidValue(format!(
                 "share archive contains undeclared file: {}",
                 path.display()
@@ -157,6 +165,9 @@ pub fn read_local(reference: &str) -> Result<ShareImportRequest> {
                     .map_err(|e| Error::InvalidValue(format!("share transport {name}: {e}")))?,
             );
         }
+        if let Ok(queries) = std::fs::read_to_string(path.join(QUERIES)) {
+            files.insert(QUERIES.to_string(), queries);
+        }
         return request_from_files(&files, reference);
     }
     let bytes = std::fs::read(path)
@@ -223,6 +234,17 @@ pub fn read_url(url: &str) -> Result<ShareImportRequest> {
                 name.to_string(),
                 String::from_utf8(bytes)
                     .map_err(|e| Error::InvalidValue(format!("share fetch {name} UTF-8: {e}")))?,
+            );
+        }
+        // A served directory exposes no listing, so fetch the member only when
+        // the manifest declares it; `verify_share` then checks its seal.
+        if files["manifest.json"].contains("\"queries_hash\"") {
+            let bytes = fetch(&format!("{url}{QUERIES}"))?;
+            files.insert(
+                QUERIES.to_string(),
+                String::from_utf8(bytes).map_err(|e| {
+                    Error::InvalidValue(format!("share fetch {QUERIES} UTF-8: {e}"))
+                })?,
             );
         }
         return request_from_files(&files, url);
