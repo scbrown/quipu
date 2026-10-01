@@ -797,6 +797,52 @@ aegis:DirectiveShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── Directive traceability ────────────────────────────────────────
+#
+# Stiwi 2026-09-24 (verbatim): "For each directive, we should have workitems
+# and policy attached to direct to it. Create the shape and work it to true."
+# Tracking: aegis-q9m5mp.
+#
+# Every directive names the WORK that carries it out (aegis:trackedBy a
+# WorkItem, i.e. a bead) and the POLICY that governs it (aegis:governedBy a
+# Policy). Policy and AlertRule are subclasses of Directive but ARE the
+# executable form, so they are exempt; OperationalRule and plain Directive
+# are not.
+#
+# EMIT, deliberately, while the backfill runs: measured 2026-09-24, about
+# 1,030 directives are untraced, so a reject shape would refuse every
+# directive write in the fleet. Emitted violations become shacl.violation
+# events and the write commits; that event count IS the progress metric.
+# Drop the annotation (enforcement reverts to reject) once it reads zero:
+# "work it to true". Store-context validation (emit path) is what lets
+# sh:class see the linked WorkItem/Policy types that are not in the payload.
+#
+# Pilot, proven end to end 2026-09-24: directive-patent-filings-private-no-
+# history-rewrite -> trackedBy aegis-vqf0p5, governedBy
+# policy_no-patent-filings-in-public-repos -> enforcedBy
+# textrule_patent-application-number (projected and executed by yupana).
+
+aegis:DirectiveTraceabilityShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetClass aegis:Directive ;
+    sh:or (
+        [ sh:class aegis:Policy ]
+        [ sh:class aegis:AlertRule ]
+        [
+            sh:property [
+                sh:path aegis:trackedBy ;
+                sh:minCount 1 ;
+                sh:class aegis:WorkItem ;
+            ] ;
+            sh:property [
+                sh:path aegis:governedBy ;
+                sh:minCount 1 ;
+                sh:class aegis:Policy ;
+            ] ;
+        ]
+    ) ;
+    sh:message "Untraced directive: it needs aegis:trackedBy a WorkItem and aegis:governedBy a Policy (aegis-q9m5mp)" .
+
 # ── Observation ─────���────────────────────────────────────────────
 #
 # An agent observation from Pensieve.
