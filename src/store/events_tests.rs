@@ -869,7 +869,7 @@ fn shacl_refused_episode_records_refusal_event() {
 /// not a fixture copy. An untraced directive still COMMITS and leaves a
 /// `shacl.violation` naming that shape; a traced one and an exempt Policy
 /// leave none. Routing: `shacl::split_shapes_by_policy` +
-/// `episode::ingest_episode` (validate_with_store_context on the emit half).
+/// `episode::ingest_episode` (`validate_with_store_context` on the emit half).
 #[cfg(feature = "shacl")]
 mod directive_traceability_emit {
     use super::*;

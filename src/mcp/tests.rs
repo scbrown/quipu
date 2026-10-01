@@ -4738,7 +4738,7 @@ fn test_verdict_verify_never_trusts_a_caller_supplied_instant() {
 /// aegis-4c3ppi: `/knot` routes stored shapes by `quipu:onViolation` exactly as
 /// `/episode` does. Before the fix, `/knot` validated the combined document
 /// whole, so an emit shape was a hard reject here (measured: an untraced
-/// Directive came back `conforms: false`, OrConstraintComponent, nothing
+/// Directive came back `conforms: false`, `OrConstraintComponent`, nothing
 /// written).
 #[cfg(feature = "shacl")]
 mod knot_on_violation {
@@ -4752,7 +4752,7 @@ mod knot_on_violation {
         aegis:knot-untraced-rule a aegis:Directive ; rdfs:label \"knot untraced\" ; rdfs:comment \"x\" .";
 
     fn store_with(shapes: &str) -> Store {
-        let mut store = Store::open_in_memory().unwrap();
+        let store = Store::open_in_memory().unwrap();
         store
             .load_shapes("aegis-ontology", shapes, "2026-10-01T00:00:00Z")
             .unwrap();
