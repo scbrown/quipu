@@ -345,10 +345,12 @@ COMMANDS:
                                                                      REPLACES the store with a --full pack, binary or text
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
+    quipu share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     quipu attest list [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
+    quipu import ... [--query-namespace NS] [--replace-queries]   carried queries land as NS/<name>; collisions are reported
     quipu import delta <parent-share> <delta-share> [--actor <id>]
     quipu compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
