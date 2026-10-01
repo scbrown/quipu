@@ -152,6 +152,10 @@ pub struct PromoteImportResult {
     pub triples: usize,
     /// Snapshot facts withheld because ROOT has a local retraction for them.
     pub suppressed_retractions: usize,
+    /// The stored queries the import held, installed now (aegis-9ofqqs);
+    /// absent when the share carried none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queries: Option<crate::share_queries::QueryImport>,
 }
 
 fn hash_suffix(value: &str) -> Result<&str> {
@@ -488,7 +492,13 @@ pub fn import_share(
         )?;
         if quarantined { "quarantined" } else { "staged" }
     };
-    let queries = crate::share_queries::settle(store, queries, quarantined, timestamp)?;
+    let queries = crate::share_queries::settle(
+        store,
+        &request.manifest.share_id,
+        queries,
+        quarantined,
+        timestamp,
+    )?;
     observation.outcome(outcome);
     Ok(ShareImportResult {
         outcome: outcome.into(),
@@ -549,6 +559,9 @@ pub fn promote_import(
             request.actor.as_deref(),
         ),
     )?;
+    // AFTER the data: if installing fails, the hold survives and promoting
+    // again retries it.
+    let queries = crate::share_queries::release(store, &request.share_id, timestamp)?;
     Ok(PromoteImportResult {
         outcome: "promoted".into(),
         share_id: request.share_id.clone(),
@@ -556,6 +569,7 @@ pub fn promote_import(
         tx_id,
         triples: count,
         suppressed_retractions: suppressed,
+        queries,
     })
 }
 

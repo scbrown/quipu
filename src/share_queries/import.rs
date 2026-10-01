@@ -50,6 +50,10 @@ pub struct QueryImport {
     pub collisions: Vec<QueryCollision>,
     /// Queries withheld from the registry with the quarantined pack.
     pub quarantined: Vec<QueryQuarantine>,
+    /// Pack-scoped names held with a staged import; `import promote` installs
+    /// them (aegis-9ofqqs). Nothing under these names is registered yet.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub awaiting_promotion: Vec<String>,
 }
 
 /// The default registry namespace for a share: stable across a producer's
@@ -180,10 +184,12 @@ pub fn verify_member(manifest: &crate::share::ShareManifest, member: Option<&str
 /// A share's queries, parsed and vetted before anything is staged.
 #[derive(Debug)]
 pub struct Pending {
-    queries: Vec<SharedQuery>,
+    pub(super) queries: Vec<SharedQuery>,
     held: Vec<QueryQuarantine>,
-    namespace: String,
-    replace: bool,
+    pub(super) namespace: String,
+    pub(super) replace: bool,
+    member: String,
+    store_id: String,
 }
 
 impl Pending {
@@ -230,15 +236,43 @@ pub fn prepare(
         held,
         namespace,
         replace,
+        member: member.to_string(),
+        store_id: store_id.to_string(),
     }))
 }
 
-/// Install a prepared member, or hold all of it back with a quarantined pack.
+/// Every query of `pending`, reported as withheld: the off-vocabulary ones
+/// with the classes they target, the rest with none.
+pub(super) fn withheld(pending: Pending) -> QueryImport {
+    let mut held = pending.held;
+    for q in &pending.queries {
+        if !held.iter().any(|h| h.name == q.query.name) {
+            held.push(QueryQuarantine {
+                name: q.query.name.clone(),
+                off_vocabulary: Vec::new(),
+            });
+        }
+    }
+    held.sort_by(|a, b| a.name.cmp(&b.name));
+    QueryImport {
+        namespace: pending.namespace,
+        quarantined: held,
+        ..QueryImport::default()
+    }
+}
+
+/// Settle a prepared member at import. INSTALLS NOTHING (aegis-9ofqqs).
+///
+/// A quarantined pack's queries are reported as withheld and not kept: such a
+/// pack cannot be promoted, and a fixed pack is re-imported. A staged pack's
+/// queries are held under its share id and installed by `import promote`
+/// ([`super::pending::release`]), behind the same human gate as its data.
 ///
 /// # Errors
 /// Store errors.
 pub fn settle(
     store: &Store,
+    share_id: &str,
     pending: Option<Pending>,
     quarantined: bool,
     timestamp: &str,
@@ -247,28 +281,26 @@ pub fn settle(
         return Ok(None);
     };
     if quarantined {
-        let mut held = pending.held;
-        for q in &pending.queries {
-            if !held.iter().any(|h| h.name == q.query.name) {
-                held.push(QueryQuarantine {
-                    name: q.query.name.clone(),
-                    off_vocabulary: Vec::new(),
-                });
-            }
-        }
-        held.sort_by(|a, b| a.name.cmp(&b.name));
-        return Ok(Some(QueryImport {
-            namespace: pending.namespace,
-            quarantined: held,
-            ..QueryImport::default()
-        }));
+        return Ok(Some(withheld(pending)));
     }
-    install(
+    super::pending::hold(
         store,
-        &pending.queries,
+        share_id,
+        &pending.member,
+        &pending.store_id,
         &pending.namespace,
         pending.replace,
         timestamp,
-    )
-    .map(Some)
+    )?;
+    let mut awaiting: Vec<String> = pending
+        .queries
+        .iter()
+        .map(|q| format!("{}/{}", pending.namespace, q.query.name))
+        .collect();
+    awaiting.sort();
+    Ok(Some(QueryImport {
+        namespace: pending.namespace,
+        awaiting_promotion: awaiting,
+        ..QueryImport::default()
+    }))
 }
