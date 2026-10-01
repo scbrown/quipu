@@ -122,6 +122,25 @@ fn opts() -> ShareOptions {
     ShareOptions::default()
 }
 
+/// Import, then promote: stored queries are installed only by the promotion
+/// (aegis-9ofqqs). Returns what the promotion did with them.
+fn land(store: &mut Store, request: &ShareImportRequest, ts: &str) -> QueryImport {
+    let staged = import_share(store, request, ts, None).unwrap();
+    assert!(
+        matches!(staged.outcome.as_str(), "staged" | "unchanged"),
+        "{:?}",
+        staged.promotion
+    );
+    let request = PromoteImportRequest {
+        share_id: staged.share_id,
+        actor: None,
+    };
+    promote_import(store, &request, ts, None)
+        .unwrap()
+        .queries
+        .unwrap()
+}
+
 /// The merge with main put two independent `manifest.ttl` additions side by
 /// side: `merge_parents` (`prov:wasDerivedFrom` on the dataset) and the queries
 /// distribution. A merge share that ALSO carries queries must render both, as
@@ -419,8 +438,7 @@ fn import_namespaces_by_pack_and_reports_collisions() {
         .query_load(&squatter, "2026-09-01T00:00:00Z")
         .unwrap();
 
-    let result = import_share(&mut target, &read(&dir, "demo"), "2026-09-02", None).unwrap();
-    let report = result.queries.unwrap();
+    let report = land(&mut target, &read(&dir, "demo"), "2026-09-02");
     assert_eq!(report.namespace, "demo");
     assert_eq!(
         report.installed,
@@ -435,8 +453,7 @@ fn import_namespaces_by_pack_and_reports_collisions() {
     );
 
     // Idempotent: a second import of the same share changes nothing.
-    let again = import_share(&mut target, &read(&dir, "demo"), "2026-09-03", None).unwrap();
-    let again = again.queries.unwrap();
+    let again = land(&mut target, &read(&dir, "demo"), "2026-09-03");
     assert!(again.installed.is_empty());
     assert_eq!(again.unchanged.len(), 3);
 
@@ -485,6 +502,7 @@ fn a_query_whose_vocabulary_the_receiver_lacks_is_quarantined_with_the_pack() {
         .unwrap();
     assert_eq!(held.off_vocabulary, vec![format!("{EX}Widget")]);
     assert!(target.query_list().unwrap().is_empty());
+    assert_eq!(held_rows(&target), 0, "a quarantined pack holds nothing");
 }
 
 #[test]
@@ -507,14 +525,8 @@ fn import_runs_no_query() {
     let dir = write(&store, temp.path(), "s", &opts());
     let mut target = receiver();
     ingest(&mut target, DATA, "2026-09-01T00:00:01Z");
-    let result = import_share(&mut target, &read(&dir, "demo"), "2026-09-02", None).unwrap();
-    assert!(
-        result
-            .queries
-            .unwrap()
-            .installed
-            .contains(&"demo/bomb".to_string())
-    );
+    let report = land(&mut target, &read(&dir, "demo"), "2026-09-02");
+    assert!(report.installed.contains(&"demo/bomb".to_string()));
     assert!(ask(&target, "demo/bomb", &serde_json::json!({})).is_err());
 }
 
@@ -571,8 +583,8 @@ fn a_delta_adds_replaces_and_removes_queries() {
     let store = producer();
     let parent = write(&store, temp.path(), "parent", &opts());
     let mut target = receiver();
-    let first = import_share(&mut target, &read(&parent, "demo"), "2026-09-02", None).unwrap();
-    assert_eq!(first.queries.unwrap().installed.len(), 4);
+    let first = land(&mut target, &read(&parent, "demo"), "2026-09-02");
+    assert_eq!(first.installed.len(), 4);
 
     let mut people = fixture_queries().remove(0);
     people.template.push_str(" LIMIT 2");
@@ -611,16 +623,14 @@ fn a_delta_adds_replaces_and_removes_queries() {
     assert!(names["people"].ends_with("LIMIT 2"));
 
     // Without replace: nothing is overwritten or closed, all of it reported.
-    let cautious = import_share(&mut target, &request, "2026-09-03", None).unwrap();
-    let cautious = cautious.queries.unwrap();
+    let cautious = land(&mut target, &request, "2026-09-03");
     assert_eq!(cautious.installed, vec!["demo/teams"]);
     assert_eq!(cautious.collisions[0].local, "demo/people");
     assert_eq!(cautious.stale, vec!["demo/has-team"]);
 
     // With replace: the namespace follows the pack.
     request.replace_queries = true;
-    let synced = import_share(&mut target, &request, "2026-09-04", None).unwrap();
-    let synced = synced.queries.unwrap();
+    let synced = land(&mut target, &request, "2026-09-04");
     assert_eq!(synced.replaced, vec!["demo/people"]);
     assert_eq!(synced.removed, vec!["demo/has-team"]);
     assert!(target.query_get("demo/has-team").unwrap().is_none());
@@ -659,4 +669,129 @@ fn an_undeclared_or_missing_member_refuses() {
     let mut extra = read(&none, "demo");
     extra.queries_turtle = Some(String::new());
     assert!(crate::share_import::verify_share(&extra).is_err());
+}
+
+fn held_rows(store: &Store) -> i64 {
+    store
+        .conn
+        .query_row("SELECT COUNT(*) FROM pending_share_queries", [], |r| {
+            r.get(0)
+        })
+        .unwrap()
+}
+
+/// aegis-9ofqqs: a staged import's queries wait behind the same human gate as
+/// its data. Before promotion nothing is registered; promotion installs them.
+#[test]
+fn a_staged_import_installs_its_queries_only_on_promote() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = write(&producer(), temp.path(), "s", &opts());
+    let mut target = receiver();
+    ingest(&mut target, DATA, "2026-09-01T00:00:01Z");
+    let staged = import_share(&mut target, &read(&dir, "demo"), "2026-09-02", None).unwrap();
+    assert_eq!(staged.outcome, "staged", "{:?}", staged.promotion);
+    let report = staged.queries.unwrap();
+    assert!(report.installed.is_empty(), "{report:?}");
+    assert_eq!(
+        report.awaiting_promotion,
+        vec![
+            "demo/has-team",
+            "demo/members-of",
+            "demo/named",
+            "demo/people"
+        ]
+    );
+    // CONTROL: the import, never promoted, registered nothing.
+    assert!(target.query_list().unwrap().is_empty());
+    let err = ask(&target, "demo/people", &serde_json::json!({})).unwrap_err();
+    assert!(err.to_string().contains("demo/people"), "{err}");
+    assert_eq!(held_rows(&target), 1);
+
+    let promoted = promote_import(
+        &mut target,
+        &PromoteImportRequest {
+            share_id: staged.share_id,
+            actor: None,
+        },
+        "2026-09-02T00:00:01Z",
+        None,
+    )
+    .unwrap();
+    let installed = promoted.queries.unwrap();
+    assert_eq!(installed.installed.len(), 4, "{installed:?}");
+    assert!(installed.awaiting_promotion.is_empty());
+    assert_eq!(
+        ask(&target, "demo/people", &serde_json::json!({})).unwrap()["count"],
+        3
+    );
+    assert_eq!(held_rows(&target), 0, "the hold is dropped once installed");
+}
+
+/// A same-name local query registered between import and promote is reported
+/// as a collision at promote, never overwritten.
+#[test]
+fn a_collision_made_after_import_is_reported_at_promote() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = write(&producer(), temp.path(), "s", &opts());
+    let mut target = receiver();
+    let staged = import_share(&mut target, &read(&dir, "demo"), "2026-09-02", None).unwrap();
+    assert!(staged.queries.unwrap().collisions.is_empty());
+    let local = q("demo/people", "SELECT ?x WHERE { ?x ?y ?z }", vec![]);
+    target.query_load(&local, "2026-09-02T00:00:00Z").unwrap();
+    let report = promote_import(
+        &mut target,
+        &PromoteImportRequest {
+            share_id: staged.share_id,
+            actor: None,
+        },
+        "2026-09-02T00:00:01Z",
+        None,
+    )
+    .unwrap()
+    .queries
+    .unwrap();
+    assert_eq!(report.collisions.len(), 1, "{report:?}");
+    assert_eq!(report.collisions[0].local, "demo/people");
+    assert_eq!(report.installed.len(), 3);
+    assert_eq!(target.query_get("demo/people").unwrap().unwrap(), local);
+}
+
+/// Promotion re-vets against the vocabulary as it is THEN. Withdrawn shapes
+/// hold every query back and keep the hold; reloading them and promoting
+/// again installs.
+#[test]
+fn promote_re_vets_the_vocabulary_and_keeps_the_hold_when_it_fails() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = write(&producer(), temp.path(), "s", &opts());
+    let mut target = receiver();
+    let staged = import_share(&mut target, &read(&dir, "demo"), "2026-09-02", None).unwrap();
+    assert_eq!(staged.outcome, "staged");
+    assert!(target.remove_shapes("people").unwrap());
+    let request = PromoteImportRequest {
+        share_id: staged.share_id,
+        actor: None,
+    };
+    let held = promote_import(&mut target, &request, "2026-09-02T00:00:01Z", None)
+        .unwrap()
+        .queries
+        .unwrap();
+    assert!(held.installed.is_empty(), "{held:?}");
+    assert_eq!(held.quarantined.len(), 4);
+    assert!(
+        held.quarantined
+            .iter()
+            .any(|h| !h.off_vocabulary.is_empty())
+    );
+    assert!(target.query_list().unwrap().is_empty());
+    assert_eq!(held_rows(&target), 1, "kept for the next promote");
+
+    target
+        .load_shapes("people", SHAPES, "2026-09-02T00:00:02Z")
+        .unwrap();
+    let again = promote_import(&mut target, &request, "2026-09-02T00:00:03Z", None)
+        .unwrap()
+        .queries
+        .unwrap();
+    assert_eq!(again.installed.len(), 4, "{again:?}");
+    assert_eq!(held_rows(&target), 0);
 }

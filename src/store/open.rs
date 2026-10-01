@@ -248,6 +248,7 @@ impl Store {
         Self::migrate_session_attestation(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
+        Self::migrate_pending_share_queries(&conn)?;
         Self::migrate_retraction_tx(&conn)?;
         // AFTER migrate_named_graphs: the fork registry references graphs(g).
         Self::migrate_forks(&conn)?;
