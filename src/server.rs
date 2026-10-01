@@ -697,5 +697,8 @@ async fn main() {
         });
     }
 
+    // Everything committed before this line is STARTUP in quipu_write_facts_total
+    // (aegis-gwkd76): the work every restart repeats.
+    quipu::write_kind::set_serving();
     quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
 }
