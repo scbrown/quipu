@@ -217,7 +217,17 @@ fn real_imports_and_verifier_failures_increment_exactly_once() {
     let env = envelope(&key, &binding, &payload);
     assert!(registry.verify(&env, &payload, NOW, 30).is_err());
     assert_eq!(verification("write", "unbound"), 1);
-    registry.register(binding.clone()).unwrap();
+    // A binding registered for shares only is refused in the write domain as
+    // SCOPE, before its signature is checked (aegis-bys8d1), and spends nothing.
+    let share_only = BindingRegistry::default();
+    share_only.register(binding.clone()).unwrap();
+    assert!(share_only.verify(&env, &payload, NOW, 30).is_err());
+    assert_eq!(verification("write", "scope"), 1);
+    assert_eq!(verification("write", "badsig"), 0);
+    // The write-domain refusals below need a binding granted write.
+    let mut writer = binding.clone();
+    writer.allow_write = true;
+    registry.register(writer).unwrap();
     let mut bad = env.clone();
     bad.signature = "00".repeat(64);
     assert!(registry.verify(&bad, &payload, NOW, 30).is_err());

@@ -497,6 +497,49 @@ aegis:attests a rdf:Property ;
     rdfs:domain aegis:VerifierRegistration ;
     rdfs:comment "What this registration vouches for — a compact policy id string or a governed subject IRI such as a workflow definition. Human-authored, and the root of trust: nothing in the automated path may mint one, or the chain verifies only against itself." .
 
+# ── Filesystem collections (aegis-1v555n) ─────────────────────────
+aegis:inExport a owl:ObjectProperty ;
+    rdfs:label "in export" ;
+    rdfs:comment "The NFS export a FileCollection was crawled from. The collection's relativePath is relative to that export's root, so the pair locates it without touching the filesystem." .
+
+aegis:parentCollection a owl:ObjectProperty ;
+    rdfs:label "parent collection" ;
+    rdfs:comment "The enclosing FileCollection, e.g. a season's show or an album's artist. Its counts and extensions include this collection's, because every aggregate covers the whole subtree." .
+
+aegis:relativePath a owl:DatatypeProperty ;
+    rdfs:label "relative path" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Path of a FileCollection relative to its export's root, with no leading slash. Stable across re-crawls, so it keys the collection's identity together with the export." .
+
+aegis:fileCount a owl:DatatypeProperty ;
+    rdfs:label "file count" ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Number of regular files in the collection's whole subtree at the time of the crawl. Symlinks are not followed, so a link to elsewhere is not double counted." .
+
+aegis:byteCount a owl:DatatypeProperty ;
+    rdfs:label "byte count" ;
+    rdfs:range xsd:integer ;
+    rdfs:comment "Total size in bytes of the regular files in the collection's subtree at crawl time (apparent size from stat, not blocks used on the pool)." .
+
+aegis:newestMtime a owl:DatatypeProperty ;
+    rdfs:label "newest mtime" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "The most recent modification time of any file in the subtree, as UTC YYYY-MM-DDTHH:MM:SSZ. Answers when a collection last changed without listing it." .
+
+aegis:hasExtension a owl:DatatypeProperty ;
+    rdfs:label "has extension" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A lower-cased file extension, with its leading dot, present anywhere in the collection's subtree. Multi-valued. It is what lets a query find the collection holding .z64 files without a crawl." .
+
+aegis:extensionCounts a owl:DatatypeProperty ;
+    rdfs:label "extension counts" ;
+    rdfs:range xsd:string ;
+    rdfs:comment "Compact histogram of the subtree's extensions, as .ext=count pairs separated by spaces, largest first. A summary for readers; hasExtension is the queryable form." .
+
+aegis:leadFor a owl:ObjectProperty ;
+    rdfs:label "lead for" ;
+    rdfs:comment "Pairs a review/design LEAD with the KEEPER whose domain it reviews, 1:1 from both ends. Not reports_to: it routes design and review work, not the stop-event tree (aegis-vj3uet). No rdfs:domain or rdfs:range on purpose: the roles are asserted with aegis:hasRole and checked by LeadForShape, so inference must not type anyone as a lead." .
+
 aegis:publicKey a owl:DatatypeProperty ;
     rdfs:label "public key" ;
     rdfs:domain aegis:VerifierRegistration ;

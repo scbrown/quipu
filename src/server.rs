@@ -3,8 +3,6 @@
 
 use std::sync::Arc;
 
-use parking_lot::FairMutex;
-
 use axum::{
     Router,
     http::StatusCode,
@@ -56,6 +54,8 @@ mod tests;
 mod tools;
 #[path = "server/update.rs"]
 mod update;
+#[path = "server/update_slice.rs"]
+mod update_slice;
 #[path = "server/wal_maintenance.rs"]
 mod wal_maintenance;
 
@@ -307,16 +307,10 @@ async fn main() {
     admission::init_read_admission_for_pool(read_pool.len());
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
 
-    let vector_reads_pooled = store.has_sqlite_vector_backend();
-    let state: SharedStore = Arc::new(StoreHandle {
-        graph_metrics: graph_metrics::GraphMetrics::new(&db_path),
-        writer: FairMutex::new(store),
-        readers: read_pool,
-        vector_reads_pooled,
-        federation: config.federation.clone(),
-        #[cfg(feature = "reactive-reasoner")]
-        reasoner: reactive_reasoner,
-    });
+    let handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    #[cfg(feature = "reactive-reasoner")]
+    let handle = handle.with_reasoner(reactive_reasoner);
+    let state: SharedStore = Arc::new(handle);
     let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
@@ -373,6 +367,7 @@ async fn main() {
         }
     }
 
+    let attest_store = state.clone();
     let app = Router::new()
         .merge(assets::routes())
         // Core API
@@ -469,9 +464,15 @@ async fn main() {
         .layer(axum::middleware::from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_policy = auth_policy.clone();
+                let attest_store = attest_store.clone();
                 async move {
                     let path = req.uri().path().to_string();
                     let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
+                    // A signed write authenticates by attestation, never by a
+                    // bearer on the same request (aegis-bys8d1).
+                    if is_write && !read_only && req.headers().contains_key(auth::write_attest::HEADER) {
+                        return auth::write_attest::handle(attest_store, req, next).await;
+                    }
                     let auth_header = req
                         .headers()
                         .get(axum::http::header::AUTHORIZATION)

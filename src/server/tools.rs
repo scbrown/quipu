@@ -119,6 +119,9 @@ macro_rules! rw_handler {
                 // finish_deferred_embed.
                 let (out, work) = {
                     let mut st = s.lock();
+                    // A refused signed write stops here, before a tool that
+                    // mutates outside a transaction can act (aegis-bys8d1).
+                    quipu::transaction_auth::refuse_if_refused()?;
                     let out = $tool(&mut st, &i)?;
                     (out, st.take_deferred_embed())
                 };
@@ -162,8 +165,9 @@ macro_rules! embed_handler {
                 let mut i = i;
                 if i.get("embedding").is_none() {
                     if let Some(text) = i.get("query").and_then(|v| v.as_str()).map(str::to_owned) {
-                        // Brief lock: clone the Arc provider, then DROP the guard.
-                        let provider = { s.lock().embedding_provider() };
+                        // The handle's startup copy: never the writer lock, which a
+                        // long write can hold for minutes (aegis-hzh9rz).
+                        let provider = s.embedding_provider.clone();
                         if let Some(provider) = provider {
                             let vec = provider.embed_text(&text)?; // CPU work, LOCK-FREE
                             if let Some(obj) = i.as_object_mut() {

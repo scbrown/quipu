@@ -66,6 +66,7 @@ aegis:DockerImage rdfs:subClassOf obo:BFO_0000002 .
 aegis:Document rdfs:subClassOf obo:BFO_0000002 .
 aegis:FamilyMember rdfs:subClassOf obo:BFO_0000002 .
 aegis:Feature rdfs:subClassOf obo:BFO_0000002 .
+aegis:FileCollection rdfs:subClassOf obo:BFO_0000002 .
 aegis:Formula rdfs:subClassOf obo:BFO_0000002 .
 aegis:GitCommit rdfs:subClassOf obo:BFO_0000002 .
 aegis:GitRepo rdfs:subClassOf obo:BFO_0000002 .
