@@ -411,6 +411,94 @@ when that test was written, `--help` documented `share`, `status`, `merge` and
 `unpack` but **not `import`**, so a page-versus-help check would have passed while
 the verb that receives a share stayed undiscoverable.
 
+## `quipu share diff` — what changed between two packs
+
+```text
+quipu share diff <old> <new> [--format text|markdown|json]
+```
+
+Each side is a pack directory (the standard artifact's `payload.nq`, else a
+legacy share's `export.nt`) or a single N-Triples/N-Quads file. Like the Git
+transport commands below, it reads files only and opens no store.
+
+The diff compares **facts**, not lines, and groups them by subject entity:
+
+```text
+~ Alice (people/alice)
+  ~ age: "30"^^xsd:integer -> "31"^^xsd:integer
+  - nickname: "Al"
++ Carol (people/carol)
+  + rdfs:label: "Carol"
+  + role: "designer"
+2 entities: 1 changed, 2 added, 1 removed facts
+```
+
+That is the whole output for the fixture pair in `tests/fixtures/share-diff/`,
+whose raw line diff is 11 lines of full IRIs and blank-node labels: Alice's
+address is a blank node that RDFC relabelled (`_:b0` to `_:c14n7`) without any
+change to its content, and it contributes nothing.
+
+- An entity is shown by its `rdfs:label` with a compact name beside it; an
+  unlabelled IRI is shown compactly (`prefix:local` for well-known vocabularies,
+  otherwise its last two path segments). Predicates show their label or local
+  name. When two distinct predicates under one entity would show the same name
+  (`ex:name` and `schema:name` both labelled "name", or two IRIs ending
+  `/name`), each carries its compact IRI — `name (ex/name)`,
+  `name (schema:name)` — or its full IRI if even those collide. Compaction
+  depends only on the IRI, never on the data, so both sides of a diff name
+  things the same way.
+- `~ predicate: old -> new` is reported only when the slot (subject, predicate,
+  graph) holds exactly one value on **both** sides. A multi-valued slot shows
+  its removed and added values separately.
+- **Blank nodes are matched by structure, not label.** RDFC-1.0 can relabel
+  every blank node between two versions of a payload; a pure relabel is zero
+  lines. A blank node referenced from another node is shown inline
+  (`[ city "Paris" ; zip "75001" ]`) as part of the referencing fact, so an edit
+  inside it is a change of that fact. Structurally identical blank nodes on
+  one slot are one fact with a count: cardinality matters to shapes
+  (`sh:maxCount`), so adding a second copy is shown as
+  `~ p: [ r "v" ] x1 -> [ r "v" ] x2`, and the textconv marks a fact asserted
+  more than once with `xN`. Limits: identical values nested inside an inlined
+  blank node still collapse; a blank node referenced only from inside a
+  blank-node cycle has no named root and is not shown; a blank *graph name*
+  is keyed by its label.
+- `--format markdown` suits a PR comment; `--format json` is the same
+  structure (`entities[].changed/added/removed`, plus totals) for tools.
+
+## `quipu diff-textconv` — readable `git diff` for pack files
+
+```text
+quipu diff-textconv <file>
+```
+
+Prints one payload file as stable, labelled, entity-grouped text: one header
+per entity (sorted by IRI, so a relabel never reorders the file), one
+`predicate: value` line per fact, blank nodes inline. Git's `textconv` runs it
+on both sides of a diff, so an ordinary `git diff`, `git log -p` or `git show`
+reads like this instead of two lines of full IRIs:
+
+```diff
+@@ -1,5 +1,5 @@
+ AAA Tracking (ability/aaa-tracking)
+-  abbrev: "AAA"
++  abbrev: "AAA CHANGED"
+   effectText: "x2 vs. air attacks"
+```
+
+Setup, once per clone (the attribute is already in this repository's
+`.gitattributes`; add it to your own):
+
+```bash
+printf '*.nt diff=quipu\n*.nq diff=quipu\n' >> .gitattributes
+git config diff.quipu.textconv "quipu diff-textconv"
+```
+
+Without the `git config` line the attribute is inert and Git diffs raw lines.
+`git diff --no-textconv` shows the raw form on demand. A file that does not
+parse (a working copy with merge conflict markers, say) is printed unchanged,
+so `git diff` never fails on it. Textconv affects display only: merges, hashes
+and `pendant-check` still operate on the canonical bytes.
+
 ## Git transport: driver, decisions, and CI
 
 These commands operate on repository files and immutable Git snapshots. They do
