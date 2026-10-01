@@ -122,8 +122,8 @@ fn opts() -> ShareOptions {
     ShareOptions::default()
 }
 
-/// The merge with main put two independent manifest.ttl additions side by
-/// side: merge_parents (prov:wasDerivedFrom on the dataset) and the queries
+/// The merge with main put two independent `manifest.ttl` additions side by
+/// side: `merge_parents` (`prov:wasDerivedFrom` on the dataset) and the queries
 /// distribution. A merge share that ALSO carries queries must render both, as
 /// Turtle that parses, without either displacing the other.
 #[test]
