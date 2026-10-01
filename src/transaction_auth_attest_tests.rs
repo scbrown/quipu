@@ -287,6 +287,7 @@ fn the_http_precheck_refuses_a_share_only_key_as_scope_and_admits_a_granted_one(
         path: "/knot",
         content_type: "application/json",
         body_sha256: &"0".repeat(64),
+        audience: None,
     };
     let mut envelope = AttestationEnvelope {
         version: WRITE_V1.into(),
@@ -296,6 +297,7 @@ fn the_http_precheck_refuses_a_share_only_key_as_scope_and_admits_a_granted_one(
         issued_at_epoch: now,
         nonce: NONCE.into(),
         signature: String::new(),
+        audience: None,
     };
     envelope.signature = hex::encode(
         key.sign(&canonical_message(
