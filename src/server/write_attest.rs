@@ -26,7 +26,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
 use quipu::session_attestation::{
-    ATTESTATION_SKEW_SECS, AttestationEnvelope, Refusal, SignedBinding, WriteBinding,
+    ATTESTATION_SKEW_SECS, AttestationEnvelope, Refusal, SignedBinding, WRITE_V2, WriteBinding,
 };
 use quipu::transaction_auth::{AttestState, AttestationSlot, Identity, PendingAttestation};
 
@@ -137,11 +137,22 @@ async fn verify(store: &SharedStore, req: axum::extract::Request) -> Result<Veri
         let (method, path, content_type) = (method.clone(), path.clone(), content_type.clone());
         tokio::task::spawn_blocking(move || {
             let reader = store.read();
+            // v2 signs THIS store's id. Taken from the store, never from the
+            // envelope: the envelope's claim is only compared against it.
+            let audience = if envelope.version == WRITE_V2 {
+                Some(reader.store_id().map_err(|e| Refusal {
+                    verdict: "error",
+                    message: format!("this store's id could not be read: {e}"),
+                })?)
+            } else {
+                None
+            };
             let write = WriteBinding {
                 method: &method,
                 path: &path,
                 content_type: &content_type,
                 body_sha256: &body_sha256,
+                audience: audience.as_deref(),
             };
             let principal = quipu::session_attestation::check_binding_deferred(
                 &*reader,
