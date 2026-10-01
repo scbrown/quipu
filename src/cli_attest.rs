@@ -42,11 +42,18 @@ pub fn cmd_attest(args: &[String], db_path: &str) {
     match args.get(2).map(String::as_str) {
         Some("register") => register(args, db_path),
         Some("list") => list(db_path),
+        Some(verb @ ("allow-write" | "deny-write")) => {
+            set_write(args, db_path, verb == "allow-write");
+        }
         _ => {
             eprintln!(
                 "quipu attest register --agent A --session S --public-key HEX \\
-                 --introducer I --issued-at EPOCH --expires-at EPOCH [--db PATH]\n\
+                 --introducer I --issued-at EPOCH --expires-at EPOCH [--allow-write] [--db PATH]\n\
+                 quipu attest allow-write|deny-write <SESSION> [--db PATH]\n\
                  quipu attest list [--db PATH]\n\n\
+                 A binding is SHARE-ONLY unless granted write: --allow-write at\n\
+                 registration, or allow-write later. Only then may its key sign\n\
+                 HTTP writes to /knot, /update, /episode (aegis-bys8d1).\n\n\
                  Registers a producer session binding OUT OF BAND, which is what a\n\
                  share import needs to reach tier=attested. Do NOT populate this from\n\
                  a share you are importing: a key that vouches for the bundle it\n\
@@ -66,7 +73,7 @@ fn register(args: &[String], db_path: &str) {
         eprintln!("--expires-at must be seconds since the epoch");
         std::process::exit(2);
     });
-    let binding = match SessionBinding::new(
+    let mut binding = match SessionBinding::new(
         need(args, "--agent"),
         need(args, "--session"),
         need(args, "--public-key"),
@@ -80,6 +87,7 @@ fn register(args: &[String], db_path: &str) {
             std::process::exit(1);
         }
     };
+    binding.allow_write = args.iter().any(|a| a == "--allow-write");
     let store = crate::cli_open::open_store(db_path);
     match store.attestation_register(&binding) {
         Ok(()) => {
@@ -91,6 +99,28 @@ fn register(args: &[String], db_path: &str) {
         }
         Err(e) => {
             eprintln!("register failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn set_write(args: &[String], db_path: &str, allow: bool) {
+    let Some(session) = args.get(3).filter(|a| !a.starts_with("--")) else {
+        eprintln!("usage: quipu attest allow-write|deny-write <SESSION> [--db PATH]");
+        std::process::exit(2);
+    };
+    let store = crate::cli_open::open_store(db_path);
+    match store.attestation_set_write(session, allow) {
+        Ok(()) => println!(
+            "session {session}: write {}",
+            if allow {
+                "GRANTED"
+            } else {
+                "withdrawn (share-only)"
+            }
+        ),
+        Err(e) => {
+            eprintln!("{e}");
             std::process::exit(1);
         }
     }
