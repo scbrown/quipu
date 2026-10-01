@@ -359,3 +359,31 @@ fn an_unauthorized_registration_does_not_mask_an_authorizing_one() {
             .ends_with("zzz-second")
     );
 }
+
+/// aegis-9dpcta dual-read: a hardware registration whose class, verifier,
+/// attests and publicKey use the Quechua namespace is trusted exactly like a
+/// legacy one. signatureScheme and the webauthn terms have no published twin
+/// yet, so they stay legacy (`a:`) here, as they would in a real mixed store.
+#[test]
+fn a_quechua_namespace_registration_is_trusted_like_a_legacy_one() {
+    let auth = Authenticator::es256();
+    let mut store = enabled_store();
+    let legacy = webauthn_registration(&auth, "");
+    let quechua = legacy
+        .replace("a a:VerifierRegistration", "a q:VerifierRegistration")
+        .replace("a:verifier", "q:verifier")
+        .replace("a:attests", "q:attests")
+        .replace("a:publicKey", "q:publicKey");
+    assert_ne!(
+        legacy, quechua,
+        "control: the fixture really changed namespace"
+    );
+    ingest(
+        &mut store,
+        &format!("@prefix q: <https://scbrown.github.io/quechua/ns#> .\n{quechua}"),
+    )
+    .unwrap();
+    let v = webauthn_verdict(&auth, &Ceremony::for_message(MESSAGE));
+    let ok = tool_verdict_verify(&store, &v).unwrap();
+    assert_eq!(ok["trusted"], true, "{ok:#}");
+}

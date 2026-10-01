@@ -974,6 +974,13 @@ Search relationships/edges by natural-language query. Body: `query`, optional
 
 Graphiti-compatible node search (mirrors Graphiti's `search_nodes` shape).
 
+The optional `group_ids` filter matches direct group labels or episode provenance
+in ROOT. It recognizes the configured vocabulary, the legacy vocabulary, and
+`https://scbrown.github.io/quechua/ns#groupId`; unrelated predicates with the same
+local name do not match. This is a provenance filter, not an access boundary.
+Results include distinct `group_ids` and retain scalar `group_id` when exactly
+one group is known. Property keys use the local name for both slash and hash IRIs.
+
 ### `POST /episodes/complete`
 
 Graphiti-compatible flat episode ingestion. Body: `name`, optional
