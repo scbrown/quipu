@@ -102,11 +102,27 @@ pub fn current_attestation() -> Option<Arc<PendingAttestation>> {
     IDENTITY.with(|slot| slot.borrow().as_ref().and_then(|i| i.attestation.0.clone()))
 }
 
+/// The wasm build has no attestation store (`store::attestation` and
+/// `session_attestation` are native only) and no server to receive a signed
+/// write, so a pending attestation cannot be settled there. Refuse rather than
+/// let a write proceed unsettled.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn settle_on(
+    _conn: &Connection,
+    _pending: &PendingAttestation,
+    _now: u64,
+) -> crate::Result<()> {
+    Err(crate::Error::InvalidValue(
+        "signed writes are not supported in the wasm build".into(),
+    ))
+}
+
 /// Re-check the binding and spend the nonce, once per request, on `conn`.
 ///
 /// Idempotent within a request: once `Spent` it returns `Ok`, once `Refused`
 /// it returns the same refusal. The binding is re-read on `conn`, so the check
 /// sees every revocation committed before this point.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn settle_on(
     conn: &Connection,
     pending: &PendingAttestation,
