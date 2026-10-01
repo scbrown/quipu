@@ -371,7 +371,7 @@ impl Store {
         Ok(Staged {
             tx_id,
             counts: StagedCounts {
-                inferred: staged_datums.len() - datums.len(),
+                inferred: staged_datums.len().saturating_sub(datums.len()),
                 asserted: written_asserts.len(),
                 retracted: written_retracts.len(),
                 superseded,
