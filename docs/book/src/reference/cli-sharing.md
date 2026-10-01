@@ -401,3 +401,117 @@ merely does not read as failure.
 when that test was written, `--help` documented `share`, `status`, `merge` and
 `unpack` but **not `import`**, so a page-versus-help check would have passed while
 the verb that receives a share stayed undiscoverable.
+
+## Git transport: driver, decisions, and CI
+
+These commands operate on repository files and immutable Git snapshots. They do
+not open a Quipu store. Use a build with the `shacl` feature (the default).
+
+They shell out to the `git` executable found on `PATH` (the wrapper, the driver's
+snapshot reads, the shapes three-way merge, and `pendant-check` all do). If `git`
+cannot be found, the command exits 1 with `` `git` executable not found on PATH ``
+and writes nothing.
+
+```text
+quipu git-merge <ref>
+quipu merge-driver <base-file> <ours-file> <theirs-file> <path>
+quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
+quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
+```
+
+Version attributes for each share directory (adjust `qpack` to your layout):
+
+```gitattributes
+qpack/export.nt merge=quipu
+qpack/shapes.ttl merge=quipu
+qpack/manifest.json merge=quipu
+qpack/manifest.ttl merge=quipu
+```
+
+Start at the repository root with a clean index and worktree. Save the branch
+tips for later checks:
+
+```bash
+ours=$(git rev-parse HEAD)
+theirs=$(git rev-parse topic)
+base=$(git merge-base "$ours" "$theirs")
+quipu git-merge "$theirs"
+```
+
+`git-merge` supplies a command-local `merge.quipu.driver` definition and the
+three immutable commit IDs to its child Git process. Nothing is installed in
+global Git configuration. This context matters: Git does not promise to merge
+`shapes.ttl` before `export.nt`. The driver reads and merges shapes from the
+three commits first, rather than trusting whichever working file happens to
+exist. Directly invoking the low-level driver without context refuses.
+Overlapping shape edits refuse before the wrapper changes the worktree; resolve
+those edits on the branches first. Criss-cross bases and incompatible
+store/scope/destination/layout metadata also refuse.
+
+The graph operator is the same one used by store-level `quipu merge`. Functional
+conflicts retain the base value and create entries in `decisions.json`. No Git
+conflict markers are written to N-Triples. New entities from opposite branches
+with a common type are compared locally: whitespace-normalized, lowercase labels,
+Jaro-Winkler similarity at least 0.90, top five candidates per new entity.
+These are proposals, never automatic identity assertions. No paid model or
+network call is used. This baseline can miss aliases and can propose false
+matches; the decision belongs to the reviewer.
+
+Exit 2 means decisions or Git conflicts remain. Inspect the sidecar, then choose:
+
+```bash
+quipu pendant-resolve "$base" "$ours" "$theirs" qpack conflict:0 ours
+quipu pendant-resolve "$base" "$ours" "$theirs" qpack alias:0 reject
+```
+
+Conflict choices are `base`, `ours`, or `theirs`; alias choices are `accept`
+(add an explicit `owl:sameAs`) or `reject` (keep identities distinct). Resolution
+reconstructs the operator result from Git and refuses stale or altered proposal
+records. The last resolution must pass SHACL. It rewrites canonical `export.nt`,
+regenerates both manifests, drops old attestations and the optional derived
+`export.ttl`, and records `parent_share=ours` plus both IDs in `merge_parents`.
+Input `tx_anchor` and `created_at` remain the ours snapshot's metadata; a Git
+merge does not fabricate a store transaction. Each file is replaced atomically;
+the directory is not a multi-file transaction, so the hash gate must pass before
+use. Review and stage the complete directory, then commit:
+
+```bash
+git add qpack
+git commit
+quipu pendant-check "$base" "$ours" "$theirs" HEAD
+```
+
+The wrapper always stops before commit, including clean merges. It reconciles
+whole qpacks after Git because Git may skip individual drivers when one file is
+unchanged. Blank-node graphs currently refuse divergent merges: canonical blank
+labels are not stable identities across snapshots. Skolemize those nodes first.
+
+**CI is required even when local driver use is documented.** A clone with no
+driver definition, a forge merge button, or a rebase can fall back to text merge.
+The repository's SHACL test job runs `scripts/ci/pendant-merge-check.py` with full
+history and the PR's synthetic merge commit. It also replays two-parent merges introduced on the topic branch, then
+reconstructs base/ours/theirs,
+requires recorded resolutions, compares the committed graph, shapes and manifest
+with the operator result, and validates SHACL. A hand-rehashed unsafe result
+still fails. Push/nightly runs validate the committed packs too; a squash commit
+alone cannot reconstruct the original branch pair, so the PR check remains
+load-bearing. Keep the SHACL test check required in branch protection.
+
+**Known gap: an administrator bypasses the gate.** The replay that can actually
+fail is the PR check. On a `push` event the final replay is trivially
+`(base, ours, theirs) = (before, before, result)`: a fast-forward of the previous
+tip, so it re-validates the committed packs but cannot reconstruct a merge
+that happened elsewhere. This repository's `main` protection uses strict status
+checks, so a squash merge's tree equals the synthetic merge commit the PR check
+tested. It does **not** enforce protection for administrators, so an admin's
+direct push, or an admin merge that skips pending or failing checks, lands a
+qpack that no merge replay has verified. Treat an admin bypass as unverified and
+run `quipu pendant-check` on the original base/ours/theirs yourself, or enable
+"include administrators" if that gap is unacceptable.
+
+Measured on the repository's real Datalinks qpack, replacing the same functional
+value on both branches produces a **text conflict**, not a clean double. Git
+writes three marker lines into the RDF. Separate new IRIs with identical labels
+merge cleanly without an identity decision; disjoint additions merge cleanly and
+correctly. `tests/git_qpack_merge.rs` exercises those cases, decision resolution,
+and the driver-absent CI refusals using actual Git repositories.

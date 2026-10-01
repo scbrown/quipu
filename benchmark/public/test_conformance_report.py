@@ -345,6 +345,35 @@ class Sparql10Tests(unittest.TestCase):
                 REPORT.load(tmp / "results")
 
 
+class Sparql12Tests(unittest.TestCase):
+    """aegis-mhee08: SPARQL 1.2 runs what needs nothing new and enumerates the rest."""
+
+    def test_the_page_carries_the_sparql12_section(self):
+        page = REPORT.render_markdown(REPORT.load(RESULTS))
+        self.assertIn("## SPARQL 1.2 query tests", page)
+        self.assertIn("never run", page)
+
+    def _mutated(self, change):
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        shutil.copytree(RESULTS, tmp / "results")
+        path = tmp / "results" / "sparql12.json"
+        ledger = json.loads(path.read_text())
+        change(ledger)
+        path.write_text(json.dumps(ledger))
+        return tmp / "results"
+
+    def test_a_triple_term_case_scored_as_run_is_refused(self):
+        def run_one(ledger):
+            row = next(r for r in ledger["results"] if "triple-terms" in r["manifest"])
+            row["status"] = "passed"
+        with self.assertRaises(REPORT.LedgerError):
+            REPORT.load(self._mutated(run_one))
+
+    def test_a_short_sparql12_ledger_is_refused(self):
+        with self.assertRaises(REPORT.LedgerError):
+            REPORT.load(self._mutated(lambda ledger: ledger["results"].pop()))
+
+
 class RdfSyntaxTableTests(unittest.TestCase):
     """aegis-mhee08: RDF 1.1 scored, RDF 1.2 published as measured-not-supported."""
 
@@ -774,6 +803,72 @@ class ArmSeparationTest(unittest.TestCase):
                     ["git", "worktree", "remove", "--force", str(work)],
                     cwd=root, capture_output=True, check=False,
                 )
+
+
+class ReportStaleTest(unittest.TestCase):
+    """`--report-stale` turns a stale STAMP into a CI signal, not a red run.
+
+    aegis-qmrymu: 17 of 37 PR conformance runs in 13.5h failed on the
+    provenance arm alone, each cleared by a hand re-derive. With the flag a
+    stale stamp exits 0 and writes `stale=true`, which the workflow uses to
+    re-derive automatically. The three outcomes are asserted separately
+    because the flag must never turn "could not look" into "fresh".
+    """
+
+    def _run(self, root, output, *args, env_extra=None):
+        import os
+
+        env = dict(os.environ, GITHUB_OUTPUT=str(output))
+        env.pop("GITHUB_BASE_REF", None)
+        env.update(env_extra or {})
+        return subprocess.run(
+            [sys.executable, str(root / "benchmark/public/conformance_report.py"),
+             "--check", "--pr-base", "", "--arm", "provenance", *args],
+            cwd=root, capture_output=True, text=True, check=False, env=env,
+        )
+
+    def test_a_stale_stamp_is_reported_and_exits_zero(self):
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("::notice title=Ledger stamp is stale::", result.stdout)
+            self.assertEqual(output.read_text(), "stale=true\n")
+
+    def test_without_the_flag_a_stale_stamp_still_blocks(self):
+        # The control: the flag is the only thing that changes the exit code.
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertFalse(output.exists(), "no output is written without the flag")
+
+    def test_a_current_stamp_reports_not_stale(self):
+        with head_tree_fixture(stale=False) as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(output.read_text(), "stale=false\n")
+
+    def test_unverified_still_fails_and_claims_nothing(self):
+        # A checkout where the ledger's revision is absent is UNVERIFIED (2).
+        # Reporting it as "not stale" would let CI skip the re-derive on a
+        # check that never looked.
+        with head_tree_fixture() as work, tempfile.TemporaryDirectory() as tmp:
+            output = pathlib.Path(tmp) / "out"
+            for ledger_path in (work / "benchmark/public/results").glob("*.json"):
+                data = json.loads(ledger_path.read_text())
+                for key in data:
+                    if key.endswith("quipu_revision"):
+                        data[key] = "0" * 40
+                ledger_path.write_text(json.dumps(data))
+            subprocess.run(
+                [sys.executable, str(work / "benchmark/public/conformance_report.py")],
+                cwd=work, capture_output=True, text=True, check=True,
+            )
+            result = self._run(work, output, "--report-stale")
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertFalse(output.exists(), "UNVERIFIED must not write stale=false")
 
 
 class RemedyNamesEveryStepTest(unittest.TestCase):

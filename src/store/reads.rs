@@ -204,6 +204,49 @@ impl Store {
         Self::collect_visible_facts(&mut stmt, rusqlite::params_from_iter(values))
     }
 
+    /// Current facts with an attribute in `attributes` — and, when `entities`
+    /// is given, a subject in it — in EVERY graph, each paired with its graph id.
+    ///
+    /// The read `/update` builds its evaluation slice from (aegis-jm1lcl). One
+    /// `idx_aevt` probe replaces a per-graph loop, and unlike
+    /// [`Store::current_facts_for_attributes_and_entities_in_graphs`] it keeps
+    /// the graph: that reader de-duplicates on `(e, a, v)` across graphs, which
+    /// would merge the same triple held in two graphs. De-duplication here is
+    /// per graph, matching [`Store::current_facts_in_graph`]. Graph filtering is
+    /// the caller's (the meta-graph, for one, is not a dataset graph).
+    pub fn current_graph_facts_for_attributes(
+        &self,
+        attributes: &[i64],
+        entities: Option<&[i64]>,
+    ) -> Result<Vec<(i64, i64, i64, Value)>> {
+        if attributes.is_empty() || entities.is_some_and(<[i64]>::is_empty) {
+            return Ok(Vec::new());
+        }
+        let ph = |n: usize| std::iter::repeat_n("?", n).collect::<Vec<_>>().join(", ");
+        let mut sql = format!(
+            "SELECT g, e, a, v FROM facts INDEXED BY idx_aevt \
+             WHERE op = 1 AND valid_to IS NULL AND a IN ({})",
+            ph(attributes.len())
+        );
+        let mut values = attributes.to_vec();
+        if let Some(entities) = entities {
+            sql.push_str(&format!(" AND e IN ({})", ph(entities.len())));
+            values.extend_from_slice(entities);
+        }
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(values))?;
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            let (g, e, a): (i64, i64, i64) = (row.get(0)?, row.get(1)?, row.get(2)?);
+            let bytes: Vec<u8> = row.get(3)?;
+            if seen.insert((g, e, a, bytes.clone())) {
+                out.push((g, e, a, Value::from_bytes(&bytes)?));
+            }
+        }
+        Ok(out)
+    }
+
     /// Current facts whose SUBJECT is one of `entities`, across `graphs`.
     ///
     /// The de-duplication read semi-naive materialization needs (aegis-2dp8e2).

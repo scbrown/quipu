@@ -89,13 +89,18 @@ pub(crate) enum VerificationResult {
     Revoked,
     Unbound,
     Skew,
+    /// The session binding itself is expired or not yet valid. Distinct from
+    /// `Skew` (the caller's clock): the remedy is re-registration, not a clock.
+    Expired,
+    /// A valid binding used outside its grant: a share-only key signing a write.
+    Scope,
     Invalid,
     Error,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl VerificationResult {
-    const fn label(self) -> &'static str {
+    pub(crate) const fn label(self) -> &'static str {
         match self {
             Self::Ok => "ok",
             Self::Badsig => "badsig",
@@ -103,6 +108,8 @@ impl VerificationResult {
             Self::Revoked => "revoked",
             Self::Unbound => "unbound",
             Self::Skew => "skew",
+            Self::Expired => "expired",
+            Self::Scope => "scope",
             Self::Invalid => "invalid",
             Self::Error => "error",
         }

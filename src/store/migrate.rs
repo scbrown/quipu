@@ -390,7 +390,9 @@ impl Store {
                  issued_at_epoch  INTEGER NOT NULL,
                  expires_at_epoch INTEGER NOT NULL,
                  revoked          INTEGER NOT NULL DEFAULT 0
-                     CHECK (revoked IN (0, 1))
+                     CHECK (revoked IN (0, 1)),
+                 allow_write      INTEGER NOT NULL DEFAULT 0
+                     CHECK (allow_write IN (0, 1))
              );
              -- Keyed by (session, nonce) rather than nonce alone: a nonce is
              -- only ever meaningful against the session that minted it, and a
@@ -405,6 +407,18 @@ impl Store {
              CREATE INDEX IF NOT EXISTS idx_attestation_nonce_age
                  ON attestation_nonces(consumed_at_epoch);",
         )?;
+        // aegis-bys8d1: a binding may SIGN WRITES only when granted. Bindings
+        // registered before signed writes existed were registered to trust a
+        // share producer, so they read as share-only (0), never as write.
+        let has_scope = conn
+            .prepare("SELECT 1 FROM pragma_table_info('attestation_bindings') WHERE name = 'allow_write'")?
+            .exists([])?;
+        if !has_scope {
+            conn.execute_batch(
+                "ALTER TABLE attestation_bindings ADD COLUMN allow_write INTEGER NOT NULL DEFAULT 0 \
+                 CHECK (allow_write IN (0, 1));",
+            )?;
+        }
         Ok(())
     }
 
