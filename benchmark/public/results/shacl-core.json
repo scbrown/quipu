@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C SHACL Core conformance",
   "suite_revision": "9c863967bceaef1a87c24e4dd761eda763823120",
-  "quipu_revision": "6ee187f8ba560e82b50dd0c88ad4d8c6ebaf4d7f",
+  "quipu_revision": "73c552700092fd22bc7ed10b7da5a33f42038b6e",
   "runner_version": 1,
   "inventory_digest": "4e4893d94f93cb4497bcc9381c4892cbea74a493e60d0c9745bd0c6ae9fdb4ea",
   "classes": {
@@ -39,7 +39,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 4.999,
+      "duration_ms": 4.196,
       "observed": {
         "conforms": false,
         "violations": 4,
@@ -57,7 +57,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 30.679,
+      "duration_ms": 28.62,
       "observed": {
         "conforms": true,
         "violations": 0,
@@ -75,7 +75,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.585,
+      "duration_ms": 3.098,
       "observed": {
         "conforms": true,
         "violations": 0,
@@ -93,7 +93,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.3,
+      "duration_ms": 2.638,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -111,7 +111,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.284,
+      "duration_ms": 2.577,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -129,7 +129,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.307,
+      "duration_ms": 2.583,
       "observed": {
         "conforms": false,
         "violations": 0,
@@ -147,7 +147,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.343,
+      "duration_ms": 2.769,
       "observed": {
         "conforms": false,
         "violations": 0,
@@ -165,7 +165,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.636,
+      "duration_ms": 2.993,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -183,7 +183,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.516,
+      "duration_ms": 2.977,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -201,7 +201,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.29,
+      "duration_ms": 2.812,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -219,7 +219,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.207,
+      "duration_ms": 2.789,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -237,7 +237,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.566,
+      "duration_ms": 3.018,
       "observed": {
         "conforms": false,
         "violations": 5,
@@ -255,7 +255,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.304,
+      "duration_ms": 2.736,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -273,7 +273,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.186,
+      "duration_ms": 2.644,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -291,7 +291,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.331,
+      "duration_ms": 2.78,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -309,7 +309,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.299,
+      "duration_ms": 2.589,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -327,7 +327,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.108,
+      "duration_ms": 2.675,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -345,7 +345,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.222,
+      "duration_ms": 2.586,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -363,7 +363,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.274,
+      "duration_ms": 2.583,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -381,7 +381,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.35,
+      "duration_ms": 2.589,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -399,7 +399,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.389,
+      "duration_ms": 2.697,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -417,7 +417,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.563,
+      "duration_ms": 2.842,
       "observed": {
         "conforms": false,
         "violations": 6,
@@ -435,7 +435,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.326,
+      "duration_ms": 2.869,
       "observed": {
         "conforms": false,
         "violations": 4,
@@ -453,7 +453,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.536,
+      "duration_ms": 2.859,
       "observed": {
         "conforms": false,
         "violations": 5,
@@ -471,7 +471,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.499,
+      "duration_ms": 2.875,
       "observed": {
         "conforms": false,
         "violations": 6,
@@ -489,7 +489,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.071,
+      "duration_ms": 2.704,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -507,7 +507,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.236,
+      "duration_ms": 2.902,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -525,7 +525,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.31,
+      "duration_ms": 2.787,
       "observed": {
         "conforms": false,
         "violations": 4,
@@ -543,7 +543,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.379,
+      "duration_ms": 2.849,
       "observed": {
         "conforms": false,
         "violations": 4,
@@ -561,7 +561,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.186,
+      "duration_ms": 2.64,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -579,7 +579,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.046,
+      "duration_ms": 2.646,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -597,7 +597,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.205,
+      "duration_ms": 2.736,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -615,7 +615,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.144,
+      "duration_ms": 2.634,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -633,7 +633,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.561,
+      "duration_ms": 4.332,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -651,7 +651,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.404,
+      "duration_ms": 2.933,
       "observed": {
         "conforms": false,
         "violations": 4,
@@ -669,7 +669,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.114,
+      "duration_ms": 2.608,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -687,7 +687,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.501,
+      "duration_ms": 4.122,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -705,7 +705,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 2.879,
+      "duration_ms": 2.328,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -723,7 +723,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 2.821,
+      "duration_ms": 2.219,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -741,7 +741,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.446,
+      "duration_ms": 2.79,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -759,7 +759,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.547,
+      "duration_ms": 2.94,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -777,7 +777,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.305,
+      "duration_ms": 2.472,
       "observed": {
         "conforms": false,
         "violations": 4,
@@ -795,7 +795,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.749,
+      "duration_ms": 2.985,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -813,7 +813,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 4.724,
+      "duration_ms": 2.593,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -831,7 +831,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.552,
+      "duration_ms": 2.718,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -849,7 +849,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.676,
+      "duration_ms": 2.759,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -867,7 +867,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.588,
+      "duration_ms": 2.738,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -885,7 +885,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.51,
+      "duration_ms": 2.678,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -903,7 +903,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.548,
+      "duration_ms": 2.618,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -921,7 +921,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.415,
+      "duration_ms": 2.581,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -939,7 +939,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.486,
+      "duration_ms": 2.597,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -957,7 +957,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 2.965,
+      "duration_ms": 2.234,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -975,7 +975,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.905,
+      "duration_ms": 3.081,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -993,7 +993,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.492,
+      "duration_ms": 2.899,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1011,7 +1011,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.631,
+      "duration_ms": 2.889,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1029,7 +1029,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.394,
+      "duration_ms": 2.782,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1047,7 +1047,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.488,
+      "duration_ms": 2.893,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1065,7 +1065,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 2.961,
+      "duration_ms": 2.339,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -1083,7 +1083,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.466,
+      "duration_ms": 3.336,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1101,7 +1101,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.785,
+      "duration_ms": 3.064,
       "observed": {
         "conforms": false,
         "violations": 5,
@@ -1119,7 +1119,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.584,
+      "duration_ms": 2.927,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1137,7 +1137,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.547,
+      "duration_ms": 2.851,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1155,7 +1155,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.727,
+      "duration_ms": 3.054,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -1173,7 +1173,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.756,
+      "duration_ms": 3.146,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -1191,7 +1191,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.532,
+      "duration_ms": 2.833,
       "observed": {
         "conforms": false,
         "violations": 4,
@@ -1209,7 +1209,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.518,
+      "duration_ms": 3.053,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1227,7 +1227,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.415,
+      "duration_ms": 2.894,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1245,7 +1245,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.232,
+      "duration_ms": 2.776,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1263,7 +1263,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.443,
+      "duration_ms": 2.902,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -1281,7 +1281,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.37,
+      "duration_ms": 2.81,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1299,7 +1299,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.339,
+      "duration_ms": 2.684,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1317,7 +1317,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.304,
+      "duration_ms": 2.573,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1335,7 +1335,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.032,
+      "duration_ms": 2.525,
       "observed": {
         "conforms": true,
         "violations": 0,
@@ -1353,7 +1353,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.358,
+      "duration_ms": 2.748,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1371,7 +1371,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.298,
+      "duration_ms": 2.753,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1389,7 +1389,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.359,
+      "duration_ms": 2.738,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1407,7 +1407,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.993,
+      "duration_ms": 3.471,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1425,7 +1425,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.36,
+      "duration_ms": 2.873,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1443,7 +1443,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 6.018,
+      "duration_ms": 5.481,
       "observed": {
         "conforms": false,
         "violations": 27,
@@ -1461,7 +1461,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.24,
+      "duration_ms": 2.769,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1479,7 +1479,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.468,
+      "duration_ms": 2.9,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1497,7 +1497,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.793,
+      "duration_ms": 3.208,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -1515,7 +1515,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.377,
+      "duration_ms": 2.898,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1533,7 +1533,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.573,
+      "duration_ms": 2.735,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1551,7 +1551,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.549,
+      "duration_ms": 3.112,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1569,7 +1569,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.791,
+      "duration_ms": 3.18,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1587,7 +1587,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.577,
+      "duration_ms": 3.076,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1605,7 +1605,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.989,
+      "duration_ms": 3.355,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1623,7 +1623,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.448,
+      "duration_ms": 2.885,
       "observed": {
         "conforms": false,
         "violations": 3,
@@ -1641,7 +1641,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 2.792,
+      "duration_ms": 2.237,
       "observed": {
         "conforms": true,
         "violations": 0,
@@ -1659,7 +1659,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.202,
+      "duration_ms": 2.627,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1677,7 +1677,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.229,
+      "duration_ms": 2.651,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1695,7 +1695,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.025,
+      "duration_ms": 2.673,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1713,7 +1713,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.173,
+      "duration_ms": 2.674,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1731,7 +1731,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.215,
+      "duration_ms": 2.65,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1749,7 +1749,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.216,
+      "duration_ms": 2.591,
       "observed": {
         "conforms": false,
         "violations": 1,
@@ -1767,7 +1767,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 3.293,
+      "duration_ms": 2.761,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -1785,7 +1785,7 @@
       "quipu_code_path": "validate_shapes -> cached_validator -> Validator::from_turtle -> Validator::validate -> rudof Native",
       "status": "passed",
       "reason": "",
-      "duration_ms": 2.869,
+      "duration_ms": 2.329,
       "observed": {
         "conforms": false,
         "violations": 2,
@@ -2083,6 +2083,6 @@
     "runner": "python3 benchmark/public/shacl_core.py",
     "suite": "/tmp/data-shapes/data-shapes-test-suite/tests"
   },
-  "generated_at": "2026-10-01T05:41:12Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36820422196"
+  "generated_at": "2026-10-01T07:08:00Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36828060398"
 }
