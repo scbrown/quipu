@@ -4734,3 +4734,147 @@ fn test_verdict_verify_never_trusts_a_caller_supplied_instant() {
         "the what-if answer is still reported"
     );
 }
+
+/// aegis-4c3ppi: `/knot` routes stored shapes by `quipu:onViolation` exactly as
+/// `/episode` does. Before the fix, `/knot` validated the combined document
+/// whole, so an emit shape was a hard reject here (measured: an untraced
+/// Directive came back `conforms: false`, OrConstraintComponent, nothing
+/// written).
+#[cfg(feature = "shacl")]
+mod knot_on_violation {
+    use super::*;
+
+    const REAL: &str = include_str!("../../shapes/aegis-ontology.shapes.ttl");
+    const EMIT_LINE: &str =
+        "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n";
+    const UNTRACED: &str = "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+        aegis:knot-untraced-rule a aegis:Directive ; rdfs:label \"knot untraced\" ; rdfs:comment \"x\" .";
+
+    fn store_with(shapes: &str) -> Store {
+        let mut store = Store::open_in_memory().unwrap();
+        store
+            .load_shapes("aegis-ontology", shapes, "2026-10-01T00:00:00Z")
+            .unwrap();
+        store
+    }
+
+    fn knot(store: &mut Store, turtle: &str) -> JsonValue {
+        tool_knot(
+            store,
+            &serde_json::json!({
+                "turtle": turtle,
+                "timestamp": "2026-10-01T01:00:00Z",
+                "actor": "test",
+                "source": "unit-test"
+            }),
+        )
+        .unwrap()
+    }
+
+    fn traceability_events(store: &Store) -> Vec<crate::store::events::EventRow> {
+        store
+            .events_after(0, 1000, None, None)
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.event_type == "shacl.violation")
+            .filter(|e| e.payload.contains("DirectiveTraceabilityShape"))
+            .collect()
+    }
+
+    #[test]
+    fn emit_shape_violation_commits_and_emits_event() {
+        let mut store = store_with(REAL);
+        let result = knot(&mut store, UNTRACED);
+        assert_eq!(
+            result["conforms"], true,
+            "emit must not gate /knot: {result}"
+        );
+        let tx = result["tx_id"].as_i64().unwrap();
+        assert!(tx > 0, "write committed");
+        let evs = traceability_events(&store);
+        assert_eq!(evs.len(), 1, "exactly one traceability event");
+        assert_eq!(evs[0].tx_id, tx, "event rides the knot write's own tx");
+        let payload: serde_json::Value = serde_json::from_str(&evs[0].payload).unwrap();
+        assert_eq!(payload["mode"], "emit");
+    }
+
+    /// Mutation arm: the SAME real shape with its emit annotation removed is a
+    /// reject shape again, and /knot refuses the same write.
+    #[test]
+    fn without_emit_annotation_the_same_shape_rejects() {
+        assert!(
+            REAL.contains(EMIT_LINE),
+            "fixture drifted from the shapes file"
+        );
+        let mutated = REAL.replacen(
+            EMIT_LINE,
+            "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n",
+            1,
+        );
+        let mut store = store_with(&mutated);
+        let result = knot(&mut store, UNTRACED);
+        assert_eq!(
+            result["conforms"], false,
+            "reject shape must gate: {result}"
+        );
+        assert!(
+            traceability_events(&store).is_empty(),
+            "a refused write leaves no violation event"
+        );
+    }
+
+    /// Control: a reject-mode (unannotated) shape still gates /knot with emit
+    /// shapes loaded beside it.
+    #[test]
+    fn reject_shape_still_gates() {
+        let mut store = store_with(REAL);
+        let result = tool_knot(
+            &mut store,
+            &serde_json::json!({
+                "turtle": UNTRACED,
+                "shapes": "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
+                    aegis:KnotHardControlShape a sh:NodeShape ;\n    sh:targetClass aegis:Directive ;\n    \
+                    sh:property [ sh:path aegis:knotControlRequired ; sh:minCount 1 ] .\n",
+                "timestamp": "2026-10-01T01:00:00Z",
+                "actor": "test",
+                "source": "unit-test"
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            result["conforms"], false,
+            "reject shape must still gate: {result}"
+        );
+    }
+
+    /// Latency of the emit half on /knot (aegis-4c3ppi, malcolm's ask). Ignored;
+    /// run with `--release -- --ignored --nocapture knot_emit_latency`.
+    #[test]
+    #[ignore]
+    fn knot_emit_latency() {
+        let reject_only = crate::shacl::split_shapes_by_policy(REAL).reject;
+        for (label, shapes) in [
+            ("with emit half", REAL.to_string()),
+            ("reject half only", reject_only),
+        ] {
+            let mut store = store_with(&shapes);
+            let n = 300;
+            let mut ms: Vec<f64> = Vec::with_capacity(n);
+            for i in 0..n {
+                let turtle = UNTRACED.replace("knot-untraced-rule", &format!("lat-rule-{i}"));
+                let t0 = std::time::Instant::now();
+                let r = knot(&mut store, &turtle);
+                ms.push(t0.elapsed().as_secs_f64() * 1e3);
+                assert_eq!(r["conforms"], true);
+            }
+            ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            eprintln!(
+                "LATENCY {label}: n={n} p50={:.3}ms p95={:.3}ms max={:.3}ms",
+                ms[n / 2],
+                ms[n * 95 / 100],
+                ms[n - 1]
+            );
+        }
+    }
+}

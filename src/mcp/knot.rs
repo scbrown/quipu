@@ -163,11 +163,43 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     // Context is scoped to the RESOLVED DESTINATION graph unioned with ROOT
     // (quipu-080): earlier chunks of a plane-routed write typed their nodes in
     // that plane, not in ROOT.
+    //
+    // Routed by `quipu:onViolation` exactly as `/episode` routes (aegis-4c3ppi):
+    // the REJECT half gates the write; the EMIT half only observes, its
+    // violations riding this write's savepoint as `shacl.violation` events.
+    // Before this, `/knot` validated the combined document whole, so every
+    // emit-annotated shape was a hard reject on this path only.
     #[cfg(feature = "shacl")]
     if let Some(shapes) = &combined_shapes {
+        let split = crate::shacl::split_shapes_by_policy(shapes);
         let feedback = crate::shacl_context::validate_with_store_context_in_graph(
-            store, shapes, turtle, graph,
+            store,
+            &split.reject,
+            turtle,
+            graph,
         )?;
+        if feedback.conforms && split.has_emit {
+            let observed = crate::shacl_context::validate_with_store_context_in_graph(
+                store,
+                &split.emit,
+                turtle,
+                graph,
+            )?;
+            for issue in observed.results.iter().filter(|_| !observed.conforms) {
+                store.queue_write_event(crate::store::PendingWriteEvent {
+                    event_type: "shacl.violation".to_string(),
+                    subject: Some(issue.focus_node.clone()),
+                    payload: serde_json::json!({
+                        "shape": issue.source_shape,
+                        "message": issue.message,
+                        "component": issue.component,
+                        "path": issue.path,
+                        "severity": issue.severity,
+                        "mode": "emit",
+                    }),
+                });
+            }
+        }
         if !feedback.conforms {
             // A gate refusal, even though this surface reports it as
             // `conforms: false` rather than an Err: record it on the audit

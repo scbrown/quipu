@@ -896,9 +896,18 @@ mod directive_traceability_emit {
     #[test]
     fn untraced_directive_commits_and_emits_traceability_violation() {
         let mut store = store_with_real_shapes();
-        let episode = ep("dt-untraced", vec![node("dt-untraced-rule", "Directive")], vec![]);
-        let (tx, count) = ingest_episode(&mut store, &episode, "2026-10-01T00:00:01Z", DEFAULT_BASE_NS)
-            .expect("an emit-mode shape must not gate the directive write");
+        let episode = ep(
+            "dt-untraced",
+            vec![node("dt-untraced-rule", "Directive")],
+            vec![],
+        );
+        let (tx, count) = ingest_episode(
+            &mut store,
+            &episode,
+            "2026-10-01T00:00:01Z",
+            DEFAULT_BASE_NS,
+        )
+        .expect("an emit-mode shape must not gate the directive write");
         assert!(tx > 0 && count > 0, "write committed");
         let evs = traceability_events(&store);
         assert_eq!(evs.len(), 1, "exactly one traceability violation");
@@ -922,25 +931,55 @@ mod directive_traceability_emit {
                 edge("dt-traced-rule", "governedBy", "dt-policy"),
             ],
         );
-        ingest_episode(&mut store, &episode, "2026-10-01T00:00:02Z", DEFAULT_BASE_NS)
-            .expect("traced directive write");
+        ingest_episode(
+            &mut store,
+            &episode,
+            "2026-10-01T00:00:02Z",
+            DEFAULT_BASE_NS,
+        )
+        .expect("traced directive write");
         let focus: Vec<_> = traceability_events(&store)
             .into_iter()
-            .filter(|e| e.subject.as_deref().unwrap_or("").contains("dt-traced-rule"))
+            .filter(|e| {
+                e.subject
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("dt-traced-rule")
+            })
             .collect();
-        assert!(focus.is_empty(), "a traced directive is conformant: {focus:?}");
+        assert!(
+            focus.is_empty(),
+            "a traced directive is conformant: {focus:?}"
+        );
     }
 
     #[test]
     fn policy_is_exempt() {
         let mut store = store_with_real_shapes();
-        let episode = ep("dt-policy-only", vec![node("dt-lone-policy", "Policy")], vec![]);
-        ingest_episode(&mut store, &episode, "2026-10-01T00:00:03Z", DEFAULT_BASE_NS)
-            .expect("policy write");
+        let episode = ep(
+            "dt-policy-only",
+            vec![node("dt-lone-policy", "Policy")],
+            vec![],
+        );
+        ingest_episode(
+            &mut store,
+            &episode,
+            "2026-10-01T00:00:03Z",
+            DEFAULT_BASE_NS,
+        )
+        .expect("policy write");
         let focus: Vec<_> = traceability_events(&store)
             .into_iter()
-            .filter(|e| e.subject.as_deref().unwrap_or("").contains("dt-lone-policy"))
+            .filter(|e| {
+                e.subject
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("dt-lone-policy")
+            })
             .collect();
-        assert!(focus.is_empty(), "Policy is the executable form and exempt: {focus:?}");
+        assert!(
+            focus.is_empty(),
+            "Policy is the executable form and exempt: {focus:?}"
+        );
     }
 }
