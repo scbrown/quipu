@@ -1,8 +1,8 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 approved query syntax",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "36d8cd05028e1e3a77c0c860e2161aec34257258",
-  "quipu_version": "quipu 0.9.1\ngit_sha: 36d8cd05028e1e3a77c0c860e2161aec34257258\ngit_dirty: false",
+  "quipu_revision": "d49c0d1234a531f4cb8b17dd217fe1a5ece56c12",
+  "quipu_version": "quipu 0.9.1\ngit_sha: d49c0d1234a531f4cb8b17dd217fe1a5ece56c12\ngit_dirty: false",
   "scope": "parser syntax only; evaluation and protocol excluded",
   "totals": {
     "passed": 86,
@@ -613,6 +613,6 @@
       "diagnostic": ""
     }
   ],
-  "generated_at": "2026-10-01T13:48:31Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36870805040"
+  "generated_at": "2026-10-01T19:42:37Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/36915760276"
 }
