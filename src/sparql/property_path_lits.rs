@@ -30,7 +30,9 @@ pub(super) fn fixed_literal(
         }
         TermPattern::Variable(v) => bindings.get(v.as_str()).cloned(),
         TermPattern::BlankNode(b) => bindings.get(b.as_str()).cloned(),
-        _ => None,
+        TermPattern::NamedNode(_) => None,
+        #[cfg(feature = "shacl")]
+        TermPattern::Triple(_) => None,
     };
     Ok(value.filter(|v| match v {
         Value::Ref(_) => false,
