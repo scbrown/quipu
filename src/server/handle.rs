@@ -103,6 +103,34 @@ impl ReadPool {
 }
 
 impl StoreHandle {
+    /// The serving handle. Store-derived fields are read BEFORE the store moves
+    /// into the writer mutex, so nothing a request needs later has to take the
+    /// writer to get it (aegis-hzh9rz).
+    pub(crate) fn serving(
+        store: quipu::Store,
+        readers: ReadPool,
+        db_path: &str,
+        federation: quipu::config::FederationConfig,
+    ) -> Self {
+        Self {
+            graph_metrics: super::graph_metrics::GraphMetrics::new(db_path),
+            vector_reads_pooled: store.has_sqlite_vector_backend(),
+            embedding_provider: store.embedding_provider(),
+            writer: FairMutex::new(store),
+            readers,
+            federation,
+            #[cfg(feature = "reactive-reasoner")]
+            reasoner: None,
+        }
+    }
+
+    /// Attach the registered reactive reasoner (see the `reasoner` field).
+    #[cfg(feature = "reactive-reasoner")]
+    pub(crate) fn with_reasoner(mut self, reasoner: Option<Arc<quipu::ReactiveReasoner>>) -> Self {
+        self.reasoner = reasoner;
+        self
+    }
+
     /// A handle with NO read pool: every read takes the writer lock, which is
     /// the pre-pool behaviour. Used by the in-memory server tests, where a pool
     /// is not merely unhelpful but wrong — each `:memory:` connection would be

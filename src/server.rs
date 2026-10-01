@@ -3,8 +3,6 @@
 
 use std::sync::Arc;
 
-use parking_lot::FairMutex;
-
 use axum::{
     Router,
     http::StatusCode,
@@ -309,18 +307,10 @@ async fn main() {
     admission::init_read_admission_for_pool(read_pool.len());
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
 
-    let vector_reads_pooled = store.has_sqlite_vector_backend();
-    let embedding_provider = store.embedding_provider();
-    let state: SharedStore = Arc::new(StoreHandle {
-        graph_metrics: graph_metrics::GraphMetrics::new(&db_path),
-        writer: FairMutex::new(store),
-        readers: read_pool,
-        vector_reads_pooled,
-        embedding_provider,
-        federation: config.federation.clone(),
-        #[cfg(feature = "reactive-reasoner")]
-        reasoner: reactive_reasoner,
-    });
+    let handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    #[cfg(feature = "reactive-reasoner")]
+    let handle = handle.with_reasoner(reactive_reasoner);
+    let state: SharedStore = Arc::new(handle);
     let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
