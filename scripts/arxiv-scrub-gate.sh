@@ -62,6 +62,7 @@ ARTIFACT=(
   "docs/paper-merge"                      # the paper source (aegis-s9sjf.3)
   "benchmark/mergebench"                  # ARM A data + build report
   "benchmark/replay"                      # ARM B/C corpus + build report
+  "benchmark/alias-resolution"            # ARM D protocol, tools and public manifests
   "examples/mergebench"                   # the harness that regenerates ARM A
   "examples/replay"                       # the harness that regenerates ARM B/C
   "scripts/build-replay-corpus.py"        # corpus provenance

@@ -1,0 +1,19 @@
+{
+  "all_attempts": {
+    "n": 216,
+    "p50": 0.35132780799176544,
+    "p90": 1.4050471379887313,
+    "p95": 120.18058003101032,
+    "p99": 120.22768571297638,
+    "max": 120.22936521610245
+  },
+  "valid_responses": {
+    "n": 204,
+    "p50": 0.35008752497378737,
+    "p90": 1.1001852549379691,
+    "p95": 1.382742227986455,
+    "p99": 1.783693354926072,
+    "max": 2.129139046999626
+  },
+  "method": "nearest-rank seconds; failed elapsed observations are client-censored; no server processing latency inferred"
+}
