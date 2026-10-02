@@ -364,22 +364,7 @@ pub fn ingest_episode_outcome(
             if split.has_emit {
                 let feedback =
                     crate::shacl_context::validate_with_store_context(store, &split.emit, &turtle)?;
-                if !feedback.conforms {
-                    for issue in &feedback.results {
-                        store.queue_write_event(crate::store::PendingWriteEvent {
-                            event_type: "shacl.violation".to_string(),
-                            subject: Some(issue.focus_node.clone()),
-                            payload: serde_json::json!({
-                                "shape": issue.source_shape,
-                                "message": issue.message,
-                                "component": issue.component,
-                                "path": issue.path,
-                                "severity": issue.severity,
-                                "mode": "emit",
-                            }),
-                        });
-                    }
-                }
+                crate::shacl_context::queue_emit_violations(store, &feedback);
             }
         }
     }

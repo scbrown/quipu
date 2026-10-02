@@ -82,6 +82,10 @@ fn text_rule_cases_reject_non_string_values_for_both_polarities() {
 
 #[test]
 fn directive_issuer_accepts_legacy_text_and_an_entity_iri() {
+    // The REJECT half: what the write gate enforces. The full file also carries
+    // the emit-mode DirectiveTraceabilityShape (aegis-4c3ppi), which reports this
+    // untraced fixture by design; that is `quipu validate`'s job, not this test's.
+    let reject = quipu::shacl::split_shapes_by_policy(SHAPES).reject;
     let fixture = |issuer: &str| {
         format!(
             r#"
@@ -95,17 +99,17 @@ fn directive_issuer_accepts_legacy_text_and_an_entity_iri() {
     };
 
     assert!(
-        quipu::validate_shapes(SHAPES, &fixture("\"Stiwi\""))
+        quipu::validate_shapes(&reject, &fixture("\"Stiwi\""))
             .unwrap()
             .conforms
     );
     assert!(
-        quipu::validate_shapes(SHAPES, &fixture("aegis:Stiwi"))
+        quipu::validate_shapes(&reject, &fixture("aegis:Stiwi"))
             .unwrap()
             .conforms
     );
     assert!(
-        !quipu::validate_shapes(SHAPES, &fixture("42"))
+        !quipu::validate_shapes(&reject, &fixture("42"))
             .unwrap()
             .conforms
     );
