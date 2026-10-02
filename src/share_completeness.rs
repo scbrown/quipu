@@ -74,6 +74,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // replay the origin had already spent is accepted on the copy. Excluding it
     // visibly is the only honest option.
     ("attestation_nonces", Disposition::Excluded),
+    // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
+    // attestation_nonces: carried, a legitimate re-attestation on the copy is
+    // refused; omitted silently, a spent one is accepted again.
+    ("decision_nonces", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
     // Webhook URLs. Restoring them aims a new store at another store's endpoints.

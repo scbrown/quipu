@@ -8,6 +8,8 @@ pub mod attach;
 pub mod attestation;
 pub mod changes;
 pub mod datasets;
+mod decision_nonces;
+pub use decision_nonces::DecisionNonceSpend;
 pub mod events;
 pub mod forks;
 pub mod freeze;
