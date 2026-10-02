@@ -180,9 +180,16 @@ impl Validator {
             });
         }
 
+        // `conforms` means "nothing BLOCKS": no sh:Violation-severity result.
+        // The engine's own conforms() is `results.is_empty()`, so a shape that
+        // declares sh:Warning or sh:Info would still refuse a write or
+        // quarantine a share. That made severity meaningless on every gate
+        // (aegis-1mv0to). `shacl_context::repaired` already counted this way;
+        // this makes the fast path agree with it. Warnings stay in `results`.
+        let violations = report.get_count_of(&shacl_engine::types::Severity::Violation);
         Ok(ValidationFeedback {
-            conforms: report.conforms(),
-            violations: report.get_count_of(&shacl_engine::types::Severity::Violation),
+            conforms: violations == 0,
+            violations,
             warnings: report.get_count_of(&shacl_engine::types::Severity::Warning),
             results: issues,
             resolution_candidates: None,

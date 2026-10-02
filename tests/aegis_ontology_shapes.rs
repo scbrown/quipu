@@ -459,3 +459,36 @@ fn lead_for_shapes_route_to_the_rejecting_document_together() {
         "control: the splitter does route emit shapes"
     );
 }
+
+/// aegis-1mv0to: the production DirectiveTraceabilityShape REPORTS an untraced
+/// directive as a warning and does not make the data non-conforming. Validated
+/// against the FULL file (both halves), the path share import and compose take.
+/// If this fails, a release's repository share quarantines again.
+#[test]
+fn directive_traceability_is_a_warning_on_the_full_shapes_file() {
+    let data = r#"
+        @prefix aegis: <http://aegis.gastown.local/ontology/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        aegis:untraced-directive a aegis:Directive ;
+            rdfs:label "Untraced directive" ;
+            aegis:issuedBy "Stiwi" .
+    "#;
+    let feedback = quipu::validate_shapes(SHAPES, data).unwrap();
+    assert!(
+        feedback.conforms,
+        "an untraced directive must not block: {:?}",
+        feedback.results
+    );
+    assert_eq!(feedback.violations, 0);
+    assert!(
+        feedback
+            .results
+            .iter()
+            .any(|r| r.severity.contains("Warning")
+                && r.source_shape
+                    .as_deref()
+                    .is_some_and(|s| s.contains("DirectiveTraceabilityShape"))),
+        "the traceability gap must still be reported: {:?}",
+        feedback.results
+    );
+}

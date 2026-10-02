@@ -355,4 +355,70 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
         let mut store = leaky_store();
         import_share(&mut store, &request, TS, None).unwrap();
     }
+
+    /// aegis-1mv0to: a Warning-severity result must NOT quarantine a share.
+    ///
+    /// v0.10.0's repository share was quarantined whole (86,038 triples) by
+    /// two untraced directives, because import gated on "any result" and an
+    /// emit shape without sh:severity defaults to sh:Violation. Both arms in
+    /// one test: the same untraced directive under the same shape is STAGED
+    /// at sh:Warning and QUARANTINED at sh:Violation. The second arm is the
+    /// control: it proves the import gate still blocks, so the first arm
+    /// cannot pass because validation was skipped.
+    ///
+    /// The fixture copies the real shape's STRUCTURE (a node-level sh:or), on
+    /// purpose: sh:severity on a node shape does not reach nested sh:property
+    /// shapes, so a bare sh:property fixture reports Violation either way.
+    #[cfg(feature = "shacl")]
+    #[test]
+    fn warning_severity_does_not_quarantine_but_violation_still_does() {
+        let shapes = |severity: &str| {
+            format!(
+                r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:TraceShape a sh:NodeShape ;
+    sh:targetClass aegis:Directive ;
+    sh:severity sh:{severity} ;
+    sh:or ( [ sh:property [ sh:path aegis:trackedBy ; sh:minCount 1 ] ] ) .
+"#
+            )
+        };
+        let mut source = Store::open_in_memory().unwrap();
+        crate::share_scrub::seed_test_catalogue(&mut source);
+        crate::rdf::ingest_rdf(
+            &mut source,
+            &b"<http://aegis.gastown.local/ontology/untraced> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://aegis.gastown.local/ontology/Directive> .\n"[..],
+            RdfFormat::NTriples,
+            None,
+            TS,
+            None,
+            Some("test"),
+        )
+        .unwrap();
+        let (_dir, request) = request(&source);
+        let import_under = |severity: &str| {
+            let mut target = Store::open_in_memory().unwrap();
+            crate::share_scrub::seed_test_catalogue(&mut target);
+            target.load_shapes("trace", &shapes(severity), TS).unwrap();
+            import_share(&mut target, &request, TS, None).unwrap()
+        };
+
+        let warned = import_under("Warning");
+        assert_eq!(
+            warned.outcome, "staged",
+            "a warning must stage: blockers {:?} report {}",
+            warned.promotion.blockers,
+            warned.validation.report
+        );
+        assert!(warned.promotion.blockers.is_empty());
+        let report = serde_json::to_string(&warned.validation.report).unwrap();
+        assert!(
+            report.contains("Warning"),
+            "the warning must still be REPORTED, not dropped: {report}"
+        );
+
+        let violated = import_under("Violation");
+        assert_eq!(violated.outcome, "quarantined");
+        assert_eq!(violated.promotion.blockers, vec!["shacl_nonconforming"]);
+    }
 }
