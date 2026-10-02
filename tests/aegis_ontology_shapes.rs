@@ -460,8 +460,8 @@ fn lead_for_shapes_route_to_the_rejecting_document_together() {
     );
 }
 
-/// aegis-1mv0to: the production DirectiveTraceabilityShape REPORTS an untraced
-/// directive as a warning and does not make the data non-conforming. Validated
+/// aegis-1mv0to: the production `DirectiveTraceabilityShape` REPORTS an
+/// untraced directive as a warning, and the warning does not BLOCK. Validated
 /// against the FULL file (both halves), the path share import and compose take.
 /// If this fails, a release's repository share quarantines again.
 #[test]
@@ -475,11 +475,13 @@ fn directive_traceability_is_a_warning_on_the_full_shapes_file() {
     "#;
     let feedback = quipu::validate_shapes(SHAPES, data).unwrap();
     assert!(
-        feedback.conforms,
+        !feedback.blocks(),
         "an untraced directive must not block: {:?}",
         feedback.results
     );
     assert_eq!(feedback.violations, 0);
+    // SHACL's own sh:conforms stays false on a warning; only the gate is narrower.
+    assert!(!feedback.conforms);
     assert!(
         feedback
             .results
