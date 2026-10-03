@@ -372,6 +372,7 @@ COMMANDS:
     quipu share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
     quipu diff-textconv <file>   labelled pack rendering for git diff's textconv
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
+    quipu audit <trace.jsonl> --repo <root> --from <base> --to <tip> [--yupana <exe>] [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
 
