@@ -19,6 +19,7 @@
 //!   quipu import promote <share-id> [--actor <id>]  Promote a staged share
 //!   quipu stats [--db <path>]            Show store statistics
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
+//!   quipu gate shadow ...                 Judge a candidate policy set over recorded history (never writes)
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
 //!   quipu audit namespace                                   Report base-namespace drift
 //!   quipu db respace --into <space> --out <file>  Move a store into a term space
@@ -41,6 +42,8 @@ mod cli_entailment;
 mod cli_explain;
 mod cli_export;
 mod cli_fork;
+mod cli_gate;
+mod cli_git_merge;
 mod cli_graph;
 mod cli_ingest;
 mod cli_mcp;
@@ -49,8 +52,10 @@ mod cli_pack;
 mod cli_path;
 mod cli_policy;
 mod cli_propose;
+mod cli_share_diff;
 
 fn main() {
+    quipu::write_kind::set_cli();
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
@@ -65,6 +70,19 @@ fn main() {
         println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
         println!("git_dirty: {}", env!("QUIPU_GIT_DIRTY"));
         return;
+    }
+
+    match args[1].as_str() {
+        "git-merge" => return cli_git_merge::run(&args),
+        "merge-driver" => return cli_git_merge::run(&args),
+        "pendant-resolve" => return cli_git_merge::run(&args),
+        "pendant-check" => return cli_git_merge::run(&args),
+        // Store-free pack readers: no config, no database (aegis-fxpbys.1).
+        "diff-textconv" => return cli_share_diff::cmd_textconv(&args),
+        "share" if args.get(2).map(String::as_str) == Some("diff") => {
+            return cli_share_diff::cmd_diff(&args);
+        }
+        _ => {}
     }
 
     // Parse --db flag from anywhere in args (overrides config file).
@@ -108,6 +126,14 @@ fn main() {
         "retract" => cli_commands::cmd_retract(&args, db_path),
         "shapes" => cli_commands::cmd_shapes(&args, db_path),
         "policy" => cli_policy::cmd_policy(&args, db_path),
+        // The CONFIGURED store, resolved without the --db override: the shadow
+        // gate refuses to replay against it (aegis-xfuch4.2).
+        "gate" => cli_gate::cmd_gate(
+            &args,
+            &quipu::QuipuConfig::load(std::path::Path::new("."))
+                .store_path
+                .to_string_lossy(),
+        ),
         "align" => cli_align::cmd_align(&args, db_path),
         "path" => cli_path::cmd_path(&args, db_path, &config.base_ns),
         "propose" => cli_propose::cmd_propose(&args, db_path),
@@ -300,6 +326,7 @@ COMMANDS:
     quipu shapes load|list|remove [--db <path>]
     quipu policy draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-IRI> --claim <ask> [--out <file.ttl>]
     quipu policy backtest <candidate.ttl> [--last-txs N] [--from-tx A --to-tx B] [--db <path>]
+    quipu gate shadow --rules <candidate.ttl> --db <quiescent-copy.db> [--since 7d | --from-tx A --to-tx B] [--mode add|replace] [--json]
     quipu propose list|submit|accept|reject [--status pending] [--db <path>]
     quipu ontology load|list|remove [--db <path>]
     quipu validate --shapes <shapes.ttl> --data <data.ttl>
@@ -324,10 +351,12 @@ COMMANDS:
                                                                      REPLACES the store with a --full pack, binary or text
     quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
+    quipu share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
     quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     quipu attest list [--db <path>]
     quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
+    quipu import ... [--query-namespace NS] [--replace-queries]   carried queries land as NS/<name>; collisions are reported
     quipu import delta <parent-share> <delta-share> [--actor <id>]
     quipu compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
     quipu import promote <share-id> [--actor <id>] [--db <path>]
@@ -336,6 +365,12 @@ COMMANDS:
     quipu align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
     quipu status <share-dir> [--db <path>]
     quipu merge <share-dir> [--actor <id>] [--db <path>]
+    quipu git-merge <ref>   merge qpacks from Git snapshots, stop before commit
+    quipu merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
+    quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
+    quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
+    quipu share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
+    quipu diff-textconv <file>   labelled pack rendering for git diff's textconv
     quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
     quipu audit namespace [--graph <iri>] [--json] [--db <path>]
     quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]

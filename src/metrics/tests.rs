@@ -239,10 +239,34 @@ fn label_values_are_escaped() {
 #[test]
 fn memory_metrics_render_and_count_writes() {
     let m = Metrics::default();
-    m.observe_write(5);
-    m.observe_write(3);
+    let write = |submitted, asserted| writes::WriteCounts {
+        submitted,
+        inferred: 0,
+        asserted,
+        retracted: 0,
+        superseded: 0,
+        root: true,
+        kind: crate::write_kind::WriteKind::Knot,
+    };
+    m.observe_write(&write(5, 5));
+    // A byte-identical re-assert: submitted, but nothing changed (aegis-gwkd76).
+    m.observe_write(&write(3, 0));
     let text = m.render(0, 0, 0, None);
     assert!(text.contains("quipu_facts_written_total 8"));
+    let series = |outcome: &str| {
+        format!("quipu_write_facts_total{{writer=\"knot\",graph=\"root\",outcome=\"{outcome}\"}}")
+    };
+    assert!(
+        text.contains(&format!("{} 8", series("submitted"))),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!("{} 5", series("asserted"))),
+        "{text}"
+    );
+    assert!(text.contains(&format!("{} 3", series("noop"))), "{text}");
+    // Zero outcomes are omitted, not rendered as 0.
+    assert!(!text.contains(&series("retracted")), "{text}");
     assert!(text.contains("process_resident_memory_bytes"));
     assert!(text.contains("process_virtual_memory_bytes"));
     assert!(text.contains("quipu_process_peak_rss_bytes"));

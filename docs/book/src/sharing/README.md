@@ -137,6 +137,7 @@ three `quipu import` reads back (`cmd_import`):
 | `export.nt` | the facts, as N-Triples |
 | `shapes.ttl` | the SHACL shapes those facts were validated against |
 | `manifest.json` | hashes, producer name and version, and the lineage link |
+| `queries.ttl` | only when the store has stored queries registered against the scope: the [competency questions](../reference/cli-sharing.md#stored-queries-queriesttl) a receiver can `quipu_ask`, sealed by the manifest |
 
 The manifest's `parent_share` field (`src/share.rs`, `ShareOptions`) is what
 makes a share a *link in a chain* rather than a loose dump: it names the share

@@ -32,6 +32,10 @@ SHACL_LEDGER = "shacl-core.json"
 FEDERATED_LEDGER = "sparql11-federated-query.json"
 RDF11_SYNTAX_LEDGER = "rdf11-syntax.json"
 RDF12_SYNTAX_LEDGER = "rdf12-syntax.json"
+SPARQL10_LEDGER = "sparql10-evaluation.json"
+SPARQL10_CASES = 242
+SPARQL12_LEDGER = "sparql12.json"
+SPARQL12_CASES = 269
 RDF_SYNTAX_SUITES = (
     ("rdf-turtle", "Turtle"),
     ("rdf-n-triples", "N-Triples"),
@@ -236,8 +240,41 @@ def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
             f"ledger carries unplaced class(es) {sorted(unknown)}; add them to CLASS_ORDER"
         )
 
+    sparql10_path = results_dir / SPARQL10_LEDGER
+    if not sparql10_path.is_file():
+        raise LedgerError(f"missing ledger: {sparql10_path}")
+    sparql10 = json.loads(sparql10_path.read_text())
+    if sparql10.get("suite_revision") != evaluation["suite_revision"]:
+        raise LedgerError(f"{sparql10_path} ran at rdf-tests {str(sparql10.get('suite_revision'))[:8]}, "
+                          f"not {evaluation['suite_revision'][:8]}")
+    sparql10_rows = [r for r in sparql10.get("results", []) if r.get("class") == "sparql10-query"]
+    if len(sparql10_rows) != SPARQL10_CASES:
+        raise LedgerError(f"{sparql10_path} must carry exactly {SPARQL10_CASES} sparql10-query rows, "
+                          f"found {len(sparql10_rows)}")
+
+    sparql12_path = results_dir / SPARQL12_LEDGER
+    if not sparql12_path.is_file():
+        raise LedgerError(f"missing ledger: {sparql12_path}")
+    sparql12 = json.loads(sparql12_path.read_text())
+    if sparql12.get("suite_revision") != evaluation["suite_revision"]:
+        raise LedgerError(f"{sparql12_path} ran at rdf-tests {str(sparql12.get('suite_revision'))[:8]}, "
+                          f"not {evaluation['suite_revision'][:8]}")
+    sparql12_rows = sparql12.get("results", [])
+    if len(sparql12_rows) != SPARQL12_CASES:
+        raise LedgerError(f"{sparql12_path} must carry exactly {SPARQL12_CASES} rows, found {len(sparql12_rows)}")
+    for row in sparql12_rows:
+        # A case that needs RDF 1.2 grammar or terms is never scored as run:
+        # a rejecting parser would "pass" its negative cases (aegis-mhee08).
+        if row.get("status") != "unsupported" and "triple-terms" in row.get("manifest", ""):
+            raise LedgerError(f"{sparql12_path} scores triple-term case {row.get('id')} as run; "
+                              "Quipu has no RDF 1.2 support")
+
     return {
         "classes": classes,
+        "sparql10": {"rows": sparql10_rows, "counts": tally(sparql10_rows)},
+        "sparql12": {"rows": sparql12_rows, "counts": tally(sparql12_rows)},
+        "sparql12_quipu_revision": sparql12["quipu_revision"],
+        "sparql10_quipu_revision": sparql10["quipu_revision"],
         "suite_revision": evaluation["suite_revision"],
         "quipu_revision": evaluation["quipu_revision"],
         "quipu_version": evaluation["quipu_version"].splitlines()[0],
@@ -314,10 +351,15 @@ def claim_boundary(data: dict) -> list[str]:
     """
     classes = data["classes"]
     core = {name: classes[name]["counts"] for name in CORE_CLAIM_CLASSES}
-    all_pass = all(c["cases"] and c["passed"] == c["cases"] for c in core.values())
+    s10 = data["sparql10"]["counts"]
+    # The SPARQL 1.0 query tests bear on SPARQL 1.1 Query conformance too, so
+    # "all" cannot be claimed while they fail (aegis-soqv1r).
+    all_pass = all(c["cases"] and c["passed"] == c["cases"] for c in core.values()) and (
+        s10["passed"] == s10["cases"]
+    )
     counts = ", ".join(
         f"{CLASS_LABELS.get(name, name)} **{c['passed']}/{c['cases']}**" for name, c in core.items()
-    )
+    ) + f", SPARQL 1.0 query **{s10['passed']}/{s10['cases']}**"
     rev = data["suite_revision"][:7]
     if all_pass:
         head = [
@@ -344,10 +386,11 @@ def claim_boundary(data: dict) -> list[str]:
         f"> manifests list {LISTED['query-evaluation']} tests, and the {core['query-evaluation']['cases']} approved ones are scored;"
         f" the {LISTED['query-evaluation'] - core['query-evaluation']['cases']} Proposed or unclassified are not run.",
         "> The update-syntax suites are not run yet.",
-        "> **The SPARQL 1.0 suite is not run.** These manifests hold what SPARQL 1.1 added; the",
-        "> SPARQL 1.0 tests (rdf-tests `sparql/sparql10`) also bear on SPARQL 1.1 Query conformance,",
-        "> and this harness does not score them yet. A trial run found real failures there, including",
-        "> `sameTerm` inside `FILTER`, so read the counts above as the 1.1 additions only (aegis-soqv1r).",
+        "> **The SPARQL 1.0 query tests are scored separately.** The SPARQL 1.1 manifests hold what",
+        "> 1.1 added; the 1.0 tests (rdf-tests `sparql/sparql10`) also bear on SPARQL 1.1 Query",
+        f"> conformance. Quipu passes {s10['passed']}/{s10['cases']} of the approved ones, with"
+        f" {s10['failed']} failing, {s10['error']} errors and {s10['unsupported']} not comparable;"
+        " see [SPARQL 1.0 query tests](#sparql-10-query-tests).",
         "> **This score is fitted to this suite.** Quipu's failures here were found by running this suite",
         "> and fixed against it, case by case, so a perfect score is partly a record of that work rather",
         "> than an independent sample. Other stores measured with the same harness were not tuned to it.",
@@ -447,6 +490,80 @@ def render_rdf_syntax(data: dict) -> list[str]:
     return out
 
 
+def render_sparql10(data: dict) -> list[str]:
+    """The SPARQL 1.0 query tests, by the suite's own directory (aegis-soqv1r)."""
+    rows = data["sparql10"]["rows"]
+    counts = data["sparql10"]["counts"]
+    families: dict[str, list[dict]] = {}
+    for row in rows:
+        families.setdefault(family_of(row).rsplit("/", 1)[-1], []).append(row)
+    table = []
+    for name in sorted(families, key=lambda n: (-sum(r["status"] != "passed" for r in families[n]), n)):
+        c = tally(families[name])
+        table.append([f"`{name}`", str(c["passed"]), str(c["failed"]), str(c["error"]),
+                      str(c["unsupported"]), str(c["cases"])])
+    out = [
+        "## SPARQL 1.0 query tests",
+        "",
+        "The approved W3C SPARQL 1.0 query-evaluation tests (`sparql/sparql10`) at the same",
+        f"rdf-tests revision (`{data['suite_revision'][:8]}`), run by the same runner:"
+        f" **{counts['passed']}/{counts['cases']}** pass.",
+        "",
+        "Most SPARQL 1.0 answers are RDF result-set graphs (`rs:ResultSet`). They are read with",
+        "rdflib, pinned, with literal normalisation off, so `\"01\"^^xsd:integer` stays `01`.",
+        "Quipu never reads its own expected answers. Where the answer numbers its solutions",
+        "(`rs:index`), order is compared, not just the multiset. The unsupported cases have",
+        "RDF/XML answers, which the runner does not read.",
+        "",
+    ]
+    out += _table(["Family", "Passed", "Failed", "Error", "Unsupported", "Cases"], table,
+                  right={1, 2, 3, 4, 5})
+    out += [
+        "",
+        "Some failures are the lexical-form design choice described above (a number is stored",
+        "by value, so `\"01\"` reads back as `1`); others are engine defects being fixed.",
+        "Every case, with its diagnostic, is in",
+        "[`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).",
+        "",
+    ]
+    return out
+
+
+def render_sparql12(data: dict) -> list[str]:
+    """SPARQL 1.2: run what needs nothing new, enumerate the rest (aegis-mhee08)."""
+    rows = data["sparql12"]["rows"]
+    counts = data["sparql12"]["counts"]
+    parts: dict[str, list[dict]] = {}
+    for row in rows:
+        parts.setdefault(row["manifest"].split("/")[2], []).append(row)
+    table = []
+    for name in sorted(parts):
+        c = tally(parts[name])
+        reasons = sorted({r.get("reason", "") for r in parts[name] if r["status"] == "unsupported"} - {""})
+        table.append([f"`{name}`", str(c["passed"]), str(c["failed"] + c["error"]), str(c["unsupported"]),
+                      str(c["cases"]), "; ".join(reasons) or "run"])
+    out = [
+        "## SPARQL 1.2 query tests",
+        "",
+        "The W3C SPARQL 1.2 query tests (`sparql/sparql12`) at the same rdf-tests revision",
+        f"(`{data['suite_revision'][:8]}`). No SPARQL 1.2 case is Working Group–approved yet; every one is",
+        f"counted anyway. **{counts['passed']} of {counts['cases']} pass, and {counts['unsupported']} are not run.**",
+        "",
+        "Most of SPARQL 1.2 needs grammar or terms Quipu does not have: triple terms, the `VERSION`",
+        "declaration, base direction, new codepoint escapes. Those cases are listed and never run,",
+        "because a parser that rejects all SPARQL 1.2 input would \"pass\" every negative case. The",
+        "few cases that need nothing new are run by the same runner as everything above.",
+        "",
+    ]
+    out += _table(["Part", "Passed", "Failed", "Not run", "Cases", "Why not run"], table, right={1, 2, 3, 4})
+    out += [
+        "",
+        "Ledger: [`sparql12.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql12.json).",
+        "",
+    ]
+    return out
+
+
 def render_markdown(data: dict) -> str:
     classes = data["classes"]
     out: list[str] = [GENERATED_HEADER, "# SPARQL 1.1 conformance", ""]
@@ -526,6 +643,8 @@ def render_markdown(data: dict) -> str:
     ]
     out += render_competitors(data)
     out += render_rdf_syntax(data)
+    out += render_sparql10(data)
+    out += render_sparql12(data)
     out += [
         "## Query evaluation, by feature family",
         "",
@@ -937,6 +1056,14 @@ def ledger_provenance(data: dict, pr_base: str | None = None) -> tuple[int, list
     return 0, []
 
 
+def _write_output(name: str, value: str) -> None:
+    """Append `name=value` to $GITHUB_OUTPUT when running under Actions."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"{name}={value}\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, default=Path("benchmark/public/results"))
@@ -973,6 +1100,16 @@ def main(argv: list[str] | None = None) -> int:
              "them as separately-named checks so a reader can tell which they have "
              "without opening the log. `both` (default) preserves the original "
              "single-command behaviour for humans and for any existing caller.",
+    )
+    parser.add_argument(
+        "--report-stale",
+        action="store_true",
+        help="provenance arm only (aegis-qmrymu): report a STALE stamp as a "
+             "notice and exit 0 instead of 1, and write `stale=true|false` to "
+             "$GITHUB_OUTPUT so CI can re-derive automatically. UNVERIFIED (exit "
+             "2) still fails: a check that could not look is not a fresh stamp. "
+             "Off by default, so humans and existing callers keep the blocking "
+             "behaviour.",
     )
     args = parser.parse_args(argv)
 
@@ -1019,6 +1156,8 @@ def main(argv: list[str] | None = None) -> int:
         arm = f"PR mode (base {base})" if base else "STRICT mode (ledger revision must be HEAD)"
         print(f"conformance_report: provenance arm = {arm}")
         code, messages = ledger_provenance(data, base)
+        if args.report_stale and code in (0, 1):
+            _write_output("stale", "true" if code == 1 else "false")
         if code:
             label = (
                 "ledger provenance CANNOT BE VERIFIED"
@@ -1068,6 +1207,20 @@ def main(argv: list[str] | None = None) -> int:
                     "(regenerates the page from them)",
                     file=sys.stderr,
                 )
+                if args.report_stale:
+                    # Reported, not failed (aegis-qmrymu). 17 of 37 PR runs in
+                    # 13.5h went red here, all on a stamp, each paid for with a
+                    # hand re-derive. CI now re-derives on this `stale=true`
+                    # output instead, and that re-derive is what gates on
+                    # check_regression, so the regression check still runs
+                    # BEFORE merge rather than moving after it.
+                    print(
+                        "::notice title=Ledger stamp is stale::The ledgers name a "
+                        "revision that is not this code; CI re-derives them "
+                        "automatically (re-run-conformance). This is not a "
+                        "conformance regression."
+                    )
+                    return 0
             return code
         print(f"conformance_report: {len(files)} published artifact(s) match the ledgers")
         if base:

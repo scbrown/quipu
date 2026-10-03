@@ -17,6 +17,7 @@ fn durability_meet_is_the_least_recoverable_input_and_unknown_is_absent() {
     );
     assert_eq!(Durability::parse("unknown"), None);
 }
+use super::props::{self, arb_graphset, arb_world};
 use proptest::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -267,137 +268,83 @@ fn undeclared_members_move_coverage_but_never_the_value() {
 // The homomorphism — #66's headline acceptance
 // ---------------------------------------------------------------------------
 
-/// One graph's declared label on a single axis, or nothing.
-type Member = Option<Freshness>;
+/// The real freshness axis, every value.
+const FRESHNESS: &[Freshness] = &[Freshness::Stale, Freshness::Recomputing, Freshness::Fresh];
 
-/// The labelling: graph id -> its declared label. **A function**, and that is
-/// load-bearing rather than incidental.
-///
-/// The first version of this test let A and B each carry their own label for
-/// the same graph id, and the proptest refuted the homomorphism in four cases
-/// — correctly. `{1: stale} ∪ {1: undeclared}` is not a world that can exist:
-/// a graph has exactly one label, held once in the meta-graph. The law is
-/// about two *datasets over one labelling*, not two independent labellings.
-///
-/// What makes that true at runtime is #65's `shapes/graph-labels.ttl`
-/// (`minCount`/`maxCount 1` on the label predicates). So the SHACL cardinality
-/// is not decoration — it is the precondition of this algebra, and relaxing it
-/// would silently falsify every composed label.
-type World = std::collections::BTreeMap<u8, Member>;
-
-const UNIVERSE: u8 = 8;
-
-fn arb_member() -> impl Strategy<Value = Member> {
-    prop_oneof![
-        Just(None),
-        Just(Some(Freshness::Stale)),
-        Just(Some(Freshness::Recomputing)),
-        Just(Some(Freshness::Fresh)),
-    ]
-}
-
-/// A labelling of the whole universe of graphs.
-fn arb_world() -> impl Strategy<Value = World> {
-    prop::collection::vec(arb_member(), UNIVERSE as usize).prop_map(|v| {
-        v.into_iter()
-            .enumerate()
-            .map(|(i, m)| (u8::try_from(i).unwrap_or(0), m))
-            .collect()
-    })
-}
-
-/// A dataset: a *set* of graph ids. Union is set union, so an overlapping
-/// graph is folded once — which is what makes graph-sets a join-semilattice.
-fn arb_graphset() -> impl Strategy<Value = BTreeSet<u8>> {
-    prop::collection::btree_set(0u8..UNIVERSE, 0..UNIVERSE as usize)
-}
-
-fn label_of(world: &World, set: &BTreeSet<u8>) -> Composed<Freshness> {
-    fold_meet(set.iter().map(|g| world.get(g).copied().flatten())).unwrap()
-}
-
+// The laws live in `lattice_props.rs`, generic over the axis, so the evidence
+// harness (`lattice_evidence_tests.rs`) runs the same code (aegis-xfuch4.4).
+//
+// The labelling: graph id -> its declared label. **A function**, and that is
+// load-bearing rather than incidental.
+//
+// The first version of this test let A and B each carry their own label for
+// the same graph id, and the proptest refuted the homomorphism in four cases
+// — correctly. `{1: stale} ∪ {1: undeclared}` is not a world that can exist:
+// a graph has exactly one label, held once in the meta-graph. The law is
+// about two *datasets over one labelling*, not two independent labellings.
+//
+// What makes that true at runtime is #65's `shapes/graph-labels.ttl`
+// (`minCount`/`maxCount 1` on the label predicates). So the SHACL cardinality
+// is not decoration — it is the precondition of this algebra, and relaxing it
+// would silently falsify every composed label.
 proptest! {
     /// `label(A ∪ B) = label(A) ⊓ label(B)`
     ///
     /// The semilattice→lattice homomorphism (§4). If this fails, composition
     /// has stopped being associative and every derived answer is suspect.
     #[test]
-    fn homomorphism(w in arb_world(), a in arb_graphset(), b in arb_graphset()) {
-        let union: BTreeSet<u8> = a.union(&b).copied().collect();
-
-        let lhs = label_of(&w, &union);
-        let rhs = label_of(&w, &a).compose_meet(&label_of(&w, &b)).unwrap();
-
-        prop_assert_eq!(lhs.value, rhs.value, "folded value must agree");
-        prop_assert_eq!(lhs.coverage, rhs.coverage, "coverage must agree");
+    fn homomorphism(w in arb_world(FRESHNESS), a in arb_graphset(), b in arb_graphset()) {
+        props::homomorphism(&w, &a, &b)?;
     }
 
     /// Union is idempotent, so the label must be too.
     #[test]
-    fn idempotent(w in arb_world(), a in arb_graphset()) {
-        let once = label_of(&w, &a);
-        let twice = once.compose_meet(&once).unwrap();
-        prop_assert_eq!(once, twice);
+    fn idempotent(w in arb_world(FRESHNESS), a in arb_graphset()) {
+        props::idempotent(&w, &a)?;
     }
 
     /// Union is commutative, so the label must be too.
     #[test]
-    fn commutative(w in arb_world(), a in arb_graphset(), b in arb_graphset()) {
-        let ab = label_of(&w, &a).compose_meet(&label_of(&w, &b)).unwrap();
-        let ba = label_of(&w, &b).compose_meet(&label_of(&w, &a)).unwrap();
-        prop_assert_eq!(ab, ba);
+    fn commutative(w in arb_world(FRESHNESS), a in arb_graphset(), b in arb_graphset()) {
+        props::commutative(&w, &a, &b)?;
     }
 
     /// Union is associative, so the label must be too.
     #[test]
     fn associative(
-        w in arb_world(),
+        w in arb_world(FRESHNESS),
         a in arb_graphset(),
         b in arb_graphset(),
         c in arb_graphset(),
     ) {
-        let (la, lb, lc) = (label_of(&w, &a), label_of(&w, &b), label_of(&w, &c));
-        let left = la.compose_meet(&lb).unwrap().compose_meet(&lc).unwrap();
-        let right = la.compose_meet(&lb.compose_meet(&lc).unwrap()).unwrap();
-        prop_assert_eq!(left, right);
+        props::associative(&w, &a, &b, &c)?;
     }
 
     /// The empty dataset is the identity for the fold.
     #[test]
-    fn empty_dataset_is_the_identity(w in arb_world(), a in arb_graphset()) {
-        let la = label_of(&w, &a);
-        let empty: Composed<Freshness> = Composed::empty();
-        prop_assert_eq!(la.clone().compose_meet(&empty).unwrap(), la.clone());
-        prop_assert_eq!(empty.compose_meet(&la).unwrap(), la);
+    fn empty_dataset_is_the_identity(w in arb_world(FRESHNESS), a in arb_graphset()) {
+        props::empty_is_identity(&w, &a)?;
     }
 
     /// Composition never widens: the composed freshness is never above either
     /// input's. Stated directly, not via the operator, per §1.
     #[test]
     fn composition_never_widens(
-        w in arb_world(),
+        w in arb_world(FRESHNESS),
         a in arb_graphset(),
         b in arb_graphset(),
     ) {
-        let la = label_of(&w, &a);
-        let lb = label_of(&w, &b);
-        let composed = la.compose_meet(&lb).unwrap();
-        if let (Some(va), Some(vb), Some(vc)) = (la.value, lb.value, composed.value) {
-            prop_assert!(vc <= va, "composed rose above A");
-            prop_assert!(vc <= vb, "composed rose above B");
-        }
+        props::composition_never_widens(&w, &a, &b)?;
     }
 
     /// Adding a graph to a dataset can only narrow its label — monotonicity,
     /// the practical restatement of §1 that a reader can check by eye.
     #[test]
-    fn adding_a_graph_never_widens(w in arb_world(), a in arb_graphset(), g in 0u8..UNIVERSE) {
-        let before = label_of(&w, &a);
-        let mut bigger = a.clone();
-        bigger.insert(g);
-        let after = label_of(&w, &bigger);
-        if let (Some(vb), Some(va)) = (before.value, after.value) {
-            prop_assert!(va <= vb, "adding a graph raised the label");
-        }
+    fn adding_a_graph_never_widens(
+        w in arb_world(FRESHNESS),
+        a in arb_graphset(),
+        g in 0u8..props::UNIVERSE,
+    ) {
+        props::adding_a_graph_never_widens(&w, &a, g)?;
     }
 }

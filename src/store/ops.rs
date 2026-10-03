@@ -14,6 +14,9 @@ pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome}
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
 struct Staged {
     tx_id: i64,
+    /// What this write did, for `quipu_write_facts_total` (aegis-gwkd76). Taken
+    /// from values staging computes anyway: no extra store read.
+    counts: StagedCounts,
     /// The COMPLETE set of changes this write made to the current-fact view, or
     /// `None` when the write path cannot vouch that it is complete.
     ///
@@ -32,6 +35,15 @@ struct Staged {
     /// Datums actually retracted, for reactive observer notification.
     #[cfg(feature = "reactive-reasoner")]
     retracts: Vec<Datum>,
+}
+
+/// Datum counts a staged write already knows (see `metrics::writes`).
+#[derive(Clone, Copy)]
+struct StagedCounts {
+    inferred: usize,
+    asserted: usize,
+    retracted: usize,
+    superseded: usize,
 }
 
 /// Every current fact one producer's source tag owns in one graph.
@@ -178,6 +190,7 @@ impl Store {
         match self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source) {
             Ok(mut staged) => {
                 let tx_id = staged.tx_id;
+                let counts = staged.counts;
                 // Taken before `staged` moves into after_commit_hooks below.
                 let effective = staged.effective.take();
                 self.conn.execute_batch("RELEASE quipu_transact")?;
@@ -191,7 +204,15 @@ impl Store {
                 self.maintain_read_model(graph, effective.as_deref(), tx_id);
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
-                crate::metrics::metrics().observe_write(datums.len() as u64);
+                crate::metrics::metrics().observe_write(&crate::metrics::writes::WriteCounts {
+                    submitted: datums.len() as u64,
+                    inferred: counts.inferred as u64,
+                    asserted: counts.asserted as u64,
+                    retracted: counts.retracted as u64,
+                    superseded: counts.superseded as u64,
+                    root: graph == crate::schema::ROOT_GRAPH,
+                    kind: crate::write_kind::classify(actor, source),
+                });
                 // Q-VERDICT-PERSIST: outside the savepoint, so the accept case
                 // and the denial case below record identically.
                 self.flush_pending_verdicts(timestamp, actor);
@@ -299,6 +320,13 @@ impl Store {
         self.verify_transition_signatures(&staged_datums, graph)
             .map_err(|e| self.stash_refusal("transition", e, staged_datums.len()))?;
 
+        // Verdict signature-scheme gate (src/verdict_schemes): a registration
+        // declaring an unknown scheme, or a hardware scheme while
+        // `hardware_verdict_schemes` is off, rolls back. Always on; inert for
+        // any write that does not assert `aegis:signatureScheme`.
+        self.refuse_disabled_signature_schemes(&staged_datums)
+            .map_err(|e| self.stash_refusal("signature-scheme", e, staged_datums.len()))?;
+
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.
@@ -342,6 +370,12 @@ impl Store {
 
         Ok(Staged {
             tx_id,
+            counts: StagedCounts {
+                inferred: staged_datums.len().saturating_sub(datums.len()),
+                asserted: written_asserts.len(),
+                retracted: written_retracts.len(),
+                superseded,
+            },
             effective,
             #[cfg(feature = "reactive-reasoner")]
             asserts,

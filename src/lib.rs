@@ -29,6 +29,7 @@ pub mod namespace;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
 pub mod transaction_auth;
+pub mod write_kind;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
 // share the feature gate.
 #[cfg(feature = "owl")]
@@ -72,6 +73,12 @@ pub mod pack_full_text;
 // The format gate + `restore`. Filesystem-bound like `pack_load`, so gated the
 // same way.
 #[cfg(not(target_arch = "wasm32"))]
+pub mod git_merge;
+#[cfg(not(target_arch = "wasm32"))]
+mod git_merge_alias;
+#[cfg(not(target_arch = "wasm32"))]
+mod git_merge_repo;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod pack_restore;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
@@ -79,12 +86,16 @@ pub mod share_completeness;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_compose;
 pub mod share_delta;
+// Entity-grouped, blank-node-stable payload diffs and the `git diff` textconv
+// rendering (aegis-fxpbys.1). Pure apart from `read_payload`, which is gated.
+pub mod share_diff;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_mint;
 mod share_promotion;
+pub mod share_queries;
 pub mod share_scrub;
 pub mod share_transport;
 pub mod signing;
@@ -96,6 +107,7 @@ pub mod vector;
 pub mod vector_delegate;
 #[cfg(feature = "lancedb")]
 pub mod vector_lance;
+pub mod verdict_schemes;
 pub mod vocabulary;
 pub mod w3c;
 

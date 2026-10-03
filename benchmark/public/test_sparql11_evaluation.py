@@ -233,5 +233,71 @@ class NonCompletionIsNotAnEmptyResultTests(unittest.TestCase):
         self.assertEqual(outcome["status"], "passed")
 
 
+class Sparql10ManifestTests(unittest.TestCase):
+    """aegis-soqv1r: the SPARQL 1.0 manifests and their rs:ResultSet answers."""
+
+    def test_a_comment_above_a_case_does_not_become_its_subject(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = pathlib.Path(directory) / "manifest.ttl"
+            manifest.write_text(
+                ":a a mf:QueryEvaluationTest ; mf:name \"a\" ;\n"
+                "    mf:action [ qt:query <a.rq> ] ; mf:result <a.srx> .\n"
+                "    # Fixed test - needs reapproving\n"
+                "##  dawgt:approval dawgt:Approved ;\n"
+                ":date-2 rdf:type mf:QueryEvaluationTest ; mf:name \"date-2\" ;\n"
+                "    mf:action [ qt:query <d.rq> ] ; mf:result <d.srx> ;\n"
+                "    dawgt:approval dawgt:Approved .\n"
+            )
+            cases = MODULE.parse_manifest("sparql10-query", manifest)
+        self.assertEqual([case.identifier for case in cases], [":date-2"])
+
+    def test_sparql10_is_opt_in(self):
+        self.assertIn("sparql10-query", MODULE.CLASS_MANIFESTS)
+        self.assertNotIn("sparql10-query", MODULE.DEFAULT_CLASSES)
+
+
+@unittest.skipUnless(importlib.util.find_spec("rdflib"), "needs rdflib (uv run --with rdflib==7.6.0)")
+class ResultSetGraphTests(unittest.TestCase):
+    PREFIXES = (
+        "@prefix rs: <http://www.w3.org/2001/sw/DataAccess/tests/result-set#> .\n"
+        "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n"
+        "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n"
+    )
+
+    def read(self, body):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "result.ttl"
+            path.write_text(self.PREFIXES + body)
+            self.assertTrue(MODULE.is_result_set_graph(path))
+            return MODULE.expected_result_set_graph(path)
+
+    def test_lexical_form_is_kept(self):
+        variables, rows, ordered = self.read(
+            '[] rdf:type rs:ResultSet ; rs:resultVariable "v" ;\n'
+            '   rs:solution [ rs:binding [ rs:variable "v" ; rs:value "01"^^xsd:integer ] ] .\n'
+        )
+        self.assertEqual((variables, rows, ordered), (["v"], [("01",)], False))
+
+    def test_index_orders_solutions_and_unbound_is_marked(self):
+        variables, rows, ordered = self.read(
+            '[] rdf:type rs:ResultSet ; rs:resultVariable "a", "b" ;\n'
+            '   rs:solution [ rs:index 2 ; rs:binding [ rs:variable "a" ; rs:value "y" ] ] ,\n'
+            '               [ rs:index 1 ; rs:binding [ rs:variable "a" ; rs:value "x" ] ;\n'
+            '                              rs:binding [ rs:variable "b" ; rs:value <http://e/b> ] ] .\n'
+        )
+        self.assertTrue(ordered)
+        self.assertEqual(variables, ["a", "b"])
+        self.assertEqual(rows, [('"x"', "http://e/b"), ('"y"', "(unbound)")])
+
+    def test_boolean_answer(self):
+        self.assertIs(self.read('[] rdf:type rs:ResultSet ; rs:boolean "true"^^xsd:boolean .\n'), True)
+
+    def test_a_construct_graph_is_not_a_result_set(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "graph.ttl"
+            path.write_text("<http://e/s> <http://e/p> <http://e/o> .\n")
+            self.assertFalse(MODULE.is_result_set_graph(path))
+
+
 if __name__ == "__main__":
     unittest.main()

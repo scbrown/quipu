@@ -28,7 +28,8 @@ facts nor depend on the homelab store.
 
 ## Wire form and identity
 
-A full share contains `manifest.ttl`, `payload.nq`, and `shapes.ttl`. A release
+A full share contains `manifest.ttl`, `payload.nq`, and `shapes.ttl`, plus
+`queries.ttl` when it carries stored queries (see [Stored queries](#stored-queries-queriesttl)). A release
 asset is those files in a deterministic POSIX tar archive named `*.qpack`; a
 served directory exposes the same files individually. Archive entry order,
 paths, modes, owners, and timestamps are normalized, but archive bytes do not
@@ -56,6 +57,56 @@ The share identifier is `urn:sha256:<digest>` of canonicalized manifest RDF
 after omitting the identifier itself and transport-location facts. Consequently
 moving a release asset does not change its identity, while changing payload,
 shapes, lineage, scope, or producer does.
+
+## Stored queries (`queries.ttl`)
+
+Status: implemented on the current `export.nt` artifact (aegis-fxpbys.2).
+
+A qpack carries its competency questions: every selected stored query (the
+registry `quipu_ask` reads) is described as RDF in `queries.ttl`. Like
+`shapes.ttl` it is source text, so its exact UTF-8 bytes are checksummed
+(`queries_hash`, and a third `dcat:Distribution` in `manifest.ttl`) and that
+checksum takes part in the share identifier. Changing one query's text changes
+the share id; a share with no queries omits the member and the field, so its
+manifest is byte-identical to one produced before the member existed.
+
+Vocabulary, under the Quipu namespace and governed by
+`shapes/stored-queries.ttl` (closed shapes, compiled into the implementation):
+`quipu:StoredQuery` with `quipu:queryName`, `quipu:sparqlTemplate`,
+`quipu:queryForm` (`SELECT`/`CONSTRUCT`/`ASK`/`DESCRIBE`), `dct:description` and
+`quipu:targetsClass` (every constant `rdf:type` object in the template's
+patterns); each `{placeholder}` is a `quipu:QueryParameter` blank node with
+`quipu:parameterName`, `quipu:parameterIndex`, `quipu:parameterKind`
+(`iri`/`text`/`int`), `quipu:required`, optional `quipu:defaultValue` and
+`dct:description`. SHACL's `sh:select` was not reused: SHACL pre-binds `$this`
+variables, whereas a stored query substitutes `{placeholders}`, and borrowing
+the term would mislead SHACL tooling about how to execute it.
+
+**Selection.** A query is *registered against* the shared graph when
+`quipu_ask` would answer it from that graph: an unscoped query belongs to a ROOT
+share and its group and CONSTRUCT slices; a dataset-scoped query belongs to a
+graph share whose graph is a member of that dataset. An explicit `--queries`
+list replaces the default. The dataset IRI is producer-local and is dropped.
+
+**Safety.** A carried query is data. The form is decided by parsing the
+template with the crate's SPARQL parser, at share time and at import; a SPARQL
+Update is refused at both ends. The importer also re-derives the declared form
+and targets and refuses a mismatch, and refuses any triple that is not part of a
+query description, so the member cannot carry graph data around the import
+quarantine. Import evaluates nothing.
+
+**Import.** Queries install as `<namespace>/<name>`; the namespace defaults to
+one derived from the producer's store identity, so successive shares of a pack
+share names. An existing local query is never overwritten silently: a differing
+definition is reported as a collision, and a query the share no longer carries
+as stale, unless the importer explicitly asks to replace, which replaces and
+closes (never deletes). A query targeting a class the receiver's loaded shapes
+do not sanction adds the `query_off_vocabulary` blocker, the same unknown-type
+quarantine the triples use; a quarantined pack installs none of its queries.
+
+**Deltas** carry the resulting share's complete `queries.ttl` beside its shapes,
+sealed by the result manifest, so adding, replacing or removing a query needs no
+query-level diff syntax.
 
 ## Import by reference
 

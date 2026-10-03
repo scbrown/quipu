@@ -20,6 +20,17 @@ pub struct ShareImportRequest {
     pub manifest: ShareManifest,
     pub export_ntriples: String,
     pub shapes_turtle: String,
+    /// The `queries.ttl` member, when the share carries one (aegis-fxpbys.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queries_turtle: Option<String>,
+    /// Registry namespace for the share's queries; defaults to one derived from
+    /// the producer's store identity (`share_queries::default_namespace`).
+    #[serde(default)]
+    pub query_namespace: Option<String>,
+    /// Replace differing same-namespace queries and close ones this share no
+    /// longer carries. Off by default: a collision is reported, never resolved.
+    #[serde(default)]
+    pub replace_queries: bool,
     pub source: String,
     #[serde(default)]
     pub actor: Option<String>,
@@ -114,6 +125,9 @@ pub struct ShareImportResult {
     pub resolution: ImportResolution,
     pub validation: ImportValidation,
     pub promotion: PromotionStatus,
+    /// What happened to the share's stored queries; absent when it carries none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queries: Option<crate::share_queries::QueryImport>,
     /// WHO produced this share, or an explicit statement that we do not know.
     /// Absent on wasm, where there is no verifier to answer with.
     #[cfg(not(target_arch = "wasm32"))]
@@ -138,6 +152,10 @@ pub struct PromoteImportResult {
     pub triples: usize,
     /// Snapshot facts withheld because ROOT has a local retraction for them.
     pub suppressed_retractions: usize,
+    /// The stored queries the import held, installed now (aegis-9ofqqs);
+    /// absent when the share carried none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queries: Option<crate::share_queries::QueryImport>,
 }
 
 fn hash_suffix(value: &str) -> Result<&str> {
@@ -208,6 +226,7 @@ pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
             request.manifest.shapes_hash
         )));
     }
+    crate::share_queries::verify_member(&request.manifest, request.queries_turtle.as_deref())?;
     let expected = sha256(&manifest_bytes(&request.manifest, false)?);
     if request.manifest.share_id != expected {
         return Err(Error::InvalidValue(format!(
@@ -397,10 +416,13 @@ pub fn import_share(
         .is_some_and(ShareDestination::is_internal)
         && !request.destination.is_internal()
     {
-        let files = BTreeMap::from([
+        let mut files = BTreeMap::from([
             ("export.nt".to_string(), request.export_ntriples.clone()),
             ("shapes.ttl".to_string(), request.shapes_turtle.clone()),
         ]);
+        if let Some(queries) = &request.queries_turtle {
+            files.insert("queries.ttl".to_string(), queries.clone());
+        }
         crate::share_scrub::scrub_outward_payload(
             store,
             &files,
@@ -416,6 +438,14 @@ pub fn import_share(
     observation.tier(&attestation.tier);
     #[cfg(target_arch = "wasm32")]
     observation.tier("transport");
+    // Queries are parsed and vetted before anything is staged; none is run.
+    let queries = crate::share_queries::prepare(
+        store,
+        request.queries_turtle.as_deref(),
+        &request.manifest.store_id,
+        request.query_namespace.as_deref(),
+        request.replace_queries,
+    )?;
     let mut triples = parse_triples(&request.export_ntriples)?;
     let resolution = resolve_and_rewrite(store, &mut triples, request.accept_exact)?;
     let resolved = serialize(&triples)?;
@@ -427,6 +457,12 @@ pub fn import_share(
         }
         if !validation.off_vocabulary.is_empty() {
             values.push("off_vocabulary".to_string());
+        }
+        if queries
+            .as_ref()
+            .is_some_and(crate::share_queries::Pending::off_vocabulary)
+        {
+            values.push("query_off_vocabulary".to_string());
         }
         values
     };
@@ -456,6 +492,13 @@ pub fn import_share(
         )?;
         if quarantined { "quarantined" } else { "staged" }
     };
+    let queries = crate::share_queries::settle(
+        store,
+        &request.manifest.share_id,
+        queries,
+        quarantined,
+        timestamp,
+    )?;
     observation.outcome(outcome);
     Ok(ShareImportResult {
         outcome: outcome.into(),
@@ -480,6 +523,7 @@ pub fn import_share(
             eligible: !quarantined,
             blockers,
         },
+        queries,
         #[cfg(not(target_arch = "wasm32"))]
         attestation,
     })
@@ -515,6 +559,9 @@ pub fn promote_import(
             request.actor.as_deref(),
         ),
     )?;
+    // AFTER the data: if installing fails, the hold survives and promoting
+    // again retries it.
+    let queries = crate::share_queries::release(store, &request.share_id, timestamp)?;
     Ok(PromoteImportResult {
         outcome: "promoted".into(),
         share_id: request.share_id.clone(),
@@ -522,6 +569,7 @@ pub fn promote_import(
         tx_id,
         triples: count,
         suppressed_retractions: suppressed,
+        queries,
     })
 }
 

@@ -1,0 +1,37 @@
+{
+  "derived": {
+    "body_sha256": "c895460491f7d423c1706d1813394dc1b9d0cd64cbbc9de835c170c2582ea818",
+    "canonical_message": "quipu-write-v1\nkey_id=sha256:8b81c862681b712b3541770fcae748a931d6ef3c3b817fe6f71b8dad20e96d07\nsession=example-session\nintroducer=urn:example:introducer\nissued_at=1800000100\nnonce=00112233445566778899aabbccddeeff\nmethod=POST\npath=/knot\ncontent_type=application/json\nbody_sha256=c895460491f7d423c1706d1813394dc1b9d0cd64cbbc9de835c170c2582ea818\n",
+    "envelope_json": "{\"version\":\"quipu-write-v1\",\"key_id\":\"sha256:8b81c862681b712b3541770fcae748a931d6ef3c3b817fe6f71b8dad20e96d07\",\"session\":\"example-session\",\"introducer\":\"urn:example:introducer\",\"issued_at_epoch\":1800000100,\"nonce\":\"00112233445566778899aabbccddeeff\",\"signature\":\"49690827077fb7dbceb5d559eedaa5c42bdff0f2b7a2ffaf1b85e149d3d5ed59858272c8c322441c429ddd81e3a61bc1cc1f1fb03ebb4bb1550ede4aa2a20905\"}",
+    "header_name": "x-quipu-attestation",
+    "header_value": "eyJ2ZXJzaW9uIjoicXVpcHUtd3JpdGUtdjEiLCJrZXlfaWQiOiJzaGEyNTY6OGI4MWM4NjI2ODFiNzEyYjM1NDE3NzBmY2FlNzQ4YTkzMWQ2ZWYzYzNiODE3ZmU2ZjcxYjhkYWQyMGU5NmQwNyIsInNlc3Npb24iOiJleGFtcGxlLXNlc3Npb24iLCJpbnRyb2R1Y2VyIjoidXJuOmV4YW1wbGU6aW50cm9kdWNlciIsImlzc3VlZF9hdF9lcG9jaCI6MTgwMDAwMDEwMCwibm9uY2UiOiIwMDExMjIzMzQ0NTU2Njc3ODg5OWFhYmJjY2RkZWVmZiIsInNpZ25hdHVyZSI6IjQ5NjkwODI3MDc3ZmI3ZGJjZWI1ZDU1OWVlZGFhNWM0MmJkZmYwZjJiN2EyZmZhZjFiODVlMTQ5ZDNkNWVkNTk4NTgyNzJjOGMzMjI0NDFjNDI5ZGRkODFlM2E2MWJjMWNjMWYxZmIwM2ViYjRiYjE1NTBlZGU0YWEyYTIwOTA1In0",
+    "key_id": "sha256:8b81c862681b712b3541770fcae748a931d6ef3c3b817fe6f71b8dad20e96d07",
+    "public_key_hex": "8146640f02493af4fbc54fe33388e75dc2c937ae0b7727cc2b2afb1b75199a3e",
+    "signature_hex": "49690827077fb7dbceb5d559eedaa5c42bdff0f2b7a2ffaf1b85e149d3d5ed59858272c8c322441c429ddd81e3a61bc1cc1f1fb03ebb4bb1550ede4aa2a20905"
+  },
+  "description": "Signed HTTP write, quipu-write-v1. Ed25519 (RFC 8032, deterministic). Every value below is derived by quipu's own functions from the inputs; a client must reproduce each one byte for byte.",
+  "inputs": {
+    "agent": "urn:example:agent",
+    "body": "{\"turtle\":\"<urn:example:s> <urn:example:p> \\\"o\\\" .\"}",
+    "content_type": "application/json",
+    "ed25519_seed_hex": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "introducer": "urn:example:introducer",
+    "issued_at_epoch": 1800000100,
+    "method": "POST",
+    "nonce": "00112233445566778899aabbccddeeff",
+    "path": "/knot",
+    "session": "example-session"
+  },
+  "rules": [
+    "body_sha256 is lowercase hex of the raw body bytes, 64 chars, no prefix",
+    "key_id is \"sha256:\" + lowercase hex SHA-256 of the RAW 32-byte public key: it HAS a prefix",
+    "body_sha256 has NO prefix; key_id HAS one; do not normalise either",
+    "canonical_message is exactly the bytes signed; every line ends in \\n",
+    "no field may contain a control character (newline, CR, tab, ...)",
+    "path is the request path exactly as sent; a signed write carries no query string",
+    "content_type is the Content-Type header byte for byte",
+    "nonce is 32 lowercase hex chars, single use; issued_at within 300 s of server time",
+    "header_value is base64url WITHOUT padding of envelope_json",
+    "accepted on POST /knot, /update, /episode; an invalid attestation is 401 and never falls back to a bearer"
+  ]
+}
