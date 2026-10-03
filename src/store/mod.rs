@@ -8,6 +8,9 @@ pub mod attach;
 pub mod attestation;
 pub mod changes;
 pub mod datasets;
+pub mod demotions;
+#[cfg(test)]
+mod demotions_tests;
 pub mod events;
 pub mod forks;
 pub mod freeze;
