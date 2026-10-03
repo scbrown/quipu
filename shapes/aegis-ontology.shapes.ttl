@@ -817,7 +817,15 @@ aegis:DirectiveShape a sh:NodeShape ;
 # `quipu validate` (or SPARQL) over the stored graph (ian ruling, aegis-4c3ppi).
 # Drop the annotation (enforcement reverts to reject) once that count reads
 # zero AND both predicates are in REQUIRED_PREDICATE_PROVEN at measured 100%:
-# "work it to true". Store-context validation (emit path) is what lets
+# "work it to true". When it flips to reject, drop sh:severity too.
+#
+# sh:severity sh:Warning (aegis-1mv0to): emit protects only the write paths
+# that route by onViolation. Share import and compose gate on conforms, and a
+# defaulted sh:Violation quarantined the whole v0.10.0 repository share for 2
+# untraced directives. Warning is the spec's word for "report, do not block",
+# and the 4c3ppi spec already said Warning until 100%.
+#
+# Store-context validation (emit path) is what lets
 # sh:class see the linked WorkItem/Policy types that are not in the payload.
 #
 # Pilot, proven end to end 2026-09-24: directive-patent-filings-private-no-
@@ -827,6 +835,7 @@ aegis:DirectiveShape a sh:NodeShape ;
 
 aegis:DirectiveTraceabilityShape a sh:NodeShape ;
     quipu:onViolation "emit" ;
+    sh:severity sh:Warning ;
     sh:targetClass aegis:Directive ;
     # I2 label floor. DirectiveShape already requires it, so this asserts
     # nothing new about the data; it keeps every targetClass shape honest.

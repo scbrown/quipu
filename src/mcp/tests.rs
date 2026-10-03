@@ -4974,8 +4974,9 @@ mod knot_on_violation {
     use super::*;
 
     const REAL: &str = include_str!("../../shapes/aegis-ontology.shapes.ttl");
-    const EMIT_LINE: &str =
-        "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n";
+    // Both soft markers: the emit route AND the Warning severity (aegis-1mv0to).
+    // Flipping to reject means dropping both; Warning alone never blocks.
+    const EMIT_LINE: &str = "aegis:DirectiveTraceabilityShape a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:severity sh:Warning ;\n";
     const UNTRACED: &str = "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
         @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
         aegis:knot-untraced-rule a aegis:Directive ; rdfs:label \"knot untraced\" ; rdfs:comment \"x\" .";
@@ -5028,8 +5029,8 @@ mod knot_on_violation {
         assert_eq!(payload["mode"], "emit");
     }
 
-    /// Mutation arm: the SAME real shape with its emit annotation removed is a
-    /// reject shape again, and /knot refuses the same write.
+    /// Mutation arm: the SAME real shape with its emit annotation and Warning
+    /// severity removed is a reject shape again, and /knot refuses the same write.
     #[test]
     fn without_emit_annotation_the_same_shape_rejects() {
         assert!(

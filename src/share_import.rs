@@ -101,7 +101,13 @@ pub struct ImportResolution {
 /// Local SHACL result and vocabulary findings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportValidation {
+    /// SHACL `sh:conforms`: false on a result of ANY severity, warnings included.
     pub conforms: bool,
+    /// True when a result has `sh:Violation` severity. THIS, not `conforms`,
+    /// is the `shacl_nonconforming` promotion blocker: warnings are reported in
+    /// `report` and do not quarantine a share (aegis-1mv0to).
+    #[serde(default)]
+    pub blocking: bool,
     pub report: serde_json::Value,
     pub off_vocabulary: Vec<String>,
 }
@@ -355,27 +361,31 @@ fn validate_local(store: &Store, data: &str) -> Result<ImportValidation> {
     let sanctioned = crate::vocabulary::sanctioned(store)?;
     let off_vocabulary = crate::vocabulary::ungoverned_types_in_turtle(data, &sanctioned);
     #[cfg(feature = "shacl")]
-    let (conforms, report) = match store.get_combined_shapes()? {
+    let (conforms, blocking, report) = match store.get_combined_shapes()? {
         Some(shapes) => {
             let feedback = crate::shacl_context::validate_with_store_context(store, &shapes, data)?;
             (
                 feedback.conforms,
+                feedback.blocks(),
                 serde_json::to_value(feedback)
                     .map_err(|e| Error::Serialization(format!("SHACL report: {e}")))?,
             )
         }
         None => (
             true,
+            false,
             serde_json::json!({"conforms": true, "reason": "no local shapes loaded"}),
         ),
     };
     #[cfg(not(feature = "shacl"))]
-    let (conforms, report) = (
+    let (conforms, blocking, report) = (
         true,
+        false,
         serde_json::json!({"conforms": true, "reason": "SHACL feature not compiled"}),
     );
     Ok(ImportValidation {
         conforms,
+        blocking,
         report,
         off_vocabulary,
     })
@@ -452,7 +462,7 @@ pub fn import_share(
     let validation = validate_local(store, &resolved)?;
     let blockers = {
         let mut values = Vec::new();
-        if !validation.conforms {
+        if validation.blocking {
             values.push("shacl_nonconforming".to_string());
         }
         if !validation.off_vocabulary.is_empty() {
