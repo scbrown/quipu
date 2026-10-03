@@ -8,6 +8,9 @@
 pub mod aggregate;
 pub mod exists;
 pub mod filter;
+pub mod filter_pushdown;
+#[cfg(test)]
+mod filter_pushdown_tests;
 pub mod pattern;
 pub mod pattern_util;
 #[cfg(test)]
