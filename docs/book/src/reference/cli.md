@@ -380,7 +380,12 @@ The additional **git-coverage** pass reads ROOT's **current** action policies
 with `appliesTo` path globs. Globs use the same `glob::Pattern` matching as
 Yupana tripwires. It checks each commit, not just the window's net diff: a
 crossing followed by a revert is still visible. Renames check both old and new
-paths; merges check every parent and the window includes side-branch commits.
+paths. The window includes side-branch commits. A merge only contributes paths
+whose committed state differs from **every** parent (including mode changes
+and deletions): inherited content is audited where it was introduced, while
+new merge content still needs its own evaluation. This also handles octopus
+merges; comparing against just one parent would either duplicate evidence or
+miss a new merge change.
 Policy scope is the supplied repository; use a store containing the policies
 intended for that repository. Policies introduced after the audited commits
 also apply: this is a current-policy retrospective audit, not historical policy

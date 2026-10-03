@@ -8,12 +8,12 @@ use crate::{
 use std::{fs, process::Command};
 use tempfile::TempDir;
 
-struct Fixture {
-    dir: TempDir,
-    base: String,
+pub(super) struct Fixture {
+    pub(super) dir: TempDir,
+    pub(super) base: String,
 }
 impl Fixture {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let mut f = Self {
             dir,
@@ -24,7 +24,7 @@ impl Fixture {
         f.base = f.git(&["rev-parse", "HEAD"]);
         f
     }
-    fn git(&self, args: &[&str]) -> String {
+    pub(super) fn git(&self, args: &[&str]) -> String {
         let output = Command::new("git")
             .arg("-C")
             .arg(self.dir.path())
@@ -44,7 +44,7 @@ impl Fixture {
         );
         String::from_utf8(output.stdout).unwrap().trim().into()
     }
-    fn commit(&self, path: &str, content: &str) -> String {
+    pub(super) fn commit(&self, path: &str, content: &str) -> String {
         let p = self.dir.path().join(path);
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(&p, content).unwrap();
@@ -52,7 +52,7 @@ impl Fixture {
         self.git(&["commit", "-qm", "shell edit", "-m", "SHANTY_AGENT: fixture"]);
         self.git(&["rev-parse", "HEAD"])
     }
-    fn check(&self, store: &Store, trace: &[TraceRecord]) -> (Report, Scope) {
+    pub(super) fn check(&self, store: &Store, trace: &[TraceRecord]) -> (Report, Scope) {
         let mut report = super::super::audit::check(store, trace, 0).unwrap();
         let scope = reconcile(
             store,
@@ -66,7 +66,7 @@ impl Fixture {
         (report, scope)
     }
 }
-fn store(effect: &str, paths: &[&str], selector: bool) -> Store {
+pub(super) fn store(effect: &str, paths: &[&str], selector: bool) -> Store {
     let mut store = Store::open_in_memory().unwrap();
     let entity = store
         .intern(&format!("{DEFAULT_BASE_NS}path-policy"))
@@ -99,7 +99,7 @@ fn store(effect: &str, paths: &[&str], selector: bool) -> Store {
         .unwrap();
     store
 }
-fn trace(commit: &str, path: &str) -> TraceRecord {
+pub(super) fn trace(commit: &str, path: &str) -> TraceRecord {
     TraceRecord {
         git_commit: Some(commit.into()),
         path: Some(path.into()),
@@ -112,7 +112,7 @@ fn trace(commit: &str, path: &str) -> TraceRecord {
         ..Default::default()
     }
 }
-fn bypasses(report: &Report) -> usize {
+pub(super) fn bypasses(report: &Report) -> usize {
     report
         .discrepancies
         .iter()
@@ -265,7 +265,7 @@ fn malformed_glob_and_invalid_refs_are_errors_not_clean_results() {
     );
 }
 #[test]
-fn side_branch_and_merge_paths_are_both_covered() {
+fn side_branch_introduction_is_not_counted_again_at_a_clean_merge() {
     let f = Fixture::new();
     let main = f.git(&["branch", "--show-current"]);
     f.git(&["checkout", "-qb", "side"]);
@@ -275,7 +275,7 @@ fn side_branch_and_merge_paths_are_both_covered() {
     f.git(&["merge", "--no-ff", "-qm", "merge", "side"]);
     let (r, s) = f.check(&store("deny", &["src/auth/**"], false), &[]);
     assert_eq!(s.commits_checked, 3);
-    assert_eq!(bypasses(&r), 2);
+    assert_eq!(bypasses(&r), 1);
 }
 
 #[test]
