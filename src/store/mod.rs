@@ -23,6 +23,7 @@ pub mod labels;
 pub mod labels_advisory;
 mod migrate;
 mod open;
+pub(crate) use open::open_file_immutable;
 pub mod ops;
 pub mod overlays;
 pub mod push;
@@ -40,6 +41,7 @@ mod set;
 mod settings;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod snapshot_upload;
+mod source_claims;
 pub mod source_tag;
 #[cfg(test)]
 mod source_tap_tests;

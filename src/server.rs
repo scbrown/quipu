@@ -3,8 +3,6 @@
 
 use std::sync::Arc;
 
-use parking_lot::FairMutex;
-
 use axum::{
     Router,
     http::StatusCode,
@@ -56,6 +54,8 @@ mod tests;
 mod tools;
 #[path = "server/update.rs"]
 mod update;
+#[path = "server/update_slice.rs"]
+mod update_slice;
 #[path = "server/wal_maintenance.rs"]
 mod wal_maintenance;
 
@@ -76,11 +76,12 @@ use tools::*;
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
-
     // Asking the binary who it is must NOT touch disk (aegis-j0nq). These are
     // pure reads of compiled-in constants and must stay above Store::open.
     if args.iter().any(|a| a == "--version" || a == "-V") {
         println!("quipu-server {}", env!("CARGO_PKG_VERSION"));
+        println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
+        println!("git_dirty: {}", env!("QUIPU_GIT_DIRTY"));
         return;
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
@@ -125,7 +126,6 @@ async fn main() {
     if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
         eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
     }
-
     // Apply the entity-resolution policy so episode ingest actually dedups
     // (hq-uye) — without this, `[quipu.resolution] enabled = true` is inert.
     store.resolution_config_mut().clone_from(&config.resolution);
@@ -307,16 +307,10 @@ async fn main() {
     admission::init_read_admission_for_pool(read_pool.len());
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
 
-    let vector_reads_pooled = store.has_sqlite_vector_backend();
-    let state: SharedStore = Arc::new(StoreHandle {
-        graph_metrics: graph_metrics::GraphMetrics::new(&db_path),
-        writer: FairMutex::new(store),
-        readers: read_pool,
-        vector_reads_pooled,
-        federation: config.federation.clone(),
-        #[cfg(feature = "reactive-reasoner")]
-        reasoner: reactive_reasoner,
-    });
+    let handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    #[cfg(feature = "reactive-reasoner")]
+    let handle = handle.with_reasoner(reactive_reasoner);
+    let state: SharedStore = Arc::new(handle);
     let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
@@ -373,6 +367,7 @@ async fn main() {
         }
     }
 
+    let attest_store = state.clone();
     let app = Router::new()
         .merge(assets::routes())
         // Core API
@@ -469,9 +464,15 @@ async fn main() {
         .layer(axum::middleware::from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_policy = auth_policy.clone();
+                let attest_store = attest_store.clone();
                 async move {
                     let path = req.uri().path().to_string();
                     let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
+                    // A signed write authenticates by attestation, never by a
+                    // bearer on the same request (aegis-bys8d1).
+                    if is_write && !read_only && req.headers().contains_key(auth::write_attest::HEADER) {
+                        return auth::write_attest::handle(attest_store, req, next).await;
+                    }
                     let auth_header = req
                         .headers()
                         .get(axum::http::header::AUTHORIZATION)
@@ -688,5 +689,8 @@ async fn main() {
         });
     }
 
+    // Everything committed before this line is STARTUP in quipu_write_facts_total
+    // (aegis-gwkd76): the work every restart repeats.
+    quipu::write_kind::set_serving();
     quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
 }

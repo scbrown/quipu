@@ -127,7 +127,10 @@ pub fn eval_pattern_seeded(
         }
 
         GraphPattern::Filter { expr, inner } => {
-            let (rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
+            // aegis-o3l46b: seed `?v` from a top-level `FILTER(?v = <iri>)`.
+            let pushed = super::filter_pushdown::seed_iri_equalities(store, expr, inner, seed)?;
+            let (rows, vars) =
+                eval_pattern_seeded(store, inner, ctx, pushed.as_ref().unwrap_or(seed))?;
             let mut filtered = Vec::with_capacity(rows.len());
             for (i, row) in rows.into_iter().enumerate() {
                 // A pure-Rust filter over pre-materialized rows touches

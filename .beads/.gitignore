@@ -91,3 +91,15 @@ bd.db
 *-fsqlite-ns-gate
 *-fsqlite-ns-use
 .br_recovery/
+
+# br local state (aegis-19lsrv). The three-way merge ancestor keeps a pre-upgrade
+# record by design (a flush never advances it), so a committed copy would publish
+# whatever the store held before the export was fixed. All of these are per-clone.
+beads.base.jsonl
+beads.base.meta.json
+beads.left.jsonl
+beads.left.meta.json
+beads.right.jsonl
+beads.right.meta.json
+.br_history/
+.br_recovery/

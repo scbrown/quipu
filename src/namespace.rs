@@ -213,6 +213,10 @@ pub const XSD_NON_NEGATIVE_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#non
 pub const XSD_POSITIVE_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#positiveInteger";
 pub const XSD_UNSIGNED_LONG: &str = "http://www.w3.org/2001/XMLSchema#unsignedLong";
 pub const XSD_UNSIGNED_INT: &str = "http://www.w3.org/2001/XMLSchema#unsignedInt";
+pub const XSD_UNSIGNED_SHORT: &str = "http://www.w3.org/2001/XMLSchema#unsignedShort";
+pub const XSD_UNSIGNED_BYTE: &str = "http://www.w3.org/2001/XMLSchema#unsignedByte";
+pub const XSD_NEGATIVE_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#negativeInteger";
+pub const XSD_NON_POSITIVE_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#nonPositiveInteger";
 pub const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
 pub const XSD_FLOAT: &str = "http://www.w3.org/2001/XMLSchema#float";
 pub const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
@@ -230,6 +234,12 @@ pub const RDF_LANG_STRING: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#la
 /// `xsd:long`, `xsd:decimal`) still compares and sums numerically instead of
 /// having to be collapsed into `Int`/`Float` at parse time (aegis-fmyi).
 pub fn is_numeric_datatype(dt: &str) -> bool {
+    is_integer_datatype(dt) || matches!(dt, XSD_DOUBLE | XSD_FLOAT | XSD_DECIMAL)
+}
+
+/// `xsd:integer` and every type XSD derives from it. SPARQL arithmetic treats
+/// them all as `xsd:integer` when it promotes operand types (aegis-soqv1r).
+pub fn is_integer_datatype(dt: &str) -> bool {
     matches!(
         dt,
         XSD_INTEGER
@@ -239,11 +249,12 @@ pub fn is_numeric_datatype(dt: &str) -> bool {
             | XSD_BYTE
             | XSD_NON_NEGATIVE_INTEGER
             | XSD_POSITIVE_INTEGER
+            | XSD_NEGATIVE_INTEGER
+            | XSD_NON_POSITIVE_INTEGER
             | XSD_UNSIGNED_LONG
             | XSD_UNSIGNED_INT
-            | XSD_DOUBLE
-            | XSD_FLOAT
-            | XSD_DECIMAL
+            | XSD_UNSIGNED_SHORT
+            | XSD_UNSIGNED_BYTE
     )
 }
 

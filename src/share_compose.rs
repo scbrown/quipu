@@ -64,6 +64,7 @@ fn validate(shapes: &str, data: &str) -> Result<serde_json::Value> {
     #[cfg(feature = "shacl")]
     {
         let feedback = crate::shacl::validate_shapes(shapes, data)?;
+        let blocks = feedback.blocks();
         let mut report =
             serde_json::to_value(feedback).map_err(|e| Error::Serialization(e.to_string()))?;
         let authority = Store::open_in_memory()?;
@@ -73,6 +74,10 @@ fn validate(shapes: &str, data: &str) -> Result<serde_json::Value> {
         if !off_vocabulary.is_empty() {
             report["conforms"] = serde_json::Value::Bool(false);
         }
+        // The quarantine gate (aegis-1mv0to): a sh:Violation-severity result or
+        // an off-vocabulary type. Narrower than `conforms`, which SHACL makes
+        // false for a warning too; warnings stay in `results`.
+        report["blocking"] = serde_json::Value::Bool(blocks || !off_vocabulary.is_empty());
         report["off_vocabulary"] = serde_json::to_value(off_vocabulary).unwrap();
         let mut counts = BTreeMap::<String, usize>::new();
         if let Some(results) = report["results"].as_array() {
@@ -227,7 +232,7 @@ fn compose_inner(
         })
         .collect();
     let result = Composition {
-        outcome: if validation["conforms"] == true {
+        outcome: if validation["blocking"] == false {
             "composed"
         } else {
             "quarantined"
@@ -250,7 +255,7 @@ fn compose_inner(
                 continue;
             }
             let graph = store.graph_create(&pack.graph)?;
-            crate::rdf::ingest_rdf_to_graph(
+            crate::rdf::ingest_assigned_rdf(
                 store,
                 data.as_bytes(),
                 RdfFormat::NTriples,
@@ -275,7 +280,7 @@ fn compose_inner(
             result.dataset,
             oxrdf::Literal::new_simple_literal(record)
         );
-        crate::rdf::ingest_rdf_to_graph(
+        crate::rdf::ingest_assigned_rdf(
             store,
             payload.as_bytes(),
             RdfFormat::NTriples,

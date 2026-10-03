@@ -179,7 +179,7 @@ pub fn pack_full(
 #[cfg(not(target_arch = "wasm32"))]
 pub fn verify_full(pack_path: &str) -> Result<(String, String, bool)> {
     let manifest = crate::pack::read_manifest(pack_path)?;
-    let conn = Connection::open(pack_path)?;
+    let conn = crate::pack::open_pack_read_only(pack_path)?;
     let recomputed = content_hash_of(&conn)?;
     let matches = recomputed == manifest.content_hash;
     Ok((manifest.content_hash, recomputed, matches))

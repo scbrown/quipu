@@ -1,0 +1,82 @@
+{
+  "example traffic": {
+    "results": [
+      {
+        "entity": "https://example.org/miss",
+        "score": 0.9
+      },
+      {
+        "entity": "https://example.org/a",
+        "score": 0.8
+      },
+      {
+        "entity": "https://example.org/b",
+        "score": 0.7
+      }
+    ]
+  },
+  "example identifier": {
+    "results": [
+      {
+        "entity": "https://example.org/miss",
+        "score": 0.9
+      },
+      {
+        "entity": "https://example.org/a",
+        "score": 0.8
+      },
+      {
+        "entity": "https://example.org/b",
+        "score": 0.7
+      }
+    ]
+  },
+  "example attribute": {
+    "results": [
+      {
+        "entity": "https://example.org/miss",
+        "score": 0.9
+      },
+      {
+        "entity": "https://example.org/a",
+        "score": 0.8
+      },
+      {
+        "entity": "https://example.org/b",
+        "score": 0.7
+      }
+    ]
+  },
+  "example paraphrase": {
+    "results": [
+      {
+        "entity": "https://example.org/miss",
+        "score": 0.9
+      },
+      {
+        "entity": "https://example.org/a",
+        "score": 0.8
+      },
+      {
+        "entity": "https://example.org/b",
+        "score": 0.7
+      }
+    ]
+  },
+  "example long-body": {
+    "results": [
+      {
+        "entity": "https://example.org/miss",
+        "score": 0.9
+      },
+      {
+        "entity": "https://example.org/a",
+        "score": 0.8
+      },
+      {
+        "entity": "https://example.org/b",
+        "score": 0.7
+      }
+    ]
+  }
+}

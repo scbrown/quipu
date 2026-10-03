@@ -10,3 +10,15 @@
 # then rejects under a guard that cannot be bypassed. Check with:
 #     git config --get merge.beads.driver
 .beads/issues.jsonl merge=beads
+
+# Local context is supplied by `quipu git-merge REF`; CI checks without a driver.
+**/qpack/export.nt merge=quipu
+**/qpack/shapes.ttl merge=quipu
+**/qpack/manifest.json merge=quipu
+**/qpack/manifest.ttl merge=quipu
+
+# Readable pack diffs: `git diff` shows facts grouped by labelled entity when
+# `git config diff.quipu.textconv "quipu diff-textconv"` is set. Without that
+# config the attribute is inert and Git diffs the raw lines as before.
+*.nt diff=quipu
+*.nq diff=quipu

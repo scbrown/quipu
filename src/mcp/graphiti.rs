@@ -61,7 +61,7 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
             let Ok(facts) = store.entity_facts(m.entity_id) else {
                 continue;
             };
-            let node = facts_to_graphiti_node(store, &iri, &facts);
+            let node = facts_to_graphiti_node(store, &iri, &facts)?;
 
             if !passes_filters(&node, entity_type_filter, group_ids.as_deref()) {
                 continue;
@@ -112,7 +112,7 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
                     let Ok(facts) = store.entity_facts(*id) else {
                         continue;
                     };
-                    let node = facts_to_graphiti_node(store, &iri, &facts);
+                    let node = facts_to_graphiti_node(store, &iri, &facts)?;
 
                     if !passes_filters(&node, entity_type_filter, group_ids.as_deref()) {
                         continue;
@@ -216,21 +216,28 @@ fn passes_filters(
             _ => return false,
         }
     }
-    if let Some(gids) = group_ids {
-        match node.get("group_id").and_then(|v| v.as_str()) {
-            Some(gid) if gids.contains(&gid) => {}
-            _ => return false,
-        }
+    if let Some(gids) = group_ids
+        && !node["group_ids"].as_array().is_some_and(|groups| {
+            groups
+                .iter()
+                .any(|g| g.as_str().is_some_and(|g| gids.contains(&g)))
+        })
+    {
+        return false;
     }
     true
 }
 
 /// Convert entity facts into a Graphiti-compatible node JSON object.
-fn facts_to_graphiti_node(store: &Store, iri: &str, facts: &[crate::types::Fact]) -> JsonValue {
+fn facts_to_graphiti_node(
+    store: &Store,
+    iri: &str,
+    facts: &[crate::types::Fact],
+) -> Result<JsonValue> {
     let mut name = String::new();
     let mut node_type = String::new();
     let mut description = String::new();
-    let mut group_id = String::new();
+    let mut groups = std::collections::BTreeSet::new();
     let mut properties = serde_json::Map::new();
 
     for fact in facts {
@@ -251,16 +258,29 @@ fn facts_to_graphiti_node(store: &Store, iri: &str, facts: &[crate::types::Fact]
                     description.clone_from(s);
                 }
             }
-            p if p.ends_with("groupId") => {
+            p if is_group_predicate(store, p) => {
                 if let Value::Str(s) = &fact.value {
-                    group_id.clone_from(s);
+                    groups.insert(s.clone());
+                }
+            }
+            "http://www.w3.org/ns/prov#wasGeneratedBy" => {
+                properties.insert(
+                    "wasGeneratedBy".into(),
+                    super::value_to_json(store, &fact.value),
+                );
+                if let Value::Ref(episode) = fact.value {
+                    for provenance in store.entity_facts(episode)? {
+                        let predicate = store.resolve(provenance.attribute)?;
+                        if is_group_predicate(store, &predicate)
+                            && let Value::Str(group) = provenance.value
+                        {
+                            groups.insert(group);
+                        }
+                    }
                 }
             }
             _ => {
-                let key = pred
-                    .rsplit_once('/')
-                    .or_else(|| pred.rsplit_once('#'))
-                    .map_or(&*pred, |(_, k)| k);
+                let key = pred.rsplit(['/', '#']).next().unwrap_or(&pred);
                 properties.insert(key.to_string(), super::value_to_json(store, &fact.value));
             }
         }
@@ -277,11 +297,29 @@ fn facts_to_graphiti_node(store: &Store, iri: &str, facts: &[crate::types::Fact]
     if !description.is_empty() {
         obj.insert("description".to_string(), JsonValue::String(description));
     }
-    if !group_id.is_empty() {
-        obj.insert("group_id".to_string(), JsonValue::String(group_id));
+    if groups.len() == 1 {
+        obj.insert("group_id".to_string(), serde_json::json!(groups.first()));
+    }
+    if !groups.is_empty() {
+        obj.insert("group_ids".to_string(), serde_json::json!(groups));
     }
     if !properties.is_empty() {
         obj.insert("properties".to_string(), JsonValue::Object(properties));
     }
-    node
+    Ok(node)
 }
+
+// Exact vocabulary alternatives, never a suffix match on an unrelated ontology.
+fn is_group_predicate(store: &Store, predicate: &str) -> bool {
+    [
+        store.base_ns(),
+        crate::namespace::DEFAULT_BASE_NS,
+        "https://scbrown.github.io/quechua/ns#",
+    ]
+    .iter()
+    .any(|base| predicate.strip_prefix(base) == Some("groupId"))
+}
+
+#[cfg(test)]
+#[path = "graphiti_namespace_tests.rs"]
+mod namespace_tests;

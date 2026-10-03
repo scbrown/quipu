@@ -364,22 +364,7 @@ pub fn ingest_episode_outcome(
             if split.has_emit {
                 let feedback =
                     crate::shacl_context::validate_with_store_context(store, &split.emit, &turtle)?;
-                if !feedback.conforms {
-                    for issue in &feedback.results {
-                        store.queue_write_event(crate::store::PendingWriteEvent {
-                            event_type: "shacl.violation".to_string(),
-                            subject: Some(issue.focus_node.clone()),
-                            payload: serde_json::json!({
-                                "shape": issue.source_shape,
-                                "message": issue.message,
-                                "component": issue.component,
-                                "path": issue.path,
-                                "severity": issue.severity,
-                                "mode": "emit",
-                            }),
-                        });
-                    }
-                }
+                crate::shacl_context::queue_emit_violations(store, &feedback);
             }
         }
     }
@@ -452,7 +437,7 @@ pub fn ingest_episode_outcome(
             })
         });
         datums.append(&mut assertions);
-        let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source_str), graph)?;
+        let tx_id = store.transact_snapshot(&datums, timestamp, actor, &source_str, graph)?;
         (tx_id, count)
     } else {
         descriptions::ingest_reconciled(store, episode, &turtle, timestamp, base_ns, actor, graph)?
