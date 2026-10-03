@@ -4,13 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed
+## [0.11.1] - 2026-10-03
 
-- RDF loads scope blank nodes to document contents and destination graph. Reloading an edited file creates new blank nodes and leaves the old blank nodes and their facts in place. ([2959ce8](https://github.com/scbrown/quipu/commit/2959ce8))
+### Fixed
 
-### Other
+- *(rdf)* Scope blank nodes by document and destination graph (#321)([9a816b9](https://github.com/scbrown/quipu/commit/9a816b9829436892111ef19299ced93d8f4859ef))
+- *(reasoner)* Preserve unsupported promotions as demotion evidence (#311)([dd0bbee](https://github.com/scbrown/quipu/commit/dd0bbeeb605c80d9cb0983ad5f0e55189894f997))
 
-- *(conformance)* Re-derive ledgers at 3b628a6a (#405) ([323dda6](https://github.com/scbrown/quipu/commit/323dda62d88ba2e87ba5a39ee6e939b51f9f4479))
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at 3b628a6a (#405)([323dda6](https://github.com/scbrown/quipu/commit/323dda62d88ba2e87ba5a39ee6e939b51f9f4479))
+- *(conformance)* Re-derive ledgers at 9a816b98 (#408)([b867711](https://github.com/scbrown/quipu/commit/b867711779fcf95e5986ab92b018eb14e5e04268))
+- *(conformance)* Re-derive ledgers at 09c9f323 (#409)([795ee1f](https://github.com/scbrown/quipu/commit/795ee1f718557796b4e03dcf975c45f6c9a4c4b2))
+- *(conformance)* Re-derive ledgers at dd0bbeeb (#410)([b7e1528](https://github.com/scbrown/quipu/commit/b7e15285f8fd2ad4c6fb539af9c75adb129618c1))
+
+### Perf
+
+- *(semweb)* Reduce cold Spotlight allocation and latency (#407)([09c9f32](https://github.com/scbrown/quipu/commit/09c9f323cec3a4b51facb5fa385efd2d8f5d4348))
 
 ## [0.11.0] - 2026-10-03
 
