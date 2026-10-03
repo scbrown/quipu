@@ -1375,6 +1375,15 @@ by offset).
 
 ### `GET /events`
 
+Feed reads (`/events`, `/changes`, `/transactions`) use the WAL read pool when
+available, so a writer holding the store mutex does not block them. An empty
+read pool falls back to the writer. `POST /events/commit` remains a write.
+The `quipu_store_wait_seconds_total` and `quipu_store_held_seconds_total` metrics
+attribute each feed read to its normalized `X-Quipu-Client` and endpoint,
+including requests that return an error. An event page and its lag gauge are
+separate reads: a concurrent commit may increase the reported lag without
+changing the page's `next_offset` cursor.
+
 Pull a batch of events in offset order.
 
 | Param | Effect |
