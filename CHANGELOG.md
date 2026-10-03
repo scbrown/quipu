@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- RDF loads scope blank nodes to document contents and destination graph. Reloading an edited file creates new blank nodes and leaves the old blank nodes and their facts in place.
+
 ## [0.11.0] - 2026-10-03
 
 ### Fixed

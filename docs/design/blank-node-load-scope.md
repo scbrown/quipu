@@ -30,3 +30,7 @@ Parser changes that alter this order require compatibility review.
 Internal share deltas retain their already assigned identities; they are not
 new document loads. Existing stored blank-node identifiers are not rewritten.
 No migration or repair of previously merged nodes is attempted.
+
+Reloading an **edited file creates new blank nodes and leaves the old blank
+nodes and their facts in place**. A load adds the new document; it does not
+replace or retract the prior document.
