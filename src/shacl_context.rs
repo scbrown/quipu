@@ -446,7 +446,10 @@ mod shacl_context_tests;
 /// write path that routes by `quipu:onViolation` (`/episode`, `/knot`), so the
 /// event shape cannot drift between them (aegis-4c3ppi).
 pub fn queue_emit_violations(store: &Store, feedback: &crate::shacl::ValidationFeedback) {
-    if feedback.conforms {
+    // Every result, not only blocking ones: an emit shape may declare
+    // sh:Warning (aegis-1mv0to), and then `conforms` is true while there is
+    // still something to observe.
+    if feedback.results.is_empty() {
         return;
     }
     for issue in &feedback.results {
