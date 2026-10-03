@@ -145,3 +145,31 @@ pub(super) fn attribution(repo: &Path, commit: &str) -> Result<String> {
         "author {author:?}, declared trailers {trailers:?} (unauthenticated)"
     ))
 }
+
+/// Read the exact committed regular-file blob, never following symlinks.
+pub(super) fn blob(repo: &Path, commit: &str, path: &str) -> Result<String> {
+    let entry = text(
+        repo,
+        &["ls-tree", "-z", commit, "--", &format!(":(literal){path}")],
+    )?;
+    let (metadata, found) = entry
+        .split_once('\t')
+        .ok_or_else(|| invalid("path was deleted; no committed source to replay"))?;
+    if found.strip_suffix('\0') != Some(path) {
+        return Err(invalid("Git blob lookup did not resolve the exact path"));
+    }
+    let fields: Vec<_> = metadata.split_whitespace().collect();
+    if fields.len() != 3 || !matches!(fields[0], "100644" | "100755") || fields[1] != "blob" {
+        return Err(invalid(
+            "selector replay requires a regular file, not a symlink or submodule",
+        ));
+    }
+    let size: u64 = text(repo, &["cat-file", "-s", fields[2]])?
+        .trim()
+        .parse()
+        .map_err(|_| invalid("invalid Git blob size"))?;
+    if size > 8 * 1024 * 1024 {
+        return Err(invalid("committed source exceeds the 8 MiB replay limit"));
+    }
+    text(repo, &["cat-file", "blob", fields[2]])
+}
