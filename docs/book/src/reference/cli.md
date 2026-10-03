@@ -362,6 +362,57 @@ has neither the file nor the parser. And the report counts lines it could not
 read rather than skipping them, so `N line(s) unreadable` is always part of the
 summary: conformance over a window that was only partly read is not conformance.
 
+### Git path-policy backstop
+
+```bash
+quipu audit trace.jsonl --repo . --from BASE --to HEAD --json --db my.db
+```
+
+All three Git flags are required together. `BASE` is exclusive; `HEAD` is
+inclusive. Both resolve to full immutable commit ids before enumeration. The
+base must be an ancestor. Shallow repositories and ancestry grafts are refused;
+replacement objects are ignored. The `git`
+object reports those ids, commits and changed paths checked, path-policy count,
+and unresolved coverage. An empty policy catalogue is unproven, not a clean scan.
+
+The additional **git-coverage** pass reads ROOT's **current** action policies
+with `appliesTo` path globs. Globs use the same `glob::Pattern` matching as
+Yupana tripwires. It checks each commit, not just the window's net diff: a
+crossing followed by a revert is still visible. Renames check both old and new
+paths; merges check every parent and the window includes side-branch commits.
+Policy scope is the supplied repository; use a store containing the policies
+intended for that repository. Policies introduced after the audited commits
+also apply: this is a current-policy retrospective audit, not historical policy
+reconstruction.
+
+A changed matching path needs a conclusive evaluation with the exact policy id,
+repository-relative `path`, and full `git_commit` id in the trace record.
+Missing evidence produces a **bypassed enforcement** violation. A path-only
+`deny` crossing produces a violation even with a recorded evaluation: a claim
+that it was blocked cannot excuse the committed crossing. The report includes
+the commit author and declared `Co-Authored-By`, `Claude-Session`, and
+`SHANTY_AGENT` metadata for investigation.
+
+Existing pre-edit spools do **not** emit `git_commit`; they remain valid for the
+trace-only checker but do not establish Git coverage. A trusted producer must
+bind an evaluation to its actual commit; do not backfill every old path record
+with the current tip. This reader does not authenticate such bindings.
+
+Git mode exits **1** for a violation, **2** when Git coverage cannot be verified
+(including malformed trace lines, invalid refs/globs, no path policies, or
+unsupported selector replay without another violation), and **0** otherwise.
+Trace-only incompleteness retains its original semantics. Selector/predicate
+policies with matching `appliesTo` are explicitly unresolved; selectors without
+path scope are outside this pass. Selector replay against committed blobs is a
+separate layer, not a capability claimed by this path-only check.
+
+This catches only changes reaching the selected Git window. Uncommitted edits,
+ignored files and writes outside the repository remain invisible. Authors,
+trailers and trace evidence can be forged: this is an audit backstop, not a
+server-side enforcement boundary. Human edits are audited too, because an
+absent agent trailer does not prove a human author. Signed exception verdicts
+and a required forge check are not implemented by this command.
+
 ### `quipu audit inventory`
 
 Check the **dispatch graph** rather than a trace — SARC I7, enforcement
