@@ -40,17 +40,82 @@ pub fn eval_filter(
     row: &Bindings,
     ctx: &TemporalContext,
 ) -> Result<bool> {
+    // A SPARQL type error inside a FILTER eliminates the row; it does not fail
+    // the query (SPARQL 1.1 section 17.2, W3C dawg-bev-5/-6, aegis-soqv1r).
+    Ok(eval_filter_tv(store, expr, row, ctx)?.unwrap_or(false))
+}
+
+/// Three-valued FILTER evaluation: `Ok(None)` is a SPARQL type error, which
+/// propagates through `!` and through `&&`/`||` per the SPARQL truth tables.
+/// `Err` stays reserved for constructs quipu cannot evaluate at all.
+fn eval_filter_tv(
+    store: &Store,
+    expr: &Expression,
+    row: &Bindings,
+    ctx: &TemporalContext,
+) -> Result<Option<bool>> {
     match expr {
-        Expression::Equal(left, right) => Ok(expr_eq(store, left, right, row)),
+        // SPARQL: F && E = F, T && E = E, E && E = E.
+        Expression::And(left, right) => {
+            // Short-circuit as before: the right side is not evaluated when
+            // the left already decides, so EXISTS cost and errors are unchanged.
+            let l = eval_filter_tv(store, left, row, ctx)?;
+            if l == Some(false) {
+                return Ok(l);
+            }
+            let r = eval_filter_tv(store, right, row, ctx)?;
+            Ok(match (l, r) {
+                (_, Some(false)) => Some(false),
+                (Some(true), Some(true)) => Some(true),
+                _ => None,
+            })
+        }
+        // SPARQL: T || E = T, F || E = E, E || E = E.
+        Expression::Or(left, right) => {
+            let l = eval_filter_tv(store, left, row, ctx)?;
+            if l == Some(true) {
+                return Ok(l);
+            }
+            let r = eval_filter_tv(store, right, row, ctx)?;
+            Ok(match (l, r) {
+                (_, Some(true)) => Some(true),
+                (Some(false), Some(false)) => Some(false),
+                _ => None,
+            })
+        }
+        Expression::Not(inner) => Ok(eval_filter_tv(store, inner, row, ctx)?.map(|b| !b)),
+        // A bare variable/literal used directly as a FILTER takes its effective
+        // boolean value, e.g. `FILTER(?flag)` or `FILTER("x")`. An unbound
+        // variable or a value with no EBV is a type error, not a query failure.
+        Expression::Variable(_) | Expression::Literal(_) => Ok(eval_expr(store, expr, row)
+            .as_ref()
+            .and_then(effective_boolean_value)),
+        other => eval_filter_two_valued(store, other, row, ctx).map(Some),
+    }
+}
+
+fn eval_filter_two_valued(
+    store: &Store,
+    expr: &Expression,
+    row: &Bindings,
+    ctx: &TemporalContext,
+) -> Result<bool> {
+    match expr {
+        Expression::Equal(left, right) => Ok(sparql_eq(store, left, right, row)),
+        // sameTerm had no FILTER arm, so every form fell to the catch-all
+        // error below while the same call in BIND answered (aegis-soqv1r,
+        // W3C sparql10 sameTerm-simple/-eq/-not-eq). It keeps term identity
+        // (`expr_eq`), unlike `=` which compares numerics by value.
+        Expression::SameTerm(left, right) => Ok(expr_eq(store, left, right, row)),
         // quipu #52: `?x IN (a, b)` is defined by SPARQL 1.1 as the disjunction
         // `?x = a || ?x = b`, so it desugars here rather than needing its own
-        // comparison logic — it shares `expr_eq` with the `=` arm above so the
+        // comparison logic — it shares `sparql_eq` with the `=` arm above so the
         // two can never drift. `NOT IN` is parsed as `Not(In(…))`, which the
-        // `Not` arm below already handles. An EMPTY candidate list is `false`
+        // `Not` arm of `eval_filter_tv` already handles. An EMPTY candidate list is `false`
         // (and `NOT IN ()` therefore `true`), per spec.
         Expression::In(lhs, candidates) => Ok(candidates
             .iter()
-            .any(|candidate| expr_eq(store, lhs, candidate, row))),
+            .any(|candidate| sparql_eq(store, lhs, candidate, row))),
         Expression::Greater(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Greater
         })),
@@ -65,28 +130,8 @@ pub fn eval_filter(
         Expression::LessOrEqual(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Less || o == std::cmp::Ordering::Equal
         })),
-        Expression::And(left, right) => {
-            Ok(eval_filter(store, left, row, ctx)? && eval_filter(store, right, row, ctx)?)
-        }
-        Expression::Or(left, right) => {
-            Ok(eval_filter(store, left, row, ctx)? || eval_filter(store, right, row, ctx)?)
-        }
-        Expression::Not(inner) => Ok(!eval_filter(store, inner, row, ctx)?),
         Expression::Bound(var) => Ok(row.contains_key(var.as_str())),
         Expression::FunctionCall(func, args) => eval_bool_function(store, func, args, row),
-        // A bare variable/literal used directly as a FILTER takes its effective
-        // boolean value, e.g. `FILTER(?flag)` or `FILTER("x")`.
-        Expression::Variable(_) | Expression::Literal(_) => {
-            match eval_expr(store, expr, row)
-                .as_ref()
-                .and_then(effective_boolean_value)
-            {
-                Some(b) => Ok(b),
-                None => Err(Error::InvalidValue(format!(
-                    "FILTER expression has no effective boolean value: {expr:?}"
-                ))),
-            }
-        }
         // EXISTS { pattern } (and NOT EXISTS via the Not arm above). The inner
         // graph pattern is evaluated through the full pattern engine — so
         // property paths, OPTIONAL, nested FILTERs etc. all work inside it
@@ -115,6 +160,22 @@ pub fn eval_filter(
 /// Term equality for `=` and `IN`. An operand that cannot be evaluated (an
 /// unbound variable, an IRI absent from the dictionary) is not equal to
 /// anything rather than an error — matching what `=` has always done.
+/// SPARQL `=`: numbers compare by VALUE across datatypes, so `1 = 1.0` holds
+/// (aegis-soqv1r). Everything else falls back to term identity (`expr_eq`),
+/// which is what `sameTerm` uses; the two differ only for numerics.
+fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
+    let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
+        return false;
+    };
+    if let (Value::Int(x), Value::Int(y)) = (&a, &b) {
+        return x == y;
+    }
+    match (a.as_f64(), b.as_f64()) {
+        (Some(x), Some(y)) => x == y,
+        _ => a == b,
+    }
+}
+
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
     match (eval_expr(store, left, row), eval_expr(store, right, row)) {
         (Some(l), Some(r)) => l == r,
@@ -310,29 +371,12 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             if divisor == 0.0 {
                 return None;
             }
-            let quotient = dividend.as_f64()? / divisor;
-            if matches!(dividend, Value::Int(_)) && matches!(divisor_value, Value::Int(_)) {
-                Some(Value::Typed {
-                    lexical: format_decimal(quotient),
-                    datatype: namespace::XSD_DECIMAL.to_string(),
-                })
-            } else if dividend.datatype() == Some(namespace::XSD_DOUBLE)
-                || divisor_value.datatype() == Some(namespace::XSD_DOUBLE)
-            {
-                Some(Value::Typed {
-                    lexical: canonical_double(quotient),
-                    datatype: namespace::XSD_DOUBLE.to_string(),
-                })
-            } else if dividend.datatype() == Some(namespace::XSD_DECIMAL)
-                || divisor_value.datatype() == Some(namespace::XSD_DECIMAL)
-            {
-                Some(Value::Typed {
-                    lexical: format_decimal(quotient),
-                    datatype: namespace::XSD_DECIMAL.to_string(),
-                })
-            } else {
-                Some(Value::Float(quotient))
-            }
+            // Division promotes like the other operators, except that two
+            // integers divide as xsd:decimal (SPARQL op:numeric-divide).
+            let rank = numeric_rank(&dividend)?
+                .max(numeric_rank(&divisor_value)?)
+                .max(NumericRank::Decimal);
+            Some(typed_numeric(rank, dividend.as_f64()? / divisor))
         }
         Expression::UnaryPlus(inner) => eval_expr(store, inner, row),
         Expression::UnaryMinus(inner) => match eval_expr(store, inner, row)? {

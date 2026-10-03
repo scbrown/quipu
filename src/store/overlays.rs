@@ -64,6 +64,27 @@ impl Store {
         Ok(g)
     }
 
+    /// Register a named graph that has just been written, if it has no registry
+    /// row yet. An existing row of any class is left alone, so this never fails
+    /// on an overlay the way [`Self::graph_create`] does.
+    ///
+    /// `/update` wrote into named graphs without registering them, and its
+    /// dataset loads registered graphs only. Data it wrote was then visible to
+    /// `/query` and invisible to every later update's WHERE, so a
+    /// `NOT EXISTS { GRAPH <g> {...} }` guard passed vacuously and duplicates
+    /// landed (aegis-e9o5ci).
+    pub fn graph_ensure_registered(&self, g: i64) -> Result<()> {
+        if g == crate::schema::ROOT_GRAPH {
+            return Ok(());
+        }
+        self.conn.execute(
+            "INSERT OR IGNORE INTO graphs (g, class, parent_branch, created_at) \
+             VALUES (?1, 'committed', NULL, ?2)",
+            params![g, crate::time::now_iso()],
+        )?;
+        Ok(())
+    }
+
     /// Remove a committed named graph from the registry after its facts have
     /// been retracted. ROOT and non-committed graph classes are never removable
     /// through the Graph Store protocol.
@@ -267,7 +288,7 @@ impl Store {
                      AND o.e = r.e AND o.a = r.a AND o.v = r.v) \
              ) GROUP BY e, a, v ORDER BY e, a",
         )?;
-        Self::collect_facts(&mut stmt, params![overlay_g, root_g])
+        Self::collect_visible_facts(&mut stmt, params![overlay_g, root_g])
     }
 
     /// Governed-wins composition (quipu-e61): resolve `[overlay > parent]`
@@ -309,6 +330,6 @@ impl Store {
                      AND t.e = o.e AND t.a = o.a AND t.v = o.v) \
              ) GROUP BY e, a, v ORDER BY e, a",
         )?;
-        Self::collect_facts(&mut stmt, params![overlay_g, root_g])
+        Self::collect_visible_facts(&mut stmt, params![overlay_g, root_g])
     }
 }

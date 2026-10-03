@@ -22,6 +22,8 @@ pub enum AuthOutcome {
     AuthenticatedPrevious,
     /// An additive named credential authenticated the write.
     AuthenticatedNamed,
+    /// A signed write (session attestation) authenticated the write.
+    AuthenticatedAttested,
     /// The write lacked the configured bearer or supplied the wrong one.
     Unauthorized,
     /// Server read-only mode refused the write regardless of credentials.
@@ -39,6 +41,7 @@ impl AuthOutcome {
             Self::AuthenticatedCurrent => "authenticated_current",
             Self::AuthenticatedPrevious => "authenticated_previous",
             Self::AuthenticatedNamed => "authenticated_named",
+            Self::AuthenticatedAttested => "authenticated_attested",
             Self::Unauthorized => "unauthorized",
             Self::ReadOnly => "read_only",
         }

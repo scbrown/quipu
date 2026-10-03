@@ -110,7 +110,13 @@ SHAPES = Path(__file__).resolve().parent / "aegis-ontology.shapes.ttl"
 # Untargeted PropertyShapes are inert by construction; they validate nothing.
 # Deliberate (aegis-7hgo), so they are exempt from I2/I3 — see the file's
 # "INERT BY CONSTRUCTION" note.
-LABEL_EXEMPT = {"aegis:LabelRequiredShape"}
+LABEL_EXEMPT = {
+    "aegis:LabelRequiredShape",
+    # Machine-emitted transition records use a stable firing IRI, not a label.
+    # Chaski graph_sink.py emits firedBy/focus/startedAt/eventId; the exact
+    # producer fixture and required-field negatives live in reaction_shapes.rs.
+    "aegis:ReactionFiringShape",
+}
 
 AEGIS_NS = "http://aegis.gastown.local/ontology/"
 
@@ -135,6 +141,19 @@ AEGIS_NS = "http://aegis.gastown.local/ontology/"
 # above is what that produces: shapes requiring predicates nothing emitted, and
 # ingestion for 11 classes one validate_on_write flag away from dying.
 REQUIRED_PREDICATE_PROVEN = {
+    # Zero asserted Reaction/ReactionFiring instances, measured 2026-09-26.
+    # Schema-first contract: tests/reaction_shapes.rs covers complete producer
+    # records and each missing required field; no existing class is relaxed.
+    **{
+        ("aegis:ReactionShape", f"aegis:{predicate}"):
+            "schema-first zero-instance contract + producer/negative fixtures 2026-09-26"
+        for predicate in ("triggerKind", "condition", "severity", "action", "owner")
+    },
+    **{
+        ("aegis:ReactionFiringShape", f"aegis:{predicate}"):
+            "schema-first zero-instance contract + producer/negative fixtures 2026-09-26"
+        for predicate in ("firedBy", "focus", "startedAt")
+    },
     # (shape, predicate): "<measured coverage> <date> <who>"
     ("aegis:TextRuleShape", "aegis:regex"):
         "7/7 TextRule instances (via rdfs:subClassOf*) 2026-08-24 grant",
@@ -173,11 +192,19 @@ def parse(path):
             m = None            # a shape in some OTHER namespace is not ours to judge
         if m:
             cur = {"name": f"{m.group(1)}:{m.group(2)}", "kind": m.group(3),
-                   "target": None, "props": []}
+                   "target": None, "props": [], "emit": False}
             shapes.append(cur)
             continue
         if cur is None:
             continue
+        # PER SHAPE, FAIL CLOSED (aegis-4c3ppi, ian ruling B): only an explicit
+        # quipu:onViolation "emit" is emit mode, matching the runtime's
+        # shacl::split_shapes_by_policy. Absent, "reject" or anything else is
+        # reject. sh:severity is NOT read: a Warning severity still rejects at
+        # write time, so it must never exempt a shape from I1.
+        v = re.search(r'quipu:onViolation\s+"([^"]*)"', line)
+        if v:
+            cur["emit"] = v.group(1) == "emit"
         t = re.search(r"sh:targetClass\s+(\S+?)\s*[;.]", line)
         if t:
             cur["target"] = t.group(1)
@@ -380,6 +407,41 @@ def flag_value(flag):
     return sys.argv[sys.argv.index(flag) + 1] if flag in sys.argv else None
 
 
+def check_i1(shapes):
+    """I1 over parsed shapes -> (failures, allowed). Lifted out of main() so the
+    selftest can drive the emit/reject arms (aegis-4c3ppi)."""
+    failures, proven = [], []
+    for s in shapes:
+        for p in s["props"]:
+            if p["minCount"] and p["path"] != "rdfs:label":
+                if (s["name"], p["path"]) in REQUIRED_PREDICATE_PROVEN:
+                    proven.append(
+                        f"I1 {s['name']} requires {p['path']} — allowed, requirement "
+                        f"justified: {REQUIRED_PREDICATE_PROVEN[(s['name'], p['path'])]}"
+                    )
+                    continue
+                if s.get("emit"):
+                    # EMIT MODE (aegis-4c3ppi, ian ruling B). I1's harm is a
+                    # REJECT shape requiring what nothing emits: ingestion for the
+                    # class dies. An emit shape lets the write commit and turns each
+                    # gap into a shacl.violation event, which IS the backfill metric.
+                    # The protection moves to the FLIP: drop the emit annotation and
+                    # this predicate fails here until REQUIRED_PREDICATE_PROVEN holds
+                    # a measured 100% for it.
+                    proven.append(
+                        f"I1 {s['name']} requires {p['path']} — allowed in EMIT mode "
+                        f"only; flipping it to reject needs a REQUIRED_PREDICATE_PROVEN "
+                        f"entry citing measured 100% coverage"
+                    )
+                    continue
+                failures.append(
+                    f"I1 {s['name']} requires {p['path']} (sh:minCount 1). Nothing but "
+                    f"rdfs:label may be required unless /episode provably emits it — "
+                    f"verify coverage against the live graph before adding this back."
+                )
+    return failures, proven
+
+
 def main():
     if "--selftest" in sys.argv:
         sys.exit(selftest())
@@ -391,20 +453,9 @@ def main():
     proven = []
 
     # I1 — only rdfs:label may be required, unless the requirement is justified.
-    for s in shapes:
-        for p in s["props"]:
-            if p["minCount"] and p["path"] != "rdfs:label":
-                if (s["name"], p["path"]) in REQUIRED_PREDICATE_PROVEN:
-                    proven.append(
-                        f"I1 {s['name']} requires {p['path']} — allowed, requirement "
-                        f"justified: {REQUIRED_PREDICATE_PROVEN[(s['name'], p['path'])]}"
-                    )
-                    continue
-                failures.append(
-                    f"I1 {s['name']} requires {p['path']} (sh:minCount 1). Nothing but "
-                    f"rdfs:label may be required unless /episode provably emits it — "
-                    f"verify coverage against the live graph before adding this back."
-                )
+    i1_fail, i1_ok = check_i1(shapes)
+    failures += i1_fail
+    proven += i1_ok
 
     # I2 — every targetClass shape requires rdfs:label.
     for s in targeted:
@@ -738,6 +789,40 @@ def selftest():
     others = other_shape_files()
     if others and not any(parse(p) for p in others):
         fails.append("vt03v-i9: I9 parsed 0 shapes across every other file")
+
+    # aegis-4c3ppi (ian ruling B): I1 is decided PER SHAPE and FAILS CLOSED.
+    # Only an explicit quipu:onViolation "emit" relaxes it; absent, "reject",
+    # any other value, and a Warning severity all still fail I1.
+    head = ("@prefix aegis: <http://aegis.gastown.local/ontology/> .\n"
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n"
+            "@prefix quipu: <http://quipu.dev/ontology/> .\n")
+
+    def i1_on(annotation):
+        ttl = (head + "aegis:ProbeShape a sh:NodeShape ;\n" + annotation +
+               "    sh:targetClass aegis:Probe ;\n"
+               "    sh:property [\n        sh:path aegis:unproven ;\n"
+               "        sh:minCount 1 ;\n    ] .\n")
+        return check_i1(parse_text_for_selftest(ttl))
+
+    for label, annotation, want_fail in (
+        ("emit", '    quipu:onViolation "emit" ;\n', False),
+        ("absent", "", True),
+        ("explicit reject", '    quipu:onViolation "reject" ;\n', True),
+        ("unknown value", '    quipu:onViolation "warn" ;\n', True),
+        ("Warning severity alone", "    sh:severity sh:Warning ;\n", True),
+    ):
+        got_fail = bool(i1_on(annotation)[0])
+        if got_fail != want_fail:
+            fails.append(f"4c3ppi-i1-{label}: I1 {'failed' if got_fail else 'passed'}, "
+                         f"wanted {'fail' if want_fail else 'pass'}")
+
+    # The flip is the gate: a PROVEN entry must cite FULL coverage (N/N with
+    # equal numbers) or the ruled schema-first zero-instance contract. A partial
+    # count is not a proof, and is exactly what a premature flip would carry.
+    for key, note in REQUIRED_PREDICATE_PROVEN.items():
+        full = any(a == b for a, b in re.findall(r"(\d+)/(\d+)", note or ""))
+        if not (full or "schema-first" in (note or "")):
+            fails.append(f"4c3ppi-proven: {key} cites no 100% measurement ({note!r})")
 
     # Every proven-coverage entry must CARRY its measurement. An empty note
     # turns the escape hatch into the exemption list I1's history forbids.

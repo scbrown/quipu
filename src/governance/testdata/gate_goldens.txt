@@ -1,0 +1,97 @@
+case deny_unsatisfied
+  result: denied: 'http://ex/e_deny_u' blocked by policy 'http://ex/P_deny' (effect 'deny', target type 'http://ex/TDeny'): claim unsatisfied.
+  verdict: http://ex/P_deny http://ex/e_deny_u unsatisfied
+case deny_satisfied
+  result: admitted
+  verdict: http://ex/P_deny http://ex/e_deny_s satisfied
+case default_effect_is_deny
+  result: denied: 'http://ex/e_default' blocked by policy 'http://ex/P_default' (effect 'deny', target type 'http://ex/TDefault'): claim unsatisfied.
+  verdict: http://ex/P_default http://ex/e_default unsatisfied
+case warn_is_not_evaluated
+  result: admitted
+case allow_is_not_evaluated
+  result: admitted
+case record_is_not_evaluated
+  result: admitted
+case throttle_is_not_evaluated
+  result: admitted
+case ungoverned_type
+  result: admitted
+case untyped_entity
+  result: admitted
+case probe_false_is_unknown
+  result: admitted
+  verdict: http://ex/P_probe http://ex/e_probe_f unknown
+case probe_true_unsatisfied
+  result: denied: 'http://ex/e_probe_tu' blocked by policy 'http://ex/P_probe' (effect 'deny', target type 'http://ex/TProbe'): claim unsatisfied.
+  verdict: http://ex/P_probe http://ex/e_probe_tu unsatisfied
+case probe_true_satisfied
+  result: admitted
+  verdict: http://ex/P_probe http://ex/e_probe_ts satisfied
+case exemplar_cited
+  result: denied: 'http://ex/e_ex' blocked by policy 'http://ex/P_ex' (effect 'deny', target type 'http://ex/TEx'): claim unsatisfied. This rule's motivating case: http://ex/verdict_motivating (aegis:exemplar) — the refusal is similar to the example that motivated the rule.
+  verdict: http://ex/P_ex http://ex/e_ex unsatisfied
+case multi_first_fails
+  result: denied: 'http://ex/e_multi_1' blocked by policy 'http://ex/P_multi_a' (effect 'deny', target type 'http://ex/TMulti'): claim unsatisfied.
+  verdict: http://ex/P_multi_a http://ex/e_multi_1 unsatisfied
+case multi_second_fails
+  result: denied: 'http://ex/e_multi_2' blocked by policy 'http://ex/P_multi_b' (effect 'deny', target type 'http://ex/TMulti'): claim unsatisfied.
+  verdict: http://ex/P_multi_a http://ex/e_multi_2 satisfied
+  verdict: http://ex/P_multi_b http://ex/e_multi_2 unsatisfied
+case multi_both_satisfied
+  result: admitted
+  verdict: http://ex/P_multi_a http://ex/e_multi_3 satisfied
+  verdict: http://ex/P_multi_b http://ex/e_multi_3 satisfied
+case mixed_warn_and_deny
+  result: denied: 'http://ex/e_mixed' blocked by policy 'http://ex/P_mixed_deny' (effect 'deny', target type 'http://ex/TMixed'): claim unsatisfied.
+  verdict: http://ex/P_mixed_deny http://ex/e_mixed unsatisfied
+case two_governed_types
+  result: denied: 'http://ex/e_two' blocked by policy 'http://ex/P_second_type' (effect 'deny', target type 'http://ex/TSecond'): claim unsatisfied.
+  verdict: http://ex/P_deny http://ex/e_two satisfied
+  verdict: http://ex/P_second_type http://ex/e_two unsatisfied
+case two_entities_one_bad
+  result: denied: 'http://ex/e_pair_bad' blocked by policy 'http://ex/P_deny' (effect 'deny', target type 'http://ex/TDeny'): claim unsatisfied.
+  verdict: http://ex/P_deny http://ex/e_pair_ok satisfied
+  verdict: http://ex/P_deny http://ex/e_pair_bad unsatisfied
+case unrelated_edit_of_compliant
+  result: admitted
+  verdict: http://ex/P_deny http://ex/e_edit satisfied
+case retraction_breaks_claim
+  result: denied: 'http://ex/e_retract' blocked by policy 'http://ex/P_deny' (effect 'deny', target type 'http://ex/TDeny'): claim unsatisfied.
+  verdict: http://ex/P_deny http://ex/e_retract unsatisfied
+case type_in_root_write_in_overlay
+  result: denied: 'http://ex/e_g_root' blocked by policy 'http://ex/P_deny' (effect 'deny', target type 'http://ex/TDeny'): claim unsatisfied.
+  verdict: http://ex/P_deny http://ex/e_g_root unsatisfied
+case type_in_other_graph_is_invisible
+  result: admitted
+case type_in_write_graph
+  result: denied: 'http://ex/e_g_write' blocked by policy 'http://ex/P_deny' (effect 'deny', target type 'http://ex/TDeny'): claim unsatisfied.
+  verdict: http://ex/P_deny http://ex/e_g_write unsatisfied
+case require_approval_no_request
+  result: denied: 'http://ex/e_ra_none' needs a human decision under policy 'http://ex/P_ra'. A DecisionRequest has been opened; have a registered decider record a signed aegis:Decision with outcome "approve" bound to its evidenceHash, then retry.
+  verdict: http://ex/P_ra http://ex/e_ra_none unsatisfied
+  request: http://ex/P_ra http://ex/e_ra_none window=3600 now>0=true
+case escalate_no_request
+  result: denied: 'http://ex/e_esc_none' needs a human decision under policy 'http://ex/P_esc'. A DecisionRequest has been opened; have a registered decider record a signed aegis:Decision with outcome "approve" bound to its evidenceHash, then retry.
+  verdict: http://ex/P_esc http://ex/e_esc_none unsatisfied
+  request: http://ex/P_esc http://ex/e_esc_none window=3600 now>0=true
+case escalate_no_window_declared
+  result: denied: 'http://ex/e_nowin' needs a human decision under policy 'http://ex/P_nowin'. A DecisionRequest has been opened; have a registered decider record a signed aegis:Decision with outcome "approve" bound to its evidenceHash, then retry.
+  verdict: http://ex/P_nowin http://ex/e_nowin unsatisfied
+  request: http://ex/P_nowin http://ex/e_nowin window=0 now>0=true
+case require_approval_pending
+  result: denied: 'http://ex/e_ra_pend' blocked by policy 'http://ex/P_ra': 'http://ex/e_ra_pend' needs a human decision under policy 'http://ex/P_ra'. A DecisionRequest is open and expires at 11700000000 (unix seconds), after which it is DENIED. To proceed, have a registered decider record a signed aegis:Decision with outcome "approve" bound to this request's evidenceHash, then retry.
+  verdict: http://ex/P_ra http://ex/e_ra_pend unsatisfied
+case require_approval_expired
+  result: denied: 'http://ex/e_ra_exp' blocked by policy 'http://ex/P_ra': the previous DecisionRequest expired with no ruling and was denied (declared default-deny). This attempt has opened a fresh request; have an authorized operator record a signed aegis:Decision with outcome "approve" bound to its evidenceHash, then retry.
+  verdict: http://ex/P_ra http://ex/e_ra_exp unsatisfied
+  request: http://ex/P_ra http://ex/e_ra_exp window=3600 now>0=true
+case require_approval_approved
+  result: admitted
+  verdict: http://ex/P_ra http://ex/e_ra_ok unsatisfied
+case require_approval_rejected
+  result: denied: 'http://ex/e_ra_no' blocked by policy 'http://ex/P_ra': 'http://ex/e_ra_no' was refused by bob (reject) under policy 'http://ex/P_ra'. This ruling binds only this (policy, target) pair; to make it a standing rule, draft a policy citing this decision as its exemplar — `quipu policy draft --exemplar http://aegis.gastown.local/ontology/decision_request_d84aec7483b70db20415357b1deb9f33 ...` — then backtest the draft over recorded history (`quipu policy backtest`) before creating it. The draft is born advisory (effect "warn").
+  verdict: http://ex/P_ra http://ex/e_ra_no unsatisfied
+case escalate_satisfied_skips_router
+  result: admitted
+  verdict: http://ex/P_esc http://ex/e_esc_sat satisfied

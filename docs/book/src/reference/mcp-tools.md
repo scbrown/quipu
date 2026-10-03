@@ -265,6 +265,18 @@ crew identity (hq-otm) land it should require an authorized principal.
 
 ### `quipu_retract_source`
 
+Identical facts asserted by different sources retain independent ownership.
+Repair removes only the selected source's claims in the selected graph; a fact
+remains visible until its last owner retracts it. Repeating an assertion under
+the same source is idempotent. The reported `retracted` count is the number of
+source-owned statements processed, not the number that disappeared from the
+logical graph. Historical assertions remain in the audit log.
+
+**The ownership fix is forward-only for newly recorded claims.** Older versions
+skipped identical assertions from later producers, so those historical claims
+cannot be reconstructed. Reassert all relevant producer snapshots before
+retracting old shared facts; this release does not backfill ownership.
+
 Retract-only repair of facts owned by a **legacy transaction source**
 (`POST /retract/source`).
 
@@ -332,6 +344,7 @@ Semantic vector search over entity embeddings. Supply either a natural-language
 | `query` | No | Natural-language query (auto-embedded; alternative to `embedding`) |
 | `embedding` | No | Float array (query vector); takes precedence over `query` |
 | `limit` | No | Max results (default: 10) |
+| `ranking` | No | `semantic` (default) preserves cosine order; opt-in `content` demotes contentless repository artifacts |
 | `valid_at` | No | Temporal filter |
 | `verbose` | No | Return full entity IRIs instead of the default CURIE-compacted values |
 
@@ -342,6 +355,10 @@ so zero results are distinguishable from an unembedded store — see
 [Embeddings and Semantic Search](../concepts/embeddings.md).
 | `group_ids` | No | Best-effort filter to entities from these provenance groups (episode-scoped label, **not** an isolation boundary; `/knot` facts are ungrouped and dropped from a group scope) |
 | `entity_type` | No | Restrict to entities of this rdf:type IRI |
+
+Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
+See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
+exceptions, temporal behavior, and bounded candidate recall.
 
 ### `quipu_hybrid_search`
 
@@ -450,6 +467,10 @@ re-running the same ASK over the same committed evidence gets the same verdict
 (checked, not trusted). The verdict is returned **unsigned** unless the store
 has a signing identity attached.
 
+Stored `claim` and `evidenceProbe` properties are read under both vocabulary
+namespaces. Identical alias values collapse; conflicting values are refused.
+The stored query text, target identity, and signature inputs are preserved.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `policy` | One of policy/claim | Policy IRI whose `aegis:claim` to evaluate |
@@ -466,6 +487,10 @@ be valid under the verifier's **registered** public key, and the verifier must
 be authorized to attest the predicate. `trusted` is the conjunction — the
 property a consumer should gate on.
 
+Registration classes and verifier/key predicates are read under both vocabulary
+namespaces. Conflicting registered keys are refused, rather than choosing one;
+duplicate aliases carrying the same key are accepted.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `predicate_id` | Yes | Predicate the verdict attests |
@@ -474,24 +499,64 @@ property a consumer should gate on.
 | `evidence_hash` | Yes | Evidence hash the signature seals |
 | `tier` | No | Evidence tier (default: `committed`) |
 | `verifier` | Yes | Verifier IRI whose registered key verifies the signature |
-| `signature` | Yes | Hex ed25519 signature over the verdict message |
+| `signature` | Yes | Signature over the verdict message: hex for `ed25519`; base64url assertion signature for `webauthn-*`; the armored SSH SIGNATURE for `sshsig-sk-ed25519` |
+| `verdict` | No | IRI of the stored verdict carrying this signature: verify as of when the store recorded it (use this for trust decisions) |
+| `signed_at` | No | Explicit valid-time instant (a what-if query; default now) |
+| `tx` | No | Explicit transaction to verify as of (a what-if query; default latest) |
+| `scheme` | No | `ed25519` (default), `webauthn-es256`, `webauthn-eddsa`, or `sshsig-sk-ed25519` |
+| `authenticator_data` | WebAuthn | base64url `authenticatorData` |
+| `client_data_json` | WebAuthn | base64url `clientDataJSON` |
+
+The registry is read **as of the signature** (signing-plane S1): a key that
+has since been rotated still verifies what it signed while registered, and
+cannot verify anything recorded after it was closed. The result's
+`as_of.basis` is `recorded`, `caller-supplied` or `now`. A caller-supplied
+instant is a what-if: `trusted` is then always `false`, and the answer is in
+`would_verify_as_of_supplied_instant`. Otherwise naming a transaction from
+before a revocation would make a revoked key read as trusted.
+
+Hardware schemes are **off by default** (`[quipu.governance]
+hardware_verdict_schemes`); while off, a verdict naming one is refused. A
+hardware verdict verifies only against a registration declaring the same
+`aegis:signatureScheme`, and is trusted only when that same registration
+attests the predicate. WebAuthn registrations carry the base64url COSE key in
+`aegis:publicKey` plus `aegis:webauthnRpId` and `aegis:webauthnOrigin`; SSHSIG
+registrations carry an OpenSSH `sk-ssh-ed25519@openssh.com` public key line.
+The WebAuthn challenge is derived by quipu from the verdict message, never
+taken from the caller, and SSHSIG must use namespace `quipu-verdict`. The
+response's `sign_count` is the authenticator counter to record as the
+registration's `aegis:signCount`. Once a nonzero counter is recorded, a
+signature whose counter does not exceed it (including 0) is refused as a
+possible clone; a credential that has only ever reported 0 is accepted.
+WebAuthn requires user verification (UV); SSHSIG requires user presence and
+reports UV without requiring it.
+See `src/verdict_schemes/mod.rs` for the full rule list.
+
+The as-of rule binds every scheme: a hardware verdict is checked against
+the registrations, grants and recorded `aegis:signCount` in effect at the
+same instant, and a caller-supplied instant leaves it untrusted too.
 
 ### `quipu_verifier_authorized`
 
 Check the Phase-0 verifier registry: may this verifier attest this predicate?
-The discovery half of the governance gate.
+The discovery half of the governance gate. Registration classes and each
+verifier/attests predicate may independently use the legacy or Quechua vocabulary.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `verifier` | Yes | Verifier IRI |
 | `predicate` | Yes | Predicate IRI to attest |
+| `signed_at` | No | Valid-time instant to check at (default now) |
+| `tx` | No | Transaction to check as of (default latest) |
 
 ### `quipu_cooccurrence`
 
 Deterministic, auditable work-item co-occurrence: given a work-item (`Bead`)
 IRI, returns the other work-items that share at least one touched code entity
 via the provenance chain `Bead ←implements− GitCommit −modifies→ entity`.
-A graph query over typed provenance edges, ordered by overlap strength.
+A graph query over typed provenance edges, ordered by overlap strength. Each
+implements/modifies edge may use the legacy or Quechua vocabulary independently;
+duplicate aliases do not inflate shared-entity counts.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -659,6 +724,19 @@ to list every query, its parameters, and their types.
 | `references_to` | `entity` (iri), `limit` (int, 50) | Entities that reference the given entity (incoming) |
 | `entities_of_type` | `type` (iri), `limit` (int, 100) | All entities of a given `rdf:type` |
 | `labeled_like` | `text` (text), `limit` (int, 50) | Entities whose `rdfs:label` contains `text` (case-insensitive) |
+
+The provenance queries `brief_ground`, `brief_related`, `entity_work`, and
+`cochanged_with` read both legacy vocabulary predicates and their Quechua
+counterparts under `https://scbrown.github.io/quechua/ns#`. Each edge can use
+either spelling independently. Duplicate aliases do not inflate returned paths
+or shared-item counts. Entity IRIs and dataset selection stay unchanged; these
+queries do not require an equivalence reasoner.
+
+The group scope in `quipu_search`, `quipu_search_nodes`, and
+`quipu_search_facts` accepts either vocabulary's `groupId` predicate on the
+provenance episode. Duplicate aliases do not duplicate search results. Other
+groups, unrelated predicates with the same local name, and nodes without an
+episode remain outside a requested group scope.
 
 Parameters are validated and escaped by type before substitution, so values are
 safe against SPARQL injection. The response includes the resolved `sparql`, the

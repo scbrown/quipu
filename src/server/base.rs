@@ -96,7 +96,9 @@ pub(crate) async fn health() -> impl IntoResponse {
 pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
-    let body = store.graph_metrics.render();
+    let mut body = store.graph_metrics.render();
+    super::request_middleware::render_request_starts(&mut body);
+    super::update::render_update_paths(&mut body);
     Ok((
         [(
             axum::http::header::CONTENT_TYPE,
@@ -173,8 +175,11 @@ where
     T: Send + 'static,
 {
     let identity = super::auth::request_identity();
-    match tokio::task::spawn_blocking(move || quipu::transaction_auth::with_identity(identity, f))
-        .await
+    let kind = super::request_middleware::request_write_kind();
+    match tokio::task::spawn_blocking(move || {
+        quipu::transaction_auth::with_identity(identity, || quipu::write_kind::scoped(kind, f))
+    })
+    .await
     {
         Ok(result) => result,
         // Only reachable if the handler panicked; the mutex is then poisoned and

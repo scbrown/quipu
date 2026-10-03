@@ -90,6 +90,25 @@ impl Store {
         Ok(Self::with_connection(conn))
     }
 
+    /// Open a store FILE that must not change, such as a pack being verified
+    /// (aegis-s8jra2).
+    ///
+    /// [`Self::open`] runs schema setup and migrations and commits them, so a
+    /// verify through it rewrote the pack. [`Self::open_read_only`] cannot
+    /// write, but on a WAL-mode file it still creates `-wal`/`-shm` siblings
+    /// that it cannot remove, and a pack must stay one file. This opens with
+    /// `immutable=1`: no locks, no siblings, bytes untouched. If a `-wal`
+    /// sibling already exists it may hold committed pages that `immutable`
+    /// would ignore, so that case falls back to a plain read-only open.
+    ///
+    /// Carries DEFAULT configuration and runs no DDL, like
+    /// [`Self::open_read_only`].
+    pub fn open_immutable(path: &str) -> Result<Self> {
+        let conn = open_file_immutable(path)?;
+        conn.execute_batch("PRAGMA foreign_keys=ON; PRAGMA query_only=ON;")?;
+        Ok(Self::with_connection(conn))
+    }
+
     /// Copy the READ-relevant configuration from another store.
     ///
     /// Reads are policy-bearing: `search_config` bounds result sets (hq-gkd),
@@ -216,6 +235,9 @@ impl Store {
         // Attribute-scoped current-fact index (aegis-svtdyn). Additive; no
         // ordering constraint beyond the `facts` table existing.
         Self::migrate_current_fact_index(&conn)?;
+        // Source-scoped retraction index (aegis-m6agjy). Additive; `transactions`
+        // exists from INIT_SQL.
+        Self::migrate_transaction_source_index(&conn)?;
         // BEFORE `migrate_graph_labels`, which interns the meta-graph IRI: that
         // intern must know the store's space, or on a non-zero-space store it
         // allocates the reserved graph OUTSIDE the space that owns it.
@@ -226,6 +248,7 @@ impl Store {
         Self::migrate_session_attestation(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
+        Self::migrate_pending_share_queries(&conn)?;
         Self::migrate_retraction_tx(&conn)?;
         // AFTER migrate_named_graphs: the fork registry references graphs(g).
         Self::migrate_forks(&conn)?;
@@ -471,4 +494,23 @@ impl Store {
     pub fn has_attachments(&self) -> bool {
         !self.attachments.is_empty()
     }
+}
+
+/// See [`Store::open_immutable`]. A bare connection, for callers that read
+/// raw tables (pack manifests, full-pack hashing).
+pub(crate) fn open_file_immutable(path: &str) -> Result<Connection> {
+    use rusqlite::OpenFlags;
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI;
+    if std::path::Path::new(&format!("{path}-wal")).exists() {
+        return Ok(Connection::open_with_flags(path, flags)?);
+    }
+    // Escape the characters a `file:` URI treats specially in a path.
+    let escaped = path
+        .replace('%', "%25")
+        .replace('?', "%3f")
+        .replace('#', "%23");
+    Ok(Connection::open_with_flags(
+        format!("file:{escaped}?immutable=1"),
+        flags,
+    )?)
 }

@@ -9,7 +9,7 @@
 //! caller-provided, so Bobbin can supply its ONNX pipeline when Quipu is used
 //! as a subsystem.
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
 use crate::error::Result;
 use crate::store::Store;
@@ -50,6 +50,15 @@ pub trait KnowledgeVectorStore {
 
     /// Close an entity's embedding (set `valid_to`) when the entity is retracted.
     fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()>;
+
+    /// The text an entity's CURRENT embedding was computed from, if the backend
+    /// can say. Auto-embed skips an entity whose current vector was built from
+    /// byte-identical text (aegis-tvlxr4). `None` means "no current vector, or
+    /// this backend cannot tell", and either way the entity is embedded again,
+    /// so a backend that does not override this keeps the re-embed behaviour.
+    fn current_embedding_text(&self, _entity_id: i64) -> Result<Option<String>> {
+        Ok(None)
+    }
 
     /// Search for similar entities by cosine similarity.
     ///
@@ -134,6 +143,16 @@ impl KnowledgeVectorStore for Store {
             params![valid_to, entity_id],
         )?;
         Ok(())
+    }
+
+    fn current_embedding_text(&self, entity_id: i64) -> Result<Option<String>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT text FROM vectors WHERE entity_id = ?1 AND valid_to IS NULL \
+             ORDER BY valid_from DESC LIMIT 1",
+        )?;
+        Ok(stmt
+            .query_row(params![entity_id], |row| row.get(0))
+            .optional()?)
     }
 
     fn vector_search(

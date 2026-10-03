@@ -27,7 +27,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_verdict_verify",
-            "description": "Verify a signed Verdict against the Phase-0 root of trust: the signature must be valid under the verifier's REGISTERED public key AND the verifier must be authorized to attest the predicate. 'trusted' is the conjunction — the property a consumer should gate on (checked, not trusted-by-assertion).",
+            "description": "Verify a signed Verdict against the root of trust AS OF the signature (signing-plane S1): the signature must be valid under a key registered to the verifier at that instant, AND that same registration must authorize the predicate. 'trusted' is that conjunction — the property a consumer should gate on. Pass 'verdict' (the stored verdict's IRI) for a trust decision: quipu then reads when the store recorded the signature, which the signer cannot choose. 'as_of.basis' says which instant was used (recorded | caller-supplied | now). A caller-supplied signed_at/tx is a what-if: 'trusted' is then always false and the answer is in 'would_verify_as_of_supplied_instant'.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -37,7 +37,13 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "evidence_hash": { "type": "string", "description": "Evidence hash the signature seals" },
                     "tier": { "type": "string", "description": "Evidence tier (default: committed)" },
                     "verifier": { "type": "string", "description": "Verifier IRI whose registered key verifies the signature" },
-                    "signature": { "type": "string", "description": "Hex ed25519 signature over the verdict message" }
+                    "signature": { "type": "string", "description": "The signature over the verdict message: hex for ed25519 (default); base64url DER/raw assertion signature for webauthn-*; the armored SSH SIGNATURE block for sshsig-sk-ed25519" },
+                    "verdict": { "type": "string", "description": "IRI of the stored verdict carrying this signature; verify as of when the store recorded it (preferred for trust decisions)" },
+                    "signed_at": { "type": "string", "description": "Explicit valid-time instant to verify at (a what-if query; default now)" },
+                    "tx": { "type": "integer", "description": "Explicit transaction to verify as of (a what-if query; default latest)" },
+                    "scheme": { "type": "string", "description": "Signature scheme: ed25519 (default) | webauthn-es256 | webauthn-eddsa | sshsig-sk-ed25519. Hardware schemes are refused unless [quipu.governance] hardware_verdict_schemes is on, and verify only against registrations declaring the same aegis:signatureScheme" },
+                    "authenticator_data": { "type": "string", "description": "webauthn-* only: base64url authenticatorData from the assertion" },
+                    "client_data_json": { "type": "string", "description": "webauthn-* only: base64url clientDataJSON from the assertion; its challenge must equal the one quipu derives from the verdict message" }
                 },
                 "required": ["predicate_id", "target_ref", "outcome", "evidence_hash", "verifier", "signature"]
             }
@@ -49,7 +55,9 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "type": "object",
                 "properties": {
                     "verifier": { "type": "string", "description": "Verifier IRI" },
-                    "predicate": { "type": "string", "description": "Predicate IRI to attest" }
+                    "predicate": { "type": "string", "description": "Predicate IRI to attest" },
+                    "signed_at": { "type": "string", "description": "Valid-time instant to check at (default now)" },
+                    "tx": { "type": "integer", "description": "Transaction to check as of (default latest)" }
                 },
                 "required": ["verifier", "predicate"]
             }

@@ -15,6 +15,7 @@ use crate::vector::KnowledgeVectorStore;
 /// `query` string. When `query` is provided and no `embedding`, the store's
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let content_ranking = super::search_ranking::ranking_mode(input)?;
     let explicit_embedding: Option<Vec<f32>> = input
         .get("embedding")
         .and_then(|v| v.as_array())
@@ -100,12 +101,15 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let matches: Vec<_> = matches
         .into_iter()
         .filter(|m| seen.insert(m.entity_id))
-        .take(limit)
         .collect();
+    let matches =
+        super::search_ranking::rank(store, matches, content_ranking, valid_at, query_text)?;
 
     let results: Vec<JsonValue> = matches
         .iter()
-        .map(|m| {
+        .take(limit)
+        .map(|ranked| {
+            let m = &ranked.matched;
             let iri = store
                 .resolve(m.entity_id)
                 .unwrap_or_else(|_| format!("ref:{}", m.entity_id));
@@ -115,7 +119,9 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             serde_json::json!({
                 "entity": iri,
                 "text": m.text,
-                "score": m.score,
+                "score": ranked.score,
+                "similarity": m.score,
+                "ranking_reason": if ranked.demoted { "contentless_artifact" } else { "semantic" },
                 "source": "knowledge",
                 "valid_from": m.valid_from,
                 "valid_to": m.valid_to
@@ -126,7 +132,8 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     Ok(serde_json::json!({
         "results": results,
         "count": results.len(),
-        "scoped": scope.is_some()
+        "scoped": scope.is_some(),
+        "ranking": if content_ranking { "content" } else { "semantic" }
     }))
 }
 
@@ -170,7 +177,7 @@ fn scoped_entity_iris(
     let mut filters = String::new();
     if has_group {
         patterns.push_str(
-            "?_episode <http://aegis.gastown.local/ontology/groupId> ?_gid . \
+            "VALUES ?_groupPredicate { <http://aegis.gastown.local/ontology/groupId> <https://scbrown.github.io/quechua/ns#groupId> } ?_episode ?_groupPredicate ?_gid . \
              ?s <http://www.w3.org/ns/prov#wasGeneratedBy> ?_episode . ",
         );
         let gid_filters: Vec<String> = group_ids

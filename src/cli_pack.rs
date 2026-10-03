@@ -260,7 +260,8 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         eprintln!(
             "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
              --construct <query>] [--shapes <name>]... [--no-shapes] \
-             [--parent-share <sha256:id>] [--since <parent-reference>] [--turtle] [--destination internal]"
+             [--queries <name>]... [--no-queries] [--parent-share <sha256:id>] \
+             [--since <parent-reference>] [--turtle] [--destination internal]"
         );
         std::process::exit(1);
     });
@@ -283,20 +284,25 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         (None, None, None) => quipu::share::ShareScope::Root,
         _ => unreachable!("mutually exclusive share scopes checked above"),
     };
-    let shapes = args
-        .windows(2)
-        .filter(|w| w[0] == "--shapes")
-        .map(|w| w[1].clone())
-        .collect();
+    let shapes = repeated(args, "--shapes");
     let no_shapes = args.iter().any(|arg| arg == "--no-shapes");
     if no_shapes && args.iter().any(|arg| arg == "--shapes") {
         eprintln!("share accepts either --shapes or --no-shapes, not both");
+        std::process::exit(1);
+    }
+    // aegis-fxpbys.2: named queries, none, or (absent) those registered
+    // against the scope.
+    let queries = repeated(args, "--queries");
+    let no_queries = args.iter().any(|arg| arg == "--no-queries");
+    if no_queries && !queries.is_empty() {
+        eprintln!("share accepts either --queries or --no-queries, not both");
         std::process::exit(1);
     }
     let opts = quipu::share::ShareOptions {
         scope,
         shapes,
         no_shapes,
+        queries: (no_queries || !queries.is_empty()).then_some(queries),
         parent_share: flag_value(args, "--parent-share").map(String::from),
         turtle_view: args.iter().any(|arg| arg == "--turtle"),
         // aegis-8fdp8d. Recorded only when the operator names it, so a share
@@ -404,6 +410,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         let actor = flag_value(args, "--actor");
         let imported = quipu::share_delta::materialize(parent, delta).and_then(|mut request| {
             request.actor = actor.map(String::from);
+            request.query_namespace = flag_value(args, "--query-namespace").map(String::from);
             let mut store = quipu::Store::open_in_memory()?;
             quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
         });
@@ -444,7 +451,8 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         .unwrap_or_else(|| {
             eprintln!(
                 "usage: quipu import <share-dir|archive|URL> [--actor <id>] \
-                 [--destination internal] [--db <path>]"
+                 [--destination internal] [--query-namespace <ns>] [--replace-queries] \
+                 [--db <path>]"
             );
             std::process::exit(1);
         });
@@ -458,6 +466,8 @@ pub fn cmd_import(args: &[String], db_path: &str) {
     let imported = quipu::share_transport::read_reference(reference).and_then(|mut request| {
         request.actor = actor.map(String::from);
         request.destination = destination_flag(args);
+        request.query_namespace = flag_value(args, "--query-namespace").map(String::from);
+        request.replace_queries = args.iter().any(|arg| arg == "--replace-queries");
         request.source = flag_value(args, "--source")
             .unwrap_or(reference)
             .to_string();
@@ -475,6 +485,14 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             std::process::exit(1);
         }
     }
+}
+
+/// Every value of a repeatable `--flag <value>`.
+fn repeated(args: &[String], flag: &str) -> Vec<String> {
+    args.windows(2)
+        .filter(|w| w[0] == flag)
+        .map(|w| w[1].clone())
+        .collect()
 }
 
 /// Read `--destination`, defaulting to outward (aegis-auw0o7).
