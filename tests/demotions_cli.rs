@@ -1,4 +1,7 @@
 //! CLI enumeration uses the same stored query as HTTP /ask.
+// Match the CLI binary's required features; minimal builds do not produce it.
+#![cfg(feature = "shacl")]
+
 use quipu::{
     Store,
     store::Datum,
