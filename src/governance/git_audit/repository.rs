@@ -99,25 +99,40 @@ pub(super) fn window(repo: &Path, from: &str, to: &str) -> Result<Window> {
 }
 
 pub(super) fn paths(repo: &Path, commit: &str) -> Result<BTreeSet<String>> {
-    // -m compares merges to every parent: neither combined-diff nor a net
-    // window diff can see every crossing. --no-renames preserves both names.
-    let output = text(
-        repo,
-        &[
-            "diff-tree",
-            "--root",
-            "-m",
-            "-r",
-            "--no-commit-id",
-            "--name-only",
-            "-z",
-            "--no-renames",
-            "--no-ext-diff",
-            "--no-textconv",
-            commit,
-            "--",
-        ],
-    )?;
+    let parents = text(repo, &["show", "-s", "--format=%P", commit, "--"])?;
+    let parents: Vec<_> = parents.split_whitespace().collect();
+    if parents.len() < 2 {
+        return diff_paths(repo, commit, None);
+    }
+    // Ordinary merges carry changes already audited at their introducing
+    // commits. Only a path different from EVERY parent is new merge evidence.
+    // Intersect pairwise tree diffs, retaining mode and deletion changes too.
+    let mut introduced = diff_paths(repo, commit, Some(parents[0]))?;
+    for parent in &parents[1..] {
+        let changed = diff_paths(repo, commit, Some(parent))?;
+        introduced.retain(|path| changed.contains(path));
+    }
+    Ok(introduced)
+}
+
+fn diff_paths(repo: &Path, commit: &str, parent: Option<&str>) -> Result<BTreeSet<String>> {
+    let mut args = vec![
+        "diff-tree",
+        "--root",
+        "-r",
+        "--no-commit-id",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--ignore-submodules=none",
+    ];
+    if let Some(parent) = parent {
+        args.push(parent);
+    }
+    args.extend([commit, "--"]);
+    let output = text(repo, &args)?;
     Ok(output
         .split('\0')
         .filter(|s| !s.is_empty())

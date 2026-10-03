@@ -27,7 +27,7 @@ pub struct Scope {
     pub to: String,
     /// Commits actually enumerated, including side-branch commits.
     pub commits_checked: usize,
-    /// Changed paths enumerated per commit (deduplicated across merge parents).
+    /// Changed paths per commit, excluding states inherited at a merge.
     pub paths_checked: usize,
     /// Path/structural policies loaded from ROOT.
     pub policies_checked: usize,
@@ -234,3 +234,7 @@ fn invalid(message: impl Into<String>) -> Error {
 #[cfg(test)]
 #[path = "git_audit_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "git_audit/merge_tests.rs"]
+mod merge_tests;
