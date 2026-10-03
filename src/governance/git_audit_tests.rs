@@ -323,3 +323,32 @@ fn grafted_ancestry_cannot_hide_a_shell_crossing() {
     .unwrap_err();
     assert!(error.to_string().contains("grafts"));
 }
+
+#[test]
+fn blob_reads_history_not_dirty_worktree_and_refuses_deleted_paths() {
+    let f = Fixture::new();
+    let commit = f.commit("src/example.rs", "// TODO missing ticket\nfn f() {}");
+    fs::write(
+        f.dir.path().join("src/example.rs"),
+        "// TODO APP-12\nfn f() {}",
+    )
+    .unwrap();
+    assert!(
+        repository::blob(f.dir.path(), &commit, "src/example.rs")
+            .unwrap()
+            .contains("missing ticket")
+    );
+    f.git(&["rm", "-f", "src/example.rs"]);
+    f.git(&["commit", "-qm", "delete"]);
+    assert!(repository::blob(f.dir.path(), "HEAD", "src/example.rs").is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn blob_does_not_follow_a_committed_symlink() {
+    let f = Fixture::new();
+    std::os::unix::fs::symlink("/outside/source.rs", f.dir.path().join("link.rs")).unwrap();
+    f.git(&["add", "link.rs"]);
+    f.git(&["commit", "-qm", "symlink"]);
+    assert!(repository::blob(f.dir.path(), "HEAD", "link.rs").is_err());
+}
