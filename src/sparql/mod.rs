@@ -40,7 +40,7 @@ use crate::error::{Error, Result};
 use crate::store::Store;
 // The query-budget progress guard lives in `progress` (size ratchet split).
 use crate::types::Value;
-use progress::ProgressGuard;
+pub(crate) use progress::ProgressGuard;
 
 const DEFAULT_QUERY_BASE: &str = "http://example.invalid/";
 
