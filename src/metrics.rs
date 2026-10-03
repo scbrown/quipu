@@ -25,6 +25,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 pub(crate) mod attestation;
+mod histogram;
+use histogram::Hist;
 pub mod writes;
 
 /// Current process (resident, virtual) memory in bytes, from `/proc/self/statm`
@@ -134,16 +136,6 @@ pub fn normalize_task(explicit: Option<&str>) -> String {
     }
 }
 
-/// Upper bounds (seconds) of the duration histogram buckets; +Inf is implicit.
-const BUCKETS: [f64; 8] = [0.005, 0.025, 0.1, 0.5, 1.0, 2.5, 10.0, 30.0];
-
-#[derive(Default, Clone)]
-struct Hist {
-    counts: [u64; BUCKETS.len()],
-    sum: f64,
-    total: u64,
-}
-
 /// Maximum distinct `client` label values before everything else folds into
 /// `other`. The label's SOURCE is a request header, i.e. attacker/caller
 /// controlled, so an uncapped map is an unbounded-cardinality hole reachable by
@@ -232,13 +224,9 @@ pub struct Metrics {
     /// /policy/check outcome -> count.
     policy: Mutex<BTreeMap<String, u64>>,
     /// (client, task, endpoint template) -> (request count, summed seconds).
-    ///
-    /// A SUM and a COUNT rather than a per-client histogram: the question this
-    /// exists to answer (aegis-ma1hy) is "which caller accounts for what
-    /// fraction of /query TIME", which is a ratio of sums. A histogram per
-    /// client would multiply series by the bucket count to answer a question
-    /// nobody asked.
     clients: Mutex<BTreeMap<ClientTaskEndpoint, RequestObservation>>,
+    /// Per-caller tails, sharing the counter's bounded identity but not its task dimension.
+    client_durations: Mutex<BTreeMap<(String, String), Hist>>,
     /// (client, endpoint) -> (seconds WAITING for the store lock, seconds HOLDING it).
     ///
     /// The distinction this exists for (`aegis-vxl81`): the wall-clock figure in
@@ -301,14 +289,7 @@ impl Metrics {
             .or_insert(0) += 1;
         let mut durs = self.durations.lock().unwrap();
         let h = durs.entry(endpoint.to_string()).or_default();
-        for (i, ub) in BUCKETS.iter().enumerate() {
-            if seconds <= *ub {
-                h.counts[i] += 1;
-                break;
-            }
-        }
-        h.sum += seconds;
-        h.total += 1;
+        h.observe(seconds);
     }
 
     /// Attribute one request's TIME to a caller (aegis-ma1hy).
@@ -328,9 +309,17 @@ impl Metrics {
         // are bounded independently, and counting pairs caused real callers to
         // fold after a few multi-endpoint clients (aegis-vxl81).
         let key = request_key(&map, client, task, endpoint);
+        let histogram_key = (key.0.clone(), key.2.clone());
         let e = map.entry(key).or_insert((0, 0.0));
         e.0 += 1;
         e.1 += seconds;
+        drop(map);
+        self.client_durations
+            .lock()
+            .unwrap()
+            .entry(histogram_key)
+            .or_default()
+            .observe(seconds);
     }
 
     /// Attribute store-lock WAIT and HELD seconds to a caller (`aegis-vxl81`).
@@ -435,36 +424,25 @@ impl Metrics {
              # TYPE quipu_http_request_duration_seconds histogram\n",
         );
         for (ep, h) in self.durations.lock().unwrap().iter() {
-            let ep = esc(ep);
-            let mut cum = 0u64;
-            for (i, ub) in BUCKETS.iter().enumerate() {
-                cum += h.counts[i];
-                let _ = writeln!(
-                    out,
-                    "quipu_http_request_duration_seconds_bucket{{endpoint=\"{ep}\",le=\"{ub}\"}} {cum}"
-                );
-            }
-            let _ = writeln!(
-                out,
-                "quipu_http_request_duration_seconds_bucket{{endpoint=\"{ep}\",le=\"+Inf\"}} {}",
-                h.total
+            h.render(
+                &mut out,
+                "quipu_http_request_duration_seconds",
+                &format!("endpoint=\"{}\"", esc(ep)),
             );
-            let _ = writeln!(
-                out,
-                "quipu_http_request_duration_seconds_sum{{endpoint=\"{ep}\"}} {}",
-                h.sum
-            );
-            let _ = writeln!(
-                out,
-                "quipu_http_request_duration_seconds_count{{endpoint=\"{ep}\"}} {}",
-                h.total
+        }
+        out.push_str(
+            "# HELP quipu_http_client_request_duration_seconds Request duration, by normalised caller and route template.\n\
+             # TYPE quipu_http_client_request_duration_seconds histogram\n",
+        );
+        for ((client, ep), h) in self.client_durations.lock().unwrap().iter() {
+            h.render(
+                &mut out,
+                "quipu_http_client_request_duration_seconds",
+                &format!("client=\"{}\",endpoint=\"{}\"", esc(client), esc(ep)),
             );
         }
 
-        // Per-caller attribution (aegis-ma1hy). Two counters rather than a
-        // histogram: "what fraction of /query time is caller X" is a ratio of
-        // sums, and the ratio is taken over increase() of BOTH, so it is
-        // reset-safe in a way a bare counter read is not.
+        // Task-level counters retain attribution without multiplying histogram series.
         out.push_str(
             "# HELP quipu_http_client_requests_total Requests served, by normalised caller, task, and route template.\n\
              # TYPE quipu_http_client_requests_total counter\n",
