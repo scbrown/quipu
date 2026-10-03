@@ -23,11 +23,16 @@ name: Conformance
 #
 # Only the fast `published-matches-ledger` job is affected; the re-derive job is
 # `schedule || workflow_dispatch` and stays skipped, so this costs seconds.
+# Cargo changes must reach the same provenance gate as source changes.
+# Keep these triggers aligned with conformance_report.py CODE_PATHS, including
+# release version bumps whose generated PRs otherwise never run this workflow.
 on:
   pull_request:
     branches: [main]
     paths:
       - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'benchmark/public/**'
       - 'docs/book/src/benchmarks/**'
       - '.github/workflows/conformance.yml'
@@ -35,6 +40,8 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'benchmark/public/**'
       - 'docs/book/src/benchmarks/**'
       - '.github/workflows/conformance.yml'
