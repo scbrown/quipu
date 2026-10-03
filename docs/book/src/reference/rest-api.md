@@ -1447,7 +1447,10 @@ context.
 DBpedia-Spotlight-style annotation: `{"text", "confidence"?}` → mentions of
 known entities found in the text, with offsets and IRIs. The labeled-entity
 list it scans against is generation-cached, so a burst pays the expensive
-fetch once.
+fetch once. The fetch reads current ROOT labels and asserted types; named
+graphs and attached packs are excluded. Cold fills stream indexed rows,
+retain the existing query deadline and row limits, and avoid intermediate
+SPARQL binding tables.
 
 ### `GET /fragments`
 
