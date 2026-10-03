@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-03
+
+### Fixed
+
+- *(sparql)* Push FILTER(?v = <iri>) into the BGP it wraps (#394)([c8dd255](https://github.com/scbrown/quipu/commit/c8dd255f4261c18293f875bf43d4b10924df93df))
+
 ## [0.10.0] - 2026-10-02
 
 ### Added
