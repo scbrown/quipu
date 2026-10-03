@@ -46,6 +46,7 @@ mod cli_gate;
 mod cli_git_merge;
 mod cli_graph;
 mod cli_ingest;
+mod cli_knot;
 mod cli_mcp;
 mod cli_open;
 mod cli_pack;

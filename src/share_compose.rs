@@ -255,7 +255,7 @@ fn compose_inner(
                 continue;
             }
             let graph = store.graph_create(&pack.graph)?;
-            crate::rdf::ingest_rdf_to_graph(
+            crate::rdf::ingest_assigned_rdf(
                 store,
                 data.as_bytes(),
                 RdfFormat::NTriples,
@@ -280,7 +280,7 @@ fn compose_inner(
             result.dataset,
             oxrdf::Literal::new_simple_literal(record)
         );
-        crate::rdf::ingest_rdf_to_graph(
+        crate::rdf::ingest_assigned_rdf(
             store,
             payload.as_bytes(),
             RdfFormat::NTriples,
