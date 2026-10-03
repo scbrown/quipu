@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- RDF loads scope blank nodes to document contents and destination graph. Reloading an edited file creates new blank nodes and leaves the old blank nodes and their facts in place. ([2959ce8](https://github.com/scbrown/quipu/commit/2959ce8))
+
+### Other
+
+- *(conformance)* Re-derive ledgers at 3b628a6a (#405) ([323dda6](https://github.com/scbrown/quipu/commit/323dda62d88ba2e87ba5a39ee6e939b51f9f4479))
+
 ## [0.11.0] - 2026-10-03
 
 ### Fixed
