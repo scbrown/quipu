@@ -38,6 +38,7 @@ mod cli_changes;
 mod cli_commands;
 mod cli_compose;
 mod cli_db;
+mod cli_demotions;
 mod cli_entailment;
 mod cli_explain;
 mod cli_export;
@@ -46,6 +47,7 @@ mod cli_gate;
 mod cli_git_merge;
 mod cli_graph;
 mod cli_ingest;
+mod cli_knot;
 mod cli_mcp;
 mod cli_open;
 mod cli_pack;
@@ -111,6 +113,7 @@ fn main() {
     let cmd = args[1].as_str();
     match cmd {
         "mcp" => cli_mcp::run(&args[2..]),
+        "demotions" => cli_demotions::run(&args, db_path),
         "knot" | "load" => cli::cmd_knot(&args, db_path),
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "attest" => cli_attest::cmd_attest(&args, db_path),
@@ -321,6 +324,7 @@ COMMANDS:
     quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85] [--predicate <IRI>] [--graph <IRI>] [--db <path>]
     quipu report [--hubs N] [--surprises N] [--questions N] [--type <IRI>] [--predicate <IRI>] [--db <path>]
     quipu reason [--rules <file.ttl>] [--db <path>]
+    quipu demotions [--graph <premise-IRI>] [--db <path>]
     quipu episode <file.json> [--base-ns <ns>] [--timestamp <ISO-8601>] [--db <path>]
     quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
     quipu shapes load|list|remove [--db <path>]

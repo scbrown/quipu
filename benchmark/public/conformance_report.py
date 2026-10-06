@@ -951,7 +951,7 @@ def artifacts(data: dict, docs_dir: Path) -> dict[Path, str]:
 # committing a freshly re-derived ledger would itself count as a code change
 # and the check could never be satisfied. Measured while writing it — a guard
 # that can never go green is not a guard.
-CODE_PATHS = ("src", "benchmark/public/*.py")
+CODE_PATHS = ("src", "benchmark/public/*.py", "Cargo.toml", "Cargo.lock")
 
 
 def _git(*args: str) -> tuple[int, str]:

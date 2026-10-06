@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- RDF loads scope blank nodes to document contents and destination graph. Reloading an edited file creates new blank nodes and leaves the old blank nodes and their facts in place. ([2959ce8](https://github.com/scbrown/quipu/commit/2959ce8))
+
+### Other
+
+- *(conformance)* Re-derive ledgers at 3b628a6a (#405) ([323dda6](https://github.com/scbrown/quipu/commit/323dda62d88ba2e87ba5a39ee6e939b51f9f4479))
+
+## [0.11.0] - 2026-10-03
+
+### Fixed
+
+- *(sparql)* Push FILTER(?v = <iri>) into the BGP it wraps (#394)([c8dd255](https://github.com/scbrown/quipu/commit/c8dd255f4261c18293f875bf43d4b10924df93df))
+- *(shacl)* Warning-severity results never block; DirectiveTraceabilityShape is a Warning (#395)([16ea564](https://github.com/scbrown/quipu/commit/16ea564ae0113d474ea07b3f0e3f901e4cdd7719))
+- *(ci)* Cover Cargo changes in conformance triggers and provenance (#403)([f7b0b08](https://github.com/scbrown/quipu/commit/f7b0b0882ef2aadeed4d4d88372dbac8233e7f50))
+
 ## [0.10.0] - 2026-10-02
 
 ### Added

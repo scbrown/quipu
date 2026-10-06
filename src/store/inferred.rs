@@ -116,6 +116,7 @@ impl Store {
     /// First use writes the graph-level `aegis:sourceKind "inferred"` tag so
     /// the companion is self-describing; subsequent calls are a lookup.
     pub fn ensure_companion_inferred_graph(&mut self, g: i64, timestamp: &str) -> Result<i64> {
+        self.ensure_demotion_query(timestamp)?;
         let iri = self.companion_inferred_iri(g)?;
         let companion = self.intern(&iri)?;
         let kind_attr = self.intern(SOURCE_KIND)?;

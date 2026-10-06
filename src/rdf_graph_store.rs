@@ -20,11 +20,12 @@ pub fn replace_rdf_graph(
     source: Option<&str>,
     graph: Option<&str>,
 ) -> Result<(i64, usize)> {
-    let mut datums = crate::rdf::parse_rdf(store, reader, format, base_iri, timestamp)?;
     let g = match graph {
         None => 0,
         Some(iri) => store.graph_create(iri)?,
     };
+    let mut datums =
+        crate::rdf::parse_rdf_scoped(store, reader, format, base_iri, timestamp, g, None)?;
     let current = store.current_facts_in_graph(g)?;
     let inserted = datums.len();
     let mut changes = Vec::with_capacity(current.len() + inserted);

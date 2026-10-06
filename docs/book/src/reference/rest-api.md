@@ -1456,7 +1456,10 @@ context.
 DBpedia-Spotlight-style annotation: `{"text", "confidence"?}` → mentions of
 known entities found in the text, with offsets and IRIs. The labeled-entity
 list it scans against is generation-cached, so a burst pays the expensive
-fetch once.
+fetch once. The fetch reads current ROOT labels and asserted types; named
+graphs and attached packs are excluded. Cold fills stream indexed rows,
+retain the existing query deadline and row limits, and avoid intermediate
+SPARQL binding tables.
 
 ### `GET /fragments`
 
@@ -1468,3 +1471,5 @@ selectors, each optional — a paged triple-pattern read for TPF clients.
 OpenRefine Reconciliation API: a body without `queries` returns the service
 manifest; `{"queries": {...}}` runs the batch and returns candidates per
 query, scored the way `/resolve` scores.
+
+RDF `/knot` loads accept `blank_node_scope`: distinct IDs separate repeated identical input; the same ID shares blank nodes across graphs only for byte-identical input. By default, whole-document bytes and destination graph define scope.

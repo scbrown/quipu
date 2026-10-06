@@ -128,6 +128,7 @@ Assert facts from Turtle data, with optional SHACL validation.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `turtle` | Yes | RDF Turtle data |
+| `blank_node_scope` | No | Explicit document identity for blank nodes; same ID shares only byte-identical input across graphs, distinct IDs separate repeat loads |
 | `timestamp` | No | Transaction-time: when this store came to believe the facts (defaults to now) |
 | `valid_from` | No | Valid-time: when the facts became true of the world. RFC 3339, normalised to UTC `Z`. Omit to reuse `timestamp` |
 | `actor` | No | Who is asserting |

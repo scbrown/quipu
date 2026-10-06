@@ -4,11 +4,13 @@
 //! The server module wraps these in thin HTTP handlers.
 
 mod conneg;
+mod labeled;
+
+pub use labeled::{fetch_labeled_entities, fetch_labeled_entities_until};
 
 pub use conneg::{entity_json_ld, entity_json_ld_mode, entity_turtle, preview_card};
 
 use serde_json::{Value as JsonValue, json};
-use std::collections::HashMap;
 
 use crate::error::Result;
 use crate::store::Store;
@@ -43,112 +45,9 @@ pub fn decode_iri(iri: &str) -> String {
 
 /// An entity with label and type for matching operations.
 pub struct LabeledEntity {
-    iri: String,
-    label: String,
-    entity_type: String,
-}
-
-/// Fetch all entities with labels from the store.
-///
-/// Public so callers can run this (cheap, O(entities) row copy) under the
-/// store lock and then run [`spotlight_over`] (expensive, O(entities × text)
-/// substring scan) OUTSIDE it — measured in production: with both under the one store
-/// mutex, a burst of spotlight calls from a 2s-timeout client starved every
-/// reader on the server for minutes (abandoned requests keep executing under
-/// a sync mutex, so client timeouts amplify instead of shedding load).
-pub fn fetch_labeled_entities(store: &Store) -> Result<Vec<LabeledEntity>> {
-    fetch_labeled_entities_until(store, None)
-}
-
-/// Fetch labeled entities under an explicit deadline.
-///
-/// Spotlight uses this form for cold cache fills. A client disconnect does not
-/// cancel `spawn_blocking`, so the server must carry its own budget into both
-/// `SQLite`'s progress handler and the Rust-side row materialization loop.
-pub fn fetch_labeled_entities_until(
-    store: &Store,
-    deadline: Option<crate::time::Deadline>,
-) -> Result<Vec<LabeledEntity>> {
-    let started = crate::time::Stopwatch::start();
-    // Keep these as two indexed single-pattern queries and join in Rust. The
-    // equivalent OPTIONAL query makes the generic evaluator materialize and
-    // merge the whole label × type binding set; on the production-sized graph
-    // that exceeded 30 seconds while each indexed arm completes in <250ms.
-    let labels = crate::sparql::query_temporal(
-        store,
-        "SELECT ?s ?label WHERE { \
-         ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label }",
-        &crate::sparql::TemporalContext {
-            deadline,
-            ..Default::default()
-        },
-    )?;
-    let types = crate::sparql::query_temporal(
-        store,
-        "SELECT ?s ?type WHERE { \
-         ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?type }",
-        &crate::sparql::TemporalContext {
-            deadline,
-            ..Default::default()
-        },
-    )?;
-
-    let mut types_by_entity: HashMap<i64, Vec<String>> = HashMap::new();
-    for row in types.rows() {
-        if deadline.is_some_and(|d| d.passed()) {
-            return Err(crate::Error::QueryTimeout {
-                elapsed_ms: started.elapsed_ms(),
-                limit_ms: deadline
-                    .map(|d| d.millis_from(&started))
-                    .unwrap_or_default(),
-            });
-        }
-        let (Some(Value::Ref(entity)), Some(Value::Ref(entity_type))) =
-            (row.get("s"), row.get("type"))
-        else {
-            continue;
-        };
-        types_by_entity
-            .entry(*entity)
-            .or_default()
-            .push(store.resolve(*entity_type).unwrap_or_default());
-    }
-
-    let mut entities = Vec::new();
-    for row in labels.rows() {
-        if deadline.is_some_and(|d| d.passed()) {
-            return Err(crate::Error::QueryTimeout {
-                elapsed_ms: started.elapsed_ms(),
-                limit_ms: deadline
-                    .map(|d| d.millis_from(&started))
-                    .unwrap_or_default(),
-            });
-        }
-        let entity_id = match row.get("s") {
-            Some(Value::Ref(id)) => *id,
-            _ => continue,
-        };
-        let iri = store.resolve(entity_id).unwrap_or_default();
-        let label = match row.get("label") {
-            Some(Value::Str(s)) => s.clone(),
-            _ => continue,
-        };
-        match types_by_entity.get(&entity_id) {
-            Some(types) if !types.is_empty() => {
-                entities.extend(types.iter().cloned().map(|entity_type| LabeledEntity {
-                    iri: iri.clone(),
-                    label: label.clone(),
-                    entity_type,
-                }));
-            }
-            _ => entities.push(LabeledEntity {
-                iri,
-                label,
-                entity_type: String::new(),
-            }),
-        }
-    }
-    Ok(entities)
+    iri: std::sync::Arc<str>,
+    label: std::sync::Arc<str>,
+    entity_type: std::sync::Arc<str>,
 }
 
 /// Annotate text with entity mentions from the knowledge graph.
@@ -187,7 +86,7 @@ pub fn spotlight_over(entities: &[LabeledEntity], text: &str, confidence: f64) -
                 if score_base >= confidence {
                     annotations.push(json!({
                         "surface": surface_text,
-                        "iri": entity.iri,
+                        "iri": entity.iri.as_ref(),
                         "type": entity_type_short,
                         "confidence": score_base,
                         "offset": abs_pos,
@@ -358,9 +257,9 @@ pub fn reconcile(store: &Store, queries: &serde_json::Map<String, JsonValue>) ->
                 };
 
                 Some(json!({
-                    "id": e.iri,
-                    "name": e.label,
-                    "type": [{"id": e.entity_type, "name": type_short}],
+                    "id": e.iri.as_ref(),
+                    "name": e.label.as_ref(),
+                    "type": [{"id": e.entity_type.as_ref(), "name": type_short}],
                     "score": score,
                     "match": score >= 100.0,
                 }))
