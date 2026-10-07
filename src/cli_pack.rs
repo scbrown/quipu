@@ -367,14 +367,22 @@ pub fn cmd_status(args: &[String], db_path: &str) {
 }
 
 /// `quipu merge <share-dir>` — shape-aware three-way reconnect into ROOT.
+///
+/// With `--emit-decisions` it writes the conflicts to resolve (and, with
+/// `--propose`, a mechanical proposal per row) and changes nothing; with
+/// `--decisions` it finishes the merge from an operator's decided file
+/// (aegis-yavo9c).
 pub fn cmd_merge(args: &[String], db_path: &str) {
     let dir = args
         .get(2)
         .filter(|s| !s.starts_with("--"))
         .unwrap_or_else(|| {
-            eprintln!("usage: quipu merge <share-dir> [--actor <id>] [--db <path>]");
+            eprintln!("{}", crate::cli_merge::MERGE_USAGE);
             std::process::exit(1);
         });
+    if crate::cli_merge::cmd_merge_decisions(args, db_path, dir) {
+        return;
+    }
     let mut store = crate::cli_open::open_store(db_path);
     match quipu::share_merge::merge(
         &mut store,

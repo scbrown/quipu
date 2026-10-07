@@ -93,6 +93,7 @@ pub mod share_diff;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
+pub mod share_merge_decisions;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_mint;
 mod share_promotion;
