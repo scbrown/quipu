@@ -18,6 +18,9 @@ use crate::shacl;
 use crate::{namespace, rdf::parse_rdf, store::Store};
 
 mod descriptions;
+mod node_type;
+use node_type::validate_node_type;
+pub(crate) use node_type::{QUECHUA_TYPE_PREFIX, node_type_iri};
 mod validation;
 
 /// Options controlling entity resolution during episode ingest.
@@ -657,8 +660,12 @@ fn episode_to_turtle(
         ttl.push_str(&node_term(&local, base_ns));
 
         if let Some(ntype) = &node.node_type {
-            let type_local = sanitize_iri_local(ntype);
-            ttl.push_str(&format!(" a aegis:{type_local}"));
+            if ntype.starts_with(QUECHUA_TYPE_PREFIX) {
+                ttl.push_str(&format!(" a <{}>", node_type_iri(ntype, base_ns)));
+            } else {
+                let type_local = sanitize_iri_local(ntype);
+                ttl.push_str(&format!(" a aegis:{type_local}"));
+            }
         }
 
         ttl.push_str(&format!(
@@ -860,60 +867,6 @@ fn resolve_edge_predicate(relation: &str) -> Result<String> {
     Ok(format!("aegis:{rel}"))
 }
 
-/// Validate a node `type`, refusing anything that would be silently rewritten.
-///
-/// `type` is a STRING, and a comma-separated one used to mint a single junk class:
-/// `"Feature, Concept"` became `aegis:Feature__Concept` — one class, not two —
-/// behind HTTP 200 with a healthy `count`. The node was in the store, correctly
-/// described and edged, and **absent from `?s a Feature`**, the query anyone
-/// actually runs (aegis-vngta).
-///
-/// It catches careful people specifically: `/search` renders a multi-typed node as
-/// `type: Bead, Issue`, so the documented way to discover an existing node's typing
-/// hands back a string that looks like valid input. Searching first — the rule that
-/// exists to prevent duplicate nodes — is what fed the mistake.
-///
-/// REFUSE rather than split, deliberately. Splitting would be a lenient parser
-/// guessing intent, and it would fork semantics from the crew-side guard in
-/// `graph-extract` (aegis-vngta, muldoon), which already refuses this input and
-/// documents `/search` output as display-only. Two layers must not disagree about
-/// whether the same request is legal.
-fn validate_node_type(node_name: &str, ntype: &str) -> Result<()> {
-    let t = ntype.trim();
-    if t.contains(',') {
-        let split: Vec<&str> = t
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        return Err(crate::error::Error::InvalidValue(format!(
-            "node '{node_name}' has a comma-separated type '{ntype}'. `type` is a \
-             single class, and this would mint ONE junk class \
-             'aegis:{}' that no `?s a <type>` query can reach. For multiple types, \
-             send ONE ENTRY PER TYPE repeating the same node name — e.g. {} — which \
-             resolves to one entity carrying both types. Note that `/search` renders \
-             types as '{}' for DISPLAY only; that format is not valid input \
-             (aegis-vngta).",
-            sanitize_iri_local(t),
-            split
-                .iter()
-                .map(|s| format!("{{\"name\":\"{node_name}\",\"type\":\"{s}\"}}"))
-                .collect::<Vec<_>>()
-                .join(", "),
-            split.join(", "),
-        )));
-    }
-    if sanitize_iri_local(t) != t {
-        return Err(crate::error::Error::InvalidValue(format!(
-            "node '{node_name}' has type '{ntype}', which cannot be represented as-is \
-             — it would be silently rewritten to '{}'. Use only letters, digits, '-', \
-             '_' and '.' (aegis-vngta).",
-            sanitize_iri_local(t)
-        )));
-    }
-    Ok(())
-}
-
 /// Sanitize a name into a valid IRI local name.
 pub(crate) fn sanitize_iri_local(name: &str) -> String {
     name.chars()
@@ -984,3 +937,5 @@ fn escape_turtle(s: &str) -> String {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod type_ns_tests;

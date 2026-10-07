@@ -23,6 +23,9 @@ pub const OWL: &str = "http://www.w3.org/2002/07/owl#";
 /// `owl:sameAs` — asserted identity between two individuals.
 pub const OWL_SAME_AS: &str = "http://www.w3.org/2002/07/owl#sameAs";
 pub const SKOS: &str = "http://www.w3.org/2004/02/skos/core#";
+/// The public Quechua vocabulary. An `/episode` node may name a class here with
+/// a `quechua:` type (aegis-kpy8ec); instance IRIs stay under `base_ns`.
+pub const QUECHUA: &str = "https://scbrown.github.io/quechua/ns#";
 
 // ── Bobbin namespace ──────────────────────────────────────────
 //

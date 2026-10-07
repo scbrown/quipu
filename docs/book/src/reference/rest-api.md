@@ -387,6 +387,14 @@ curl -s localhost:3030/episode -X POST \
   }'
 ```
 
+A bare node `type` such as `WebApplication` names a class under the store's
+`base_ns`. To name a class in the public Quechua vocabulary instead, prefix it:
+`"type": "quechua:WorkItem"` asserts
+`<https://scbrown.github.io/quechua/ns#WorkItem>`. The prefix changes only the
+class. The node's own IRI is still minted under `base_ns`. Like any other type, a
+Quechua class is refused until a loaded shape sanctions it. No other prefix is
+accepted.
+
 Set `"replace_snapshot": true` for producers whose payload is the complete
 current state of an inventory. Facts previously asserted by the same episode
 name but absent from the new payload are retracted atomically with the new
