@@ -107,8 +107,9 @@ pub(crate) async fn update_post(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost");
     let base = format!("http://{host}{}", uri.path());
-    blocking(move || apply_update(&store, &format!("BASE <{base}>\n{update}"))).await?;
-    Ok(StatusCode::NO_CONTENT.into_response())
+    let report =
+        blocking(move || apply_update(&store, &format!("BASE <{base}>\n{update}"))).await?;
+    Ok(axum::Json(report).into_response())
 }
 
 static UPDATES_SLICED: AtomicU64 = AtomicU64::new(0);
@@ -139,17 +140,53 @@ pub(super) enum UpdatePath {
     Full,
 }
 
-/// What one update did: the dataset path and the datums it transacted.
-///
-/// Only the tests read it back; production uses the counters above.
-#[cfg_attr(not(test), allow(dead_code))]
+/// What one update did: the dataset path, the datums it transacted, and the
+/// transaction each graph's batch committed as (`(graph, tx)`, batch order).
 pub(super) struct Applied {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(super) path: UpdatePath,
     pub(super) changes: Vec<(i64, Vec<quipu::store::Datum>)>,
+    pub(super) txs: Vec<(i64, i64)>,
 }
 
-fn apply_update(shared: &SharedStore, update: &str) -> Result<(), AppError> {
-    apply_update_as(shared, update, false).map(|_| ())
+impl Applied {
+    /// The `/update` response body (aegis-xajsgn). SPARQL 1.1 Protocol leaves a
+    /// successful update's body to the implementation; quipu reports what it
+    /// committed so a conditional `DELETE/INSERT ... WHERE` caller can tell
+    /// whether its precondition matched without a racy read-back:
+    /// `asserted == 0 && retracted == 0` means the WHERE matched nothing (or the
+    /// update was a no-op) and `tx` is null. With changes in several graphs each
+    /// graph commits its own transaction; `tx` is the last of them.
+    pub(super) fn report(&self, store: &quipu::Store) -> Result<serde_json::Value, AppError> {
+        let mut graphs = Vec::with_capacity(self.changes.len());
+        let (mut asserted, mut retracted) = (0usize, 0usize);
+        for ((graph, datums), (_, tx)) in self.changes.iter().zip(&self.txs) {
+            let a = datums.iter().filter(|d| d.op == quipu::Op::Assert).count();
+            let r = datums.len() - a;
+            asserted += a;
+            retracted += r;
+            let iri = if *graph == 0 {
+                serde_json::Value::Null
+            } else {
+                serde_json::Value::String(store.resolve(*graph)?)
+            };
+            graphs.push(serde_json::json!({
+                "graph": iri, "tx": tx, "asserted": a, "retracted": r,
+            }));
+        }
+        Ok(serde_json::json!({
+            "tx": self.txs.last().map(|(_, tx)| *tx),
+            "asserted": asserted,
+            "retracted": retracted,
+            "graphs": graphs,
+        }))
+    }
+}
+
+fn apply_update(shared: &SharedStore, update: &str) -> Result<serde_json::Value, AppError> {
+    let applied = apply_update_as(shared, update, false)?;
+    let store = shared.lock();
+    applied.report(&store)
 }
 
 /// Evaluate `update` with Oxigraph and transact the before/after diff.
@@ -236,8 +273,15 @@ pub(super) fn apply_update_as(
                 op: quipu::Op::Assert,
             });
     }
-    let batches: Vec<_> = changes.into_iter().collect();
-    store.transact_graph_batches(&batches, &now, Some("sparql-update"), Some("sparql-update"))?;
+    let mut batches: Vec<_> = changes.into_iter().collect();
+    // Deterministic commit (and report) order across graphs; ROOT first.
+    batches.sort_unstable_by_key(|(graph, _)| *graph);
+    let txs = store.transact_graph_batches_tx(
+        &batches,
+        &now,
+        Some("sparql-update"),
+        Some("sparql-update"),
+    )?;
     // Register every named graph this update asserted into, so the next
     // update's dataset includes it (aegis-e9o5ci). After the commit, so a
     // refused write leaves no empty registry row behind.
@@ -249,6 +293,7 @@ pub(super) fn apply_update_as(
     Ok(Applied {
         path,
         changes: batches,
+        txs,
     })
 }
 
@@ -351,3 +396,7 @@ mod graph_tests;
 #[cfg(test)]
 #[path = "update_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "update_report_tests.rs"]
+mod update_report_tests;
