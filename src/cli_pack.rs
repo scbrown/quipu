@@ -280,15 +280,17 @@ pub fn cmd_share(args: &[String], db_path: &str) {
     let project_output = project
         .as_ref()
         .map(|(_, dir)| dir.to_string_lossy().into_owned());
-    let output = flag_value(args, "--output").or(project_output.as_deref()).unwrap_or_else(|| {
-        eprintln!(
-            "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
+    let output = flag_value(args, "--output")
+        .or(project_output.as_deref())
+        .unwrap_or_else(|| {
+            eprintln!(
+                "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
              --construct <query>] [--shapes <name>]... [--no-shapes] \
              [--queries <name>]... [--no-queries] [--parent-share <sha256:id>] \
              [--since <parent-reference>] [--turtle] [--destination internal]"
-        );
-        std::process::exit(1);
-    });
+            );
+            std::process::exit(1);
+        });
     let graph = flag_value(args, "--graph").or(project.as_ref().map(|(iri, _)| iri.as_str()));
     if project.is_some() && flag_value(args, "--graph").is_some() {
         eprintln!("share accepts --project or --graph, not both: --project names the graph");
