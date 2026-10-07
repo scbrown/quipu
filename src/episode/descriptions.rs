@@ -237,3 +237,38 @@ pub(super) fn reconcile_node_descriptions(
     }
     Ok(())
 }
+
+/// Retract an existing episode activity's facts before its changed content is
+/// re-asserted. `retract_entity` is ROOT-scoped (quipu #56), but a graph-scoped
+/// activity's facts live in its own graph, so they are retracted there
+/// (aegis-z1i5on). This is a separate transaction, as on ROOT: one transaction
+/// cannot both retract and re-assert the same (e, a, v).
+pub(super) fn retract_activity(
+    store: &mut Store,
+    ep_id: i64,
+    graph: i64,
+    timestamp: &str,
+    actor: Option<&str>,
+    source: &str,
+) -> Result<()> {
+    if graph == crate::schema::ROOT_GRAPH {
+        store.retract_entity(ep_id, None, timestamp, actor)?;
+        return Ok(());
+    }
+    let stale: Vec<crate::store::Datum> = store
+        .entity_facts_in_graph(ep_id, graph)?
+        .into_iter()
+        .map(|f| crate::store::Datum {
+            entity: f.entity,
+            attribute: f.attribute,
+            value: f.value,
+            valid_from: timestamp.to_string(),
+            valid_to: None,
+            op: crate::types::Op::Retract,
+        })
+        .collect();
+    if !stale.is_empty() {
+        store.transact_to_graph(&stale, timestamp, actor, Some(source), graph)?;
+    }
+    Ok(())
+}

@@ -434,29 +434,7 @@ pub fn ingest_episode_outcome(
         && !episode.replace_snapshot
         && let Some(ep_id) = store.lookup(&ep_iri)?
     {
-        if graph == 0 {
-            store.retract_entity(ep_id, None, timestamp, actor)?;
-        } else {
-            // `retract_entity` is ROOT-scoped (quipu #56), and a graph-scoped
-            // activity's facts live in its own graph, so retract them there
-            // (aegis-z1i5on). Same separate-transaction shape as ROOT: one
-            // transaction cannot both retract and re-assert an (e, a, v).
-            let stale: Vec<crate::store::Datum> = store
-                .entity_facts_in_graph(ep_id, graph)?
-                .into_iter()
-                .map(|f| crate::store::Datum {
-                    entity: f.entity,
-                    attribute: f.attribute,
-                    value: f.value,
-                    valid_from: timestamp.to_string(),
-                    valid_to: None,
-                    op: crate::types::Op::Retract,
-                })
-                .collect();
-            if !stale.is_empty() {
-                store.transact_to_graph(&stale, timestamp, actor, Some(&source_str), graph)?;
-            }
-        }
+        descriptions::retract_activity(store, ep_id, graph, timestamp, actor, &source_str)?;
     }
 
     let (tx_id, count) = if episode.replace_snapshot {
