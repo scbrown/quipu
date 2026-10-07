@@ -360,6 +360,11 @@ Results include raw `similarity`, adjusted `score`, and `ranking_reason`.
 See [search ranking](./rest-api.md#post-search) for content criteria, exact-name
 exceptions, temporal behavior, and bounded candidate recall.
 
+**Anchored search** (`anchor`, `max_hops`, `anchor_mode`, `decay`, `via`,
+`direction`, `explain`) roots the search on one entity and ranks by hop
+distance. It is off unless the server sets `[quipu.search] anchored = true`. See
+[anchored search](./rest-api.md#anchored-search).
+
 ### `quipu_hybrid_search`
 
 Combined SPARQL filtering + vector ranking. Supply either a natural-language
