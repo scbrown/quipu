@@ -354,8 +354,7 @@ pub fn query_row_labeled(
     sparql: &str,
     ctx: &TemporalContext,
 ) -> Result<QueryResult> {
-    let parsed = sparql_parser()
-        .parse_query(sparql)
+    let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
     let g_var = match &parsed {
         Query::Select { pattern, .. }
@@ -455,8 +454,7 @@ pub fn dataset_member_ids(store: &Store, sparql: &str, ctx: &TemporalContext) ->
     // implementation of the resolution would be free to drift from the one that
     // decides what the query actually reads — labelling a dataset the query
     // does not read is precisely the failure this is meant to prevent.
-    let parsed = sparql_parser()
-        .parse_query(sparql)
+    let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
     let dataset = match &parsed {
         Query::Select { dataset, .. }
@@ -501,8 +499,7 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         ));
     }
 
-    let parsed = sparql_parser()
-        .parse_query(sparql)
+    let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 
     let started = crate::time::Stopwatch::start();
