@@ -13,6 +13,8 @@ All notable changes to this project will be documented in this file.
 - *(episode)* Let a node type name a class in the public Quechua namespace (#412)([c9d9ca2](https://github.com/scbrown/quipu/commit/c9d9ca2fa27f7f8f9e5c53ce8ad524aefdfc45f5))
 - *(shapes)* Govern legacy Bead as a deprecated subclass of WorkItem (#423)([9e12ee1](https://github.com/scbrown/quipu/commit/9e12ee1a43979c2ef7bb9d19028f5f84eb258646))
 
+
+
 ### Fixed
 
 - *(rdf)* Scope blank nodes by document and destination graph (#321)([9a816b9](https://github.com/scbrown/quipu/commit/9a816b9829436892111ef19299ced93d8f4859ef))
@@ -49,14 +51,6 @@ All notable changes to this project will be documented in this file.
 - *(update)* Slice a variable predicate on a constant subject instead of copying the store (#417)([ba9a8e7](https://github.com/scbrown/quipu/commit/ba9a8e73f6612013ed866e9ebaa8a06b3f051e45))
 - *(server)* Serve the change feed from the read pool, not the writer (#278)([cdaa25a](https://github.com/scbrown/quipu/commit/cdaa25a0c281156113e32cb9ca116ffba8bec5c3))
 - *(sparql)* Bind-join small VALUES tables into BGP operands (#429)([5030080](https://github.com/scbrown/quipu/commit/5030080d1f324333d9935fc35286c3d509281085))
-
-### Changed
-
-- RDF loads scope blank nodes to document contents and destination graph. Reloading an edited file creates new blank nodes and leaves the old blank nodes and their facts in place. ([2959ce8](https://github.com/scbrown/quipu/commit/2959ce8))
-
-### Other
-
-- *(conformance)* Re-derive ledgers at 3b628a6a (#405) ([323dda6](https://github.com/scbrown/quipu/commit/323dda62d88ba2e87ba5a39ee6e939b51f9f4479))
 
 ## [0.11.0] - 2026-10-03
 
