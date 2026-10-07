@@ -187,6 +187,21 @@ const SLICED_CORPUS: &[&str] = &[
     // A one-or-more path and EXISTS inside BIND.
     "INSERT { ?a p:reaches ?b } WHERE { ?a p:dependsOn+ ?b }",
     "INSERT { ?s p:hasPrio ?h } WHERE { ?s p:status ?x BIND(EXISTS { ?s p:priority ?p } AS ?h) }",
+    // A variable predicate on a CONSTANT subject reads that subject's facts
+    // (aegis-w3k75d.15). seeds writes are these shapes.
+    r#"INSERT { e:x p:y "z" } WHERE { e:s1 ?p ?o }"#,
+    r#"DELETE { e:s1 ?p ?o } INSERT { e:s1 p:status "closed" }
+       WHERE { e:s1 p:status "open" . e:s1 ?p ?o }"#,
+    r#"INSERT { e:new p:status "open" } WHERE { FILTER NOT EXISTS { e:new ?x ?y } }"#,
+    r#"INSERT { e:s1 p:status "dup" } WHERE { FILTER NOT EXISTS { e:s1 ?x ?y } }"#,
+    r#"DELETE { GRAPH <http://ex.org/g/1> { e:s1 ?p ?o } }
+       INSERT { GRAPH <http://ex.org/g/1> { e:s1 p:claimedBy "agentZ" } }
+       WHERE { GRAPH <http://ex.org/g/1> { e:s1 ?p ?o } }"#,
+    r#"DELETE { e:s1 ?p ?o . e:s2 ?q ?r } INSERT { e:s1 p:status "moved" }
+       WHERE { e:s1 p:status "open" { e:s1 ?p ?o } UNION { e:s2 ?q ?r } }"#,
+    // The object side is not read: a constant OBJECT with a variable predicate
+    // and open subject is still an open subject.
+    r#"DELETE { e:s3 ?p e:s1 } WHERE { e:s3 ?p e:s1 }"#,
 ];
 
 #[test]
@@ -201,7 +216,7 @@ fn sliced_path_matches_full_path() {
 const FALLBACK_CORPUS: &[(&str, &str)] = &[
     (
         "variable-predicate",
-        r#"INSERT { e:x p:y "z" } WHERE { e:s1 ?p ?o }"#,
+        r#"INSERT { e:x p:y "z" } WHERE { ?s ?p ?o }"#,
     ),
     (
         "variable-predicate",
@@ -246,7 +261,7 @@ fn fallback_triggers_take_the_full_path() {
 
 #[test]
 fn cas_slices_to_one_subject() {
-    let Plan::Sliced(touched) = plan(&format!("{PREFIXES}{}", SLICED_CORPUS[0])) else {
+    let Plan::Sliced(touched, _) = plan(&format!("{PREFIXES}{}", SLICED_CORPUS[0])) else {
         panic!("CAS must slice");
     };
     assert_eq!(touched.len(), 1);
@@ -403,4 +418,23 @@ mod generated {
             prop_assert!(paths.iter().all(|p| *p == super::UpdatePath::Sliced), "{paths:?}");
         }
     }
+}
+
+#[test]
+fn a_variable_predicate_on_a_constant_subject_slices_to_that_subject() {
+    let Plan::Sliced(touched, whole) = plan(&format!(
+        "{PREFIXES}DELETE {{ e:s1 ?p ?o }} INSERT {{ e:s1 p:status \"closed\" }} \
+         WHERE {{ e:s1 p:status \"open\" . e:s1 ?p ?o FILTER NOT EXISTS {{ e:new ?x ?y }} }}"
+    )) else {
+        panic!("a constant-subject variable predicate must slice (aegis-w3k75d.15)");
+    };
+    assert_eq!(
+        whole,
+        [
+            "http://ex.org/e/new".to_string(),
+            "http://ex.org/e/s1".to_string()
+        ]
+        .into()
+    );
+    assert_eq!(touched.len(), 1, "{touched:?}");
 }
