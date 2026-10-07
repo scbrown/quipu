@@ -28,9 +28,6 @@ mod base;
 mod entity;
 #[path = "server/feed.rs"]
 mod feed;
-#[cfg(test)]
-#[path = "server/feed_read_pool_tests.rs"]
-mod feed_read_pool_tests;
 #[path = "server/graph_metrics.rs"]
 mod graph_metrics;
 #[path = "server/graph_store.rs"]

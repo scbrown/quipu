@@ -14,15 +14,15 @@ use std::time::Duration;
 use axum::extract::{Query, State};
 use serde_json::json;
 
-use super::feed;
+use crate::feed;
 
 /// Run `call` while another thread holds the writer; true if it answered.
 async fn answers_while_writer_held<F, Fut>(call: F) -> bool
 where
-    F: FnOnce(super::SharedStore) -> Fut,
+    F: FnOnce(crate::SharedStore) -> Fut,
     Fut: std::future::Future<Output = bool>,
 {
-    let (_dir, handle) = super::tests::pooled_handle(2);
+    let (_dir, handle) = crate::tests::pooled_handle(2);
     {
         let mut writer = handle.lock();
         quipu::rdf::ingest_rdf(
@@ -36,7 +36,7 @@ where
         )
         .unwrap();
     }
-    let shared: super::SharedStore = Arc::new(handle);
+    let shared: crate::SharedStore = Arc::new(handle);
     let (ready_tx, ready_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
     let held = shared.clone();
@@ -139,7 +139,7 @@ fn headers(client: &'static str) -> axum::http::HeaderMap {
 
 #[tokio::test]
 async fn feed_error_still_records_caller_store_time() {
-    let (_dir, handle) = super::tests::pooled_handle(1);
+    let (_dir, handle) = crate::tests::pooled_handle(1);
     let state = Arc::new(handle);
     let params = serde_json::from_value(json!({"capture": "invalid"})).unwrap();
     assert!(
@@ -178,7 +178,7 @@ fn recorded_wait(client: &str, endpoint: &str) -> f64 {
 async fn feed_wait_metric_detects_real_writer_fallback_wait() {
     // Positive control: an empty pool must fall back to the writer, and the
     // metric must see that contention instead of reporting a vacuous zero.
-    let (_dir, handle) = super::tests::pooled_handle(0);
+    let (_dir, handle) = crate::tests::pooled_handle(0);
     let state = Arc::new(handle);
     let held = state.clone();
     let (ready_tx, ready_rx) = std::sync::mpsc::channel();

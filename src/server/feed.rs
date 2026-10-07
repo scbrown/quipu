@@ -242,3 +242,7 @@ pub(crate) async fn transactions(
     })
     .await
 }
+
+#[cfg(test)]
+#[path = "feed_read_pool_tests.rs"]
+mod feed_read_pool_tests;
