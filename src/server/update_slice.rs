@@ -103,7 +103,7 @@ type Walk = Result<(), &'static str>;
 
 /// Decide the dataset an update needs. `Plan::Full` is always safe.
 pub(crate) fn plan(update: &str) -> Plan {
-    let Ok(parsed) = SparqlParser::new().parse_update(update) else {
+    let Ok(Ok(parsed)) = quipu::sparql_structure::parse_update(SparqlParser::new(), update) else {
         return Plan::Full("unparsed");
     };
     let mut slice = Slice::default();
