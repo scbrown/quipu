@@ -49,7 +49,11 @@ needs an [identifier-policy catalogue](../sharing/README.md#prepare-an-outward-s
 
 ### 2. Import: stage and validate
 
+The **target** validates the data against its own shapes, not the ones the share
+carries, so load the same shape set there first:
+
 ```bash
+quipu shapes load items shapes.ttl --db target.db
 quipu import share1 --db target.db --actor you --destination internal
 ```
 
@@ -75,6 +79,17 @@ The JSON result is the review:
 { "outcome": "quarantined",
   "triples": { "accepted": 0, "quarantined": 5 },
   "promotion": { "eligible": false, "blockers": ["shacl_nonconforming"] } }
+```
+
+- If the target has **no** shapes for a class the share uses, every typed triple
+  is quarantined as off-vocabulary. The data is neither dropped nor admitted.
+  Load the shapes and import again:
+
+```json
+{ "outcome": "quarantined",
+  "triples": { "accepted": 0, "quarantined": 4000 },
+  "validation": { "off_vocabulary": ["http://example.org/Item"] },
+  "promotion": { "eligible": false, "blockers": ["off_vocabulary"] } }
 ```
 
 ### 3. Promote: admit it into ROOT
@@ -117,12 +132,14 @@ The same steps exist over HTTP: `POST /import` stages a share and
 
 ## Measured
 
-These are the numbers from the example above: 2,000 entities and 4,000 triples
-moved from a scratch store into a target that already held its own data.
+These are the numbers from the example above, measured with a release build of
+quipu 0.11.0: 2,000 entities and 4,000 triples moved from a scratch store into a
+target that already held its own data and had the same shapes loaded.
 
 | step | result |
 |---|---|
-| `import` | staged, 4,000 accepted, 0 quarantined; ROOT unchanged (1 entity) |
+| `import`, target without the shapes | quarantined: 4,000 triples, blocker `off_vocabulary` |
+| `import`, target with the shapes | staged, 4,000 accepted, 0 quarantined; ROOT unchanged (1 entity) |
 | `import promote` | one transaction (`tx_id` 3), 4,000 triples, 0.12 s |
 | read-back | 2,001 entities (1 existing + 2,000 promoted) |
 | re-promote | same 4,002 current facts, no duplicates |
