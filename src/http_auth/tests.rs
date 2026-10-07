@@ -324,6 +324,8 @@ fn routes_in_server_source() -> Vec<String> {
         "server/tests.rs",
         "server/tools.rs",
         "server/update.rs",
+        // Write gates for /update (aegis-1hfyk5): called from update.rs, no routes.
+        "server/update_gates.rs",
         // Slice planner for /update (aegis-jm1lcl): pure analysis of the parsed
         // update, called from update.rs, no routes.
         "server/update_slice.rs",

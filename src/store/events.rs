@@ -392,6 +392,32 @@ impl Store {
         );
     }
 
+    /// Record a gate refusal from outside the store's own write path: the
+    /// server's `/update` gates refuse before any transaction exists
+    /// (aegis-1hfyk5). Same metadata-only event as [`Store::record_refusal`].
+    pub fn record_gate_refusal(
+        &self,
+        gate: &'static str,
+        reason: &str,
+        graph: i64,
+        actor: Option<&str>,
+        source: Option<&str>,
+        timestamp: &str,
+    ) {
+        let refusal = PendingRefusal {
+            gate,
+            reason: reason.to_owned(),
+            refused_datums: 0,
+        };
+        self.record_refusal(
+            &refusal,
+            &self.graph_iri_of(graph),
+            actor,
+            source,
+            timestamp,
+        );
+    }
+
     /// The IRI of graph `g`, for refusal payloads. ROOT gets its stable IRI;
     /// an unresolvable id degrades to `g:<id>` rather than failing the
     /// (must-not-fail) recording path.
