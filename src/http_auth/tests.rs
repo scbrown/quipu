@@ -313,6 +313,8 @@ fn routes_in_server_source() -> Vec<String> {
         "server/auth.rs",
         "server/base.rs",
         "server/entity.rs",
+        "server/feed.rs",
+        "server/feed_read_pool_tests.rs",
         "server/graph_metrics.rs",
         "server/handle.rs",
         "server/input_fields.rs",
