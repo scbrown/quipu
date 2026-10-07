@@ -12,6 +12,7 @@
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
 @prefix quipu:  <http://quipu.dev/ontology/> .
 @prefix aegis:  <http://aegis.gastown.local/ontology/> .
 
@@ -1852,7 +1853,8 @@ aegis:Directive rdfs:subClassOf aegis:OperationalKnowledge .
 # ALSO a WorkItem. A Bead-only node, which is what a new Bead write would be,
 # violates it. Note that the vocabulary gate admits any targeted class, so this
 # shape does not by itself refuse such a write at /episode. It makes one visible.
-aegis:Bead rdfs:subClassOf aegis:WorkItem .
+aegis:Bead rdfs:subClassOf aegis:WorkItem ;
+    owl:deprecated true .
 
 aegis:BeadLegacyShape a sh:NodeShape ;
     sh:targetClass aegis:Bead ;
