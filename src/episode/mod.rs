@@ -372,7 +372,15 @@ pub fn ingest_episode_outcome(
         }
     }
 
-    let existing_hash = descriptions::current_content_hash(store, &ep_iri, base_ns)?;
+    // The episode's own graph, as an IRI: its activity facts live there, so the
+    // hash, the presence check and the stale-fact retraction must all read it
+    // (aegis-z1i5on). None is ROOT.
+    let graph_iri = episode
+        .graph
+        .as_deref()
+        .map(str::trim)
+        .filter(|g| !g.is_empty());
+    let existing_hash = descriptions::current_content_hash(store, &ep_iri, base_ns, graph_iri)?;
 
     // Idempotency fast path: same content already recorded → skip the write.
     // Reported as `Unchanged`, NOT as a bare `count: 0` — see `IngestOutcome`.
@@ -381,7 +389,15 @@ pub fn ingest_episode_outcome(
     // retraction of the entities it was recorded for, so `is_unchanged` also
     // confirms those entities are still in the store. Rationale and the
     // measurement are on `descriptions::is_unchanged`.
-    if descriptions::is_unchanged(store, &ep_iri, base_ns, episode, &existing_hash, &new_hash)? {
+    if descriptions::is_unchanged(
+        store,
+        &ep_iri,
+        base_ns,
+        graph_iri,
+        episode,
+        &existing_hash,
+        &new_hash,
+    )? {
         return Ok((NOOP_TX, 0, IngestOutcome::Unchanged));
     }
 
@@ -397,13 +413,6 @@ pub fn ingest_episode_outcome(
     } else {
         IngestOutcome::Created
     };
-    if existing_hash.is_some()
-        && !episode.replace_snapshot
-        && let Some(ep_id) = store.lookup(&ep_iri)?
-    {
-        store.retract_entity(ep_id, None, timestamp, actor)?;
-    }
-
     let source_str = format!("episode:{}", episode.name);
 
     // Named graph (aegis-g1al / #36): register the graph and write there.
@@ -420,6 +429,35 @@ pub fn ingest_episode_outcome(
         Some(iri) if !iri.trim().is_empty() => store.graph_create(iri)?,
         _ => 0,
     };
+
+    if existing_hash.is_some()
+        && !episode.replace_snapshot
+        && let Some(ep_id) = store.lookup(&ep_iri)?
+    {
+        if graph == 0 {
+            store.retract_entity(ep_id, None, timestamp, actor)?;
+        } else {
+            // `retract_entity` is ROOT-scoped (quipu #56), and a graph-scoped
+            // activity's facts live in its own graph, so retract them there
+            // (aegis-z1i5on). Same separate-transaction shape as ROOT: one
+            // transaction cannot both retract and re-assert an (e, a, v).
+            let stale: Vec<crate::store::Datum> = store
+                .entity_facts_in_graph(ep_id, graph)?
+                .into_iter()
+                .map(|f| crate::store::Datum {
+                    entity: f.entity,
+                    attribute: f.attribute,
+                    value: f.value,
+                    valid_from: timestamp.to_string(),
+                    valid_to: None,
+                    op: crate::types::Op::Retract,
+                })
+                .collect();
+            if !stale.is_empty() {
+                store.transact_to_graph(&stale, timestamp, actor, Some(&source_str), graph)?;
+            }
+        }
+    }
 
     let (tx_id, count) = if episode.replace_snapshot {
         let mut datums = store.plan_episode_retraction(&episode.name, graph)?;
@@ -935,6 +973,8 @@ fn escape_turtle(s: &str) -> String {
         .replace('\t', "\\t")
 }
 
+#[cfg(test)]
+mod graph_idempotency_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

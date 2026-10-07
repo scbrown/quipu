@@ -12,13 +12,29 @@ pub(super) fn current_content_hash(
     store: &Store,
     ep_iri: &str,
     base_ns: &str,
+    graph: Option<&str>,
 ) -> Result<Option<String>> {
-    let query = format!("SELECT ?h WHERE {{ <{ep_iri}> <{base_ns}contentHash> ?h }} LIMIT 1");
+    let pattern = in_graph(&format!("<{ep_iri}> <{base_ns}contentHash> ?h"), graph);
+    let query = format!("SELECT ?h WHERE {{ {pattern} }} LIMIT 1");
     let result = crate::sparql::query(store, &query)?;
     Ok(result.rows().first().and_then(|row| match row.get("h") {
         Some(Value::Str(s)) => Some(s.clone()),
         _ => None,
     }))
+}
+
+/// Scope a pattern to the episode's named graph; `None` is ROOT, as before.
+///
+/// An episode written into a named graph keeps its activity (contentHash,
+/// generatedAtTime, provenance) in THAT graph. An unscoped lookup reads ROOT
+/// only, so it never found the hash: every byte-identical re-post was a full
+/// write reported `created`, and each left another `generatedAtTime` behind
+/// (aegis-z1i5on; 160,247 values on 25,213 activities in one plane).
+fn in_graph(pattern: &str, graph: Option<&str>) -> String {
+    match graph {
+        Some(g) => format!("GRAPH <{g}> {{ {pattern} }}"),
+        None => pattern.to_string(),
+    }
 }
 
 /// Is a content-hash match really "it is already there"? (aegis-7oswq4)
@@ -44,6 +60,7 @@ pub(super) fn is_unchanged(
     store: &Store,
     ep_iri: &str,
     base_ns: &str,
+    graph: Option<&str>,
     episode: &Episode,
     existing_hash: &Option<String>,
     new_hash: &str,
@@ -59,10 +76,11 @@ pub(super) fn is_unchanged(
     if expected.is_empty() {
         return Ok(true);
     }
-    let query = format!(
-        "SELECT ?s WHERE {{ ?s <{}wasGeneratedBy> <{ep_iri}> }}",
-        namespace::PROV,
+    let pattern = in_graph(
+        &format!("?s <{}wasGeneratedBy> <{ep_iri}>", namespace::PROV),
+        graph,
     );
+    let query = format!("SELECT ?s WHERE {{ {pattern} }}");
     Ok(crate::sparql::query(store, &query)?.rows().len() >= expected.len())
 }
 
