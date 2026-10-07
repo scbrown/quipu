@@ -65,6 +65,11 @@ pub(crate) async fn update_post(
         )
             .into_response()),
     };
+    // Before ANY parser sees it: a deep or long-chained update overflows the
+    // recursive parser and aborts the process (aegis-rq1afp).
+    if let Err(e) = quipu::sparql_structure::check(&update) {
+        return Ok((StatusCode::BAD_REQUEST, e.to_string()).into_response());
+    }
     let parameters: Vec<_> = uri
         .query()
         .map(|query| url::form_urlencoded::parse(query.as_bytes()).collect())

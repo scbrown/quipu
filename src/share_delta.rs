@@ -237,11 +237,9 @@ pub fn build_delta_with_limit(
     let result = build_share_payload(store, &opts)?;
     let update = update_text(parent_export_ntriples, &result.files["export.nt"]);
     if !update.is_empty() {
-        spargebra::SparqlParser::new()
-            .parse_update(&update)
-            .map_err(|e| {
-                Error::InvalidValue(format!("generated delta is not SPARQL Update: {e}"))
-            })?;
+        crate::sparql_structure::parse_update(spargebra::SparqlParser::new(), &update)?.map_err(
+            |e| Error::InvalidValue(format!("generated delta is not SPARQL Update: {e}")),
+        )?;
     }
     let shapes = result.files["shapes.ttl"].clone();
     let queries = result
@@ -368,9 +366,9 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
     }
     let mut result = lines(&parent.export_ntriples);
     if !update.is_empty() {
-        let parsed = spargebra::SparqlParser::new()
-            .parse_update(&update)
-            .map_err(|e| Error::InvalidValue(format!("delta update parse: {e}")))?;
+        let parsed =
+            crate::sparql_structure::parse_update(spargebra::SparqlParser::new(), &update)?
+                .map_err(|e| Error::InvalidValue(format!("delta update parse: {e}")))?;
         for operation in parsed.operations {
             match operation {
                 GraphUpdateOperation::DeleteData { data } => {

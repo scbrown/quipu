@@ -387,6 +387,14 @@ curl -s localhost:3030/episode -X POST \
   }'
 ```
 
+A bare node `type` such as `WebApplication` names a class under the store's
+`base_ns`. To name a class in the public Quechua vocabulary instead, prefix it:
+`"type": "quechua:WorkItem"` asserts
+`<https://scbrown.github.io/quechua/ns#WorkItem>`. The prefix changes only the
+class. The node's own IRI is still minted under `base_ns`. Like any other type, a
+Quechua class is refused until a loaded shape sanctions it. No other prefix is
+accepted.
+
 Set `"replace_snapshot": true` for producers whose payload is the complete
 current state of an inventory. Facts previously asserted by the same episode
 name but absent from the new payload are retracted atomically with the new
@@ -1396,6 +1404,15 @@ The durable graph-change event log (at-least-once delivery; consumers dedup
 by offset).
 
 ### `GET /events`
+
+Feed reads (`/events`, `/changes`, `/transactions`) use the WAL read pool when
+available, so a writer holding the store mutex does not block them. An empty
+read pool falls back to the writer. `POST /events/commit` remains a write.
+The `quipu_store_wait_seconds_total` and `quipu_store_held_seconds_total` metrics
+attribute each feed read to its normalized `X-Quipu-Client` and endpoint,
+including requests that return an error. An event page and its lag gauge are
+separate reads: a concurrent commit may increase the reported lag without
+changing the page's `next_offset` cursor.
 
 Pull a batch of events in offset order.
 
