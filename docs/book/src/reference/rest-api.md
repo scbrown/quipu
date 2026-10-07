@@ -277,6 +277,13 @@ both zero means the `WHERE` matched nothing, or the update changed nothing, and
 `null` for the default graph); `tx` is the last of them, usable with `--at` /
 `tx` reads. The SPARQL 1.1 Protocol leaves this body to the implementation.
 
+Attribute a write with the optional `actor` and `source` query parameters (or
+form fields beside `update=`), each at most once, 1–256 characters, no control
+characters: `POST /update?actor=agent:wu&source=seeds:claim`. They are recorded
+on the transaction as declared, like `/knot`'s fields; the verified caller is
+recorded separately as its `authenticated` principal. Without `actor` the
+transaction's actor is unknown (`null`); `source` defaults to `sparql-update`.
+
 Quipu's JSON extension compacts result IRIs to CURIEs by default using prefixes
 declared by the currently loaded shape sets; unknown namespaces remain full
 IRIs. Pass `"verbose": true` in a JSON request, or `?verbose=1` on GET, to
