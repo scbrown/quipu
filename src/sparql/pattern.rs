@@ -432,6 +432,16 @@ pub fn eval_pattern_seeded(
         GraphPattern::Graph { name, inner } => {
             if let NamedNodePattern::Variable(variable) = name {
                 let graph_var = variable.as_str().to_string();
+                // A seed binding the graph variable to anything but a stored term
+                // (an IRI absent from the dictionary, a literal) names no graph:
+                // the row has no solution. Treating it as unbound would scan every
+                // graph and overwrite ?g (aegis-roth88, wu's review of quipu#429).
+                if seed
+                    .get(&graph_var)
+                    .is_some_and(|v| !matches!(v, Value::Ref(_)))
+                {
+                    return Ok((Vec::new(), vec![graph_var]));
+                }
                 let bound_graph = seed.get(&graph_var).and_then(|value| match value {
                     Value::Ref(id) => Some(*id),
                     _ => None,

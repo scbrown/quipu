@@ -314,3 +314,40 @@ fn declines_above_the_row_ceiling() {
         .is_none()
     );
 }
+
+#[test]
+fn a_values_graph_iri_the_store_lacks_matches_no_graph() {
+    // wu's quipu#429 review: an unknown graph IRI binds ?g as a Str, and the
+    // GRAPH ?g arm used to treat that as unbound, scanning every graph and
+    // relabelling ?g. Under the bind join that doubled the rows.
+    let store = store();
+    let both = query(
+        &store,
+        &format!(
+            "SELECT * WHERE {{ VALUES ?g {{ <{G}> <http://example.org/nog> }} GRAPH ?g {{ ?s ?p ?o }} }}"
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        both.rows().len(),
+        4,
+        "only the 4 facts of G: {:?}",
+        both.rows()
+    );
+    let absent = query(
+        &store,
+        "SELECT * WHERE { VALUES ?g { <http://example.org/nog> } GRAPH ?g { ?s ?p ?o } }",
+    )
+    .unwrap();
+    assert_eq!(absent.rows().len(), 0, "{:?}", absent.rows());
+    // The same answer through the hash join (VALUES above the row ceiling is
+    // not needed: compare against the bind join's own operands directly).
+    let (bind, hash) = both_ways(
+        &store,
+        &format!(
+            "SELECT * WHERE {{ VALUES ?g {{ <{G}> <http://example.org/nog> }} GRAPH ?g {{ ?s ?p ?o }} }}"
+        ),
+        &TemporalContext::default(),
+    );
+    assert_eq!(bind, hash);
+}
