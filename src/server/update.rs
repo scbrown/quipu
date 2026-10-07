@@ -328,8 +328,8 @@ pub(super) fn apply_update_attributed(
             UPDATES_FULL.fetch_add(1, Ordering::Relaxed);
             UpdatePath::Full
         }
-        Plan::Sliced(touched) => {
-            load_slice(&store, &ox, &graphs, touched)?;
+        Plan::Sliced(touched, whole) => {
+            load_slice(&store, &ox, &graphs, touched, whole)?;
             UPDATES_SLICED.fetch_add(1, Ordering::Relaxed);
             UpdatePath::Sliced
         }
@@ -406,6 +406,7 @@ fn load_slice(
     ox: &OxStore,
     graphs: &[(i64, GraphName)],
     touched: &std::collections::BTreeMap<String, Subjects>,
+    whole: &std::collections::BTreeSet<String>,
 ) -> Result<(), AppError> {
     let dataset: HashMap<i64, &GraphName> = graphs.iter().map(|(id, name)| (*id, name)).collect();
     let mut every_subject = Vec::new();
@@ -423,6 +424,17 @@ fn load_slice(
                     entities.extend(store.lookup_all(iri)?);
                 }
                 reads.push((attributes, Some(entities)));
+            }
+        }
+    }
+    // Every current fact of each `whole` subject, one indexed read per entity
+    // and dataset graph (a variable predicate on a constant subject).
+    for iri in whole {
+        for entity in store.lookup_all(iri)? {
+            for (g, graph) in graphs {
+                for fact in store.entity_facts_in_graph(entity, *g)? {
+                    insert_fact(store, ox, fact.entity, fact.attribute, &fact.value, graph)?;
+                }
             }
         }
     }
