@@ -522,10 +522,15 @@ fn a_bead_only_node_fails_even_though_bead_is_a_subclass_of_work_item() {
         aegis:aegis-new a aegis:Bead ; rdfs:label "aegis-new" ."#
     );
     let report = quipu::validate_shapes(SHAPES, &data).unwrap();
-    assert!(!report.conforms, "a Bead-only node must violate BeadLegacyShape");
+    assert!(
+        !report.conforms,
+        "a Bead-only node must violate BeadLegacyShape"
+    );
 }
 
 #[test]
 fn bead_is_declared_a_deprecated_subclass_of_work_item() {
-    assert!(SHAPES.contains("aegis:Bead rdfs:subClassOf aegis:WorkItem ;\n    owl:deprecated true ."));
+    assert!(
+        SHAPES.contains("aegis:Bead rdfs:subClassOf aegis:WorkItem ;\n    owl:deprecated true .")
+    );
 }
