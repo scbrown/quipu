@@ -17,7 +17,7 @@ use oxigraph::{
 
 use super::{
     SharedStore,
-    base::{AppError, blocking},
+    base::{AppError, blocking_deep},
     update_slice::{self, Plan, Subjects},
 };
 
@@ -65,6 +65,11 @@ pub(crate) async fn update_post(
         )
             .into_response()),
     };
+    // Before ANY parser sees it: a deep or long-chained update overflows the
+    // recursive parser and aborts the process (aegis-rq1afp).
+    if let Err(e) = quipu::sparql_structure::check(&update) {
+        return Ok((StatusCode::BAD_REQUEST, e.to_string()).into_response());
+    }
     let parameters: Vec<_> = uri
         .query()
         .map(|query| url::form_urlencoded::parse(query.as_bytes()).collect())
@@ -122,7 +127,7 @@ pub(crate) async fn update_post(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost");
     let base = format!("http://{host}{}", uri.path());
-    let report = blocking(move || {
+    let report = blocking_deep(move || {
         apply_update_reported(&store, &format!("BASE <{base}>\n{update}"), &attribution)
     })
     .await?;
@@ -492,6 +497,9 @@ mod graph_tests;
 #[cfg(test)]
 #[path = "update_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "update_nesting_tests.rs"]
+mod update_nesting_tests;
 
 #[cfg(test)]
 #[path = "update_report_tests.rs"]
