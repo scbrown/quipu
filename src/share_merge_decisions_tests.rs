@@ -10,6 +10,7 @@ use crate::store::Store;
 const S: &str = "https://example.org/s";
 const STATUS: &str = "https://example.org/status";
 const TAG: &str = "https://example.org/tag";
+const LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 const SHAPES: &str = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 [] sh:path <https://example.org/status> ; sh:maxCount 1 .
@@ -41,7 +42,11 @@ fn store_with_base() -> Store {
     store.load_shapes("merge", SHAPES, "2026-10-07").unwrap();
     put(
         &mut store,
-        &format!("<{S}> <{STATUS}> \"open\" .\n<{S}> <{TAG}> \"a\" .\n"),
+        &format!(
+            "<{S}> <{STATUS}> \"open\" .\n<{S}> <{TAG}> \"a\" .\n\
+             <{STATUS}> <{LABEL}> \"statut\"@fr .\n<{STATUS}> <{LABEL}> \"status\"@en .\n\
+             <{S}> <{LABEL}> \"Thing S\" .\n"
+        ),
         "2026-10-07T00:00:00Z",
     );
     store
@@ -377,4 +382,134 @@ fn inline_shares_are_verified_and_must_be_parent_and_child() {
     .unwrap_err()
     .to_string();
     assert!(err.contains("parent"), "{err}");
+}
+
+// aegis-yavo9c item 6: what a person reads, and what a tool may not add.
+
+#[test]
+fn emit_carries_labels_kind_and_the_rule_in_words() {
+    let root = tempfile::tempdir().unwrap();
+    let (local, incoming) = scenario(root.path());
+    let file = emit(&local, &incoming).unwrap();
+    assert_eq!(
+        file.labels.get(STATUS).map(String::as_str),
+        Some("status"),
+        "@en over @fr"
+    );
+    assert_eq!(
+        file.labels.get(S).map(String::as_str),
+        Some("Thing S"),
+        "untagged first"
+    );
+    let row = &file.rows[0];
+    assert_eq!(row.kind, Some(ConflictKind::MaxCountExceeded));
+    assert_eq!(
+        row.rule.as_deref(),
+        Some("sh:maxCount 1 on status: ours and theirs together hold 2 values")
+    );
+}
+
+#[test]
+fn a_one_sided_delete_against_a_replacement_is_its_own_kind() {
+    let record = DecisionRecord {
+        subject: format!("<{S}>"),
+        predicate: STATUS.into(),
+        max_count: 1,
+        base: vec!["\"open\"".into()],
+        ours: vec![],
+        theirs: vec!["\"closed\"".into()],
+    };
+    assert_eq!(
+        crate::share_merge_decisions_view::kind(&record),
+        ConflictKind::DeleteReplace
+    );
+    let rule = crate::share_merge_decisions_view::rule(&record, &Default::default());
+    assert!(rule.contains("deleted"), "{rule}");
+}
+
+#[test]
+fn decided_by_is_round_tripped_and_an_unknown_field_refuses() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let mut file = emit(&local, &incoming).unwrap();
+    file.rows[0].decision = Some(Decision::Choose {
+        choose: Side::Theirs,
+    });
+    file.rows[0].decided_by = Some("page:stiwi".into());
+    file.rows[0].decided_at = Some("2026-10-07T23:00:00Z".into());
+
+    let mut extra: serde_json::Value = serde_json::to_value(&file).unwrap();
+    extra["rows"][0]["confidence"] = serde_json::json!("high");
+    let bytes = serde_json::to_vec(&extra).unwrap();
+    let before = values(&local, STATUS);
+    let err = apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "r",
+        "2026-10-07T01:00:00Z",
+        None,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("unknown field 'confidence'"), "{err}");
+    assert_eq!(values(&local, STATUS), before, "refused: nothing written");
+
+    let bytes = serde_json::to_vec(&file).unwrap();
+    let out = apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "r",
+        "2026-10-07T01:00:00Z",
+        None,
+    )
+    .unwrap();
+    assert_eq!(out.applied[0].decided_by.as_deref(), Some("page:stiwi"));
+    assert_eq!(
+        out.applied[0].decided_at.as_deref(),
+        Some("2026-10-07T23:00:00Z")
+    );
+}
+
+#[test]
+fn dry_run_reports_what_apply_then_writes_and_writes_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let mut file = emit(&local, &incoming).unwrap();
+    let bytes = decide(
+        &mut file,
+        &Decision::Choose {
+            choose: Side::Theirs,
+        },
+    );
+    let before = (values(&local, STATUS), values(&local, TAG));
+    // A dry run refuses what apply refuses: an undecided file.
+    let undecided = emit(&local, &incoming).unwrap();
+    let raw = serde_json::to_vec(&undecided).unwrap();
+    let err = dry_run(&mut local, &incoming, &undecided, &raw, "r")
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("undecided"), "{err}");
+    let dry = dry_run(&mut local, &incoming, &file, &bytes, "r").unwrap();
+    assert_eq!(dry.merge.outcome, "dry-run");
+    assert!(dry.merge.tx_id.is_none());
+    assert_eq!((values(&local, STATUS), values(&local, TAG)), before);
+    // The same file is still fresh after a dry run, and applies as reported.
+    let real = apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "r",
+        "2026-10-07T01:00:00Z",
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        (dry.merge.asserted, dry.merge.retracted),
+        (real.merge.asserted, real.merge.retracted)
+    );
 }

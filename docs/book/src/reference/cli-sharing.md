@@ -243,7 +243,7 @@ from "went wrong".
 
 ```text
 quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
-quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--actor <id>] [--db <path>]
+quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
 ```
 
 The same split as `quipu align`: a merge that cannot auto-merge is finished by a
@@ -254,12 +254,18 @@ person, with the evidence in front of them.
    `max_count`), the `base` / `ours` / `theirs` values, and each side's
    provenance: ROOT's current facts with their `valid_from`, transaction, actor
    and source; the incoming and base shares' id, `created_at`, producer store
-   and whether they are attested. The file is bound to ROOT's graph hash and the
-   incoming share id.
+   and whether they are attested. For a person reading it, each row also has a
+   `kind` (`max_count_exceeded` or `delete_replace`) and a `rule` in words
+   ("sh:maxCount 1 on status: ours and theirs together hold 2 values"), and the
+   file carries `labels`: one `rdfs:label` per IRI it mentions. The file is bound
+   to ROOT's graph hash and the incoming share id.
 2. **Propose (agent).** `--propose` also fills each row's `proposal` (`choose`
    plus `evidence`) from mechanical evidence: a side unchanged from base, the
    newer side, an attested share. It never sets `decision`.
-3. **Decide (operator).** Set each row's `decision` to
+3. **Decide (operator, or any tool that edits the file).** A tool may also set
+   `decided_by` and `decided_at` per row; apply echoes them back. They are a
+   claim made by that tool. The attested record is the transaction's reviewer
+   and the decisions file's hash. Set each row's `decision` to
    `{"choose": "ours"}`, `{"choose": "theirs"}`, `{"choose": "base"}`, or
    `{"values": ["\"an edited value\""]}` (N-Triples terms).
 4. **Apply.** `--decisions` commits the clean part of the merge plus every
@@ -276,6 +282,11 @@ Apply refuses, and writes nothing, when:
 | the conflicts differ from the file's rows | same reason |
 | a decision has more values than the slot's `sh:maxCount` | it would re-create the conflict |
 | a value is not an RDF term | it cannot be stored |
+| the file has a field merge-decisions/v1 does not define | apply would drop it while the file's hash still covered it |
+
+`--dry-run` runs every check above and reports the counts that apply would
+assert and retract, without writing anything. A CI check uses it to validate a
+decided file before merge.
 
 Plain `quipu merge` without these flags behaves as before.
 

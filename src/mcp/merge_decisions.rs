@@ -13,7 +13,7 @@ use serde_json::{Value as JsonValue, json};
 
 use crate::error::{Error, Result};
 use crate::share_merge_decisions::{
-    DecisionFile, InlineShare, SharePair, apply_pair, emit_pair, propose,
+    DecisionFile, InlineShare, SharePair, apply_pair, dry_run_pair, emit_pair, propose,
 };
 use crate::store::Store;
 
@@ -61,14 +61,18 @@ pub fn tool_merge_apply(store: &mut Store, input: &JsonValue) -> Result<JsonValu
     let actor = input.get("actor").and_then(JsonValue::as_str);
     // The hash recorded in provenance is of the decisions exactly as received.
     let bytes = serde_json::to_vec(decisions).map_err(|e| Error::Serialization(e.to_string()))?;
-    let result = apply_pair(
-        store,
-        pair(input)?,
-        &file,
-        &bytes,
-        reviewer,
-        &crate::time::now_iso(),
-        actor,
-    )?;
+    let result = if input.get("dry_run").and_then(JsonValue::as_bool) == Some(true) {
+        dry_run_pair(store, pair(input)?, &file, &bytes, reviewer)?
+    } else {
+        apply_pair(
+            store,
+            pair(input)?,
+            &file,
+            &bytes,
+            reviewer,
+            &crate::time::now_iso(),
+            actor,
+        )?
+    };
     Ok(json!(result))
 }

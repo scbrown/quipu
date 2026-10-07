@@ -4,7 +4,7 @@ use crate::cli::{chrono_now, flag_value};
 
 pub(crate) const MERGE_USAGE: &str = "usage: quipu merge <share-dir> [--actor <id>] [--db <path>]\n\
        quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]\n\
-       quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--actor <id>] [--db <path>]";
+       quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]";
 
 /// Handle `--emit-decisions` / `--decisions`; false when neither was given.
 pub fn cmd_merge_decisions(args: &[String], db_path: &str, dir: &str) -> bool {
@@ -47,15 +47,25 @@ pub fn cmd_merge_decisions(args: &[String], db_path: &str, dir: &str) -> bool {
                 let file = serde_json::from_slice(&bytes).map_err(|e| {
                     quipu::Error::InvalidValue(format!("{path} is not a decisions file: {e}"))
                 })?;
-                quipu::share_merge_decisions::apply(
-                    &mut store,
-                    std::path::Path::new(dir),
-                    &file,
-                    &bytes,
-                    reviewer,
-                    &chrono_now(),
-                    flag_value(args, "--actor"),
-                )
+                if args.iter().any(|a| a == "--dry-run") {
+                    quipu::share_merge_decisions::dry_run(
+                        &mut store,
+                        std::path::Path::new(dir),
+                        &file,
+                        &bytes,
+                        reviewer,
+                    )
+                } else {
+                    quipu::share_merge_decisions::apply(
+                        &mut store,
+                        std::path::Path::new(dir),
+                        &file,
+                        &bytes,
+                        reviewer,
+                        &chrono_now(),
+                        flag_value(args, "--actor"),
+                    )
+                }
             });
         match applied {
             Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),

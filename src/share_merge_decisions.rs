@@ -19,6 +19,7 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -30,6 +31,8 @@ use crate::share_merge::{
     DecisionRecord, Graph, LoadedShare, MergeResult, commit, locate_base, merge_graphs,
     parse_graph, read_share, root_graph, share_from_parts,
 };
+pub use crate::share_merge_decisions_view::ConflictKind;
+use crate::share_merge_decisions_view::{check_fields, kind, labels, rule};
 use crate::store::Store;
 
 /// Schema of the decisions file.
@@ -45,6 +48,9 @@ pub struct DecisionFile {
     /// has changed since.
     pub local_graph_hash: String,
     pub incoming_graph_hash: String,
+    /// `rdfs:label` per IRI the rows mention, for display (item 6).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, String>,
     pub rows: Vec<DecisionRow>,
 }
 
@@ -59,6 +65,19 @@ pub struct DecisionRow {
     pub proposal: Option<Proposal>,
     /// Filled by the operator; [`apply`] refuses while any row lacks one.
     pub decision: Option<Decision>,
+    /// Why the slot could not auto-merge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ConflictKind>,
+    /// The broken rule, in words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
+    /// Who decided, as the editing tool CLAIMS it. Echoed by [`apply`]; the
+    /// attested record is the transaction's reviewer and the file's hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decided_by: Option<String>,
+    /// When, as claimed alongside `decided_by`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decided_at: Option<String>,
 }
 
 /// Where each side's values came from.
@@ -130,6 +149,10 @@ pub struct AppliedRow {
     pub subject: String,
     pub predicate: String,
     pub values: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decided_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decided_at: Option<String>,
 }
 
 struct Inputs {
@@ -262,6 +285,10 @@ pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
         &i.incoming.graph,
         &i.incoming.shapes,
     )?;
+    let labels = labels(
+        &conflicts.iter().collect::<Vec<_>>(),
+        &[&i.ours, &i.incoming.graph, &i.base.graph],
+    );
     let mut rows = Vec::new();
     for (n, record) in conflicts.into_iter().enumerate() {
         rows.push(DecisionRow {
@@ -271,9 +298,13 @@ pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
                 theirs: origin(&i.incoming),
                 base: origin(&i.base),
             },
+            kind: Some(kind(&record)),
+            rule: Some(rule(&record, &labels)),
             record,
             proposal: None,
             decision: None,
+            decided_by: None,
+            decided_at: None,
         });
     }
     Ok(DecisionFile {
@@ -282,6 +313,7 @@ pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
         base_share: i.base.manifest.share_id,
         local_graph_hash: i.ours_hash,
         incoming_graph_hash: i.incoming.manifest.graph_hash,
+        labels,
         rows,
     })
 }
@@ -385,6 +417,21 @@ pub fn apply(
     apply_pair(store, pair, file, file_bytes, reviewer, timestamp, actor)
 }
 
+/// [`apply`]'s checks and counts for `incoming_dir`, writing nothing.
+///
+/// # Errors
+/// As [`apply`].
+pub fn dry_run(
+    store: &mut Store,
+    incoming_dir: &Path,
+    file: &DecisionFile,
+    file_bytes: &[u8],
+    reviewer: &str,
+) -> Result<DecidedMerge> {
+    let pair = SharePair::from_dir(incoming_dir)?;
+    dry_run_pair(store, pair, file, file_bytes, reviewer)
+}
+
 /// [`apply`] for an already-loaded share pair.
 ///
 /// # Errors
@@ -398,6 +445,37 @@ pub fn apply_pair(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<DecidedMerge> {
+    plan_pair(
+        store, pair, file, file_bytes, reviewer, timestamp, actor, false,
+    )
+}
+
+/// Every check [`apply`] makes and the counts it would write, with no write
+/// (`--dry-run`; the check-run's validate step).
+///
+/// # Errors
+/// As [`apply`].
+pub fn dry_run_pair(
+    store: &mut Store,
+    pair: SharePair,
+    file: &DecisionFile,
+    file_bytes: &[u8],
+    reviewer: &str,
+) -> Result<DecidedMerge> {
+    plan_pair(store, pair, file, file_bytes, reviewer, "", None, true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn plan_pair(
+    store: &mut Store,
+    pair: SharePair,
+    file: &DecisionFile,
+    file_bytes: &[u8],
+    reviewer: &str,
+    timestamp: &str,
+    actor: Option<&str>,
+    dry_run: bool,
+) -> Result<DecidedMerge> {
     if reviewer.trim().is_empty() {
         return Err(Error::InvalidValue("a reviewer is required".into()));
     }
@@ -407,6 +485,7 @@ pub fn apply_pair(
             file.schema
         )));
     }
+    check_fields(file_bytes)?;
     let i = inputs(store, pair)?;
     let stale = |what: &str| {
         Error::InvalidValue(format!(
@@ -461,6 +540,8 @@ pub fn apply_pair(
             subject: r.subject.clone(),
             predicate: r.predicate.clone(),
             values,
+            decided_by: row.decided_by.clone(),
+            decided_at: row.decided_at.clone(),
         });
     }
     let decisions_sha256 = sha256(file_bytes);
@@ -469,7 +550,18 @@ pub fn apply_pair(
         "share-merge:parents={},{};decisions={decisions_sha256};reviewer={reviewer}",
         parents[0], parents[1]
     );
-    let merge = commit(store, &i.ours, &merged, parents, &source, timestamp, actor)?;
+    let merge = if dry_run {
+        MergeResult {
+            outcome: "dry-run".into(),
+            tx_id: None,
+            asserted: merged.difference(&i.ours).count(),
+            retracted: i.ours.difference(&merged).count(),
+            provenance_parents: parents,
+            conflicts: Vec::new(),
+        }
+    } else {
+        commit(store, &i.ours, &merged, parents, &source, timestamp, actor)?
+    };
     Ok(DecidedMerge {
         merge,
         reviewer: reviewer.into(),

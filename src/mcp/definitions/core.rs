@@ -123,7 +123,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "base": { "type": "object", "description": "Its parent share. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
                     "decisions": { "type": "object", "description": "The file from merge_decisions with each row's decision set: {choose: ours|theirs|base} or {values: [N-Triples terms]}." },
                     "reviewer": { "type": "string", "description": "Who decided. Recorded in provenance." },
-                    "actor": { "type": "string", "description": "Who is applying." }
+                    "actor": { "type": "string", "description": "Who is applying." },
+                    "dry_run": { "type": "boolean", "description": "Run every check and report the counts it would write; write nothing." }
                 },
                 "required": ["incoming", "base", "decisions", "reviewer"]
             }

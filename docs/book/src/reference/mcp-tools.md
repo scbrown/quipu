@@ -144,8 +144,10 @@ decisions.
 
 It refuses, and writes nothing, on an undecided row, stale decisions (ROOT or the share
 moved since they were emitted), more values than the slot's `sh:maxCount`, or a value
-that is not an RDF term. REST: `POST /merge/apply`. CLI: `quipu merge <share-dir>
---decisions <file> --reviewer <who>`.
+that is not an RDF term. It also refuses a field merge-decisions/v1 does not
+define. `dry_run: true` runs every check and returns the counts it would write,
+without writing. REST: `POST /merge/apply`. CLI: `quipu merge <share-dir>
+--decisions <file> --reviewer <who> [--dry-run]`.
 
 ### `quipu_knot`
 

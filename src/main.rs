@@ -373,7 +373,7 @@ COMMANDS:
     quipu status <share-dir> [--db <path>]
     quipu merge <share-dir> [--actor <id>] [--db <path>]
     quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
-    quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--actor <id>] [--db <path>]
+    quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
     quipu git-merge <ref>   merge qpacks from Git snapshots, stop before commit
     quipu merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
     quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
