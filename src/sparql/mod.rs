@@ -25,6 +25,9 @@ mod rdfs_closure_tests;
 #[cfg(test)]
 mod tests;
 
+mod bind_join;
+#[cfg(test)]
+mod bind_join_tests;
 mod construct;
 mod join;
 mod progress;
